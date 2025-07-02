@@ -24,6 +24,33 @@ pub struct Position {
     pub sol_received: f64, // SOL received on sell
     pub open_time: DateTime<Utc>, // when position opened
     pub close_time: Option<DateTime<Utc>>, // when position closed
+    pub stop_loss_price: Option<f64>, // Optional stop-loss price
+    pub take_profit_price: Option<f64>, // Optional take-profit price
+    pub leverage: Option<f64>, // Optional leverage for margin trades
+    pub trailing_stop_pct: Option<f64>, // Optional trailing stop percentage
+    pub status: PositionStatus, // Status of the position (Open, Closed, etc.)
+    pub avg_entry_price: f64, // Average entry price after DCA
+    pub trade_type: TradeType, // Type of trade (Initial, DCA, etc.)
+    pub risk_reward_ratio: Option<f64>, // Risk-reward ratio
+    pub max_drawdown: Option<f64>, // Max drawdown
+    pub capital_allocated: f64, // Capital allocated to the position
+    pub profit_loss_usd: Option<f64>, // Profit/Loss in USD
+    pub trade_fees: Option<f64>, // Trade fees (if applicable)
+}
+
+#[derive(Debug, Clone)]
+pub enum PositionStatus {
+    Open,
+    Closed,
+    Active, // e.g., awaiting DCA
+    Pending, // Position is not yet entered, waiting for signal
+}
+
+#[derive(Debug, Clone)]
+pub enum TradeType {
+    Initial, // First position taken
+    DCA, // Dollar-Cost Averaging
+    Adjusted, // Adjusted position based on other factors
 }
 
 // ────────────── GLOBAL OPEN POSITIONS ──────────────
@@ -36,7 +63,7 @@ pub static RECENT_CLOSED_POSITIONS: Lazy<RwLock<Vec<Position>>> = Lazy::new(|| {
 
 // ────────────── ACTIONS ──────────────
 
-async fn print_open_positions() {
+async fn print_positions() {
     let positions = OPEN_POSITIONS.read().await;
     let closed = RECENT_CLOSED_POSITIONS.read().await;
     let tokens = TOKENS.read().await;
@@ -158,7 +185,12 @@ async fn sell_token(
     drop_pct: f64,
     sol_spent: f64,
     token_amount: f64,
-    open_time: DateTime<Utc>
+    open_time: DateTime<Utc>,
+    stop_loss_price: Option<f64>,
+    take_profit_price: Option<f64>,
+    leverage: Option<f64>,
+    trailing_stop_pct: Option<f64>,
+    trade_fees: Option<f64>
 ) {
     let sol_received = token_amount * sell_price;
     let profit_sol = sol_received - sol_spent;
@@ -178,27 +210,53 @@ async fn sell_token(
     println!("   • Drop From Peak  : {:.2}%", drop_pct);
     println!("   • Open Time       : {}", open_time);
     println!("   • Close Time      : {}", close_time);
+
+    if let Some(sl) = stop_loss_price {
+        println!("   • Stop Loss Price : {:.9}", sl);
+    }
+    if let Some(tp) = take_profit_price {
+        println!("   • Take Profit Price : {:.9}", tp);
+    }
+    if let Some(l) = leverage {
+        println!("   • Leverage         : {:.1}", l);
+    }
+    if let Some(ts) = trailing_stop_pct {
+        println!("   • Trailing Stop    : {:.2}%", ts);
+    }
+    if let Some(fee) = trade_fees {
+        println!("   • Trade Fees       : {:.9}", fee);
+    }
+
     println!("💰 [Screener] Executed SELL {}\n", symbol);
 
-    // ✅ Add to RECENT_CLOSED_POSITIONS
     {
         let mut closed = RECENT_CLOSED_POSITIONS.write().await;
 
-        // Build the closed position manually
         let closed_pos = Position {
             entry_price: entry,
             peak_price: peak,
-            dca_count: 0, // If you track DCA count in the caller, pass it too
+            dca_count: 0,
             token_amount,
             sol_spent,
             sol_received,
             open_time,
             close_time: Some(close_time),
+            stop_loss_price,
+            take_profit_price,
+            leverage,
+            trailing_stop_pct,
+            status: PositionStatus::Closed,
+            avg_entry_price: entry,
+            trade_type: TradeType::Adjusted,
+            risk_reward_ratio: None,
+            max_drawdown: None,
+            capital_allocated: sol_spent,
+            profit_loss_usd: None,
+            trade_fees,
         };
 
         closed.push(closed_pos);
 
-        // keep only last 10
         if closed.len() > 10 {
             closed.remove(0);
         }
@@ -207,17 +265,6 @@ async fn sell_token(
 
 pub async fn start_trader_loop() {
     println!("🚀 [Screener] Trader loop started!");
-
-    // ────────────── [O] to show open positions ──────────────
-    tokio::spawn(async move {
-        let stdin = io::stdin();
-        let mut reader = BufReader::new(stdin).lines();
-        while let Ok(Some(line)) = reader.next_line().await {
-            if line.trim().eq_ignore_ascii_case("o") {
-                print_open_positions().await;
-            }
-        }
-    });
 
     // ────────────── Main trader loop ──────────────
     tokio::spawn(async move {
@@ -272,6 +319,18 @@ pub async fn start_trader_loop() {
                                         sol_received: 0.0,
                                         open_time: Utc::now(),
                                         close_time: None,
+                                        stop_loss_price: Some(current_price * 0.9), // example, 10% below entry price
+                                        take_profit_price: Some(current_price * 1.1), // example, 10% above entry price
+                                        leverage: Some(2.0), // example leverage
+                                        trailing_stop_pct: Some(5.0), // example trailing stop percentage
+                                        status: PositionStatus::Open,
+                                        avg_entry_price: current_price,
+                                        trade_type: TradeType::Initial,
+                                        risk_reward_ratio: Some(2.0), // e.g., 2:1 risk/reward ratio
+                                        max_drawdown: Some(0.15), // e.g., max 15% drawdown allowed
+                                        capital_allocated: amount_sol,
+                                        profit_loss_usd: None,
+                                        trade_fees: Some(0.001), // example trade fee in SOL
                                     });
                                 }
                                 Err(e) => {
@@ -357,7 +416,12 @@ pub async fn start_trader_loop() {
                                         drop,
                                         pos.sol_spent,
                                         pos.token_amount,
-                                        pos.open_time
+                                        pos.open_time,
+                                        pos.stop_loss_price,
+                                        pos.take_profit_price,
+                                        pos.leverage,
+                                        pos.trailing_stop_pct,
+                                        pos.trade_fees
                                     ).await;
                                     positions.remove(&token.mint);
                                 }
@@ -386,7 +450,7 @@ pub async fn start_trader_loop() {
         let stdin = BufReader::new(io::stdin());
         let mut lines = stdin.lines();
         while let Ok(Some(_)) = lines.next_line().await {
-            print_open_positions().await;
+            print_positions().await;
         }
     });
 }
