@@ -1,20 +1,35 @@
+#![allow(warnings)]
+
+// use crate::helpers::get_all_tokens;
+
+mod utilitis;
+mod dexscreener;
+mod trader;
 mod configs;
 mod helpers;
 mod swap_gmgn;
-mod dexscreener;
-mod trader;
+mod pool_decoder;
+mod pool_cpmm;
+mod pool_meteora_dlmm;
+mod pool_orca_whirlpool;
+mod pool_pumpfun;
+mod pool_raydium_amm;
+mod pool_raydium_clmm;
+mod pool_raydium_cpmm;
+mod pool_pumpfun2;
 
 #[tokio::main]
 async fn main() {
-
     dexscreener::start_dexscreener_loop().await;
     trader::start_trader_loop().await;
-    
+
     // Keep alive forever
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(600)).await;
     }
 
+    // let tokens = get_all_tokens();
+    // println!("Tokens: {:?}", tokens);
 
     // let token_mint = "GtfNvPGEZEgFyJR8AP7ckvFBdSTnvP4Ses4ZNaZDpump";
 

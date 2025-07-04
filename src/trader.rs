@@ -1,4 +1,4 @@
-// Trader.rs
+#![allow(warnings)]
 
 use crate::dexscreener::{ TOKENS, Token };
 use once_cell::sync::Lazy;
@@ -9,10 +9,16 @@ use chrono::{ DateTime, Utc };
 use tokio::io::{ self, AsyncBufReadExt, BufReader };
 use comfy_table::{ Table, presets::UTF8_FULL };
 use crate::swap_gmgn::*;
+use crate::helpers::*;
+use crate::utilitis::{ price_from_biggest_pool };
+use tokio::task::spawn_blocking;
+use crate::configs::BLACKLIST;
 
-const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 1; // example: allow up to 5 open positions
+// Constants
+const TRADE_SIZE_SOL: f64 = 0.004; // amount of SOL to spend on each buy
+const MAX_OPEN_POSITIONS: usize = 3; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u32 = 3; // for example, max 3 DCA per position
+const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
 
 #[derive(Debug, Clone)]
 pub struct Position {
@@ -24,33 +30,6 @@ pub struct Position {
     pub sol_received: f64, // SOL received on sell
     pub open_time: DateTime<Utc>, // when position opened
     pub close_time: Option<DateTime<Utc>>, // when position closed
-    pub stop_loss_price: Option<f64>, // Optional stop-loss price
-    pub take_profit_price: Option<f64>, // Optional take-profit price
-    pub leverage: Option<f64>, // Optional leverage for margin trades
-    pub trailing_stop_pct: Option<f64>, // Optional trailing stop percentage
-    pub status: PositionStatus, // Status of the position (Open, Closed, etc.)
-    pub avg_entry_price: f64, // Average entry price after DCA
-    pub trade_type: TradeType, // Type of trade (Initial, DCA, etc.)
-    pub risk_reward_ratio: Option<f64>, // Risk-reward ratio
-    pub max_drawdown: Option<f64>, // Max drawdown
-    pub capital_allocated: f64, // Capital allocated to the position
-    pub profit_loss_usd: Option<f64>, // Profit/Loss in USD
-    pub trade_fees: Option<f64>, // Trade fees (if applicable)
-}
-
-#[derive(Debug, Clone)]
-pub enum PositionStatus {
-    Open,
-    Closed,
-    Active, // e.g., awaiting DCA
-    Pending, // Position is not yet entered, waiting for signal
-}
-
-#[derive(Debug, Clone)]
-pub enum TradeType {
-    Initial, // First position taken
-    DCA, // Dollar-Cost Averaging
-    Adjusted, // Adjusted position based on other factors
 }
 
 // ────────────── GLOBAL OPEN POSITIONS ──────────────
@@ -63,35 +42,35 @@ pub static RECENT_CLOSED_POSITIONS: Lazy<RwLock<Vec<Position>>> = Lazy::new(|| {
 
 // ────────────── ACTIONS ──────────────
 
-async fn print_positions() {
+use crate::utilitis::PRICE_CACHE;
+
+async fn print_open_positions() {
     let positions = OPEN_POSITIONS.read().await;
     let closed = RECENT_CLOSED_POSITIONS.read().await;
-    let tokens = TOKENS.read().await;
 
     // ────────────── OPEN POSITIONS ──────────────
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
-        .set_header(
-            vec![
-                "Mint",
-                "Symbol",
-                "Entry Price",
-                "Current Price",
-                "Profit %",
-                "Peak Price",
-                "DCA Count",
-                "Tokens",
-                "SOL Spent",
-                "Open Time"
-            ]
-        );
+        .set_header(vec![
+            "Mint",
+            "Entry Price",
+            "Current Price",
+            "Profit %",
+            "Peak Price",
+            "DCA Count",
+            "Tokens",
+            "SOL Spent",
+            "Open Time",
+        ]);
 
     for (mint, pos) in positions.iter() {
-        let current_price = tokens
-            .iter()
-            .find(|t| &t.mint == mint)
-            .and_then(|t| t.price_usd.parse::<f64>().ok())
+        // Read current price from in-memory cache
+        let current_price = PRICE_CACHE
+            .read()
+            .unwrap()
+            .get(mint)
+            .map(|&(_ts, price)| price)
             .unwrap_or(0.0);
 
         let profit_pct = if pos.entry_price > 0.0 && current_price > 0.0 {
@@ -100,26 +79,17 @@ async fn print_positions() {
             0.0
         };
 
-        let symbol = tokens
-            .iter()
-            .find(|t| &t.mint == mint)
-            .map(|t| t.symbol.clone())
-            .unwrap_or_default();
-
-        table.add_row(
-            vec![
-                mint.clone(),
-                symbol,
-                format!("{:.9}", pos.entry_price),
-                format!("{:.9}", current_price),
-                format!("{:+.2}%", profit_pct),
-                format!("{:.9}", pos.peak_price),
-                pos.dca_count.to_string(),
-                format!("{:.9}", pos.token_amount),
-                format!("{:.9}", pos.sol_spent),
-                pos.open_time.to_rfc3339()
-            ]
-        );
+        table.add_row(vec![
+            mint.clone(),
+            format!("{:.9}", pos.entry_price),
+            format!("{:.9}", current_price),
+            format!("{:+.2}%", profit_pct),
+            format!("{:.9}", pos.peak_price),
+            pos.dca_count.to_string(),
+            format!("{:.9}", pos.token_amount),
+            format!("{:.9}", pos.sol_spent),
+            pos.open_time.to_rfc3339(),
+        ]);
     }
 
     println!("\n📂 [Open Positions]\n{}\n", table);
@@ -129,20 +99,18 @@ async fn print_positions() {
         let mut table_closed = Table::new();
         table_closed
             .load_preset(UTF8_FULL)
-            .set_header(
-                vec![
-                    "Mint",
-                    "Entry Price",
-                    "Close Price",
-                    "Profit %",
-                    "Peak Price",
-                    "Tokens",
-                    "SOL Spent",
-                    "SOL Received",
-                    "Open Time",
-                    "Close Time"
-                ]
-            );
+            .set_header(vec![
+                "Mint",
+                "Entry Price",
+                "Close Price",
+                "Profit %",
+                "Peak Price",
+                "Tokens",
+                "SOL Spent",
+                "SOL Received",
+                "Open Time",
+                "Close Time",
+            ]);
 
         for pos in closed.iter() {
             let close_price = if pos.token_amount > 0.0 {
@@ -156,25 +124,26 @@ async fn print_positions() {
                 0.0
             };
 
-            table_closed.add_row(
-                vec![
-                    "(closed)".into(),
-                    format!("{:.9}", pos.entry_price),
-                    format!("{:.9}", close_price),
-                    format!("{:+.2}%", profit_pct),
-                    format!("{:.9}", pos.peak_price),
-                    format!("{:.9}", pos.token_amount),
-                    format!("{:.9}", pos.sol_spent),
-                    format!("{:.9}", pos.sol_received),
-                    pos.open_time.to_rfc3339(),
-                    pos.close_time.map(|t| t.to_rfc3339()).unwrap_or_else(|| "-".into())
-                ]
-            );
+            table_closed.add_row(vec![
+                "(closed)".into(),
+                format!("{:.9}", pos.entry_price),
+                format!("{:.9}", close_price),
+                format!("{:+.2}%", profit_pct),
+                format!("{:.9}", pos.peak_price),
+                format!("{:.9}", pos.token_amount),
+                format!("{:.9}", pos.sol_spent),
+                format!("{:.9}", pos.sol_received),
+                pos.open_time.to_rfc3339(),
+                pos.close_time
+                    .map(|t| t.to_rfc3339())
+                    .unwrap_or_else(|| "-".into()),
+            ]);
         }
 
         println!("📁 [Recent Closed Positions]\n{}\n", table_closed);
     }
 }
+
 
 async fn sell_token(
     symbol: &str,
@@ -185,17 +154,12 @@ async fn sell_token(
     drop_pct: f64,
     sol_spent: f64,
     token_amount: f64,
-    open_time: DateTime<Utc>,
-    stop_loss_price: Option<f64>,
-    take_profit_price: Option<f64>,
-    leverage: Option<f64>,
-    trailing_stop_pct: Option<f64>,
-    trade_fees: Option<f64>
+    open_time: DateTime<Utc>
 ) {
-    let sol_received = token_amount * sell_price;
-    let profit_sol = sol_received - sol_spent;
-    let profit_pct = (profit_sol / sol_spent) * 100.0;
     let close_time = Utc::now();
+    let sol_received = token_amount * sell_price - TRANSACTION_FEE_SOL; // Account for the fee
+    let profit_sol = sol_received - sol_spent - TRANSACTION_FEE_SOL; // Subtract fee from profit
+    let profit_pct = (profit_sol / sol_spent) * 100.0;
 
     println!("\n🔴 [SELL] Close position with trailing stop");
     println!("   • Token           : {} ({})", symbol, mint);
@@ -210,247 +174,233 @@ async fn sell_token(
     println!("   • Drop From Peak  : {:.2}%", drop_pct);
     println!("   • Open Time       : {}", open_time);
     println!("   • Close Time      : {}", close_time);
-
-    if let Some(sl) = stop_loss_price {
-        println!("   • Stop Loss Price : {:.9}", sl);
-    }
-    if let Some(tp) = take_profit_price {
-        println!("   • Take Profit Price : {:.9}", tp);
-    }
-    if let Some(l) = leverage {
-        println!("   • Leverage         : {:.1}", l);
-    }
-    if let Some(ts) = trailing_stop_pct {
-        println!("   • Trailing Stop    : {:.2}%", ts);
-    }
-    if let Some(fee) = trade_fees {
-        println!("   • Trade Fees       : {:.9}", fee);
-    }
-
     println!("💰 [Screener] Executed SELL {}\n", symbol);
 
+    // ✅ Add to RECENT_CLOSED_POSITIONS
     {
         let mut closed = RECENT_CLOSED_POSITIONS.write().await;
 
+        // Build the closed position manually
         let closed_pos = Position {
             entry_price: entry,
             peak_price: peak,
-            dca_count: 0,
+            dca_count: 0, // If you track DCA count in the caller, pass it too
             token_amount,
             sol_spent,
             sol_received,
             open_time,
             close_time: Some(close_time),
-            stop_loss_price,
-            take_profit_price,
-            leverage,
-            trailing_stop_pct,
-            status: PositionStatus::Closed,
-            avg_entry_price: entry,
-            trade_type: TradeType::Adjusted,
-            risk_reward_ratio: None,
-            max_drawdown: None,
-            capital_allocated: sol_spent,
-            profit_loss_usd: None,
-            trade_fees,
         };
 
         closed.push(closed_pos);
 
+        // keep only last 10
         if closed.len() > 10 {
             closed.remove(0);
         }
     }
 }
 
+use crate::configs::RPC; // import your static RPC client
+
+use futures::future::join_all;
+
+
 pub async fn start_trader_loop() {
     println!("🚀 [Screener] Trader loop started!");
 
-    // ────────────── Main trader loop ──────────────
     tokio::spawn(async move {
-        let mut last_prices: Vec<(String, f64)> = Vec::new();
+        println!("🔥 Entered MAIN TRADER LOOP TASK");
+
+        // Wait ONCE for TOKENS to be loaded
+        loop {
+            let lock = TOKENS.read().await;
+            println!("⏳ Waiting for TOKENS to be loaded... (len={})", lock.len());
+            if !lock.is_empty() {
+                println!("✅ TOKENS loaded! Proceeding with trader loop.");
+                break;
+            }
+            drop(lock);
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // track last prices per mint
+        let mut last_prices: HashMap<String, f64> = HashMap::new();
 
         loop {
-            let tokens_snapshot: Vec<Token> = {
+            // snapshot tokens
+            let tokens_snapshot = {
                 let lock = TOKENS.read().await;
                 lock.clone()
             };
 
-            for token in &tokens_snapshot {
-                if token.price_usd.is_empty() {
-                    continue;
+            // build list of mints
+            let mut mints: Vec<String> =
+                tokens_snapshot.iter().map(|t| t.mint.clone()).collect();
+            {
+                let pos_lock = OPEN_POSITIONS.read().await;
+                for m in pos_lock.keys() {
+                    if !mints.contains(m) {
+                        mints.push(m.clone());
+                    }
                 }
-                let current_price = token.price_usd.parse::<f64>().unwrap_or(0.0);
-                if current_price <= 0.0 {
-                    continue;
+            }
+
+            for mint in mints {
+                // skip black-listed
+                {
+                    let bl = BLACKLIST.read().await;
+                    if bl.contains(&mint) {
+                        continue;
+                    }
                 }
 
-                let last_price = last_prices
+                // symbol or fallback
+                let symbol = tokens_snapshot
                     .iter()
-                    .find(|(m, _)| m == &token.mint)
-                    .map(|(_, p)| *p);
+                    .find(|t| t.mint == mint)
+                    .map(|t| t.symbol.clone())
+                    .unwrap_or_else(|| mint.chars().take(4).collect());
 
-                // ────────────── PRICE DROP ENTRY ──────────────
-                if let Some(prev) = last_price {
-                    let change_pct = ((current_price - prev) / prev) * 100.0;
-                    if change_pct <= -1.0 {
+                // fetch price
+                let price_res = tokio::task::spawn_blocking({
+                    let m = mint.clone();
+                    move || price_from_biggest_pool(&RPC, &m)
+                })
+                .await;
+                let current_price = match price_res {
+                    Ok(Ok(p)) if p > 0.0 => p,
+                    Ok(Err(e)) => {
+                        eprintln!("❌ price error for {}: {}", symbol, e);
+                        if e.to_string().contains("no valid pools")
+                            || e.to_string().contains("Unsupported program id")
+                        {
+                            let mut bl = BLACKLIST.write().await;
+                            if bl.insert(mint.clone()) {
+                                println!("🛑 {} added to blacklist", symbol);
+                            }
+                        }
+                        continue;
+                    }
+                    _ => continue,
+                };
+
+                // compare to last tick
+                if let Some(prev) = last_prices.get(&mint).cloned() {
+                    let pct = ((current_price - prev) / prev) * 100.0;
+                    if pct.abs() >= 1.0 {
+                        println!(
+                            "💹 {} price change: {:.9} → {:.9} ({:+.2}%)",
+                            symbol, prev, current_price, pct
+                        );
+                    }
+                    // ENTRY on drop ≥5%
+                    if pct <= -15.0 {
                         let mut positions = OPEN_POSITIONS.write().await;
-
-                        if positions.len() >= MAX_OPEN_POSITIONS {
-                            println!(
-                                "🚫 Max open positions ({}) reached, skip new for {}",
-                                MAX_OPEN_POSITIONS,
-                                token.symbol
-                            );
-                        } else if !positions.contains_key(&token.mint) {
-                            let amount_sol = TRADE_SIZE_SOL;
-                            let amount_u64 = (amount_sol * 1_000_000_000.0) as u64;
-
-                            match buy_gmgn(&token.mint, amount_u64).await {
-                                Ok(tx_hash) => {
-                                    println!("✅ GMGN BUY success: {}", tx_hash);
-                                    let tokens_bought = amount_sol / current_price;
-                                    positions.insert(token.mint.clone(), Position {
+                        if positions.len() < MAX_OPEN_POSITIONS && !positions.contains_key(&mint) {
+                            let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
+                            if let Ok(tx) = buy_gmgn(&mint, lamports).await {
+                                println!("✅ GMGN BUY success: {}", tx);
+                                let bought = TRADE_SIZE_SOL / current_price;
+                                positions.insert(
+                                    mint.clone(),
+                                    Position {
                                         entry_price: current_price,
                                         peak_price: current_price,
                                         dca_count: 1,
-                                        token_amount: tokens_bought,
-                                        sol_spent: amount_sol,
+                                        token_amount: bought,
+                                        sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
                                         sol_received: 0.0,
                                         open_time: Utc::now(),
                                         close_time: None,
-                                        stop_loss_price: Some(current_price * 0.9), // example, 10% below entry price
-                                        take_profit_price: Some(current_price * 1.1), // example, 10% above entry price
-                                        leverage: Some(2.0), // example leverage
-                                        trailing_stop_pct: Some(5.0), // example trailing stop percentage
-                                        status: PositionStatus::Open,
-                                        avg_entry_price: current_price,
-                                        trade_type: TradeType::Initial,
-                                        risk_reward_ratio: Some(2.0), // e.g., 2:1 risk/reward ratio
-                                        max_drawdown: Some(0.15), // e.g., max 15% drawdown allowed
-                                        capital_allocated: amount_sol,
-                                        profit_loss_usd: None,
-                                        trade_fees: Some(0.001), // example trade fee in SOL
-                                    });
-                                }
-                                Err(e) => {
-                                    println!("❌ GMGN BUY failed: {:?}", e);
-                                }
+                                    },
+                                );
                             }
                         }
                     }
                 }
 
-                // ────────────── DCA + Trailing Stop ──────────────
+                // DCA + TRAILING STOP
                 {
                     let mut positions = OPEN_POSITIONS.write().await;
-                    if let Some(pos) = positions.get_mut(&token.mint) {
+                    if let Some(pos) = positions.get_mut(&mint) {
                         let now = Utc::now();
                         let elapsed = now - pos.open_time;
+
+                        // DCA
                         let drop_pct =
                             ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
-
-                        if pos.dca_count >= MAX_DCA_COUNT {
-                            println!("🚫 Max DCA count reached for {}", token.symbol);
-                        } else if drop_pct > -10.0 {
-                            println!(
-                                "⏳ Not enough drop for {}: {:.2}% (need ≤ -10%)",
-                                token.symbol,
-                                drop_pct
-                            );
-                        } else if elapsed.num_minutes() < 5 {
-                            println!(
-                                "⏳ Waiting 5 min before next DCA for {} (elapsed: {}s)",
-                                token.symbol,
-                                elapsed.num_seconds()
-                            );
-                        } else {
-                            let amount_sol = TRADE_SIZE_SOL;
-                            let amount_u64 = (amount_sol * 1_000_000_000.0) as u64;
-
-                            match buy_gmgn(&token.mint, amount_u64).await {
-                                Ok(tx_hash) => {
-                                    println!("✅ GMGN DCA BUY success: {}", tx_hash);
-                                    let added = amount_sol / current_price;
-                                    pos.token_amount += added;
-                                    pos.sol_spent += amount_sol;
-                                    pos.dca_count += 1;
-                                    pos.entry_price = pos.sol_spent / pos.token_amount;
-
-                                    println!(
-                                        "🟢 [DCA] {} new avg entry: {:.9} SOL (DCA count: {}, tokens: {:.9})",
-                                        token.symbol,
-                                        pos.entry_price,
-                                        pos.dca_count,
-                                        pos.token_amount
-                                    );
-                                }
-                                Err(e) => {
-                                    println!("❌ GMGN DCA BUY failed: {:?}", e);
-                                }
+                        if pos.dca_count < MAX_DCA_COUNT
+                            && drop_pct <= -20.0
+                            && elapsed.num_minutes() >= 5
+                        {
+                            let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
+                            if let Ok(tx) = buy_gmgn(&mint, lamports).await {
+                                println!("✅ GMGN DCA BUY success: {}", tx);
+                                let added = TRADE_SIZE_SOL / current_price;
+                                pos.token_amount += added;
+                                pos.sol_spent += TRADE_SIZE_SOL + TRANSACTION_FEE_SOL;
+                                pos.dca_count += 1;
+                                pos.entry_price = pos.sol_spent / pos.token_amount;
+                                println!(
+                                    "🟢 [DCA] {} new avg entry: {:.9} SOL (DCA {})",
+                                    symbol, pos.entry_price, pos.dca_count
+                                );
                             }
                         }
 
+                        // update peak
                         if current_price > pos.peak_price {
                             pos.peak_price = current_price;
                             println!(
                                 "📈 [Peak] {} new peak → {:.9} SOL",
-                                token.symbol,
-                                pos.peak_price
+                                symbol, pos.peak_price
                             );
                         }
 
-                        let drop = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
+                        // trailing stop / take-profit with profit check
                         let profit_pct =
                             ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
-                        if drop <= -1.0 && profit_pct > 0.0 {
-                            match sell_all_gmgn(&token.mint).await {
-                                Ok(tx_hash) => {
-                                    println!("✅ GMGN SELL success: {}", tx_hash);
-                                    sell_token(
-                                        &token.symbol,
-                                        &token.mint,
-                                        current_price,
-                                        pos.entry_price,
-                                        pos.peak_price,
-                                        drop,
-                                        pos.sol_spent,
-                                        pos.token_amount,
-                                        pos.open_time,
-                                        pos.stop_loss_price,
-                                        pos.take_profit_price,
-                                        pos.leverage,
-                                        pos.trailing_stop_pct,
-                                        pos.trade_fees
-                                    ).await;
-                                    positions.remove(&token.mint);
-                                }
-                                Err(e) => {
-                                    println!("❌ GMGN SELL failed: {:?}", e);
-                                }
+                        let drop_from_peak =
+                            ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
+                        if profit_pct >= 10.0 && drop_from_peak <= 0.0 {
+                            // pass current_price to ensure sell at profit
+                            if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
+                                println!("✅ GMGN SELL success: {}", tx);
+                                sell_token(
+                                    &symbol,
+                                    &mint,
+                                    current_price,
+                                    pos.entry_price,
+                                    pos.peak_price,
+                                    drop_from_peak,
+                                    pos.sol_spent,
+                                    pos.token_amount,
+                                    pos.open_time,
+                                )
+                                .await;
+                                positions.remove(&mint);
                             }
                         }
                     }
                 }
 
-                // SAVE LAST PRICE
-                if let Some(i) = last_prices.iter().position(|(m, _)| m == &token.mint) {
-                    last_prices[i] = (token.mint.clone(), current_price);
-                } else {
-                    last_prices.push((token.mint.clone(), current_price));
-                }
+                // update last price
+                last_prices.insert(mint, current_price);
             }
 
-            sleep(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(1)).await;
         }
     });
 
-    // Enter listener to show table too
+    // keyboard shortcut to print open positions
     tokio::spawn(async move {
         let stdin = BufReader::new(io::stdin());
         let mut lines = stdin.lines();
         while let Ok(Some(_)) = lines.next_line().await {
-            print_positions().await;
+            print_open_positions().await;
         }
     });
 }
+
+

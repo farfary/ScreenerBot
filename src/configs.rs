@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
@@ -14,3 +16,12 @@ pub static CONFIGS: Lazy<Configs> = Lazy::new(|| {
 });
 
 pub static RPC: Lazy<RpcClient> = Lazy::new(|| RpcClient::new(CONFIGS.rpc_url.clone()));
+
+use std::collections::HashSet;
+use tokio::sync::RwLock;
+
+/// Mints that produced “Unsupported program id …” or similar hard
+/// errors while decoding pools.
+pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> =
+    Lazy::new(|| RwLock::new(HashSet::new()));
+
