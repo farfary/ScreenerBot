@@ -378,7 +378,6 @@ async fn trader_main_loop() {
                                         last_dca_price: current_price,
                                     });
                                 }
-                                save_open().await;
                             }
                         }
                     }
@@ -416,7 +415,6 @@ async fn trader_main_loop() {
                             let mut w = OPEN_POSITIONS.write().await;
                             w.insert(mint.clone(), pos.clone());
                         }
-                        save_open().await;
                     }
                 }
 
@@ -428,7 +426,6 @@ async fn trader_main_loop() {
                             p.peak_price = current_price;
                         }
                     }
-                    save_open().await;
                 }
 
                 // trailing stop / take-profit
@@ -452,8 +449,7 @@ async fn trader_main_loop() {
                         ).await;
 
                         OPEN_POSITIONS.write().await.remove(&mint);
-                        save_open().await;
-                        save_closed().await;
+
                     }
                 }
             }

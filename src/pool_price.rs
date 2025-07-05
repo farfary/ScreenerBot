@@ -75,11 +75,11 @@ fn flush_pool_cache_to_disk() {
     }
 }
 
-/// fetch live price using the (cached) biggest pool
 pub fn price_from_biggest_pool(rpc: &RpcClient, token_mint: &str) -> Result<f64> {
     use crate::pool_decoder::{ decode_any_pool, decode_any_pool_price };
+    use std::time::Instant;
 
-    ensure_pool_cache_loaded()?; // load address cache
+    ensure_pool_cache_loaded()?;
 
     let start = Instant::now();
     let maybe_pool = { POOL_CACHE.read().get(token_mint).copied() };
@@ -88,15 +88,13 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, token_mint: &str) -> Result<f64>
     let best_pk = if let Some(pk) = maybe_pool {
         pk
     } else {
-        // scan all pools and keep the biggest
         let pools = fetch_solana_pairs(token_mint)?;
         println!(
             "🔗 [POOL] {token_mint} → fetched {} pool(s) ({} ms)",
             pools.len(),
             start.elapsed().as_millis()
         );
-
-        let (best_pk, max_liq) = pools
+        let (best_pk, _max_liq) = pools
             .par_iter()
             .filter_map(|pk| {
                 decode_any_pool(rpc, pk)
@@ -105,22 +103,47 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, token_mint: &str) -> Result<f64>
             })
             .max_by_key(|&(_, liq)| liq)
             .ok_or_else(|| anyhow!("no valid pools for {token_mint}"))?;
-
-        // remember address in RAM + disk
         POOL_CACHE.write().insert(token_mint.to_string(), best_pk);
         flush_pool_cache_to_disk();
-        // println!("💾 [POOL] {token_mint} → new biggest pool {best_pk} | liq {max_liq}");
         best_pk
     };
 
     // ---------- 2. get fresh price ---------------------------------------------------
     let (_, _, price) = decode_any_pool_price(rpc, &best_pk)?;
+
+    // ---------- compute percent change from last price ------------------------------
+    let prev_price_opt = PRICE_CACHE.read()
+        .unwrap()
+        .get(token_mint)
+        .map(|&(_ts, p)| p);
+
+    let pct_str = if let Some(prev) = prev_price_opt {
+        let pct = ((price - prev) / prev) * 100.0;
+        if pct > 0.0 {
+            // green, bold
+            format!("\x1b[32m\x1b[1m+{:.2}%\x1b[0m", pct)
+        } else if pct < 0.0 {
+            // red, bold
+            format!("\x1b[31m\x1b[1m{:.2}%\x1b[0m", pct)
+        } else {
+            // no change, dark gray
+            format!("\x1b[90m+0.00%\x1b[0m")
+        }
+    } else {
+        // first time, treat as no change
+        format!("\x1b[90m+0.00%\x1b[0m")
+    };
+
+    // ---------- 3. log with percent before price, price bold -------------------------
     println!(
-        "🏆 [POOL] {token_mint} → price {price:.12} SOL (total {} ms)",
+        "🏆 [POOL] {} → {} \x1b[1m{:.12}\x1b[0m SOL (total {} ms)",
+        token_mint,
+        pct_str,
+        price,
         start.elapsed().as_millis()
     );
 
-    // ---------- 3. save price in RAM for UI -----------------------------------------
+    // ---------- 4. save price in RAM for next tick ---------------------------------
     let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
     PRICE_CACHE.write().unwrap().insert(token_mint.to_string(), (ts, price));
 

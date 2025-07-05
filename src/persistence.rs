@@ -94,7 +94,7 @@ pub async fn autosave_loop() {
         // so run it on a blocking thread-pool:
         let _ = task::spawn_blocking(|| flush_pool_cache_to_disk_nonblocking()).await;
 
-        sleep(Duration::from_secs(2)).await;          // every 10 s
+        sleep(Duration::from_secs(2)).await;
     }
 }
 // ──────────────────────────────────────────────────────────────────────────────
