@@ -25,7 +25,7 @@ use tokio::time::{timeout};
 
 // Constants
 const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 3; // example: allow up to 5 open positions
+const MAX_OPEN_POSITIONS: usize = 5; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
 
@@ -315,9 +315,7 @@ async fn trader_main_loop() {
                 let m = mint.clone();
                 move || price_from_biggest_pool(&RPC, &m)          // ← sync call
             });
-        
-            eprintln!("▶️  starting price fetch for {symbol}");
-            
+                    
             let current_price = match timeout(Duration::from_secs(5), price_handle).await {
                 /* finished in time -------------------------------------------------- */
                 Ok(join_res) => match join_res {
@@ -350,8 +348,6 @@ async fn trader_main_loop() {
                     continue;
                 }
             };
-
-            eprintln!("✅ got price {current_price:.12} for {symbol}");
 
             
             let now = Instant::now();
