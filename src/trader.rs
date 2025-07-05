@@ -347,7 +347,7 @@ async fn trader_main_loop() {
                 let elapsed = now.duration_since(ts);
                 if elapsed.as_secs() >= 300 {
                     let drop_pct = ((current_price - old_price) / old_price) * 100.0;
-                    if drop_pct <= -10.0 {
+                    if drop_pct <= -5.0 {
                         println!(
                             "🚨 {} has dropped {:.2}% over the last 5m (from {:.9} → {:.9}), placing entry",
                             symbol,
