@@ -3,8 +3,10 @@
 use tokio::sync::RwLock;
 use once_cell::sync::Lazy;
 use serde_json::Value;
+use std::sync::atomic::Ordering;
 use reqwest::Client;
 use crate::configs::BLACKLIST;
+use crate::utilitis::*;
 
 #[derive(Debug, Clone)]
 pub struct Token {
@@ -32,14 +34,16 @@ fn chunked(vec: Vec<String>, chunk_size: usize) -> Vec<Vec<String>> {
         .collect()
 }
 
-pub async fn start_dexscreener_loop() {
-    const MAX_TOKENS: usize = 10;
+pub fn start_dexscreener_loop() {
+    const MAX_TOKENS: usize = 30;
 
     let client = Client::new();
     let client_insert = client.clone();
 
     tokio::spawn(async move {
         loop {
+            if SHUTDOWN.load(Ordering::SeqCst) { break }
+
             println!("\n🔄 [Screener] Fetching DexScreener token lists...");
 
             let mut new_tokens: Vec<Token> = Vec::new();
@@ -146,27 +150,30 @@ pub async fn start_dexscreener_loop() {
             });
             new_tokens.truncate(MAX_TOKENS);
 
-            // Instead of filtering inside the write-lock, filter up-front:
-            let mut filtered_tokens = Vec::with_capacity(MAX_TOKENS);
+            // Capture existing mints to only log truly new ones
+            let existing_mints: Vec<String> = {
+                let lock = TOKENS.read().await;
+                lock.iter().map(|t| t.mint.clone()).collect()
+            };
 
+            // Filter and log only new additions
+            let mut filtered_tokens = Vec::with_capacity(MAX_TOKENS);
             for t in new_tokens {
-                // Blacklist check outside TOKENS lock
                 if BLACKLIST.read().await.contains(&t.mint) {
                     continue;
                 }
                 if !t.symbol.is_empty() && !t.price_usd.is_empty() && !t.name.is_empty() {
-                    println!(
-                        "🆕 Added: {} ({}) | Native {} SOL | USD ${}",
-                        t.symbol,
-                        t.mint,
-                        t.price_native,
-                        t.price_usd
-                    );
+                    if !existing_mints.contains(&t.mint) {
+                        println!(
+                            "🆕 Added: {} ({}) | Native {} SOL | USD ${}",
+                            t.symbol, t.mint, t.price_native, t.price_usd
+                        );
+                    }
                     filtered_tokens.push(t);
                 }
             }
 
-            // Only hold lock for short time, and just replace the vector
+            // Replace TOKENS with the new list
             {
                 let mut lock = TOKENS.write().await;
                 lock.clear();
@@ -179,3 +186,4 @@ pub async fn start_dexscreener_loop() {
         }
     });
 }
+

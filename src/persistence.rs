@@ -18,6 +18,8 @@ use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use tokio::{fs, time::{sleep, Duration}};
 use anyhow::Result;
+use crate::utilitis::*;
+use crate::pool_price::flush_pool_cache_to_disk_nonblocking;   // <── add
 
 pub const OPEN_POS_FILE:   &str = "open_positions.json";
 pub const CLOSED_POS_FILE: &str = "recent_closed.json";
@@ -56,24 +58,43 @@ pub async fn load_cache() -> Result<()> {
 }
 
 // save helpers ---------------------------------------------------------------
-pub async fn save_open() -> Result<()> {
+/// Spawn the open‐positions write so we don’t block the caller.
+pub async fn save_open() {
     let map = OPEN_POSITIONS.read().await.clone();
-    fs::write(OPEN_POS_FILE, serde_json::to_vec_pretty(&map)?).await?;
-    Ok(())
+    let data = serde_json::to_vec_pretty(&map).unwrap();
+    tokio::spawn(async move {
+        let _ = fs::write(OPEN_POS_FILE, data).await;
+    });
 }
 
-pub async fn save_closed() -> Result<()> {
+/// Spawn the closed‐positions write so we don’t block the caller.
+pub async fn save_closed() {
     let vec = RECENT_CLOSED_POSITIONS.read().await.clone();
-    fs::write(CLOSED_POS_FILE, serde_json::to_vec_pretty(&vec)?).await?;
-    Ok(())
+    let data = serde_json::to_vec_pretty(&vec).unwrap();
+    tokio::spawn(async move {
+        let _ = fs::write(CLOSED_POS_FILE, data).await;
+    });
 }
+
 
 // background autosave --------------------------------------------------------
 pub async fn autosave_loop() {
+    use std::sync::atomic::Ordering;
+    use tokio::{task, time::{sleep, Duration}};
     loop {
-        let _ = save_open().await;
-        let _ = save_closed().await;
-        sleep(Duration::from_secs(10)).await;   // every 10 s
+        // stop immediately once the flag is set
+        if SHUTDOWN.load(Ordering::SeqCst) { break }
+
+        // run both JSON writes concurrently (non-blocking)
+        let open  = tokio::spawn(save_open());
+        let closed = tokio::spawn(save_closed());
+        let _ = futures::future::join(open, closed).await;
+
+        // write the pool-address cache (uses blocking std::fs),
+        // so run it on a blocking thread-pool:
+        let _ = task::spawn_blocking(|| flush_pool_cache_to_disk_nonblocking()).await;
+
+        sleep(Duration::from_secs(2)).await;          // every 10 s
     }
 }
 // ──────────────────────────────────────────────────────────────────────────────

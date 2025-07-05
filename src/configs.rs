@@ -22,6 +22,33 @@ use tokio::sync::RwLock;
 
 /// Mints that produced “Unsupported program id …” or similar hard
 /// errors while decoding pools.
-pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> =
-    Lazy::new(|| RwLock::new(HashSet::new()));
 
+
+use std::{fs};
+use serde_json::json;
+
+
+const BLACKLIST_FILE: &str = ".blacklist.json";
+
+/// In-memory set, initially populated from disk
+pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
+    let mut set = HashSet::new();
+    if let Ok(s) = fs::read_to_string(BLACKLIST_FILE) {
+        if let Ok(v) = serde_json::from_str::<Vec<String>>(&s) {
+            set.extend(v);
+        }
+    }
+    RwLock::new(set)
+});
+
+pub async fn add_to_blacklist(mint: &str) {
+    let mut bl = BLACKLIST.write().await;
+    if bl.insert(mint.to_string()) {
+        // write out the updated list as JSON array
+        let vec: Vec<&String> = bl.iter().collect();
+        let _ = fs::write(
+            BLACKLIST_FILE,
+            serde_json::to_string(&vec).unwrap(),
+        );
+    }
+}

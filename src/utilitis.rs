@@ -102,97 +102,7 @@ pub static PRICE_CACHE: Lazy<RwLock<HashMap<String, (u64, f64)>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 
-pub fn price_from_biggest_pool(rpc: &RpcClient, token_mint: &str) -> Result<f64> {
-    use crate::pool_decoder::{decode_any_pool, decode_any_pool_price};
-    
 
-    const TTL: u64 = 2 * 3600; // 2 hours
-
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let start = Instant::now();
-
-    // 1) Check in-memory cache
-    if let Some(&(ts, price)) = PRICE_CACHE.read().unwrap().get(token_mint) {
-        if now < ts + TTL {
-            println!(
-                "🟢 [POOL] {token_mint} → cache hit | price {price:.9} SOL ({}ms)",
-                start.elapsed().as_millis()
-            );
-            return Ok(price);
-        } else {
-            println!("🔄 [POOL] {token_mint} → cache expired ({} s ago)", now - ts);
-        }
-    } else {
-        println!("🔍 [POOL] {token_mint} → no cache entry");
-    }
-
-    // 2) Fetch pool list
-    let t0 = Instant::now();
-    let pools = fetch_solana_pairs(token_mint)?;
-    println!(
-        "🔗 [POOL] {token_mint} → fetched {} pool(s) ({}ms)",
-        pools.len(),
-        t0.elapsed().as_millis()
-    );
-
-    // 3) Find biggest pool by liquidity in parallel
-    let t1 = Instant::now();
-    let pool_results: Vec<_> = pools
-        .par_iter()
-        .map(|pk| {
-            let t_pool = Instant::now();
-            let res = decode_any_pool(rpc, pk);
-            (pk, res, t_pool.elapsed())
-        })
-        .collect();
-
-    let mut best_pk: Option<Pubkey> = None;
-    let mut max_liq: u128 = 0;
-    for (pk, result, elapsed) in pool_results {
-        match result {
-            Ok((base, quote, _, _)) => {
-                let liq = (base as u128) + (quote as u128);
-                println!(
-                    "   • {pk} | base {base} quote {quote} liq {liq} ({}ms)",
-                    elapsed.as_millis()
-                );
-                if liq > max_liq {
-                    max_liq = liq;
-                    best_pk = Some(*pk);
-                }
-            }
-            Err(e) => {
-                eprintln!(
-                    "⚠️  decode failed for {pk}: {e} ({}ms)",
-                    elapsed.as_millis()
-                );
-            }
-        }
-    }
-    println!("🔎 Pool scan time: {}ms", t1.elapsed().as_millis());
-
-    let best_pk = best_pk.ok_or_else(|| anyhow!("no valid pools for {token_mint}"))?;
-
-    // 4) Decode price from best pool
-    let t2 = Instant::now();
-    let (_, _, best_price) = decode_any_pool_price(rpc, &best_pk)?;
-    println!(
-        "🏆 [POOL] {token_mint} → BEST {best_pk} | liq {max_liq} | price {best_price:.9} SOL ({}ms)",
-        t2.elapsed().as_millis()
-    );
-
-    // 5) Update in-memory cache
-    {
-        let mut cache = PRICE_CACHE.write().unwrap();
-        cache.insert(token_mint.to_string(), (now, best_price));
-    }
-
-    println!(
-        "⏱️ Total time for price_from_biggest_pool: {}ms",
-        start.elapsed().as_millis()
-    );
-    Ok(best_price)
-}
 
 /// Pull every *Solana* `pairAddress` for the given token mint from DexScreener, with 2h cache.
 pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
@@ -333,7 +243,19 @@ pub fn effective_swap_price(
     );
     println!("💸 minus fee  : {fee_lamports} (= {SWAP_FEE_SOL:.9} SOL)");
     println!("💰 spent used : {effective_lamports} (= {sol_spent:.9} SOL)");
-    println!("📈 effective price: {price:.9} SOL per token");
+    println!("📈 effective price: {price:.12} SOL per token");
 
     Ok(price)
+}
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+pub static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+pub fn install_sigint_handler() -> Result<()> {
+    ctrlc::set_handler(|| {
+        eprintln!("\n^C⏹  Ctrl-C received, will terminate after current cycle …");
+        SHUTDOWN.store(true, Ordering::SeqCst);
+    })?;
+    Ok(())
 }

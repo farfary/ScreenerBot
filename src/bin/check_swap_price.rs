@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let rpc = RpcClient::new("https://api.mainnet-beta.solana.com");
 
     let price = effective_swap_price(&rpc, tx_sig, &wallet, &token_mint, lamports_in)?;
-    println!("✅ FINAL effective price: {price:.9} SOL");
+    println!("✅ FINAL effective price: {price:.12} SOL");
 
     Ok(())
 }
