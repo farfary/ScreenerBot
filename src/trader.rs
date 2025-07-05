@@ -49,15 +49,13 @@ fn format_duration_ago(from: DateTime<Utc>) -> String {
 }
 
 async fn print_open_positions() {
-    use colored::Colorize;
     let positions = OPEN_POSITIONS.read().await;
     let closed = RECENT_CLOSED_POSITIONS.read().await;
 
-    // Prepare and sort open positions by open_time (oldest first, newest on bottom)
-    let mut open_list: Vec<_> = positions.iter().collect();
-    open_list.sort_by_key(|(_, pos)| pos.open_time);
+    // Sort open positions by open_time ascending (latest at bottom)
+    let mut positions_vec: Vec<_> = positions.iter().collect();
+    positions_vec.sort_by_key(|(_, pos)| pos.open_time);
 
-    // Build Open Positions table
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
@@ -75,7 +73,7 @@ async fn print_open_positions() {
             ]
         );
 
-    for (mint, pos) in open_list {
+    for (mint, pos) in positions_vec {
         let current_price = PRICE_CACHE.read()
             .unwrap()
             .get(mint)
@@ -86,13 +84,6 @@ async fn print_open_positions() {
             ((current_price - pos.entry_price) / pos.entry_price) * 100.0
         } else {
             0.0
-        };
-
-        // Color row green if profitable, red otherwise
-        let color_fn = if profit_pct >= 0.0 {
-            |s: String| s.green().to_string()
-        } else {
-            |s: String| s.red().to_string()
         };
 
         table.add_row(
@@ -107,19 +98,15 @@ async fn print_open_positions() {
                 format!("{:.9}", pos.sol_spent),
                 format_duration_ago(pos.open_time)
             ]
-                .into_iter()
-                .map(color_fn)
-                .collect::<Vec<_>>()
         );
     }
 
     println!("\n📂 [Open Positions]\n{}\n", table);
 
-    // If there are any closed positions, sort by close_time and display
     if !closed.is_empty() {
-        // Clone and sort closed positions by close_time (oldest first)
-        let mut closed_list = closed.clone();
-        closed_list.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
+        // Sort closed positions by close_time ascending (latest at bottom)
+        let mut closed_vec: Vec<_> = closed.iter().cloned().collect();
+        closed_vec.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
 
         let mut table_closed = Table::new();
         table_closed
@@ -139,7 +126,7 @@ async fn print_open_positions() {
                 ]
             );
 
-        for pos in closed_list {
+        for pos in closed_vec {
             let close_price = if pos.token_amount > 0.0 {
                 pos.sol_received / pos.token_amount
             } else {
@@ -149,13 +136,6 @@ async fn print_open_positions() {
                 ((pos.sol_received - pos.sol_spent) / pos.sol_spent) * 100.0
             } else {
                 0.0
-            };
-
-            // Color closed rows: green if profitable, red otherwise
-            let color_fn = if profit_pct >= 0.0 {
-                |s: String| s.green().to_string()
-            } else {
-                |s: String| s.red().to_string()
             };
 
             table_closed.add_row(
@@ -171,9 +151,6 @@ async fn print_open_positions() {
                     format_duration_ago(pos.open_time),
                     pos.close_time.map(format_duration_ago).unwrap_or_else(|| "-".into())
                 ]
-                    .into_iter()
-                    .map(color_fn)
-                    .collect::<Vec<_>>()
             );
         }
 
