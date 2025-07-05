@@ -4,6 +4,7 @@ pub mod helpers;
 pub mod swap_gmgn;
 pub mod dexscreener;
 pub mod trader;
+pub mod persistence;
 
 pub mod pool_decoder;
 pub mod pool_pumpfun;

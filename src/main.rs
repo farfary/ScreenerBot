@@ -17,36 +17,28 @@ mod pool_raydium_amm;
 mod pool_raydium_clmm;
 mod pool_raydium_cpmm;
 mod pool_pumpfun2;
+mod persistence;
+
+use anyhow::Result;
+use tokio::signal;
+use tokio::time::{sleep, Duration};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    // ── 1. restore cache from disk ───────────────────────────────────────────
+    persistence::load_cache().await?;
+
+    // ── 2. start the background auto-saver ───────────────────────────────────
+    tokio::spawn(async { persistence::autosave_loop().await; });
+
+    // ── 3. kick off the two main services (they spawn their own tasks) ───────
     dexscreener::start_dexscreener_loop().await;
     trader::start_trader_loop().await;
 
-    // Keep alive forever
-    loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(600)).await;
-    }
-
-    // let tokens = get_all_tokens();
-    // println!("Tokens: {:?}", tokens);
-
-    // let token_mint = "GtfNvPGEZEgFyJR8AP7ckvFBdSTnvP4Ses4ZNaZDpump";
-
-    // // ──────────────── BUY ────────────────
-    // let amount_in = 10_000_000; // e.g., 0.01 SOL in lamports
-    // println!("🚀 Start BUY via GMGN");
-
-    // match swap_gmgn::buy_gmgn(token_mint, amount_in).await {
-    //     Ok(sig) => println!("✅ BUY Tx Done: {sig}"),
-    //     Err(e) => eprintln!("❌ BUY Error: {e:?}"),
-    // }
-
-    // // ──────────────── SELL ────────────────
-    // println!("\n🚀 Start SELL ALL via GMGN");
-
-    // match swap_gmgn::sell_all_gmgn(token_mint).await {
-    //     Ok(sig) => println!("✅ SELL Tx Done: {sig}"),
-    //     Err(e) => eprintln!("❌ SELL Error: {e:?}"),
-    // }
+    // ── 4. keep the program alive and shut down gracefully on Ctrl-C ─────────
+    signal::ctrl_c().await?;
+    println!("⏹  Ctrl-C received, saving cache …");
+    persistence::save_open().await?;
+    persistence::save_closed().await?;
+    Ok(())
 }
