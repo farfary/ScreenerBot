@@ -1,4 +1,3 @@
-//! src/main.rs
 #![allow(warnings)]
 
 mod utilitis;
@@ -26,8 +25,17 @@ use tokio::{signal, task};
 use pool_price::flush_pool_cache_to_disk_nonblocking;
 use utilitis::{install_sigint_handler, SHUTDOWN};
 
+// --- New imports ---
+use once_cell::sync::Lazy;
+use std::env;
+
+
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // You can now refer to ARGS anywhere, e.g.:
+    // println!("All args: {:?}", *ARGS);
+
     // 1 ─ install lightweight Ctrl-C handler (sets SHUTDOWN = true)
     install_sigint_handler()?;
 

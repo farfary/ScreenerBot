@@ -15,7 +15,9 @@ pub static CONFIGS: Lazy<Configs> = Lazy::new(|| {
     serde_json::from_str(&raw).expect("Failed to parse configs.json")
 });
 
-pub static RPC: Lazy<RpcClient> = Lazy::new(|| RpcClient::new(CONFIGS.rpc_url.clone()));
+pub static RPC: Lazy<RpcClient> = Lazy::new(|| {
+    RpcClient::new_with_timeout(CONFIGS.rpc_url.clone(), std::time::Duration::from_secs(10))
+});
 
 use std::collections::HashSet;
 use tokio::sync::RwLock;
@@ -42,13 +44,27 @@ pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
 });
 
 pub async fn add_to_blacklist(mint: &str) {
-    let mut bl = BLACKLIST.write().await;
-    if bl.insert(mint.to_string()) {
-        // write out the updated list as JSON array
-        let vec: Vec<&String> = bl.iter().collect();
-        let _ = fs::write(
-            BLACKLIST_FILE,
-            serde_json::to_string(&vec).unwrap(),
-        );
+    // 1) Insert under lock, but don't write file yet
+    let need_write = {
+        let mut bl = BLACKLIST.write().await;
+        bl.insert(mint.to_string())
+    };
+
+    // 2) If it was new, persist _after_ dropping the lock
+    if need_write {
+        // capture the current set
+        let vec: Vec<String> = {
+            let bl = BLACKLIST.read().await;
+            bl.iter().cloned().collect()
+        };
+        let data = serde_json::to_string(&vec).unwrap();
+
+        // async write without blocking the executor
+        tokio::fs::write(BLACKLIST_FILE, data).await.ok();
     }
 }
+
+
+use std::env;
+/// Cached command-line arguments
+pub static ARGS: Lazy<Vec<String>> = Lazy::new(|| env::args().collect());

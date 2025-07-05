@@ -39,6 +39,8 @@ use colored::Colorize;
 
 pub fn start_dexscreener_loop() {
     const MAX_TOKENS: usize = 30;
+    // check debug flag from cached args
+    let debug = crate::configs::ARGS.iter().any(|a| a == "--debug-dexscreener");
 
     let client = Client::new();
     let client_insert = client.clone();
@@ -47,7 +49,10 @@ pub fn start_dexscreener_loop() {
         loop {
             if SHUTDOWN.load(Ordering::SeqCst) { break }
 
-            println!("\n🔄 [Screener] Fetching DexScreener token lists...");
+            // minimal start/stop unless debug
+            if debug {
+                println!("\n🔄 [Screener] Fetching DexScreener token lists...");
+            }
 
             let mut new_tokens: Vec<Token> = Vec::new();
             let endpoints = [
@@ -58,18 +63,20 @@ pub fn start_dexscreener_loop() {
 
             /* ── first-pass lists ─────────────────────────────────────────── */
             for url in endpoints {
-                println!("🌐 [Screener] Requesting: {url}");
+                if debug {
+                    println!("🌐 [Screener] Requesting: {url}");
+                }
                 if let Ok(resp) = client_insert.get(url).send().await {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(arr) = json.as_array() {
-                            println!("✅ {arr_len} tokens from {url}", arr_len = arr.len());
+                            if debug {
+                                println!("✅ {arr_len} tokens from {url}", arr_len = arr.len());
+                            }
                             for item in arr {
                                 let mint = item["tokenAddress"].as_str().unwrap_or_default();
-                                // ── SKIP if black-listed ──
                                 if BLACKLIST.read().await.contains(mint) {
                                     continue;
                                 }
-
                                 new_tokens.push(Token {
                                     mint: mint.to_string(),
                                     balance: "0".into(),
@@ -91,17 +98,15 @@ pub fn start_dexscreener_loop() {
             }
 
             /* ── second-pass details ──────────────────────────────────────── */
-            let mints: Vec<String> = new_tokens
-                .iter()
-                .map(|t| t.mint.clone())
-                .collect();
+            let mints: Vec<String> = new_tokens.iter().map(|t| t.mint.clone()).collect();
             let batches = chunked(mints, 30);
 
             for (i, batch) in batches.iter().enumerate() {
                 let joined = batch.join(",");
                 let url = format!("https://api.dexscreener.com/tokens/v1/solana/{joined}");
-                println!("🔗 DexScreener info (batch {}/{})", i + 1, batches.len());
-
+                if debug {
+                    println!("🔗 DexScreener info (batch {}/{})", i + 1, batches.len());
+                }
                 if let Ok(resp) = client_insert.get(&url).send().await {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(arr) = json.as_array() {
@@ -167,31 +172,36 @@ pub fn start_dexscreener_loop() {
                 }
                 if !t.symbol.is_empty() && !t.price_usd.is_empty() && !t.name.is_empty() {
                     if !existing_mints.contains(&t.mint) {
-                        // nicely formatted, colored full info
-                        println!(
-                            "{} {} {}\n  {} {}\n  {} {}\n  {} {} SOL\n  {} ${}\n  {} ${}\n  {} ${}\n  {} {}\n  {} {}\n  {} {}",
-                            "🆕".bold(),
-                            t.symbol.green().bold(),
-                            "-".normal(),
-                            "Name:".blue().bold(),
-                            t.name.white(),
-                            "Mint:".blue().bold(),
-                            t.mint.dimmed(),
-                            "Native:".blue().bold(),
-                            t.price_native.cyan().bold(),
-                            "USD:".blue().bold(),
-                            t.price_usd.yellow().bold(),
-                            "Volume24h:".blue().bold(),
-                            t.volume_usd.magenta().bold(),
-                            "FDV:".blue().bold(),
-                            t.fdv_usd.blue().bold(),
-                            "ATA:".blue().bold(),
-                            t.ata_pubkey.dimmed(),
-                            "ProgramID:".blue().bold(),
-                            t.program_id.dimmed(),
-                            "ImageURL:".blue().bold(),
-                            t.image_url.underline().white(),
-                        );
+                        if debug {
+                            // full info as before
+                            println!(
+                                "{} {} {}\n  {} {}\n  {} {}\n  {} {} SOL\n  {} ${}\n  {} ${}\n  {} ${}\n  {} {}\n  {} {}\n  {} {}",
+                                "🆕".bold(),
+                                t.symbol.green().bold(),
+                                "-".normal(),
+                                "Name:".blue().bold(),
+                                t.name.white(),
+                                "Mint:".blue().bold(),
+                                t.mint.dimmed(),
+                                "Native:".blue().bold(),
+                                t.price_native.cyan().bold(),
+                                "USD:".blue().bold(),
+                                t.price_usd.yellow().bold(),
+                                "Volume24h:".blue().bold(),
+                                t.volume_usd.magenta().bold(),
+                                "FDV:".blue().bold(),
+                                t.fdv_usd.blue().bold(),
+                                "ATA:".blue().bold(),
+                                t.ata_pubkey.dimmed(),
+                                "ProgramID:".blue().bold(),
+                                t.program_id.dimmed(),
+                                "ImageURL:".blue().bold(),
+                                t.image_url.underline().white(),
+                            );
+                        } else {
+                            // minimal added-token log
+                            println!("🆕 Added: {} ({})", t.symbol, t.mint);
+                        }
                     }
                     filtered_tokens.push(t);
                 }
@@ -204,10 +214,12 @@ pub fn start_dexscreener_loop() {
                 lock.extend(filtered_tokens);
             }
 
+            // always show this stop line
             println!("✅ TOKENS updated: {}", TOKENS.read().await.len());
 
             tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
         }
     });
 }
+
 

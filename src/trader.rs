@@ -20,9 +20,11 @@ use serde::{ Serialize, Deserialize };
 use tokio::{ fs };
 use anyhow::Result;
 use crate::utilitis::*;
+// put this near your other imports
+use tokio::time::{timeout};
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.004; // amount of SOL to spend on each buy
+const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 3; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
@@ -299,47 +301,59 @@ async fn trader_main_loop() {
 
         /* ── iterate mints ─────────────────────────────────────────────── */
         for mint in mints {
-            if SHUTDOWN.load(Ordering::SeqCst) {
-                return;
-            }
-            if BLACKLIST.read().await.contains(&mint) {
-                continue;
-            }
-
+            if SHUTDOWN.load(Ordering::SeqCst) { return; }
+            if BLACKLIST.read().await.contains(&mint) { continue; }
+        
             let symbol = TOKENS.read().await
                 .iter()
                 .find(|t| t.mint == mint)
                 .map(|t| t.symbol.clone())
                 .unwrap_or_else(|| mint.chars().take(4).collect());
-
-            // current price (blocking RPC on helper thread)
-            let current_price = match
-                task::spawn_blocking({
-                    let m = mint.clone();
-                    move || price_from_biggest_pool(&RPC, &m)
-                }).await
-            {
-                Ok(Ok(p)) if p > 0.0 => p,
-                Ok(Err(e)) => {
-                    eprintln!("❌ price error for {symbol}: {e}");
-                    if
-                        e.to_string().contains("no valid pools") ||
-                        e.to_string().contains("Unsupported program id") ||
-                        e.to_string().contains("is not an SPL-Token mint") ||
-                        e.to_string().contains("AccountNotFound")
-                        
-                    {
-                        println!("⚠️ Blacklisting mint: {}", mint);
-                        crate::configs::add_to_blacklist(&mint).await;
-                        println!("🛑 {} added to blacklist", symbol);
+        
+            /* ---------- CURRENT PRICE (with timeout) ------------------- */
+            let price_handle = tokio::task::spawn_blocking({
+                let m = mint.clone();
+                move || price_from_biggest_pool(&RPC, &m)          // ← sync call
+            });
+        
+            eprintln!("▶️  starting price fetch for {symbol}");
+            
+            let current_price = match timeout(Duration::from_secs(5), price_handle).await {
+                /* finished in time -------------------------------------------------- */
+                Ok(join_res) => match join_res {
+                    Ok(Ok(p)) if p > 0.0 => p,          // valid price
+                    Ok(Ok(_)) => {                      // price <= 0 ⇒ skip
+                        continue;
                     }
-                    continue;
-                }
-                _ => {
+                    Ok(Err(e)) => {                     // decode error
+                        eprintln!("❌ price error for {symbol}: {e}");
+                        if e.to_string().contains("no valid pools")
+                            || e.to_string().contains("Unsupported program id")
+                            || e.to_string().contains("is not an SPL-Token mint")
+                            || e.to_string().contains("AccountNotFound")
+                        {
+                            println!("⚠️ Blacklisting mint: {mint}");
+                            crate::configs::add_to_blacklist(&mint).await;
+                            println!("🛑 {symbol} added to blacklist");
+                        }
+                        continue;
+                    }
+                    Err(join_err) => {                  // worker panicked
+                        eprintln!("❌ worker panic fetching price for {symbol}: {join_err}");
+                        continue;
+                    }
+                },
+            
+                /* timed out --------------------------------------------------------- */
+                Err(_) => {
+                    eprintln!("⏰ price timeout (>5 s) for {symbol}");
                     continue;
                 }
             };
 
+            eprintln!("✅ got price {current_price:.12} for {symbol}");
+
+            
             let now = Instant::now();
 
             /* ---------- ENTRY: dropped ≥25% in last 5 minutes ---------- */
@@ -390,7 +404,12 @@ async fn trader_main_loop() {
             }
 
             /* ---------- DCA & trailing stop ---------- */
-            if let Some(mut pos) = OPEN_POSITIONS.read().await.get(&mint).cloned() {
+            let pos_opt = {
+                let guard = OPEN_POSITIONS.read().await;   // read-lock
+                guard.get(&mint).cloned()                  // clone the Position, no &refs
+            };  
+
+            if let Some(mut pos) = pos_opt  {
                 let now = Utc::now();
                 let elapsed = now - pos.open_time;
 
@@ -449,7 +468,6 @@ async fn trader_main_loop() {
                         ).await;
 
                         OPEN_POSITIONS.write().await.remove(&mint);
-
                     }
                 }
             }
