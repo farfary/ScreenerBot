@@ -217,7 +217,7 @@ pub fn start_dexscreener_loop() {
             // always show this stop line
             println!("✅ TOKENS updated: {}", TOKENS.read().await.len());
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
         }
     });
 }
