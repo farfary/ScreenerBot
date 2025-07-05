@@ -34,6 +34,9 @@ fn chunked(vec: Vec<String>, chunk_size: usize) -> Vec<Vec<String>> {
         .collect()
 }
 
+// Required import:
+use colored::Colorize;
+
 pub fn start_dexscreener_loop() {
     const MAX_TOKENS: usize = 30;
 
@@ -164,9 +167,30 @@ pub fn start_dexscreener_loop() {
                 }
                 if !t.symbol.is_empty() && !t.price_usd.is_empty() && !t.name.is_empty() {
                     if !existing_mints.contains(&t.mint) {
+                        // nicely formatted, colored full info
                         println!(
-                            "🆕 Added: {} ({}) | Native {} SOL | USD ${}",
-                            t.symbol, t.mint, t.price_native, t.price_usd
+                            "{} {} {}\n  {} {}\n  {} {}\n  {} {} SOL\n  {} ${}\n  {} ${}\n  {} ${}\n  {} {}\n  {} {}\n  {} {}",
+                            "🆕".bold(),
+                            t.symbol.green().bold(),
+                            "-".normal(),
+                            "Name:".blue().bold(),
+                            t.name.white(),
+                            "Mint:".blue().bold(),
+                            t.mint.dimmed(),
+                            "Native:".blue().bold(),
+                            t.price_native.cyan().bold(),
+                            "USD:".blue().bold(),
+                            t.price_usd.yellow().bold(),
+                            "Volume24h:".blue().bold(),
+                            t.volume_usd.magenta().bold(),
+                            "FDV:".blue().bold(),
+                            t.fdv_usd.blue().bold(),
+                            "ATA:".blue().bold(),
+                            t.ata_pubkey.dimmed(),
+                            "ProgramID:".blue().bold(),
+                            t.program_id.dimmed(),
+                            "ImageURL:".blue().bold(),
+                            t.image_url.underline().white(),
                         );
                     }
                     filtered_tokens.push(t);
