@@ -21,10 +21,10 @@ use tokio::{ fs };
 use anyhow::Result;
 use crate::utilitis::*;
 // put this near your other imports
-use tokio::time::{timeout};
+use tokio::time::{ timeout };
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
+const TRADE_SIZE_SOL: f64 = 0.004; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 5; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
@@ -49,9 +49,15 @@ fn format_duration_ago(from: DateTime<Utc>) -> String {
 }
 
 async fn print_open_positions() {
+    use colored::Colorize;
     let positions = OPEN_POSITIONS.read().await;
     let closed = RECENT_CLOSED_POSITIONS.read().await;
 
+    // Prepare and sort open positions by open_time (oldest first, newest on bottom)
+    let mut open_list: Vec<_> = positions.iter().collect();
+    open_list.sort_by_key(|(_, pos)| pos.open_time);
+
+    // Build Open Positions table
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
@@ -69,7 +75,7 @@ async fn print_open_positions() {
             ]
         );
 
-    for (mint, pos) in positions.iter() {
+    for (mint, pos) in open_list {
         let current_price = PRICE_CACHE.read()
             .unwrap()
             .get(mint)
@@ -80,6 +86,13 @@ async fn print_open_positions() {
             ((current_price - pos.entry_price) / pos.entry_price) * 100.0
         } else {
             0.0
+        };
+
+        // Color row green if profitable, red otherwise
+        let color_fn = if profit_pct >= 0.0 {
+            |s: String| s.green().to_string()
+        } else {
+            |s: String| s.red().to_string()
         };
 
         table.add_row(
@@ -94,12 +107,20 @@ async fn print_open_positions() {
                 format!("{:.9}", pos.sol_spent),
                 format_duration_ago(pos.open_time)
             ]
+                .into_iter()
+                .map(color_fn)
+                .collect::<Vec<_>>()
         );
     }
 
     println!("\n📂 [Open Positions]\n{}\n", table);
 
+    // If there are any closed positions, sort by close_time and display
     if !closed.is_empty() {
+        // Clone and sort closed positions by close_time (oldest first)
+        let mut closed_list = closed.clone();
+        closed_list.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
+
         let mut table_closed = Table::new();
         table_closed
             .load_preset(UTF8_FULL)
@@ -118,7 +139,7 @@ async fn print_open_positions() {
                 ]
             );
 
-        for pos in closed.iter() {
+        for pos in closed_list {
             let close_price = if pos.token_amount > 0.0 {
                 pos.sol_received / pos.token_amount
             } else {
@@ -128,6 +149,13 @@ async fn print_open_positions() {
                 ((pos.sol_received - pos.sol_spent) / pos.sol_spent) * 100.0
             } else {
                 0.0
+            };
+
+            // Color closed rows: green if profitable, red otherwise
+            let color_fn = if profit_pct >= 0.0 {
+                |s: String| s.green().to_string()
+            } else {
+                |s: String| s.red().to_string()
             };
 
             table_closed.add_row(
@@ -143,6 +171,9 @@ async fn print_open_positions() {
                     format_duration_ago(pos.open_time),
                     pos.close_time.map(format_duration_ago).unwrap_or_else(|| "-".into())
                 ]
+                    .into_iter()
+                    .map(color_fn)
+                    .collect::<Vec<_>>()
             );
         }
 
@@ -301,47 +332,56 @@ async fn trader_main_loop() {
 
         /* ── iterate mints ─────────────────────────────────────────────── */
         for mint in mints {
-            if SHUTDOWN.load(Ordering::SeqCst) { return; }
-            if BLACKLIST.read().await.contains(&mint) { continue; }
-        
+            if SHUTDOWN.load(Ordering::SeqCst) {
+                return;
+            }
+            if BLACKLIST.read().await.contains(&mint) {
+                continue;
+            }
+
             let symbol = TOKENS.read().await
                 .iter()
                 .find(|t| t.mint == mint)
                 .map(|t| t.symbol.clone())
                 .unwrap_or_else(|| mint.chars().take(4).collect());
-        
+
             /* ---------- CURRENT PRICE (with timeout) ------------------- */
             let price_handle = tokio::task::spawn_blocking({
                 let m = mint.clone();
-                move || price_from_biggest_pool(&RPC, &m)          // ← sync call
+                move || price_from_biggest_pool(&RPC, &m) // ← sync call
             });
-                    
+
             let current_price = match timeout(Duration::from_secs(5), price_handle).await {
                 /* finished in time -------------------------------------------------- */
-                Ok(join_res) => match join_res {
-                    Ok(Ok(p)) if p > 0.0 => p,          // valid price
-                    Ok(Ok(_)) => {                      // price <= 0 ⇒ skip
-                        continue;
-                    }
-                    Ok(Err(e)) => {                     // decode error
-                        eprintln!("❌ price error for {symbol}: {e}");
-                        if e.to_string().contains("no valid pools")
-                            || e.to_string().contains("Unsupported program id")
-                            || e.to_string().contains("is not an SPL-Token mint")
-                            || e.to_string().contains("AccountNotFound")
-                        {
-                            println!("⚠️ Blacklisting mint: {mint}");
-                            crate::configs::add_to_blacklist(&mint).await;
-                            println!("🛑 {symbol} added to blacklist");
+                Ok(join_res) =>
+                    match join_res {
+                        Ok(Ok(p)) if p > 0.0 => p, // valid price
+                        Ok(Ok(_)) => {
+                            // price <= 0 ⇒ skip
+                            continue;
                         }
-                        continue;
+                        Ok(Err(e)) => {
+                            // decode error
+                            eprintln!("❌ price error for {symbol}: {e}");
+                            if
+                                e.to_string().contains("no valid pools") ||
+                                e.to_string().contains("Unsupported program id") ||
+                                e.to_string().contains("is not an SPL-Token mint") ||
+                                e.to_string().contains("AccountNotFound")
+                            {
+                                println!("⚠️ Blacklisting mint: {mint}");
+                                crate::configs::add_to_blacklist(&mint).await;
+                                println!("🛑 {symbol} added to blacklist");
+                            }
+                            continue;
+                        }
+                        Err(join_err) => {
+                            // worker panicked
+                            eprintln!("❌ worker panic fetching price for {symbol}: {join_err}");
+                            continue;
+                        }
                     }
-                    Err(join_err) => {                  // worker panicked
-                        eprintln!("❌ worker panic fetching price for {symbol}: {join_err}");
-                        continue;
-                    }
-                },
-            
+
                 /* timed out --------------------------------------------------------- */
                 Err(_) => {
                     eprintln!("⏰ price timeout (>5 s) for {symbol}");
@@ -349,7 +389,6 @@ async fn trader_main_loop() {
                 }
             };
 
-            
             let now = Instant::now();
 
             /* ---------- ENTRY: dropped ≥25% in last 5 minutes ---------- */
@@ -401,11 +440,11 @@ async fn trader_main_loop() {
 
             /* ---------- DCA & trailing stop ---------- */
             let pos_opt = {
-                let guard = OPEN_POSITIONS.read().await;   // read-lock
-                guard.get(&mint).cloned()                  // clone the Position, no &refs
-            };  
+                let guard = OPEN_POSITIONS.read().await; // read-lock
+                guard.get(&mint).cloned() // clone the Position, no &refs
+            };
 
-            if let Some(mut pos) = pos_opt  {
+            if let Some(mut pos) = pos_opt {
                 let now = Utc::now();
                 let elapsed = now - pos.open_time;
 
