@@ -25,7 +25,7 @@ use tokio::time::{ timeout };
 
 // Constants
 const TRADE_SIZE_SOL: f64 = 0.004; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 5; // example: allow up to 5 open positions
+const MAX_OPEN_POSITIONS: usize = 6; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
 
@@ -373,7 +373,7 @@ async fn trader_main_loop() {
                 let elapsed = now.duration_since(ts);
                 if elapsed.as_secs() >= 300 {
                     let drop_pct = ((current_price - old_price) / old_price) * 100.0;
-                    if drop_pct <= -5.0 {
+                    if drop_pct <= -7.0 {
                         println!(
                             "🚨 {} has dropped {:.2}% over the last 5m (from {:.9} → {:.9}), placing entry",
                             symbol,
