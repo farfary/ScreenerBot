@@ -92,17 +92,13 @@ pub fn get_token_account_mint(rpc: &RpcClient, token_account: &Pubkey) -> Result
 use std::{ fs::{ File }, time::{ Instant } };
 use rayon::prelude::*; // ADD THIS
 
-use std::{
-    sync::RwLock,
-};
+use std::{ sync::RwLock };
 use once_cell::sync::Lazy;
 
 // Cache: token_mint -> (timestamp_secs, price)
-pub static PRICE_CACHE: Lazy<RwLock<HashMap<String, (u64, f64)>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-
-
+pub static PRICE_CACHE: Lazy<RwLock<HashMap<String, (u64, f64)>>> = Lazy::new(||
+    RwLock::new(HashMap::new())
+);
 
 /// Pull every *Solana* `pairAddress` for the given token mint from DexScreener, with 2h cache.
 pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
@@ -248,14 +244,28 @@ pub fn effective_swap_price(
     Ok(price)
 }
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{ AtomicBool, Ordering };
 
 pub static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 pub fn install_sigint_handler() -> Result<()> {
+    // plain Ctrl‑C (works cross‑platform)
     ctrlc::set_handler(|| {
-        eprintln!("\n^C⏹  Ctrl-C received, will terminate after current cycle …");
         SHUTDOWN.store(true, Ordering::SeqCst);
     })?;
+
+    // Spawn async SIGTERM listener for Unix
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{ signal, SignalKind };
+        tokio::spawn(async {
+            let mut sigterm = signal(SignalKind::terminate()).expect(
+                "cannot install SIGTERM handler"
+            );
+            sigterm.recv().await;
+            SHUTDOWN.store(true, Ordering::SeqCst);
+        });
+    }
+
     Ok(())
 }

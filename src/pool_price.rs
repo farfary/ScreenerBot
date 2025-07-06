@@ -94,6 +94,7 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
     let (_, _, price) = decode_any_pool_price(rpc, &pool_pk)?;
 
     // ---------- log change ------------------------------------------------
+    // ---------- log change (skip zero) -----------------------------------
     let prev = {
         PRICE_CACHE.read()
             .unwrap()
@@ -104,18 +105,19 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
         Some(p) if p != 0.0 => ((price - p) / p) * 100.0,
         _ => 0.0,
     };
-    let pct_str = if pct > 0.0 {
-        format!("\x1b[32;1m+{pct:.2}%\x1b[0m")
-    } else if pct < 0.0 {
-        format!("\x1b[31;1m{pct:.2}%\x1b[0m")
-    } else {
-        "\x1b[90m+0.00%\x1b[0m".into()
-    };
 
-    println!(
-        "🏆 [POOL] {mint} → {pct_str} \x1b[1m{price:.12}\x1b[0m SOL ({} ms)",
-        t0.elapsed().as_millis()
-    );
+    if pct != 0.0 {
+        let pct_str = if pct > 0.0 {
+            format!("\x1b[32;1m+{pct:.2}%\x1b[0m")
+        } else {
+            format!("\x1b[31;1m{pct:.2}%\x1b[0m")
+        };
+
+        println!(
+            "🏆 [POOL] {mint} → {pct_str} \x1b[1m{price:.12}\x1b[0m SOL ({} ms)",
+            t0.elapsed().as_millis()
+        );
+    }
 
     // ---------- cache price ----------------------------------------------
     let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();

@@ -38,7 +38,7 @@ fn chunked(vec: Vec<String>, chunk_size: usize) -> Vec<Vec<String>> {
 use colored::Colorize;
 
 pub fn start_dexscreener_loop() {
-    const MAX_TOKENS: usize = 30;
+    const MAX_TOKENS: usize = 80;
     // check debug flag from cached args
     let debug = crate::configs::ARGS.iter().any(|a| a == "--debug-dexscreener");
 

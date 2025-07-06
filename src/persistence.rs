@@ -46,23 +46,28 @@ pub async fn load_cache() -> Result<()> {
 }
 
 // save helpers ---------------------------------------------------------------
+async fn atomic_write(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    use std::path::Path;
+    use tokio::fs;
+
+    let tmp = format!("{path}.tmp");
+    fs::write(&tmp, bytes).await?;
+    fs::rename(&tmp, Path::new(path)).await
+}
+
 pub async fn save_open() {
-    let snapshot = {                  // <- read-guard lives only in this block
-        OPEN_POSITIONS.read().await.clone()
-    };
-    let _ = fs::write(
+    let snapshot = OPEN_POSITIONS.read().await.clone();
+    let _ = atomic_write(
         OPEN_POS_FILE,
-        serde_json::to_vec_pretty(&snapshot).unwrap()
+        &serde_json::to_vec_pretty(&snapshot).unwrap()
     ).await;
 }
 
 pub async fn save_closed() {
-    let snapshot = {
-        RECENT_CLOSED_POSITIONS.read().await.clone()
-    };
-    let _ = fs::write(
+    let snapshot = RECENT_CLOSED_POSITIONS.read().await.clone();
+    let _ = atomic_write(
         CLOSED_POS_FILE,
-        serde_json::to_vec_pretty(&snapshot).unwrap()
+        &serde_json::to_vec_pretty(&snapshot).unwrap()
     ).await;
 }
 

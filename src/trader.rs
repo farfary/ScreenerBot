@@ -24,8 +24,8 @@ use crate::utilitis::*;
 use tokio::time::{ timeout };
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.004; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 6; // example: allow up to 5 open positions
+const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
+const MAX_OPEN_POSITIONS: usize = 20; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
 
@@ -283,6 +283,12 @@ async fn trader_main_loop() {
     }
     println!("✅ TOKENS loaded! Proceeding with trader loop.");
 
+    let mut price_histories: HashMap<String, VecDeque<f64>> = HashMap::new();
+    const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
+    const RSI_PERIOD: usize = 14;
+    const OVERSOLD_RSI: f64 = 30.0;
+    const BOUNCE_REQ: f64 = 0.25; // %
+
     // track price snapshots for 5-min drop checks
     let mut last_prices: HashMap<String, (Instant, f64)> = HashMap::new();
 
@@ -366,53 +372,70 @@ async fn trader_main_loop() {
                 }
             };
 
+            let hist = price_histories.entry(mint.clone()).or_insert_with(VecDeque::new);
+            hist.push_back(current_price);
+            if hist.len() > PRICE_HISTORY_CAP {
+                hist.pop_front();
+            }
+
             let now = Instant::now();
 
-            /* ---------- ENTRY: dropped ≥25% in last 5 minutes ---------- */
-            if let Some(&(ts, old_price)) = last_prices.get(&mint) {
-                let elapsed = now.duration_since(ts);
-                if elapsed.as_secs() >= 300 {
-                    let drop_pct = ((current_price - old_price) / old_price) * 100.0;
-                    if drop_pct <= -7.0 {
-                        println!(
-                            "🚨 {} has dropped {:.2}% over the last 5m (from {:.9} → {:.9}), placing entry",
-                            symbol,
-                            drop_pct,
-                            old_price,
-                            current_price
-                        );
-                        let need_entry = {
-                            let pos = OPEN_POSITIONS.read().await;
-                            pos.len() < MAX_OPEN_POSITIONS && !pos.contains_key(&mint)
-                        };
-                        if need_entry {
-                            let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
-                            if let Ok(tx) = buy_gmgn(&mint, lamports).await {
-                                println!("✅ GMGN BUY success: {tx}");
-                                let bought = TRADE_SIZE_SOL / current_price;
-                                {
-                                    let mut pos = OPEN_POSITIONS.write().await;
-                                    pos.insert(mint.clone(), Position {
-                                        entry_price: current_price,
-                                        peak_price: current_price,
-                                        dca_count: 1,
-                                        token_amount: bought,
-                                        sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
-                                        sol_received: 0.0,
-                                        open_time: Utc::now(),
-                                        close_time: None,
-                                        last_dca_price: current_price,
-                                    });
-                                }
-                            }
+            /* ---------- ENTRY: dropped n in last x minutes ---------- */
+            if hist.len() == PRICE_HISTORY_CAP {
+                // 5-min drop versus oldest snapshot
+                let oldest = hist[0];
+                let drop_pct = ((current_price - oldest) / oldest) * 100.0;
+                if drop_pct <= -7.0 {
+                    // bounce confirmation off the 5-min low
+                    let min_5m = hist.iter().copied().fold(f64::INFINITY, f64::min);
+                    let bounce_pct = ((current_price - min_5m) / min_5m) * 100.0;
+
+                    // quick in-place RSI-14
+                    let mut gains = 0.0;
+                    let mut losses = 0.0;
+                    for i in PRICE_HISTORY_CAP - RSI_PERIOD..PRICE_HISTORY_CAP - 1 {
+                        let diff = hist[i + 1] - hist[i];
+                        if diff >= 0.0 {
+                            gains += diff;
+                        } else {
+                            losses += -diff;
                         }
                     }
-                    // reset snapshot
-                    last_prices.insert(mint.clone(), (now, current_price));
+                    let rsi = if losses == 0.0 {
+                        0.0
+                    } else {
+                        let rs = gains / losses;
+                        100.0 - 100.0 / (1.0 + rs)
+                    };
+
+                    let need_entry = {
+                        let pos = OPEN_POSITIONS.read().await;
+                        pos.len() < MAX_OPEN_POSITIONS && !pos.contains_key(&mint)
+                    };
+
+                    if need_entry && bounce_pct >= BOUNCE_REQ && rsi < OVERSOLD_RSI {
+                        println!(
+                            "🚨 {symbol} drop {drop_pct:.2}% | bounce {bounce_pct:.2}% | RSI {rsi:.1} ⇒ BUY"
+                        );
+                        let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
+                        if let Ok(tx) = buy_gmgn(&mint, lamports).await {
+                            println!("✅ GMGN BUY success: {tx}");
+                            let bought = TRADE_SIZE_SOL / current_price;
+                            let mut pos = OPEN_POSITIONS.write().await;
+                            pos.insert(mint.clone(), Position {
+                                entry_price: current_price,
+                                peak_price: current_price,
+                                dca_count: 1,
+                                token_amount: bought,
+                                sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
+                                sol_received: 0.0,
+                                open_time: Utc::now(),
+                                close_time: None,
+                                last_dca_price: current_price,
+                            });
+                        }
+                    }
                 }
-            } else {
-                // first snapshot
-                last_prices.insert(mint.clone(), (now, current_price));
             }
 
             /* ---------- DCA & trailing stop ---------- */
@@ -430,8 +453,8 @@ async fn trader_main_loop() {
                 let should_dca =
                     pos.dca_count < MAX_DCA_COUNT &&
                     current_price < pos.last_dca_price &&
-                    drop_pct <= -20.0 &&
-                    elapsed.num_minutes() >= 5;
+                    drop_pct <= -12.0 &&
+                    elapsed.num_minutes() >= 4;
                 if should_dca {
                     let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
                     if let Ok(tx) = buy_gmgn(&mint, lamports).await {
@@ -462,7 +485,7 @@ async fn trader_main_loop() {
                 // trailing stop / take-profit
                 let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
                 let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
-                if profit_pct >= 10.0 && drop_from_peak <= 0.0 {
+                if profit_pct >= 8.0 && drop_from_peak <= -2.0 {
                     if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
                         println!("✅ GMGN SELL success: {tx}");
                         sell_token(

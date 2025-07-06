@@ -19,53 +19,68 @@ mod persistence;
 mod pool_price;
 
 use anyhow::Result;
-use std::process;
-use tokio::{signal, task};
-
+use tokio::task;
 use pool_price::flush_pool_cache_to_disk_nonblocking;
 use utilitis::{install_sigint_handler, SHUTDOWN};
 
-// --- New imports ---
 use once_cell::sync::Lazy;
-use std::env;
+use std::{env, process, sync::atomic::Ordering};
 
-
+/// All command‑line arguments captured at startup.
+pub static ARGS: Lazy<Vec<String>> = Lazy::new(|| env::args().collect());
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // You can now refer to ARGS anywhere, e.g.:
-    // println!("All args: {:?}", *ARGS);
-
-    // 1 ─ install lightweight Ctrl-C handler (sets SHUTDOWN = true)
+    // 1 ─ install signal handlers
     install_sigint_handler()?;
 
-    // 2 ─ restore JSON caches
+    // 2 ─ restore caches
     persistence::load_cache().await?;
 
-    // 3 ─ start long-running services (they spawn their own tasks)
-    dexscreener::start_dexscreener_loop(); // returns immediately
-    trader::start_trader_loop();           // returns immediately
+    // 3 ─ start background services (each spawns its own task and returns)
+    dexscreener::start_dexscreener_loop();
+    trader::start_trader_loop();
 
-    // 4 ─ background autosaver (returns a JoinHandle we can abort later)
+    // 4 ─ periodic autosave task
     let autosaver = task::spawn(persistence::autosave_loop());
 
-    // 5 ─ wait for the **first** async Ctrl-C delivered by Tokio
-    signal::ctrl_c().await?;
-    println!("⏹  Ctrl-C received, shutting down …");
+    // 5 ─ block until the first shutdown signal arrives
+    wait_for_shutdown_signal().await;
 
-    // 6 ─ let every loop see the flag and stop by itself
-    SHUTDOWN.store(true, std::sync::atomic::Ordering::SeqCst);
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    println!("⏹  shutdown signal caught, flushing state …");
 
-    // 7 ─ abort the autosaver if it is still sleeping
+    // 6 ─ broadcast shutdown flag so every long‑running loop stops
+    SHUTDOWN.store(true, Ordering::Release);
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // 7 ─ abort autosaver if still pending
     autosaver.abort();
     let _ = autosaver.await;
 
-    // 8 ─ final flush
+    // 8 ─ final flush to disk
     persistence::save_open().await;
     persistence::save_closed().await;
     flush_pool_cache_to_disk_nonblocking();
 
     println!("✅ graceful shutdown complete.");
     process::exit(0);
+}
+
+/// Waits until either Ctrl‑C (SIGINT) or SIGTERM (from systemd) is received.
+async fn wait_for_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = signal(SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = term.recv()             => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
