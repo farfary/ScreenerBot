@@ -282,8 +282,9 @@ async fn trader_main_loop() {
         sleep(Duration::from_secs(1)).await;
     }
     println!("✅ TOKENS loaded! Proceeding with trader loop.");
-
+    let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
     let mut price_histories: HashMap<String, VecDeque<f64>> = HashMap::new();
+
     const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
     const RSI_PERIOD: usize = 14;
     const OVERSOLD_RSI: f64 = 30.0;
@@ -381,16 +382,34 @@ async fn trader_main_loop() {
             let now = Instant::now();
 
             /* ---------- ENTRY: dropped n in last x minutes ---------- */
+            // PARAMETERS ─────────────────────────────────────────────────────────────
+            // How many price points to keep in memory (for 5min window with 5s loop)
+            const PRICE_HISTORY_CAP: usize = 60;
+
+            // How many periods for RSI calculation (standard is 14)
+            const RSI_PERIOD: usize = 14;
+
+            // Entry only if price has dropped at least this % over the last 5min
+            const DROP_TRIGGER_PCT: f64 = -7.0;
+
+            // Entry only if we have bounced this % off the local 5min low (to avoid catching falling knife)
+            const BOUNCE_REQ_PCT: f64 = 0.25;
+
+            // Entry only if RSI is below this (oversold zone, helps catch bounces)
+            const OVERSOLD_RSI: f64 = 30.0;
+
+            // REPLACEMENT BLOCK (drop in as-is) ─────────────────────────────────────
             if hist.len() == PRICE_HISTORY_CAP {
-                // 5-min drop versus oldest snapshot
+                // 5-min drop versus oldest price
                 let oldest = hist[0];
                 let drop_pct = ((current_price - oldest) / oldest) * 100.0;
-                if drop_pct <= -7.0 {
-                    // bounce confirmation off the 5-min low
+
+                if drop_pct <= DROP_TRIGGER_PCT {
+                    // How much we've bounced up off the lowest price in last 5min
                     let min_5m = hist.iter().copied().fold(f64::INFINITY, f64::min);
                     let bounce_pct = ((current_price - min_5m) / min_5m) * 100.0;
 
-                    // quick in-place RSI-14
+                    // Quick in-place RSI calculation (classic 14 periods)
                     let mut gains = 0.0;
                     let mut losses = 0.0;
                     for i in PRICE_HISTORY_CAP - RSI_PERIOD..PRICE_HISTORY_CAP - 1 {
@@ -408,12 +427,14 @@ async fn trader_main_loop() {
                         100.0 - 100.0 / (1.0 + rs)
                     };
 
+                    // Only enter if we don't already hold & have available slots
                     let need_entry = {
                         let pos = OPEN_POSITIONS.read().await;
                         pos.len() < MAX_OPEN_POSITIONS && !pos.contains_key(&mint)
                     };
 
-                    if need_entry && bounce_pct >= BOUNCE_REQ && rsi < OVERSOLD_RSI {
+                    // ENTRY DECISION
+                    if need_entry && bounce_pct >= BOUNCE_REQ_PCT && rsi < OVERSOLD_RSI {
                         println!(
                             "🚨 {symbol} drop {drop_pct:.2}% | bounce {bounce_pct:.2}% | RSI {rsi:.1} ⇒ BUY"
                         );
@@ -444,65 +465,113 @@ async fn trader_main_loop() {
                 guard.get(&mint).cloned() // clone the Position, no &refs
             };
 
+            // ───────── HARD-CODED PARAMS (configure at top of file) ───────────────
+            const DCA_BASE_TRIGGER_PCT: f64 = -12.0; // first DCA at -12 %
+            const DCA_STEP_TRIGGER_PCT: f64 = -5.0; // every extra DCA needs another -5 %
+            const DCA_MIN_COOLDOWN_MIN: i64 = 3; // min minutes between DCAs
+            const DCA_SIZE_FACTOR: f64 = 0.25; // each DCA adds 25 % more size
+
+            const TP_START_PROFIT_PCT: f64 = 8.0; // enable trailing ≥ +8 %
+            const TP_BASE_DROP_PCT: f64 = -2.0; // start trail at −2 %
+            const TP_STEP_PCT: f64 = 4.0; // widen trail 1 % per +4 % profit
+            const TP_MAX_DROP_PCT: f64 = -10.0; // never looser than −10 %
+
+            // ───────── DCA + TRAILING (single block) ───────────────────────────────
             if let Some(mut pos) = pos_opt {
                 let now = Utc::now();
                 let elapsed = now - pos.open_time;
-
-                // DCA
                 let drop_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
-                let should_dca =
+                let next_trig =
+                    DCA_BASE_TRIGGER_PCT + (pos.dca_count as f64) * DCA_STEP_TRIGGER_PCT;
+                let cooldown_ok =
+                    elapsed.num_minutes() >= DCA_MIN_COOLDOWN_MIN * ((pos.dca_count as i64) + 1);
+
+                /* ——— DCA ladder ——— */
+                if
                     pos.dca_count < MAX_DCA_COUNT &&
                     current_price < pos.last_dca_price &&
-                    drop_pct <= -12.0 &&
-                    elapsed.num_minutes() >= 4;
-                if should_dca {
-                    let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
+                    drop_pct <= next_trig &&
+                    cooldown_ok
+                {
+                    let sol_size =
+                        TRADE_SIZE_SOL * (1.0 + (pos.dca_count as f64) * DCA_SIZE_FACTOR);
+                    let lamports = (sol_size * 1_000_000_000.0) as u64;
+
                     if let Ok(tx) = buy_gmgn(&mint, lamports).await {
-                        println!("✅ GMGN DCA BUY success: {tx}");
-                        let added = TRADE_SIZE_SOL / current_price;
+                        let added = sol_size / current_price;
                         pos.token_amount += added;
-                        pos.sol_spent += TRADE_SIZE_SOL + TRANSACTION_FEE_SOL;
+                        pos.sol_spent += sol_size + TRANSACTION_FEE_SOL;
                         pos.dca_count += 1;
                         pos.entry_price = pos.sol_spent / pos.token_amount;
                         pos.last_dca_price = current_price;
-                        {
-                            let mut w = OPEN_POSITIONS.write().await;
-                            w.insert(mint.clone(), pos.clone());
-                        }
+
+                        OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
+
+                        println!(
+                            "🟢 DCA #{:02} {} @ {:.9} (∆ {:.2} %)  |  {tx}",
+                            pos.dca_count,
+                            symbol,
+                            current_price,
+                            drop_pct
+                        );
                     }
                 }
 
-                // update peak
+                /* ——— peak update & milestone log ——— */
                 if current_price > pos.peak_price {
-                    {
-                        let mut w = OPEN_POSITIONS.write().await;
-                        if let Some(p) = w.get_mut(&mint) {
-                            p.peak_price = current_price;
-                        }
+                    if let Some(p) = OPEN_POSITIONS.write().await.get_mut(&mint) {
+                        p.peak_price = current_price;
+                    }
+                    let profit_now = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+                    let bucket = (profit_now / 2.0).floor() as i32; // announce every +2 %
+
+                    if bucket > *notified_profit_bucket.get(&mint).unwrap_or(&-1) {
+                        notified_profit_bucket.insert(mint.clone(), bucket);
+                        println!(
+                            "📈 {} new peak {:.2}% (price {:.9})",
+                            symbol,
+                            profit_now,
+                            current_price
+                        );
                     }
                 }
 
-                // trailing stop / take-profit
+                /* ——— dynamic trailing stop ——— */
                 let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
                 let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
-                if profit_pct >= 8.0 && drop_from_peak <= -2.0 {
-                    if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
-                        println!("✅ GMGN SELL success: {tx}");
-                        sell_token(
-                            &symbol,
-                            &mint,
-                            current_price,
-                            pos.entry_price,
-                            pos.peak_price,
-                            drop_from_peak,
-                            pos.sol_spent,
-                            pos.token_amount,
-                            pos.dca_count,
-                            pos.last_dca_price,
-                            pos.open_time
-                        ).await;
 
-                        OPEN_POSITIONS.write().await.remove(&mint);
+                if profit_pct >= TP_START_PROFIT_PCT {
+                    let extra = ((profit_pct - TP_START_PROFIT_PCT) / TP_STEP_PCT).floor();
+                    let mut trail = TP_BASE_DROP_PCT - extra; // wider trail with profit
+                    if trail < TP_MAX_DROP_PCT {
+                        trail = TP_MAX_DROP_PCT;
+                    }
+
+                    if drop_from_peak <= trail {
+                        if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
+                            println!(
+                                "🔴 SELL {}  +{:.2}% | peak {:.2}% | trail {:.2}%  |  {tx}",
+                                symbol,
+                                profit_pct,
+                                drop_from_peak.abs(),
+                                trail
+                            );
+                            sell_token(
+                                &symbol,
+                                &mint,
+                                current_price,
+                                pos.entry_price,
+                                pos.peak_price,
+                                drop_from_peak,
+                                pos.sol_spent,
+                                pos.token_amount,
+                                pos.dca_count,
+                                pos.last_dca_price,
+                                pos.open_time
+                            ).await;
+                            OPEN_POSITIONS.write().await.remove(&mint);
+                            notified_profit_bucket.remove(&mint);
+                        }
                     }
                 }
             }

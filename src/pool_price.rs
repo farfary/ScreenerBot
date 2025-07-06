@@ -93,7 +93,6 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
     // ---------- fresh price ----------------------------------------------
     let (_, _, price) = decode_any_pool_price(rpc, &pool_pk)?;
 
-    // ---------- log change ------------------------------------------------
     // ---------- log change (skip zero) -----------------------------------
     let prev = {
         PRICE_CACHE.read()
