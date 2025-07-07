@@ -49,7 +49,9 @@ pub fn get_token_decimals(rpc: &RpcClient, mint: &Pubkey) -> Result<u8> {
         let s = serde_json::to_string(&cache).unwrap();
         f.write_all(s.as_bytes())
     });
-
+    println!("🔍 Fetching decimals for mint: {mint}");
+    println!("🔍 Account owner: {}", acc.owner);
+    println!("🔍 Mint state decimals: {decimals}");
     Ok(decimals)
 }
 
