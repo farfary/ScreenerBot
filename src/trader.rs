@@ -17,37 +17,14 @@ use tokio::task;
 use futures::FutureExt;
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.005; // amount of SOL to spend on each buy
+const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
 const MAX_DCA_COUNT: u8 = 3; // max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001;
 pub const POSITIONS_CHECK_TIME: u64 = 10; // 10 seconds
 
-/* ── tunables ─────────────────────────────────────── */
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
-const RSI_PERIOD: usize = 14;
 
-/* ───── SMART-DIP ENTRY ─────────────────────────────── */
-const FAST_WIN: usize = 6; // 30 s high
-const MED_WIN: usize = 36; // 3 min high
-const FAST_DROP_PCT: f64 = -2.0; // trigger at ≥−2% in 30 s
-const MED_DROP_PCT: f64 = -3.0; // trigger at ≥−3% in 3 min
-const ATR_PERIOD_BOUNCE: usize = 18; // 90 s ATR
-const MIN_BOUNCE_ATR_MULT: f64 = 0.4;
-const MIN_BOUNCE_PCT: f64 = 0.15;
-const DIP_TIMEOUT_SEC: u64 = 300;
-const FAST_EMA: usize = 12;
-const HOLD_SEC: u64 = 8;
-const EXTRA_BOUNCE_FRAC: f64 = 0.05;
-
-/* ───────── new DipTracker ───────── */
-#[derive(Debug)]
-struct DipTracker {
-    low_price: f64,
-    start_time: Instant,
-    last_low_time: Instant,
-    armed: bool,
-}
 
 /// supervisor that restarts the trader loop on *any* panic
 pub fn start_trader_loop() {
@@ -108,7 +85,11 @@ async fn trader_main_loop() {
     /* ── local state ──────────────────────────────────── */
     let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
     let mut price_histories: HashMap<String, VecDeque<f64>> = HashMap::new();
-    let mut dip_trackers: HashMap<String, DipTracker> = HashMap::new();
+
+    let mut drop_streaks: HashMap<String, usize> = HashMap::new();
+    let mut last_drop_scales: HashMap<String, Vec<f64>> = HashMap::new();
+    let mut last_up_scales: HashMap<String, Vec<f64>> = HashMap::new();
+    let mut drop_required: HashMap<String, usize> = HashMap::new();
 
     loop {
         if SHUTDOWN.load(Ordering::SeqCst) {
@@ -243,97 +224,93 @@ async fn trader_main_loop() {
 
             let now = Instant::now();
 
-            /* ---------- ENTRY: bottom-catch buy ---------- */
-            // ENTRY: bottom-catch buy
-            if hist.len() >= MED_WIN {
-                let fast_hi = hist
-                    .iter()
-                    .rev()
-                    .take(FAST_WIN)
-                    .fold(f64::MIN, |m, &p| m.max(p));
-                let med_hi = hist
-                    .iter()
-                    .rev()
-                    .take(MED_WIN)
-                    .fold(f64::MIN, |m, &p| m.max(p));
-                let drop_fast = pct_change(fast_hi, current_price);
-                let drop_med = pct_change(med_hi, current_price);
+            /* ---------- ENTRY: streak drop buy ---------- */
 
-                let mut remove = false;
-                {
-                    let tr = dip_trackers.entry(mint.clone()).or_insert_with(|| DipTracker {
-                        low_price: current_price,
-                        start_time: Instant::now(),
-                        last_low_time: Instant::now(),
-                        armed: false,
-                    });
+            // Local streak/drop state for all tokens (at top with other state, outside the loop):
+            // let mut drop_streaks: HashMap<String, usize> = HashMap::new();
+            // let mut last_drop_scales: HashMap<String, Vec<f64>> = HashMap::new();
+            // let mut last_up_scales: HashMap<String, Vec<f64>> = HashMap::new();
+            // let mut drop_required: HashMap<String, usize> = HashMap::new(); // per-token "how many drops before buy"
 
-                    // (1) arm when shallower dip reached
-                    if !tr.armed && drop_fast <= FAST_DROP_PCT && drop_med <= MED_DROP_PCT {
-                        tr.armed = true;
-                        tr.low_price = current_price;
-                        tr.start_time = Instant::now();
-                        tr.last_low_time = Instant::now();
+            let drop_len = drop_streaks.entry(mint.clone()).or_insert(0);
+            let drop_scales = last_drop_scales.entry(mint.clone()).or_insert_with(Vec::new);
+            let up_scales = last_up_scales.entry(mint.clone()).or_insert_with(Vec::new);
+            let required = drop_required.entry(mint.clone()).or_insert(3); // Default: 3-drops
+
+            if hist.len() >= 2 {
+                let prev = *hist.get(hist.len() - 2).unwrap();
+                let change = ((current_price - prev) / prev) * 100.0;
+
+                // Detect drop/up and cache scales
+                if change < -0.2 {
+                    *drop_len += 1;
+                    drop_scales.push(change);
+                    if drop_scales.len() > 16 {
+                        drop_scales.remove(0);
                     }
 
-                    // (2) track new lows
-                    if tr.armed && current_price < tr.low_price {
-                        tr.low_price = current_price;
-                        tr.last_low_time = Instant::now();
+                    // Log focus on token if about to buy
+                    if *drop_len + 1 >= *required {
+                        println!(
+                            "👀 Focus: {} drop streak {} (Δ{:.2}%)  drop_scales={:?}",
+                            symbol,
+                            *drop_len + 1,
+                            change,
+                            drop_scales
+                        );
                     }
-
-                    // (3) timeout
-                    if tr.armed && tr.start_time.elapsed().as_secs() > DIP_TIMEOUT_SEC {
-                        remove = true;
-                    }
-
-                    // (4) consolidation + bounce → buy
-                    if tr.armed && tr.last_low_time.elapsed().as_secs() >= HOLD_SEC {
-                        let bounce_pct = pct_change(tr.low_price, current_price);
-                        let atr_p = atr_pct(hist, ATR_PERIOD_BOUNCE).unwrap_or(0.3);
-                        let need_b = (drop_fast.abs() * EXTRA_BOUNCE_FRAC)
-                            .max(atr_p * MIN_BOUNCE_ATR_MULT)
-                            .max(MIN_BOUNCE_PCT);
-
-                        let ema_ok = ema(hist, FAST_EMA).map_or(true, |e| current_price > e);
-                        let rsi_ok = rsi(hist, RSI_PERIOD).map_or(true, |v| v >= 30.0);
-                        let cap_ok = {
-                            let pos = OPEN_POSITIONS.read().await;
-                            pos.len() < MAX_OPEN_POSITIONS && !pos.contains_key(&mint)
-                        };
-
-                        if bounce_pct >= need_b && ema_ok && rsi_ok && cap_ok {
-                            println!(
-                                "🚀 BOTTOM-CATCH ENTRY {symbol}: drop {:.2}% / bounce {:.2}% / need {:.2}%",
-                                drop_fast,
-                                bounce_pct,
-                                need_b
-                            );
-
-                            let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
-                            if let Ok(tx) = buy_gmgn(&mint, lamports).await {
-                                println!("✅ GMGN BUY success: {tx}");
-                                let bought = TRADE_SIZE_SOL / current_price;
-                                OPEN_POSITIONS.write().await.insert(mint.clone(), Position {
-                                    entry_price: current_price,
-                                    peak_price: current_price,
-                                    dca_count: 1,
-                                    token_amount: bought,
-                                    sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
-                                    sol_received: 0.0,
-                                    open_time: Utc::now(),
-                                    close_time: None,
-                                    last_dca_price: current_price,
-                                });
-                                remove = true;
-                            }
+                } else if change > 0.2 {
+                    // Up candle: reset streak, store up scale
+                    if *drop_len > 0 {
+                        up_scales.push(change);
+                        if up_scales.len() > 16 {
+                            up_scales.remove(0);
                         }
                     }
-                }
-                if remove {
-                    dip_trackers.remove(&mint);
+                    *drop_len = 0;
                 }
             }
+
+            // Entry logic: only enter if N drops (default 3), not open, and open count < max
+            let open_positions = OPEN_POSITIONS.read().await;
+            let open = open_positions.contains_key(&mint);
+            let can_open_more = open_positions.len() < MAX_OPEN_POSITIONS;
+            drop(open_positions);
+
+            if *drop_len >= *required && !open && can_open_more {
+                println!(
+                    "🚀 ENTRY BUY {}: drop streak {}: {:?} (histlen {} last={:.9})",
+                    symbol,
+                    *drop_len,
+                    &drop_scales,
+                    hist.len(),
+                    current_price
+                );
+                let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
+                if let Ok(tx) = buy_gmgn(&mint, lamports).await {
+                    println!("✅ BUY success: {tx}");
+                    let bought = TRADE_SIZE_SOL / current_price;
+                    OPEN_POSITIONS.write().await.insert(mint.clone(), Position {
+                        entry_price: current_price,
+                        peak_price: current_price,
+                        dca_count: 1,
+                        token_amount: bought,
+                        sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
+                        sol_received: 0.0,
+                        open_time: Utc::now(),
+                        close_time: None,
+                        last_dca_price: current_price,
+                    });
+                    // On buy: reset streak and cache count for next time (adaptively increase required drops if price keeps dropping after buy)
+                    if drop_scales.len() >= *required && drop_scales.last().unwrap() < &-3.0 {
+                        *required = (*required + 1).min(6); // try increase if after buy we get dumped again
+                    } else if drop_scales.last().unwrap_or(&0.0) > &-0.5 && *required > 2 {
+                        *required -= 1; // lower requirement if too shallow
+                    }
+                    *drop_len = 0;
+                }
+            }
+
             /* ---------- END ENTRY block ---------- */
 
             /* ---------- DCA & trailing stop ---------- */

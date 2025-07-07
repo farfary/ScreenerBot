@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 mod utilitis;
 mod dexscreener;
 mod trader;
