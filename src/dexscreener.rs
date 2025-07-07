@@ -91,6 +91,8 @@ fn chunked(vec: Vec<String>, chunk_size: usize) -> Vec<Vec<String>> {
 }
 
 pub fn start_dexscreener_loop() {
+    println!("🚀 Starting DexScreener loop...");
+
     let debug = ARGS.iter().any(|a| a == "--debug-dexscreener");
     let client = Client::new();
     let client_insert = client.clone();
@@ -188,11 +190,22 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            // ── second-pass details ────────────────────────────────────────
-            let mints: Vec<String> = new_tokens
+            // ───────── ALWAYS include open positions' mints ─────────────
+            // always use latest cached open positions
+            let open_pos_mints: Vec<String> = {
+                let open_pos = crate::persistence::OPEN_POSITIONS.read().await;
+                open_pos.keys().cloned().collect()
+            };
+
+            // combine with new token mints and dedup
+            let mut mints: Vec<String> = new_tokens
                 .iter()
                 .map(|t| t.mint.clone())
                 .collect();
+            mints.extend(open_pos_mints.iter().cloned());
+            mints.sort();
+            mints.dedup();
+
             let batches = chunked(mints, 30);
 
             for (i, batch) in batches.iter().enumerate() {
@@ -316,18 +329,21 @@ pub fn start_dexscreener_loop() {
             }
 
             const MAX_TOKENS: usize = 50;
-            const MIN_PRICE_SOL: f64 = 0.0000001;
-            const MAX_PRICE_SOL: f64 = 0.1;
+            const MIN_PRICE_SOL: f64 = 0.00000001;
+            const MAX_PRICE_SOL: f64 = 0.2;
 
-            const MIN_VOLUME_USD: f64 = 50_000.0; // 24h volume >= $50k
-            const MIN_FDV_USD: f64 = 250_000.0; // FDV >= $250k
-            const MAX_FDV_USD: f64 = 20_000_000.0; // FDV <= $20M
-            const MIN_LIQUIDITY_SOL: f64 = 1500.0; // Liquidity >= 1500 SOL
+            const MIN_VOLUME_USD: f64 = 5000.0;
+            const MIN_FDV_USD: f64 = 20_000.0;
+            const MAX_FDV_USD: f64 = 50_000_000.0;
+            const MIN_LIQUIDITY_SOL: f64 = 10.0;
 
-            const MAX_PRICE_CHANGE_M5: f64 = 28.0; // 5m price change max abs %
-            const MAX_PRICE_CHANGE_H1: f64 = 55.0; // 1h price change max abs %
-            const MAX_PRICE_CHANGE_H6: f64 = 80.0; // 6h price change max abs %
-            const MAX_PRICE_CHANGE_H24: f64 = 90.0; // 24h price change max abs %
+            const MAX_PRICE_CHANGE_M5: f64 = 60.0;
+            const MAX_PRICE_CHANGE_H1: f64 = 120.0;
+            const MAX_PRICE_CHANGE_H6: f64 = 160.0;
+            const MAX_PRICE_CHANGE_H24: f64 = 180.0;
+
+            const MIN_BUYS_24H: u64 = 10; // at least 10 buys in 24h
+            const MAX_DUMP_24H: f64 = -70.0; // reject if -70% or worse in 24h
 
             new_tokens.retain(|t| {
                 let price = t.price_native.parse::<f64>().unwrap_or(0.0);
@@ -335,7 +351,6 @@ pub fn start_dexscreener_loop() {
                 let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
                 let pooled_sol = t.liquidity.base + t.liquidity.quote;
                 let has_image = !t.image_url.trim().is_empty();
-                let has_website = !t.url.trim().is_empty();
 
                 let price_ok =
                     t.price_change.m5.abs() <= MAX_PRICE_CHANGE_M5 &&
@@ -343,18 +358,22 @@ pub fn start_dexscreener_loop() {
                     t.price_change.h6.abs() <= MAX_PRICE_CHANGE_H6 &&
                     t.price_change.h24.abs() <= MAX_PRICE_CHANGE_H24;
 
+                let not_rugged = t.price_change.h24 > MAX_DUMP_24H;
+                let not_dead = t.txns.h24.buys >= MIN_BUYS_24H;
+
                 price >= MIN_PRICE_SOL &&
                     price <= MAX_PRICE_SOL &&
                     vol >= MIN_VOLUME_USD &&
                     fdv >= MIN_FDV_USD &&
                     fdv <= MAX_FDV_USD &&
                     has_image &&
-                    has_website &&
                     pooled_sol >= MIN_LIQUIDITY_SOL &&
                     !t.symbol.is_empty() &&
                     !t.name.is_empty() &&
                     !t.price_usd.is_empty() &&
-                    price_ok
+                    price_ok &&
+                    not_rugged &&
+                    not_dead
             });
 
             if debug {

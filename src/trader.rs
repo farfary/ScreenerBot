@@ -19,9 +19,9 @@ use futures::FutureExt;
 // Constants
 const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
-const MAX_DCA_COUNT: u8 = 3; // max 3 DCA per position
-const TRANSACTION_FEE_SOL: f64 = 0.001;
-pub const POSITIONS_CHECK_TIME: u64 = 10; // 10 seconds
+const MAX_DCA_COUNT: u8 = 2; // max 3 DCA per position
+const TRANSACTION_FEE_SOL: f64 = 0.00003;
+pub const POSITIONS_CHECK_TIME: u64 = 5; // 10 seconds
 
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 
@@ -607,16 +607,16 @@ pub async fn sell_token(
 }
 
 async fn print_open_positions() {
-    use comfy_table::{ Table, presets::UTF8_FULL }; // make sure these are in scope
+    use comfy_table::{ Table, presets::UTF8_FULL };
 
     let positions_guard = OPEN_POSITIONS.read().await;
     let closed_guard = RECENT_CLOSED_POSITIONS.read().await;
 
-    /* ── quick stats ─────────────────────────────────────────── */
+    // ── quick stats ───────────────────────────
     let open_count = positions_guard.len();
     let mut total_unrealized_sol = 0.0;
 
-    /* ── prepare open-positions table ────────────────────────── */
+    // ── prepare open-positions table ──────────
     let mut positions_vec: Vec<_> = positions_guard.iter().collect();
     positions_vec.sort_by_key(|(_, pos)| pos.open_time);
 
@@ -648,7 +648,7 @@ async fn print_open_positions() {
             0.0
         };
 
-        /* accumulate unrealized P/L in SOL */
+        // accumulate unrealized P/L in SOL
         total_unrealized_sol += current_price * pos.token_amount - pos.sol_spent;
 
         table.add_row([
@@ -671,9 +671,9 @@ async fn print_open_positions() {
         table
     );
 
-    /* ── recent-closed table (unchanged) ─────────────────────── */
+    // ── recent-closed table (FIXED) ───────────
     if !closed_guard.is_empty() {
-        let mut closed_vec: Vec<_> = closed_guard.iter().cloned().collect();
+        let mut closed_vec: Vec<_> = closed_guard.values().cloned().collect();
         closed_vec.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
 
         let mut table_closed = Table::new();
