@@ -16,6 +16,7 @@ use bs58;
 use solana_sdk::{ pubkey::Pubkey };
 
 use crate::utilitis::effective_swap_price;
+use crate::configs::{ BLACKLIST };
 
 /// Submit a swap to GMGN router and return the signature string.
 /// Also prints the **effective on-chain price** paid for the swap.
@@ -56,6 +57,27 @@ pub async fn buy_gmgn(
         .json().await
         .context("decode quote JSON")?;
     println!("✅ QUOTE RESPONSE:\n{}", serde_json::to_string_pretty(&body)?);
+
+    // ── detect gmgn router errors ────────────────────────────────────────────
+    if body["code"].as_i64().unwrap_or(0) != 0 {
+        let msg = body["msg"].as_str().unwrap_or_default();
+
+        // little-pool ⇒ blacklist mint and abort
+        if msg.contains("little pool hit") {
+            {
+                // write-lock and insert once
+                let mut bl = BLACKLIST.write().await;
+                if bl.insert(token_mint_address.to_string()) {
+                    println!("🚫 blacklisted {token_mint_address} – {}", msg);
+                }
+            }
+            anyhow::bail!("token {} blacklisted: {}", token_mint_address, msg);
+        }
+
+        // any other router error → just propagate
+        anyhow::bail!("gmgn quote error ({}): {}", body["code"], msg);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     let raw_tx = body["data"]["raw_tx"]["swapTransaction"]
         .as_str()
