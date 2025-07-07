@@ -17,8 +17,6 @@ use serde_json::Value;
 
 use std::time::{ SystemTime, UNIX_EPOCH };
 
-
-
 /// Return the `decimals` of a mint account on–chain, with disk cache.
 /// Cache is in ".token_decimals_cache.json"
 pub fn get_token_decimals(rpc: &RpcClient, mint: &Pubkey) -> Result<u8> {
@@ -271,3 +269,6 @@ pub fn install_sigint_handler() -> Result<()> {
 
     Ok(())
 }
+
+// Re-export batch price function for convenience
+pub use crate::pool_price::batch_prices_from_pools;

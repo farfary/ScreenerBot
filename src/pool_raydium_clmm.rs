@@ -1,5 +1,5 @@
 //! Raydium CLMM v1  (program pAMMBa… & CAMMCz…)
-use anyhow::{anyhow, Result};
+use anyhow::{ anyhow, Result };
 use num_format::{ Locale, ToFormattedString };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -9,7 +9,7 @@ use solana_sdk::account::Account;
 pub fn decode_raydium_clmm(
     rpc: &RpcClient,
     pool_pk: &Pubkey,
-    acct: &Account,
+    acct: &Account
 ) -> Result<(u64, u64, Pubkey, Pubkey)> {
     if acct.data.len() < 211 {
         return Err(anyhow!("Pump.fun account only {} B (<211)", acct.data.len()));
@@ -32,4 +32,14 @@ pub fn decode_raydium_clmm(
         pc.to_formatted_string(&Locale::en)
     );
     Ok((coin, pc, coin_mint, pc_mint))
+}
+
+/// Batch-friendly version: decode from already-fetched account
+pub fn decode_raydium_clmm_from_account(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    // Same logic as decode_raydium_clmm, but account is already provided
+    decode_raydium_clmm(rpc, pool_pk, acct)
 }

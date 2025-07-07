@@ -5,10 +5,11 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::account::Account;
 
-pub fn decode_raydium_amm(rpc: &RpcClient, pool_pk: &Pubkey,
-    acct: &Account,
+pub fn decode_raydium_amm(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
 ) -> Result<(u64, u64, Pubkey, Pubkey)> {
-    
     if acct.data.len() < 264 {
         return Err(anyhow!("AMM account too short"));
     }
@@ -28,4 +29,14 @@ pub fn decode_raydium_amm(rpc: &RpcClient, pool_pk: &Pubkey,
         quote.to_formatted_string(&Locale::en)
     );
     Ok((base, quote, base_mint, quote_mint))
+}
+
+/// Batch-friendly version: decode from already-fetched account
+pub fn decode_raydium_amm_from_account(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    // Same logic as decode_raydium_amm, but account is already provided
+    decode_raydium_amm(rpc, pool_pk, acct)
 }

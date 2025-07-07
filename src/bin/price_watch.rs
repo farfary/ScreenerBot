@@ -13,14 +13,14 @@ fn main() -> Result<()> {
         "https://lb.drpc.org/ogrpc?network=solana&dkey=Av7uqDf0ZEvytvOyAG1UTCcCtbSoJigR8IKSEjfP07KJ",
     );
 
-    let mut last_price = screenerbot::utilitis::price_from_biggest_pool(&rpc, &token_mint)?;
+    let mut last_price = screenerbot::pool_price::price_from_biggest_pool(&rpc, &token_mint)?;
 
     println!("⏳ Start price watch for {token_mint}, initial price: {last_price:.9}");
 
     loop {
         sleep(Duration::from_secs(1));
 
-        let price = match screenerbot::utilitis::price_from_biggest_pool(&rpc, &token_mint) {
+        let price = match screenerbot::pool_price::price_from_biggest_pool(&rpc, &token_mint) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("❌ Error fetching price: {e}");

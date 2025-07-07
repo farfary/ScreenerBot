@@ -1,12 +1,12 @@
-use anyhow::{anyhow, Result};
-use num_format::{Locale, ToFormattedString};
+use anyhow::{ anyhow, Result };
+use num_format::{ Locale, ToFormattedString };
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{pubkey::Pubkey, account::Account};
+use solana_sdk::{ pubkey::Pubkey, account::Account };
 
 pub fn decode_meteora_dlmm(
     rpc: &RpcClient,
     _pool_pk: &Pubkey,
-    acct: &Account,
+    acct: &Account
 ) -> Result<(u64, u64, Pubkey, Pubkey)> {
     if acct.data.len() < 128 {
         println!("⚠️  DLMM account too small");
@@ -61,4 +61,14 @@ pub fn decode_meteora_dlmm(
         bal_b.to_formatted_string(&Locale::en)
     );
     Ok((bal_a, bal_b, mint_x, mint_y))
+}
+
+/// Batch-friendly version: decode from already-fetched account
+pub fn decode_meteora_dlmm_from_account(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    // Same logic as decode_meteora_dlmm, but account is already provided
+    decode_meteora_dlmm(rpc, pool_pk, acct)
 }

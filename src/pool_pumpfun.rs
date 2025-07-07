@@ -1,6 +1,6 @@
 //! Pump.fun AMM-pool decoder
 
-use anyhow::{anyhow, Result};
+use anyhow::{ anyhow, Result };
 use borsh::BorshDeserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -23,7 +23,7 @@ pub struct PumpFunPool {
 pub fn decode_pumpfun_pool(
     rpc: &RpcClient,
     pool_pk: &Pubkey,
-    acct: &Account,
+    acct: &Account
 ) -> Result<(u64, u64, Pubkey, Pubkey)> {
     if acct.data.len() < 211 {
         return Err(anyhow!("Pump.fun account only {} B (<211)", acct.data.len()));
@@ -37,4 +37,14 @@ pub fn decode_pumpfun_pool(
     let quote = u64::from_le_bytes(quote_acct.data[64..72].try_into()?);
 
     Ok((base, quote, pool.base_mint, pool.quote_mint))
+}
+
+/// Batch-friendly version: decode from already-fetched account
+pub fn decode_pumpfun_pool_from_account(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    // Same logic as decode_pumpfun_pool, but account is already provided
+    decode_pumpfun_pool(rpc, pool_pk, acct)
 }

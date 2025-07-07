@@ -1,33 +1,20 @@
 // #![allow(warnings)]
 
-use crate::dexscreener::{ TOKENS, Token };
-use once_cell::sync::Lazy;
+use crate::dexscreener::TOKENS;
 use std::collections::HashMap;
-use tokio::sync::RwLock;
 use tokio::time::{ sleep, Duration };
 use chrono::{ DateTime, Utc };
-use tokio::io::{ self, AsyncBufReadExt, AsyncReadExt, BufReader };
-use comfy_table::{ Table, presets::UTF8_FULL };
 use crate::swap_gmgn::*;
-use crate::helpers::*;
 use crate::pool_price::*;
-use tokio::task::spawn_blocking;
 use crate::configs::BLACKLIST;
 use crate::persistence::*;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use serde::{ Serialize, Deserialize };
-use tokio::{ fs };
-use anyhow::Result;
-use crate::utilitis::*;
-use tokio::time::{ timeout };
+use crate::utilitis::{ *, batch_prices_from_pools };
 use crate::configs::RPC;
-use futures::future::join_all;
-use futures::FutureExt;
-use tokio::{ task };
-use tokio::runtime::Handle;
-use chrono::{ Duration as ChronoDuration };
 use std::collections::{ VecDeque };
+use tokio::task;
+use futures::FutureExt;
 
 // Constants
 const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
@@ -128,29 +115,117 @@ async fn trader_main_loop() {
         }
 
         /* ── build mint list ──────────────────────────── */
-        let mut mints: Vec<String> = {
+        let mut all_mints: Vec<String> = {
             let t = TOKENS.read().await;
             t.iter()
                 .map(|tok| tok.mint.clone())
                 .collect()
         };
-        {
+
+        // Add open positions to mint list
+        let open_position_mints: Vec<String> = {
             let pos = OPEN_POSITIONS.read().await;
-            for m in pos.keys() {
-                if !mints.contains(m) {
-                    mints.push(m.clone());
-                }
+            pos.keys().cloned().collect()
+        };
+
+        for mint in &open_position_mints {
+            if !all_mints.contains(mint) {
+                all_mints.push(mint.clone());
             }
         }
 
-        /* ── iterate mints ────────────────────────────── */
-        for mint in mints {
+        // Remove blacklisted mints
+        let filtered_mints: Vec<String> = {
+            let blacklist = BLACKLIST.read().await;
+            all_mints
+                .into_iter()
+                .filter(|mint| !blacklist.contains(mint))
+                .collect()
+        };
+
+        if filtered_mints.is_empty() {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        /* ── BATCH PRICE FETCHING (saves RPC costs!) ─────────── */
+        println!("🔄 [BATCH] Starting price update cycle for {} tokens...", filtered_mints.len());
+        let cycle_start = Instant::now();
+
+        let prices = tokio::task
+            ::spawn_blocking({
+                let mints = filtered_mints.clone();
+                move || batch_prices_from_pools(&RPC, &mints)
+            }).await
+            .unwrap_or_else(|e| {
+                eprintln!("❌ Batch price fetch panicked: {}", e);
+                HashMap::new()
+            });
+
+        let successful_prices = prices.len();
+        let failed_prices = filtered_mints.len() - successful_prices;
+
+        if successful_prices > 0 {
+            println!(
+                "✅ [BATCH] Price cycle completed in {} ms - Success: {}/{} - Failed: {}",
+                cycle_start.elapsed().as_millis(),
+                successful_prices,
+                filtered_mints.len(),
+                failed_prices
+            );
+        } else {
+            eprintln!(
+                "❌ [BATCH] No prices fetched successfully, falling back to individual fetches"
+            );
+        }
+
+        /* ── iterate mints and process with fetched prices ──────── */
+        for mint in filtered_mints {
             if SHUTDOWN.load(Ordering::SeqCst) {
                 return;
             }
-            if BLACKLIST.read().await.contains(&mint) {
-                continue;
-            }
+
+            // Get price from batch results or fallback to individual fetch
+            let current_price = if let Some(&price) = prices.get(&mint) {
+                price
+            } else {
+                // Fallback to individual fetch for failed batches
+                let symbol = TOKENS.read().await
+                    .iter()
+                    .find(|t| t.mint == mint)
+                    .map(|t| t.symbol.clone())
+                    .unwrap_or_else(|| mint.chars().take(4).collect());
+
+                match
+                    tokio::task::spawn_blocking({
+                        let m = mint.clone();
+                        move || price_from_biggest_pool(&RPC, &m)
+                    }).await
+                {
+                    Ok(Ok(p)) if p > 0.0 => {
+                        println!("🔄 [FALLBACK] Individual fetch for {}: {:.12} SOL", symbol, p);
+                        p
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("❌ [FALLBACK] Price error for {}: {}", symbol, e);
+                        if
+                            e.to_string().contains("no valid pools") ||
+                            e.to_string().contains("Unsupported program id") ||
+                            e.to_string().contains("is not an SPL-Token mint") ||
+                            e.to_string().contains("AccountNotFound") ||
+                            e.to_string().contains("base reserve is zero")
+                        {
+                            println!("⚠️ Blacklisting mint: {}", mint);
+                            crate::configs::add_to_blacklist(&mint).await;
+                        }
+                        continue;
+                    }
+                    _ => {
+                        eprintln!("❌ [FALLBACK] Failed to fetch price for {}", mint);
+                        continue;
+                    }
+                }
+            };
 
             /* ── symbol string ────────────────────────── */
             let symbol = TOKENS.read().await
@@ -158,43 +233,6 @@ async fn trader_main_loop() {
                 .find(|t| t.mint == mint)
                 .map(|t| t.symbol.clone())
                 .unwrap_or_else(|| mint.chars().take(4).collect());
-
-            /* ── PRICE (spawn_blocking with timeout)───── */
-            let price_handle = tokio::task::spawn_blocking({
-                let m = mint.clone();
-                move || price_from_biggest_pool(&RPC, &m)
-            });
-            let current_price = match timeout(Duration::from_secs(5), price_handle).await {
-                Ok(join_res) =>
-                    match join_res {
-                        Ok(Ok(p)) if p > 0.0 => p,
-                        Ok(Ok(_)) => {
-                            continue;
-                        }
-                        Ok(Err(e)) => {
-                            eprintln!("❌ price error for {symbol}: {e}");
-                            if
-                                e.to_string().contains("no valid pools") ||
-                                e.to_string().contains("Unsupported program id") ||
-                                e.to_string().contains("is not an SPL-Token mint") ||
-                                e.to_string().contains("AccountNotFound") ||
-                                e.to_string().contains("base reserve is zero")
-                            {
-                                println!("⚠️ Blacklisting mint: {mint}");
-                                crate::configs::add_to_blacklist(&mint).await;
-                            }
-                            continue;
-                        }
-                        Err(join_err) => {
-                            eprintln!("❌ worker panic fetching price for {symbol}: {join_err}");
-                            continue;
-                        }
-                    }
-                Err(_) => {
-                    eprintln!("⏰ price timeout (>5 s) for {symbol}");
-                    continue;
-                }
-            };
 
             let hist = price_histories.entry(mint.clone()).or_insert_with(VecDeque::new);
             hist.push_back(current_price);

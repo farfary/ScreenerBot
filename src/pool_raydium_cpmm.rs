@@ -12,7 +12,7 @@
 ///
 /// *Reserves are **not** stored in the pool; we read vault balances.*
 
-use anyhow::{anyhow, Result};
+use anyhow::{ anyhow, Result };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::account::Account;
@@ -21,7 +21,7 @@ use solana_sdk::account::Account;
 pub fn decode_raydium_cpmm(
     rpc: &RpcClient,
     pool_pk: &Pubkey,
-    acct: &Account,
+    acct: &Account
 ) -> Result<(u64, u64, Pubkey, Pubkey)> {
     if acct.data.len() < 224 {
         return Err(anyhow!("CPMM account too short: {}", acct.data.len()));
@@ -42,4 +42,14 @@ pub fn decode_raydium_cpmm(
         .map(|b| b.amount.parse::<u64>().unwrap_or(0))?;
 
     Ok((reserve0, reserve1, token0_mint, token1_mint))
+}
+
+/// Batch-friendly version: decode from already-fetched account
+pub fn decode_raydium_cpmm_from_account(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    // Same logic as decode_raydium_cpmm, but account is already provided
+    decode_raydium_cpmm(rpc, pool_pk, acct)
 }

@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     );
 
     // One-liner call requested
-    let price = screenerbot::utilitis::price_from_biggest_pool(&rpc, &token_mint)?;
+    let price = screenerbot::pool_price::price_from_biggest_pool(&rpc, &token_mint)?;
 
     println!("✅ Price for {token_mint}: {price}");
 
