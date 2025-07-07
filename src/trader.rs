@@ -17,7 +17,7 @@ use tokio::task;
 use futures::FutureExt;
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
+const TRADE_SIZE_SOL: f64 = 0.005; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
 const MAX_DCA_COUNT: u8 = 2; // max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.00003;
