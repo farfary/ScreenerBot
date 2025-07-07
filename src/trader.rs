@@ -27,17 +27,17 @@ use futures::FutureExt;
 use tokio::{ task };
 use tokio::runtime::Handle;
 use chrono::{ Duration as ChronoDuration };
+use std::collections::{ VecDeque };
 
 // Constants
 const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 20; // example: allow up to 5 open positions
 const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
+pub const POSITIONS_CHECK_TIME: u64 = 10; // 10 seconds
 
 /* ── tunables ─────────────────────────────────────── */
-const SHORT_POLL_SECS: u64 = 10; // default
-const LONG_POLL_SECS: u64 = 60; // pos > 6 h
-const OLD_POS_HOURS: i64 = 6; // age threshold
+
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 const RSI_PERIOD: usize = 14;
 
@@ -59,74 +59,6 @@ struct DipTracker {
     start_time: Instant,
     last_low_time: Instant,
     armed: bool,
-}
-
-// ────────────── ACTIONS ──────────────
-
-fn format_duration_ago(from: DateTime<Utc>) -> String {
-    let now = Utc::now();
-    let diff = now.signed_duration_since(from);
-
-    if diff.num_seconds() < 60 {
-        format!("{}s ago", diff.num_seconds())
-    } else if diff.num_minutes() < 60 {
-        format!("{}m ago", diff.num_minutes())
-    } else if diff.num_hours() < 24 {
-        format!("{}h ago", diff.num_hours())
-    } else {
-        format!("{}d ago", diff.num_days())
-    }
-}
-
-/// returns `Some(rsi)` if `values` has `period+1` points, otherwise `None`
-fn rsi(values: &VecDeque<f64>, period: usize) -> Option<f64> {
-    if values.len() <= period {
-        return None;
-    }
-    let mut gain = 0.0;
-    let mut loss = 0.0;
-    for i in values.len() - period..values.len() - 1 {
-        let diff = values[i + 1] - values[i];
-        if diff >= 0.0 {
-            gain += diff;
-        } else {
-            loss += -diff;
-        }
-    }
-    if loss == 0.0 {
-        return Some(100.0);
-    }
-    let rs = gain / loss;
-    Some(100.0 - 100.0 / (1.0 + rs))
-}
-
-#[inline]
-fn pct_change(old: f64, new_: f64) -> f64 {
-    ((new_ - old) / old) * 100.0
-}
-
-fn ema(series: &VecDeque<f64>, period: usize) -> Option<f64> {
-    if series.len() < period {
-        return None;
-    }
-    let k = 2.0 / ((period as f64) + 1.0);
-    let mut e = series[series.len() - period];
-    for i in series.len() - period + 1..series.len() {
-        e = series[i] * k + e * (1.0 - k);
-    }
-    Some(e)
-}
-
-fn atr_pct(hist: &VecDeque<f64>, period: usize) -> Option<f64> {
-    if hist.len() < period + 1 {
-        return None;
-    }
-    let mut sum = 0.0;
-    for i in hist.len() - period + 1..hist.len() {
-        let pct = ((hist[i] - hist[i - 1]).abs() / hist[i - 1]) * 100.0;
-        sum += pct;
-    }
-    Some(sum / (period as f64)) // average % true range
 }
 
 /// supervisor that restarts the trader loop on *any* panic
@@ -168,8 +100,6 @@ pub fn start_trader_loop() {
     });
 }
 
-use std::collections::{ VecDeque };
-
 async fn trader_main_loop() {
     use std::time::Instant;
     println!("🔥 Entered MAIN TRADER LOOP TASK");
@@ -190,7 +120,6 @@ async fn trader_main_loop() {
     /* ── local state ──────────────────────────────────── */
     let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
     let mut price_histories: HashMap<String, VecDeque<f64>> = HashMap::new();
-    let mut last_polled: HashMap<String, Instant> = HashMap::new(); // ⟵ NEW
     let mut dip_trackers: HashMap<String, DipTracker> = HashMap::new();
 
     loop {
@@ -222,22 +151,6 @@ async fn trader_main_loop() {
             if BLACKLIST.read().await.contains(&mint) {
                 continue;
             }
-
-            /* ── per-mint polling logic ───────────────── */
-            let (is_old, poll_secs) = {
-                let guard = OPEN_POSITIONS.read().await;
-                let old = guard
-                    .get(&mint)
-                    .map(|p| (Utc::now() - p.open_time).num_hours() >= OLD_POS_HOURS)
-                    .unwrap_or(false);
-                (old, if old { LONG_POLL_SECS } else { SHORT_POLL_SECS })
-            };
-            if let Some(last) = last_polled.get(&mint) {
-                if last.elapsed().as_secs() < poll_secs {
-                    continue; // skip until interval elapsed
-                }
-            }
-            last_polled.insert(mint.clone(), Instant::now()); // mark
 
             /* ── symbol string ────────────────────────── */
             let symbol = TOKENS.read().await
@@ -412,8 +325,14 @@ async fn trader_main_loop() {
                 let now = Utc::now();
                 let elapsed = now - pos.open_time;
                 let drop_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
-                let next_trig =
-                    DCA_BASE_TRIGGER_PCT + (pos.dca_count as f64) * DCA_STEP_TRIGGER_PCT;
+
+                // override 3rd DCA (pos.dca_count == 2) to require ≥70% drop
+                let next_trig = if pos.dca_count == 2 {
+                    -70.0
+                } else {
+                    DCA_BASE_TRIGGER_PCT + (pos.dca_count as f64) * DCA_STEP_TRIGGER_PCT
+                };
+
                 let cooldown_ok =
                     elapsed.num_minutes() >= DCA_MIN_COOLDOWN_MIN * ((pos.dca_count as i64) + 1);
 
@@ -439,11 +358,12 @@ async fn trader_main_loop() {
                         OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
 
                         println!(
-                            "🟢 DCA #{:02} {} @ {:.9} (∆ {:.2} %)  |  {tx}",
+                            "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}% / trigger {:.2}%) | {tx}",
                             pos.dca_count,
                             symbol,
                             current_price,
-                            drop_pct
+                            drop_pct,
+                            next_trig
                         );
                     }
                 }
@@ -514,70 +434,79 @@ async fn trader_main_loop() {
                         notified_profit_bucket.remove(&mint);
                     }
                 }
-
-                // logic sell 1
-                /* ——— dynamic trailing stop ——— */
-                /*──────────────── Smart trailing-stop 5 % → 1000 % ────────────────*/
-                // const TP_START_PCT: f64 = 5.0; // enable at +5 %
-                // const TP_MIN_DROP: f64 = 0.0; // lock breakeven at +5 %
-                // const TP_MID_PCT: f64 = 25.0; // reach −2 % trail by +25 %
-                // const TP_MID_DROP: f64 = -2.0;
-
-                // const TP_MAX_PCT: f64 = 1000.0; // theoretic upper bound
-                // const TP_MAX_DROP: f64 = -40.0; // never wider than −40 %
-
-                // #[inline]
-                // fn calc_trail(profit_pct: f64) -> f64 {
-                //     if profit_pct < TP_START_PCT {
-                //         return f64::NEG_INFINITY; // trailing not active yet
-                //     }
-                //     if profit_pct <= TP_MID_PCT {
-                //         // linear easing  0 → −2 %
-                //         let t = (profit_pct - TP_START_PCT) / (TP_MID_PCT - TP_START_PCT);
-                //         return TP_MIN_DROP + t * (TP_MID_DROP - TP_MIN_DROP);
-                //     }
-                //     // quadratic easing  −2 %  →  −40 %
-                //     let norm = ((profit_pct - TP_MID_PCT) / (TP_MAX_PCT - TP_MID_PCT)).min(1.0);
-                //     let widen = norm * norm; // slow at first, faster later
-                //     let drop = TP_MID_DROP + widen * (TP_MAX_DROP - TP_MID_DROP);
-                //     drop.max(TP_MAX_DROP) // clamp
-                // }
-
-                // /*──────── Replace your old trailing-stop block with this ────────*/
-                // let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
-                // let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
-                // let trail = calc_trail(profit_pct);
-
-                // if trail > f64::NEG_INFINITY && drop_from_peak <= trail {
-                //     if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
-                //         println!(
-                //             "🔴 SELL {symbol} +{:.2}% | peak {:.2}% | trail {:.2}%  |  {tx}",
-                //             profit_pct,
-                //             drop_from_peak.abs(),
-                //             trail
-                //         );
-                //         sell_token(
-                //             &symbol,
-                //             &mint,
-                //             current_price,
-                //             pos.entry_price,
-                //             pos.peak_price,
-                //             drop_from_peak,
-                //             pos.sol_spent,
-                //             pos.token_amount,
-                //             pos.dca_count,
-                //             pos.last_dca_price,
-                //             pos.open_time
-                //         ).await;
-                //         OPEN_POSITIONS.write().await.remove(&mint);
-                //         notified_profit_bucket.remove(&mint);
-                //     }
-                // }
             }
         } // end for mint
 
-        sleep(Duration::from_secs(5)).await;
+        sleep(Duration::from_secs(POSITIONS_CHECK_TIME)).await;
     }
+}
+
+// ────────────── ACTIONS ──────────────
+
+fn format_duration_ago(from: DateTime<Utc>) -> String {
+    let now = Utc::now();
+    let diff = now.signed_duration_since(from);
+
+    if diff.num_seconds() < 60 {
+        format!("{}s ago", diff.num_seconds())
+    } else if diff.num_minutes() < 60 {
+        format!("{}m ago", diff.num_minutes())
+    } else if diff.num_hours() < 24 {
+        format!("{}h ago", diff.num_hours())
+    } else {
+        format!("{}d ago", diff.num_days())
+    }
+}
+
+/// returns `Some(rsi)` if `values` has `period+1` points, otherwise `None`
+fn rsi(values: &VecDeque<f64>, period: usize) -> Option<f64> {
+    if values.len() <= period {
+        return None;
+    }
+    let mut gain = 0.0;
+    let mut loss = 0.0;
+    for i in values.len() - period..values.len() - 1 {
+        let diff = values[i + 1] - values[i];
+        if diff >= 0.0 {
+            gain += diff;
+        } else {
+            loss += -diff;
+        }
+    }
+    if loss == 0.0 {
+        return Some(100.0);
+    }
+    let rs = gain / loss;
+    Some(100.0 - 100.0 / (1.0 + rs))
+}
+
+#[inline]
+fn pct_change(old: f64, new_: f64) -> f64 {
+    ((new_ - old) / old) * 100.0
+}
+
+fn ema(series: &VecDeque<f64>, period: usize) -> Option<f64> {
+    if series.len() < period {
+        return None;
+    }
+    let k = 2.0 / ((period as f64) + 1.0);
+    let mut e = series[series.len() - period];
+    for i in series.len() - period + 1..series.len() {
+        e = series[i] * k + e * (1.0 - k);
+    }
+    Some(e)
+}
+
+fn atr_pct(hist: &VecDeque<f64>, period: usize) -> Option<f64> {
+    if hist.len() < period + 1 {
+        return None;
+    }
+    let mut sum = 0.0;
+    for i in hist.len() - period + 1..hist.len() {
+        let pct = ((hist[i] - hist[i - 1]).abs() / hist[i - 1]) * 100.0;
+        sum += pct;
+    }
+    Some(sum / (period as f64)) // average % true range
 }
 
 // ── utils.rs (or wherever you keep helpers) ──────────────────────────────────
