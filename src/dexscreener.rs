@@ -11,10 +11,6 @@ use crate::utilitis::*;
 use serde::{ Serialize, Deserialize };
 use tokio::{ fs, io::AsyncReadExt, io::AsyncWriteExt };
 
-const MAX_TOKENS: usize = 20;
-const MIN_PRICE_SOL: f64 = 0.0000001;
-const MAX_PRICE_SOL: f64 = 0.01;
-
 const TOKEN_CACHE_FILE: &str = ".tokens_cache.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,22 +315,46 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            const MIN_VOLUME_USD: f64 = 2000.0;
-            const MIN_FDV_USD: f64 = 10000.0;
-            const MAX_FDV_USD: f64 = 10_000_000.0;
+            const MAX_TOKENS: usize = 50;
+            const MIN_PRICE_SOL: f64 = 0.0000001;
+            const MAX_PRICE_SOL: f64 = 0.1;
+
+            const MIN_VOLUME_USD: f64 = 50_000.0; // 24h volume >= $50k
+            const MIN_FDV_USD: f64 = 250_000.0; // FDV >= $250k
+            const MAX_FDV_USD: f64 = 20_000_000.0; // FDV <= $20M
+            const MIN_LIQUIDITY_SOL: f64 = 1500.0; // Liquidity >= 1500 SOL
+
+            const MAX_PRICE_CHANGE_M5: f64 = 28.0; // 5m price change max abs %
+            const MAX_PRICE_CHANGE_H1: f64 = 55.0; // 1h price change max abs %
+            const MAX_PRICE_CHANGE_H6: f64 = 80.0; // 6h price change max abs %
+            const MAX_PRICE_CHANGE_H24: f64 = 90.0; // 24h price change max abs %
 
             new_tokens.retain(|t| {
                 let price = t.price_native.parse::<f64>().unwrap_or(0.0);
                 let vol = t.volume_usd.parse::<f64>().unwrap_or(0.0);
                 let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                let pooled_sol = t.liquidity.base + t.liquidity.quote;
+                let has_image = !t.image_url.trim().is_empty();
+                let has_website = !t.url.trim().is_empty();
+
+                let price_ok =
+                    t.price_change.m5.abs() <= MAX_PRICE_CHANGE_M5 &&
+                    t.price_change.h1.abs() <= MAX_PRICE_CHANGE_H1 &&
+                    t.price_change.h6.abs() <= MAX_PRICE_CHANGE_H6 &&
+                    t.price_change.h24.abs() <= MAX_PRICE_CHANGE_H24;
+
                 price >= MIN_PRICE_SOL &&
                     price <= MAX_PRICE_SOL &&
                     vol >= MIN_VOLUME_USD &&
                     fdv >= MIN_FDV_USD &&
                     fdv <= MAX_FDV_USD &&
+                    has_image &&
+                    has_website &&
+                    pooled_sol >= MIN_LIQUIDITY_SOL &&
                     !t.symbol.is_empty() &&
                     !t.name.is_empty() &&
-                    !t.price_usd.is_empty()
+                    !t.price_usd.is_empty() &&
+                    price_ok
             });
 
             if debug {

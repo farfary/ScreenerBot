@@ -20,11 +20,10 @@ use futures::FutureExt;
 const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
 const MAX_DCA_COUNT: u8 = 3; // max 3 DCA per position
-const TRANSACTION_FEE_SOL: f64 = 0.0001;
+const TRANSACTION_FEE_SOL: f64 = 0.001;
 pub const POSITIONS_CHECK_TIME: u64 = 10; // 10 seconds
 
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
-
 
 /// supervisor that restarts the trader loop on *any* panic
 pub fn start_trader_loop() {
@@ -392,32 +391,58 @@ async fn trader_main_loop() {
                     }
                 }
 
-                /* ───────── TRAILING-STOP PARAMS ───────── */
-                const TP_START: f64 = 10.0; // enable trailing only after +10 %
-                const DROP_MIN: f64 = -1.0; // tightest it can ever be
-                const DROP_MAX: f64 = -40.0; // loosest fallback guard
-                const ATR_PERIOD: usize = 60; // 60 × 5 s  ≈ 5-minute ATR
-                const ATR_BASE_MULT: f64 = 2.0; // base distance = 2 × ATR
-                const PROFIT_FACTOR: f64 = 0.25; // adds 0.25 % trail per 1 % profit
+                /* ───────── SMART TRAILING-STOP PARAMS (CHANDLIER + RATCHET) ───────── */
+                const TP_START: f64 = 8.0; // start trailing at +8 %
+                const DROP_TIGHT: f64 = -0.75; // tightest stop (-0.75%)
+                const DROP_MID: f64 = -2.0; // loose stop (-2%) for 8–30%
+                const DROP_WIDE: f64 = -4.5; // extra loose for super high
+                const DROP_ULTRA: f64 = -7.0; // rare, for over 100% runs
+                const PROFIT_1: f64 = 30.0;
+                const PROFIT_2: f64 = 60.0;
+                const PROFIT_3: f64 = 100.0;
+                const ATR_PERIOD: usize = 60;
+                const ATR_BASE_MULT: f64 = 1.5;
+                const PROFIT_SHARPEN: f64 = 0.14; // more dynamic after 30%
 
-                /* ------------- improved trailing-stop block ------------- */
-                let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+                let fee_percent = (TRANSACTION_FEE_SOL / pos.entry_price) * 100.0;
+                let profit_pct =
+                    ((current_price - pos.entry_price - TRANSACTION_FEE_SOL) / pos.entry_price) *
+                    100.0;
                 let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
 
+                // Calculate trailing distance based on profit zone
                 let trail = if profit_pct >= TP_START {
-                    /* volatility-adjusted distance */
-                    let atr_p = atr_pct(hist, ATR_PERIOD).unwrap_or(0.5); // % of price
-                    let mut t = -(atr_p * ATR_BASE_MULT).max(profit_pct * PROFIT_FACTOR);
-                    t = t.clamp(DROP_MAX, DROP_MIN); // bounds
+                    let mut t = match profit_pct {
+                        x if x >= PROFIT_3 => DROP_ULTRA,
+                        x if x >= PROFIT_2 => DROP_ULTRA * 0.7 + DROP_WIDE * 0.3,
+                        x if x >= PROFIT_1 => DROP_WIDE * 0.8 + DROP_MID * 0.2,
+                        x if x >= 20.0 => DROP_MID * 0.7 + DROP_TIGHT * 0.3,
+                        _ => DROP_MID,
+                    };
+
+                    // Use ATR (volatility) in tight zones
+                    if profit_pct < PROFIT_1 {
+                        let atr_p = atr_pct(hist, ATR_PERIOD).unwrap_or(0.4);
+                        let dyn_trail = -(
+                            atr_p * ATR_BASE_MULT +
+                            (profit_pct * PROFIT_SHARPEN).max(0.25)
+                        );
+                        t = t.max(dyn_trail);
+                    }
+
+                    // Always use at least tightest
+                    t = t.max(DROP_TIGHT);
+
                     t
                 } else {
-                    f64::NEG_INFINITY // not active
+                    f64::NEG_INFINITY
                 };
 
-                if trail > f64::NEG_INFINITY && drop_from_peak <= trail {
+                // Only sell if after-fee profit is positive and drop_from_peak triggers
+                if trail > f64::NEG_INFINITY && drop_from_peak <= trail && profit_pct > 0.0 {
                     if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
                         println!(
-                            "🔴 SELL {symbol} +{:.2}% | peak {:.2}% | trail {:.2}% | {tx}",
+                            "🔴 TRAILING-SELL {symbol} +{:.2}% | peak +{:.2}% | trail {:.2}% | {tx}",
                             profit_pct,
                             drop_from_peak.abs(),
                             trail
@@ -554,7 +579,7 @@ pub async fn sell_token(
     {
         let mut closed = RECENT_CLOSED_POSITIONS.write().await;
 
-        closed.push(Position {
+        closed.insert(mint.to_string(), Position {
             entry_price: entry,
             peak_price: peak,
             dca_count,
@@ -563,11 +588,20 @@ pub async fn sell_token(
             sol_received,
             open_time,
             close_time: Some(close_time),
-            last_dca_price, // ← NEW field
+            last_dca_price,
         });
 
+        // Keep only the most recent 10 positions (by close_time)
         if closed.len() > 10 {
-            closed.remove(0);
+            // Remove the oldest by close_time
+            if
+                let Some((oldest_mint, _)) = closed
+                    .iter()
+                    .min_by_key(|(_, pos)| pos.close_time)
+                    .map(|(mint, _)| (mint.clone(), ()))
+            {
+                closed.remove(&oldest_mint);
+            }
         }
     }
 }

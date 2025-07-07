@@ -35,9 +35,20 @@ const BLACKLIST_FILE: &str = ".blacklist.json";
 /// In-memory set, initially populated from disk
 pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
     let mut set = HashSet::new();
+
+    // Load from JSON file
     if let Ok(s) = fs::read_to_string(BLACKLIST_FILE) {
         if let Ok(v) = serde_json::from_str::<Vec<String>>(&s) {
             set.extend(v);
+        }
+    }
+    // Also load from plain text blacklist.txt (one address per line)
+    if let Ok(s) = fs::read_to_string("blacklist.txt") {
+        for line in s.lines() {
+            let addr = line.trim();
+            if !addr.is_empty() {
+                set.insert(addr.to_string());
+            }
         }
     }
     RwLock::new(set)

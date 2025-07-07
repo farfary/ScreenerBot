@@ -345,6 +345,7 @@ fn decode_pool_account_to_price(
     use crate::pool_raydium_clmm::decode_raydium_clmm_from_account;
     use crate::pool_raydium_cpmm::decode_raydium_cpmm_from_account;
     use crate::pool_pumpfun2::decode_pumpfun2_pool_from_account;
+    use crate::pool_raydium_launchpad::decode_raydium_launchpad_from_account;
 
     let owner = account.owner.to_string();
 
@@ -371,6 +372,11 @@ fn decode_pool_account_to_price(
         // "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" |
         // "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG" =>
         //     decode_meteora_dlmm_from_account(rpc, pool_pk, account)?,
+
+        // Raydium Launchpad
+        "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj" =>
+            decode_raydium_launchpad_from_account(rpc, pool_pk, account)?,
+
         _ => {
             return Err(anyhow!("Unsupported program id {} for pool {}", owner, pool_pk));
         }

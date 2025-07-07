@@ -12,6 +12,7 @@ mod pool_pumpfun;
 mod pool_raydium_amm;
 mod pool_raydium_clmm;
 mod pool_raydium_cpmm;
+mod pool_raydium_launchpad;
 mod pool_pumpfun2;
 mod persistence;
 mod pool_price;
