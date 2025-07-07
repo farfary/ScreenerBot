@@ -21,7 +21,7 @@ const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
 const MAX_DCA_COUNT: u8 = 2; // max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.00003;
-pub const POSITIONS_CHECK_TIME: u64 = 5; // 10 seconds
+pub const POSITIONS_CHECK_TIME: u64 = 8; // 10 seconds
 
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 
