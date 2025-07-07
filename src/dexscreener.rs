@@ -5,8 +5,50 @@ use once_cell::sync::Lazy;
 use serde_json::Value;
 use std::sync::atomic::Ordering;
 use reqwest::Client;
-use crate::configs::BLACKLIST;
+use colored::Colorize;
+use crate::configs::{BLACKLIST, ARGS};
 use crate::utilitis::*;
+
+const MAX_TOKENS: usize = 20;
+const MIN_PRICE_SOL: f64 = 0.0000001;
+const MAX_PRICE_SOL: f64 = 0.01;
+
+#[derive(Debug, Clone)]
+struct TxnCount {
+    buys: u64,
+    sells: u64,
+}
+
+#[derive(Debug, Clone)]
+struct Txns {
+    m5: TxnCount,
+    h1: TxnCount,
+    h6: TxnCount,
+    h24: TxnCount,
+}
+
+#[derive(Debug, Clone)]
+struct Volume {
+    m5: f64,
+    h1: f64,
+    h6: f64,
+    h24: f64,
+}
+
+#[derive(Debug, Clone)]
+struct PriceChange {
+    m5: f64,
+    h1: f64,
+    h6: f64,
+    h24: f64,
+}
+
+#[derive(Debug, Clone)]
+struct Liquidity {
+    usd: f64,
+    base: f64,
+    quote: f64,
+}
 
 #[derive(Debug, Clone)]
 pub struct Token {
@@ -16,12 +58,24 @@ pub struct Token {
     pub program_id: String,
     pub name: String,
     pub symbol: String,
-    pub price_native: String, // Store native SOL price here
+    pub dex_id: String,
+    pub url: String,
+    pub pair_address: String,
+    pub labels: Vec<String>,
+    pub quote_address: String,
+    pub quote_name: String,
+    pub quote_symbol: String,
+    pub price_native: String,
     pub price_usd: String,
     pub last_price_usd: String,
     pub volume_usd: String,
     pub fdv_usd: String,
     pub image_url: String,
+    pub txns: Txns,
+    pub volume: Volume,
+    pub price_change: PriceChange,
+    pub liquidity: Liquidity,
+    pub pair_created_at: u64,
 }
 
 // ────────────── GLOBAL STATIC ──────────────
@@ -34,22 +88,17 @@ fn chunked(vec: Vec<String>, chunk_size: usize) -> Vec<Vec<String>> {
         .collect()
 }
 
-// Required import:
-use colored::Colorize;
-
 pub fn start_dexscreener_loop() {
-    const MAX_TOKENS: usize = 80;
-    // check debug flag from cached args
-    let debug = crate::configs::ARGS.iter().any(|a| a == "--debug-dexscreener");
-
+    let debug = ARGS.iter().any(|a| a == "--debug-dexscreener");
     let client = Client::new();
     let client_insert = client.clone();
 
     tokio::spawn(async move {
         loop {
-            if SHUTDOWN.load(Ordering::SeqCst) { break }
+            if SHUTDOWN.load(Ordering::SeqCst) {
+                break;
+            }
 
-            // minimal start/stop unless debug
             if debug {
                 println!("\n🔄 [Screener] Fetching DexScreener token lists...");
             }
@@ -61,35 +110,52 @@ pub fn start_dexscreener_loop() {
                 "https://api.dexscreener.com/token-boosts/top/v1",
             ];
 
-            /* ── first-pass lists ─────────────────────────────────────────── */
+            // ── first-pass lists ───────────────────────────────────────────
             for url in endpoints {
                 if debug {
-                    println!("🌐 [Screener] Requesting: {url}");
+                    println!("🌐 [Screener] Requesting: {}", url);
                 }
                 if let Ok(resp) = client_insert.get(url).send().await {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(arr) = json.as_array() {
                             if debug {
-                                println!("✅ {arr_len} tokens from {url}", arr_len = arr.len());
+                                println!("✅ {} tokens from {}", arr.len(), url);
                             }
                             for item in arr {
-                                let mint = item["tokenAddress"].as_str().unwrap_or_default();
-                                if BLACKLIST.read().await.contains(mint) {
+                                let mint = item["tokenAddress"].as_str().unwrap_or_default().to_string();
+                                if BLACKLIST.read().await.contains(&mint) {
                                     continue;
                                 }
                                 new_tokens.push(Token {
-                                    mint: mint.to_string(),
+                                    mint,
                                     balance: "0".into(),
                                     ata_pubkey: item["url"].as_str().unwrap_or_default().into(),
                                     program_id: item["chainId"].as_str().unwrap_or_default().into(),
                                     name: "".into(),
                                     symbol: "".into(),
-                                    price_native: "".into(),
-                                    price_usd: "".into(),
-                                    last_price_usd: "".into(),
-                                    volume_usd: "".into(),
-                                    fdv_usd: "".into(),
-                                    image_url: "".into(),
+                                    dex_id: String::new(),
+                                    url: String::new(),
+                                    pair_address: String::new(),
+                                    labels: Vec::new(),
+                                    quote_address: String::new(),
+                                    quote_name: String::new(),
+                                    quote_symbol: String::new(),
+                                    price_native: String::new(),
+                                    price_usd: String::new(),
+                                    last_price_usd: String::new(),
+                                    volume_usd: String::new(),
+                                    fdv_usd: String::new(),
+                                    image_url: String::new(),
+                                    txns: Txns {
+                                        m5: TxnCount { buys: 0, sells: 0 },
+                                        h1: TxnCount { buys: 0, sells: 0 },
+                                        h6: TxnCount { buys: 0, sells: 0 },
+                                        h24: TxnCount { buys: 0, sells: 0 },
+                                    },
+                                    volume: Volume { m5: 0.0, h1: 0.0, h6: 0.0, h24: 0.0 },
+                                    price_change: PriceChange { m5: 0.0, h1: 0.0, h6: 0.0, h24: 0.0 },
+                                    liquidity: Liquidity { usd: 0.0, base: 0.0, quote: 0.0 },
+                                    pair_created_at: 0,
                                 });
                             }
                         }
@@ -97,13 +163,13 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            /* ── second-pass details ──────────────────────────────────────── */
+            // ── second-pass details ────────────────────────────────────────
             let mints: Vec<String> = new_tokens.iter().map(|t| t.mint.clone()).collect();
             let batches = chunked(mints, 30);
 
             for (i, batch) in batches.iter().enumerate() {
                 let joined = batch.join(",");
-                let url = format!("https://api.dexscreener.com/tokens/v1/solana/{joined}");
+                let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", joined);
                 if debug {
                     println!("🔗 DexScreener info (batch {}/{})", i + 1, batches.len());
                 }
@@ -111,38 +177,63 @@ pub fn start_dexscreener_loop() {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(arr) = json.as_array() {
                             for item in arr {
-                                let mint = item["baseToken"]["address"]
-                                    .as_str()
-                                    .unwrap_or_default();
-                                if let Some(tok) = new_tokens.iter_mut().find(|t| t.mint == mint) {
-                                    tok.name = item["baseToken"]["name"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.symbol = item["baseToken"]["symbol"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.price_native = item["priceNative"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.price_usd = item["priceUsd"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.volume_usd = item["volume"]["h24"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.fdv_usd = item["fdv"]
-                                        .as_f64()
-                                        .unwrap_or_default()
-                                        .to_string();
-                                    tok.image_url = item["info"]["imageUrl"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
+                                let base_address = item["baseToken"]["address"].as_str().unwrap_or_default();
+                                if let Some(tok) = new_tokens.iter_mut().find(|t| t.mint == base_address) {
+                                    tok.dex_id = item["dexId"].as_str().unwrap_or_default().into();
+                                    tok.url = item["url"].as_str().unwrap_or_default().into();
+                                    tok.pair_address = item["pairAddress"].as_str().unwrap_or_default().into();
+                                    tok.labels = item["labels"]
+                                        .as_array()
+                                        .unwrap_or(&vec![])
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(String::from))
+                                        .collect();
+                                    tok.name = item["baseToken"]["name"].as_str().unwrap_or_default().into();
+                                    tok.symbol = item["baseToken"]["symbol"].as_str().unwrap_or_default().into();
+                                    tok.quote_address = item["quoteToken"]["address"].as_str().unwrap_or_default().into();
+                                    tok.quote_name = item["quoteToken"]["name"].as_str().unwrap_or_default().into();
+                                    tok.quote_symbol = item["quoteToken"]["symbol"].as_str().unwrap_or_default().into();
+                                    tok.price_native = item["priceNative"].as_str().unwrap_or_default().into();
+                                    tok.price_usd = item["priceUsd"].as_str().unwrap_or_default().into();
+                                    tok.volume_usd = item["volume"]["h24"].as_f64().unwrap_or(0.0).to_string();
+                                    tok.fdv_usd = item["fdv"].as_f64().unwrap_or(0.0).to_string();
+                                    tok.image_url = item["info"]["imageUrl"].as_str().unwrap_or_default().into();
+                                    tok.txns = Txns {
+                                        m5: TxnCount {
+                                            buys: item["txns"]["m5"]["buys"].as_u64().unwrap_or(0),
+                                            sells: item["txns"]["m5"]["sells"].as_u64().unwrap_or(0),
+                                        },
+                                        h1: TxnCount {
+                                            buys: item["txns"]["h1"]["buys"].as_u64().unwrap_or(0),
+                                            sells: item["txns"]["h1"]["sells"].as_u64().unwrap_or(0),
+                                        },
+                                        h6: TxnCount {
+                                            buys: item["txns"]["h6"]["buys"].as_u64().unwrap_or(0),
+                                            sells: item["txns"]["h6"]["sells"].as_u64().unwrap_or(0),
+                                        },
+                                        h24: TxnCount {
+                                            buys: item["txns"]["h24"]["buys"].as_u64().unwrap_or(0),
+                                            sells: item["txns"]["h24"]["sells"].as_u64().unwrap_or(0),
+                                        },
+                                    };
+                                    tok.volume = Volume {
+                                        m5: item["volume"]["m5"].as_f64().unwrap_or(0.0),
+                                        h1: item["volume"]["h1"].as_f64().unwrap_or(0.0),
+                                        h6: item["volume"]["h6"].as_f64().unwrap_or(0.0),
+                                        h24: item["volume"]["h24"].as_f64().unwrap_or(0.0),
+                                    };
+                                    tok.price_change = PriceChange {
+                                        m5: item["priceChange"]["m5"].as_f64().unwrap_or(0.0),
+                                        h1: item["priceChange"]["h1"].as_f64().unwrap_or(0.0),
+                                        h6: item["priceChange"]["h6"].as_f64().unwrap_or(0.0),
+                                        h24: item["priceChange"]["h24"].as_f64().unwrap_or(0.0),
+                                    };
+                                    tok.liquidity = Liquidity {
+                                        usd: item["liquidity"]["usd"].as_f64().unwrap_or(0.0),
+                                        base: item["liquidity"]["base"].as_f64().unwrap_or(0.0),
+                                        quote: item["liquidity"]["quote"].as_f64().unwrap_or(0.0),
+                                    };
+                                    tok.pair_created_at = item["pairCreatedAt"].as_u64().unwrap_or(0);
                                 }
                             }
                         }
@@ -150,7 +241,38 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            /* ── keep top-N and push into shared TOKENS ──────────────────── */
+            for t in &new_tokens {
+                println!(
+                    "Symbol: {}, Price: {}, Volume: {}, FDV: {}",
+                    t.symbol,
+                    t.price_native,
+                    t.volume_usd,
+                    t.fdv_usd
+                );
+            }
+
+            const MIN_VOLUME_USD: f64 = 2000.0;
+            const MIN_FDV_USD: f64 = 10000.0;
+            const MAX_FDV_USD: f64 = 10_000_000.0;
+
+            new_tokens.retain(|t| {
+                let price = t.price_native.parse::<f64>().unwrap_or(0.0);
+                let vol = t.volume_usd.parse::<f64>().unwrap_or(0.0);
+                let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                price >= MIN_PRICE_SOL &&
+                price <= MAX_PRICE_SOL &&
+                vol >= MIN_VOLUME_USD &&
+                fdv >= MIN_FDV_USD &&
+                fdv <= MAX_FDV_USD &&
+                !t.symbol.is_empty() &&
+                !t.name.is_empty() &&
+                !t.price_usd.is_empty()
+            });
+
+            if debug {
+                println!("✅ {} tokens remain after price filter", new_tokens.len());
+            }
+
             new_tokens.sort_unstable_by(|a, b| {
                 let va = a.volume_usd.parse::<f64>().unwrap_or(0.0);
                 let vb = b.volume_usd.parse::<f64>().unwrap_or(0.0);
@@ -158,13 +280,11 @@ pub fn start_dexscreener_loop() {
             });
             new_tokens.truncate(MAX_TOKENS);
 
-            // Capture existing mints to only log truly new ones
             let existing_mints: Vec<String> = {
                 let lock = TOKENS.read().await;
                 lock.iter().map(|t| t.mint.clone()).collect()
             };
 
-            // Filter and log only new additions
             let mut filtered_tokens = Vec::with_capacity(MAX_TOKENS);
             for t in new_tokens {
                 if BLACKLIST.read().await.contains(&t.mint) {
@@ -173,7 +293,6 @@ pub fn start_dexscreener_loop() {
                 if !t.symbol.is_empty() && !t.price_usd.is_empty() && !t.name.is_empty() {
                     if !existing_mints.contains(&t.mint) {
                         if debug {
-                            // full info as before
                             println!(
                                 "{} {} {}\n  {} {}\n  {} {}\n  {} {} SOL\n  {} ${}\n  {} ${}\n  {} ${}\n  {} {}\n  {} {}\n  {} {}",
                                 "🆕".bold(),
@@ -196,10 +315,9 @@ pub fn start_dexscreener_loop() {
                                 "ProgramID:".blue().bold(),
                                 t.program_id.dimmed(),
                                 "ImageURL:".blue().bold(),
-                                t.image_url.underline().white(),
+                                t.image_url.underline().white()
                             );
                         } else {
-                            // minimal added-token log
                             println!("🆕 Added: {} ({})", t.symbol, t.mint);
                         }
                     }
@@ -207,19 +325,14 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            // Replace TOKENS with the new list
             {
                 let mut lock = TOKENS.write().await;
                 lock.clear();
                 lock.extend(filtered_tokens);
             }
 
-            // always show this stop line
             println!("✅ TOKENS updated: {}", TOKENS.read().await.len());
-
             tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
         }
     });
 }
-
-

@@ -17,27 +17,28 @@ use tokio::task;
 use futures::FutureExt;
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.01; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 20; // example: allow up to 5 open positions
-const MAX_DCA_COUNT: u8 = 3; // for example, max 3 DCA per position
-const TRANSACTION_FEE_SOL: f64 = 0.0001; // Transaction fee for buying and selling
+const TRADE_SIZE_SOL: f64 = 0.005; // amount of SOL to spend on each buy
+const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
+const MAX_DCA_COUNT: u8 = 3; // max 3 DCA per position
+const TRANSACTION_FEE_SOL: f64 = 0.0001;
 pub const POSITIONS_CHECK_TIME: u64 = 10; // 10 seconds
 
 /* ── tunables ─────────────────────────────────────── */
-
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 const RSI_PERIOD: usize = 14;
 
 /* ───── SMART-DIP ENTRY ─────────────────────────────── */
 const FAST_WIN: usize = 6; // 30 s high
 const MED_WIN: usize = 36; // 3 min high
-const FAST_DROP_PCT: f64 = -2.0; // need ≥−2 % in 30 s
-const MED_DROP_PCT: f64 = -4.0; // AND ≥−4 % in 3 min
+const FAST_DROP_PCT: f64 = -2.0; // trigger at ≥−2% in 30 s
+const MED_DROP_PCT: f64 = -3.0; // trigger at ≥−3% in 3 min
 const ATR_PERIOD_BOUNCE: usize = 18; // 90 s ATR
-const MIN_BOUNCE_ATR_MULT: f64 = 0.4; // bounce ≥ 0.4×ATR%
-const MIN_BOUNCE_PCT: f64 = 0.15; // at least 0.15 %
-const DIP_TIMEOUT_SEC: u64 = 300; // 5 min wave life
-const FAST_EMA: usize = 12; // 1-min EMA for confirmation
+const MIN_BOUNCE_ATR_MULT: f64 = 0.4;
+const MIN_BOUNCE_PCT: f64 = 0.15;
+const DIP_TIMEOUT_SEC: u64 = 300;
+const FAST_EMA: usize = 12;
+const HOLD_SEC: u64 = 8;
+const EXTRA_BOUNCE_FRAC: f64 = 0.05;
 
 /* ───────── new DipTracker ───────── */
 #[derive(Debug)]
@@ -242,11 +243,8 @@ async fn trader_main_loop() {
 
             let now = Instant::now();
 
-            /* ───────── new constants ───────── */
-            const HOLD_SEC: u64 = 8; // price must stop making lower lows ≥ this
-            const EXTRA_BOUNCE_FRAC: f64 = 0.15; // 15 % of the fast drop regained = enough
-
             /* ---------- ENTRY: bottom-catch buy ---------- */
+            // ENTRY: bottom-catch buy
             if hist.len() >= MED_WIN {
                 let fast_hi = hist
                     .iter()
@@ -258,11 +256,9 @@ async fn trader_main_loop() {
                     .rev()
                     .take(MED_WIN)
                     .fold(f64::MIN, |m, &p| m.max(p));
+                let drop_fast = pct_change(fast_hi, current_price);
+                let drop_med = pct_change(med_hi, current_price);
 
-                let drop_fast = pct_change(fast_hi, current_price); // ≤ 0
-                let drop_med = pct_change(med_hi, current_price); // ≤ 0
-
-                /* per-mint tracker */
                 let mut remove = false;
                 {
                     let tr = dip_trackers.entry(mint.clone()).or_insert_with(|| DipTracker {
@@ -272,7 +268,7 @@ async fn trader_main_loop() {
                         armed: false,
                     });
 
-                    /* (1) arm the tracker once both windows satisfy the thresholds */
+                    // (1) arm when shallower dip reached
                     if !tr.armed && drop_fast <= FAST_DROP_PCT && drop_med <= MED_DROP_PCT {
                         tr.armed = true;
                         tr.low_price = current_price;
@@ -280,25 +276,20 @@ async fn trader_main_loop() {
                         tr.last_low_time = Instant::now();
                     }
 
-                    /* (2) update low + time stamp while armed */
+                    // (2) track new lows
                     if tr.armed && current_price < tr.low_price {
                         tr.low_price = current_price;
                         tr.last_low_time = Instant::now();
                     }
 
-                    /* (3) give up if the whole pattern grows too old */
+                    // (3) timeout
                     if tr.armed && tr.start_time.elapsed().as_secs() > DIP_TIMEOUT_SEC {
                         remove = true;
                     }
 
-                    /* (4) consolidation + small bounce → buy */
+                    // (4) consolidation + bounce → buy
                     if tr.armed && tr.last_low_time.elapsed().as_secs() >= HOLD_SEC {
                         let bounce_pct = pct_change(tr.low_price, current_price);
-
-                        /* dynamic bounce requirement:                                     *
-                         *   – 15 % of the fast drop,                                       *
-                         *   – or volatility-based (ATR × multiplier),                      *
-                         *   – at least MIN_BOUNCE_PCT.                                     */
                         let atr_p = atr_pct(hist, ATR_PERIOD_BOUNCE).unwrap_or(0.3);
                         let need_b = (drop_fast.abs() * EXTRA_BOUNCE_FRAC)
                             .max(atr_p * MIN_BOUNCE_ATR_MULT)
@@ -306,12 +297,12 @@ async fn trader_main_loop() {
 
                         let ema_ok = ema(hist, FAST_EMA).map_or(true, |e| current_price > e);
                         let rsi_ok = rsi(hist, RSI_PERIOD).map_or(true, |v| v >= 30.0);
-                        let capacity_ok = {
+                        let cap_ok = {
                             let pos = OPEN_POSITIONS.read().await;
                             pos.len() < MAX_OPEN_POSITIONS && !pos.contains_key(&mint)
                         };
 
-                        if bounce_pct >= need_b && ema_ok && rsi_ok && capacity_ok {
+                        if bounce_pct >= need_b && ema_ok && rsi_ok && cap_ok {
                             println!(
                                 "🚀 BOTTOM-CATCH ENTRY {symbol}: drop {:.2}% / bounce {:.2}% / need {:.2}%",
                                 drop_fast,
@@ -334,12 +325,11 @@ async fn trader_main_loop() {
                                     close_time: None,
                                     last_dca_price: current_price,
                                 });
-                                remove = true; // consume this dip wave
+                                remove = true;
                             }
                         }
                     }
-                } /* mutable borrow ends */
-
+                }
                 if remove {
                     dip_trackers.remove(&mint);
                 }
@@ -366,7 +356,7 @@ async fn trader_main_loop() {
 
                 // override 3rd DCA (pos.dca_count == 2) to require ≥70% drop
                 let next_trig = if pos.dca_count == 2 {
-                    -70.0
+                    -80.0
                 } else {
                     DCA_BASE_TRIGGER_PCT + (pos.dca_count as f64) * DCA_STEP_TRIGGER_PCT
                 };
