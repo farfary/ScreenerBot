@@ -770,20 +770,20 @@ pub fn start_dexscreener_loop() {
             }
 
             const MAX_TOKENS: usize = 50;
-            const MIN_PRICE_SOL: f64 = 0.00000001;
-            const MAX_PRICE_SOL: f64 = 0.2;
+            const MIN_PRICE_SOL: f64 = 0.000000001;
+            const MAX_PRICE_SOL: f64 = 0.01;
 
             const MIN_VOLUME_USD: f64 = 5000.0;
             const MIN_FDV_USD: f64 = 20_000.0;
             const MAX_FDV_USD: f64 = 50_000_000.0;
-            const MIN_LIQUIDITY_SOL: f64 = 10.0;
+            const MIN_LIQUIDITY_SOL: f64 = 1000.0;
 
             const MAX_PRICE_CHANGE_M5: f64 = 60.0;
             const MAX_PRICE_CHANGE_H1: f64 = 120.0;
             const MAX_PRICE_CHANGE_H6: f64 = 160.0;
             const MAX_PRICE_CHANGE_H24: f64 = 180.0;
 
-            const MIN_BUYS_24H: u64 = 10; // at least 10 buys in 24h
+            const MIN_BUYS_24H: u64 = 1000; // at least 10 buys in 24h
             const MAX_DUMP_24H: f64 = -50.0; // reject if -50% or worse in 24h
 
             // Apply comprehensive filtering including rug check safety
