@@ -1,3 +1,7 @@
 /target
 .DS_Store
 .ohlcv_cache
+.pool_cache.json
+.solana_pairs_cache.json
+.token_decimals_cache.json
+.tokens_cache.json
