@@ -19,87 +19,61 @@ pub fn should_buy(dataframe: &MarketDataFrame, token: &Token, can_buy: bool) -> 
         return false;
     }
 
-    // SMART ENTRY BUY: Only on Extreme/Abnormal Drops (No Comeback Buys)
-    const DROP_LOOKBACK: usize = 32; // Candles to look back
-    const MIN_TOTAL_DROP: f64 = 15.0; // Require total drop at least -15%
-    const MIN_DROP_SCALE: f64 = 2.5; // Last drop must be >2.5x avg drop
-    const MIN_DROP_ABS: f64 = 8.0; // Or last drop at least -8%
-    const MIN_BOUNCE: f64 = 0.5; // Optional: Require at least +0.5% bounce (set 0 for instant)
-
+    // Simple buy logic: Look for any meaningful dip with basic token health checks
     let hist = &dataframe.prices;
-
-    if hist.len() <= DROP_LOOKBACK + 2 {
+    
+    if hist.len() < 5 {
         return false;
     }
 
-    let window: Vec<f64> = hist.iter().rev().take(DROP_LOOKBACK).cloned().collect();
-    let high = window.iter().cloned().fold(f64::MIN, f64::max);
-    let last = *window.first().unwrap();
-    let prev = *hist.get(hist.len() - 2).unwrap();
-    let two_back = *hist.get(hist.len() - 3).unwrap();
-
-    let total_drop = if high > 0.0 { ((last - high) / high) * 100.0 } else { 0.0 };
-    let curr_drop = ((last - prev) / prev) * 100.0;
-    let prev_drop = ((prev - two_back) / two_back) * 100.0;
-
-    let mut drops = Vec::new();
-    for i in 1..=DROP_LOOKBACK {
-        let now = hist[hist.len() - i];
-        let prev = hist[hist.len() - i - 1];
-        let drop = ((now - prev) / prev) * 100.0;
-        if drop < 0.0 {
-            drops.push(drop.abs());
-        }
-    }
-    let avg_drop = if !drops.is_empty() {
-        drops.iter().sum::<f64>() / (drops.len() as f64)
-    } else {
-        0.0
-    };
-
-    // Additional token-based filtering using the Token object
+    let current_price = *hist.back().unwrap();
+    let prev_price = *hist.get(hist.len() - 2).unwrap();
+    
+    // Look for recent high in last 10 candles
+    let lookback = 10.min(hist.len());
+    let recent_high = hist.iter().rev().take(lookback).cloned().fold(0.0, f64::max);
+    
+    // Calculate drops
+    let current_drop = ((current_price - prev_price) / prev_price) * 100.0;
+    let drop_from_high = ((current_price - recent_high) / recent_high) * 100.0;
+    
+    // Basic token health filters (more lenient)
     let volume_24h = token.volume.h24;
     let price_change_24h = token.price_change.h24;
     let liquidity_sol = token.liquidity.base + token.liquidity.quote;
     let buys_24h = token.txns.h24.buys;
-
-    // Enhanced filtering using token metadata
-    let has_sufficient_liquidity = liquidity_sol >= 5.0; // At least 5 SOL liquidity
-    let has_activity = buys_24h >= 5; // At least 5 buys in 24h
-    let not_rugged = price_change_24h > -70.0; // Not dumped more than 70% in 24h
-    let has_volume = volume_24h >= 1000.0; // At least $1k volume in 24h
-
-    if
-        total_drop <= -MIN_TOTAL_DROP &&
-        (curr_drop <= -MIN_DROP_ABS ||
-            (curr_drop < -0.5 && curr_drop.abs() > MIN_DROP_SCALE * avg_drop)) &&
-        prev_drop < 0.0 &&
-        has_sufficient_liquidity &&
-        has_activity &&
-        not_rugged &&
-        has_volume
-    {
-        // Rug-prevention: skip ultra dumps
-        if curr_drop > -60.0 {
-            let bounced = ((last - prev) / prev) * 100.0 > MIN_BOUNCE;
-            if bounced || MIN_BOUNCE <= 0.0 {
-                println!(
-                    "🟢 SMART BUY SIGNAL {}: total_drop={:.2}%, last_drop={:.2}% (avg={:.2}%) | Vol24h=${:.0} | Liq={:.1}SOL | Buys24h={}",
-                    token.symbol,
-                    total_drop,
-                    curr_drop,
-                    avg_drop,
-                    volume_24h,
-                    liquidity_sol,
-                    buys_24h
-                );
-                return true;
-            }
-        } else {
-            println!("⚠️ [SKIP] {}: Dump >60% in 1 candle, likely rug, skip!", token.symbol);
-        }
+    
+    let has_min_liquidity = liquidity_sol >= 1.0; // At least 1 SOL
+    let has_some_activity = buys_24h >= 1; // At least 1 buy in 24h
+    let not_completely_rugged = price_change_24h > -90.0; // Not completely dead
+    let has_some_volume = volume_24h >= 100.0; // At least $100 volume
+    
+    // Simple entry conditions - buy on any of these:
+    let small_dip = current_drop <= -2.0; // 2% drop in current candle
+    let bigger_dip = drop_from_high <= -5.0; // 5% drop from recent high
+    let oversold = drop_from_high <= -10.0; // 10% drop from recent high (more aggressive)
+    
+    let basic_health_ok = has_min_liquidity && has_some_activity && not_completely_rugged && has_some_volume;
+    
+    if basic_health_ok && (small_dip || bigger_dip || oversold) {
+        println!(
+            "🟢 SIMPLE BUY SIGNAL {}: current_drop={:.2}%, drop_from_high={:.2}% | Vol24h=${:.0} | Liq={:.1}SOL | Buys24h={}",
+            token.symbol,
+            current_drop,
+            drop_from_high,
+            volume_24h,
+            liquidity_sol,
+            buys_24h
+        );
+        return true;
     }
-
+    
+    // Optional: Less frequent debug logging
+    if hist.len() % 10 == 0 { // Only log every 10th check to reduce spam
+        println!("🔍 {} - curr_drop={:.2}%, high_drop={:.2}%, vol=${:.0}, liq={:.1}SOL, buys={}", 
+            token.symbol, current_drop, drop_from_high, volume_24h, liquidity_sol, buys_24h);
+    }
+    
     false
 }
 

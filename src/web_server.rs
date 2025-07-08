@@ -410,15 +410,15 @@ async fn collect_dashboard_data() -> Result<DashboardData> {
 }
 
 async fn get_current_token_price(token_id: &str) -> Option<f64> {
-    // Try to get price from existing token data
+    // Try to get price from existing token data (price is in SOL)
     let tokens = TOKENS.read().await;
     if let Some(token) = tokens.iter().find(|t| t.mint == token_id) {
-        if let Ok(price) = token.price_usd.parse::<f64>() {
+        if let Ok(price) = token.price_native.parse::<f64>() {
             return Some(price);
         }
     }
 
-    // Fallback to pool price calculation
+    // Fallback to pool price calculation (returns price in SOL)
     match crate::pool_price::price_from_biggest_pool(&*crate::configs::RPC, token_id) {
         Ok(price) => Some(price),
         Err(_) => None,
@@ -427,12 +427,12 @@ async fn get_current_token_price(token_id: &str) -> Option<f64> {
 
 fn calculate_pnl(position: &Position, current_price: Option<f64>) -> (Option<f64>, Option<f64>) {
     if let Some(close_time) = position.close_time {
-        // Closed position - use actual received amount
+        // Closed position - use actual received amount (in SOL)
         let pnl = position.sol_received - position.sol_spent;
         let pnl_percentage = (pnl / position.sol_spent) * 100.0;
         (Some(pnl), Some(pnl_percentage))
     } else if let Some(price) = current_price {
-        // Open position - calculate unrealized PnL
+        // Open position - calculate unrealized PnL (current_price is in SOL)
         let current_value = position.token_amount * price;
         let pnl = current_value - position.sol_spent;
         let pnl_percentage = (pnl / position.sol_spent) * 100.0;
@@ -587,11 +587,11 @@ fn create_default_html() -> String {
         <div class="stats-grid">
             <div class="stat-card">
                 <h3>Total PnL</h3>
-                <div class="stat-value" id="totalPnl">$0.00</div>
+                <div class="stat-value" id="totalPnl">0.00 SOL</div>
             </div>
             <div class="stat-card">
                 <h3>Total Invested</h3>
-                <div class="stat-value" id="totalInvested">$0.00</div>
+                <div class="stat-value" id="totalInvested">0.00 SOL</div>
             </div>
             <div class="stat-card">
                 <h3>Active Trades</h3>
