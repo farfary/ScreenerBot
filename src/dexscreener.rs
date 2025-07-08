@@ -311,6 +311,55 @@ pub async fn get_rug_check_report(mint: &str, debug: bool) -> Option<RugCheckDat
     fetch_rug_check_data(&client, mint, debug).await
 }
 
+/// Ensure RugCheck data is cached for all tokens in the watch list
+pub async fn ensure_watchlist_rugcheck_cached(debug: bool) {
+    let client = reqwest::Client::new();
+    let mut tokens = TOKENS.write().await;
+    let now = std::time::SystemTime
+        ::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    for token in tokens.iter_mut() {
+        // Check if we need to refresh RugCheck data (older than 24 hours or missing)
+        let needs_refresh = match token.rug_check.checked_at {
+            Some(checked_at) => now - checked_at >= 86400, // 24 hours
+            None => true, // No data at all
+        };
+
+        if needs_refresh {
+            if debug {
+                println!("🔍 [RugCheck] Refreshing data for watch list token: {}", token.symbol);
+            }
+
+            if let Some(rug_data) = fetch_rug_check_data(&client, &token.mint, debug).await {
+                token.rug_check = rug_data;
+
+                if debug {
+                    println!(
+                        "✅ [RugCheck] Updated {} ({}): score={}, normalized={}, rugged={}",
+                        token.symbol,
+                        token.mint,
+                        token.rug_check.score,
+                        token.rug_check.score_normalised,
+                        token.rug_check.rugged
+                    );
+                }
+            }
+
+            // Be respectful to the API
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        } else if debug {
+            println!(
+                "📋 [RugCheck] {} has fresh cached data (age: {} hours)",
+                token.symbol,
+                (now - token.rug_check.checked_at.unwrap_or(0)) / 3600
+            );
+        }
+    }
+}
+
 // ────────────── CHUNK HELPER ──────────────
 fn chunked(vec: Vec<String>, chunk_size: usize) -> Vec<Vec<String>> {
     vec.chunks(chunk_size)
@@ -327,13 +376,15 @@ pub fn start_dexscreener_loop() {
 
     tokio::spawn(async move {
         // ───── Load from disk cache on start ──────────
+        let mut cached_tokens: Vec<Token> = Vec::new();
         if let Ok(mut file) = fs::File::open(TOKEN_CACHE_FILE).await {
             let mut data = Vec::new();
             if file.read_to_end(&mut data).await.is_ok() {
                 if let Ok(tokens) = serde_json::from_slice::<Vec<Token>>(&data) {
+                    cached_tokens = tokens;
                     let mut lock = TOKENS.write().await;
                     lock.clear();
-                    lock.extend(tokens);
+                    lock.extend(cached_tokens.clone());
                     if debug {
                         println!("📥 Loaded {} tokens from disk cache", lock.len());
                     }
@@ -577,6 +628,45 @@ pub fn start_dexscreener_loop() {
             mints.sort();
             mints.dedup();
 
+            // Create a map of cached RugCheck data for quick lookup
+            let mut cached_rug_data: std::collections::HashMap<
+                String,
+                RugCheckData
+            > = std::collections::HashMap::new();
+            for cached_token in &cached_tokens {
+                if cached_token.rug_check.checked_at.is_some() {
+                    cached_rug_data.insert(
+                        cached_token.mint.clone(),
+                        cached_token.rug_check.clone()
+                    );
+                }
+            }
+
+            // Apply cached RugCheck data to new tokens where available and still valid
+            let now = std::time::SystemTime
+                ::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            for token in &mut new_tokens {
+                if let Some(cached_rug) = cached_rug_data.get(&token.mint) {
+                    if let Some(checked_at) = cached_rug.checked_at {
+                        // Use cached data if it's less than 24 hours old
+                        if now - checked_at < 86400 {
+                            token.rug_check = cached_rug.clone();
+                            if debug {
+                                println!(
+                                    "📋 [RugCheck] Using cached data for {} (age: {} hours)",
+                                    token.symbol,
+                                    (now - checked_at) / 3600
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
             let batches = chunked(mints, 30);
 
             for (i, batch) in batches.iter().enumerate() {
@@ -726,7 +816,7 @@ pub fn start_dexscreener_loop() {
                 for token_idx in start_idx..end_idx {
                     let token = &mut new_tokens[token_idx];
 
-                    // Skip if we already have recent rug check data
+                    // Skip if we already have recent rug check data (less than 24 hours old)
                     if let Some(checked_at) = token.rug_check.checked_at {
                         let now = std::time::SystemTime
                             ::now()
@@ -734,8 +824,15 @@ pub fn start_dexscreener_loop() {
                             .unwrap_or_default()
                             .as_secs();
 
-                        // Skip if checked within the last hour
-                        if now - checked_at < 3600 {
+                        // Skip if checked within the last day (24 hours = 86400 seconds)
+                        if now - checked_at < 86400 {
+                            if debug {
+                                println!(
+                                    "🔍 [RugCheck] Skipping {} - cached data is {} hours old",
+                                    token.symbol,
+                                    (now - checked_at) / 3600
+                                );
+                            }
                             continue;
                         }
                     }
@@ -885,6 +982,9 @@ pub fn start_dexscreener_loop() {
                 lock.clear();
                 lock.extend(filtered_tokens);
             }
+
+            // Ensure all watch list tokens have up-to-date RugCheck data
+            ensure_watchlist_rugcheck_cached(debug).await;
 
             // ───── Save to disk cache ──────────
             if let Ok(data) = serde_json::to_vec(&*TOKENS.read().await) {

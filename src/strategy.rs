@@ -22,16 +22,16 @@ pub const RSI_PERIOD: usize = 14; // RSI calculation period
 pub const BB_PERIOD: usize = 20; // Bollinger Bands period
 pub const BB_STD_DEV: f64 = 2.0; // Standard deviation multiplier
 pub const VWAP_PERIOD: usize = 20; // VWAP calculation period
-pub const QUICK_PROFIT_TARGET: f64 = 1.0; // Start taking profits at 1%
+pub const QUICK_PROFIT_TARGET: f64 = 2.0; // Start taking profits at 1%
 pub const MAX_PROFIT_TARGET: f64 = 500.0; // Maximum profit target 500%
-pub const RAPID_STOP_LOSS: f64 = -3.0; // Relaxed 3% stop loss for crypto volatility
+pub const RAPID_STOP_LOSS: f64 = -10.0; // Relaxed 3% stop loss for crypto volatility
 pub const MAX_TRADE_DURATION_SEC: i64 = 3600; // Max 60 minutes for better opportunities
 pub const MIN_PROFIT_BEFORE_EXIT_SOL: f64 = FEE_RATE * 1.5; // Reduced minimum profit requirement
 
 // PROFIT TAKING TIERS FOR 1% TO 500% RANGE
-pub const PROFIT_TIER_1: f64 = 1.0; // 1% - quick scalp
-pub const PROFIT_TIER_2: f64 = 3.0; // 3% - small profit
-pub const PROFIT_TIER_3: f64 = 5.0; // 5% - medium profit
+pub const PROFIT_TIER_1: f64 = 3.0; // 1% - quick scalp
+pub const PROFIT_TIER_2: f64 = 6.0; // 3% - small profit
+pub const PROFIT_TIER_3: f64 = 8.0; // 5% - medium profit
 pub const PROFIT_TIER_4: f64 = 10.0; // 10% - good profit
 pub const PROFIT_TIER_5: f64 = 20.0; // 20% - great profit
 pub const PROFIT_TIER_6: f64 = 50.0; // 50% - excellent profit
