@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use crate::prelude::*;
 
 use anyhow::{ anyhow, Result };

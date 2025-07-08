@@ -1,4 +1,4 @@
-// persistence.rs ─────────────────────────────────────────────────────────────
+#![allow(warnings)]
 use crate::prelude::*;
 
 use std::collections::HashMap;

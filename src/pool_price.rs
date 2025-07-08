@@ -1,11 +1,4 @@
-//! src/pool_price.rs
-//! -------------------------------------------------------------
-//! • Every call fetches a fresh price (no TTL).
-//! • Biggest pool address is cached in RAM + pool_cache.json.
-//!   – Locks are held only long enough to copy data.
-//! • BATCH PRICE FETCHING: Reduces RPC costs by fetching multiple accounts
-//! -------------------------------------------------------------
-
+#![allow(warnings)]
 use crate::prelude::*;
 
 use std::{ collections::HashMap, fs::File, io::BufReader, time::Instant };

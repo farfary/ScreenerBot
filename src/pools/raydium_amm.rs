@@ -1,4 +1,6 @@
-//! Raydium AMM V4  (program RVKd6…)
+#![allow(warnings)]
+use crate::prelude::*;
+
 use anyhow::{ anyhow, Result };
 use num_format::{ Locale, ToFormattedString };
 use solana_client::rpc_client::RpcClient;
@@ -31,7 +33,6 @@ pub fn decode_raydium_amm(
     Ok((base, quote, base_mint, quote_mint))
 }
 
-/// Batch-friendly version: decode from already-fetched account
 pub fn decode_raydium_amm_from_account(
     rpc: &RpcClient,
     pool_pk: &Pubkey,

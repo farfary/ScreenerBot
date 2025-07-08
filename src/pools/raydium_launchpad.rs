@@ -1,4 +1,5 @@
-// pool_raydium_launchpad.rs
+#![allow(warnings)]
+use crate::prelude::*;
 
 use anyhow::{ anyhow, Result };
 use solana_client::rpc_client::RpcClient;
@@ -43,7 +44,6 @@ pub fn decode_raydium_launchpad(
 }
 
 
-// Optional: batch-friendly version
 pub fn decode_raydium_launchpad_from_account(
     rpc: &RpcClient,
     pool_pk: &Pubkey,

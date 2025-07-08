@@ -1,20 +1,5 @@
-//! PumpFun v2 “CPMM” pool decoder
-//! Program id: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
-//!
-//! ✅  Extracts the on-chain “real” reserves that form the price.
-//!
-//! Account layout (after Anchor’s 8-byte discriminator):
-//!   0..  8  virtual_token_reserves  (u64)   – EMA / TWAP helper, ignore for spot
-//!   8.. 16  virtual_sol_reserves    (u64)
-//!  16.. 24  real_token_reserves     (u64)   – we use this
-//!  24.. 32  real_sol_reserves       (u64)   – we use this
-//!  32.. 40  token_total_supply      (u64)   – LP supply, not used for price
-//!  40      complete                (u8 )    – 0 = trading, 1 = frozen/complete
-//!  41.. 73  creator                 (Pubkey)
-//!
-//! The pool **does not store the token-mint pubkey** on account; you must
-//! know it from context.  We therefore return `Pubkey::default()` for the
-//! base-mint and `So111…` for SOL so callers can still compute price.
+#![allow(warnings)]
+use crate::prelude::*;
 
 use anyhow::{ anyhow, Result };
 use solana_client::rpc_client::RpcClient;
@@ -22,7 +7,6 @@ use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use solana_sdk::account::Account;
 
-/// Returns `(real_token_reserves, real_sol_reserves, base_mint, quote_mint)`
 pub fn decode_pumpfun2_pool(
     rpc: &RpcClient,
     pool_pk: &Pubkey,
@@ -47,7 +31,6 @@ pub fn decode_pumpfun2_pool(
     Ok((real_token_reserves, real_sol_reserves, base_mint, quote_mint))
 }
 
-/// Batch-friendly version: decode from already-fetched account
 pub fn decode_pumpfun2_pool_from_account(
     rpc: &RpcClient,
     pool_pk: &Pubkey,

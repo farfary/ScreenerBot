@@ -1,4 +1,4 @@
-//! Generic CPMM pools (program CPMMoo…)
+#![allow(warnings)]
 use crate::prelude::*;
 
 use anyhow::Result;

@@ -1,11 +1,13 @@
-//! Raydium CLMM v1  (program pAMMBa… & CAMMCz…)
+#![allow(warnings)]
+use crate::prelude::*;
+
 use anyhow::{ anyhow, Result };
 use num_format::{ Locale, ToFormattedString };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::account::Account;
 
-/// Returns (reserve_coin, reserve_pc, coin_mint, pc_mint)
+
 pub fn decode_raydium_clmm(
     rpc: &RpcClient,
     pool_pk: &Pubkey,
@@ -34,7 +36,6 @@ pub fn decode_raydium_clmm(
     Ok((coin, pc, coin_mint, pc_mint))
 }
 
-/// Batch-friendly version: decode from already-fetched account
 pub fn decode_raydium_clmm_from_account(
     rpc: &RpcClient,
     pool_pk: &Pubkey,

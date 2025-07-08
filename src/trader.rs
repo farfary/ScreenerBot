@@ -1,5 +1,4 @@
-// #![allow(warnings)]
-
+#![allow(warnings)]
 use crate::prelude::*;
 
 use std::collections::HashMap;
@@ -17,12 +16,12 @@ use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 
 // Constants
-const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
-const MAX_DCA_COUNT: u8 = 1; // max 3 DCA per position
-const TRANSACTION_FEE_SOL: f64 = 0.00003;
-pub const POSITIONS_CHECK_TIME: u64 = 5; // 10 seconds
-const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
+pub const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
+pub const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
+pub const MAX_DCA_COUNT: u8 = 1; // max 3 DCA per position
+pub const TRANSACTION_FEE_SOL: f64 = 0.00003;
+pub const POSITIONS_CHECK_TIME: u64 = 15; // 10 seconds
+pub const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 
 
 

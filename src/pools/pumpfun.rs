@@ -1,4 +1,5 @@
-//! Pump.fun AMM-pool decoder
+#![allow(warnings)]
+use crate::prelude::*;
 
 use anyhow::{ anyhow, Result };
 use borsh::BorshDeserialize;
@@ -19,7 +20,6 @@ pub struct PumpFunPool {
     pub lp_supply: u64,
 }
 
-/// Returns (base, quote, base_mint, quote_mint)
 pub fn decode_pumpfun_pool(
     rpc: &RpcClient,
     pool_pk: &Pubkey,
@@ -39,7 +39,6 @@ pub fn decode_pumpfun_pool(
     Ok((base, quote, pool.base_mint, pool.quote_mint))
 }
 
-/// Batch-friendly version: decode from already-fetched account
 pub fn decode_pumpfun_pool_from_account(
     rpc: &RpcClient,
     pool_pk: &Pubkey,

@@ -1,15 +1,11 @@
-//! Generic multipool decoder: Pump.fun, Raydium AMM / CLMM, Orca Whirlpool,
-//! Meteora DLMM, generic CPMM – plus helpers for fetching pools & price.
-
+#![allow(warnings)]
 use crate::prelude::*;
 
 use anyhow::{ bail, Result };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 
-/// Main multipool decode entrypoint.
-/// Only fetch account once, pass account data to decoders.
-/// Signature is **unchanged**.
+
 pub fn decode_any_pool(rpc: &RpcClient, pool_pk: &Pubkey) -> Result<(u64, u64, Pubkey, Pubkey)> {
     let acct = rpc.get_account(pool_pk)?; // fetch once
     let owner = acct.owner.to_string();
@@ -38,10 +34,6 @@ pub fn decode_any_pool(rpc: &RpcClient, pool_pk: &Pubkey) -> Result<(u64, u64, P
         _ => bail!("Unsupported program id {} for pool {}", owner, pool_pk),
     }
 }
-
-/// Convenience: returns `(base, quote, price)` with `price = quote / base` (f64).
-///
-/// *Decimals are **not** adjusted;* scale if the two tokens have different decimals.
 
 pub fn decode_any_pool_price(rpc: &RpcClient, pool_pk: &Pubkey) -> Result<(u64, u64, f64)> {
     // now returns (base_amt, quote_amt, base_mint, quote_mint)
