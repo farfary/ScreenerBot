@@ -19,11 +19,41 @@ use futures::FutureExt;
 // Constants
 const TRADE_SIZE_SOL: f64 = 0.005; // amount of SOL to spend on each buy
 const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
-const MAX_DCA_COUNT: u8 = 2; // max 3 DCA per position
+const MAX_DCA_COUNT: u8 = 1; // max 3 DCA per position
 const TRANSACTION_FEE_SOL: f64 = 0.00003;
-pub const POSITIONS_CHECK_TIME: u64 = 8; // 10 seconds
+pub const POSITIONS_CHECK_TIME: u64 = 5; // 10 seconds
 
 const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
+
+use std::collections::HashSet;
+use std::fs::{ OpenOptions, File };
+use std::io::{ BufRead, BufReader, Write };
+use once_cell::sync::Lazy;
+use tokio::sync::Mutex;
+
+// Global set for permanently skipped tokens (now async Mutex)
+pub static SKIPPED_SELLS: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| {
+    // Initialize from file, can't do async here, so use blocking
+    let mut set = HashSet::new();
+    if let Ok(file) = File::open(".skipped_sells") {
+        for line in BufReader::new(file).lines().flatten() {
+            set.insert(line.trim().to_string());
+        }
+    }
+    Mutex::new(set)
+});
+
+async fn add_skipped_sell(mint: &str) {
+    {
+        let mut set = SKIPPED_SELLS.lock().await;
+        if set.insert(mint.to_string()) {
+            // File I/O must be blocking (but this is rare)
+            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(".skipped_sells") {
+                let _ = writeln!(f, "{mint}");
+            }
+        }
+    }
+}
 
 /// supervisor that restarts the trader loop on *any* panic
 pub fn start_trader_loop() {
@@ -84,11 +114,7 @@ async fn trader_main_loop() {
     /* ── local state ──────────────────────────────────── */
     let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
     let mut price_histories: HashMap<String, VecDeque<f64>> = HashMap::new();
-
-    let mut drop_streaks: HashMap<String, usize> = HashMap::new();
-    let mut last_drop_scales: HashMap<String, Vec<f64>> = HashMap::new();
-    let mut last_up_scales: HashMap<String, Vec<f64>> = HashMap::new();
-    let mut drop_required: HashMap<String, usize> = HashMap::new();
+    let mut sell_failures: HashMap<String, u8> = HashMap::new(); // mint -> fails
 
     loop {
         if SHUTDOWN.load(Ordering::SeqCst) {
@@ -223,65 +249,79 @@ async fn trader_main_loop() {
 
             let now = Instant::now();
 
-            /* ---------- ENTRY: streak drop buy ---------- */
-
-            // Local streak/drop state for all tokens (at top with other state, outside the loop):
-            // let mut drop_streaks: HashMap<String, usize> = HashMap::new();
-            // let mut last_drop_scales: HashMap<String, Vec<f64>> = HashMap::new();
-            // let mut last_up_scales: HashMap<String, Vec<f64>> = HashMap::new();
-            // let mut drop_required: HashMap<String, usize> = HashMap::new(); // per-token "how many drops before buy"
-
-            let drop_len = drop_streaks.entry(mint.clone()).or_insert(0);
-            let drop_scales = last_drop_scales.entry(mint.clone()).or_insert_with(Vec::new);
-            let up_scales = last_up_scales.entry(mint.clone()).or_insert_with(Vec::new);
-            let required = drop_required.entry(mint.clone()).or_insert(3); // Default: 3-drops
-
-            if hist.len() >= 2 {
-                let prev = *hist.get(hist.len() - 2).unwrap();
-                let change = ((current_price - prev) / prev) * 100.0;
-
-                // Detect drop/up and cache scales
-                if change < -0.2 {
-                    *drop_len += 1;
-                    drop_scales.push(change);
-                    if drop_scales.len() > 16 {
-                        drop_scales.remove(0);
-                    }
-
-                    // Log focus on token if about to buy
-                    if *drop_len + 1 >= *required {
-                        println!(
-                            "👀 Focus: {} drop streak {} (Δ{:.2}%)  drop_scales={:?}",
-                            symbol,
-                            *drop_len + 1,
-                            change,
-                            drop_scales
-                        );
-                    }
-                } else if change > 0.2 {
-                    // Up candle: reset streak, store up scale
-                    if *drop_len > 0 {
-                        up_scales.push(change);
-                        if up_scales.len() > 16 {
-                            up_scales.remove(0);
-                        }
-                    }
-                    *drop_len = 0;
-                }
-            }
-
-            // Entry logic: only enter if N drops (default 3), not open, and open count < max
+            // -- Check open position state for this token
             let open_positions = OPEN_POSITIONS.read().await;
             let open = open_positions.contains_key(&mint);
             let can_open_more = open_positions.len() < MAX_OPEN_POSITIONS;
             drop(open_positions);
 
-            if *drop_len >= *required && !open && can_open_more {
+            // -------------- SMART ENTRY BUY: Only on Extreme/Abnormal Drops (No Comeback Buys) --------------
+            const DROP_LOOKBACK: usize = 32; // Candles to look back
+            const MIN_TOTAL_DROP: f64 = 15.0; // Require total drop at least -15%
+            const MIN_DROP_SCALE: f64 = 2.5; // Last drop must be >2.5x avg drop
+            const MIN_DROP_ABS: f64 = 8.0; // Or last drop at least -8%
+            const MIN_BOUNCE: f64 = 0.5; // Optional: Require at least +0.5% bounce (set 0 for instant)
+
+            let mut buy_signal = false;
+
+            if hist.len() > DROP_LOOKBACK + 2 {
+                let window: Vec<f64> = hist.iter().rev().take(DROP_LOOKBACK).cloned().collect();
+                let high = window.iter().cloned().fold(f64::MIN, f64::max);
+                let last = *window.first().unwrap();
+                let prev = *hist.get(hist.len() - 2).unwrap();
+                let two_back = *hist.get(hist.len() - 3).unwrap();
+
+                let total_drop = if high > 0.0 { ((last - high) / high) * 100.0 } else { 0.0 };
+                let curr_drop = ((last - prev) / prev) * 100.0;
+                let prev_drop = ((prev - two_back) / two_back) * 100.0;
+
+                let mut drops = Vec::new();
+                for i in 1..=DROP_LOOKBACK {
+                    let now = hist[hist.len() - i];
+                    let prev = hist[hist.len() - i - 1];
+                    let drop = ((now - prev) / prev) * 100.0;
+                    if drop < 0.0 {
+                        drops.push(drop.abs());
+                    }
+                }
+                let avg_drop = if !drops.is_empty() {
+                    drops.iter().sum::<f64>() / (drops.len() as f64)
+                } else {
+                    0.0
+                };
+
+                if
+                    total_drop <= -MIN_TOTAL_DROP &&
+                    (curr_drop <= -MIN_DROP_ABS ||
+                        (curr_drop < -0.5 && curr_drop.abs() > MIN_DROP_SCALE * avg_drop)) &&
+                    prev_drop < 0.0 &&
+                    !open &&
+                    can_open_more
+                {
+                    // Rug-prevention: skip ultra dumps
+                    if curr_drop > -60.0 {
+                        let bounced = ((last - prev) / prev) * 100.0 > MIN_BOUNCE;
+                        if bounced || MIN_BOUNCE <= 0.0 {
+                            buy_signal = true;
+                            println!(
+                                "🟢 SMART BUY SIGNAL {}: total_drop={:.2}%, last_drop={:.2}% (avg={:.2}%) (window={})",
+                                symbol,
+                                total_drop,
+                                curr_drop,
+                                avg_drop,
+                                DROP_LOOKBACK
+                            );
+                        }
+                    } else {
+                        println!("⚠️ [SKIP] {}: Dump >60% in 1 candle, likely rug, skip!", symbol);
+                    }
+                }
+            }
+
+            if buy_signal && !open && can_open_more {
                 println!(
-                    "🚀 ENTRY BUY {}: drop streak {}: {:?} (histlen {} last={:.9})",
+                    "🚀 ENTRY BUY {}: [scalping drop] histlen={} price={:.9}",
                     symbol,
-                    *drop_len,
-                    &drop_scales,
                     hist.len(),
                     current_price
                 );
@@ -300,17 +340,8 @@ async fn trader_main_loop() {
                         close_time: None,
                         last_dca_price: current_price,
                     });
-                    // On buy: reset streak and cache count for next time (adaptively increase required drops if price keeps dropping after buy)
-                    if drop_scales.len() >= *required && drop_scales.last().unwrap() < &-3.0 {
-                        *required = (*required + 1).min(6); // try increase if after buy we get dumped again
-                    } else if drop_scales.last().unwrap_or(&0.0) > &-0.5 && *required > 2 {
-                        *required -= 1; // lower requirement if too shallow
-                    }
-                    *drop_len = 0;
                 }
             }
-
-            /* ---------- END ENTRY block ---------- */
 
             /* ---------- DCA & trailing stop ---------- */
             let pos_opt = {
@@ -391,78 +422,155 @@ async fn trader_main_loop() {
                     }
                 }
 
-                /* ───────── SMART TRAILING-STOP PARAMS (CHANDLIER + RATCHET) ───────── */
-                const TP_START: f64 = 8.0; // start trailing at +8 %
-                const DROP_TIGHT: f64 = -0.75; // tightest stop (-0.75%)
-                const DROP_MID: f64 = -2.0; // loose stop (-2%) for 8–30%
-                const DROP_WIDE: f64 = -4.5; // extra loose for super high
-                const DROP_ULTRA: f64 = -7.0; // rare, for over 100% runs
-                const PROFIT_1: f64 = 30.0;
-                const PROFIT_2: f64 = 60.0;
-                const PROFIT_3: f64 = 100.0;
-                const ATR_PERIOD: usize = 60;
-                const ATR_BASE_MULT: f64 = 1.5;
-                const PROFIT_SHARPEN: f64 = 0.14; // more dynamic after 30%
+                // ────── SMART TRAILING-STOP + FAST PROFIT CAPTURE (for 10–30% gains) ──────
+                // logic sell 1
+                /* ——— dynamic trailing stop ——— */
+                /*──────────────── Smart trailing-stop 5 % → 1000 % ────────────────*/
+                const TP_START_PCT: f64 = 4.0; // enable at +5 %
+                const TP_MIN_DROP: f64 = 0.0; // lock breakeven at +5 %
+                const TP_MID_PCT: f64 = 25.0; // reach −2 % trail by +25 %
+                const TP_MID_DROP: f64 = -1.0;
 
-                let fee_percent = (TRANSACTION_FEE_SOL / pos.entry_price) * 100.0;
-                let profit_pct =
-                    ((current_price - pos.entry_price - TRANSACTION_FEE_SOL) / pos.entry_price) *
-                    100.0;
-                let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
+                const TP_MAX_PCT: f64 = 1000.0; // theoretic upper bound
+                const TP_MAX_DROP: f64 = -40.0; // never wider than −40 %
 
-                // Calculate trailing distance based on profit zone
-                let trail = if profit_pct >= TP_START {
-                    let mut t = match profit_pct {
-                        x if x >= PROFIT_3 => DROP_ULTRA,
-                        x if x >= PROFIT_2 => DROP_ULTRA * 0.7 + DROP_WIDE * 0.3,
-                        x if x >= PROFIT_1 => DROP_WIDE * 0.8 + DROP_MID * 0.2,
-                        x if x >= 20.0 => DROP_MID * 0.7 + DROP_TIGHT * 0.3,
-                        _ => DROP_MID,
-                    };
-
-                    // Use ATR (volatility) in tight zones
-                    if profit_pct < PROFIT_1 {
-                        let atr_p = atr_pct(hist, ATR_PERIOD).unwrap_or(0.4);
-                        let dyn_trail = -(
-                            atr_p * ATR_BASE_MULT +
-                            (profit_pct * PROFIT_SHARPEN).max(0.25)
-                        );
-                        t = t.max(dyn_trail);
+                #[inline]
+                fn calc_trail(profit_pct: f64) -> f64 {
+                    if profit_pct < TP_START_PCT {
+                        return f64::NEG_INFINITY; // trailing not active yet
                     }
+                    if profit_pct <= TP_MID_PCT {
+                        // linear easing  0 → −2 %
+                        let t = (profit_pct - TP_START_PCT) / (TP_MID_PCT - TP_START_PCT);
+                        return TP_MIN_DROP + t * (TP_MID_DROP - TP_MIN_DROP);
+                    }
+                    // quadratic easing  −2 %  →  −40 %
+                    let norm = ((profit_pct - TP_MID_PCT) / (TP_MAX_PCT - TP_MID_PCT)).min(1.0);
+                    let widen = norm * norm; // slow at first, faster later
+                    let drop = TP_MID_DROP + widen * (TP_MAX_DROP - TP_MID_DROP);
+                    drop.max(TP_MAX_DROP) // clamp
+                }
 
-                    // Always use at least tightest
-                    t = t.max(DROP_TIGHT);
+                /*──────── Replace your old trailing-stop block with this ────────*/
+                let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+                let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
+                let trail = calc_trail(profit_pct);
 
-                    t
-                } else {
-                    f64::NEG_INFINITY
-                };
+                // ───────── STOP-LOSS: Sell if loss > 50% ─────────
+                const STOP_LOSS_PCT: f64 = -50.0;
+                const EARLY_RUG_SL: f64 = -20.0; // -20% early SL
+                let held_secs = (Utc::now() - pos.open_time).num_seconds();
+                let is_early = held_secs < 900; // 15 min
 
-                // Only sell if after-fee profit is positive and drop_from_peak triggers
-                if trail > f64::NEG_INFINITY && drop_from_peak <= trail && profit_pct > 0.0 {
-                    if let Ok(tx) = sell_all_gmgn(&mint, current_price).await {
-                        println!(
-                            "🔴 TRAILING-SELL {symbol} +{:.2}% | peak +{:.2}% | trail {:.2}% | {tx}",
-                            profit_pct,
-                            drop_from_peak.abs(),
-                            trail
-                        );
-                        sell_token(
-                            &symbol,
-                            &mint,
-                            current_price,
-                            pos.entry_price,
-                            pos.peak_price,
-                            drop_from_peak,
-                            pos.sol_spent,
-                            pos.token_amount,
-                            pos.dca_count,
-                            pos.last_dca_price,
-                            pos.open_time
-                        ).await;
+                let stop_loss = if is_early { EARLY_RUG_SL } else { STOP_LOSS_PCT };
+
+                // Check if sell for this mint is permanently blacklisted
+                {
+                    let set = SKIPPED_SELLS.lock().await;
+
+                    if set.contains(&mint) {
+                        println!("⛔️ [SKIPPED_SELLS] Not selling {} because it's blacklisted after 10 fails.", mint);
                         OPEN_POSITIONS.write().await.remove(&mint);
                         notified_profit_bucket.remove(&mint);
+                        continue;
                     }
+                }
+
+                // STOP-LOSS SELL
+                if profit_pct <= stop_loss {
+                    match sell_all_gmgn(&mint, current_price).await {
+                        Ok(tx) => {
+                            println!(
+                                "⛔️ [STOP LOSS] SELL {symbol} at {profit_pct:.2}% (entry: {entry:.9}, now: {current_price:.9}) | {tx}",
+                                symbol = symbol,
+                                profit_pct = profit_pct,
+                                entry = pos.entry_price,
+                                current_price = current_price,
+                                tx = tx
+                            );
+                            sell_token(
+                                &symbol,
+                                &mint,
+                                current_price,
+                                pos.entry_price,
+                                pos.peak_price,
+                                drop_from_peak,
+                                pos.sol_spent,
+                                pos.token_amount,
+                                pos.dca_count,
+                                pos.last_dca_price,
+                                pos.open_time
+                            ).await;
+                            OPEN_POSITIONS.write().await.remove(&mint);
+                            notified_profit_bucket.remove(&mint);
+                        }
+                        Err(e) => {
+                            let fails = sell_failures.entry(mint.clone()).or_default();
+                            *fails += 1;
+                            println!("❌ Sell failed for {} (fail {}/10): {e}", mint, *fails);
+                            if *fails >= 10 {
+                                add_skipped_sell(&mint);
+                                println!("⛔️ [SKIPPED_SELLS] Added {} to skipped sells after 10 fails.", mint);
+                                OPEN_POSITIONS.write().await.remove(&mint);
+                                notified_profit_bucket.remove(&mint);
+                            }
+                        }
+                    }
+                    continue; // always continue, do not try trailing-stop if stop-loss triggers
+                }
+
+                // TRAILING-STOP SELL
+                if trail > f64::NEG_INFINITY && drop_from_peak <= trail {
+                    // Check if sell for this mint is permanently blacklisted
+                    {
+                        let set = SKIPPED_SELLS.lock().await;
+
+                        if set.contains(&mint) {
+                            println!("⛔️ [SKIPPED_SELLS] Not selling {} because it's blacklisted after 10 fails.", mint);
+                            OPEN_POSITIONS.write().await.remove(&mint);
+                            notified_profit_bucket.remove(&mint);
+                            continue;
+                        }
+                    }
+
+                    match sell_all_gmgn(&mint, current_price).await {
+                        Ok(tx) => {
+                            println!(
+                                "🔴 SELL {symbol} +{:.2}% | peak {:.2}% | trail {:.2}%  |  {tx}",
+                                profit_pct,
+                                drop_from_peak.abs(),
+                                trail
+                            );
+                            sell_token(
+                                &symbol,
+                                &mint,
+                                current_price,
+                                pos.entry_price,
+                                pos.peak_price,
+                                drop_from_peak,
+                                pos.sol_spent,
+                                pos.token_amount,
+                                pos.dca_count,
+                                pos.last_dca_price,
+                                pos.open_time
+                            ).await;
+                            OPEN_POSITIONS.write().await.remove(&mint);
+                            notified_profit_bucket.remove(&mint);
+                        }
+                        Err(e) => {
+                            let fails = sell_failures.entry(mint.clone()).or_default();
+                            *fails += 1;
+                            println!("❌ Sell failed for {} (fail {}/10): {e}", mint, *fails);
+                            if *fails >= 10 {
+                                add_skipped_sell(&mint);
+                                println!("⛔️ [SKIPPED_SELLS] Added {} to skipped sells after 10 fails.", mint);
+                                OPEN_POSITIONS.write().await.remove(&mint);
+                                notified_profit_bucket.remove(&mint);
+                            }
+                        }
+                    }
+                    // continue to next mint (no matter success/fail)
+                    continue;
                 }
             }
         } // end for mint
@@ -648,7 +756,6 @@ async fn print_open_positions() {
             0.0
         };
 
-        // accumulate unrealized P/L in SOL
         total_unrealized_sol += current_price * pos.token_amount - pos.sol_spent;
 
         table.add_row([
@@ -671,26 +778,25 @@ async fn print_open_positions() {
         table
     );
 
-    // ── recent-closed table (FIXED) ───────────
+    // ── recent-closed table (WITH EXACT PROFIT SOL) ───────────
     if !closed_guard.is_empty() {
         let mut closed_vec: Vec<_> = closed_guard.values().cloned().collect();
         closed_vec.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
 
         let mut table_closed = Table::new();
-        table_closed
-            .load_preset(UTF8_FULL)
-            .set_header([
-                "Mint",
-                "Entry Price",
-                "Close Price",
-                "Profit %",
-                "Peak Price",
-                "Tokens",
-                "SOL Spent",
-                "SOL Received",
-                "Open Time",
-                "Close Time",
-            ]);
+        table_closed.load_preset(UTF8_FULL).set_header([
+            "Mint",
+            "Entry Price",
+            "Close Price",
+            "Profit %",
+            "Profit SOL", // NEW COLUMN
+            "Peak Price",
+            "Tokens",
+            "SOL Spent",
+            "SOL Received",
+            "Open Time",
+            "Close Time",
+        ]);
 
         for pos in closed_vec {
             let close_price = if pos.token_amount > 0.0 {
@@ -704,11 +810,14 @@ async fn print_open_positions() {
                 0.0
             };
 
+            let profit_sol = pos.sol_received - pos.sol_spent;
+
             table_closed.add_row([
                 "(closed)".into(),
                 format!("{:.9}", pos.entry_price),
                 format!("{:.9}", close_price),
                 format!("{:+.2}%", profit_pct),
+                format!("{:+.9}", profit_sol), // EXACT PROFIT SOL
                 format!("{:.9}", pos.peak_price),
                 format!("{:.9}", pos.token_amount),
                 format!("{:.9}", pos.sol_spent),

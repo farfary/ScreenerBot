@@ -18,6 +18,13 @@ use solana_sdk::{ pubkey::Pubkey };
 use crate::utilitis::effective_swap_price;
 use crate::configs::{ BLACKLIST };
 
+use std::collections::HashSet;
+use std::fs::{ OpenOptions, File };
+use std::io::{ BufRead, BufReader, Write };
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+
 /// Submit a swap to GMGN router and return the signature string.
 /// Also prints the **effective on-chain price** paid for the swap.
 pub async fn buy_gmgn(
@@ -169,6 +176,17 @@ pub async fn sell_all_gmgn(
     token_mint_address: &str,
     min_out_amount: f64 // require at least this SOL out
 ) -> anyhow::Result<String> {
+    // Block if token is in skipped list
+    {
+        let set = crate::trader::SKIPPED_SELLS.lock().await;
+        if set.contains(token_mint_address) {
+            anyhow::bail!(
+                "❌ Sell for mint {} is skipped due to too many failures",
+                token_mint_address
+            );
+        }
+    }
+
     // load wallet
     let wallet = {
         let bytes = bs58::decode(&CONFIGS.main_wallet_private).into_vec()?;
