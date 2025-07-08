@@ -6,5 +6,6 @@ pub mod trader;
 pub mod persistence;
 pub mod pools; 
 pub mod pool_price;
+pub mod strategy;
 
 pub mod prelude;

@@ -7,6 +7,7 @@ mod swap_gmgn;
 mod pools;
 mod persistence;
 mod pool_price;
+mod strategy;
 
 use prelude::*;
 
