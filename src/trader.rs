@@ -1,5 +1,6 @@
 #![allow(warnings)]
 use crate::prelude::*;
+use crate::web_server::MARKET_DATAFRAMES;
 use std::collections::VecDeque;
 use serde::{ Deserialize, Serialize };
 use std::fs;
@@ -458,7 +459,6 @@ impl MarketDataFrame {
     }
 }
 
-
 /// supervisor that restarts the trader loop on *any* panic
 pub fn start_trader_loop() {
     println!("🚀 [Screener] Trader loop started!");
@@ -517,7 +517,6 @@ async fn trader_main_loop() {
 
     /* ── local state ──────────────────────────────────── */
     let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
-    let mut market_dataframes: HashMap<String, MarketDataFrame> = HashMap::new();
     let mut sell_failures: HashMap<String, u8> = HashMap::new(); // mint -> fails
 
     loop {
@@ -683,9 +682,11 @@ async fn trader_main_loop() {
                 }
             };
 
-            let dataframe = market_dataframes
-                .entry(mint.clone())
-                .or_insert_with(MarketDataFrame::new);
+            // Get or create dataframe for this token
+            let mut dataframe = {
+                let dataframes = MARKET_DATAFRAMES.read().await;
+                dataframes.get(&mint).cloned().unwrap_or_else(MarketDataFrame::new)
+            };
 
             // Try to load historical data if we don't have enough data
             if dataframe.minute_data.len() < 50 {
@@ -706,6 +707,12 @@ async fn trader_main_loop() {
             // Estimate volume from token data (convert to numerical value)
             let estimated_volume = token.volume.h1; // Use hourly volume as proxy
             dataframe.add_price_data(current_price, estimated_volume, current_timestamp);
+
+            // Update the global dataframes storage
+            {
+                let mut dataframes = MARKET_DATAFRAMES.write().await;
+                dataframes.insert(mint.clone(), dataframe.clone());
+            }
 
             let now = Instant::now();
 
@@ -963,12 +970,6 @@ pub async fn sell_token(
         }
     }
 }
-
-
-
-
-
-
 
 // GeckoTerminal API functions
 async fn fetch_gecko_ohlcv(

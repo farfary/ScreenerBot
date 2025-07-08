@@ -1,5 +1,21 @@
 #![allow(warnings)]
-use crate::prelude::*;
+use anyhow::Result;
+use axum::{
+    extract::{ ws::WebSocket, WebSocketUpgrade, Path, Query },
+    response::{ Html, Json, Response },
+    routing::{ get, post },
+    Router,
+};
+use futures::{ sink::SinkExt, stream::StreamExt };
+use once_cell::sync::Lazy;
+use serde::{ Deserialize, Serialize };
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{ broadcast, RwLock };
+use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
+use uuid::Uuid;
+
 use crate::persistence::{
     OPEN_POSITIONS,
     RECENT_CLOSED_POSITIONS,
@@ -10,21 +26,12 @@ use crate::persistence::{
 };
 use crate::dexscreener::{ TOKENS, Token };
 use crate::pool_price::POOL_CACHE;
+use crate::trader::MarketDataFrame;
 
-use axum::{
-    extract::{ ws::WebSocket, WebSocketUpgrade, Path, Query },
-    response::{ Html, Json, Response },
-    routing::{ get, post },
-    Router,
-};
-use futures::{ sink::SinkExt, stream::StreamExt };
-use serde::{ Deserialize, Serialize };
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
-use uuid::Uuid;
+// Global storage for market dataframes
+pub static MARKET_DATAFRAMES: Lazy<RwLock<HashMap<String, MarketDataFrame>>> = Lazy::new(||
+    RwLock::new(HashMap::new())
+);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PositionWithId {
@@ -48,6 +55,37 @@ pub struct TokenAnalysis {
     pub price_trend: String,
     pub liquidity_health: String,
     pub risk_level: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TokenChartData {
+    pub mint: String,
+    pub symbol: String,
+    pub name: String,
+    pub timeframes: TokenTimeframes,
+    pub current_price: f64,
+    pub has_sufficient_data: bool,
+    pub pool_address: String,
+    pub last_updated: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TokenTimeframes {
+    pub minute: ChartTimeframe,
+    pub hour: ChartTimeframe,
+    pub day: ChartTimeframe,
+    pub legacy: ChartTimeframe,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChartTimeframe {
+    pub timestamps: Vec<u64>,
+    pub opens: Vec<f64>,
+    pub highs: Vec<f64>,
+    pub lows: Vec<f64>,
+    pub closes: Vec<f64>,
+    pub volumes: Vec<f64>,
+    pub data_points: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -82,6 +120,8 @@ pub async fn start_web_server() -> Result<()> {
         .route("/api/positions/closed", get(get_closed_positions))
         .route("/api/positions/all-closed", get(get_all_closed_positions))
         .route("/api/tokens", get(get_watched_tokens))
+        .route("/api/tokens/charts", get(get_token_charts))
+        .route("/api/tokens/:mint/chart", get(get_token_chart))
         .route("/api/trading-history", get(get_trading_history))
         .route("/api/ws", get(websocket_handler))
         .nest_service("/static", ServeDir::new("web/static"))
@@ -206,6 +246,83 @@ async fn get_watched_tokens() -> Json<Vec<TokenWithAnalysis>> {
 async fn get_trading_history() -> Json<Vec<TradingSnapshot>> {
     let history = TRADING_HISTORY.read().await;
     Json(history.clone())
+}
+
+async fn get_token_charts() -> Json<Vec<TokenChartData>> {
+    let dataframes = MARKET_DATAFRAMES.read().await;
+    let tokens = TOKENS.read().await;
+    let mut charts = Vec::new();
+
+    for (mint, dataframe) in dataframes.iter() {
+        if let Some(token) = tokens.iter().find(|t| t.mint == *mint) {
+            let chart_data = create_token_chart_data(mint, token, dataframe).await;
+            charts.push(chart_data);
+        }
+    }
+
+    Json(charts)
+}
+
+async fn get_token_chart(Path(mint): Path<String>) -> Json<Option<TokenChartData>> {
+    let dataframes = MARKET_DATAFRAMES.read().await;
+    let tokens = TOKENS.read().await;
+
+    if
+        let (Some(dataframe), Some(token)) = (
+            dataframes.get(&mint),
+            tokens.iter().find(|t| t.mint == mint),
+        )
+    {
+        let chart_data = create_token_chart_data(&mint, token, dataframe).await;
+        Json(Some(chart_data))
+    } else {
+        Json(None)
+    }
+}
+
+async fn create_token_chart_data(
+    mint: &str,
+    token: &Token,
+    dataframe: &MarketDataFrame
+) -> TokenChartData {
+    let current_price = dataframe.latest_price().unwrap_or(0.0);
+    let (has_sufficient_data, _) = dataframe.has_sufficient_data_for_trading();
+
+    TokenChartData {
+        mint: mint.to_string(),
+        symbol: token.symbol.clone(),
+        name: token.name.clone(),
+        timeframes: TokenTimeframes {
+            minute: convert_timeframe_data(&dataframe.minute_data),
+            hour: convert_timeframe_data(&dataframe.hour_data),
+            day: convert_timeframe_data(&dataframe.day_data),
+            legacy: ChartTimeframe {
+                timestamps: dataframe.timestamps.iter().copied().collect(),
+                opens: dataframe.opens.iter().copied().collect(),
+                highs: dataframe.highs.iter().copied().collect(),
+                lows: dataframe.lows.iter().copied().collect(),
+                closes: dataframe.closes.iter().copied().collect(),
+                volumes: dataframe.volumes.iter().copied().collect(),
+                data_points: dataframe.prices.len(),
+            },
+        },
+        current_price,
+        has_sufficient_data,
+        pool_address: dataframe.pool_address.clone(),
+        last_updated: dataframe.last_updated,
+    }
+}
+
+fn convert_timeframe_data(timeframe_data: &crate::trader::TimeframeData) -> ChartTimeframe {
+    ChartTimeframe {
+        timestamps: timeframe_data.timestamps.iter().copied().collect(),
+        opens: timeframe_data.opens.iter().copied().collect(),
+        highs: timeframe_data.highs.iter().copied().collect(),
+        lows: timeframe_data.lows.iter().copied().collect(),
+        closes: timeframe_data.closes.iter().copied().collect(),
+        volumes: timeframe_data.volumes.iter().copied().collect(),
+        data_points: timeframe_data.len(),
+    }
 }
 
 async fn websocket_handler(ws: WebSocketUpgrade) -> Response {
@@ -455,6 +572,7 @@ fn create_default_html() -> String {
     <title>ScreenerBot Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body>
     <div class="container">
@@ -488,6 +606,7 @@ fn create_default_html() -> String {
         <div class="tabs">
             <button class="tab-button active" onclick="showTab('positions')">Positions</button>
             <button class="tab-button" onclick="showTab('tokens')">Watched Tokens</button>
+            <button class="tab-button" onclick="showTab('charts')">Token Charts</button>
             <button class="tab-button" onclick="showTab('analytics')">Analytics</button>
         </div>
         
@@ -545,6 +664,26 @@ fn create_default_html() -> String {
             <div class="section">
                 <h2>Watched Tokens</h2>
                 <div class="tokens-grid" id="tokensGrid"></div>
+            </div>
+        </div>
+        
+        <div id="charts" class="tab-content">
+            <div class="section">
+                <h2>Token Price Charts</h2>
+                <div class="chart-controls">
+                    <select id="timeframeSelect">
+                        <option value="minute">1 Minute</option>
+                        <option value="hour">1 Hour</option>
+                        <option value="day">1 Day</option>
+                        <option value="legacy">Legacy (Live)</option>
+                    </select>
+                    <select id="chartTypeSelect">
+                        <option value="candlestick">Candlestick</option>
+                        <option value="line">Line Chart</option>
+                        <option value="volume">Volume</option>
+                    </select>
+                </div>
+                <div class="charts-grid" id="chartsGrid"></div>
             </div>
         </div>
         
