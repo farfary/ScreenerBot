@@ -458,16 +458,6 @@ impl MarketDataFrame {
     }
 }
 
-pub const TRADE_SIZE_SOL: f64 = 0.002;
-pub const MAX_OPEN_POSITIONS: usize = 50;
-pub const MAX_DCA_COUNT: u8 = 2;
-pub const TRANSACTION_FEE_SOL: f64 = 0.00003;
-pub const POSITIONS_CHECK_TIME: u64 = 15;
-pub const POSITIONS_PRINT_TIME: u64 = 15;
-pub const PRICE_HISTORY_CAP: usize = 60;
-pub const SLIPPAGE_BPS: f64 = 0.5;
-pub const FEE_RATE: f64 = 0.00002;
-pub const DCA_SIZE_FACTOR: f64 = 0.25; // each DCA adds 25% more size
 
 /// supervisor that restarts the trader loop on *any* panic
 pub fn start_trader_loop() {
