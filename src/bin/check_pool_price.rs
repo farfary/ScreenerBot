@@ -3,7 +3,7 @@
 //!   cargo run --bin check_pool_price <POOL_PUBKEY> [<POOL_PUBKEY> …]
 
 use anyhow::{bail, Result};
-use screenerbot::pool_decoder::decode_any_pool_price;
+use screenerbot::pools::decoder::decode_any_pool_price;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::{env, str::FromStr};

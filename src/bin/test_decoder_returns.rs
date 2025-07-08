@@ -1,5 +1,5 @@
 use anyhow::Result;
-use screenerbot::pool_decoder::decode_any_pool;
+use screenerbot::pools::decoder::decode_any_pool;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
