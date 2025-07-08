@@ -677,6 +677,7 @@ async fn trader_main_loop() {
                             price_change: PriceChange { m5: 0.0, h1: 0.0, h6: 0.0, h24: 0.0 },
                             liquidity: Liquidity { usd: 0.0, base: 0.0, quote: 0.0 },
                             pair_created_at: 0,
+                            rug_check: RugCheckData::default(),
                         },
                     )
                 }

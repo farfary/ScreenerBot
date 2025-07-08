@@ -281,6 +281,11 @@ pub fn should_buy(
         return false;
     }
 
+    // ─── RUG CHECK SAFETY (CRITICAL FIRST CHECK) ───
+    if !crate::dexscreener::is_safe_to_trade(token, false) {
+        return false;
+    }
+
     // Pre-filters for professional trading
     let volume_24h = token.volume.h24;
     let liquidity_sol = token.liquidity.base + token.liquidity.quote;
