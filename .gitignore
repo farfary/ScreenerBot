@@ -5,3 +5,4 @@
 .solana_pairs_cache.json
 .token_decimals_cache.json
 .tokens_cache.json
+.blacklist.json
