@@ -49,8 +49,6 @@ fn ensure_pool_cache_loaded() -> Result<()> {
 }
 
 pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
-    
-
     ensure_pool_cache_loaded()?;
 
     let t0 = Instant::now();
@@ -117,6 +115,9 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
 /// Batch fetch prices for multiple tokens to reduce RPC costs
 /// Returns HashMap<mint, price> for successful fetches
 /// Logs important info including RPC savings
+///
+/// CRITICAL: These real-time prices should be used for all trading decisions (buy/sell/DCA)
+/// to ensure accurate execution prices rather than historical dataframe prices.
 pub fn batch_prices_from_pools(rpc: &RpcClient, mints: &[String]) -> HashMap<String, f64> {
     if mints.is_empty() {
         return HashMap::new();

@@ -731,7 +731,7 @@ async fn trader_main_loop() {
             }
 
             // Check if we should buy
-            let buy_signal = should_buy(&dataframe, &token, !open && can_open_more);
+            let buy_signal = should_buy(&dataframe, &token, !open && can_open_more, current_price);
 
             if buy_signal {
                 println!(

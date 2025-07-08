@@ -342,38 +342,38 @@ pub fn start_dexscreener_loop() {
             const MAX_PRICE_CHANGE_H24: f64 = 180.0;
 
             const MIN_BUYS_24H: u64 = 10; // at least 10 buys in 24h
-            const MAX_DUMP_24H: f64 = -70.0; // reject if -70% or worse in 24h
+            const MAX_DUMP_24H: f64 = -50.0; // reject if -50% or worse in 24h
 
-            new_tokens.retain(|t| {
-                let price = t.price_native.parse::<f64>().unwrap_or(0.0);
-                let vol = t.volume_usd.parse::<f64>().unwrap_or(0.0);
-                let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
-                let pooled_sol = t.liquidity.base + t.liquidity.quote;
-                let has_image = !t.image_url.trim().is_empty();
+            // new_tokens.retain(|t| {
+            //     let price = t.price_native.parse::<f64>().unwrap_or(0.0);
+            //     let vol = t.volume_usd.parse::<f64>().unwrap_or(0.0);
+            //     let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
+            //     let pooled_sol = t.liquidity.base + t.liquidity.quote;
+            //     let has_image = !t.image_url.trim().is_empty();
 
-                let price_ok =
-                    t.price_change.m5.abs() <= MAX_PRICE_CHANGE_M5 &&
-                    t.price_change.h1.abs() <= MAX_PRICE_CHANGE_H1 &&
-                    t.price_change.h6.abs() <= MAX_PRICE_CHANGE_H6 &&
-                    t.price_change.h24.abs() <= MAX_PRICE_CHANGE_H24;
+            //     let price_ok =
+            //         t.price_change.m5.abs() <= MAX_PRICE_CHANGE_M5 &&
+            //         t.price_change.h1.abs() <= MAX_PRICE_CHANGE_H1 &&
+            //         t.price_change.h6.abs() <= MAX_PRICE_CHANGE_H6 &&
+            //         t.price_change.h24.abs() <= MAX_PRICE_CHANGE_H24;
 
-                let not_rugged = t.price_change.h24 > MAX_DUMP_24H;
-                let not_dead = t.txns.h24.buys >= MIN_BUYS_24H;
+            //     let not_rugged = t.price_change.h24 > MAX_DUMP_24H;
+            //     let not_dead = t.txns.h24.buys >= MIN_BUYS_24H;
 
-                price >= MIN_PRICE_SOL &&
-                    price <= MAX_PRICE_SOL &&
-                    vol >= MIN_VOLUME_USD &&
-                    fdv >= MIN_FDV_USD &&
-                    fdv <= MAX_FDV_USD &&
-                    has_image &&
-                    pooled_sol >= MIN_LIQUIDITY_SOL &&
-                    !t.symbol.is_empty() &&
-                    !t.name.is_empty() &&
-                    !t.price_usd.is_empty() &&
-                    price_ok &&
-                    not_rugged &&
-                    not_dead
-            });
+            //     price >= MIN_PRICE_SOL &&
+            //         price <= MAX_PRICE_SOL &&
+            //         vol >= MIN_VOLUME_USD &&
+            //         fdv >= MIN_FDV_USD &&
+            //         fdv <= MAX_FDV_USD &&
+            //         has_image &&
+            //         pooled_sol >= MIN_LIQUIDITY_SOL &&
+            //         !t.symbol.is_empty() &&
+            //         !t.name.is_empty() &&
+            //         !t.price_usd.is_empty() &&
+            //         price_ok &&
+            //         not_rugged &&
+            //         not_dead
+            // });
 
             if debug {
                 println!("✅ {} tokens remain after price filter", new_tokens.len());
