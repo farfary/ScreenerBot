@@ -2,16 +2,16 @@
 use crate::prelude::*;
 
 // PROFESSIONAL HIGH-FREQUENCY TRADING CONSTANTS
-pub const TRADE_SIZE_SOL: f64 = 0.001; // Smaller size for rapid scalping
+pub const TRADE_SIZE_SOL: f64 = 0.003; // Increased size for better fee coverage
 pub const MAX_OPEN_POSITIONS: usize = 3; // Fewer positions for better risk management
-pub const MAX_DCA_COUNT: u8 = 1; // Limited DCA for quick trades
-pub const TRANSACTION_FEE_SOL: f64 = 0.00003;
+pub const MAX_DCA_COUNT: u8 = 2; // Increased DCA allowance for recovery
+pub const TRANSACTION_FEE_SOL: f64 = 0.0001; // More realistic fee estimate including slippage
 pub const POSITIONS_CHECK_TIME: u64 = 2; // Check every 2 seconds
 pub const POSITIONS_PRINT_TIME: u64 = 5; // Print every 5 seconds
 pub const PRICE_HISTORY_CAP: usize = 120; // Larger history for better analysis
-pub const SLIPPAGE_BPS: f64 = 0.3; // Tighter slippage
-pub const FEE_RATE: f64 = 0.000015;
-pub const DCA_SIZE_FACTOR: f64 = 0.5; // Larger DCA when used
+pub const SLIPPAGE_BPS: f64 = 0.5; // Slightly increased for better execution
+pub const FEE_RATE: f64 = 0.0001; // More realistic total fee rate
+pub const DCA_SIZE_FACTOR: f64 = 0.8; // Larger DCA when used
 
 // SCALPING STRATEGY CONSTANTS
 pub const MIN_VOLUME_USD: f64 = 5000.0; // Minimum daily volume
@@ -24,9 +24,9 @@ pub const BB_STD_DEV: f64 = 2.0; // Standard deviation multiplier
 pub const VWAP_PERIOD: usize = 20; // VWAP calculation period
 pub const QUICK_PROFIT_TARGET: f64 = 1.0; // Start taking profits at 1%
 pub const MAX_PROFIT_TARGET: f64 = 500.0; // Maximum profit target 500%
-pub const RAPID_STOP_LOSS: f64 = -1.0; // Tight 1% stop loss
-pub const MAX_TRADE_DURATION_SEC: i64 = 1800; // Max 30 minutes for larger profits
-pub const MIN_PROFIT_BEFORE_EXIT_SOL: f64 = FEE_RATE * 2.0; // Minimum profit to cover fees
+pub const RAPID_STOP_LOSS: f64 = -3.0; // Relaxed 3% stop loss for crypto volatility
+pub const MAX_TRADE_DURATION_SEC: i64 = 3600; // Max 60 minutes for better opportunities
+pub const MIN_PROFIT_BEFORE_EXIT_SOL: f64 = FEE_RATE * 1.5; // Reduced minimum profit requirement
 
 // PROFIT TAKING TIERS FOR 1% TO 500% RANGE
 pub const PROFIT_TIER_1: f64 = 1.0; // 1% - quick scalp
@@ -357,8 +357,8 @@ pub fn should_dca(
     // Only DCA if we have strong technical confirmation
     let (signal_strength, _) = analyze_microstructure(dataframe, token, current_price);
 
-    // Require oversold conditions and strong technical signal
-    if drop_pct <= -5.0 && signal_strength >= 0.7 && elapsed.num_minutes() >= 2 {
+    // Require oversold conditions and strong technical signal (more conservative)
+    if drop_pct <= -8.0 && signal_strength >= 0.8 && elapsed.num_minutes() >= 5 {
         // Additional safety checks
         let volume_declining = if dataframe.volumes.len() >= 2 {
             let latest_vol = dataframe.volumes.back().unwrap_or(&0.0);
@@ -368,9 +368,9 @@ pub fn should_dca(
             false
         };
 
-        // Check if we're still in a downtrend
+        // Check if we're still in a downtrend (more conservative RSI threshold)
         if let Some(rsi) = calculate_rsi(&dataframe.prices, RSI_PERIOD) {
-            return rsi < 35.0 && volume_declining && current_price < pos.last_dca_price;
+            return rsi < 25.0 && volume_declining && current_price < pos.last_dca_price * 0.95;
         }
     }
 
@@ -384,12 +384,14 @@ pub fn should_sell(
     pos: &Position,
     current_price: f64
 ) -> (bool, String) {
-    let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+    // Use consistent profit calculation method (same as web server and helpers)
+    let current_value = current_price * pos.token_amount;
+    let profit_sol = current_value - pos.sol_spent;
+    let profit_pct = if pos.sol_spent > 0.0 { (profit_sol / pos.sol_spent) * 100.0 } else { 0.0 };
+
     let drop_from_peak = ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
     let held_duration = (Utc::now() - pos.open_time).num_seconds();
 
-    // Calculate profit in SOL terms
-    let profit_sol = (current_price - pos.entry_price) * pos.token_amount;
     let has_min_profit = profit_sol >= MIN_PROFIT_BEFORE_EXIT_SOL;
 
     // Get technical analysis for profit-taking decisions
@@ -434,17 +436,19 @@ pub fn should_sell(
 
     // 2. DYNAMIC TIME-BASED EXIT - Longer holding for larger profits
     let max_duration = if profit_pct >= PROFIT_TIER_7 {
-        3600 // 1 hour for 100%+ profits
+        7200 // 2 hours for 100%+ profits
     } else if profit_pct >= PROFIT_TIER_6 {
-        2700 // 45 minutes for 50%+ profits
+        5400 // 90 minutes for 50%+ profits
     } else if profit_pct >= PROFIT_TIER_5 {
-        2100 // 35 minutes for 20%+ profits
+        3600 // 60 minutes for 20%+ profits
     } else if profit_pct >= PROFIT_TIER_4 {
-        1800 // 30 minutes for 10%+ profits
+        2700 // 45 minutes for 10%+ profits
     } else if profit_pct >= PROFIT_TIER_2 {
-        1200 // 20 minutes for 3%+ profits
+        1800 // 30 minutes for 3%+ profits
+    } else if profit_pct > 0.0 {
+        1200 // 20 minutes for any positive profit
     } else {
-        600 // 10 minutes for small profits
+        900 // 15 minutes for break-even/losses
     };
 
     if held_duration >= max_duration {
@@ -461,19 +465,23 @@ pub fn should_sell(
 
     // 4. TECHNICAL ANALYSIS BASED EXITS - Scaled by profit level
     if let Some(rsi) = calculate_rsi(&dataframe.prices, RSI_PERIOD) {
-        // More aggressive exits for larger profits
+        // More conservative exits to avoid selling profitable positions too early
         let rsi_exit_threshold = if profit_pct >= PROFIT_TIER_6 {
-            75.0 // Exit at RSI 75+ for 50%+ profits
+            78.0 // Exit at RSI 78+ for 50%+ profits
         } else if profit_pct >= PROFIT_TIER_4 {
-            78.0 // Exit at RSI 78+ for 10%+ profits
+            82.0 // Exit at RSI 82+ for 10%+ profits
+        } else if profit_pct >= PROFIT_TIER_2 {
+            85.0 // Exit at RSI 85+ for 3%+ profits
         } else {
-            80.0 // Exit at RSI 80+ for smaller profits
+            88.0 // Exit at RSI 88+ for smaller profits (very overbought)
         };
 
         let min_profit_for_rsi_exit = if profit_pct >= PROFIT_TIER_3 {
             0.0 // Any profit above 5%
+        } else if profit_pct >= PROFIT_TIER_1 {
+            0.3 // Require 0.3% minimum for 1%+ profits
         } else {
-            0.5 // Require 0.5% minimum for smaller profits
+            0.8 // Require 0.8% minimum for smaller profits
         };
 
         // Exit on overbought conditions with appropriate profit levels
@@ -490,8 +498,8 @@ pub fn should_sell(
             );
         }
 
-        // Exit on oversold if in significant loss
-        if rsi <= 20.0 && profit_pct <= -2.0 {
+        // Exit on oversold if in significant loss (more conservative)
+        if rsi <= 15.0 && profit_pct <= -4.0 {
             return (true, format!("rsi_oversold_cutloss(rsi:{:.1}, loss:{:.2}%)", rsi, profit_pct));
         }
     }
@@ -505,15 +513,15 @@ pub fn should_sell(
         )
     {
         // Exit if price hits upper band with profit (only if min profit met)
-        if current_price >= upper && profit_pct > 0.3 && has_min_profit {
+        if current_price >= upper && profit_pct > 0.8 && has_min_profit {
             return (
                 true,
                 format!("bb_upper_exit(profit:{:.2}%, {:.6}SOL)", profit_pct, profit_sol),
             );
         }
 
-        // Exit if price breaks lower band significantly
-        if current_price <= lower * 0.995 && profit_pct <= -1.5 {
+        // Exit if price breaks lower band significantly (more conservative)
+        if current_price <= lower * 0.99 && profit_pct <= -3.5 {
             return (true, format!("bb_lower_breakdown(loss:{:.2}%)", profit_pct));
         }
     }
@@ -524,7 +532,7 @@ pub fn should_sell(
         let avg_vol = dataframe.volumes.iter().rev().take(5).sum::<f64>() / 5.0;
 
         // Exit on volume spike with profit (possible distribution) - only if min profit met
-        if current_vol > avg_vol * 3.0 && profit_pct > 0.8 && has_min_profit {
+        if current_vol > avg_vol * 4.0 && profit_pct > 1.5 && has_min_profit {
             return (
                 true,
                 format!(
@@ -536,16 +544,16 @@ pub fn should_sell(
             );
         }
 
-        // Exit on volume death (liquidity drying up)
-        if current_vol < avg_vol * 0.3 && profit_pct <= 0.0 {
+        // Exit on volume death (liquidity drying up) - more conservative
+        if current_vol < avg_vol * 0.2 && profit_pct <= -1.0 {
             return (true, format!("volume_death_exit(vol_ratio:{:.1})", current_vol / avg_vol));
         }
     }
 
     // 7. MOMENTUM REVERSAL EXIT
     if let Some(momentum) = calculate_momentum(&dataframe.prices, MOMENTUM_PERIOD) {
-        // Exit on negative momentum in profit (only if min profit met)
-        if momentum <= -2.0 && profit_pct > 0.5 && has_min_profit {
+        // Exit on negative momentum in profit (only if min profit met) - more conservative
+        if momentum <= -3.5 && profit_pct > 1.0 && has_min_profit {
             return (
                 true,
                 format!(
@@ -724,7 +732,8 @@ pub fn get_min_profit_requirement() -> f64 {
 
 /// Check if a position has achieved minimum profitable exit threshold
 pub fn has_achieved_min_profit(pos: &Position, current_price: f64) -> (bool, f64) {
-    let profit_sol = (current_price - pos.entry_price) * pos.token_amount;
+    let current_value = current_price * pos.token_amount;
+    let profit_sol = current_value - pos.sol_spent;
     let has_min_profit = profit_sol >= MIN_PROFIT_BEFORE_EXIT_SOL;
     (has_min_profit, profit_sol)
 }
@@ -742,7 +751,10 @@ fn calculate_dynamic_profit_target(
     pos: &Position,
     current_price: f64
 ) -> f64 {
-    let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+    // Use consistent profit calculation method
+    let current_value = current_price * pos.token_amount;
+    let profit_sol = current_value - pos.sol_spent;
+    let profit_pct = if pos.sol_spent > 0.0 { (profit_sol / pos.sol_spent) * 100.0 } else { 0.0 };
     let held_duration_minutes = (Utc::now() - pos.open_time).num_minutes();
 
     // Base profit target depends on current profit level
@@ -805,21 +817,21 @@ fn calculate_tiered_trailing_stop(profit_pct: f64) -> f64 {
     if profit_pct < PROFIT_TIER_1 {
         f64::NEG_INFINITY // No trailing stop below 1%
     } else if profit_pct <= PROFIT_TIER_2 {
-        -0.3 // Very tight 0.3% trailing stop for 1-3% profits
+        -0.6 // Relaxed 0.6% trailing stop for 1-3% profits
     } else if profit_pct <= PROFIT_TIER_3 {
-        -0.5 // 0.5% trailing stop for 3-5% profits
+        -0.8 // 0.8% trailing stop for 3-5% profits
     } else if profit_pct <= PROFIT_TIER_4 {
-        -0.8 // 0.8% trailing stop for 5-10% profits
+        -1.2 // 1.2% trailing stop for 5-10% profits
     } else if profit_pct <= PROFIT_TIER_5 {
-        -1.2 // 1.2% trailing stop for 10-20% profits
+        -1.8 // 1.8% trailing stop for 10-20% profits
     } else if profit_pct <= PROFIT_TIER_6 {
-        -2.0 // 2% trailing stop for 20-50% profits
+        -2.5 // 2.5% trailing stop for 20-50% profits
     } else if profit_pct <= PROFIT_TIER_7 {
-        -3.0 // 3% trailing stop for 50-100% profits
+        -3.5 // 3.5% trailing stop for 50-100% profits
     } else if profit_pct <= PROFIT_TIER_8 {
-        -5.0 // 5% trailing stop for 100-200% profits
+        -5.5 // 5.5% trailing stop for 100-200% profits
     } else {
-        -8.0 // 8% trailing stop for 200%+ profits
+        -8.0 // 8% trailing stop for 200%+ profits (unchanged for massive profits)
     }
 }
 
@@ -877,8 +889,12 @@ pub fn get_profit_recommendation(
     dataframe: &MarketDataFrame,
     token: &Token
 ) -> String {
-    let profit_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
-    let (has_min_profit, profit_sol) = has_achieved_min_profit(pos, current_price);
+    // Use consistent profit calculation method
+    let current_value = current_price * pos.token_amount;
+    let profit_sol = current_value - pos.sol_spent;
+    let profit_pct = if pos.sol_spent > 0.0 { (profit_sol / pos.sol_spent) * 100.0 } else { 0.0 };
+
+    let (has_min_profit, _) = has_achieved_min_profit(pos, current_price);
     let (signal_strength, _) = analyze_microstructure(dataframe, token, current_price);
     let tier_name = get_profit_tier_name(profit_pct);
     let dynamic_target = calculate_dynamic_profit_target(dataframe, token, pos, current_price);

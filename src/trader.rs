@@ -787,7 +787,14 @@ async fn trader_main_loop() {
                     let sol_size =
                         TRADE_SIZE_SOL * (1.0 + (pos.dca_count as f64) * DCA_SIZE_FACTOR);
                     let lamports = (sol_size * 1_000_000_000.0) as u64;
-                    let drop_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+                    // Use consistent profit calculation for DCA trigger
+                    let current_value = current_price * pos.token_amount;
+                    let profit_sol = current_value - pos.sol_spent;
+                    let drop_pct = if pos.sol_spent > 0.0 {
+                        (profit_sol / pos.sol_spent) * 100.0
+                    } else {
+                        0.0
+                    };
 
                     if let Ok(tx) = buy_gmgn(&mint, lamports).await {
                         let added = sol_size / current_price;
@@ -814,7 +821,14 @@ async fn trader_main_loop() {
                     if let Some(p) = OPEN_POSITIONS.write().await.get_mut(&mint) {
                         p.peak_price = current_price;
                     }
-                    let profit_now = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+                    // Use consistent profit calculation method
+                    let current_value = current_price * pos.token_amount;
+                    let profit_sol = current_value - pos.sol_spent;
+                    let profit_now = if pos.sol_spent > 0.0 {
+                        (profit_sol / pos.sol_spent) * 100.0
+                    } else {
+                        0.0
+                    };
                     let bucket = (profit_now / 2.0).floor() as i32; // announce every +2 %
 
                     if bucket > *notified_profit_bucket.get(&mint).unwrap_or(&-1) {
@@ -851,8 +865,14 @@ async fn trader_main_loop() {
 
                     match sell_all_gmgn(&mint, current_price).await {
                         Ok(tx) => {
-                            let profit_pct =
-                                ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+                            // Use consistent profit calculation method
+                            let current_value = current_price * pos.token_amount;
+                            let profit_sol = current_value - pos.sol_spent;
+                            let profit_pct = if pos.sol_spent > 0.0 {
+                                (profit_sol / pos.sol_spent) * 100.0
+                            } else {
+                                0.0
+                            };
                             let drop_from_peak =
                                 ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
 

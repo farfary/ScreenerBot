@@ -218,13 +218,16 @@ pub async fn print_open_positions() {
             .map(|&(_ts, price)| price)
             .unwrap_or(0.0);
 
-        let profit_pct = if pos.entry_price > 0.0 && current_price > 0.0 {
-            ((current_price - pos.entry_price) / pos.entry_price) * 100.0
+        // Use consistent profit calculation method (same as web server)
+        let current_value = current_price * pos.token_amount;
+        let profit_sol = current_value - pos.sol_spent;
+        let profit_pct = if pos.sol_spent > 0.0 {
+            (profit_sol / pos.sol_spent) * 100.0
         } else {
             0.0
         };
 
-        total_unrealized_sol += current_price * pos.token_amount - pos.sol_spent;
+        total_unrealized_sol += profit_sol;
 
         table.add_row([
             mint.clone(),
