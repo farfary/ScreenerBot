@@ -13,40 +13,40 @@ use tokio::{ fs, io::AsyncReadExt, io::AsyncWriteExt };
 const TOKEN_CACHE_FILE: &str = ".tokens_cache.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TxnCount {
-    buys: u64,
-    sells: u64,
+pub struct TxnCount {
+    pub buys: u64,
+    pub sells: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Txns {
-    m5: TxnCount,
-    h1: TxnCount,
-    h6: TxnCount,
-    h24: TxnCount,
+pub struct Txns {
+    pub m5: TxnCount,
+    pub h1: TxnCount,
+    pub h6: TxnCount,
+    pub h24: TxnCount,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Volume {
-    m5: f64,
-    h1: f64,
-    h6: f64,
-    h24: f64,
+pub struct Volume {
+    pub m5: f64,
+    pub h1: f64,
+    pub h6: f64,
+    pub h24: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PriceChange {
-    m5: f64,
-    h1: f64,
-    h6: f64,
-    h24: f64,
+pub struct PriceChange {
+    pub m5: f64,
+    pub h1: f64,
+    pub h6: f64,
+    pub h24: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Liquidity {
-    usd: f64,
-    base: f64,
-    quote: f64,
+pub struct Liquidity {
+    pub usd: f64,
+    pub base: f64,
+    pub quote: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

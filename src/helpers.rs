@@ -583,3 +583,55 @@ pub async fn add_skipped_sell(mint: &str) {
         }
     }
 }
+
+
+/// returns `Some(rsi)` if `values` has `period+1` points, otherwise `None`
+pub fn rsi(values: &VecDeque<f64>, period: usize) -> Option<f64> {
+    if values.len() <= period {
+        return None;
+    }
+    let mut gain = 0.0;
+    let mut loss = 0.0;
+    for i in values.len() - period..values.len() - 1 {
+        let diff = values[i + 1] - values[i];
+        if diff >= 0.0 {
+            gain += diff;
+        } else {
+            loss += -diff;
+        }
+    }
+    if loss == 0.0 {
+        return Some(100.0);
+    }
+    let rs = gain / loss;
+    Some(100.0 - 100.0 / (1.0 + rs))
+}
+
+#[inline]
+pub fn pct_change(old: f64, new_: f64) -> f64 {
+    ((new_ - old) / old) * 100.0
+}
+
+pub fn ema(series: &VecDeque<f64>, period: usize) -> Option<f64> {
+    if series.len() < period {
+        return None;
+    }
+    let k = 2.0 / ((period as f64) + 1.0);
+    let mut e = series[series.len() - period];
+    for i in series.len() - period + 1..series.len() {
+        e = series[i] * k + e * (1.0 - k);
+    }
+    Some(e)
+}
+
+pub fn atr_pct(hist: &VecDeque<f64>, period: usize) -> Option<f64> {
+    if hist.len() < period + 1 {
+        return None;
+    }
+    let mut sum = 0.0;
+    for i in hist.len() - period + 1..hist.len() {
+        let pct = ((hist[i] - hist[i - 1]).abs() / hist[i - 1]) * 100.0;
+        sum += pct;
+    }
+    Some(sum / (period as f64)) // average % true range
+}
