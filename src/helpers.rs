@@ -2,7 +2,7 @@
 use crate::prelude::*;
 
 use std::{ fs, str::FromStr };
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc };
 use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_request::TokenAccountsFilter;
@@ -30,10 +30,17 @@ use solana_transaction_status::{
     UiTransactionTokenBalance,
 };
 use std::sync::atomic::{ AtomicBool, Ordering };
+use tokio::time::{ sleep, Duration };
+use std::collections::{ VecDeque };
+use tokio::task;
+use futures::FutureExt;
+use std::collections::HashSet;
+use std::fs::{ OpenOptions };
+use std::io::{ BufRead, BufReader};
+use tokio::sync::Mutex;
+
 
 pub static SHUTDOWN: AtomicBool = AtomicBool::new(false);
-
-
 
 // ────────────── CONFIG & RPC ──────────────
 #[derive(Debug, Deserialize)]
@@ -425,7 +432,6 @@ pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
     )
 }
 
-
 /// Return the effective price you actually paid (SOL per token)
 /// and print full debug info.
 ///
@@ -499,7 +505,6 @@ pub fn effective_swap_price(
     Ok(price)
 }
 
-
 pub fn install_sigint_handler() -> Result<()> {
     // plain Ctrl‑C (works cross‑platform)
     ctrlc::set_handler(|| {
@@ -541,9 +546,8 @@ pub fn format_duration_ago(from: DateTime<Utc>) -> String {
 pub async fn wait_for_shutdown_signal() {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
-        let mut term = signal(SignalKind::terminate())
-            .expect("failed to install SIGTERM handler");
+        use tokio::signal::unix::{ signal, SignalKind };
+        let mut term = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {},
             _ = term.recv()             => {},
@@ -553,5 +557,29 @@ pub async fn wait_for_shutdown_signal() {
     #[cfg(not(unix))]
     {
         let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+// Global set for permanently skipped tokens (now async Mutex)
+pub static SKIPPED_SELLS: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| {
+    // Initialize from file, can't do async here, so use blocking
+    let mut set = HashSet::new();
+    if let Ok(file) = File::open(".skipped_sells") {
+        for line in BufReader::new(file).lines().flatten() {
+            set.insert(line.trim().to_string());
+        }
+    }
+    Mutex::new(set)
+});
+
+pub async fn add_skipped_sell(mint: &str) {
+    {
+        let mut set = SKIPPED_SELLS.lock().await;
+        if set.insert(mint.to_string()) {
+            // File I/O must be blocking (but this is rare)
+            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(".skipped_sells") {
+                let _ = writeln!(f, "{mint}");
+            }
+        }
     }
 }

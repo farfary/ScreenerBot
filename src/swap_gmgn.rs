@@ -171,7 +171,7 @@ pub async fn sell_all_gmgn(
 ) -> anyhow::Result<String> {
     // Block if token is in skipped list
     {
-        let set = crate::trader::SKIPPED_SELLS.lock().await;
+        let set = SKIPPED_SELLS.lock().await;
         if set.contains(token_mint_address) {
             anyhow::bail!(
                 "❌ Sell for mint {} is skipped due to too many failures",

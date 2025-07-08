@@ -25,29 +25,7 @@ pub const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 
 
 
-// Global set for permanently skipped tokens (now async Mutex)
-pub static SKIPPED_SELLS: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| {
-    // Initialize from file, can't do async here, so use blocking
-    let mut set = HashSet::new();
-    if let Ok(file) = File::open(".skipped_sells") {
-        for line in BufReader::new(file).lines().flatten() {
-            set.insert(line.trim().to_string());
-        }
-    }
-    Mutex::new(set)
-});
 
-async fn add_skipped_sell(mint: &str) {
-    {
-        let mut set = SKIPPED_SELLS.lock().await;
-        if set.insert(mint.to_string()) {
-            // File I/O must be blocking (but this is rare)
-            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(".skipped_sells") {
-                let _ = writeln!(f, "{mint}");
-            }
-        }
-    }
-}
 
 /// supervisor that restarts the trader loop on *any* panic
 pub fn start_trader_loop() {
