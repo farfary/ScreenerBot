@@ -4,16 +4,7 @@ mod trader;
 mod configs;
 mod helpers;
 mod swap_gmgn;
-mod pool_decoder;
-mod pool_cpmm;
-mod pool_meteora_dlmm;
-mod pool_orca_whirlpool;
-mod pool_pumpfun;
-mod pool_raydium_amm;
-mod pool_raydium_clmm;
-mod pool_raydium_cpmm;
-mod pool_raydium_launchpad;
-mod pool_pumpfun2;
+mod pools;
 mod persistence;
 mod pool_price;
 

@@ -18,7 +18,7 @@ use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 
-const POOL_CACHE_FILE: &str = "pool_cache.json";
+const POOL_CACHE_FILE: &str = ".pool_cache.json";
 
 /// token-mint → biggest-pool address
 pub static POOL_CACHE: Lazy<RwLock<HashMap<String, Pubkey>>> = Lazy::new(||
@@ -56,7 +56,7 @@ fn ensure_pool_cache_loaded() -> Result<()> {
 }
 
 pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
-    use crate::pool_decoder::{ decode_any_pool, decode_any_pool_price };
+    
 
     ensure_pool_cache_loaded()?;
 
@@ -317,8 +317,6 @@ pub fn flush_pool_cache_to_disk_nonblocking() {
 
 /// Helper: Find biggest pool for a single mint (used for cache misses)
 fn find_biggest_pool_for_mint(rpc: &RpcClient, mint: &str) -> Result<Pubkey> {
-    use crate::pool_decoder::decode_any_pool;
-
     let pools = fetch_solana_pairs(mint)?;
     let (best, _liq) = pools
         .par_iter()
@@ -339,14 +337,6 @@ fn decode_pool_account_to_price(
     pool_pk: &Pubkey,
     account: &solana_sdk::account::Account
 ) -> Result<f64> {
-    use crate::pool_orca_whirlpool::decode_orca_whirlpool_from_account;
-    use crate::pool_pumpfun::decode_pumpfun_pool_from_account;
-    use crate::pool_raydium_amm::decode_raydium_amm_from_account;
-    use crate::pool_raydium_clmm::decode_raydium_clmm_from_account;
-    use crate::pool_raydium_cpmm::decode_raydium_cpmm_from_account;
-    use crate::pool_pumpfun2::decode_pumpfun2_pool_from_account;
-    use crate::pool_raydium_launchpad::decode_raydium_launchpad_from_account;
-
     let owner = account.owner.to_string();
 
     let (base_amt, quote_amt, base_mint, quote_mint) = match owner.as_str() {
