@@ -17,7 +17,6 @@ use std::io::{ BufRead, BufReader, Write };
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
-
 /// Submit a swap to GMGN router and return the signature string.
 /// Also prints the **effective on-chain price** paid for the swap.
 pub async fn buy_gmgn(
@@ -205,8 +204,8 @@ pub async fn sell_all_gmgn(
         wrapped_sol,
         in_amount,
         owner,
-        0.5,
-        0.00002
+        SLIPPAGE_BPS,
+        FEE_RATE
     );
 
     // fetch quote

@@ -23,6 +23,8 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.00003;
 pub const POSITIONS_CHECK_TIME: u64 = 15; // 10 seconds
 pub const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
 
+pub const SLIPPAGE_BPS: f64 = 0.5;       // 0.5%
+pub const FEE_RATE: f64 = 0.00002;       // example flat fee
 
 
 
