@@ -18,7 +18,7 @@ use tokio::sync::Mutex;
 // Constants
 pub const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
 pub const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
-pub const MAX_DCA_COUNT: u8 = 1; // max 3 DCA per position
+pub const MAX_DCA_COUNT: u8 = 2; // max 3 DCA per position
 pub const TRANSACTION_FEE_SOL: f64 = 0.00003;
 pub const POSITIONS_CHECK_TIME: u64 = 15; // 10 seconds
 pub const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop

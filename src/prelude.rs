@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 pub use crate::configs::*;
 pub use crate::dexscreener::*;
 pub use crate::swap_gmgn::*;
