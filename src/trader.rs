@@ -58,7 +58,7 @@ const DEFAULT_OHLCV_LIMIT: usize = 200; // Default amount of historical data
 
 // Constants for pre-trade data validation
 const MIN_MINUTE_DATA_POINTS: usize = 50; // Minimum minute data for trading
-const MIN_HOUR_DATA_POINTS: usize = 24; // Minimum hour data for trading  
+const MIN_HOUR_DATA_POINTS: usize = 24; // Minimum hour data for trading
 const MIN_DAY_DATA_POINTS: usize = 7; // Minimum day data for trading
 const MIN_LEGACY_DATA_POINTS: usize = 32; // Minimum legacy price data for trading
 
@@ -66,7 +66,7 @@ const MIN_LEGACY_DATA_POINTS: usize = 32; // Minimum legacy price data for tradi
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Timeframe {
     Minute,
-    Hour, 
+    Hour,
     Day,
 }
 
@@ -74,16 +74,16 @@ impl Timeframe {
     pub fn as_str(&self) -> &'static str {
         match self {
             Timeframe::Minute => "minute",
-            Timeframe::Hour => "hour", 
+            Timeframe::Hour => "hour",
             Timeframe::Day => "day",
         }
     }
-    
+
     pub fn aggregate_value(&self) -> u32 {
         match self {
-            Timeframe::Minute => 1,  // 1 minute
-            Timeframe::Hour => 1,    // 1 hour  
-            Timeframe::Day => 1,     // 1 day
+            Timeframe::Minute => 1, // 1 minute
+            Timeframe::Hour => 1, // 1 hour
+            Timeframe::Day => 1, // 1 day
         }
     }
 }
@@ -110,15 +110,23 @@ impl TimeframeData {
             volumes: VecDeque::new(),
         }
     }
-    
-    pub fn add_ohlcv(&mut self, timestamp: u64, open: f64, high: f64, low: f64, close: f64, volume: f64) {
+
+    pub fn add_ohlcv(
+        &mut self,
+        timestamp: u64,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64
+    ) {
         self.timestamps.push_back(timestamp);
         self.opens.push_back(open);
         self.highs.push_back(high);
         self.lows.push_back(low);
         self.closes.push_back(close);
         self.volumes.push_back(volume);
-        
+
         // Keep reasonable limits for each timeframe
         let max_size = 1000; // Configurable based on needs
         if self.timestamps.len() > max_size {
@@ -130,15 +138,15 @@ impl TimeframeData {
             self.volumes.pop_front();
         }
     }
-    
+
     pub fn len(&self) -> usize {
         self.timestamps.len()
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.timestamps.is_empty()
     }
-    
+
     pub fn latest_close(&self) -> Option<f64> {
         self.closes.back().copied()
     }
@@ -185,7 +193,11 @@ impl MarketDataFrame {
         }
     }
 
-    pub fn new_with_pool_info(pool_address: String, base_token: String, quote_token: String) -> Self {
+    pub fn new_with_pool_info(
+        pool_address: String,
+        base_token: String,
+        quote_token: String
+    ) -> Self {
         Self {
             pool_address,
             base_token,
@@ -222,7 +234,11 @@ impl MarketDataFrame {
     }
 
     // Load OHLCV data from GeckoTerminal API with caching
-    pub async fn load_historical_data(&mut self, pool_address: &str, mint: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn load_historical_data(
+        &mut self,
+        pool_address: &str,
+        mint: &str
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Try to load from cache first
         if let Ok(cached_data) = load_cached_ohlcv(pool_address).await {
             if is_cache_valid(&cached_data) {
@@ -234,10 +250,18 @@ impl MarketDataFrame {
 
         // Fetch fresh data from GeckoTerminal API
         println!("🌐 [GECKO] Fetching fresh OHLCV data for pool {}", pool_address);
-        
+
         // Fetch all timeframes
-        let minute_data = fetch_gecko_ohlcv(pool_address, Timeframe::Minute, DEFAULT_OHLCV_LIMIT).await?;
-        let hour_data = fetch_gecko_ohlcv(pool_address, Timeframe::Hour, DEFAULT_OHLCV_LIMIT).await?;
+        let minute_data = fetch_gecko_ohlcv(
+            pool_address,
+            Timeframe::Minute,
+            DEFAULT_OHLCV_LIMIT
+        ).await?;
+        let hour_data = fetch_gecko_ohlcv(
+            pool_address,
+            Timeframe::Hour,
+            DEFAULT_OHLCV_LIMIT
+        ).await?;
         let day_data = fetch_gecko_ohlcv(pool_address, Timeframe::Day, 30).await?; // 30 days should be enough
 
         // Load data into timeframes
@@ -249,7 +273,8 @@ impl MarketDataFrame {
         self.pool_address = pool_address.to_string();
         self.base_token = minute_data.meta.base.symbol;
         self.quote_token = minute_data.meta.quote.symbol;
-        self.last_updated = std::time::SystemTime::now()
+        self.last_updated = std::time::SystemTime
+            ::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
@@ -274,7 +299,7 @@ impl MarketDataFrame {
 
     fn load_timeframe_data(&mut self, timeframe: Timeframe, ohlcv_list: &[[f64; 6]]) {
         let timeframe_data = self.get_timeframe_data_mut(timeframe);
-        
+
         for ohlcv in ohlcv_list {
             let [timestamp, open, high, low, close, volume] = *ohlcv;
             timeframe_data.add_ohlcv(timestamp as u64, open, high, low, close, volume);
@@ -306,14 +331,23 @@ impl MarketDataFrame {
         self.closes.clear();
 
         for i in 0..self.minute_data.len() {
-            if let (Some(&timestamp), Some(&open), Some(&high), Some(&low), Some(&close), Some(&volume)) = (
-                self.minute_data.timestamps.get(i),
-                self.minute_data.opens.get(i),
-                self.minute_data.highs.get(i),
-                self.minute_data.lows.get(i),
-                self.minute_data.closes.get(i),
-                self.minute_data.volumes.get(i),
-            ) {
+            if
+                let (
+                    Some(&timestamp),
+                    Some(&open),
+                    Some(&high),
+                    Some(&low),
+                    Some(&close),
+                    Some(&volume),
+                ) = (
+                    self.minute_data.timestamps.get(i),
+                    self.minute_data.opens.get(i),
+                    self.minute_data.highs.get(i),
+                    self.minute_data.lows.get(i),
+                    self.minute_data.closes.get(i),
+                    self.minute_data.volumes.get(i),
+                )
+            {
                 self.timestamps.push_back(timestamp);
                 self.opens.push_back(open);
                 self.highs.push_back(high);
@@ -379,14 +413,38 @@ impl MarketDataFrame {
 
         // Require at least minute data and legacy data to be sufficient
         let has_minimum = minute_ok && legacy_ok;
-        
+
         // Create detailed status message
         let status = format!(
-            "Data status: Minute({}/{}){} Hour({}/{}){} Day({}/{}){} Legacy({}/{}){}", 
-            minute_count, MIN_MINUTE_DATA_POINTS, if minute_ok { "✅" } else { "❌" },
-            hour_count, MIN_HOUR_DATA_POINTS, if hour_ok { "✅" } else { "❌" },
-            day_count, MIN_DAY_DATA_POINTS, if day_ok { "✅" } else { "❌" },
-            legacy_count, MIN_LEGACY_DATA_POINTS, if legacy_ok { "✅" } else { "❌" }
+            "Data status: Minute({}/{}){} Hour({}/{}){} Day({}/{}){} Legacy({}/{}){}",
+            minute_count,
+            MIN_MINUTE_DATA_POINTS,
+            if minute_ok {
+                "✅"
+            } else {
+                "❌"
+            },
+            hour_count,
+            MIN_HOUR_DATA_POINTS,
+            if hour_ok {
+                "✅"
+            } else {
+                "❌"
+            },
+            day_count,
+            MIN_DAY_DATA_POINTS,
+            if day_ok {
+                "✅"
+            } else {
+                "❌"
+            },
+            legacy_count,
+            MIN_LEGACY_DATA_POINTS,
+            if legacy_ok {
+                "✅"
+            } else {
+                "❌"
+            }
         );
 
         (has_minimum, status)
@@ -394,9 +452,9 @@ impl MarketDataFrame {
 
     // Check if we need to load more historical data
     pub fn needs_historical_data_loading(&self) -> bool {
-        self.minute_data.len() < MIN_MINUTE_DATA_POINTS || 
-        self.hour_data.len() < MIN_HOUR_DATA_POINTS ||
-        self.day_data.len() < MIN_DAY_DATA_POINTS
+        self.minute_data.len() < MIN_MINUTE_DATA_POINTS ||
+            self.hour_data.len() < MIN_HOUR_DATA_POINTS ||
+            self.day_data.len() < MIN_DAY_DATA_POINTS
     }
 }
 
@@ -638,7 +696,7 @@ async fn trader_main_loop() {
             let dataframe = market_dataframes
                 .entry(mint.clone())
                 .or_insert_with(MarketDataFrame::new);
-            
+
             // Try to load historical data if we don't have enough data
             if dataframe.minute_data.len() < 50 {
                 // Try to find pool address for this mint and load historical data
@@ -648,7 +706,7 @@ async fn trader_main_loop() {
                     }
                 }
             }
-            
+
             let current_timestamp = std::time::SystemTime
                 ::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -669,7 +727,7 @@ async fn trader_main_loop() {
 
             // Check if we have sufficient data for trading decisions
             let (has_sufficient_data, data_status) = dataframe.has_sufficient_data_for_trading();
-            
+
             if !has_sufficient_data {
                 println!("⚠️ [DATA] Insufficient data for trading {}: {}", symbol, data_status);
                 continue; // Skip this token until we have sufficient data
@@ -712,10 +770,15 @@ async fn trader_main_loop() {
             // ───────── DCA + TRAILING (single block) ───────────────────────────────
             if let Some(mut pos) = pos_opt {
                 // Check if we have sufficient data for trading decisions
-                let (has_sufficient_data, data_status) = dataframe.has_sufficient_data_for_trading();
-                
+                let (has_sufficient_data, data_status) =
+                    dataframe.has_sufficient_data_for_trading();
+
                 if !has_sufficient_data {
-                    println!("⚠️ [DATA] Insufficient data for DCA/sell decision {}: {}", symbol, data_status);
+                    println!(
+                        "⚠️ [DATA] Insufficient data for DCA/sell decision {}: {}",
+                        symbol,
+                        data_status
+                    );
                     continue; // Skip this token until we have sufficient data
                 }
 
@@ -1132,7 +1195,11 @@ fn should_sell(
 }
 
 // GeckoTerminal API functions
-async fn fetch_gecko_ohlcv(pool_address: &str, timeframe: Timeframe, limit: usize) -> Result<GeckoTerminalResponse, Box<dyn std::error::Error>> {
+async fn fetch_gecko_ohlcv(
+    pool_address: &str,
+    timeframe: Timeframe,
+    limit: usize
+) -> Result<GeckoTerminalResponse, Box<dyn std::error::Error>> {
     let url = format!(
         "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/{}?limit={}&currency=token&include_empty_intervals=false&token=base",
         pool_address,
@@ -1147,16 +1214,16 @@ async fn fetch_gecko_ohlcv(pool_address: &str, timeframe: Timeframe, limit: usiz
         .get(&url)
         .header("accept", "application/json")
         .header("User-Agent", "ScreenerBot/1.0")
-        .send()
-        .await?;
+        .send().await?;
 
     if !response.status().is_success() {
         return Err(format!("GeckoTerminal API error: {}", response.status()).into());
     }
 
     let gecko_response: GeckoTerminalResponse = response.json().await?;
-    
-    println!("✅ [GECKO] Fetched {} {} candles for pool {}", 
+
+    println!(
+        "✅ [GECKO] Fetched {} {} candles for pool {}",
         gecko_response.data.attributes.ohlcv_list.len(),
         timeframe.as_str(),
         pool_address
@@ -1168,38 +1235,39 @@ async fn fetch_gecko_ohlcv(pool_address: &str, timeframe: Timeframe, limit: usiz
 // Caching functions
 async fn load_cached_ohlcv(pool_address: &str) -> Result<CachedOHLCV, Box<dyn std::error::Error>> {
     let cache_file = format!("{}/{}.json", CACHE_DIR, pool_address);
-    
+
     if !Path::new(&cache_file).exists() {
         return Err("Cache file not found".into());
     }
 
     let cache_content = fs::read_to_string(&cache_file)?;
     let cached_data: CachedOHLCV = serde_json::from_str(&cache_content)?;
-    
+
     Ok(cached_data)
 }
 
 async fn save_cached_ohlcv(cache_data: &CachedOHLCV) -> Result<(), Box<dyn std::error::Error>> {
     // Create cache directory if it doesn't exist
     fs::create_dir_all(CACHE_DIR)?;
-    
+
     let cache_file = format!("{}/{}.json", CACHE_DIR, cache_data.pool_address);
     let cache_content = serde_json::to_string_pretty(cache_data)?;
-    
+
     fs::write(&cache_file, cache_content)?;
-    
+
     // Clean old cache files
     clean_old_cache_files().await?;
-    
+
     Ok(())
 }
 
 fn is_cache_valid(cached_data: &CachedOHLCV) -> bool {
-    let now = std::time::SystemTime::now()
+    let now = std::time::SystemTime
+        ::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    
+
     let cache_age_hours = (now - cached_data.timestamp_cached) / 3600;
     cache_age_hours < CACHE_DURATION_HOURS
 }
@@ -1209,23 +1277,24 @@ async fn clean_old_cache_files() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let now = std::time::SystemTime::now()
+    let now = std::time::SystemTime
+        ::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
     let entries = fs::read_dir(CACHE_DIR)?;
-    
+
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
-        
+
         if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
             if let Ok(metadata) = entry.metadata() {
                 if let Ok(modified) = metadata.modified() {
                     if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
                         let file_age_hours = (now - duration.as_secs()) / 3600;
-                        
+
                         if file_age_hours > CACHE_DURATION_HOURS {
                             if let Err(e) = fs::remove_file(&path) {
                                 eprintln!("⚠️ Failed to remove old cache file {:?}: {}", path, e);
@@ -1238,7 +1307,7 @@ async fn clean_old_cache_files() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1248,7 +1317,7 @@ async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
     use crate::pool_price::POOL_CACHE;
     use crate::helpers::fetch_solana_pairs;
     use crate::pools::decoder::decode_any_pool;
-    
+
     // First check cache
     {
         let cache = POOL_CACHE.read();
@@ -1256,14 +1325,14 @@ async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
             return Some(pool_pk.to_string());
         }
     }
-    
+
     // If not in cache, try to find biggest pool
-    match tokio::task::spawn_blocking({
-        let mint = mint.to_string();
-        move || {
-            let rpc = &crate::configs::RPC;
-            fetch_solana_pairs(&mint)
-                .and_then(|pools| {
+    match
+        tokio::task::spawn_blocking({
+            let mint = mint.to_string();
+            move || {
+                let rpc = &crate::configs::RPC;
+                fetch_solana_pairs(&mint).and_then(|pools| {
                     pools
                         .par_iter()
                         .filter_map(|pk| {
@@ -1275,8 +1344,9 @@ async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
                         .map(|(pk, _)| pk)
                         .ok_or_else(|| anyhow::anyhow!("no valid pools for {}", mint))
                 })
-        }
-    }).await {
+            }
+        }).await
+    {
         Ok(Ok(pool_pk)) => {
             // Cache the result
             {

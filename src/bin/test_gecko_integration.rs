@@ -4,19 +4,19 @@ use tokio;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Testing GeckoTerminal API Integration");
-    
+
     // Test with a known pool address (SOL/USDC)
     let test_pool_address = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2";
     let test_mint = "So11111111111111111111111111111111111111112"; // SOL mint
-    
+
     println!("📊 Testing historical data loading for pool: {}", test_pool_address);
-    
+
     let mut market_data = MarketDataFrame::new_with_pool_info(
         test_pool_address.to_string(),
         "SOL".to_string(),
         "USDC".to_string()
     );
-    
+
     // Load historical data
     match market_data.load_historical_data(test_pool_address, test_mint).await {
         Ok(()) => {
@@ -24,11 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("📈 Minute data points: {}", market_data.minute_data.timestamps.len());
             println!("📈 Hour data points: {}", market_data.hour_data.timestamps.len());
             println!("📈 Day data points: {}", market_data.day_data.timestamps.len());
-            
+
             // Show some sample data
             if !market_data.minute_data.timestamps.is_empty() {
                 let latest_idx = market_data.minute_data.timestamps.len() - 1;
-                println!("📊 Latest minute data: timestamp={}, open={}, high={}, low={}, close={}, volume={}", 
+                println!(
+                    "📊 Latest minute data: timestamp={}, open={}, high={}, low={}, close={}, volume={}",
                     market_data.minute_data.timestamps[latest_idx],
                     market_data.minute_data.opens[latest_idx],
                     market_data.minute_data.highs[latest_idx],
@@ -42,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("❌ Failed to load historical data: {}", e);
         }
     }
-    
+
     // Test cache functionality
     println!("\n🗂️  Testing cache functionality...");
     match market_data.load_historical_data(test_pool_address, test_mint).await {
@@ -53,8 +54,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("❌ Cache test failed: {}", e);
         }
     }
-    
+
     println!("\n✅ GeckoTerminal API integration test completed");
-    
+
     Ok(())
 }
