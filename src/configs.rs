@@ -3,6 +3,13 @@
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
+use std::collections::HashSet;
+use tokio::sync::RwLock;
+use std::{fs};
+use serde_json::json;
+use std::env;
+
+pub static ARGS: Lazy<Vec<String>> = Lazy::new(|| env::args().collect());
 
 #[derive(Debug, Deserialize)]
 pub struct Configs {
@@ -19,20 +26,9 @@ pub static RPC: Lazy<RpcClient> = Lazy::new(|| {
     RpcClient::new_with_timeout(CONFIGS.rpc_url.clone(), std::time::Duration::from_secs(10))
 });
 
-use std::collections::HashSet;
-use tokio::sync::RwLock;
-
-/// Mints that produced “Unsupported program id …” or similar hard
-/// errors while decoding pools.
-
-
-use std::{fs};
-use serde_json::json;
-
-
 const BLACKLIST_FILE: &str = ".blacklist.json";
 
-/// In-memory set, initially populated from disk
+
 pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
     let mut set = HashSet::new();
 
@@ -75,7 +71,3 @@ pub async fn add_to_blacklist(mint: &str) {
     }
 }
 
-
-use std::env;
-/// Cached command-line arguments
-pub static ARGS: Lazy<Vec<String>> = Lazy::new(|| env::args().collect());

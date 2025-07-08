@@ -1,35 +1,30 @@
 // #![allow(warnings)]
 
-use crate::dexscreener::TOKENS;
+use crate::prelude::*;
+
 use std::collections::HashMap;
 use tokio::time::{ sleep, Duration };
 use chrono::{ DateTime, Utc };
-use crate::swap_gmgn::*;
-use crate::pool_price::*;
-use crate::configs::BLACKLIST;
-use crate::persistence::*;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use crate::utilitis::{ *, batch_prices_from_pools };
-use crate::configs::RPC;
 use std::collections::{ VecDeque };
 use tokio::task;
 use futures::FutureExt;
-
-// Constants
-const TRADE_SIZE_SOL: f64 = 0.005; // amount of SOL to spend on each buy
-const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
-const MAX_DCA_COUNT: u8 = 1; // max 3 DCA per position
-const TRANSACTION_FEE_SOL: f64 = 0.00003;
-pub const POSITIONS_CHECK_TIME: u64 = 5; // 10 seconds
-
-const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
-
 use std::collections::HashSet;
 use std::fs::{ OpenOptions, File };
 use std::io::{ BufRead, BufReader, Write };
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
+
+// Constants
+const TRADE_SIZE_SOL: f64 = 0.002; // amount of SOL to spend on each buy
+const MAX_OPEN_POSITIONS: usize = 50; // allow up to 50 open positions
+const MAX_DCA_COUNT: u8 = 1; // max 3 DCA per position
+const TRANSACTION_FEE_SOL: f64 = 0.00003;
+pub const POSITIONS_CHECK_TIME: u64 = 5; // 10 seconds
+const PRICE_HISTORY_CAP: usize = 60; // 5 min @ 5 s/loop
+
+
 
 // Global set for permanently skipped tokens (now async Mutex)
 pub static SKIPPED_SELLS: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| {
@@ -162,7 +157,7 @@ async fn trader_main_loop() {
         let prices = tokio::task
             ::spawn_blocking({
                 let mints = filtered_mints.clone();
-                move || batch_prices_from_pools(&RPC, &mints)
+                move || batch_prices_from_pools(&crate::configs::RPC, &mints)
             }).await
             .unwrap_or_else(|e| {
                 eprintln!("❌ Batch price fetch panicked: {}", e);
@@ -206,7 +201,7 @@ async fn trader_main_loop() {
                 match
                     tokio::task::spawn_blocking({
                         let m = mint.clone();
-                        move || price_from_biggest_pool(&RPC, &m)
+                        move || price_from_biggest_pool(&crate::configs::RPC, &m)
                     }).await
                 {
                     Ok(Ok(p)) if p > 0.0 => {
@@ -579,22 +574,6 @@ async fn trader_main_loop() {
     }
 }
 
-// ────────────── ACTIONS ──────────────
-
-fn format_duration_ago(from: DateTime<Utc>) -> String {
-    let now = Utc::now();
-    let diff = now.signed_duration_since(from);
-
-    if diff.num_seconds() < 60 {
-        format!("{}s ago", diff.num_seconds())
-    } else if diff.num_minutes() < 60 {
-        format!("{}m ago", diff.num_minutes())
-    } else if diff.num_hours() < 24 {
-        format!("{}h ago", diff.num_hours())
-    } else {
-        format!("{}d ago", diff.num_days())
-    }
-}
 
 /// returns `Some(rsi)` if `values` has `period+1` points, otherwise `None`
 fn rsi(values: &VecDeque<f64>, period: usize) -> Option<f64> {
@@ -714,119 +693,4 @@ pub async fn sell_token(
     }
 }
 
-async fn print_open_positions() {
-    use comfy_table::{ Table, presets::UTF8_FULL };
 
-    let positions_guard = OPEN_POSITIONS.read().await;
-    let closed_guard = RECENT_CLOSED_POSITIONS.read().await;
-
-    // ── quick stats ───────────────────────────
-    let open_count = positions_guard.len();
-    let mut total_unrealized_sol = 0.0;
-
-    // ── prepare open-positions table ──────────
-    let mut positions_vec: Vec<_> = positions_guard.iter().collect();
-    positions_vec.sort_by_key(|(_, pos)| pos.open_time);
-
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_header([
-            "Mint",
-            "Entry Price",
-            "Current Price",
-            "Profit %",
-            "Peak Price",
-            "DCA Count",
-            "Tokens",
-            "SOL Spent",
-            "Open Time",
-        ]);
-
-    for (mint, pos) in positions_vec {
-        let current_price = PRICE_CACHE.read()
-            .unwrap()
-            .get(mint)
-            .map(|&(_ts, price)| price)
-            .unwrap_or(0.0);
-
-        let profit_pct = if pos.entry_price > 0.0 && current_price > 0.0 {
-            ((current_price - pos.entry_price) / pos.entry_price) * 100.0
-        } else {
-            0.0
-        };
-
-        total_unrealized_sol += current_price * pos.token_amount - pos.sol_spent;
-
-        table.add_row([
-            mint.clone(),
-            format!("{:.12}", pos.entry_price),
-            format!("{:.12}", current_price),
-            format!("{:+.2}%", profit_pct),
-            format!("{:.12}", pos.peak_price),
-            pos.dca_count.to_string(),
-            format!("{:.9}", pos.token_amount),
-            format!("{:.9}", pos.sol_spent),
-            format_duration_ago(pos.open_time),
-        ]);
-    }
-
-    println!(
-        "\n📂 [Open Positions] — count: {} | unrealized P/L: {:+.3} SOL\n{}\n",
-        open_count,
-        total_unrealized_sol,
-        table
-    );
-
-    // ── recent-closed table (WITH EXACT PROFIT SOL) ───────────
-    if !closed_guard.is_empty() {
-        let mut closed_vec: Vec<_> = closed_guard.values().cloned().collect();
-        closed_vec.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
-
-        let mut table_closed = Table::new();
-        table_closed.load_preset(UTF8_FULL).set_header([
-            "Mint",
-            "Entry Price",
-            "Close Price",
-            "Profit %",
-            "Profit SOL", // NEW COLUMN
-            "Peak Price",
-            "Tokens",
-            "SOL Spent",
-            "SOL Received",
-            "Open Time",
-            "Close Time",
-        ]);
-
-        for pos in closed_vec {
-            let close_price = if pos.token_amount > 0.0 {
-                pos.sol_received / pos.token_amount
-            } else {
-                0.0
-            };
-            let profit_pct = if pos.sol_spent > 0.0 {
-                ((pos.sol_received - pos.sol_spent) / pos.sol_spent) * 100.0
-            } else {
-                0.0
-            };
-
-            let profit_sol = pos.sol_received - pos.sol_spent;
-
-            table_closed.add_row([
-                "(closed)".into(),
-                format!("{:.9}", pos.entry_price),
-                format!("{:.9}", close_price),
-                format!("{:+.2}%", profit_pct),
-                format!("{:+.9}", profit_sol), // EXACT PROFIT SOL
-                format!("{:.9}", pos.peak_price),
-                format!("{:.9}", pos.token_amount),
-                format!("{:.9}", pos.sol_spent),
-                format!("{:.9}", pos.sol_received),
-                format_duration_ago(pos.open_time),
-                pos.close_time.map(format_duration_ago).unwrap_or_else(|| "-".into()),
-            ]);
-        }
-
-        println!("📁 [Recent Closed Positions]\n{}\n", table_closed);
-    }
-}

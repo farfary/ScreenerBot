@@ -6,6 +6,8 @@
 //! • BATCH PRICE FETCHING: Reduces RPC costs by fetching multiple accounts
 //! -------------------------------------------------------------
 
+use crate::prelude::*;
+
 use std::{ collections::HashMap, fs::File, io::BufReader, time::Instant };
 
 use anyhow::{ anyhow, Result };
@@ -15,8 +17,6 @@ use rayon::prelude::*;
 use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
-
-use crate::utilitis::*;
 
 const POOL_CACHE_FILE: &str = "pool_cache.json";
 

@@ -1,5 +1,7 @@
 #![allow(warnings)]
 
+use crate::prelude::*;
+
 use anyhow::{ Context, Result };
 use base64::{ engine::general_purpose, Engine };
 use reqwest::Client;
@@ -7,17 +9,9 @@ use serde_json::Value;
 use solana_sdk::{ signature::{ Keypair, Signer }, transaction::VersionedTransaction };
 use solana_client::rpc_client::RpcClient;
 use std::time::Duration;
-use std::str::FromStr; // ← add this one line
-
-use crate::configs::CONFIGS;
-use crate::helpers::get_biggest_token_amount;
-
+use std::str::FromStr;
 use bs58;
 use solana_sdk::{ pubkey::Pubkey };
-
-use crate::utilitis::effective_swap_price;
-use crate::configs::{ BLACKLIST };
-
 use std::collections::HashSet;
 use std::fs::{ OpenOptions, File };
 use std::io::{ BufRead, BufReader, Write };
@@ -33,13 +27,13 @@ pub async fn buy_gmgn(
 ) -> Result<String> {
     // -------- 0. setup -----------------------------------------------------
     let wallet = {
-        let bytes = bs58::decode(&CONFIGS.main_wallet_private).into_vec()?;
+        let bytes = bs58::decode(&crate::configs::CONFIGS.main_wallet_private).into_vec()?;
         Keypair::try_from(&bytes[..])?
     };
     let wallet_pk = wallet.pubkey();
     let owner = wallet_pk.to_string();
     let client = Client::new();
-    let rpc_client = RpcClient::new(CONFIGS.rpc_url.clone());
+    let rpc_client = RpcClient::new(crate::configs::CONFIGS.rpc_url.clone());
     let token_mint_pk = Pubkey::from_str(token_mint_address).context("bad token mint pubkey")?;
 
     // -------- 1. get quote --------------------------------------------------
@@ -189,12 +183,12 @@ pub async fn sell_all_gmgn(
 
     // load wallet
     let wallet = {
-        let bytes = bs58::decode(&CONFIGS.main_wallet_private).into_vec()?;
+        let bytes = bs58::decode(&crate::configs::CONFIGS.main_wallet_private).into_vec()?;
         Keypair::try_from(&bytes[..])?
     };
     let owner = wallet.pubkey().to_string();
     let client = Client::new();
-    let rpc_client = RpcClient::new(CONFIGS.rpc_url.clone());
+    let rpc_client = RpcClient::new(crate::configs::CONFIGS.rpc_url.clone());
 
     // get token balance (lamports)
     let in_amount = get_biggest_token_amount(token_mint_address);

@@ -1,4 +1,4 @@
-mod utilitis;
+mod prelude;
 mod dexscreener;
 mod trader;
 mod configs;
@@ -17,17 +17,11 @@ mod pool_pumpfun2;
 mod persistence;
 mod pool_price;
 
+use prelude::*;
 
-use anyhow::Result;
-use tokio::task;
-use pool_price::flush_pool_cache_to_disk_nonblocking;
-use utilitis::{install_sigint_handler, SHUTDOWN};
 
-use once_cell::sync::Lazy;
-use std::{env, process, sync::atomic::Ordering};
 
-/// All command‑line arguments captured at startup.
-pub static ARGS: Lazy<Vec<String>> = Lazy::new(|| env::args().collect());
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -66,21 +60,3 @@ async fn main() -> Result<()> {
     process::exit(0);
 }
 
-/// Waits until either Ctrl‑C (SIGINT) or SIGTERM (from systemd) is received.
-async fn wait_for_shutdown_signal() {
-    #[cfg(unix)]
-    {
-        use tokio::signal::unix::{signal, SignalKind};
-        let mut term = signal(SignalKind::terminate())
-            .expect("failed to install SIGTERM handler");
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {},
-            _ = term.recv()             => {},
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = tokio::signal::ctrl_c().await;
-    }
-}
