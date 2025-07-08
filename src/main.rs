@@ -19,10 +19,6 @@ mod pool_price;
 
 use prelude::*;
 
-
-
-
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1 ─ install signal handlers
@@ -59,4 +55,3 @@ async fn main() -> Result<()> {
     println!("✅ graceful shutdown complete.");
     process::exit(0);
 }
-
