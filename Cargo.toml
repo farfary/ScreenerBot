@@ -48,6 +48,15 @@ solana-transaction-status = "2.3.3"
 # UI / Other dependencies
 calamine = "0.18"
 once_cell = "1.21.1"
+
+# Web server dependencies
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+tokio-tungstenite = "0.21"
+futures = "0.3"
+uuid = { version = "1.0", features = ["v4"] }
+parking_lot = "0.12"
 rfd = "0.12"
 rand = "0.8"
 colored = "2.0"
@@ -55,13 +64,11 @@ jup-ag = "0.8.0"
 reqwest = { version = "0.11", features = ["json", "blocking", "rustls-tls"] }
 base64 = "0.22.1"
 bincode = "1.3.3"
-futures = "0.3"
 rayon = "1.7"
 teloxide = { version = "0.9.1", features = ["macros"] }
 tokio-util = { version = "0.6", features = ["codec"] }
 num-format = "0.4"
 
-tokio-tungstenite = { version = "0.17", features = ["native-tls"] }
 futures-util = "0.3"
 url = "2.4"
 lazy_static = "1.4"
@@ -84,7 +91,6 @@ toml = "0.8.23"
 prettytable-rs = "0.10.0"
 comfy-table = "7.1.4"
 borsh = "1.3"   # Use the official borsh crate
-parking_lot = "0.12.4"
 crossterm = "0.29.0"
 tabled = "0.15"
 owo-colors = "4"

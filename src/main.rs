@@ -8,6 +8,7 @@ mod pools;
 mod persistence;
 mod pool_price;
 mod strategy;
+mod web_server;
 
 use prelude::*;
 
@@ -22,6 +23,13 @@ async fn main() -> Result<()> {
     // 3 ─ start background services (each spawns its own task and returns)
     dexscreener::start_dexscreener_loop();
     trader::start_trader_loop();
+
+    // 3.1 ─ start web server
+    tokio::spawn(async move {
+        if let Err(e) = web_server::start_web_server().await {
+            eprintln!("Web server error: {}", e);
+        }
+    });
 
     // 4 ─ periodic autosave task
     let autosaver = task::spawn(persistence::autosave_loop());
@@ -42,6 +50,8 @@ async fn main() -> Result<()> {
     // 8 ─ final flush to disk
     persistence::save_open().await;
     persistence::save_closed().await;
+    persistence::save_all_closed().await;
+    persistence::save_trading_history().await;
     flush_pool_cache_to_disk_nonblocking();
 
     println!("✅ graceful shutdown complete.");
