@@ -11,9 +11,16 @@ use serde::{ Serialize, Deserialize };
 use tokio::{ fs, io::AsyncReadExt, io::AsyncWriteExt };
 use std::collections::{ VecDeque, HashMap };
 
+// ────────────── CONFIGURATION ──────────────
+// Cache files
 const TOKEN_CACHE_FILE: &str = ".tokens_cache.json";
 const RUGCHECK_CACHE_FILE: &str = ".rugcheck_cache.json";
 const DEXSCREENER_CACHE_FILE: &str = ".dexscreener_cache.json";
+
+// Configuration constants - modify these to change behavior
+const ENABLE_RUGCHECK: bool = false; // Set to false to disable rugcheck entirely
+const RUGCHECK_CACHE_DAYS: u64 = 7; // Cache rugcheck data for N days (default: 7)
+const DEXSCREENER_CACHE_MINUTES: u64 = 30; // Cache dexscreener data for N minutes (default: 30)
 
 // Cache structure for rugcheck data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,27 +237,27 @@ async fn save_dexscreener_cache(cache: &DexScreenerCache, debug: bool) {
     }
 }
 
-/// Check if rugcheck data is still valid (less than 24 hours old)
-fn is_rugcheck_data_valid(data: &RugCheckData, max_age_hours: u64) -> bool {
+/// Check if rugcheck data is still valid (configurable cache period)
+fn is_rugcheck_data_valid(data: &RugCheckData) -> bool {
     if let Some(checked_at) = data.checked_at {
         let now = std::time::SystemTime
             ::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        return now - checked_at < max_age_hours * 3600;
+        return now - checked_at < RUGCHECK_CACHE_DAYS * 24 * 3600;
     }
     false
 }
 
-/// Check if dexscreener data is still valid (less than 30 minutes old)
-fn is_dexscreener_data_valid(data: &DexScreenerData, max_age_minutes: u64) -> bool {
+/// Check if dexscreener data is still valid (configurable cache period)
+fn is_dexscreener_data_valid(data: &DexScreenerData) -> bool {
     let now = std::time::SystemTime
         ::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    now - data.last_updated < max_age_minutes * 60
+    now - data.last_updated < DEXSCREENER_CACHE_MINUTES * 60
 }
 
 // ────────────── GLOBAL STATIC ──────────────
@@ -267,7 +274,7 @@ async fn fetch_rug_check_data(
 ) -> Option<RugCheckData> {
     // Check cache first
     if let Some(cached_data) = rugcheck_cache.data.get(mint) {
-        if is_rugcheck_data_valid(cached_data, 24) {
+        if is_rugcheck_data_valid(cached_data) {
             if debug {
                 println!("📋 [RugCheck] Using cached data for: {}", mint);
             }
@@ -361,6 +368,14 @@ async fn fetch_rug_check_data(
 }
 
 pub fn is_safe_to_trade(token: &Token, debug: bool) -> bool {
+    // If rugcheck is disabled, always return true
+    if !ENABLE_RUGCHECK {
+        if debug {
+            println!("🔓 [Safety] RugCheck disabled - allowing all tokens");
+        }
+        return true;
+    }
+
     let rug_data = &token.rug_check;
 
     // Basic safety checks
@@ -470,6 +485,14 @@ pub fn is_safe_to_trade(token: &Token, debug: bool) -> bool {
 
 /// Get a detailed rug check report for a specific token
 pub async fn get_rug_check_report(mint: &str, debug: bool) -> Option<RugCheckData> {
+    // Return None if rugcheck is disabled
+    if !ENABLE_RUGCHECK {
+        if debug {
+            println!("🔓 [RugCheck] RugCheck is disabled - returning None");
+        }
+        return None;
+    }
+
     let client = reqwest::Client::new();
     let mut rugcheck_cache = load_rugcheck_cache(debug).await;
     fetch_rug_check_data(&client, mint, debug, &mut rugcheck_cache).await
@@ -477,6 +500,14 @@ pub async fn get_rug_check_report(mint: &str, debug: bool) -> Option<RugCheckDat
 
 /// Ensure RugCheck data is cached for all tokens in the watch list
 pub async fn ensure_watchlist_rugcheck_cached(debug: bool) {
+    // Skip if rugcheck is disabled
+    if !ENABLE_RUGCHECK {
+        if debug {
+            println!("🔓 [RugCheck] RugCheck is disabled - skipping watchlist update");
+        }
+        return;
+    }
+
     let client = reqwest::Client::new();
     let mut rugcheck_cache = load_rugcheck_cache(debug).await;
     let mut tokens = TOKENS.write().await;
@@ -541,7 +572,7 @@ async fn fetch_dexscreener_data(
 ) -> Option<DexScreenerData> {
     // Check cache first
     if let Some(cached_data) = dexscreener_cache.data.get(mint) {
-        if is_dexscreener_data_valid(cached_data, 30) {
+        if is_dexscreener_data_valid(cached_data) {
             if debug {
                 println!("📋 [DexScreener] Using cached data for: {}", mint);
             }
@@ -767,7 +798,7 @@ fn apply_cached_dexscreener_data(
     debug: bool
 ) -> bool {
     if let Some(cached_data) = dexscreener_cache.data.get(&token.mint) {
-        if is_dexscreener_data_valid(cached_data, 30) {
+        if is_dexscreener_data_valid(cached_data) {
             token.dex_id = cached_data.dex_id.clone();
             token.url = cached_data.url.clone();
             token.pair_address = cached_data.pair_address.clone();
@@ -1089,7 +1120,7 @@ pub fn start_dexscreener_loop() {
 
             for token in &mut new_tokens {
                 if let Some(cached_rug) = rugcheck_cache.data.get(&token.mint) {
-                    if is_rugcheck_data_valid(cached_rug, 24) {
+                    if is_rugcheck_data_valid(cached_rug) {
                         token.rug_check = cached_rug.clone();
                         if debug {
                             println!(
@@ -1173,8 +1204,7 @@ pub fn start_dexscreener_loop() {
                                                     pair_created_at: 0,
                                                     last_updated: 0,
                                                 })
-                                            ),
-                                            30
+                                            )
                                         )
                                     {
                                         update_token_with_dexscreener_data(
@@ -1195,139 +1225,143 @@ pub fn start_dexscreener_loop() {
             save_dexscreener_cache(&dexscreener_cache, debug).await;
 
             // ── Fetch rug check data for all tokens ──────────────────────
-            if debug {
-                println!(
-                    "🔍 [RugCheck] Fetching rug check data for {} tokens...",
-                    new_tokens.len()
-                );
-            }
-
-            // Load rugcheck cache
             let mut rugcheck_cache = load_rugcheck_cache(debug).await;
 
-            // Fetch rug check data for tokens in batches to avoid overwhelming the API
-            let rug_check_batch_size = 5; // Conservative batch size
-            let total_tokens = new_tokens.len();
-
-            for batch_idx in 0..(total_tokens + rug_check_batch_size - 1) / rug_check_batch_size {
-                let start_idx = batch_idx * rug_check_batch_size;
-                let end_idx = std::cmp::min(start_idx + rug_check_batch_size, total_tokens);
-
+            if ENABLE_RUGCHECK {
                 if debug {
                     println!(
-                        "🔍 [RugCheck] Processing batch {}/{}",
-                        batch_idx + 1,
-                        (total_tokens + rug_check_batch_size - 1) / rug_check_batch_size
+                        "🔍 [RugCheck] Fetching rug check data for {} tokens...",
+                        new_tokens.len()
                     );
                 }
 
-                for token_idx in start_idx..end_idx {
-                    let token = &mut new_tokens[token_idx];
+                // Fetch rug check data for tokens in batches to avoid overwhelming the API
+                let rug_check_batch_size = 5; // Conservative batch size
+                let total_tokens = new_tokens.len();
 
-                    // Skip if we already have recent rug check data (less than 24 hours old)
-                    if let Some(checked_at) = token.rug_check.checked_at {
-                        let now = std::time::SystemTime
-                            ::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
+                for batch_idx in 0..(total_tokens + rug_check_batch_size - 1) /
+                    rug_check_batch_size {
+                    let start_idx = batch_idx * rug_check_batch_size;
+                    let end_idx = std::cmp::min(start_idx + rug_check_batch_size, total_tokens);
 
-                        // Skip if checked within the last day (24 hours = 86400 seconds)
-                        if now - checked_at < 86400 {
+                    if debug {
+                        println!(
+                            "🔍 [RugCheck] Processing batch {}/{}",
+                            batch_idx + 1,
+                            (total_tokens + rug_check_batch_size - 1) / rug_check_batch_size
+                        );
+                    }
+
+                    for token_idx in start_idx..end_idx {
+                        let token = &mut new_tokens[token_idx];
+
+                        // Skip if we already have recent rug check data
+                        if let Some(checked_at) = token.rug_check.checked_at {
+                            let now = std::time::SystemTime
+                                ::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+
+                            // Skip if checked within the configured cache period
+                            if now - checked_at < RUGCHECK_CACHE_DAYS * 24 * 60 * 60 {
+                                if debug {
+                                    println!(
+                                        "🔍 [RugCheck] Skipping {} - cached data is {} hours old",
+                                        token.symbol,
+                                        (now - checked_at) / 3600
+                                    );
+                                }
+                                continue;
+                            }
+                        }
+
+                        // Use cache-enabled fetch function
+                        if
+                            let Some(rug_data) = fetch_rug_check_data(
+                                &client_insert,
+                                &token.mint,
+                                debug,
+                                &mut rugcheck_cache
+                            ).await
+                        {
+                            token.rug_check = rug_data;
+
                             if debug {
                                 println!(
-                                    "🔍 [RugCheck] Skipping {} - cached data is {} hours old",
+                                    "✅ [RugCheck] {} ({}): score={}, normalized={}, rugged={}",
                                     token.symbol,
-                                    (now - checked_at) / 3600
+                                    token.mint,
+                                    token.rug_check.score,
+                                    token.rug_check.score_normalised,
+                                    token.rug_check.rugged
                                 );
                             }
-                            continue;
                         }
+
+                        // Small delay between requests to be respectful to the API
+                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
                     }
 
-                    // Use cache-enabled fetch function
-                    if
-                        let Some(rug_data) = fetch_rug_check_data(
-                            &client_insert,
-                            &token.mint,
-                            debug,
-                            &mut rugcheck_cache
-                        ).await
-                    {
-                        token.rug_check = rug_data;
-
-                        if debug {
-                            println!(
-                                "✅ [RugCheck] {} ({}): score={}, normalized={}, rugged={}",
-                                token.symbol,
-                                token.mint,
-                                token.rug_check.score,
-                                token.rug_check.score_normalised,
-                                token.rug_check.rugged
-                            );
-                        }
-                    }
-
-                    // Small delay between requests to be respectful to the API
-                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    // Longer delay between batches
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
-
-                // Longer delay between batches
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            } else if debug {
+                println!("🔓 [RugCheck] RugCheck is disabled - skipping data fetch");
             }
 
-            const MAX_TOKENS: usize = 50;
+            const MAX_TOKENS: usize = 100;
             const MIN_PRICE_SOL: f64 = 0.000000001;
             const MAX_PRICE_SOL: f64 = 0.01;
 
             const MIN_VOLUME_USD: f64 = 5000.0;
             const MIN_FDV_USD: f64 = 20_000.0;
-            const MAX_FDV_USD: f64 = 50_000_000.0;
+            const MAX_FDV_USD: f64 = 500_000_000.0;
             const MIN_LIQUIDITY_SOL: f64 = 10.0;
 
             const MAX_PRICE_CHANGE_M5: f64 = 10.0;
-            const MAX_PRICE_CHANGE_H1: f64 = 10.0;
-            const MAX_PRICE_CHANGE_H6: f64 = 20.0;
-            const MAX_PRICE_CHANGE_H24: f64 = 20.0;
+            const MAX_PRICE_CHANGE_H1: f64 = 80.0;
+            const MAX_PRICE_CHANGE_H6: f64 = 100.0;
+            const MAX_PRICE_CHANGE_H24: f64 = 180.0;
 
-            const MIN_BUYS_24H: u64 = 500; // at least 10 buys in 24h
+            const MIN_BUYS_24H: u64 = 50; // at least 10 buys in 24h
             const MAX_DUMP_24H: f64 = -50.0; // reject if -50% or worse in 24h
 
-            // Apply comprehensive filtering including rug check safety
-            new_tokens.retain(|t| {
-                let price = t.price_native.parse::<f64>().unwrap_or(0.0);
-                let vol = t.volume_usd.parse::<f64>().unwrap_or(0.0);
-                let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
-                let pooled_sol = t.liquidity.base + t.liquidity.quote;
-                let has_image = !t.image_url.trim().is_empty();
+            // // Apply comprehensive filtering including rug check safety
+            // new_tokens.retain(|t| {
+            //     let price = t.price_native.parse::<f64>().unwrap_or(0.0);
+            //     let vol = t.volume_usd.parse::<f64>().unwrap_or(0.0);
+            //     let fdv = t.fdv_usd.parse::<f64>().unwrap_or(0.0);
+            //     let pooled_sol = t.liquidity.base + t.liquidity.quote;
+            //     let has_image = !t.image_url.trim().is_empty();
 
-                let price_ok =
-                    t.price_change.m5.abs() <= MAX_PRICE_CHANGE_M5 &&
-                    t.price_change.h1.abs() <= MAX_PRICE_CHANGE_H1 &&
-                    t.price_change.h6.abs() <= MAX_PRICE_CHANGE_H6 &&
-                    t.price_change.h24.abs() <= MAX_PRICE_CHANGE_H24;
+            //     let price_ok =
+            //         t.price_change.m5.abs() <= MAX_PRICE_CHANGE_M5 &&
+            //         t.price_change.h1.abs() <= MAX_PRICE_CHANGE_H1 &&
+            //         t.price_change.h6.abs() <= MAX_PRICE_CHANGE_H6 &&
+            //         t.price_change.h24.abs() <= MAX_PRICE_CHANGE_H24;
 
-                let not_rugged = t.price_change.h24 > MAX_DUMP_24H;
-                let not_dead = t.txns.h24.buys >= MIN_BUYS_24H;
+            //     let not_rugged = t.price_change.h24 > MAX_DUMP_24H;
+            //     let not_dead = t.txns.h24.buys >= MIN_BUYS_24H;
 
-                // Add rug check safety validation
-                let rug_check_safe = is_safe_to_trade(t, debug);
+            //     // Add rug check safety validation
+            //     let rug_check_safe = is_safe_to_trade(t, debug);
 
-                price >= MIN_PRICE_SOL &&
-                    price <= MAX_PRICE_SOL &&
-                    vol >= MIN_VOLUME_USD &&
-                    fdv >= MIN_FDV_USD &&
-                    fdv <= MAX_FDV_USD &&
-                    has_image &&
-                    pooled_sol >= MIN_LIQUIDITY_SOL &&
-                    !t.symbol.is_empty() &&
-                    !t.name.is_empty() &&
-                    !t.price_usd.is_empty() &&
-                    price_ok &&
-                    not_rugged &&
-                    not_dead &&
-                    rug_check_safe // Include rug check safety
-            });
+            //     price >= MIN_PRICE_SOL &&
+            //         price <= MAX_PRICE_SOL &&
+            //         vol >= MIN_VOLUME_USD &&
+            //         fdv >= MIN_FDV_USD &&
+            //         fdv <= MAX_FDV_USD &&
+            //         has_image &&
+            //         pooled_sol >= MIN_LIQUIDITY_SOL &&
+            //         !t.symbol.is_empty() &&
+            //         !t.name.is_empty() &&
+            //         !t.price_usd.is_empty() &&
+            //         price_ok &&
+            //         not_rugged &&
+            //         not_dead &&
+            //         rug_check_safe // Include rug check safety
+            // });
 
             if debug {
                 println!("✅ {} tokens remain after price filter", new_tokens.len());
@@ -1402,14 +1436,18 @@ pub fn start_dexscreener_loop() {
             }
 
             // Save rugcheck and dexscreener caches
+            if ENABLE_RUGCHECK {
+                if debug {
+                    println!("💾 Saving rugcheck cache with {} entries", rugcheck_cache.data.len());
+                }
+                save_rugcheck_cache(&rugcheck_cache, debug).await;
+            }
             if debug {
-                println!("💾 Saving rugcheck cache with {} entries", rugcheck_cache.data.len());
                 println!(
                     "💾 Saving dexscreener cache with {} entries",
                     dexscreener_cache.data.len()
                 );
             }
-            save_rugcheck_cache(&rugcheck_cache, debug).await;
             save_dexscreener_cache(&dexscreener_cache, debug).await;
 
             println!("✅ TOKENS updated: {}", TOKENS.read().await.len());

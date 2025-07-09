@@ -31,7 +31,6 @@ use solana_transaction_status::{
 };
 use std::sync::atomic::{ AtomicBool, Ordering };
 use tokio::time::{ sleep, Duration };
-use std::collections::{ VecDeque };
 use tokio::task;
 use futures::FutureExt;
 use std::collections::HashSet;
@@ -42,7 +41,7 @@ use tokio::sync::Mutex;
 #[derive(Debug, Clone)]
 pub struct PoolInfo {
     pub address: String,
-    pub source: String, // "dexscreener" or "geckoterminal"
+    pub source: String, // "dexscreener"
     pub name: Option<String>,
     pub liquidity_usd: Option<f64>,
     pub volume_24h_usd: Option<f64>,
@@ -382,7 +381,7 @@ pub static PRICE_CACHE: Lazy<RwLock<HashMap<String, (u64, f64)>>> = Lazy::new(||
     RwLock::new(HashMap::new())
 );
 
-/// Pull every *Solana* `pairAddress` for the given token mint from both DexScreener and GeckoTerminal, with 2h cache.
+/// Pull every *Solana* `pairAddress` for the given token mint from DexScreener, with 2h cache.
 pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
     let cache_path = ".solana_pairs_cache.json";
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
@@ -410,12 +409,12 @@ pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
         }
     }
 
-    // Fetch fresh from both sources
-    println!("🔄 Fetching pools from both DexScreener and GeckoTerminal...");
+    // Fetch fresh from DexScreener
+    println!("🔄 Fetching pools from DexScreener...");
     let pools = fetch_combined_pools(token_mint)?;
 
     if pools.is_empty() {
-        bail!("No Solana pools found for mint {} from any source", token_mint);
+        bail!("No Solana pools found for mint {} from DexScreener", token_mint);
     }
 
     let addresses: Vec<String> = pools
@@ -591,131 +590,6 @@ pub async fn add_skipped_sell(mint: &str) {
     }
 }
 
-/// returns `Some(rsi)` if `values` has `period+1` points, otherwise `None`
-pub fn rsi(values: &VecDeque<f64>, period: usize) -> Option<f64> {
-    if values.len() <= period {
-        return None;
-    }
-    let mut gain = 0.0;
-    let mut loss = 0.0;
-    for i in values.len() - period..values.len() - 1 {
-        let diff = values[i + 1] - values[i];
-        if diff >= 0.0 {
-            gain += diff;
-        } else {
-            loss += -diff;
-        }
-    }
-    if loss == 0.0 {
-        return Some(100.0);
-    }
-    let rs = gain / loss;
-    Some(100.0 - 100.0 / (1.0 + rs))
-}
-
-#[inline]
-pub fn pct_change(old: f64, new_: f64) -> f64 {
-    ((new_ - old) / old) * 100.0
-}
-
-pub fn ema(series: &VecDeque<f64>, period: usize) -> Option<f64> {
-    if series.len() < period {
-        return None;
-    }
-    let k = 2.0 / ((period as f64) + 1.0);
-    let mut e = series[series.len() - period];
-    for i in series.len() - period + 1..series.len() {
-        e = series[i] * k + e * (1.0 - k);
-    }
-    Some(e)
-}
-
-pub fn atr_pct(hist: &VecDeque<f64>, period: usize) -> Option<f64> {
-    if hist.len() < period + 1 {
-        return None;
-    }
-    let mut sum = 0.0;
-    for i in hist.len() - period + 1..hist.len() {
-        let pct = ((hist[i] - hist[i - 1]).abs() / hist[i - 1]) * 100.0;
-        sum += pct;
-    }
-    Some(sum / (period as f64)) // average % true range
-}
-
-/// Fetch pools from GeckoTerminal API with different sorting options
-pub fn fetch_gecko_pools(token_mint: &str, sort: &str) -> Result<Vec<PoolInfo>> {
-    let valid_sorts = ["h24_volume_usd_liquidity_desc", "h24_tx_count_desc", "h24_volume_usd_desc"];
-    if !valid_sorts.contains(&sort) {
-        return Err(anyhow!("Invalid sort parameter. Valid options: {:?}", valid_sorts));
-    }
-
-    let url = format!(
-        "https://api.geckoterminal.com/api/v2/networks/solana/tokens/{}/pools?include=base_token%2C%20quote_token%2C%20dex&page=1&sort={}",
-        token_mint,
-        sort
-    );
-
-    println!("🦎 Fetching GeckoTerminal pools with sort: {}", sort);
-    let json: Value = Client::new().get(&url).send()?.json()?;
-
-    let mut pools = Vec::new();
-    if let Some(data) = json.get("data").and_then(|v| v.as_array()) {
-        for pool in data {
-            if let Some(attrs) = pool.get("attributes") {
-                let address = attrs
-                    .get("address")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-
-                let name = attrs
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-
-                let liquidity_usd = attrs
-                    .get("reserve_in_usd")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| s.parse::<f64>().ok());
-
-                let volume_24h_usd = attrs
-                    .get("volume_usd")
-                    .and_then(|v| v.get("h24"))
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| s.parse::<f64>().ok());
-
-                let tx_count_24h = attrs
-                    .get("transactions")
-                    .and_then(|v| v.get("h24"))
-                    .and_then(|v| v.get("buys"))
-                    .and_then(|v| v.as_u64())
-                    .and_then(|buys| {
-                        attrs
-                            .get("transactions")
-                            .and_then(|v| v.get("h24"))
-                            .and_then(|v| v.get("sells"))
-                            .and_then(|v| v.as_u64())
-                            .map(|sells| buys + sells)
-                    });
-
-                if !address.is_empty() {
-                    pools.push(PoolInfo {
-                        address,
-                        source: "geckoterminal".to_string(),
-                        name,
-                        liquidity_usd,
-                        volume_24h_usd,
-                        tx_count_24h,
-                    });
-                }
-            }
-        }
-    }
-
-    println!("🦎 Found {} pools from GeckoTerminal", pools.len());
-    Ok(pools)
-}
-
 /// Fetch pools from DexScreener API and convert to PoolInfo format
 pub fn fetch_dexscreener_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
     let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", token_mint);
@@ -783,7 +657,7 @@ pub fn fetch_dexscreener_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
     Ok(pools)
 }
 
-/// Fetch pools from both DexScreener and GeckoTerminal, combine and deduplicate
+/// Fetch pools from DexScreener only
 pub fn fetch_combined_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
     let mut all_pools = Vec::new();
     let mut seen_addresses = HashSet::new();
@@ -800,22 +674,6 @@ pub fn fetch_combined_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
         Err(e) => println!("⚠️ DexScreener fetch failed: {}", e),
     }
 
-    // Fetch from GeckoTerminal with different sorting options
-    let gecko_sorts = ["h24_volume_usd_desc", "h24_tx_count_desc", "h24_volume_usd_liquidity_desc"];
-
-    for sort in &gecko_sorts {
-        match fetch_gecko_pools(token_mint, sort) {
-            Ok(gecko_pools) => {
-                for pool in gecko_pools {
-                    if seen_addresses.insert(pool.address.clone()) {
-                        all_pools.push(pool);
-                    }
-                }
-            }
-            Err(e) => println!("⚠️ GeckoTerminal fetch failed for sort {}: {}", sort, e),
-        }
-    }
-
     // Sort by liquidity (highest first), then by volume
     all_pools.sort_by(|a, b| {
         let a_liq = a.liquidity_usd.unwrap_or(0.0);
@@ -829,7 +687,7 @@ pub fn fetch_combined_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
             .then_with(|| b_vol.partial_cmp(&a_vol).unwrap_or(std::cmp::Ordering::Equal))
     });
 
-    println!("🔗 Combined {} unique pools from both sources", all_pools.len());
+    println!("� Found {} pools from DexScreener", all_pools.len());
 
     // Print summary of pools found
     for (i, pool) in all_pools.iter().take(5).enumerate() {

@@ -25,6 +25,7 @@ pub struct Position {
     pub open_time: DateTime<Utc>,
     pub close_time: Option<DateTime<Utc>>,
     pub last_dca_price: f64,
+    pub last_dca_time: DateTime<Utc>, // Time of last DCA for cooldown tracking
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -229,7 +229,7 @@ pub async fn sell_all_gmgn(
         in_amount,
         owner,
         SLIPPAGE_BPS,
-        FEE_RATE
+        TRANSACTION_FEE_SOL
     );
 
     // fetch quote

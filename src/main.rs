@@ -8,7 +8,6 @@ mod pools;
 mod persistence;
 mod pool_price;
 mod strategy;
-mod web_server;
 mod transaction_manager;
 
 use prelude::*;
@@ -56,12 +55,6 @@ async fn main() -> Result<()> {
     dexscreener::start_dexscreener_loop();
     trader::start_trader_loop();
 
-    // 3.1 ─ start web server
-    tokio::spawn(async move {
-        if let Err(e) = web_server::start_web_server().await {
-            eprintln!("Web server error: {}", e);
-        }
-    });
 
     // 4 ─ periodic autosave task
     let autosaver = task::spawn(persistence::autosave_loop());

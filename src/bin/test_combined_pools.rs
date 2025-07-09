@@ -4,10 +4,10 @@ fn main() -> anyhow::Result<()> {
     // Test token (the one from your example)
     let token_mint = "42orNZHxsH1SNUZX87btNs6LiAoXdqj1RRUgRxgppump";
 
-    println!("🧪 Testing combined pool fetching for token: {}", token_mint);
+    println!("🧪 Testing pool fetching for token: {}", token_mint);
     println!("{}", "─".repeat(60));
 
-    // Test individual sources first
+    // Test DexScreener source
     println!("\n📊 Testing DexScreener only:");
     match fetch_dexscreener_pools(token_mint) {
         Ok(pools) => {
@@ -19,31 +19,10 @@ fn main() -> anyhow::Result<()> {
         Err(e) => println!("❌ Error: {}", e),
     }
 
-    println!("\n🦎 Testing GeckoTerminal with different sorts:");
-    let sorts = ["h24_volume_usd_desc", "h24_tx_count_desc", "h24_volume_usd_liquidity_desc"];
-
-    for sort in &sorts {
-        println!("\n  Sort: {}", sort);
-        match fetch_gecko_pools(token_mint, sort) {
-            Ok(pools) => {
-                println!("  ✅ Found {} pools", pools.len());
-                for pool in pools.iter().take(2) {
-                    println!(
-                        "    - {} [{}] {}",
-                        pool.address,
-                        pool.source,
-                        pool.name.as_ref().unwrap_or(&"Unknown".to_string())
-                    );
-                }
-            }
-            Err(e) => println!("  ❌ Error: {}", e),
-        }
-    }
-
-    println!("\n🔗 Testing combined approach:");
+    println!("\n📊 Testing combined approach (DexScreener only):");
     match fetch_combined_pools(token_mint) {
         Ok(pools) => {
-            println!("✅ Total unique pools found: {}", pools.len());
+            println!("✅ Total pools found: {}", pools.len());
             println!("\nTop 5 pools by liquidity:");
             for (i, pool) in pools.iter().take(5).enumerate() {
                 println!("  {}. {} [{}]", i + 1, pool.address, pool.source);

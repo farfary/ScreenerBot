@@ -1,6 +1,4 @@
-#![allow(warnings)]
 use crate::prelude::*;
-use crate::web_server::MARKET_DATAFRAMES;
 use std::collections::VecDeque;
 use serde::{ Deserialize, Serialize };
 use std::fs;
@@ -51,17 +49,6 @@ struct CachedOHLCV {
     day_data: Vec<[f64; 6]>,
 }
 
-// Constants for caching
-const CACHE_DIR: &str = ".ohlcv_cache";
-const CACHE_DURATION_HOURS: u64 = 6; // Cache data for 6 hours
-const MAX_OHLCV_LIMIT: usize = 1000; // Maximum data points to fetch
-const DEFAULT_OHLCV_LIMIT: usize = 200; // Default amount of historical data
-
-// Constants for pre-trade data validation
-const MIN_MINUTE_DATA_POINTS: usize = 50; // Minimum minute data for trading
-const MIN_HOUR_DATA_POINTS: usize = 24; // Minimum hour data for trading
-const MIN_DAY_DATA_POINTS: usize = 7; // Minimum day data for trading
-const MIN_LEGACY_DATA_POINTS: usize = 32; // Minimum legacy price data for trading
 
 // Timeframe enum for different OHLCV intervals
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -173,297 +160,12 @@ pub struct MarketDataFrame {
     pub closes: VecDeque<f64>,
 }
 
-impl MarketDataFrame {
-    pub fn new() -> Self {
-        Self {
-            pool_address: String::new(),
-            base_token: String::new(),
-            quote_token: String::new(),
-            minute_data: TimeframeData::new(),
-            hour_data: TimeframeData::new(),
-            day_data: TimeframeData::new(),
-            last_updated: 0,
-            // Legacy fields for backward compatibility
-            prices: VecDeque::new(),
-            volumes: VecDeque::new(),
-            timestamps: VecDeque::new(),
-            highs: VecDeque::new(),
-            lows: VecDeque::new(),
-            opens: VecDeque::new(),
-            closes: VecDeque::new(),
-        }
-    }
 
-    pub fn new_with_pool_info(
-        pool_address: String,
-        base_token: String,
-        quote_token: String
-    ) -> Self {
-        Self {
-            pool_address,
-            base_token,
-            quote_token,
-            minute_data: TimeframeData::new(),
-            hour_data: TimeframeData::new(),
-            day_data: TimeframeData::new(),
-            last_updated: 0,
-            prices: VecDeque::new(),
-            volumes: VecDeque::new(),
-            timestamps: VecDeque::new(),
-            highs: VecDeque::new(),
-            lows: VecDeque::new(),
-            opens: VecDeque::new(),
-            closes: VecDeque::new(),
-        }
-    }
-
-    // Get timeframe data by enum
-    pub fn get_timeframe_data(&self, timeframe: Timeframe) -> &TimeframeData {
-        match timeframe {
-            Timeframe::Minute => &self.minute_data,
-            Timeframe::Hour => &self.hour_data,
-            Timeframe::Day => &self.day_data,
-        }
-    }
-
-    pub fn get_timeframe_data_mut(&mut self, timeframe: Timeframe) -> &mut TimeframeData {
-        match timeframe {
-            Timeframe::Minute => &mut self.minute_data,
-            Timeframe::Hour => &mut self.hour_data,
-            Timeframe::Day => &mut self.day_data,
-        }
-    }
-
-    // Load OHLCV data from GeckoTerminal API with caching
-    pub async fn load_historical_data(
-        &mut self,
-        pool_address: &str,
-        mint: &str
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Try to load from cache first
-        if let Ok(cached_data) = load_cached_ohlcv(pool_address).await {
-            if is_cache_valid(&cached_data) {
-                println!("📋 [CACHE] Using cached OHLCV data for pool {}", pool_address);
-                self.load_from_cached_data(&cached_data);
-                return Ok(());
-            }
-        }
-
-        // Fetch fresh data from GeckoTerminal API
-        println!("🌐 [GECKO] Fetching fresh OHLCV data for pool {}", pool_address);
-
-        // Fetch all timeframes
-        let minute_data = fetch_gecko_ohlcv(
-            pool_address,
-            Timeframe::Minute,
-            DEFAULT_OHLCV_LIMIT
-        ).await?;
-        let hour_data = fetch_gecko_ohlcv(
-            pool_address,
-            Timeframe::Hour,
-            DEFAULT_OHLCV_LIMIT
-        ).await?;
-        let day_data = fetch_gecko_ohlcv(pool_address, Timeframe::Day, 30).await?; // 30 days should be enough
-
-        // Load data into timeframes
-        self.load_timeframe_data(Timeframe::Minute, &minute_data.data.attributes.ohlcv_list);
-        self.load_timeframe_data(Timeframe::Hour, &hour_data.data.attributes.ohlcv_list);
-        self.load_timeframe_data(Timeframe::Day, &day_data.data.attributes.ohlcv_list);
-
-        // Update pool info
-        self.pool_address = pool_address.to_string();
-        self.base_token = minute_data.meta.base.symbol;
-        self.quote_token = minute_data.meta.quote.symbol;
-        self.last_updated = std::time::SystemTime
-            ::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        // Cache the data with all timeframes
-        let cache_data = CachedOHLCV {
-            pool_address: pool_address.to_string(),
-            timestamp_cached: self.last_updated,
-            base_token: self.base_token.clone(),
-            quote_token: self.quote_token.clone(),
-            minute_data: minute_data.data.attributes.ohlcv_list,
-            hour_data: hour_data.data.attributes.ohlcv_list,
-            day_data: day_data.data.attributes.ohlcv_list,
-        };
-        save_cached_ohlcv(&cache_data).await?;
-
-        // Update legacy price data with minute data for backward compatibility
-        self.update_legacy_data();
-
-        Ok(())
-    }
-
-    fn load_timeframe_data(&mut self, timeframe: Timeframe, ohlcv_list: &[[f64; 6]]) {
-        let timeframe_data = self.get_timeframe_data_mut(timeframe);
-
-        for ohlcv in ohlcv_list {
-            let [timestamp, open, high, low, close, volume] = *ohlcv;
-            timeframe_data.add_ohlcv(timestamp as u64, open, high, low, close, volume);
-        }
-    }
-
-    fn load_from_cached_data(&mut self, cached: &CachedOHLCV) {
-        self.pool_address = cached.pool_address.clone();
-        self.base_token = cached.base_token.clone();
-        self.quote_token = cached.quote_token.clone();
-        self.last_updated = cached.timestamp_cached;
-
-        // Load cached data for all timeframes
-        self.load_timeframe_data(Timeframe::Minute, &cached.minute_data);
-        self.load_timeframe_data(Timeframe::Hour, &cached.hour_data);
-        self.load_timeframe_data(Timeframe::Day, &cached.day_data);
-        self.update_legacy_data();
-    }
-
-    // Update legacy fields for backward compatibility
-    pub fn update_legacy_data(&mut self) {
-        // Use minute data for legacy compatibility
-        self.prices.clear();
-        self.volumes.clear();
-        self.timestamps.clear();
-        self.opens.clear();
-        self.highs.clear();
-        self.lows.clear();
-        self.closes.clear();
-
-        for i in 0..self.minute_data.len() {
-            if
-                let (
-                    Some(&timestamp),
-                    Some(&open),
-                    Some(&high),
-                    Some(&low),
-                    Some(&close),
-                    Some(&volume),
-                ) = (
-                    self.minute_data.timestamps.get(i),
-                    self.minute_data.opens.get(i),
-                    self.minute_data.highs.get(i),
-                    self.minute_data.lows.get(i),
-                    self.minute_data.closes.get(i),
-                    self.minute_data.volumes.get(i),
-                )
-            {
-                self.timestamps.push_back(timestamp);
-                self.opens.push_back(open);
-                self.highs.push_back(high);
-                self.lows.push_back(low);
-                self.closes.push_back(close);
-                self.volumes.push_back(volume);
-                self.prices.push_back(close); // Use close as price for legacy compatibility
-            }
-        }
-    }
-
-    pub fn add_price_data(&mut self, price: f64, volume: f64, timestamp: u64) {
-        self.prices.push_back(price);
-        self.volumes.push_back(volume);
-        self.timestamps.push_back(timestamp);
-        // For simplicity, use current price as OHLC for now
-        self.opens.push_back(price);
-        self.highs.push_back(price);
-        self.lows.push_back(price);
-        self.closes.push_back(price);
-
-        // Keep only last N entries
-        const MAX_SIZE: usize = 100;
-        if self.prices.len() > MAX_SIZE {
-            self.prices.pop_front();
-            self.volumes.pop_front();
-            self.timestamps.pop_front();
-            self.highs.pop_front();
-            self.lows.pop_front();
-            self.opens.pop_front();
-            self.closes.pop_front();
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.prices.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.prices.is_empty()
-    }
-
-    pub fn latest_price(&self) -> Option<f64> {
-        self.prices.back().copied()
-    }
-
-    pub fn price_history(&self) -> &VecDeque<f64> {
-        &self.prices
-    }
-
-    // Check if dataframe has sufficient data for reliable trading decisions
-    pub fn has_sufficient_data_for_trading(&self) -> (bool, String) {
-        let minute_count = self.minute_data.len();
-        let hour_count = self.hour_data.len();
-        let day_count = self.day_data.len();
-        let legacy_count = self.prices.len();
-
-        // Check each timeframe
-        let minute_ok = minute_count >= MIN_MINUTE_DATA_POINTS;
-        let hour_ok = hour_count >= MIN_HOUR_DATA_POINTS;
-        let day_ok = day_count >= MIN_DAY_DATA_POINTS;
-        let legacy_ok = legacy_count >= MIN_LEGACY_DATA_POINTS;
-
-        // Require at least minute data and legacy data to be sufficient
-        let has_minimum = minute_ok && legacy_ok;
-
-        // Create detailed status message
-        let status = format!(
-            "Data status: Minute({}/{}){} Hour({}/{}){} Day({}/{}){} Legacy({}/{}){}",
-            minute_count,
-            MIN_MINUTE_DATA_POINTS,
-            if minute_ok {
-                "✅"
-            } else {
-                "❌"
-            },
-            hour_count,
-            MIN_HOUR_DATA_POINTS,
-            if hour_ok {
-                "✅"
-            } else {
-                "❌"
-            },
-            day_count,
-            MIN_DAY_DATA_POINTS,
-            if day_ok {
-                "✅"
-            } else {
-                "❌"
-            },
-            legacy_count,
-            MIN_LEGACY_DATA_POINTS,
-            if legacy_ok {
-                "✅"
-            } else {
-                "❌"
-            }
-        );
-
-        (has_minimum, status)
-    }
-
-    // Check if we need to load more historical data
-    pub fn needs_historical_data_loading(&self) -> bool {
-        self.minute_data.len() < MIN_MINUTE_DATA_POINTS ||
-            self.hour_data.len() < MIN_HOUR_DATA_POINTS ||
-            self.day_data.len() < MIN_DAY_DATA_POINTS
-    }
-}
-
-/// supervisor that restarts the trader loop on *any* panic
+/// supervisor that starts both position monitoring and token discovery tasks
 pub fn start_trader_loop() {
     println!("🚀 [Screener] Trader loop started!");
 
-    // ── supervisor task ──────────────────────────────────────────────────────
+    // ── Start fast position monitoring task ──────────────────────────────────────────────────────
     task::spawn(async move {
         use std::panic::AssertUnwindSafe;
 
@@ -472,22 +174,49 @@ pub fn start_trader_loop() {
                 break;
             }
 
-            // run the heavy async logic and trap panics
-            let run = AssertUnwindSafe(trader_main_loop()).catch_unwind().await;
+            // run the position monitoring logic and trap panics
+            let run = AssertUnwindSafe(position_monitor_loop()).catch_unwind().await;
 
             match run {
                 Ok(_) => {
                     break;
                 } // exited via SHUTDOWN
                 Err(e) => {
-                    eprintln!("❌ Trader loop panicked: {e:?} — restarting in 1 s");
-                    sleep(Duration::from_secs(1)).await;
+                    eprintln!("💥 [PANIC] Position monitor crashed: {:?}", e);
+                    eprintln!("🔄 [RESTART] Restarting position monitor in 3 seconds...");
+                    sleep(Duration::from_secs(3)).await;
                 }
             }
         }
     });
 
-    task::spawn(async {
+    // ── Start token discovery task ──────────────────────────────────────────────────────
+    task::spawn(async move {
+        use std::panic::AssertUnwindSafe;
+
+        loop {
+            if SHUTDOWN.load(Ordering::SeqCst) {
+                break;
+            }
+
+            // run the token discovery logic and trap panics
+            let run = AssertUnwindSafe(token_discovery_loop()).catch_unwind().await;
+
+            match run {
+                Ok(_) => {
+                    break;
+                } // exited via SHUTDOWN
+                Err(e) => {
+                    eprintln!("💥 [PANIC] Token discovery crashed: {:?}", e);
+                    eprintln!("🔄 [RESTART] Restarting token discovery in 5 seconds...");
+                    sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+    });
+
+    // ── positions print task ──────────────────────────────────────────────────────
+    task::spawn(async move {
         loop {
             if SHUTDOWN.load(Ordering::SeqCst) {
                 break;
@@ -498,9 +227,10 @@ pub fn start_trader_loop() {
     });
 }
 
-async fn trader_main_loop() {
+/// Fast position monitoring task - checks open positions every 2 seconds
+async fn position_monitor_loop() {
     use std::time::Instant;
-    println!("🔥 Entered MAIN TRADER LOOP TASK");
+    println!("🔥 [POSITION MONITOR] Started fast position monitoring task");
 
     /* ── wait for TOKENS ──────────────────────────────── */
     loop {
@@ -510,12 +240,12 @@ async fn trader_main_loop() {
         if !TOKENS.read().await.is_empty() {
             break;
         }
-        println!("⏳ Waiting for TOKENS to be loaded …");
+        println!("⏳ [POSITION MONITOR] Waiting for TOKENS to be loaded …");
         sleep(Duration::from_secs(1)).await;
     }
-    println!("✅ TOKENS loaded! Proceeding with trader loop.");
+    println!("✅ [POSITION MONITOR] TOKENS loaded! Starting position monitoring.");
 
-    /* ── local state ──────────────────────────────────── */
+    /* ── local state for position monitoring ──────────────────────────────────── */
     let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
     let mut sell_failures: HashMap<String, u8> = HashMap::new(); // mint -> fails
 
@@ -524,37 +254,14 @@ async fn trader_main_loop() {
             return;
         }
 
-        /* ── build mint list ──────────────────────────── */
-        let mut all_mints: Vec<String> = {
-            let t = TOKENS.read().await;
-            t.iter()
-                .map(|tok| tok.mint.clone())
-                .collect()
-        };
-
-        // Add open positions to mint list
-        let open_position_mints: Vec<String> = {
+        // Get only open position mints for monitoring
+        let position_mints: Vec<String> = {
             let pos = OPEN_POSITIONS.read().await;
             pos.keys().cloned().collect()
         };
 
-        for mint in &open_position_mints {
-            if !all_mints.contains(mint) {
-                all_mints.push(mint.clone());
-            }
-        }
-
-        // Remove blacklisted mints
-        let filtered_mints: Vec<String> = {
-            let blacklist = BLACKLIST.read().await;
-            all_mints
-                .into_iter()
-                .filter(|mint| !blacklist.contains(mint))
-                .collect()
-        };
-
-        if filtered_mints.is_empty() {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+        if position_mints.is_empty() {
+            tokio::time::sleep(Duration::from_secs(2)).await;
             continue;
         }
 
@@ -564,39 +271,39 @@ async fn trader_main_loop() {
             continue;
         }
 
-        /* ── BATCH PRICE FETCHING (saves RPC costs!) ─────────── */
-        println!("🔄 [BATCH] Starting price update cycle for {} tokens...", filtered_mints.len());
+        /* ── BATCH PRICE FETCHING for positions only ─────────── */
+        println!("🔄 [POSITION MONITOR] Checking {} open positions...", position_mints.len());
         let cycle_start = Instant::now();
 
         let prices = tokio::task
             ::spawn_blocking({
-                let mints = filtered_mints.clone();
+                let mints = position_mints.clone();
                 move || batch_prices_from_pools(&crate::configs::RPC, &mints)
             }).await
             .unwrap_or_else(|e| {
-                eprintln!("❌ Batch price fetch panicked: {}", e);
+                eprintln!("❌ [POSITION MONITOR] Batch price fetch panicked: {}", e);
                 HashMap::new()
             });
 
         let successful_prices = prices.len();
-        let failed_prices = filtered_mints.len() - successful_prices;
+        let failed_prices = position_mints.len() - successful_prices;
 
         if successful_prices > 0 {
             println!(
-                "✅ [BATCH] Price cycle completed in {} ms - Success: {}/{} - Failed: {}",
+                "✅ [POSITION MONITOR] Price cycle completed in {} ms - Success: {}/{} - Failed: {}",
                 cycle_start.elapsed().as_millis(),
                 successful_prices,
-                filtered_mints.len(),
+                position_mints.len(),
                 failed_prices
             );
         } else {
             eprintln!(
-                "❌ [BATCH] No prices fetched successfully, falling back to individual fetches"
+                "❌ [POSITION MONITOR] No prices fetched successfully, falling back to individual fetches"
             );
         }
 
-        /* ── iterate mints and process with fetched prices ──────── */
-        for mint in filtered_mints {
+        /* ── iterate position mints and process with fetched prices ──────── */
+        for mint in position_mints {
             if SHUTDOWN.load(Ordering::SeqCst) {
                 return;
             }
@@ -689,64 +396,356 @@ async fn trader_main_loop() {
                 }
             };
 
-            // Get or create dataframe for this token
-            let mut dataframe = {
-                let dataframes = MARKET_DATAFRAMES.read().await;
-                dataframes.get(&mint).cloned().unwrap_or_else(MarketDataFrame::new)
+            let now = Instant::now();
+
+            // -- Check if this token has an open position
+            let open_positions = OPEN_POSITIONS.read().await;
+            let has_position = open_positions.contains_key(&mint);
+            drop(open_positions);
+
+            // Skip if no position for this token (position monitor only handles existing positions)
+            if !has_position {
+                continue;
+            }
+
+            /* ---------- DCA & trailing stop ---------- */
+            let pos_opt = {
+                let guard = OPEN_POSITIONS.read().await; // read-lock
+                guard.get(&mint).cloned() // clone the Position, no &refs
             };
 
-            // Try to load historical data if we don't have enough data
-            if dataframe.minute_data.len() < 50 {
-                // Try to find pool address for this mint and load historical data
-                if let Some(pool_address) = get_pool_address_for_mint(&mint).await {
-                    if let Err(e) = dataframe.load_historical_data(&pool_address, &mint).await {
-                        eprintln!("⚠️ Failed to load historical data for {}: {}", mint, e);
+            // ───────── POSITION MANAGEMENT (using strategy.rs) ───────────────────────────────
+            if let Some(mut pos) = pos_opt {
+                // Get strategy decision for this position
+                let action = evaluate_position(&token, &pos, current_price);
+
+                match action {
+                    PositionAction::DCA { sol_amount } => {
+                        let lamports = (sol_amount * 1_000_000_000.0) as u64;
+                        // Use consistent profit calculation for logging
+                        let current_value = current_price * pos.token_amount;
+                        let profit_sol = current_value - pos.sol_spent;
+                        let drop_pct = if pos.sol_spent > 0.0 {
+                            (profit_sol / pos.sol_spent) * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        // Store original position before DCA
+                        let original_position = pos.clone();
+
+                        match buy_gmgn(&mint, lamports).await {
+                            Ok(tx) => {
+                                let added = sol_amount / current_price;
+                                pos.token_amount += added;
+                                pos.sol_spent += sol_amount + TRANSACTION_FEE_SOL;
+                                pos.dca_count += 1;
+                                pos.entry_price = pos.sol_spent / pos.token_amount;
+                                pos.last_dca_price = current_price;
+                                pos.last_dca_time = Utc::now();
+
+                                // Create pending transaction record
+                                let pending_tx = PendingTransaction::new(
+                                    tx.clone(),
+                                    TransactionType::DCA,
+                                    mint.clone(),
+                                    symbol.clone(),
+                                    sol_amount,
+                                    added,
+                                    current_price,
+                                    Some(create_position_data(&original_position))
+                                );
+
+                                TransactionManager::add_pending_transaction(pending_tx).await.ok();
+                                OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
+                                save_open().await;
+
+                                println!(
+                                    "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}%) | {tx}",
+                                    pos.dca_count,
+                                    symbol,
+                                    current_price,
+                                    drop_pct
+                                );
+                            }
+                            Err(e) => {
+                                println!("❌ DCA failed: {}", e);
+                            }
+                        }
+                    }
+
+                    PositionAction::Sell { reason } => {
+                        // Check if sell for this mint is permanently blacklisted
+                        {
+                            let set = SKIPPED_SELLS.lock().await;
+                            if set.contains(&mint) {
+                                println!("⛔️ [SKIPPED_SELLS] Not selling {} because it's blacklisted after 10 fails.", mint);
+                                OPEN_POSITIONS.write().await.remove(&mint);
+                                notified_profit_bucket.remove(&mint);
+                                continue;
+                            }
+                        }
+
+                        match sell_all_gmgn(&mint, current_price).await {
+                            Ok(tx) => {
+                                // Use consistent profit calculation method
+                                let current_value = current_price * pos.token_amount;
+                                let profit_sol = current_value - pos.sol_spent;
+                                let profit_pct = if pos.sol_spent > 0.0 {
+                                    (profit_sol / pos.sol_spent) * 100.0
+                                } else {
+                                    0.0
+                                };
+                                let drop_from_peak =
+                                    ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
+
+                                println!(
+                                    "{} SELL {} at {:.2}% | {} | {tx}",
+                                    if reason.contains("stop_loss") {
+                                        "⛔️ [STOP LOSS]"
+                                    } else {
+                                        "🔴"
+                                    },
+                                    symbol,
+                                    profit_pct,
+                                    reason
+                                );
+
+                                // Create pending transaction record
+                                let pending_tx = PendingTransaction::new(
+                                    tx.clone(),
+                                    TransactionType::Sell,
+                                    mint.clone(),
+                                    symbol.clone(),
+                                    profit_sol,
+                                    pos.token_amount,
+                                    current_price,
+                                    Some(create_position_data(&pos))
+                                );
+
+                                TransactionManager::add_pending_transaction(pending_tx).await.ok();
+
+                                // Process sell
+                                sell_token(
+                                    &symbol,
+                                    &mint,
+                                    current_price,
+                                    pos.entry_price,
+                                    pos.peak_price,
+                                    drop_from_peak,
+                                    pos.sol_spent,
+                                    pos.token_amount,
+                                    pos.dca_count,
+                                    pos.last_dca_price,
+                                    pos.open_time
+                                ).await;
+
+                                // Remove position (will be restored if transaction fails)
+                                OPEN_POSITIONS.write().await.remove(&mint);
+                                notified_profit_bucket.remove(&mint);
+                                save_open().await;
+                            }
+                            Err(e) => {
+                                let fails = sell_failures.entry(mint.clone()).or_default();
+                                *fails += 1;
+                                println!("❌ Sell failed for {} (fail {}/10): {e}", mint, *fails);
+                                if *fails >= 10 {
+                                    add_skipped_sell(&mint);
+                                    println!("⛔️ [SKIPPED_SELLS] Added {} to skipped sells after 10 fails.", mint);
+                                    OPEN_POSITIONS.write().await.remove(&mint);
+                                    notified_profit_bucket.remove(&mint);
+                                    save_open().await;
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    PositionAction::Hold => {
+                        // Just holding - check for peak updates and profit notifications
+                    }
+                }
+
+                /* ——— Peak update & milestone notifications (moved to strategy) ——— */
+                if should_update_peak(&pos, current_price) {
+                    if let Some(p) = OPEN_POSITIONS.write().await.get_mut(&mint) {
+                        p.peak_price = current_price;
+                    }
+
+                    let bucket = get_profit_bucket(&pos, current_price);
+                    if bucket > *notified_profit_bucket.get(&mint).unwrap_or(&-1) {
+                        notified_profit_bucket.insert(mint.clone(), bucket);
+                        let current_value = current_price * pos.token_amount;
+                        let profit_sol = current_value - pos.sol_spent;
+                        let profit_now = if pos.sol_spent > 0.0 {
+                            (profit_sol / pos.sol_spent) * 100.0
+                        } else {
+                            0.0
+                        };
+                        println!(
+                            "📈 {} new peak {:.2}% (price {:.9})",
+                            symbol,
+                            profit_now,
+                            current_price
+                        );
                     }
                 }
             }
+        } // end for mint
 
-            let current_timestamp = std::time::SystemTime
-                ::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
+        // Print transaction status every 5 iterations (roughly every 10 seconds)
+        static mut LOOP_COUNTER: u32 = 0;
+        unsafe {
+            LOOP_COUNTER += 1;
+            if LOOP_COUNTER % 5 == 0 {
+                let tx_summary = TransactionManager::get_transaction_summary().await;
+                println!("{}", tx_summary);
+            }
+        }
 
-            // Estimate volume from token data (convert to numerical value)
-            let estimated_volume = token.volume.h1; // Use hourly volume as proxy
-            dataframe.add_price_data(current_price, estimated_volume, current_timestamp);
+        // Fast position checking - every 2 seconds
+        sleep(Duration::from_secs(2)).await;
+    }
+}
 
-            // Update the global dataframes storage
-            {
-                let mut dataframes = MARKET_DATAFRAMES.write().await;
-                dataframes.insert(mint.clone(), dataframe.clone());
+/// Token discovery task - scans for new buy opportunities every 15 seconds
+async fn token_discovery_loop() {
+    use std::time::Instant;
+    println!("🔥 [TOKEN DISCOVERY] Started token discovery task");
+
+    /* ── wait for TOKENS ──────────────────────────────── */
+    loop {
+        if SHUTDOWN.load(Ordering::SeqCst) {
+            return;
+        }
+        if !TOKENS.read().await.is_empty() {
+            break;
+        }
+        println!("⏳ [TOKEN DISCOVERY] Waiting for TOKENS to be loaded …");
+        sleep(Duration::from_secs(1)).await;
+    }
+    println!("✅ [TOKEN DISCOVERY] TOKENS loaded! Starting token discovery.");
+
+    loop {
+        if SHUTDOWN.load(Ordering::SeqCst) {
+            return;
+        }
+
+        // Get tokens for new buy opportunities (exclude open positions)
+        let discovery_mints: Vec<String> = {
+            let tokens = TOKENS.read().await;
+            let open_positions = OPEN_POSITIONS.read().await;
+            let blacklist = BLACKLIST.read().await;
+
+            tokens
+                .iter()
+                .map(|tok| tok.mint.clone())
+                .filter(|mint| {
+                    // Only include tokens that:
+                    // 1. Are NOT blacklisted
+                    // 2. Do NOT have open positions (we don't want to buy more of what we already have)
+                    !blacklist.contains(mint) && !open_positions.contains_key(mint)
+                })
+                .collect()
+        };
+
+        if discovery_mints.is_empty() {
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            continue;
+        }
+
+        // Check if trading is blocked due to pending transactions
+        if TransactionManager::is_trading_blocked().await {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        // Check if we can open more positions
+        let can_open_more = {
+            let open_positions = OPEN_POSITIONS.read().await;
+            open_positions.len() < MAX_OPEN_POSITIONS
+        };
+
+        if !can_open_more {
+            println!("🚫 [TOKEN DISCOVERY] Max positions reached, waiting...");
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            continue;
+        }
+
+        /* ── BATCH PRICE FETCHING for discovery ─────────── */
+        println!(
+            "🔄 [TOKEN DISCOVERY] Scanning {} tokens for opportunities...",
+            discovery_mints.len()
+        );
+        let cycle_start = Instant::now();
+
+        let prices = tokio::task
+            ::spawn_blocking({
+                let mints = discovery_mints.clone();
+                move || batch_prices_from_pools(&crate::configs::RPC, &mints)
+            }).await
+            .unwrap_or_else(|e| {
+                eprintln!("❌ [TOKEN DISCOVERY] Batch price fetch panicked: {}", e);
+                HashMap::new()
+            });
+
+        let successful_prices = prices.len();
+        if successful_prices > 0 {
+            println!(
+                "✅ [TOKEN DISCOVERY] Price cycle completed in {} ms - Success: {}/{}",
+                cycle_start.elapsed().as_millis(),
+                successful_prices,
+                discovery_mints.len()
+            );
+        }
+
+        // Update price cache for successful fetches
+        {
+            let mut price_cache = PRICE_CACHE.write().unwrap();
+            for (mint, price) in &prices {
+                price_cache.insert(mint.clone(), (Utc::now().timestamp() as u64, *price));
+            }
+        }
+
+        // Process each token for buy opportunities
+        for mint in discovery_mints {
+            if SHUTDOWN.load(Ordering::SeqCst) {
+                return;
             }
 
-            let now = Instant::now();
+            let current_price = if let Some(&price) = prices.get(&mint) {
+                price
+            } else {
+                // Skip tokens without valid prices
+                continue;
+            };
 
-            // -- Check open position state for this token
+            /* ── symbol string & token lookup ────────────────────────── */
+            let (symbol, token) = {
+                let tokens = TOKENS.read().await;
+                if let Some(t) = tokens.iter().find(|t| t.mint == mint) {
+                    (t.symbol.clone(), t.clone())
+                } else {
+                    continue; // Skip if token not found
+                }
+            };
+
+            // Check if we can open more positions (double-check)
             let open_positions = OPEN_POSITIONS.read().await;
-            let open = open_positions.contains_key(&mint);
+            let has_position = open_positions.contains_key(&mint);
             let can_open_more = open_positions.len() < MAX_OPEN_POSITIONS;
             drop(open_positions);
 
-            // Check if we have sufficient data for trading decisions
-            let (has_sufficient_data, data_status) = dataframe.has_sufficient_data_for_trading();
-
-            if !has_sufficient_data {
-                println!("⚠️ [DATA] Insufficient data for trading {}: {}", symbol, data_status);
-                continue; // Skip this token until we have sufficient data
+            // Skip if already have position or can't open more
+            if has_position || !can_open_more {
+                continue;
             }
 
             // Check if we should buy
-            let buy_signal = should_buy(&dataframe, &token, !open && can_open_more, current_price);
+            let buy_signal = should_buy(&token, true, current_price);
 
             if buy_signal {
-                println!(
-                    "🚀 ENTRY BUY {}: [scalping drop] histlen={} price={:.9}",
-                    symbol,
-                    dataframe.len(),
-                    current_price
-                );
+                println!("🚀 [TOKEN DISCOVERY] ENTRY BUY {}: price={:.9}", symbol, current_price);
                 let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
 
                 // Create position before transaction
@@ -754,18 +753,19 @@ async fn trader_main_loop() {
                 let new_position = Position {
                     entry_price: current_price,
                     peak_price: current_price,
-                    dca_count: 1,
+                    dca_count: 0, // Start at 0, increment on DCA
                     token_amount: bought,
                     sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
                     sol_received: 0.0,
                     open_time: Utc::now(),
                     close_time: None,
                     last_dca_price: current_price,
+                    last_dca_time: Utc::now(), // Initialize to open time
                 };
 
                 match buy_gmgn(&mint, lamports).await {
                     Ok(tx) => {
-                        println!("✅ BUY success: {tx}");
+                        println!("✅ [TOKEN DISCOVERY] BUY success: {tx}");
 
                         // Create pending transaction record
                         let pending_tx = PendingTransaction::new(
@@ -784,7 +784,7 @@ async fn trader_main_loop() {
                             let Err(e) =
                                 TransactionManager::add_pending_transaction(pending_tx).await
                         {
-                            println!("❌ Failed to add pending transaction: {}", e);
+                            println!("❌ [TOKEN DISCOVERY] Failed to add pending transaction: {}", e);
                         }
 
                         // Add position to open positions
@@ -792,240 +792,43 @@ async fn trader_main_loop() {
                         save_open().await;
                     }
                     Err(e) => {
-                        println!("❌ BUY failed: {}", e);
+                        println!("❌ [TOKEN DISCOVERY] BUY failed: {}", e);
                     }
                 }
-            }
-
-            /* ---------- DCA & trailing stop ---------- */
-            let pos_opt = {
-                let guard = OPEN_POSITIONS.read().await; // read-lock
-                guard.get(&mint).cloned() // clone the Position, no &refs
-            };
-
-            // ───────── DCA + TRAILING (single block) ───────────────────────────────
-            if let Some(mut pos) = pos_opt {
-                // Check if we have sufficient data for trading decisions
-                let (has_sufficient_data, data_status) =
-                    dataframe.has_sufficient_data_for_trading();
-
-                if !has_sufficient_data {
-                    println!(
-                        "⚠️ [DATA] Insufficient data for DCA/sell decision {}: {}",
-                        symbol,
-                        data_status
-                    );
-                    continue; // Skip this token until we have sufficient data
-                }
-
-                // Check if we should DCA
-                let dca_signal = should_dca(&dataframe, &token, &pos, current_price);
-
-                if dca_signal {
-                    let sol_size =
-                        TRADE_SIZE_SOL * (1.0 + (pos.dca_count as f64) * DCA_SIZE_FACTOR);
-                    let lamports = (sol_size * 1_000_000_000.0) as u64;
-                    // Use consistent profit calculation for DCA trigger
-                    let current_value = current_price * pos.token_amount;
-                    let profit_sol = current_value - pos.sol_spent;
-                    let drop_pct = if pos.sol_spent > 0.0 {
-                        (profit_sol / pos.sol_spent) * 100.0
-                    } else {
-                        0.0
-                    };
-
-                    // Store original position before DCA
-                    let original_position = pos.clone();
-
-                    match buy_gmgn(&mint, lamports).await {
-                        Ok(tx) => {
-                            let added = sol_size / current_price;
-                            pos.token_amount += added;
-                            pos.sol_spent += sol_size + TRANSACTION_FEE_SOL;
-                            pos.dca_count += 1;
-                            pos.entry_price = pos.sol_spent / pos.token_amount;
-                            pos.last_dca_price = current_price;
-
-                            // Create pending transaction record
-                            let pending_tx = PendingTransaction::new(
-                                tx.clone(),
-                                TransactionType::DCA,
-                                mint.clone(),
-                                symbol.clone(),
-                                sol_size,
-                                added,
-                                current_price,
-                                Some(create_position_data(&original_position)) // Store original position for recovery
-                            );
-
-                            // Add to pending transactions
-                            if
-                                let Err(e) =
-                                    TransactionManager::add_pending_transaction(pending_tx).await
-                            {
-                                println!("❌ Failed to add pending DCA transaction: {}", e);
-                            }
-
-                            OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
-                            save_open().await;
-
-                            println!(
-                                "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}%) | {tx}",
-                                pos.dca_count,
-                                symbol,
-                                current_price,
-                                drop_pct
-                            );
-                        }
-                        Err(e) => {
-                            println!("❌ DCA failed: {}", e);
-                        }
-                    }
-                }
-
-                /* ——— peak update & milestone log ——— */
-                if current_price > pos.peak_price {
-                    if let Some(p) = OPEN_POSITIONS.write().await.get_mut(&mint) {
-                        p.peak_price = current_price;
-                    }
-                    // Use consistent profit calculation method
-                    let current_value = current_price * pos.token_amount;
-                    let profit_sol = current_value - pos.sol_spent;
-                    let profit_now = if pos.sol_spent > 0.0 {
-                        (profit_sol / pos.sol_spent) * 100.0
-                    } else {
-                        0.0
-                    };
-                    let bucket = (profit_now / 2.0).floor() as i32; // announce every +2 %
-
-                    if bucket > *notified_profit_bucket.get(&mint).unwrap_or(&-1) {
-                        notified_profit_bucket.insert(mint.clone(), bucket);
-                        println!(
-                            "📈 {} new peak {:.2}% (price {:.9})",
-                            symbol,
-                            profit_now,
-                            current_price
-                        );
-                    }
-                }
-
-                // Check if we should sell
-                let (should_sell_signal, sell_reason) = should_sell(
-                    &dataframe,
-                    &token,
-                    &pos,
-                    current_price
-                );
-
-                if should_sell_signal {
-                    // Check if sell for this mint is permanently blacklisted
-                    {
-                        let set = SKIPPED_SELLS.lock().await;
-
-                        if set.contains(&mint) {
-                            println!("⛔️ [SKIPPED_SELLS] Not selling {} because it's blacklisted after 10 fails.", mint);
-                            OPEN_POSITIONS.write().await.remove(&mint);
-                            notified_profit_bucket.remove(&mint);
-                            continue;
-                        }
-                    }
-
-                    match sell_all_gmgn(&mint, current_price).await {
-                        Ok(tx) => {
-                            // Use consistent profit calculation method
-                            let current_value = current_price * pos.token_amount;
-                            let profit_sol = current_value - pos.sol_spent;
-                            let profit_pct = if pos.sol_spent > 0.0 {
-                                (profit_sol / pos.sol_spent) * 100.0
-                            } else {
-                                0.0
-                            };
-                            let drop_from_peak =
-                                ((current_price - pos.peak_price) / pos.peak_price) * 100.0;
-
-                            println!(
-                                "{} SELL {} at {:.2}% | {} | {tx}",
-                                if sell_reason == "stop_loss" {
-                                    "⛔️ [STOP LOSS]"
-                                } else {
-                                    "🔴"
-                                },
-                                symbol,
-                                profit_pct,
-                                sell_reason
-                            );
-
-                            // Create pending transaction record
-                            let pending_tx = PendingTransaction::new(
-                                tx.clone(),
-                                TransactionType::Sell,
-                                mint.clone(),
-                                symbol.clone(),
-                                profit_sol,
-                                pos.token_amount,
-                                current_price,
-                                Some(create_position_data(&pos)) // Store position for recovery
-                            );
-
-                            // Add to pending transactions
-                            if
-                                let Err(e) =
-                                    TransactionManager::add_pending_transaction(pending_tx).await
-                            {
-                                println!("❌ Failed to add pending sell transaction: {}", e);
-                            }
-
-                            // Process sell
-                            sell_token(
-                                &symbol,
-                                &mint,
-                                current_price,
-                                pos.entry_price,
-                                pos.peak_price,
-                                drop_from_peak,
-                                pos.sol_spent,
-                                pos.token_amount,
-                                pos.dca_count,
-                                pos.last_dca_price,
-                                pos.open_time
-                            ).await;
-
-                            // Remove position (will be restored if transaction fails)
-                            OPEN_POSITIONS.write().await.remove(&mint);
-                            notified_profit_bucket.remove(&mint);
-                            save_open().await;
-                        }
-                        Err(e) => {
-                            let fails = sell_failures.entry(mint.clone()).or_default();
-                            *fails += 1;
-                            println!("❌ Sell failed for {} (fail {}/10): {e}", mint, *fails);
-                            if *fails >= 10 {
-                                add_skipped_sell(&mint);
-                                println!("⛔️ [SKIPPED_SELLS] Added {} to skipped sells after 10 fails.", mint);
-                                OPEN_POSITIONS.write().await.remove(&mint);
-                                notified_profit_bucket.remove(&mint);
-                                save_open().await;
-                            }
-                        }
-                    }
-                    continue;
-                }
-            }
-        } // end for mint
-
-        // Print transaction status every 5 iterations (roughly every 10 seconds)
-        static mut LOOP_COUNTER: u32 = 0;
-        unsafe {
-            LOOP_COUNTER += 1;
-            if LOOP_COUNTER % 5 == 0 {
-                let tx_summary = TransactionManager::get_transaction_summary().await;
-                println!("{}", tx_summary);
             }
         }
 
-        sleep(Duration::from_secs(POSITIONS_CHECK_TIME)).await;
+        // Slower discovery checking - every 15 seconds
+        sleep(Duration::from_secs(15)).await;
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CLEAN TRADING ARCHITECTURE - SEPARATION OF CONCERNS
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// This trading system properly separates STRATEGY from EXECUTION:
+//
+// 📋 STRATEGY.RS (Decision Making):
+//    - should_buy() - Entry decisions
+//    - should_sell() - Exit decisions
+//    - should_dca() - DCA decisions
+//    - evaluate_position() - Comprehensive position analysis
+//    - All trading logic and signal calculations
+//
+// ⚙️ TRADER.RS (Execution Engine):
+//    - Position monitoring loops (2s for positions, 15s for discovery)
+//    - Price fetching and caching
+//    - Calling strategy functions for decisions
+//    - Executing buy_gmgn/sell_gmgn based on strategy recommendations
+//    - Managing position state and transaction records
+//
+// This ensures:
+// ✅ Clean separation between "what to do" (strategy) and "how to do it" (trader)
+// ✅ Strategy logic is centralized and testable
+// ✅ Trader focuses on execution and state management
+// ✅ Easy to modify trading strategy without touching execution code
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // ── utils.rs (or wherever you keep helpers) ──────────────────────────────────
 pub async fn sell_token(
@@ -1077,6 +880,7 @@ pub async fn sell_token(
             open_time,
             close_time: Some(close_time),
             last_dca_price,
+            last_dca_time: open_time, // Use open_time for closed positions
         });
 
         // Keep only the most recent 10 positions (by close_time)
@@ -1094,122 +898,15 @@ pub async fn sell_token(
     }
 }
 
-// GeckoTerminal API functions
-async fn fetch_gecko_ohlcv(
-    pool_address: &str,
-    timeframe: Timeframe,
-    limit: usize
-) -> Result<GeckoTerminalResponse, Box<dyn std::error::Error>> {
-    let url = format!(
-        "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/{}?limit={}&currency=token&include_empty_intervals=false&token=base",
-        pool_address,
-        timeframe.as_str(),
-        limit.min(MAX_OHLCV_LIMIT)
-    );
 
-    println!("🌐 [GECKO] Fetching {} data from: {}", timeframe.as_str(), url);
 
-    let client = reqwest::Client::new();
-    let response = client
-        .get(&url)
-        .header("accept", "application/json")
-        .header("User-Agent", "ScreenerBot/1.0")
-        .send().await?;
 
-    if !response.status().is_success() {
-        return Err(format!("GeckoTerminal API error: {}", response.status()).into());
-    }
 
-    let gecko_response: GeckoTerminalResponse = response.json().await?;
 
-    println!(
-        "✅ [GECKO] Fetched {} {} candles for pool {}",
-        gecko_response.data.attributes.ohlcv_list.len(),
-        timeframe.as_str(),
-        pool_address
-    );
 
-    Ok(gecko_response)
-}
 
-// Caching functions
-async fn load_cached_ohlcv(pool_address: &str) -> Result<CachedOHLCV, Box<dyn std::error::Error>> {
-    let cache_file = format!("{}/{}.json", CACHE_DIR, pool_address);
 
-    if !Path::new(&cache_file).exists() {
-        return Err("Cache file not found".into());
-    }
 
-    let cache_content = fs::read_to_string(&cache_file)?;
-    let cached_data: CachedOHLCV = serde_json::from_str(&cache_content)?;
-
-    Ok(cached_data)
-}
-
-async fn save_cached_ohlcv(cache_data: &CachedOHLCV) -> Result<(), Box<dyn std::error::Error>> {
-    // Create cache directory if it doesn't exist
-    fs::create_dir_all(CACHE_DIR)?;
-
-    let cache_file = format!("{}/{}.json", CACHE_DIR, cache_data.pool_address);
-    let cache_content = serde_json::to_string_pretty(cache_data)?;
-
-    fs::write(&cache_file, cache_content)?;
-
-    // Clean old cache files
-    clean_old_cache_files().await?;
-
-    Ok(())
-}
-
-fn is_cache_valid(cached_data: &CachedOHLCV) -> bool {
-    let now = std::time::SystemTime
-        ::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let cache_age_hours = (now - cached_data.timestamp_cached) / 3600;
-    cache_age_hours < CACHE_DURATION_HOURS
-}
-
-async fn clean_old_cache_files() -> Result<(), Box<dyn std::error::Error>> {
-    if !Path::new(CACHE_DIR).exists() {
-        return Ok(());
-    }
-
-    let now = std::time::SystemTime
-        ::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let entries = fs::read_dir(CACHE_DIR)?;
-
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
-            if let Ok(metadata) = entry.metadata() {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
-                        let file_age_hours = (now - duration.as_secs()) / 3600;
-
-                        if file_age_hours > CACHE_DURATION_HOURS {
-                            if let Err(e) = fs::remove_file(&path) {
-                                eprintln!("⚠️ Failed to remove old cache file {:?}: {}", path, e);
-                            } else {
-                                println!("🗑️ Removed old cache file: {:?}", path);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
 
 // Helper function to get pool address from mint
 async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
