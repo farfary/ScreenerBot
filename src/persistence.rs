@@ -83,7 +83,7 @@ pub async fn load_cache() -> Result<()> {
 }
 
 // save helpers ---------------------------------------------------------------
-async fn atomic_write(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+pub async fn atomic_write(path: &str, bytes: &[u8]) -> std::io::Result<()> {
     use std::path::Path;
     use tokio::fs;
 

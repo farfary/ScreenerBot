@@ -558,6 +558,12 @@ async fn trader_main_loop() {
             continue;
         }
 
+        // Check if trading is blocked due to pending transactions
+        if TransactionManager::is_trading_blocked().await {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
         /* ── BATCH PRICE FETCHING (saves RPC costs!) ─────────── */
         println!("🔄 [BATCH] Starting price update cycle for {} tokens...", filtered_mints.len());
         let cycle_start = Instant::now();
@@ -742,20 +748,52 @@ async fn trader_main_loop() {
                     current_price
                 );
                 let lamports = (TRADE_SIZE_SOL * 1_000_000_000.0) as u64;
-                if let Ok(tx) = buy_gmgn(&mint, lamports).await {
-                    println!("✅ BUY success: {tx}");
-                    let bought = TRADE_SIZE_SOL / current_price;
-                    OPEN_POSITIONS.write().await.insert(mint.clone(), Position {
-                        entry_price: current_price,
-                        peak_price: current_price,
-                        dca_count: 1,
-                        token_amount: bought,
-                        sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
-                        sol_received: 0.0,
-                        open_time: Utc::now(),
-                        close_time: None,
-                        last_dca_price: current_price,
-                    });
+
+                // Create position before transaction
+                let bought = TRADE_SIZE_SOL / current_price;
+                let new_position = Position {
+                    entry_price: current_price,
+                    peak_price: current_price,
+                    dca_count: 1,
+                    token_amount: bought,
+                    sol_spent: TRADE_SIZE_SOL + TRANSACTION_FEE_SOL,
+                    sol_received: 0.0,
+                    open_time: Utc::now(),
+                    close_time: None,
+                    last_dca_price: current_price,
+                };
+
+                match buy_gmgn(&mint, lamports).await {
+                    Ok(tx) => {
+                        println!("✅ BUY success: {tx}");
+
+                        // Create pending transaction record
+                        let pending_tx = PendingTransaction::new(
+                            tx.clone(),
+                            TransactionType::Buy,
+                            mint.clone(),
+                            symbol.clone(),
+                            TRADE_SIZE_SOL,
+                            bought,
+                            current_price,
+                            None // No position data needed for new buy
+                        );
+
+                        // Add to pending transactions
+                        if
+                            let Err(e) =
+                                TransactionManager::add_pending_transaction(pending_tx).await
+                        {
+                            println!("❌ Failed to add pending transaction: {}", e);
+                        }
+
+                        // Add position to open positions
+                        OPEN_POSITIONS.write().await.insert(mint.clone(), new_position);
+                        save_open().await;
+                    }
+                    Err(e) => {
+                        println!("❌ BUY failed: {}", e);
+                    }
                 }
             }
 
@@ -796,23 +834,52 @@ async fn trader_main_loop() {
                         0.0
                     };
 
-                    if let Ok(tx) = buy_gmgn(&mint, lamports).await {
-                        let added = sol_size / current_price;
-                        pos.token_amount += added;
-                        pos.sol_spent += sol_size + TRANSACTION_FEE_SOL;
-                        pos.dca_count += 1;
-                        pos.entry_price = pos.sol_spent / pos.token_amount;
-                        pos.last_dca_price = current_price;
+                    // Store original position before DCA
+                    let original_position = pos.clone();
 
-                        OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
+                    match buy_gmgn(&mint, lamports).await {
+                        Ok(tx) => {
+                            let added = sol_size / current_price;
+                            pos.token_amount += added;
+                            pos.sol_spent += sol_size + TRANSACTION_FEE_SOL;
+                            pos.dca_count += 1;
+                            pos.entry_price = pos.sol_spent / pos.token_amount;
+                            pos.last_dca_price = current_price;
 
-                        println!(
-                            "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}%) | {tx}",
-                            pos.dca_count,
-                            symbol,
-                            current_price,
-                            drop_pct
-                        );
+                            // Create pending transaction record
+                            let pending_tx = PendingTransaction::new(
+                                tx.clone(),
+                                TransactionType::DCA,
+                                mint.clone(),
+                                symbol.clone(),
+                                sol_size,
+                                added,
+                                current_price,
+                                Some(create_position_data(&original_position)) // Store original position for recovery
+                            );
+
+                            // Add to pending transactions
+                            if
+                                let Err(e) =
+                                    TransactionManager::add_pending_transaction(pending_tx).await
+                            {
+                                println!("❌ Failed to add pending DCA transaction: {}", e);
+                            }
+
+                            OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
+                            save_open().await;
+
+                            println!(
+                                "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}%) | {tx}",
+                                pos.dca_count,
+                                symbol,
+                                current_price,
+                                drop_pct
+                            );
+                        }
+                        Err(e) => {
+                            println!("❌ DCA failed: {}", e);
+                        }
                     }
                 }
 
@@ -888,6 +955,27 @@ async fn trader_main_loop() {
                                 sell_reason
                             );
 
+                            // Create pending transaction record
+                            let pending_tx = PendingTransaction::new(
+                                tx.clone(),
+                                TransactionType::Sell,
+                                mint.clone(),
+                                symbol.clone(),
+                                profit_sol,
+                                pos.token_amount,
+                                current_price,
+                                Some(create_position_data(&pos)) // Store position for recovery
+                            );
+
+                            // Add to pending transactions
+                            if
+                                let Err(e) =
+                                    TransactionManager::add_pending_transaction(pending_tx).await
+                            {
+                                println!("❌ Failed to add pending sell transaction: {}", e);
+                            }
+
+                            // Process sell
                             sell_token(
                                 &symbol,
                                 &mint,
@@ -901,8 +989,11 @@ async fn trader_main_loop() {
                                 pos.last_dca_price,
                                 pos.open_time
                             ).await;
+
+                            // Remove position (will be restored if transaction fails)
                             OPEN_POSITIONS.write().await.remove(&mint);
                             notified_profit_bucket.remove(&mint);
+                            save_open().await;
                         }
                         Err(e) => {
                             let fails = sell_failures.entry(mint.clone()).or_default();
@@ -913,6 +1004,7 @@ async fn trader_main_loop() {
                                 println!("⛔️ [SKIPPED_SELLS] Added {} to skipped sells after 10 fails.", mint);
                                 OPEN_POSITIONS.write().await.remove(&mint);
                                 notified_profit_bucket.remove(&mint);
+                                save_open().await;
                             }
                         }
                     }
@@ -920,6 +1012,16 @@ async fn trader_main_loop() {
                 }
             }
         } // end for mint
+
+        // Print transaction status every 5 iterations (roughly every 10 seconds)
+        static mut LOOP_COUNTER: u32 = 0;
+        unsafe {
+            LOOP_COUNTER += 1;
+            if LOOP_COUNTER % 5 == 0 {
+                let tx_summary = TransactionManager::get_transaction_summary().await;
+                println!("{}", tx_summary);
+            }
+        }
 
         sleep(Duration::from_secs(POSITIONS_CHECK_TIME)).await;
     }
@@ -941,7 +1043,7 @@ pub async fn sell_token(
 ) {
     let close_time = Utc::now();
     let sol_received = token_amount * sell_price - TRANSACTION_FEE_SOL;
-    let profit_sol = sol_received - sol_spent - TRANSACTION_FEE_SOL;
+    let profit_sol = sol_received - sol_spent; // Don't double deduct transaction fees
     let profit_pct = (profit_sol / sol_spent) * 100.0;
 
     println!("\n🔴 [SELL] Close position with trailing stop");

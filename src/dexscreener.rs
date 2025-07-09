@@ -9,9 +9,47 @@ use reqwest::Client;
 use colored::Colorize;
 use serde::{ Serialize, Deserialize };
 use tokio::{ fs, io::AsyncReadExt, io::AsyncWriteExt };
-use std::collections::VecDeque;
+use std::collections::{ VecDeque, HashMap };
 
 const TOKEN_CACHE_FILE: &str = ".tokens_cache.json";
+const RUGCHECK_CACHE_FILE: &str = ".rugcheck_cache.json";
+const DEXSCREENER_CACHE_FILE: &str = ".dexscreener_cache.json";
+
+// Cache structure for rugcheck data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugCheckCache {
+    pub data: HashMap<String, RugCheckData>,
+    pub last_updated: u64,
+}
+
+// Cache structure for dexscreener data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexScreenerCache {
+    pub data: HashMap<String, DexScreenerData>,
+    pub last_updated: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexScreenerData {
+    pub dex_id: String,
+    pub url: String,
+    pub pair_address: String,
+    pub labels: Vec<String>,
+    pub quote_address: String,
+    pub quote_name: String,
+    pub quote_symbol: String,
+    pub price_native: String,
+    pub price_usd: String,
+    pub volume_usd: String,
+    pub fdv_usd: String,
+    pub image_url: String,
+    pub txns: Txns,
+    pub volume: Volume,
+    pub price_change: PriceChange,
+    pub liquidity: Liquidity,
+    pub pair_created_at: u64,
+    pub last_updated: u64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxnCount {
@@ -122,17 +160,125 @@ pub struct Token {
     pub rug_check: RugCheckData,
 }
 
+// ────────────── CACHE MANAGEMENT ──────────────
+
+/// Load rugcheck cache from disk
+async fn load_rugcheck_cache(debug: bool) -> RugCheckCache {
+    if let Ok(data) = fs::read(RUGCHECK_CACHE_FILE).await {
+        if let Ok(cache) = serde_json::from_slice::<RugCheckCache>(&data) {
+            if debug {
+                println!("📥 Loaded {} rugcheck entries from cache", cache.data.len());
+            }
+            return cache;
+        }
+    }
+
+    if debug {
+        println!("📥 No rugcheck cache found, starting fresh");
+    }
+
+    RugCheckCache {
+        data: HashMap::new(),
+        last_updated: 0,
+    }
+}
+
+/// Save rugcheck cache to disk
+async fn save_rugcheck_cache(cache: &RugCheckCache, debug: bool) {
+    if let Ok(data) = serde_json::to_vec_pretty(cache) {
+        if let Err(e) = fs::write(RUGCHECK_CACHE_FILE, data).await {
+            if debug {
+                println!("❌ Failed to save rugcheck cache: {}", e);
+            }
+        } else if debug {
+            println!("💾 Saved {} rugcheck entries to cache", cache.data.len());
+        }
+    }
+}
+
+/// Load dexscreener cache from disk
+async fn load_dexscreener_cache(debug: bool) -> DexScreenerCache {
+    if let Ok(data) = fs::read(DEXSCREENER_CACHE_FILE).await {
+        if let Ok(cache) = serde_json::from_slice::<DexScreenerCache>(&data) {
+            if debug {
+                println!("📥 Loaded {} dexscreener entries from cache", cache.data.len());
+            }
+            return cache;
+        }
+    }
+
+    if debug {
+        println!("📥 No dexscreener cache found, starting fresh");
+    }
+
+    DexScreenerCache {
+        data: HashMap::new(),
+        last_updated: 0,
+    }
+}
+
+/// Save dexscreener cache to disk
+async fn save_dexscreener_cache(cache: &DexScreenerCache, debug: bool) {
+    if let Ok(data) = serde_json::to_vec_pretty(cache) {
+        if let Err(e) = fs::write(DEXSCREENER_CACHE_FILE, data).await {
+            if debug {
+                println!("❌ Failed to save dexscreener cache: {}", e);
+            }
+        } else if debug {
+            println!("💾 Saved {} dexscreener entries to cache", cache.data.len());
+        }
+    }
+}
+
+/// Check if rugcheck data is still valid (less than 24 hours old)
+fn is_rugcheck_data_valid(data: &RugCheckData, max_age_hours: u64) -> bool {
+    if let Some(checked_at) = data.checked_at {
+        let now = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        return now - checked_at < max_age_hours * 3600;
+    }
+    false
+}
+
+/// Check if dexscreener data is still valid (less than 30 minutes old)
+fn is_dexscreener_data_valid(data: &DexScreenerData, max_age_minutes: u64) -> bool {
+    let now = std::time::SystemTime
+        ::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    now - data.last_updated < max_age_minutes * 60
+}
+
 // ────────────── GLOBAL STATIC ──────────────
 pub static TOKENS: Lazy<RwLock<Vec<Token>>> = Lazy::new(|| {
     RwLock::new(Vec::new()) // will load below
 });
 
 // ────────────── RUG CHECK FUNCTIONS ──────────────
-async fn fetch_rug_check_data(client: &Client, mint: &str, debug: bool) -> Option<RugCheckData> {
+async fn fetch_rug_check_data(
+    client: &Client,
+    mint: &str,
+    debug: bool,
+    rugcheck_cache: &mut RugCheckCache
+) -> Option<RugCheckData> {
+    // Check cache first
+    if let Some(cached_data) = rugcheck_cache.data.get(mint) {
+        if is_rugcheck_data_valid(cached_data, 24) {
+            if debug {
+                println!("📋 [RugCheck] Using cached data for: {}", mint);
+            }
+            return Some(cached_data.clone());
+        }
+    }
+
     let url = format!("https://api.rugcheck.xyz/v1/tokens/{}/report", mint);
 
     if debug {
-        println!("🔍 [RugCheck] Fetching report for: {}", mint);
+        println!("🔍 [RugCheck] Fetching fresh report for: {}", mint);
     }
 
     match client.get(&url).send().await {
@@ -155,7 +301,7 @@ async fn fetch_rug_check_data(client: &Client, mint: &str, debug: bool) -> Optio
                         }
                     }
 
-                    Some(RugCheckData {
+                    let rug_data = RugCheckData {
                         score: json["score"].as_i64().unwrap_or(0) as i32,
                         score_normalised: json["score_normalised"].as_i64().unwrap_or(0) as i32,
                         rugged: json["rugged"].as_bool().unwrap_or(false),
@@ -178,7 +324,24 @@ async fn fetch_rug_check_data(client: &Client, mint: &str, debug: bool) -> Optio
                                 .unwrap_or_default()
                                 .as_secs()
                         ),
-                    })
+                    };
+
+                    // Cache the data immediately
+                    rugcheck_cache.data.insert(mint.to_string(), rug_data.clone());
+                    rugcheck_cache.last_updated = std::time::SystemTime
+                        ::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    // Save to disk immediately
+                    save_rugcheck_cache(rugcheck_cache, debug).await;
+
+                    if debug {
+                        println!("💾 [RugCheck] Cached and saved data for: {}", mint);
+                    }
+
+                    Some(rug_data)
                 }
                 Err(e) => {
                     if debug {
@@ -308,12 +471,14 @@ pub fn is_safe_to_trade(token: &Token, debug: bool) -> bool {
 /// Get a detailed rug check report for a specific token
 pub async fn get_rug_check_report(mint: &str, debug: bool) -> Option<RugCheckData> {
     let client = reqwest::Client::new();
-    fetch_rug_check_data(&client, mint, debug).await
+    let mut rugcheck_cache = load_rugcheck_cache(debug).await;
+    fetch_rug_check_data(&client, mint, debug, &mut rugcheck_cache).await
 }
 
 /// Ensure RugCheck data is cached for all tokens in the watch list
 pub async fn ensure_watchlist_rugcheck_cached(debug: bool) {
     let client = reqwest::Client::new();
+    let mut rugcheck_cache = load_rugcheck_cache(debug).await;
     let mut tokens = TOKENS.write().await;
     let now = std::time::SystemTime
         ::now()
@@ -333,7 +498,14 @@ pub async fn ensure_watchlist_rugcheck_cached(debug: bool) {
                 println!("🔍 [RugCheck] Refreshing data for watch list token: {}", token.symbol);
             }
 
-            if let Some(rug_data) = fetch_rug_check_data(&client, &token.mint, debug).await {
+            if
+                let Some(rug_data) = fetch_rug_check_data(
+                    &client,
+                    &token.mint,
+                    debug,
+                    &mut rugcheck_cache
+                ).await
+            {
                 token.rug_check = rug_data;
 
                 if debug {
@@ -358,6 +530,279 @@ pub async fn ensure_watchlist_rugcheck_cached(debug: bool) {
             );
         }
     }
+}
+
+// ────────────── DEXSCREENER FUNCTIONS ──────────────
+async fn fetch_dexscreener_data(
+    client: &Client,
+    mint: &str,
+    debug: bool,
+    dexscreener_cache: &mut DexScreenerCache
+) -> Option<DexScreenerData> {
+    // Check cache first
+    if let Some(cached_data) = dexscreener_cache.data.get(mint) {
+        if is_dexscreener_data_valid(cached_data, 30) {
+            if debug {
+                println!("📋 [DexScreener] Using cached data for: {}", mint);
+            }
+            return Some(cached_data.clone());
+        }
+    }
+
+    let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", mint);
+
+    if debug {
+        println!("🔍 [DexScreener] Fetching fresh data for: {}", mint);
+    }
+
+    match client.get(&url).send().await {
+        Ok(resp) => {
+            match resp.json::<Value>().await {
+                Ok(json) => {
+                    let dex_data = DexScreenerData {
+                        dex_id: json["dexId"].as_str().unwrap_or_default().into(),
+                        url: json["url"].as_str().unwrap_or_default().into(),
+                        pair_address: json["pairAddress"].as_str().unwrap_or_default().into(),
+                        labels: json["labels"]
+                            .as_array()
+                            .unwrap_or(&vec![])
+                            .iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect(),
+                        quote_address: json["quoteToken"]["address"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .into(),
+                        quote_name: json["quoteToken"]["name"].as_str().unwrap_or_default().into(),
+                        quote_symbol: json["quoteToken"]["symbol"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .into(),
+                        price_native: json["priceNative"].as_str().unwrap_or_default().into(),
+                        price_usd: json["priceUsd"].as_str().unwrap_or_default().into(),
+                        volume_usd: json["volume"]["h24"].as_f64().unwrap_or(0.0).to_string(),
+                        fdv_usd: json["fdv"].as_f64().unwrap_or(0.0).to_string(),
+                        image_url: json["info"]["imageUrl"].as_str().unwrap_or_default().into(),
+                        txns: Txns {
+                            m5: TxnCount {
+                                buys: json["txns"]["m5"]["buys"].as_u64().unwrap_or(0),
+                                sells: json["txns"]["m5"]["sells"].as_u64().unwrap_or(0),
+                            },
+                            h1: TxnCount {
+                                buys: json["txns"]["h1"]["buys"].as_u64().unwrap_or(0),
+                                sells: json["txns"]["h1"]["sells"].as_u64().unwrap_or(0),
+                            },
+                            h6: TxnCount {
+                                buys: json["txns"]["h6"]["buys"].as_u64().unwrap_or(0),
+                                sells: json["txns"]["h6"]["sells"].as_u64().unwrap_or(0),
+                            },
+                            h24: TxnCount {
+                                buys: json["txns"]["h24"]["buys"].as_u64().unwrap_or(0),
+                                sells: json["txns"]["h24"]["sells"].as_u64().unwrap_or(0),
+                            },
+                        },
+                        volume: Volume {
+                            m5: json["volume"]["m5"].as_f64().unwrap_or(0.0),
+                            h1: json["volume"]["h1"].as_f64().unwrap_or(0.0),
+                            h6: json["volume"]["h6"].as_f64().unwrap_or(0.0),
+                            h24: json["volume"]["h24"].as_f64().unwrap_or(0.0),
+                        },
+                        price_change: PriceChange {
+                            m5: json["priceChange"]["m5"].as_f64().unwrap_or(0.0),
+                            h1: json["priceChange"]["h1"].as_f64().unwrap_or(0.0),
+                            h6: json["priceChange"]["h6"].as_f64().unwrap_or(0.0),
+                            h24: json["priceChange"]["h24"].as_f64().unwrap_or(0.0),
+                        },
+                        liquidity: Liquidity {
+                            usd: json["liquidity"]["usd"].as_f64().unwrap_or(0.0),
+                            base: json["liquidity"]["base"].as_f64().unwrap_or(0.0),
+                            quote: json["liquidity"]["quote"].as_f64().unwrap_or(0.0),
+                        },
+                        pair_created_at: json["pairCreatedAt"].as_u64().unwrap_or(0),
+                        last_updated: std::time::SystemTime
+                            ::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    };
+
+                    // Cache the data immediately
+                    dexscreener_cache.data.insert(mint.to_string(), dex_data.clone());
+                    dexscreener_cache.last_updated = std::time::SystemTime
+                        ::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    // Save to disk immediately
+                    save_dexscreener_cache(dexscreener_cache, debug).await;
+
+                    if debug {
+                        println!("💾 [DexScreener] Cached and saved data for: {}", mint);
+                    }
+
+                    Some(dex_data)
+                }
+                Err(e) => {
+                    if debug {
+                        println!("❌ [DexScreener] Failed to parse JSON for {}: {}", mint, e);
+                    }
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            if debug {
+                println!("❌ [DexScreener] Failed to fetch data for {}: {}", mint, e);
+            }
+            None
+        }
+    }
+}
+
+/// Update token with DexScreener data and cache it
+async fn update_token_with_dexscreener_data(
+    token: &mut Token,
+    item: &Value,
+    dexscreener_cache: &mut DexScreenerCache,
+    debug: bool
+) {
+    let now = std::time::SystemTime
+        ::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let dex_data = DexScreenerData {
+        dex_id: item["dexId"].as_str().unwrap_or_default().into(),
+        url: item["url"].as_str().unwrap_or_default().into(),
+        pair_address: item["pairAddress"].as_str().unwrap_or_default().into(),
+        labels: item["labels"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        quote_address: item["quoteToken"]["address"].as_str().unwrap_or_default().into(),
+        quote_name: item["quoteToken"]["name"].as_str().unwrap_or_default().into(),
+        quote_symbol: item["quoteToken"]["symbol"].as_str().unwrap_or_default().into(),
+        price_native: item["priceNative"].as_str().unwrap_or_default().into(),
+        price_usd: item["priceUsd"].as_str().unwrap_or_default().into(),
+        volume_usd: item["volume"]["h24"].as_f64().unwrap_or(0.0).to_string(),
+        fdv_usd: item["fdv"].as_f64().unwrap_or(0.0).to_string(),
+        image_url: item["info"]["imageUrl"].as_str().unwrap_or_default().into(),
+        txns: Txns {
+            m5: TxnCount {
+                buys: item["txns"]["m5"]["buys"].as_u64().unwrap_or(0),
+                sells: item["txns"]["m5"]["sells"].as_u64().unwrap_or(0),
+            },
+            h1: TxnCount {
+                buys: item["txns"]["h1"]["buys"].as_u64().unwrap_or(0),
+                sells: item["txns"]["h1"]["sells"].as_u64().unwrap_or(0),
+            },
+            h6: TxnCount {
+                buys: item["txns"]["h6"]["buys"].as_u64().unwrap_or(0),
+                sells: item["txns"]["h6"]["sells"].as_u64().unwrap_or(0),
+            },
+            h24: TxnCount {
+                buys: item["txns"]["h24"]["buys"].as_u64().unwrap_or(0),
+                sells: item["txns"]["h24"]["sells"].as_u64().unwrap_or(0),
+            },
+        },
+        volume: Volume {
+            m5: item["volume"]["m5"].as_f64().unwrap_or(0.0),
+            h1: item["volume"]["h1"].as_f64().unwrap_or(0.0),
+            h6: item["volume"]["h6"].as_f64().unwrap_or(0.0),
+            h24: item["volume"]["h24"].as_f64().unwrap_or(0.0),
+        },
+        price_change: PriceChange {
+            m5: item["priceChange"]["m5"].as_f64().unwrap_or(0.0),
+            h1: item["priceChange"]["h1"].as_f64().unwrap_or(0.0),
+            h6: item["priceChange"]["h6"].as_f64().unwrap_or(0.0),
+            h24: item["priceChange"]["h24"].as_f64().unwrap_or(0.0),
+        },
+        liquidity: Liquidity {
+            usd: item["liquidity"]["usd"].as_f64().unwrap_or(0.0),
+            base: item["liquidity"]["base"].as_f64().unwrap_or(0.0),
+            quote: item["liquidity"]["quote"].as_f64().unwrap_or(0.0),
+        },
+        pair_created_at: item["pairCreatedAt"].as_u64().unwrap_or(0),
+        last_updated: now,
+    };
+
+    // Update token with data
+    token.dex_id = dex_data.dex_id.clone();
+    token.url = dex_data.url.clone();
+    token.pair_address = dex_data.pair_address.clone();
+    token.labels = dex_data.labels.clone();
+    token.name = item["baseToken"]["name"].as_str().unwrap_or_default().into();
+    token.symbol = item["baseToken"]["symbol"].as_str().unwrap_or_default().into();
+    token.quote_address = dex_data.quote_address.clone();
+    token.quote_name = dex_data.quote_name.clone();
+    token.quote_symbol = dex_data.quote_symbol.clone();
+    token.price_native = dex_data.price_native.clone();
+    token.price_usd = dex_data.price_usd.clone();
+    token.volume_usd = dex_data.volume_usd.clone();
+    token.fdv_usd = dex_data.fdv_usd.clone();
+    token.image_url = dex_data.image_url.clone();
+    token.txns = dex_data.txns.clone();
+    token.volume = dex_data.volume.clone();
+    token.price_change = dex_data.price_change.clone();
+    token.liquidity = dex_data.liquidity.clone();
+    token.pair_created_at = dex_data.pair_created_at;
+
+    // Cache the data
+    dexscreener_cache.data.insert(token.mint.clone(), dex_data);
+    dexscreener_cache.last_updated = now;
+
+    if debug {
+        println!("💾 [DexScreener] Cached data for: {}", token.symbol);
+    }
+}
+
+/// Apply cached DexScreener data to token if available and valid
+fn apply_cached_dexscreener_data(
+    token: &mut Token,
+    dexscreener_cache: &DexScreenerCache,
+    debug: bool
+) -> bool {
+    if let Some(cached_data) = dexscreener_cache.data.get(&token.mint) {
+        if is_dexscreener_data_valid(cached_data, 30) {
+            token.dex_id = cached_data.dex_id.clone();
+            token.url = cached_data.url.clone();
+            token.pair_address = cached_data.pair_address.clone();
+            token.labels = cached_data.labels.clone();
+            token.quote_address = cached_data.quote_address.clone();
+            token.quote_name = cached_data.quote_name.clone();
+            token.quote_symbol = cached_data.quote_symbol.clone();
+            token.price_native = cached_data.price_native.clone();
+            token.price_usd = cached_data.price_usd.clone();
+            token.volume_usd = cached_data.volume_usd.clone();
+            token.fdv_usd = cached_data.fdv_usd.clone();
+            token.image_url = cached_data.image_url.clone();
+            token.txns = cached_data.txns.clone();
+            token.volume = cached_data.volume.clone();
+            token.price_change = cached_data.price_change.clone();
+            token.liquidity = cached_data.liquidity.clone();
+            token.pair_created_at = cached_data.pair_created_at;
+
+            if debug {
+                println!(
+                    "📋 [DexScreener] Using cached data for {} (age: {} minutes)",
+                    token.symbol,
+                    (std::time::SystemTime
+                        ::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() -
+                        cached_data.last_updated) /
+                        60
+                );
+            }
+            return true;
+        }
+    }
+    false
 }
 
 // ────────────── CHUNK HELPER ──────────────
@@ -391,6 +836,10 @@ pub fn start_dexscreener_loop() {
                 }
             }
         }
+
+        // Load rugcheck and dexscreener caches
+        let mut rugcheck_cache = load_rugcheck_cache(debug).await;
+        let mut dexscreener_cache = load_dexscreener_cache(debug).await;
 
         loop {
             if SHUTDOWN.load(Ordering::SeqCst) {
@@ -628,19 +1077,8 @@ pub fn start_dexscreener_loop() {
             mints.sort();
             mints.dedup();
 
-            // Create a map of cached RugCheck data for quick lookup
-            let mut cached_rug_data: std::collections::HashMap<
-                String,
-                RugCheckData
-            > = std::collections::HashMap::new();
-            for cached_token in &cached_tokens {
-                if cached_token.rug_check.checked_at.is_some() {
-                    cached_rug_data.insert(
-                        cached_token.mint.clone(),
-                        cached_token.rug_check.clone()
-                    );
-                }
-            }
+            // Load rugcheck cache for applying cached data
+            let rugcheck_cache = load_rugcheck_cache(debug).await;
 
             // Apply cached RugCheck data to new tokens where available and still valid
             let now = std::time::SystemTime
@@ -650,21 +1088,26 @@ pub fn start_dexscreener_loop() {
                 .as_secs();
 
             for token in &mut new_tokens {
-                if let Some(cached_rug) = cached_rug_data.get(&token.mint) {
-                    if let Some(checked_at) = cached_rug.checked_at {
-                        // Use cached data if it's less than 24 hours old
-                        if now - checked_at < 86400 {
-                            token.rug_check = cached_rug.clone();
-                            if debug {
-                                println!(
-                                    "📋 [RugCheck] Using cached data for {} (age: {} hours)",
-                                    token.symbol,
-                                    (now - checked_at) / 3600
-                                );
-                            }
+                if let Some(cached_rug) = rugcheck_cache.data.get(&token.mint) {
+                    if is_rugcheck_data_valid(cached_rug, 24) {
+                        token.rug_check = cached_rug.clone();
+                        if debug {
+                            println!(
+                                "📋 [RugCheck] Using cached data for {} (age: {} hours)",
+                                token.symbol,
+                                (now - cached_rug.checked_at.unwrap_or(0)) / 3600
+                            );
                         }
                     }
                 }
+            }
+
+            // Load DexScreener cache
+            let mut dexscreener_cache = load_dexscreener_cache(debug).await;
+
+            // Apply cached DexScreener data where available
+            for token in &mut new_tokens {
+                apply_cached_dexscreener_data(token, &dexscreener_cache, debug);
             }
 
             let batches = chunked(mints, 30);
@@ -687,107 +1130,69 @@ pub fn start_dexscreener_loop() {
                                         .iter_mut()
                                         .find(|t| t.mint == base_address)
                                 {
-                                    tok.dex_id = item["dexId"].as_str().unwrap_or_default().into();
-                                    tok.url = item["url"].as_str().unwrap_or_default().into();
-                                    tok.pair_address = item["pairAddress"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.labels = item["labels"]
-                                        .as_array()
-                                        .unwrap_or(&vec![])
-                                        .iter()
-                                        .filter_map(|v| v.as_str().map(String::from))
-                                        .collect();
-                                    tok.name = item["baseToken"]["name"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.symbol = item["baseToken"]["symbol"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.quote_address = item["quoteToken"]["address"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.quote_name = item["quoteToken"]["name"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.quote_symbol = item["quoteToken"]["symbol"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.price_native = item["priceNative"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.price_usd = item["priceUsd"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.volume_usd = item["volume"]["h24"]
-                                        .as_f64()
-                                        .unwrap_or(0.0)
-                                        .to_string();
-                                    tok.fdv_usd = item["fdv"].as_f64().unwrap_or(0.0).to_string();
-                                    tok.image_url = item["info"]["imageUrl"]
-                                        .as_str()
-                                        .unwrap_or_default()
-                                        .into();
-                                    tok.txns = Txns {
-                                        m5: TxnCount {
-                                            buys: item["txns"]["m5"]["buys"].as_u64().unwrap_or(0),
-                                            sells: item["txns"]["m5"]["sells"]
-                                                .as_u64()
-                                                .unwrap_or(0),
-                                        },
-                                        h1: TxnCount {
-                                            buys: item["txns"]["h1"]["buys"].as_u64().unwrap_or(0),
-                                            sells: item["txns"]["h1"]["sells"]
-                                                .as_u64()
-                                                .unwrap_or(0),
-                                        },
-                                        h6: TxnCount {
-                                            buys: item["txns"]["h6"]["buys"].as_u64().unwrap_or(0),
-                                            sells: item["txns"]["h6"]["sells"]
-                                                .as_u64()
-                                                .unwrap_or(0),
-                                        },
-                                        h24: TxnCount {
-                                            buys: item["txns"]["h24"]["buys"].as_u64().unwrap_or(0),
-                                            sells: item["txns"]["h24"]["sells"]
-                                                .as_u64()
-                                                .unwrap_or(0),
-                                        },
-                                    };
-                                    tok.volume = Volume {
-                                        m5: item["volume"]["m5"].as_f64().unwrap_or(0.0),
-                                        h1: item["volume"]["h1"].as_f64().unwrap_or(0.0),
-                                        h6: item["volume"]["h6"].as_f64().unwrap_or(0.0),
-                                        h24: item["volume"]["h24"].as_f64().unwrap_or(0.0),
-                                    };
-                                    tok.price_change = PriceChange {
-                                        m5: item["priceChange"]["m5"].as_f64().unwrap_or(0.0),
-                                        h1: item["priceChange"]["h1"].as_f64().unwrap_or(0.0),
-                                        h6: item["priceChange"]["h6"].as_f64().unwrap_or(0.0),
-                                        h24: item["priceChange"]["h24"].as_f64().unwrap_or(0.0),
-                                    };
-                                    tok.liquidity = Liquidity {
-                                        usd: item["liquidity"]["usd"].as_f64().unwrap_or(0.0),
-                                        base: item["liquidity"]["base"].as_f64().unwrap_or(0.0),
-                                        quote: item["liquidity"]["quote"].as_f64().unwrap_or(0.0),
-                                    };
-                                    tok.pair_created_at = item["pairCreatedAt"]
-                                        .as_u64()
-                                        .unwrap_or(0);
+                                    // Check if we need to update this token (if cache is stale or missing)
+                                    if
+                                        !is_dexscreener_data_valid(
+                                            &dexscreener_cache.data.get(&tok.mint).unwrap_or(
+                                                &(DexScreenerData {
+                                                    dex_id: String::new(),
+                                                    url: String::new(),
+                                                    pair_address: String::new(),
+                                                    labels: Vec::new(),
+                                                    quote_address: String::new(),
+                                                    quote_name: String::new(),
+                                                    quote_symbol: String::new(),
+                                                    price_native: String::new(),
+                                                    price_usd: String::new(),
+                                                    volume_usd: String::new(),
+                                                    fdv_usd: String::new(),
+                                                    image_url: String::new(),
+                                                    txns: Txns {
+                                                        m5: TxnCount { buys: 0, sells: 0 },
+                                                        h1: TxnCount { buys: 0, sells: 0 },
+                                                        h6: TxnCount { buys: 0, sells: 0 },
+                                                        h24: TxnCount { buys: 0, sells: 0 },
+                                                    },
+                                                    volume: Volume {
+                                                        m5: 0.0,
+                                                        h1: 0.0,
+                                                        h6: 0.0,
+                                                        h24: 0.0,
+                                                    },
+                                                    price_change: PriceChange {
+                                                        m5: 0.0,
+                                                        h1: 0.0,
+                                                        h6: 0.0,
+                                                        h24: 0.0,
+                                                    },
+                                                    liquidity: Liquidity {
+                                                        usd: 0.0,
+                                                        base: 0.0,
+                                                        quote: 0.0,
+                                                    },
+                                                    pair_created_at: 0,
+                                                    last_updated: 0,
+                                                })
+                                            ),
+                                            30
+                                        )
+                                    {
+                                        update_token_with_dexscreener_data(
+                                            tok,
+                                            item,
+                                            &mut dexscreener_cache,
+                                            debug
+                                        ).await;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            // Save DexScreener cache to disk
+            save_dexscreener_cache(&dexscreener_cache, debug).await;
 
             // ── Fetch rug check data for all tokens ──────────────────────
             if debug {
@@ -796,6 +1201,9 @@ pub fn start_dexscreener_loop() {
                     new_tokens.len()
                 );
             }
+
+            // Load rugcheck cache
+            let mut rugcheck_cache = load_rugcheck_cache(debug).await;
 
             // Fetch rug check data for tokens in batches to avoid overwhelming the API
             let rug_check_batch_size = 5; // Conservative batch size
@@ -837,11 +1245,13 @@ pub fn start_dexscreener_loop() {
                         }
                     }
 
+                    // Use cache-enabled fetch function
                     if
                         let Some(rug_data) = fetch_rug_check_data(
                             &client_insert,
                             &token.mint,
-                            debug
+                            debug,
+                            &mut rugcheck_cache
                         ).await
                     {
                         token.rug_check = rug_data;
@@ -873,14 +1283,14 @@ pub fn start_dexscreener_loop() {
             const MIN_VOLUME_USD: f64 = 5000.0;
             const MIN_FDV_USD: f64 = 20_000.0;
             const MAX_FDV_USD: f64 = 50_000_000.0;
-            const MIN_LIQUIDITY_SOL: f64 = 1000.0;
+            const MIN_LIQUIDITY_SOL: f64 = 10.0;
 
-            const MAX_PRICE_CHANGE_M5: f64 = 60.0;
-            const MAX_PRICE_CHANGE_H1: f64 = 120.0;
-            const MAX_PRICE_CHANGE_H6: f64 = 160.0;
-            const MAX_PRICE_CHANGE_H24: f64 = 180.0;
+            const MAX_PRICE_CHANGE_M5: f64 = 10.0;
+            const MAX_PRICE_CHANGE_H1: f64 = 10.0;
+            const MAX_PRICE_CHANGE_H6: f64 = 20.0;
+            const MAX_PRICE_CHANGE_H24: f64 = 20.0;
 
-            const MIN_BUYS_24H: u64 = 1000; // at least 10 buys in 24h
+            const MIN_BUYS_24H: u64 = 500; // at least 10 buys in 24h
             const MAX_DUMP_24H: f64 = -50.0; // reject if -50% or worse in 24h
 
             // Apply comprehensive filtering including rug check safety
@@ -990,6 +1400,17 @@ pub fn start_dexscreener_loop() {
             if let Ok(data) = serde_json::to_vec(&*TOKENS.read().await) {
                 let _ = fs::write(TOKEN_CACHE_FILE, data).await;
             }
+
+            // Save rugcheck and dexscreener caches
+            if debug {
+                println!("💾 Saving rugcheck cache with {} entries", rugcheck_cache.data.len());
+                println!(
+                    "💾 Saving dexscreener cache with {} entries",
+                    dexscreener_cache.data.len()
+                );
+            }
+            save_rugcheck_cache(&rugcheck_cache, debug).await;
+            save_dexscreener_cache(&dexscreener_cache, debug).await;
 
             println!("✅ TOKENS updated: {}", TOKENS.read().await.len());
             tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;

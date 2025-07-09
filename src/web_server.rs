@@ -27,6 +27,7 @@ use crate::persistence::{
 use crate::dexscreener::{ TOKENS, Token };
 use crate::pool_price::POOL_CACHE;
 use crate::trader::MarketDataFrame;
+use crate::strategy::TRANSACTION_FEE_SOL;
 
 // Global storage for market dataframes
 pub static MARKET_DATAFRAMES: Lazy<RwLock<HashMap<String, MarketDataFrame>>> = Lazy::new(||
@@ -433,8 +434,9 @@ fn calculate_pnl(position: &Position, current_price: Option<f64>) -> (Option<f64
         (Some(pnl), Some(pnl_percentage))
     } else if let Some(price) = current_price {
         // Open position - calculate unrealized PnL (current_price is in SOL)
+        // Account for sell transaction fee to make profit calculation more realistic
         let current_value = position.token_amount * price;
-        let pnl = current_value - position.sol_spent;
+        let pnl = current_value - position.sol_spent - TRANSACTION_FEE_SOL;
         let pnl_percentage = (pnl / position.sol_spent) * 100.0;
         (Some(pnl), Some(pnl_percentage))
     } else {

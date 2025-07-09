@@ -218,9 +218,10 @@ pub async fn print_open_positions() {
             .map(|&(_ts, price)| price)
             .unwrap_or(0.0);
 
-        // Use consistent profit calculation method (same as web server)
+        // Use consistent profit calculation method (same as strategy.rs)
+        // Account for sell transaction fee to make profit calculation more realistic
         let current_value = current_price * pos.token_amount;
-        let profit_sol = current_value - pos.sol_spent;
+        let profit_sol = current_value - pos.sol_spent - TRANSACTION_FEE_SOL;
         let profit_pct = if pos.sol_spent > 0.0 {
             (profit_sol / pos.sol_spent) * 100.0
         } else {
