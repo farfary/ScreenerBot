@@ -8,6 +8,7 @@ mod pools;
 mod persistence;
 mod pool_price;
 mod strategy;
+mod performance;
 
 use prelude::*;
 
@@ -18,6 +19,7 @@ async fn main() -> Result<()> {
 
     // 2 ─ restore caches
     persistence::load_cache().await?;
+    performance::load_performance_history().await?;
 
     // 3 ─ start background services (each spawns its own task and returns)
     dexscreener::start_dexscreener_loop();
@@ -42,6 +44,7 @@ async fn main() -> Result<()> {
     // 8 ─ final flush to disk
     persistence::save_open().await;
     persistence::save_closed().await;
+    let _ = performance::save_performance_history().await;
     flush_pool_cache_to_disk_nonblocking();
 
     println!("✅ graceful shutdown complete.");

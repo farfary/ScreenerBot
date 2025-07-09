@@ -8,5 +8,6 @@ pub mod pools;
 pub mod pool_price;
 pub mod strategy;
 pub mod transaction_manager;
+pub mod performance;
 
 pub mod prelude;

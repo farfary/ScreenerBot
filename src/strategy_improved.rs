@@ -75,7 +75,7 @@ pub const MIN_HOLDER_COUNT: u64 = 10; // Lower holder requirement
 
 /// SIMPLIFIED ANTI-BOT WHALE-FOLLOWING ENTRY STRATEGY
 /// Focus: Avoid bots, follow whales, enter quickly when conditions are met
-pub async fn should_buy(token: &Token, can_buy: bool, current_price: f64) -> bool {
+pub fn should_buy(token: &Token, can_buy: bool, current_price: f64) -> bool {
     println!(
         "\n🔍 [ENTRY] {} | ${:.8} | Simplified whale-following analysis...",
         token.symbol,
@@ -84,12 +84,6 @@ pub async fn should_buy(token: &Token, can_buy: bool, current_price: f64) -> boo
 
     if !can_buy {
         println!("❌ [ENTRY] {} | Trading blocked", token.symbol);
-        return false;
-    }
-
-    // Check if we should pause trading based on recent performance
-    if should_pause_trading().await {
-        println!("⏸️ [ENTRY] {} | Trading paused due to poor recent performance", token.symbol);
         return false;
     }
 
@@ -237,43 +231,25 @@ pub async fn should_buy(token: &Token, can_buy: bool, current_price: f64) -> boo
     println!("🎯 [SCORE] {:.2} | {:?}", entry_score, reasons);
 
     // ─── FINAL DECISION ───
-    let required_score = get_adaptive_entry_threshold().await; // Use adaptive threshold
+    let required_score = 0.5; // Lower threshold for more entries
 
     if entry_score >= required_score && whale_score >= 0.4 && bot_score <= 0.6 {
         println!(
-            "✅ [ENTRY] {} | APPROVED | Score: {:.2} | Whale: {:.1} | Bot: {:.1} | Threshold: {:.2}",
+            "✅ [ENTRY] {} | APPROVED | Score: {:.2} | Whale: {:.1} | Bot: {:.1}",
             token.symbol,
             entry_score,
             whale_score,
-            bot_score,
-            required_score
-        );
-
-        // Record the entry for performance tracking
-        let entry_signals: Vec<String> = reasons
-            .iter()
-            .map(|r| r.clone())
-            .collect();
-        let _result = record_trade_entry(
-            &token.mint,
-            &token.symbol,
-            current_price,
-            TRADE_SIZE_SOL,
-            entry_signals,
-            whale_score,
             bot_score
-        ).await;
-
+        );
         return true;
     }
 
     println!(
-        "❌ [ENTRY] {} | REJECTED | Score: {:.2} < {:.2} | Need: {:.2} more | Adaptive threshold: {:.2}",
+        "❌ [ENTRY] {} | REJECTED | Score: {:.2} < {:.2} | Need: {:.2} more",
         token.symbol,
         entry_score,
         required_score,
-        required_score - entry_score,
-        required_score
+        required_score - entry_score
     );
     false
 }

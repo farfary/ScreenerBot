@@ -192,11 +192,19 @@ pub fn start_trader_loop() {
 
     // ── positions print task ──────────────────────────────────────────────────────
     task::spawn(async move {
+        let mut counter = 0;
         loop {
             if SHUTDOWN.load(Ordering::SeqCst) {
                 break;
             }
             print_open_positions().await;
+
+            // Print performance report every 10 cycles (roughly every 100 seconds)
+            counter += 1;
+            if counter % 10 == 0 {
+                print_performance_report().await;
+            }
+
             sleep(Duration::from_secs(POSITIONS_PRINT_TIME)).await;
         }
     });
@@ -683,7 +691,7 @@ async fn token_discovery_loop() {
             }
 
             // Check if we should buy
-            let buy_signal = should_buy(&token, true, current_price);
+            let buy_signal = should_buy(&token, true, current_price).await;
 
             if buy_signal {
                 println!("🚀 [TOKEN DISCOVERY] ENTRY BUY {}: price={:.9}", symbol, current_price);
@@ -817,6 +825,11 @@ pub async fn sell_token(
             }
         }
     }
+
+    // Record the exit in performance tracking
+    let is_rug = profit_pct < -80.0; // Consider >80% loss as potential rug
+    let exit_reason = if profit_pct > 0.0 { "profit_taking" } else { "stop_loss" };
+    let _ = record_trade_exit(mint, sell_price, sol_received, exit_reason, dca_count, is_rug).await;
 }
 
 // Helper function to get pool address from mint

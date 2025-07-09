@@ -8,6 +8,7 @@ pub use crate::pool_price::*;
 pub use crate::swap_gmgn::*;
 pub use crate::trader::*;
 pub use crate::strategy::*;
+pub use crate::performance::*;
 
 pub use crate::pools::cpmm::*;
 pub use crate::pools::decoder::*;
