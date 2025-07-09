@@ -185,7 +185,7 @@ pub async fn print_open_positions() {
     use comfy_table::{ Table, presets::UTF8_FULL };
 
     let positions_guard = OPEN_POSITIONS.read().await;
-    let closed_guard = RECENT_CLOSED_POSITIONS.read().await;
+    let closed_guard = CLOSED_POSITIONS.read().await;
 
     // ── quick stats ───────────────────────────
     let open_count = positions_guard.len();

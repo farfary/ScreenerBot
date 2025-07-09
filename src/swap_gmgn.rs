@@ -19,22 +19,11 @@ use once_cell::sync::Lazy;
 
 /// Submit a swap to GMGN router and return the signature string.
 /// Also prints the **effective on-chain price** paid for the swap.
-/// Now integrates with transaction manager for proper state tracking.
+/// Transactions are confirmed immediately after sending.
 pub async fn buy_gmgn(
     token_mint_address: &str,
     in_amount: u64 // lamports you want to swap
 ) -> Result<String> {
-    // Check if trading is blocked due to pending transactions
-    if TransactionManager::is_trading_blocked().await {
-        return Err(anyhow::anyhow!("Trading blocked due to pending transactions"));
-    }
-
-    // Check if this specific token already has a pending transaction
-    if TransactionManager::has_pending_transaction_for_token(token_mint_address).await {
-        return Err(
-            anyhow::anyhow!("Token {} already has a pending transaction", token_mint_address)
-        );
-    }
     // -------- 0. setup -----------------------------------------------------
     let wallet = {
         let bytes = bs58::decode(&crate::configs::CONFIGS.main_wallet_private).into_vec()?;
@@ -180,18 +169,6 @@ pub async fn sell_all_gmgn(
     token_mint_address: &str,
     min_out_amount: f64 // require at least this SOL out
 ) -> anyhow::Result<String> {
-    // Check if trading is blocked due to pending transactions
-    if TransactionManager::is_trading_blocked().await {
-        return Err(anyhow::anyhow!("Trading blocked due to pending transactions"));
-    }
-
-    // Check if this specific token already has a pending transaction
-    if TransactionManager::has_pending_transaction_for_token(token_mint_address).await {
-        return Err(
-            anyhow::anyhow!("Token {} already has a pending sell transaction", token_mint_address)
-        );
-    }
-
     // Block if token is in skipped list
     {
         let set = SKIPPED_SELLS.lock().await;

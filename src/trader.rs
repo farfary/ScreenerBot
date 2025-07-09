@@ -1,10 +1,7 @@
 use crate::prelude::*;
 use std::collections::VecDeque;
 use serde::{ Deserialize, Serialize };
-use std::fs;
-use std::path::Path;
 use rayon::prelude::*;
-use anyhow::anyhow;
 
 // GeckoTerminal API response structures
 #[derive(Debug, Deserialize)]
@@ -48,7 +45,6 @@ struct CachedOHLCV {
     hour_data: Vec<[f64; 6]>,
     day_data: Vec<[f64; 6]>,
 }
-
 
 // Timeframe enum for different OHLCV intervals
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -139,27 +135,6 @@ impl TimeframeData {
         self.closes.back().copied()
     }
 }
-
-// Market data structure with multiple timeframes
-#[derive(Debug, Clone)]
-pub struct MarketDataFrame {
-    pub pool_address: String,
-    pub base_token: String,
-    pub quote_token: String,
-    pub minute_data: TimeframeData,
-    pub hour_data: TimeframeData,
-    pub day_data: TimeframeData,
-    pub last_updated: u64,
-    // Legacy fields for backward compatibility
-    pub prices: VecDeque<f64>,
-    pub volumes: VecDeque<f64>,
-    pub timestamps: VecDeque<u64>,
-    pub highs: VecDeque<f64>,
-    pub lows: VecDeque<f64>,
-    pub opens: VecDeque<f64>,
-    pub closes: VecDeque<f64>,
-}
-
 
 /// supervisor that starts both position monitoring and token discovery tasks
 pub fn start_trader_loop() {
@@ -265,11 +240,8 @@ async fn position_monitor_loop() {
             continue;
         }
 
-        // Check if trading is blocked due to pending transactions
-        if TransactionManager::is_trading_blocked().await {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            continue;
-        }
+        // Check if trading is blocked - simple check without complex transaction manager
+        // For now, we'll allow trading since transactions are confirmed immediately
 
         /* ── BATCH PRICE FETCHING for positions only ─────────── */
         println!("🔄 [POSITION MONITOR] Checking {} open positions...", position_mints.len());
@@ -302,20 +274,29 @@ async fn position_monitor_loop() {
             );
         }
 
+        // Print position status every 5 iterations (roughly every 10 seconds)
+        static mut LOOP_COUNTER: u32 = 0;
+        unsafe {
+            LOOP_COUNTER += 1;
+            if LOOP_COUNTER % 5 == 0 {
+                println!("💹 [POSITION MONITOR] Monitoring {} positions", position_mints.len());
+            }
+        }
+
         /* ── iterate position mints and process with fetched prices ──────── */
-        for mint in position_mints {
+        for mint in &position_mints {
             if SHUTDOWN.load(Ordering::SeqCst) {
                 return;
             }
 
             // Get price from batch results or fallback to individual fetch
-            let current_price = if let Some(&price) = prices.get(&mint) {
+            let current_price = if let Some(&price) = prices.get(mint) {
                 price
             } else {
                 // Fallback to individual fetch for failed batches
                 let symbol = TOKENS.read().await
                     .iter()
-                    .find(|t| t.mint == mint)
+                    .find(|t| t.mint == *mint)
                     .map(|t| t.symbol.clone())
                     .unwrap_or_else(|| mint.chars().take(4).collect());
 
@@ -353,7 +334,7 @@ async fn position_monitor_loop() {
             /* ── symbol string & token lookup ────────────────────────── */
             let (symbol, token) = {
                 let tokens = TOKENS.read().await;
-                if let Some(t) = tokens.iter().find(|t| t.mint == mint) {
+                if let Some(t) = tokens.iter().find(|t| t.mint == *mint) {
                     (t.symbol.clone(), t.clone())
                 } else {
                     // Fallback if token not found in TOKENS list
@@ -396,11 +377,11 @@ async fn position_monitor_loop() {
                 }
             };
 
-            let now = Instant::now();
+            let _now = Instant::now();
 
             // -- Check if this token has an open position
             let open_positions = OPEN_POSITIONS.read().await;
-            let has_position = open_positions.contains_key(&mint);
+            let has_position = open_positions.contains_key(mint.as_str());
             drop(open_positions);
 
             // Skip if no position for this token (position monitor only handles existing positions)
@@ -411,7 +392,7 @@ async fn position_monitor_loop() {
             /* ---------- DCA & trailing stop ---------- */
             let pos_opt = {
                 let guard = OPEN_POSITIONS.read().await; // read-lock
-                guard.get(&mint).cloned() // clone the Position, no &refs
+                guard.get(mint.as_str()).cloned() // clone the Position, no &refs
             };
 
             // ───────── POSITION MANAGEMENT (using strategy.rs) ───────────────────────────────
@@ -432,7 +413,7 @@ async fn position_monitor_loop() {
                         };
 
                         // Store original position before DCA
-                        let original_position = pos.clone();
+                        let _original_position = pos.clone();
 
                         match buy_gmgn(&mint, lamports).await {
                             Ok(tx) => {
@@ -444,19 +425,6 @@ async fn position_monitor_loop() {
                                 pos.last_dca_price = current_price;
                                 pos.last_dca_time = Utc::now();
 
-                                // Create pending transaction record
-                                let pending_tx = PendingTransaction::new(
-                                    tx.clone(),
-                                    TransactionType::DCA,
-                                    mint.clone(),
-                                    symbol.clone(),
-                                    sol_amount,
-                                    added,
-                                    current_price,
-                                    Some(create_position_data(&original_position))
-                                );
-
-                                TransactionManager::add_pending_transaction(pending_tx).await.ok();
                                 OPEN_POSITIONS.write().await.insert(mint.clone(), pos.clone());
                                 save_open().await;
 
@@ -478,10 +446,10 @@ async fn position_monitor_loop() {
                         // Check if sell for this mint is permanently blacklisted
                         {
                             let set = SKIPPED_SELLS.lock().await;
-                            if set.contains(&mint) {
+                            if set.contains(mint.as_str()) {
                                 println!("⛔️ [SKIPPED_SELLS] Not selling {} because it's blacklisted after 10 fails.", mint);
-                                OPEN_POSITIONS.write().await.remove(&mint);
-                                notified_profit_bucket.remove(&mint);
+                                OPEN_POSITIONS.write().await.remove(mint.as_str());
+                                notified_profit_bucket.remove(mint.as_str());
                                 continue;
                             }
                         }
@@ -511,20 +479,6 @@ async fn position_monitor_loop() {
                                     reason
                                 );
 
-                                // Create pending transaction record
-                                let pending_tx = PendingTransaction::new(
-                                    tx.clone(),
-                                    TransactionType::Sell,
-                                    mint.clone(),
-                                    symbol.clone(),
-                                    profit_sol,
-                                    pos.token_amount,
-                                    current_price,
-                                    Some(create_position_data(&pos))
-                                );
-
-                                TransactionManager::add_pending_transaction(pending_tx).await.ok();
-
                                 // Process sell
                                 sell_token(
                                     &symbol,
@@ -540,9 +494,9 @@ async fn position_monitor_loop() {
                                     pos.open_time
                                 ).await;
 
-                                // Remove position (will be restored if transaction fails)
-                                OPEN_POSITIONS.write().await.remove(&mint);
-                                notified_profit_bucket.remove(&mint);
+                                // Remove position
+                                OPEN_POSITIONS.write().await.remove(mint.as_str());
+                                notified_profit_bucket.remove(mint.as_str());
                                 save_open().await;
                             }
                             Err(e) => {
@@ -550,10 +504,10 @@ async fn position_monitor_loop() {
                                 *fails += 1;
                                 println!("❌ Sell failed for {} (fail {}/10): {e}", mint, *fails);
                                 if *fails >= 10 {
-                                    add_skipped_sell(&mint);
+                                    add_skipped_sell(mint.as_str()).await;
                                     println!("⛔️ [SKIPPED_SELLS] Added {} to skipped sells after 10 fails.", mint);
-                                    OPEN_POSITIONS.write().await.remove(&mint);
-                                    notified_profit_bucket.remove(&mint);
+                                    OPEN_POSITIONS.write().await.remove(mint.as_str());
+                                    notified_profit_bucket.remove(mint.as_str());
                                     save_open().await;
                                 }
                             }
@@ -568,12 +522,12 @@ async fn position_monitor_loop() {
 
                 /* ——— Peak update & milestone notifications (moved to strategy) ——— */
                 if should_update_peak(&pos, current_price) {
-                    if let Some(p) = OPEN_POSITIONS.write().await.get_mut(&mint) {
+                    if let Some(p) = OPEN_POSITIONS.write().await.get_mut(mint.as_str()) {
                         p.peak_price = current_price;
                     }
 
                     let bucket = get_profit_bucket(&pos, current_price);
-                    if bucket > *notified_profit_bucket.get(&mint).unwrap_or(&-1) {
+                    if bucket > *notified_profit_bucket.get(mint.as_str()).unwrap_or(&-1) {
                         notified_profit_bucket.insert(mint.clone(), bucket);
                         let current_value = current_price * pos.token_amount;
                         let profit_sol = current_value - pos.sol_spent;
@@ -592,16 +546,6 @@ async fn position_monitor_loop() {
                 }
             }
         } // end for mint
-
-        // Print transaction status every 5 iterations (roughly every 10 seconds)
-        static mut LOOP_COUNTER: u32 = 0;
-        unsafe {
-            LOOP_COUNTER += 1;
-            if LOOP_COUNTER % 5 == 0 {
-                let tx_summary = TransactionManager::get_transaction_summary().await;
-                println!("{}", tx_summary);
-            }
-        }
 
         // Fast position checking - every 2 seconds
         sleep(Duration::from_secs(2)).await;
@@ -654,11 +598,8 @@ async fn token_discovery_loop() {
             continue;
         }
 
-        // Check if trading is blocked due to pending transactions
-        if TransactionManager::is_trading_blocked().await {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            continue;
-        }
+        // Check if trading is blocked - simple check without complex transaction manager
+        // For now, we'll allow trading since transactions are confirmed immediately
 
         // Check if we can open more positions
         let can_open_more = {
@@ -767,26 +708,6 @@ async fn token_discovery_loop() {
                     Ok(tx) => {
                         println!("✅ [TOKEN DISCOVERY] BUY success: {tx}");
 
-                        // Create pending transaction record
-                        let pending_tx = PendingTransaction::new(
-                            tx.clone(),
-                            TransactionType::Buy,
-                            mint.clone(),
-                            symbol.clone(),
-                            TRADE_SIZE_SOL,
-                            bought,
-                            current_price,
-                            None // No position data needed for new buy
-                        );
-
-                        // Add to pending transactions
-                        if
-                            let Err(e) =
-                                TransactionManager::add_pending_transaction(pending_tx).await
-                        {
-                            println!("❌ [TOKEN DISCOVERY] Failed to add pending transaction: {}", e);
-                        }
-
                         // Add position to open positions
                         OPEN_POSITIONS.write().await.insert(mint.clone(), new_position);
                         save_open().await;
@@ -866,9 +787,9 @@ pub async fn sell_token(
     println!("   • Close Time      : {}", close_time);
     println!("💰 [Screener] Executed SELL {}\n", symbol);
 
-    // ✅ store in RECENT_CLOSED_POSITIONS
+    // ✅ store in CLOSED_POSITIONS
     {
-        let mut closed = RECENT_CLOSED_POSITIONS.write().await;
+        let mut closed = CLOSED_POSITIONS.write().await;
 
         closed.insert(mint.to_string(), Position {
             entry_price: entry,
@@ -883,8 +804,8 @@ pub async fn sell_token(
             last_dca_time: open_time, // Use open_time for closed positions
         });
 
-        // Keep only the most recent 10 positions (by close_time)
-        if closed.len() > 10 {
+        // Keep only the most recent 100 positions (by close_time)
+        if closed.len() > 100 {
             // Remove the oldest by close_time
             if
                 let Some((oldest_mint, _)) = closed
@@ -897,16 +818,6 @@ pub async fn sell_token(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
 
 // Helper function to get pool address from mint
 async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
