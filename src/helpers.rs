@@ -229,6 +229,141 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
     let now = Utc::now();
     println!("⏰ Analysis Time: {} UTC", now.format("%Y-%m-%d %H:%M:%S"));
 
+    // ── Full Watchlist Tokens Display ──────────────────────────────────────────────────
+    match tokio::time::timeout(Duration::from_secs(2), TOKENS.read()).await {
+        Ok(tokens_guard) => {
+            if !tokens_guard.is_empty() {
+                let mut all_watchlist_tokens: Vec<_> = tokens_guard.iter().collect();
+
+                // Sort by market cap (highest first) for full watchlist display
+                all_watchlist_tokens.sort_by(|a, b| {
+                    let a_mcap = a.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                    let b_mcap = b.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                    b_mcap.partial_cmp(&a_mcap).unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let mut full_watchlist_table = Table::new();
+                full_watchlist_table
+                    .load_preset(UTF8_FULL)
+                    .set_header([
+                        "#",
+                        "Symbol",
+                        "Name",
+                        "Price USD",
+                        "5m %",
+                        "1h %",
+                        "24h %",
+                        "Volume 24h",
+                        "Liquidity",
+                        "MCap",
+                        "Buys 1h",
+                        "Rug Score",
+                        "Mint Address",
+                    ]);
+
+                for (index, token) in all_watchlist_tokens.iter().enumerate() {
+                    let price_usd = token.price_usd.parse::<f64>().unwrap_or(0.0);
+                    let volume_24h = token.volume.h24;
+                    let liquidity_usd = token.liquidity.usd;
+                    let mcap = token.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                    let buys_1h = token.txns.h1.buys;
+
+                    // Format price change with emojis
+                    let change_5m = token.price_change.m5;
+                    let change_1h = token.price_change.h1;
+                    let change_24h = token.price_change.h24;
+
+                    let format_change = |change: f64| -> String {
+                        if change > 5.0 {
+                            format!("🚀+{:.1}%", change)
+                        } else if change > 0.0 {
+                            format!("📈+{:.1}%", change)
+                        } else if change < -5.0 {
+                            format!("💀{:.1}%", change)
+                        } else if change < 0.0 {
+                            format!("📉{:.1}%", change)
+                        } else {
+                            "➡️0.0%".to_string()
+                        }
+                    };
+
+                    // Format large numbers
+                    let format_large_number = |value: f64| -> String {
+                        if value >= 1_000_000.0 {
+                            format!("{:.2}M", value / 1_000_000.0)
+                        } else if value >= 1_000.0 {
+                            format!("{:.1}K", value / 1_000.0)
+                        } else {
+                            format!("{:.0}", value)
+                        }
+                    };
+
+                    // Truncate name if too long
+                    let display_name = if token.name.len() > 12 {
+                        format!("{}...", &token.name[..9])
+                    } else {
+                        token.name.clone()
+                    };
+
+                    // Format rug score with emoji
+                    let rug_score_display = if token.rug_check.rugged {
+                        "🚨 RUG".to_string()
+                    } else if token.rug_check.score_normalised >= 80 {
+                        format!("✅ {}", token.rug_check.score_normalised)
+                    } else if token.rug_check.score_normalised >= 60 {
+                        format!("⚠️ {}", token.rug_check.score_normalised)
+                    } else if token.rug_check.score_normalised > 0 {
+                        format!("🔴 {}", token.rug_check.score_normalised)
+                    } else {
+                        "❓ N/A".to_string()
+                    };
+
+                    full_watchlist_table.add_row([
+                        (index + 1).to_string(),
+                        token.symbol.clone(),
+                        display_name,
+                        if price_usd > 0.0 {
+                            if price_usd < 0.000001 {
+                                format!("${:.9}", price_usd)
+                            } else {
+                                format!("${:.6}", price_usd)
+                            }
+                        } else {
+                            "N/A".to_string()
+                        },
+                        format_change(change_5m),
+                        format_change(change_1h),
+                        format_change(change_24h),
+                        format!("${}", format_large_number(volume_24h)),
+                        format!("${}", format_large_number(liquidity_usd)),
+                        format!("${}", format_large_number(mcap)),
+                        buys_1h.to_string(),
+                        rug_score_display,
+                        token.mint.clone(),
+                    ]);
+                }
+
+                println!("\n🎯 [FULL WATCHLIST TOKENS] ═════════════════════════════════════════");
+                println!(
+                    "📊 All tracked tokens • Sorted by Market Cap • Live data from DexScreener"
+                );
+                println!("🔍 Rug scores from RugCheck • Volume & liquidity in USD");
+                println!("═══════════════════════════════════════════════════════════════════");
+                println!("{}", full_watchlist_table);
+                println!("═══════════════════════════════════════════════════════════════════\n");
+            } else {
+                println!(
+                    "\n🎯 [FULL WATCHLIST] No tokens loaded yet - waiting for DexScreener data\n"
+                );
+            }
+        }
+        Err(_) => {
+            println!(
+                "\n🎯 [FULL WATCHLIST] Token data being updated - skipping watchlist display this cycle\n"
+            );
+        }
+    }
+
     // ── prepare open-positions table with enhanced columns ──────────
     let mut positions_vec: Vec<_> = positions_guard.iter().collect();
 

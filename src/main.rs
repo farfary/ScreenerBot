@@ -50,6 +50,7 @@ async fn main() -> Result<()> {
     // 8 ─ final flush to disk
     persistence::save_open().await;
     persistence::save_closed().await;
+    persistence::save_watchlist().await;
     let _ = performance::save_performance_history().await;
     flush_pool_cache_to_disk_nonblocking();
 

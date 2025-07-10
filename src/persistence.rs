@@ -11,6 +11,7 @@ use anyhow::Result;
 
 pub const OPEN_POS_FILE: &str = "open_positions.json";
 pub const CLOSED_POS_FILE: &str = "closed_positions.json";
+pub const WATCHLIST_FILE: &str = "watchlist_tokens.json";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Position {
@@ -26,12 +27,29 @@ pub struct Position {
     pub last_dca_time: DateTime<Utc>, // Time of last DCA for cooldown tracking
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WatchlistEntry {
+    pub mint: String,
+    pub symbol: String,
+    pub name: String,
+    pub first_traded: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
+    pub total_trades: u32,
+    pub last_price: f64,
+    pub priority_score: f64, // Higher score = higher priority for monitoring
+}
+
 // in-memory stores -----------------------------------------------------------
 pub static OPEN_POSITIONS: Lazy<RwLock<HashMap<String, Position>>> = Lazy::new(||
     RwLock::new(HashMap::new())
 );
 
 pub static CLOSED_POSITIONS: Lazy<RwLock<HashMap<String, Position>>> = Lazy::new(||
+    RwLock::new(HashMap::new())
+);
+
+// NEW: Persistent watchlist for tokens we've previously traded
+pub static WATCHLIST_TOKENS: Lazy<RwLock<HashMap<String, WatchlistEntry>>> = Lazy::new(||
     RwLock::new(HashMap::new())
 );
 
@@ -44,6 +62,14 @@ pub async fn load_cache() -> Result<()> {
     if let Ok(data) = fs::read(CLOSED_POS_FILE).await {
         let map: HashMap<String, Position> = serde_json::from_slice(&data)?;
         *CLOSED_POSITIONS.write().await = map;
+    }
+
+    // Load watchlist
+    if let Ok(data) = fs::read(WATCHLIST_FILE).await {
+        let map: HashMap<String, WatchlistEntry> = serde_json::from_slice(&data)?;
+        let watchlist_count = map.len();
+        *WATCHLIST_TOKENS.write().await = map;
+        println!("📋 Loaded {} tokens in watchlist", watchlist_count);
     }
 
     Ok(())
@@ -69,6 +95,11 @@ pub async fn save_closed() {
     let _ = atomic_write(CLOSED_POS_FILE, &serde_json::to_vec_pretty(&snapshot).unwrap()).await;
 }
 
+pub async fn save_watchlist() {
+    let snapshot = WATCHLIST_TOKENS.read().await.clone();
+    let _ = atomic_write(WATCHLIST_FILE, &serde_json::to_vec_pretty(&snapshot).unwrap()).await;
+}
+
 // background autosave --------------------------------------------------------
 pub async fn autosave_loop() {
     use std::sync::atomic::Ordering;
@@ -79,7 +110,7 @@ pub async fn autosave_loop() {
         }
 
         // run all writes concurrently
-        futures::join!(save_open(), save_closed());
+        futures::join!(save_open(), save_closed(), save_watchlist());
 
         // the heavy pool-cache write on a blocking worker
         let _ = tokio::task::spawn_blocking(|| flush_pool_cache_to_disk_nonblocking()).await;
@@ -98,7 +129,30 @@ pub async fn close_position(token_id: &str, sol_received: f64) -> Result<()> {
         position.close_time = Some(chrono::Utc::now());
 
         // Add to closed positions (keep only last 100 for performance)
-        closed_positions.insert(token_id.to_string(), position);
+        closed_positions.insert(token_id.to_string(), position.clone());
+
+        // Add to watchlist for future monitoring
+        // Try to get token details from TOKENS
+        {
+            let tokens = TOKENS.read().await;
+            if let Some(token) = tokens.iter().find(|t| t.mint == token_id) {
+                add_to_watchlist(
+                    &token.mint,
+                    &token.symbol,
+                    &token.name,
+                    position.entry_price
+                ).await;
+                println!(
+                    "📋 Added {} ({}) to watchlist for continuous monitoring",
+                    token.symbol,
+                    token.mint
+                );
+            } else {
+                // Fallback: add with minimal info
+                add_to_watchlist(token_id, "UNKNOWN", "UNKNOWN", position.entry_price).await;
+                println!("📋 Added {} to watchlist (unknown symbol)", token_id);
+            }
+        }
 
         // Keep only the most recent 100 positions (by close_time)
         if closed_positions.len() > 100 {
@@ -117,4 +171,72 @@ pub async fn close_position(token_id: &str, sol_received: f64) -> Result<()> {
     }
 
     Ok(())
+}
+
+// Watchlist management functions ---------------------------------------------
+
+/// Add a token to the watchlist when we first trade it
+pub async fn add_to_watchlist(mint: &str, symbol: &str, name: &str, price: f64) {
+    let mut watchlist = WATCHLIST_TOKENS.write().await;
+
+    let now = chrono::Utc::now();
+
+    if let Some(entry) = watchlist.get_mut(mint) {
+        // Update existing entry
+        entry.last_seen = now;
+        entry.total_trades += 1;
+        entry.last_price = price;
+        entry.priority_score += 1.0; // Increase priority each time we trade
+    } else {
+        // Add new entry
+        let entry = WatchlistEntry {
+            mint: mint.to_string(),
+            symbol: symbol.to_string(),
+            name: name.to_string(),
+            first_traded: now,
+            last_seen: now,
+            total_trades: 1,
+            last_price: price,
+            priority_score: 10.0, // Start with base priority
+        };
+        watchlist.insert(mint.to_string(), entry);
+    }
+}
+
+/// Get all watchlist tokens sorted by priority
+pub async fn get_watchlist_tokens() -> Vec<WatchlistEntry> {
+    let watchlist = WATCHLIST_TOKENS.read().await;
+    let mut tokens: Vec<WatchlistEntry> = watchlist.values().cloned().collect();
+
+    // Sort by priority score (highest first)
+    tokens.sort_by(|a, b|
+        b.priority_score.partial_cmp(&a.priority_score).unwrap_or(std::cmp::Ordering::Equal)
+    );
+
+    tokens
+}
+
+/// Update last seen time for a watchlist token
+pub async fn update_watchlist_token_seen(mint: &str, price: f64) {
+    let mut watchlist = WATCHLIST_TOKENS.write().await;
+    if let Some(entry) = watchlist.get_mut(mint) {
+        entry.last_seen = chrono::Utc::now();
+        entry.last_price = price;
+    }
+}
+
+/// Check if a token is in our watchlist
+pub async fn is_watchlist_token(mint: &str) -> bool {
+    let watchlist = WATCHLIST_TOKENS.read().await;
+    watchlist.contains_key(mint)
+}
+
+/// Get priority watchlist tokens (top 50 by priority score)
+pub async fn get_priority_watchlist_tokens(limit: usize) -> Vec<String> {
+    let tokens = get_watchlist_tokens().await;
+    tokens
+        .into_iter()
+        .take(limit)
+        .map(|entry| entry.mint)
+        .collect()
 }

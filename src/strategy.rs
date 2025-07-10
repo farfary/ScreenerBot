@@ -46,37 +46,132 @@ use crate::price_validation::{ is_price_valid, get_trading_price };
 // • Rug loss offset: 10+ small wins per rug loss
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🔧 CONFIGURATION PARAMETERS - ADJUST THESE TO CUSTOMIZE STRATEGY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── TIMING PARAMETERS ───
 pub const POSITIONS_CHECK_TIME_SEC: u64 = 30;
 pub const TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 30;
-
-// TRADING CONSTANTS - OPTIMIZED FOR 0.001 SOL TRADES
-pub const MAX_TOKENS: usize = 100;
-pub const TRADE_SIZE_SOL: f64 = 0.001; // Your specified trade size
-pub const MAX_OPEN_POSITIONS: usize = 20; // Reduced for better management
+pub const WATCHLIST_CHECK_TIME_SEC: u64 = 10; // Check watchlist tokens more frequently
+pub const NEW_TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 60; // Check new tokens less frequently
 pub const MIN_HOLD_TIME_SECONDS: i64 = 30; // Faster exits allowed
 pub const MAX_HOLD_TIME_SECONDS: i64 = 21600; // 6 hours max hold time
-pub const MAX_DCA_COUNT: u8 = 1; // Only 1 DCA round to limit risk
+pub const POSITIONS_PRINT_TIME: u64 = 10; // Print every 10 seconds
+pub const ENTRY_COOLDOWN_MINUTES: i64 = 15; // Faster re-entry
 pub const DCA_COOLDOWN_MINUTES: i64 = 30; // Faster DCA attempts
+
+// ─── TRADING SIZE PARAMETERS (DYNAMIC SOL AMOUNT BASED ON LIQUIDITY) ───
+pub const MIN_TRADE_SIZE_SOL: f64 = 0.001; // Minimum trade size
+pub const MAX_TRADE_SIZE_SOL: f64 = 0.01; // Maximum trade size
+pub const MIN_LIQUIDITY_FOR_MIN_SIZE: f64 = 10.0; // 10 SOL liquidity = min trade size
+pub const MAX_LIQUIDITY_FOR_MAX_SIZE: f64 = 10000.0; // 10k SOL liquidity = max trade size
+
+// ─── POSITION MANAGEMENT ───
+pub const MAX_TOKENS: usize = 100;
+pub const MAX_OPEN_POSITIONS: usize = 20; // Reduced for better management
+pub const MAX_DCA_COUNT: u8 = 1; // Only 1 DCA round to limit risk
+pub const DCA_SIZE_FACTOR: f64 = 1.0; // Same size DCA as initial
 pub const DCA_BASE_TRIGGER_PCT: f64 = -15.0; // DCA trigger at -15%
 
+// ─── TRADING COSTS ───
 pub const TRANSACTION_FEE_SOL: f64 = 0.000015; // Transaction fee
-pub const POSITIONS_PRINT_TIME: u64 = 10; // Print every 10 seconds
 pub const SLIPPAGE_BPS: f64 = 1.0; // Slightly higher slippage for execution
-pub const DCA_SIZE_FACTOR: f64 = 1.0; // Same size DCA as initial
 
-// STRATEGY CONSTANTS - SIMPLIFIED & EFFECTIVE
-pub const MIN_VOLUME_USD: f64 = 3000.0; // Lowered for more opportunities
-pub const MIN_LIQUIDITY_SOL: f64 = 8.0; // Lowered for early tokens
+// ─── ENTRY FILTERS - FUNDAMENTAL REQUIREMENTS ───
+pub const MIN_VOLUME_USD: f64 = 3000.0; // Minimum 24h volume
+pub const MIN_LIQUIDITY_SOL: f64 = 8.0; // Minimum liquidity pool size
+pub const MIN_ACTIVITY_BUYS_1H: u64 = 3; // Minimum buying activity per hour
+pub const MIN_HOLDER_COUNT: u64 = 10; // Minimum unique holders
 
-// ENHANCED ENTRY LOGIC - FOCUS ON BOT AVOIDANCE
-pub const MIN_ACTIVITY_BUYS_1H: u64 = 3; // Minimum buying activity
-pub const BIG_DUMP_THRESHOLD: f64 = -25.0; // Avoid major dumps
-pub const ENTRY_COOLDOWN_MINUTES: i64 = 15; // Faster re-entry
-pub const ACCUMULATION_PATIENCE_THRESHOLD: f64 = 12.0; // Allow more pump
+// ─── WHALE DETECTION THRESHOLDS ───
+pub const WHALE_BUY_THRESHOLD_SOL: f64 = 2.0; // Minimum SOL for whale trade
+pub const LARGE_WHALE_MULTIPLIER: f64 = 2.0; // 4+ SOL for large whale
+pub const MEDIUM_WHALE_MULTIPLIER: f64 = 0.5; // 1+ SOL for medium whale
 
-// WHALE DETECTION CONSTANTS
-pub const WHALE_BUY_THRESHOLD_SOL: f64 = 2.0; // Lower whale threshold
-pub const MIN_HOLDER_COUNT: u64 = 10; // Lower holder requirement
+// ─── RISK MANAGEMENT ───
+pub const BIG_DUMP_THRESHOLD: f64 = -25.0; // Avoid tokens with major dumps
+pub const ACCUMULATION_PATIENCE_THRESHOLD: f64 = 12.0; // Allow moderate pump before entry
+pub const MAX_PRICE_DIFFERENCE_PCT: f64 = 10.0; // Max price difference between sources
+pub const HIGH_VOLATILITY_THRESHOLD: f64 = 15.0; // High volatility warning
+
+// ─── WHALE ACTIVITY SCORING ───
+pub const STRONG_WHALE_ACCUMULATION_USD: f64 = 500.0; // Strong whale net flow
+pub const MODERATE_WHALE_ACCUMULATION_USD: f64 = 100.0; // Moderate whale net flow
+pub const LARGE_TRADE_THRESHOLD_USD: f64 = 100.0; // Large trade detection
+pub const MEDIUM_TRADE_THRESHOLD_USD: f64 = 50.0; // Medium trade detection
+pub const SMALL_TRADE_THRESHOLD_USD: f64 = 10.0; // Small/bot trade detection
+
+// ─── BOT DETECTION PARAMETERS ───
+pub const HIGH_BOT_ACTIVITY_AVG_SIZE: f64 = 0.5; // SOL - very small avg trade
+pub const HIGH_BOT_ACTIVITY_COUNT: u64 = 100; // Many small transactions
+pub const MEDIUM_BOT_ACTIVITY_AVG_SIZE: f64 = 1.0; // SOL - small avg trade
+pub const MEDIUM_BOT_ACTIVITY_COUNT: u64 = 50; // Moderate transaction count
+pub const LOW_BOT_ACTIVITY_AVG_SIZE: f64 = 1.5; // SOL - reasonable avg trade
+pub const LOW_BOT_ACTIVITY_COUNT: u64 = 20; // Low transaction count
+
+// ─── ENTRY SCORING WEIGHTS ───
+pub const WHALE_SCORE_WEIGHT: f64 = 0.3; // Weight for whale activity
+pub const TRADES_SCORE_WEIGHT: f64 = 0.4; // Weight for trades data (higher)
+pub const BOT_SCORE_WEIGHT: f64 = 0.2; // Weight for anti-bot scoring
+pub const BUY_RATIO_WEIGHT: f64 = 0.15; // Weight for buy/sell ratio
+pub const PRICE_MOMENTUM_WEIGHT: f64 = 0.15; // Weight for price momentum
+pub const LIQUIDITY_BONUS_WEIGHT: f64 = 0.1; // Weight for extra liquidity
+pub const VOLUME_MOMENTUM_WEIGHT: f64 = 0.1; // Weight for volume momentum
+
+// ─── TECHNICAL ANALYSIS PARAMETERS ───
+pub const VOLUME_SURGE_MULTIPLIER: f64 = 1.5; // Recent vs older volume
+pub const POSITIVE_MOMENTUM_THRESHOLD: f64 = 2.0; // Price change %
+pub const NEGATIVE_MOMENTUM_THRESHOLD: f64 = -3.0; // Price decline %
+pub const VWAP_BULLISH_THRESHOLD: f64 = 1.02; // Price above VWAP
+pub const VWAP_BEARISH_THRESHOLD: f64 = 0.98; // Price below VWAP
+pub const VOLATILITY_MULTIPLIER: f64 = 1.5; // Increase caution in volatile markets
+
+// ─── ENTRY SCORING THRESHOLDS ───
+pub const MIN_WHALE_SCORE: f64 = 0.6; // Minimum whale activity
+pub const MIN_TRADES_SCORE: f64 = 0.5; // Minimum trades score
+pub const MAX_BOT_SCORE: f64 = 0.4; // Maximum bot activity
+pub const MIN_BUY_RATIO: f64 = 0.6; // Minimum buy ratio
+pub const ACCUMULATION_RANGE_MIN: f64 = -10.0; // Price change range
+pub const LIQUIDITY_MULTIPLIER: f64 = 2.0; // Liquidity bonus threshold
+
+// ─── SELL STRATEGY PARAMETERS ───
+pub const WHALE_DISTRIBUTION_THRESHOLD: f64 = -200.0; // Heavy whale selling
+pub const MODERATE_SELLING_THRESHOLD: f64 = -50.0; // Moderate selling pressure
+pub const RECENT_MOMENTUM_THRESHOLD: f64 = -1.0; // Bearish momentum
+pub const RESISTANCE_DISTANCE_THRESHOLD: f64 = 1.0; // Distance from resistance
+pub const VOLUME_DECLINE_MULTIPLIER: f64 = 0.7; // Volume decline indicator
+pub const PROFITABLE_VWAP_THRESHOLD: f64 = 1.05; // Extended above VWAP
+pub const MIN_PROFIT_FOR_VWAP_SELL: f64 = 1.0; // Min profit for VWAP sell
+
+// ─── SELL MULTIPLIERS ───
+pub const WHALE_DISTRIBUTION_MULTIPLIER: f64 = 1.5; // Aggressive on whale distribution
+pub const MODERATE_SELLING_MULTIPLIER: f64 = 1.2; // Moderate selling pressure
+pub const MOMENTUM_MULTIPLIER: f64 = 1.3; // Bearish momentum
+pub const RESISTANCE_MULTIPLIER: f64 = 1.2; // At resistance level
+pub const VWAP_EXTENDED_MULTIPLIER: f64 = 1.15; // Extended above VWAP
+
+// ─── PROFIT TAKING THRESHOLDS (ADJUSTED BY MULTIPLIERS) ───
+pub const WEAK_SELL_THRESHOLD: f64 = -2.0; // Weak sell signal base
+pub const MEDIUM_SELL_THRESHOLD: f64 = -3.0; // Medium sell signal base
+pub const STRONG_SELL_THRESHOLD: f64 = -5.0; // Strong sell signal base
+pub const EMERGENCY_EXIT_MIN_PROFIT: f64 = 0.3; // Min profit for emergency exit
+
+/// Calculate dynamic SOL amount based on liquidity
+pub fn calculate_trade_size_sol(liquidity_sol: f64) -> f64 {
+    if liquidity_sol <= MIN_LIQUIDITY_FOR_MIN_SIZE {
+        MIN_TRADE_SIZE_SOL
+    } else if liquidity_sol >= MAX_LIQUIDITY_FOR_MAX_SIZE {
+        MAX_TRADE_SIZE_SOL
+    } else {
+        // Linear interpolation between min and max
+        let liquidity_ratio =
+            (liquidity_sol - MIN_LIQUIDITY_FOR_MIN_SIZE) /
+            (MAX_LIQUIDITY_FOR_MAX_SIZE - MIN_LIQUIDITY_FOR_MIN_SIZE);
+        let size_range = MAX_TRADE_SIZE_SOL - MIN_TRADE_SIZE_SOL;
+        MIN_TRADE_SIZE_SOL + liquidity_ratio * size_range
+    }
+}
 
 /// SIMPLIFIED ANTI-BOT WHALE-FOLLOWING ENTRY STRATEGY
 /// Focus: Avoid bots, follow whales, enter quickly when conditions are met
@@ -154,13 +249,17 @@ pub async fn should_buy(
     let sells_1h = token.txns.h1.sells;
     let total_holders = token.rug_check.total_holders;
 
+    // Calculate dynamic trade size based on liquidity
+    let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
+
     println!(
-        "📊 [METRICS] Vol24h: ${:.0} | Liq: {:.1}SOL | Buys1h: {} | Price5m: {:.1}% | Holders: {}",
+        "📊 [METRICS] Vol24h: ${:.0} | Liq: {:.1}SOL | Buys1h: {} | Price5m: {:.1}% | Holders: {} | TradeSize: {:.4}SOL",
         volume_24h,
         liquidity_sol,
         buys_1h,
         price_change_5m,
-        total_holders
+        total_holders,
+        dynamic_trade_size
     );
 
     // ─── TRADES DATA ANALYSIS ───
@@ -170,8 +269,8 @@ pub async fn should_buy(
 
     if let Some(trades_cache) = trades {
         // Analyze whale activity from trades data
-        let whale_trades_1h = trades_cache.get_whale_trades(100.0, 1); // $100+ trades in last hour
-        let whale_trades_24h = trades_cache.get_whale_trades(100.0, 24); // $100+ trades in 24h
+        let whale_trades_1h = trades_cache.get_whale_trades(LARGE_TRADE_THRESHOLD_USD, 1); // Large trades in last hour
+        let whale_trades_24h = trades_cache.get_whale_trades(LARGE_TRADE_THRESHOLD_USD, 24); // Large trades in 24h
         let recent_buys = trades_cache.get_trades_by_type("buy", 1);
         let recent_sells = trades_cache.get_trades_by_type("sell", 1);
 
@@ -193,18 +292,18 @@ pub async fn should_buy(
         // Large buy vs sell ratio in recent trades
         let large_buy_count = recent_buys
             .iter()
-            .filter(|t| t.volume_usd > 50.0)
+            .filter(|t| t.volume_usd > MEDIUM_TRADE_THRESHOLD_USD)
             .count();
         let large_sell_count = recent_sells
             .iter()
-            .filter(|t| t.volume_usd > 50.0)
+            .filter(|t| t.volume_usd > MEDIUM_TRADE_THRESHOLD_USD)
             .count();
 
-        trades_whale_activity = if whale_net_flow > 500.0 {
+        trades_whale_activity = if whale_net_flow > STRONG_WHALE_ACCUMULATION_USD {
             0.8 // Strong whale accumulation
-        } else if whale_net_flow > 100.0 {
+        } else if whale_net_flow > MODERATE_WHALE_ACCUMULATION_USD {
             0.6 // Moderate whale accumulation
-        } else if whale_net_flow > -100.0 {
+        } else if whale_net_flow > -MODERATE_WHALE_ACCUMULATION_USD {
             0.3 // Neutral whale activity
         } else {
             0.1 // Whale distribution
@@ -219,7 +318,7 @@ pub async fn should_buy(
         let small_trades_1h = trades_cache
             .get_trades_by_type("buy", 1)
             .iter()
-            .filter(|t| t.volume_usd < 10.0)
+            .filter(|t| t.volume_usd < SMALL_TRADE_THRESHOLD_USD)
             .count();
 
         let bot_penalty = if small_trades_1h > 20 {
@@ -1229,7 +1328,7 @@ pub async fn should_buy(
             &token.mint,
             &token.symbol,
             current_price,
-            TRADE_SIZE_SOL,
+            dynamic_trade_size,
             entry_signals,
             whale_score,
             bot_score
@@ -1546,7 +1645,7 @@ pub fn should_sell(
     if let Some(trades_cache) = trades {
         // Check for whale distribution (large sells)
         let recent_whale_sells = trades_cache
-            .get_whale_trades(100.0, 0) // Last 30 min
+            .get_whale_trades(LARGE_TRADE_THRESHOLD_USD, 0) // Last 30 min
             .iter()
             .filter(
                 |t|
@@ -1562,7 +1661,7 @@ pub fn should_sell(
             .sum::<f64>();
 
         let recent_whale_buys = trades_cache
-            .get_whale_trades(100.0, 0) // Last 30 min
+            .get_whale_trades(LARGE_TRADE_THRESHOLD_USD, 0) // Last 30 min
             .iter()
             .filter(
                 |t|
@@ -1579,18 +1678,18 @@ pub fn should_sell(
 
         let whale_net_flow = recent_whale_buys - recent_whale_sells;
 
-        if whale_net_flow < -200.0 {
+        if whale_net_flow < WHALE_DISTRIBUTION_THRESHOLD {
             // Heavy whale distribution
             whale_distribution_detected = true;
-            sell_pressure_multiplier = 1.5; // Be more aggressive with profit taking
+            sell_pressure_multiplier = WHALE_DISTRIBUTION_MULTIPLIER;
             println!(
                 "🚨 [SELL] {} | Whale distribution detected: ${:.0} net outflow",
                 token.symbol,
                 whale_net_flow.abs()
             );
-        } else if whale_net_flow < -50.0 {
+        } else if whale_net_flow < MODERATE_SELLING_THRESHOLD {
             // Moderate distribution
-            sell_pressure_multiplier = 1.2;
+            sell_pressure_multiplier = MODERATE_SELLING_MULTIPLIER;
             println!(
                 "⚠️ [SELL] {} | Moderate selling pressure: ${:.0} net outflow",
                 token.symbol,
@@ -1614,9 +1713,9 @@ pub fn should_sell(
 
         // Check for bearish momentum
         if let Some(price_change_recent) = primary_timeframe.price_change_over_period(3) {
-            if price_change_recent < -1.0 {
+            if price_change_recent < RECENT_MOMENTUM_THRESHOLD {
                 technical_sell_signal = true;
-                momentum_multiplier = 1.3; // Be more aggressive
+                momentum_multiplier = MOMENTUM_MULTIPLIER;
                 println!(
                     "📉 [SELL] {} | Bearish momentum: {:.1}% over 3 periods",
                     token.symbol,
@@ -1634,9 +1733,9 @@ pub fn should_sell(
                 .fold(0.0, f64::max);
             let distance_from_high = ((recent_high - current_price) / recent_high) * 100.0;
 
-            if distance_from_high < 1.0 {
+            if distance_from_high < RESISTANCE_DISTANCE_THRESHOLD {
                 technical_sell_signal = true;
-                momentum_multiplier *= 1.2;
+                momentum_multiplier *= RESISTANCE_MULTIPLIER;
                 println!(
                     "📊 [SELL] {} | Near resistance: current={:.8} vs high={:.8} (-{:.1}%)",
                     token.symbol,
@@ -1651,7 +1750,10 @@ pub fn should_sell(
         let recent_avg_volume = primary_timeframe.average_volume(3).unwrap_or(0.0);
         let older_avg_volume = primary_timeframe.average_volume(10).unwrap_or(0.0);
 
-        if recent_avg_volume < older_avg_volume * 0.7 && profit_pct > 2.0 {
+        if
+            recent_avg_volume < older_avg_volume * VOLUME_DECLINE_MULTIPLIER &&
+            profit_pct > MIN_PROFIT_FOR_VWAP_SELL
+        {
             technical_sell_signal = true;
             println!(
                 "📉 [SELL] {} | Volume declining on pump: recent={:.0} vs avg={:.0}",
@@ -1663,8 +1765,11 @@ pub fn should_sell(
 
         // VWAP check - if price significantly above VWAP and profitable, consider selling
         if let Some(vwap) = primary_timeframe.vwap(20) {
-            if current_price > vwap * 1.05 && profit_pct > 1.0 {
-                momentum_multiplier *= 1.15;
+            if
+                current_price > vwap * PROFITABLE_VWAP_THRESHOLD &&
+                profit_pct > MIN_PROFIT_FOR_VWAP_SELL
+            {
+                momentum_multiplier *= VWAP_EXTENDED_MULTIPLIER;
                 println!(
                     "📊 [SELL] {} | Price extended above VWAP: {:.8} vs {:.8} (+{:.1}%)",
                     token.symbol,
@@ -1689,12 +1794,12 @@ pub fn should_sell(
     // 3. AGGRESSIVE PROFIT TAKING (Enhanced with trades data)
 
     // Apply sell pressure multiplier to thresholds
-    let weak_threshold = -2.0 * sell_pressure_multiplier;
-    let medium_threshold = -3.0 * sell_pressure_multiplier;
-    let strong_threshold = -5.0 * sell_pressure_multiplier;
+    let weak_threshold = WEAK_SELL_THRESHOLD * sell_pressure_multiplier;
+    let medium_threshold = MEDIUM_SELL_THRESHOLD * sell_pressure_multiplier;
+    let strong_threshold = STRONG_SELL_THRESHOLD * sell_pressure_multiplier;
 
     // Emergency exit on whale distribution
-    if whale_distribution_detected && profit_pct > 0.3 {
+    if whale_distribution_detected && profit_pct > EMERGENCY_EXIT_MIN_PROFIT {
         println!(
             "🚨 [SELL] {} | WHALE DUMP: {:.2}% profit + distribution",
             token.symbol,
@@ -1805,6 +1910,10 @@ pub fn evaluate_position(token: &Token, pos: &Position, current_price: f64) -> P
         MAX_DCA_COUNT
     );
 
+    // Calculate dynamic trade size based on current liquidity
+    let liquidity_sol = token.liquidity.base + token.liquidity.quote;
+    let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
+
     // Get trades data for this token
     let trades_data = futures::executor::block_on(async {
         crate::trades::get_token_trades(&token.mint).await
@@ -1817,7 +1926,7 @@ pub fn evaluate_position(token: &Token, pos: &Position, current_price: f64) -> P
 
     // 1. Check DCA
     if should_dca(token, pos, current_price, trades_data.as_ref(), ohlcv_dataframe.as_ref()) {
-        return PositionAction::DCA { sol_amount: TRADE_SIZE_SOL };
+        return PositionAction::DCA { sol_amount: dynamic_trade_size };
     }
 
     // 2. Check sell
@@ -1847,9 +1956,10 @@ pub fn get_profit_bucket(pos: &Position, current_price: f64) -> i32 {
     (profit_pct / 2.0).floor() as i32 // Every 2%
 }
 
-/// Calculate DCA size (simplified)
-pub fn calculate_dca_size(_token: &Token, _pos: &Position) -> f64 {
-    TRADE_SIZE_SOL // Same size as initial entry
+/// Calculate DCA size based on current liquidity
+pub fn calculate_dca_size(token: &Token, _pos: &Position) -> f64 {
+    let liquidity_sol = token.liquidity.base + token.liquidity.quote;
+    calculate_trade_size_sol(liquidity_sol)
 }
 
 // ═════════════════
