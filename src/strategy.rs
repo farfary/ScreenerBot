@@ -1,5 +1,11 @@
 use crate::prelude::*;
-use crate::price_validation::{ is_price_valid, get_trading_price };
+use crate::price_validation::{
+    is_price_valid,
+    get_trading_price,
+    get_realtime_price_change,
+    has_sufficient_price_history,
+    update_price_history,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENHANCED ANTI-BOT WHALE-FOLLOWING MEME COIN STRATEGY V2.0
@@ -173,6 +179,127 @@ pub fn calculate_trade_size_sol(liquidity_sol: f64) -> f64 {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// REAL-TIME PRICE CHANGE ANALYSIS SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Get real-time price change with fallback to dexscreener data
+/// Returns (price_change_pct, is_realtime)
+pub fn get_price_change_with_fallback(token: &Token, minutes: u64) -> (f64, bool) {
+    // First try to get real-time price change from pool prices
+    if has_sufficient_price_history(&token.mint, minutes) {
+        if let Some(realtime_change) = get_realtime_price_change(&token.mint, minutes) {
+            return (realtime_change, true);
+        }
+    }
+
+    // Fallback to dexscreener data based on requested timeframe
+    let fallback_change = match minutes {
+        5 => token.price_change.m5,
+        15 => token.price_change.m5, // fallback to 5m since m15 doesn't exist
+        60 => token.price_change.h1,
+        _ => token.price_change.m5, // default to 5m for other timeframes
+    };
+
+    (fallback_change, false)
+}
+
+/// Get comprehensive real-time price analysis
+pub fn get_realtime_price_analysis(token: &Token) -> PriceAnalysis {
+    let (change_5m, is_5m_realtime) = get_price_change_with_fallback(token, 5);
+    let (change_15m, is_15m_realtime) = get_price_change_with_fallback(token, 15);
+    let (change_1h, is_1h_realtime) = get_price_change_with_fallback(token, 60);
+
+    // Update price history if we have current price
+    if let Some(current_price) = get_trading_price(&token.mint) {
+        update_price_history(&token.mint, current_price);
+    }
+
+    PriceAnalysis {
+        change_5m,
+        change_15m,
+        change_1h,
+        is_5m_realtime,
+        is_15m_realtime,
+        is_1h_realtime,
+        has_sufficient_history: has_sufficient_price_history(&token.mint, 5),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PriceAnalysis {
+    pub change_5m: f64,
+    pub change_15m: f64,
+    pub change_1h: f64,
+    pub is_5m_realtime: bool,
+    pub is_15m_realtime: bool,
+    pub is_1h_realtime: bool,
+    pub has_sufficient_history: bool,
+}
+
+impl PriceAnalysis {
+    /// Check if price changes show excessive upward momentum
+    pub fn has_excessive_momentum(&self) -> (bool, String) {
+        if self.change_5m > 2.0 {
+            // MAX_UPWARD_MOMENTUM_5M value
+            return (
+                true,
+                format!("high_5m_momentum({:.1}%{})", self.change_5m, if self.is_5m_realtime {
+                    "_RT"
+                } else {
+                    "_DX"
+                }),
+            );
+        }
+
+        if self.change_1h > 8.0 {
+            // MAX_UPWARD_MOMENTUM_1H value
+            return (
+                true,
+                format!("high_1h_momentum({:.1}%{})", self.change_1h, if self.is_1h_realtime {
+                    "_RT"
+                } else {
+                    "_DX"
+                }),
+            );
+        }
+
+        (false, "momentum_acceptable".to_string())
+    }
+
+    /// Check if token is in a major dump
+    pub fn is_major_dump(&self) -> bool {
+        self.change_5m <= -25.0 // BIG_DUMP_THRESHOLD value
+    }
+
+    /// Check if price is in accumulation range (controlled movement)
+    pub fn is_accumulation_range(&self) -> bool {
+        self.change_5m >= -10.0 && self.change_5m <= 3.0 // ACCUMULATION_PATIENCE_THRESHOLD value
+    }
+
+    /// Get a display string showing data sources
+    pub fn get_data_source_info(&self) -> String {
+        format!(
+            "5m:{} 15m:{} 1h:{}",
+            if self.is_5m_realtime {
+                "RT"
+            } else {
+                "DX"
+            },
+            if self.is_15m_realtime {
+                "RT"
+            } else {
+                "DX"
+            },
+            if self.is_1h_realtime {
+                "RT"
+            } else {
+                "DX"
+            }
+        )
+    }
+}
+
 /// SIMPLIFIED ANTI-BOT WHALE-FOLLOWING ENTRY STRATEGY
 /// Focus: Avoid bots, follow whales, enter quickly when conditions are met
 pub async fn should_buy(
@@ -239,12 +366,20 @@ pub async fn should_buy(
         return false;
     }
 
+    // ─── REAL-TIME PRICE ANALYSIS ───
+    let price_analysis = get_realtime_price_analysis(token);
+
+    println!(
+        "📈 [PRICE] Real-time analysis: 5m={:.1}% 1h={:.1}% | Sources: {}",
+        price_analysis.change_5m,
+        price_analysis.change_1h,
+        price_analysis.get_data_source_info()
+    );
+
     // ─── KEY METRICS ───
     let volume_24h = token.volume.h24;
     let volume_1h = token.volume.h1;
     let liquidity_sol = token.liquidity.base + token.liquidity.quote;
-    let price_change_5m = token.price_change.m5;
-    let _price_change_1h = token.price_change.h1;
     let buys_1h = token.txns.h1.buys;
     let sells_1h = token.txns.h1.sells;
     let total_holders = token.rug_check.total_holders;
@@ -253,11 +388,16 @@ pub async fn should_buy(
     let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
 
     println!(
-        "📊 [METRICS] Vol24h: ${:.0} | Liq: {:.1}SOL | Buys1h: {} | Price5m: {:.1}% | Holders: {} | TradeSize: {:.4}SOL",
+        "📊 [METRICS] Vol24h: ${:.0} | Liq: {:.1}SOL | Buys1h: {} | Price5m: {:.1}%{} | Holders: {} | TradeSize: {:.4}SOL",
         volume_24h,
         liquidity_sol,
         buys_1h,
-        price_change_5m,
+        price_analysis.change_5m,
+        if price_analysis.is_5m_realtime {
+            "_RT"
+        } else {
+            "_DX"
+        },
         total_holders,
         dynamic_trade_size
     );
@@ -402,18 +542,18 @@ pub async fn should_buy(
 
         // Check for price momentum (recent price change)
         if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
-            if price_change_5m > 2.0 {
+            if token.price_change.m5 > 2.0 {
                 println!(
                     "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score += 1;
-            } else if price_change_5m < -3.0 {
+            } else if token.price_change.m5 < -3.0 {
                 println!(
                     "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score -= 1;
             }
@@ -473,8 +613,14 @@ pub async fn should_buy(
     }
 
     // 4. Avoid major dumps
-    if price_change_5m <= BIG_DUMP_THRESHOLD {
-        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+    if price_analysis.change_5m <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%{}", token.symbol, price_analysis.change_5m, if
+            price_analysis.is_5m_realtime
+        {
+            "_RT"
+        } else {
+            "_DX"
+        });
         return false;
     }
 
@@ -550,9 +696,9 @@ pub async fn should_buy(
     }
 
     // Controlled price movement (not FOMO)
-    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+    if token.price_change.m5 >= -10.0 && token.price_change.m5 <= ACCUMULATION_PATIENCE_THRESHOLD {
         entry_score += 0.15;
-        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+        reasons.push(format!("controlled_movement({:.1}%)", token.price_change.m5));
     }
 
     // Good liquidity
@@ -615,18 +761,18 @@ pub async fn should_buy(
 
         // Check for price momentum (recent price change)
         if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
-            if price_change_5m > 2.0 {
+            if token.price_change.m5 > 2.0 {
                 println!(
                     "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score += 1;
-            } else if price_change_5m < -3.0 {
+            } else if token.price_change.m5 < -3.0 {
                 println!(
                     "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score -= 1;
             }
@@ -686,8 +832,8 @@ pub async fn should_buy(
     }
 
     // 4. Avoid major dumps
-    if price_change_5m <= BIG_DUMP_THRESHOLD {
-        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+    if token.price_change.m5 <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, token.price_change.m5);
         return false;
     }
 
@@ -763,9 +909,9 @@ pub async fn should_buy(
     }
 
     // Controlled price movement (not FOMO)
-    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+    if token.price_change.m5 >= -10.0 && token.price_change.m5 <= ACCUMULATION_PATIENCE_THRESHOLD {
         entry_score += 0.15;
-        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+        reasons.push(format!("controlled_movement({:.1}%)", token.price_change.m5));
     }
 
     // Good liquidity
@@ -828,18 +974,18 @@ pub async fn should_buy(
 
         // Check for price momentum (recent price change)
         if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
-            if price_change_5m > 2.0 {
+            if token.price_change.m5 > 2.0 {
                 println!(
                     "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score += 1;
-            } else if price_change_5m < -3.0 {
+            } else if token.price_change.m5 < -3.0 {
                 println!(
                     "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score -= 1;
             }
@@ -899,8 +1045,8 @@ pub async fn should_buy(
     }
 
     // 4. Avoid major dumps
-    if price_change_5m <= BIG_DUMP_THRESHOLD {
-        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+    if token.price_change.m5 <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, token.price_change.m5);
         return false;
     }
 
@@ -976,9 +1122,9 @@ pub async fn should_buy(
     }
 
     // Controlled price movement (not FOMO)
-    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+    if token.price_change.m5 >= -10.0 && token.price_change.m5 <= ACCUMULATION_PATIENCE_THRESHOLD {
         entry_score += 0.15;
-        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+        reasons.push(format!("controlled_movement({:.1}%)", token.price_change.m5));
     }
 
     // Good liquidity
@@ -1041,18 +1187,18 @@ pub async fn should_buy(
 
         // Check for price momentum (recent price change)
         if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
-            if price_change_5m > 2.0 {
+            if token.price_change.m5 > 2.0 {
                 println!(
                     "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score += 1;
-            } else if price_change_5m < -3.0 {
+            } else if token.price_change.m5 < -3.0 {
                 println!(
                     "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score -= 1;
             }
@@ -1112,8 +1258,8 @@ pub async fn should_buy(
     }
 
     // 4. Avoid major dumps
-    if price_change_5m <= BIG_DUMP_THRESHOLD {
-        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+    if token.price_change.m5 <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, token.price_change.m5);
         return false;
     }
 
@@ -1189,9 +1335,9 @@ pub async fn should_buy(
     }
 
     // Controlled price movement (not FOMO)
-    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+    if token.price_change.m5 >= -10.0 && token.price_change.m5 <= ACCUMULATION_PATIENCE_THRESHOLD {
         entry_score += 0.15;
-        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+        reasons.push(format!("controlled_movement({:.1}%)", token.price_change.m5));
     }
 
     // Good liquidity
@@ -1254,18 +1400,18 @@ pub async fn should_buy(
 
         // Check for price momentum (recent price change)
         if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
-            if price_change_5m > 2.0 {
+            if token.price_change.m5 > 2.0 {
                 println!(
                     "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score += 1;
-            } else if price_change_5m < -3.0 {
+            } else if token.price_change.m5 < -3.0 {
                 println!(
                     "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
                     token.symbol,
-                    price_change_5m
+                    token.price_change.m5
                 );
                 confirmation_score -= 1;
             }

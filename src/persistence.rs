@@ -67,9 +67,17 @@ pub async fn load_cache() -> Result<()> {
     // Load watchlist
     if let Ok(data) = fs::read(WATCHLIST_FILE).await {
         let map: HashMap<String, WatchlistEntry> = serde_json::from_slice(&data)?;
-        let watchlist_count = map.len();
+
+        // Filter out excluded tokens from watchlist loading
+        let blacklist = crate::configs::BLACKLIST.read().await;
+        let filtered_count = map
+            .iter()
+            .filter(|(mint, _)| !blacklist.contains(*mint))
+            .count();
+        drop(blacklist);
+
         *WATCHLIST_TOKENS.write().await = map;
-        println!("📋 Loaded {} tokens in watchlist", watchlist_count);
+        println!("📋 Loaded {} tokens in watchlist (excluded tokens filtered)", filtered_count);
     }
 
     Ok(())
@@ -177,6 +185,12 @@ pub async fn close_position(token_id: &str, sol_received: f64) -> Result<()> {
 
 /// Add a token to the watchlist when we first trade it
 pub async fn add_to_watchlist(mint: &str, symbol: &str, name: &str, price: f64) {
+    // Check if token is excluded from trading
+    if crate::configs::BLACKLIST.read().await.contains(mint) {
+        println!("🚫 [WATCHLIST] Skipping excluded token: {} ({}) - {}", symbol, name, mint);
+        return;
+    }
+
     let mut watchlist = WATCHLIST_TOKENS.write().await;
 
     let now = chrono::Utc::now();
@@ -206,7 +220,15 @@ pub async fn add_to_watchlist(mint: &str, symbol: &str, name: &str, price: f64) 
 /// Get all watchlist tokens sorted by priority
 pub async fn get_watchlist_tokens() -> Vec<WatchlistEntry> {
     let watchlist = WATCHLIST_TOKENS.read().await;
-    let mut tokens: Vec<WatchlistEntry> = watchlist.values().cloned().collect();
+    let blacklist = crate::configs::BLACKLIST.read().await;
+
+    let mut tokens: Vec<WatchlistEntry> = watchlist
+        .values()
+        .filter(|entry| !blacklist.contains(&entry.mint))
+        .cloned()
+        .collect();
+
+    drop(blacklist);
 
     // Sort by priority score (highest first)
     tokens.sort_by(|a, b|

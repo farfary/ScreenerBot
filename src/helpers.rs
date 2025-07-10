@@ -236,7 +236,13 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
     match tokio::time::timeout(Duration::from_secs(2), TOKENS.read()).await {
         Ok(tokens_guard) => {
             if !tokens_guard.is_empty() {
-                let mut all_watchlist_tokens: Vec<_> = tokens_guard.iter().collect();
+                // Filter out excluded tokens from watchlist display
+                let blacklist = crate::configs::BLACKLIST.read().await;
+                let mut all_watchlist_tokens: Vec<_> = tokens_guard
+                    .iter()
+                    .filter(|token| !blacklist.contains(&token.mint))
+                    .collect();
+                drop(blacklist);
 
                 // Sort by market cap (highest first) for full watchlist display
                 all_watchlist_tokens.sort_by(|a, b| {
@@ -348,7 +354,8 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
 
                 println!("\n🎯 [FULL WATCHLIST TOKENS] ═════════════════════════════════════════");
                 println!(
-                    "📊 All tracked tokens • Sorted by Market Cap • Live data from DexScreener"
+                    "📊 {} tracked tokens (excluded tokens filtered) • Sorted by Market Cap • Live data from DexScreener",
+                    all_watchlist_tokens.len()
                 );
                 println!("🔍 Rug scores from RugCheck • Volume & liquidity in USD");
                 println!("═══════════════════════════════════════════════════════════════════");
@@ -603,7 +610,13 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
     match tokio::time::timeout(Duration::from_secs(2), TOKENS.read()).await {
         Ok(tokens_guard) => {
             if !tokens_guard.is_empty() {
-                let mut watchlist_tokens: Vec<_> = tokens_guard.iter().collect();
+                // Filter out excluded tokens from watchlist display
+                let blacklist = crate::configs::BLACKLIST.read().await;
+                let mut watchlist_tokens: Vec<_> = tokens_guard
+                    .iter()
+                    .filter(|token| !blacklist.contains(&token.mint))
+                    .collect();
+                drop(blacklist);
 
                 // Sort by volume (highest first)
                 watchlist_tokens.sort_by(|a, b| {
@@ -694,7 +707,9 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
                 }
 
                 println!("📊 [TOP 25 WATCHLIST TOKENS] ═══════════════════════════════════════");
-                println!("🎯 Sorted by 24h volume • Updated from DexScreener & RugCheck APIs");
+                println!(
+                    "🎯 Sorted by 24h volume (excluded tokens filtered) • Updated from DexScreener & RugCheck APIs"
+                );
                 println!("══════════════════════════════════════════════════════════════════\n");
                 println!("{}\n", watchlist_table);
             } else {

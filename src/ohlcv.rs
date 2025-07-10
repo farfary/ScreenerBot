@@ -329,6 +329,96 @@ impl OhlcvDataFrame {
 
         Some(variance.sqrt())
     }
+
+    /// Get the highest price over the last N candles
+    pub fn highest_price(&self, candles_count: usize) -> Option<f64> {
+        if self.candles.is_empty() {
+            return None;
+        }
+
+        self.candles
+            .iter()
+            .take(candles_count)
+            .map(|c| c.high)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    /// Get the lowest price over the last N candles
+    pub fn lowest_price(&self, candles_count: usize) -> Option<f64> {
+        if self.candles.is_empty() {
+            return None;
+        }
+
+        self.candles
+            .iter()
+            .take(candles_count)
+            .map(|c| c.low)
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    /// Find support level based on multiple touches of similar price levels
+    pub fn find_support_level(
+        &self,
+        lookback_periods: usize,
+        min_touches: usize,
+        proximity_threshold: f64
+    ) -> Option<f64> {
+        if self.candles.len() < lookback_periods || lookback_periods < min_touches {
+            return None;
+        }
+
+        let recent_candles: Vec<&OhlcvCandle> = self.candles
+            .iter()
+            .take(lookback_periods)
+            .collect();
+        let mut support_candidates: Vec<(f64, usize)> = Vec::new(); // (price, touch_count)
+
+        // Look for price levels that have been tested multiple times
+        for (i, candle) in recent_candles.iter().enumerate() {
+            let test_price = candle.low; // Use low prices for support
+            let mut touches = 1;
+
+            // Count how many other candles have lows near this price
+            for (j, other_candle) in recent_candles.iter().enumerate() {
+                if i != j {
+                    let price_diff = (other_candle.low - test_price).abs() / test_price;
+                    if price_diff <= proximity_threshold {
+                        touches += 1;
+                    }
+                }
+            }
+
+            if touches >= min_touches {
+                // Check if we already have a similar support level
+                let mut found_similar = false;
+                for (candidate_price, candidate_touches) in support_candidates.iter_mut() {
+                    let price_diff = (test_price - *candidate_price).abs() / *candidate_price;
+                    if price_diff <= proximity_threshold {
+                        // Update to the one with more touches, or lower price if equal touches
+                        if
+                            touches > *candidate_touches ||
+                            (touches == *candidate_touches && test_price < *candidate_price)
+                        {
+                            *candidate_price = test_price;
+                            *candidate_touches = touches;
+                        }
+                        found_similar = true;
+                        break;
+                    }
+                }
+
+                if !found_similar {
+                    support_candidates.push((test_price, touches));
+                }
+            }
+        }
+
+        // Return the support level with the most touches (strongest support)
+        support_candidates
+            .into_iter()
+            .max_by_key(|(_, touches)| *touches)
+            .map(|(price, _)| price)
+    }
 }
 
 impl TokenOhlcvCache {

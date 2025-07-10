@@ -6,7 +6,7 @@ use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
 use std::collections::HashSet;
 use tokio::sync::RwLock;
-use std::{fs};
+use std::{ fs };
 use serde_json::json;
 use std::env;
 
@@ -29,7 +29,6 @@ pub static RPC: Lazy<RpcClient> = Lazy::new(|| {
 
 const BLACKLIST_FILE: &str = ".blacklist.json";
 
-
 pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
     let mut set = HashSet::new();
 
@@ -39,6 +38,7 @@ pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
             set.extend(v);
         }
     }
+
     // Also load from plain text blacklist.txt (one address per line)
     if let Ok(s) = fs::read_to_string("blacklist.txt") {
         for line in s.lines() {
@@ -48,6 +48,17 @@ pub static BLACKLIST: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| {
             }
         }
     }
+
+    // Load excluded tokens from exclude_tokens.json (array of mint addresses)
+    if let Ok(s) = fs::read_to_string("exclude_tokens.json") {
+        if let Ok(excluded_mints) = serde_json::from_str::<Vec<String>>(&s) {
+            for mint in excluded_mints {
+                set.insert(mint.clone());
+                println!("🚫 Excluded token: {}", mint);
+            }
+        }
+    }
+
     RwLock::new(set)
 });
 
@@ -71,4 +82,3 @@ pub async fn add_to_blacklist(mint: &str) {
         tokio::fs::write(BLACKLIST_FILE, data).await.ok();
     }
 }
-
