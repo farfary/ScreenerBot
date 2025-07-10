@@ -258,10 +258,14 @@ pub fn start_trader_loop() {
     });
 }
 
-/// Fast position monitoring task - checks open positions every 2 seconds
+/// Fast position monitoring task - checks open positions with dual frequency
+/// - Positions in profit >2%: every 5 seconds
+/// - All positions: every 30 seconds
 async fn position_monitor_loop() {
     use std::time::Instant;
-    println!("🔥 [POSITION MONITOR] Started fast position monitoring task");
+    println!("🔥 [POSITION MONITOR] Started dual-frequency position monitoring task");
+    println!("📊 [POSITION MONITOR] Profitable positions (>2%): every {}s", POSITIONS_FREQUENT_CHECK_TIME_SEC);
+    println!("📊 [POSITION MONITOR] All positions: every {}s", POSITIONS_CHECK_TIME_SEC);
 
     /* ── wait for TOKENS ──────────────────────────────── */
     loop {
@@ -279,22 +283,86 @@ async fn position_monitor_loop() {
     /* ── local state for position monitoring ──────────────────────────────────── */
     let mut notified_profit_bucket: HashMap<String, i32> = HashMap::new();
     let mut sell_failures: HashMap<String, u8> = HashMap::new(); // mint -> fails
+    let mut cycle_counter = 0u64; // Track cycles for dual-frequency checking
+    let normal_check_interval = POSITIONS_CHECK_TIME_SEC / POSITIONS_FREQUENT_CHECK_TIME_SEC; // 30/5 = 6
 
     loop {
         if SHUTDOWN.load(Ordering::SeqCst) {
             return;
         }
 
-        // Get only open position mints for monitoring
-        // IMPORTANT: Monitor ALL open positions regardless of blacklist status
-        // Blacklist only prevents NEW entries, but existing positions must be tracked
-        let position_mints: Vec<String> = {
+        cycle_counter += 1;
+        let is_full_check_cycle = cycle_counter % normal_check_interval == 0;
+
+        // Get all position mints first
+        let all_position_mints: Vec<String> = {
             let pos = OPEN_POSITIONS.read().await;
             pos.keys().cloned().collect()
         };
 
+        if all_position_mints.is_empty() {
+            if is_full_check_cycle {
+                println!("📭 [POSITION MONITOR] No open positions found");
+            }
+            tokio::time::sleep(Duration::from_secs(POSITIONS_FREQUENT_CHECK_TIME_SEC)).await;
+            continue;
+        }
+
+        // For frequent checks, get current prices to filter profitable positions
+        let position_mints = if is_full_check_cycle {
+            // Full check: all positions
+            println!(
+                "🔄 [POSITION MONITOR] FULL CHECK - Monitoring {} positions (cycle {})",
+                all_position_mints.len(),
+                cycle_counter
+            );
+            all_position_mints
+        } else {
+            // Frequent check: only profitable positions (>2%)
+            let positions = OPEN_POSITIONS.read().await;
+            let mut profitable_mints = Vec::new();
+
+            // Use batch pricing to efficiently check all positions
+            let prices = tokio::task
+                ::spawn_blocking({
+                    let mints = all_position_mints.clone();
+                    move || batch_prices_from_pools(&crate::configs::RPC, &mints)
+                }).await
+                .unwrap_or_default();
+
+            for (mint, position) in positions.iter() {
+                if let Some(&current_price) = prices.get(mint) {
+                    if current_price > 0.0 {
+                        let current_value = current_price * position.token_amount;
+                        let profit_sol = current_value - position.sol_spent;
+                        let profit_pct = if position.sol_spent > 0.0 {
+                            (profit_sol / position.sol_spent) * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        // Only include positions with >2% profit for frequent checking
+                        if profit_pct > 2.0 {
+                            profitable_mints.push(mint.clone());
+                        }
+                    }
+                }
+            }
+
+            if !profitable_mints.is_empty() {
+                println!(
+                    "� [POSITION MONITOR] PROFITABLE CHECK - Monitoring {}/{} profitable positions (>2%) (cycle {})",
+                    profitable_mints.len(),
+                    all_position_mints.len(),
+                    cycle_counter
+                );
+            }
+
+            profitable_mints
+        };
+
         if position_mints.is_empty() {
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(POSITIONS_FREQUENT_CHECK_TIME_SEC)).await;
             continue;
         }
 
@@ -653,8 +721,8 @@ async fn position_monitor_loop() {
             }
         } // end for mint
 
-        // Fast position checking - every 2 seconds
-        sleep(Duration::from_secs(POSITIONS_CHECK_TIME_SEC)).await;
+        // Use frequent check interval for all cycles
+        sleep(Duration::from_secs(POSITIONS_FREQUENT_CHECK_TIME_SEC)).await;
     }
 }
 

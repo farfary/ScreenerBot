@@ -199,8 +199,9 @@ async fn poll_transaction_status(
 // --------------------------------------------------
 // SELL FUNCTION WITH MIN-OUT-AMOUNT CHECK
 // --------------------------------------------------
-pub async fn sell_all_gmgn_detailed(
+pub async fn sell_gmgn_detailed(
     token_mint_address: &str,
+    token_amount: u64, // amount of tokens to sell (in token's smallest unit)
     min_out_amount: f64 // require at least this SOL out
 ) -> anyhow::Result<SwapResult> {
     let start_time = std::time::Instant::now();
@@ -232,8 +233,8 @@ pub async fn sell_all_gmgn_detailed(
     let client = Client::new();
     let rpc_client = RpcClient::new(crate::configs::CONFIGS.rpc_url.clone());
 
-    // get token balance (lamports)
-    let in_amount = get_biggest_token_amount(token_mint_address);
+    // use provided token amount
+    let in_amount = token_amount;
     if in_amount == 0 {
         let mut swap_result = SwapResult::from_gmgn_response(
             SwapRequest::new_sell(token_mint_address, 0, &owner, SLIPPAGE_BPS, TRANSACTION_FEE_SOL),
@@ -372,7 +373,10 @@ pub async fn sell_all_gmgn(
     token_mint_address: &str,
     min_out_amount: f64 // require at least this SOL out
 ) -> anyhow::Result<String> {
-    match sell_all_gmgn_detailed(token_mint_address, min_out_amount).await? {
+    // get the maximum token balance to sell
+    let token_amount = get_biggest_token_amount(token_mint_address);
+
+    match sell_gmgn_detailed(token_mint_address, token_amount, min_out_amount).await? {
         result if result.success => {
             if let Some(signature) = result.transaction_signature {
                 Ok(signature)
