@@ -8,5 +8,7 @@ pub mod pools;
 pub mod pool_price;
 pub mod strategy;
 pub mod performance;
+pub mod trades;
+pub mod ohlcv;
 
 pub mod prelude;

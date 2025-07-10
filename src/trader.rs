@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::trades::get_token_trades;
 use std::collections::VecDeque;
 use serde::{ Deserialize, Serialize };
 use rayon::prelude::*;
@@ -248,6 +249,25 @@ async fn position_monitor_loop() {
         if position_mints.is_empty() {
             tokio::time::sleep(Duration::from_secs(2)).await;
             continue;
+        }
+
+        // Add open positions to trades monitoring
+        {
+            let tokens = TOKENS.read().await;
+            let tokens_to_monitor: Vec<&Token> = tokens
+                .iter()
+                .filter(|token| position_mints.contains(&token.mint))
+                .collect();
+
+            if !tokens_to_monitor.is_empty() {
+                add_tokens_to_monitor(&tokens_to_monitor).await;
+                crate::ohlcv::add_tokens_to_ohlcv_monitor(&tokens_to_monitor).await;
+
+                // Add as priority tokens since these are open positions
+                for token in &tokens_to_monitor {
+                    crate::ohlcv::add_priority_token(&token.mint).await;
+                }
+            }
         }
 
         // Check if trading is blocked - simple check without complex transaction manager
@@ -637,6 +657,25 @@ async fn token_discovery_loop() {
             continue;
         }
 
+        // Add discovered tokens to trades monitoring
+        {
+            let tokens = TOKENS.read().await;
+            let tokens_to_monitor: Vec<&Token> = tokens
+                .iter()
+                .filter(|token| discovery_mints.contains(&token.mint))
+                .collect();
+
+            if !tokens_to_monitor.is_empty() {
+                add_tokens_to_monitor(&tokens_to_monitor).await;
+                crate::ohlcv::add_tokens_to_ohlcv_monitor(&tokens_to_monitor).await;
+
+                // Add as priority tokens since these are watched tokens
+                for token in &tokens_to_monitor {
+                    crate::ohlcv::add_priority_token(&token.mint).await;
+                }
+            }
+        }
+
         // Check if trading is blocked - simple check without complex transaction manager
         // For now, we'll allow trading since transactions are confirmed immediately
 
@@ -721,8 +760,20 @@ async fn token_discovery_loop() {
                 continue;
             }
 
+            // Get trades data for this token
+            let trades_data = get_token_trades(&token.mint).await;
+
+            // Get OHLCV dataframe for this token
+            let ohlcv_dataframe = crate::ohlcv::get_token_ohlcv_dataframe(&token.mint).await;
+
             // Check if we should buy
-            let buy_signal = should_buy(&token, true, current_price).await;
+            let buy_signal = should_buy(
+                &token,
+                true,
+                current_price,
+                trades_data.as_ref(),
+                ohlcv_dataframe.as_ref()
+            ).await;
 
             if buy_signal {
                 println!("🚀 [TOKEN DISCOVERY] ENTRY BUY {}: price={:.9}", symbol, current_price);

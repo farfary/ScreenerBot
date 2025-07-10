@@ -9,6 +9,8 @@ mod persistence;
 mod pool_price;
 mod strategy;
 mod performance;
+mod trades;
+mod ohlcv;
 
 use prelude::*;
 
@@ -24,6 +26,8 @@ async fn main() -> Result<()> {
     // 3 ─ start background services (each spawns its own task and returns)
     dexscreener::start_dexscreener_loop();
     trader::start_trader_loop();
+    trades::start_trades_cache_task();
+    ohlcv::start_ohlcv_cache_task();
 
     // 4 ─ periodic autosave task
     let autosaver = task::spawn(persistence::autosave_loop());
