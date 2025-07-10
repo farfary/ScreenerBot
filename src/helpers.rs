@@ -1,5 +1,8 @@
 #![allow(warnings)]
 use crate::prelude::*;
+use crate::rate_limiter::{ RateLimitedRequest, DEXSCREENER_LIMITER };
+use crate::price_validation::{ get_price_state, PriceState };
+use crate::dexscreener::TOKENS;
 
 use std::{ fs, str::FromStr };
 use chrono::{ DateTime, Utc };
@@ -181,95 +184,406 @@ pub fn get_biggest_token_amount(token_mint: &str) -> u64 {
     biggest
 }
 
-pub async fn print_open_positions() {
+/// Enhanced summary function that serves as the main bot interface
+/// Provides comprehensive portfolio analysis and trading insights
+pub async fn print_summary() {
     use comfy_table::{ Table, presets::UTF8_FULL };
 
     let positions_guard = OPEN_POSITIONS.read().await;
     let closed_guard = CLOSED_POSITIONS.read().await;
 
-    // ── quick stats ───────────────────────────
+    // ── Enhanced stats calculation with comprehensive metrics ───────────────────────────
     let open_count = positions_guard.len();
     let mut total_unrealized_sol = 0.0;
+    let mut total_invested_sol = 0.0;
+    let mut winners = 0;
+    let mut losers = 0;
+    let mut best_performer = ("".to_string(), 0.0, "".to_string());
+    let mut worst_performer = ("".to_string(), 0.0, "".to_string());
+    let mut total_drawdown = 0.0;
+    let mut avg_holding_hours = 0.0;
+    let mut positions_with_dca = 0;
+    let mut closed_winners = 0; // Track closed winners at function level
 
-    // ── prepare open-positions table ──────────
+    // ── Bot Performance Header ───────────────────────────────────────────────
+    println!("\n╔══════════════════════════════════════════════════════════════════╗");
+    println!("║                    🤖 SCREENER BOT DASHBOARD 🤖                   ║");
+    println!("║              Automated Solana Token Trading Summary               ║");
+    println!("╚══════════════════════════════════════════════════════════════════╝");
+
+    let now = Utc::now();
+    println!("⏰ Analysis Time: {} UTC", now.format("%Y-%m-%d %H:%M:%S"));
+
+    // ── prepare open-positions table with enhanced columns ──────────
     let mut positions_vec: Vec<_> = positions_guard.iter().collect();
-    positions_vec.sort_by_key(|(_, pos)| pos.open_time);
+
+    // Sort by open_time (oldest first, so newest will be at bottom)
+    positions_vec.sort_by(|(_, a), (_, b)| { a.open_time.cmp(&b.open_time) });
 
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
         .set_header([
-            "Mint",
-            "Entry Price",
-            "Current Price",
+            "#",
+            "Mint Address",
+            "Entry",
+            "Current",
             "Profit %",
-            "Peak Price",
-            "DCA Count",
+            "P/L SOL",
+            "Peak",
+            "DD %",
+            "DCA",
             "Tokens",
-            "SOL Spent",
-            "Open Time",
+            "Invested",
+            "Value",
+            "Age",
+            "Status",
         ]);
 
-    for (mint, pos) in positions_vec {
+    for (index, (mint, pos)) in positions_vec.iter().enumerate() {
         let current_price = PRICE_CACHE.read()
             .unwrap()
-            .get(mint)
+            .get(*mint)
             .map(|&(_ts, price)| price)
             .unwrap_or(0.0);
 
-        // Use consistent profit calculation method (same as strategy.rs)
-        // Account for sell transaction fee to make profit calculation more realistic
-        let current_value = current_price * pos.token_amount;
-        let profit_sol = current_value - pos.sol_spent - TRANSACTION_FEE_SOL;
-        let profit_pct = if pos.sol_spent > 0.0 {
-            (profit_sol / pos.sol_spent) * 100.0
+        // Check if price is valid/loaded
+        let price_loaded = current_price > 0.0;
+        let current_price_str = if price_loaded {
+            format!("{:.8}", current_price)
+        } else {
+            "Price not loaded".to_string()
+        };
+
+        let (current_value, profit_sol, profit_pct) = if price_loaded {
+            let current_value = current_price * pos.token_amount;
+            let profit_sol = current_value - pos.sol_spent - TRANSACTION_FEE_SOL;
+            let profit_pct = if pos.sol_spent > 0.0 {
+                (profit_sol / pos.sol_spent) * 100.0
+            } else {
+                0.0
+            };
+            (current_value, profit_sol, profit_pct)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
+
+        // Calculate drawdown from peak
+        let peak_value = pos.peak_price * pos.token_amount;
+        let drawdown_pct = if peak_value > 0.0 && price_loaded {
+            ((peak_value - current_value) / peak_value) * 100.0
         } else {
             0.0
         };
 
-        total_unrealized_sol += profit_sol;
+        // Calculate holding time
+        let holding_hours = now.signed_duration_since(pos.open_time).num_hours() as f64;
+        avg_holding_hours += holding_hours;
 
+        // Format age for display
+        let age_display = format_position_age(pos.open_time);
+
+        // Update stats only if price loaded
+        if price_loaded {
+            total_unrealized_sol += profit_sol;
+            total_invested_sol += pos.sol_spent;
+            total_drawdown += drawdown_pct;
+
+            if pos.dca_count > 0 {
+                positions_with_dca += 1;
+            }
+
+            if profit_pct > 0.0 {
+                winners += 1;
+                if profit_pct > best_performer.1 {
+                    best_performer = (
+                        (*mint).clone(),
+                        profit_pct,
+                        mint[..(8).min(mint.len())].to_string(),
+                    );
+                }
+            } else if profit_pct < 0.0 {
+                losers += 1;
+                if profit_pct < worst_performer.1 {
+                    worst_performer = (
+                        (*mint).clone(),
+                        profit_pct,
+                        mint[..(8).min(mint.len())].to_string(),
+                    );
+                }
+            }
+        } else {
+            // For positions without valid prices, don't include in stats but still track them
+            total_invested_sol += pos.sol_spent;
+            println!("⚠️ [SUMMARY] {} - Price not loaded, excluding from profit calculations", mint);
+        }
+
+        // Full mint address (no shortening)
+        let full_mint = (*mint).clone();
+
+        // Position status
+        let status = if !price_loaded {
+            "❓ NO_PRICE"
+        } else if profit_pct > 20.0 {
+            "🚀 MOON"
+        } else if profit_pct > 10.0 {
+            "📈 PUMP"
+        } else if profit_pct > 0.0 {
+            "✅ PROF"
+        } else if profit_pct > -10.0 {
+            "⚠️ DOWN"
+        } else if profit_pct > -25.0 {
+            "📉 LOSS"
+        } else {
+            "💀 RIP"
+        };
+
+        // Add row to table
         table.add_row([
-            mint.clone(),
-            format!("{:.12}", pos.entry_price),
-            format!("{:.12}", current_price),
-            format!("{:+.2}%", profit_pct),
-            format!("{:.12}", pos.peak_price),
+            (index + 1).to_string(),
+            full_mint,
+            format!("{:.8}", pos.entry_price),
+            current_price_str,
+            if price_loaded { format!("{:+.1}%", profit_pct) } else { "N/A".to_string() },
+            if price_loaded { format!("{:+.4}", profit_sol) } else { "N/A".to_string() },
+            format!("{:.8}", pos.peak_price),
+            if price_loaded { format!("{:.1}%", drawdown_pct) } else { "N/A".to_string() },
             pos.dca_count.to_string(),
-            format!("{:.9}", pos.token_amount),
-            format!("{:.9}", pos.sol_spent),
-            format_duration_ago(pos.open_time),
+            format!("{:.1}K", pos.token_amount / 1000.0),
+            format!("{:.4}", pos.sol_spent),
+            if price_loaded { format!("{:.4}", current_value) } else { "N/A".to_string() },
+            age_display,
+            status.to_string(),
         ]);
     }
 
+    // Calculate averages
+    if open_count > 0 {
+        avg_holding_hours /= open_count as f64;
+    }
+    let avg_drawdown = if open_count > 0 { total_drawdown / (open_count as f64) } else { 0.0 };
+
+    // ── Enhanced summary with comprehensive portfolio metrics ───────────
+    let portfolio_pct = if total_invested_sol > 0.0 {
+        (total_unrealized_sol / total_invested_sol) * 100.0
+    } else {
+        0.0
+    };
+
+    let win_rate = if open_count > 0 {
+        ((winners as f64) / (open_count as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let dca_usage_rate = if open_count > 0 {
+        ((positions_with_dca as f64) / (open_count as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    println!("\n🎯 [PORTFOLIO OVERVIEW] ════════════════════════════════════════════");
     println!(
-        "\n📂 [Open Positions] — count: {} | unrealized P/L: {:+.3} SOL\n{}\n",
+        "📊 Active Positions: {} | Winners: {} ({:.1}%) | Losers: {} ({:.1}%)",
         open_count,
+        winners,
+        ((winners as f64) / (open_count.max(1) as f64)) * 100.0,
+        losers,
+        ((losers as f64) / (open_count.max(1) as f64)) * 100.0
+    );
+    println!(
+        "💰 Total Invested: {:.3} SOL | Current Value: {:.3} SOL | P/L: {:+.3} SOL ({:+.1}%)",
+        total_invested_sol,
+        total_invested_sol + total_unrealized_sol,
         total_unrealized_sol,
-        table
+        portfolio_pct
+    );
+    println!(
+        "📈 DCA Usage: {:.1}% | Avg Hold Time: {:.1}h | Avg Drawdown: {:.1}%",
+        dca_usage_rate,
+        avg_holding_hours,
+        avg_drawdown
     );
 
-    // ── recent-closed table (WITH EXACT PROFIT SOL) ───────────
+    if !best_performer.0.is_empty() {
+        println!(
+            "🏆 Best: {} {:+.1}% | 📉 Worst: {} {:+.1}%",
+            best_performer.2,
+            best_performer.1,
+            worst_performer.2,
+            worst_performer.1
+        );
+    }
+
+    // Risk Analysis
+    let risk_level = if portfolio_pct < -20.0 {
+        "🔴 HIGH RISK"
+    } else if portfolio_pct < -10.0 {
+        "🟡 MEDIUM RISK"
+    } else if portfolio_pct > 10.0 {
+        "🟢 PROFITABLE"
+    } else {
+        "🔵 STABLE"
+    };
+
+    println!("🎲 Portfolio Risk: {} | Bot Status: ACTIVE", risk_level);
+    println!("════════════════════════════════════════════════════════════════════\n");
+
+    // ── Top 25 Watchlist Tokens ──────────────────────────────────────────────────
+    {
+        let tokens_guard = TOKENS.read().await;
+        if !tokens_guard.is_empty() {
+            let mut watchlist_tokens: Vec<_> = tokens_guard.iter().collect();
+
+            // Sort by volume (highest first)
+            watchlist_tokens.sort_by(|a, b| {
+                let a_vol = a.volume.h24;
+                let b_vol = b.volume.h24;
+                b_vol.partial_cmp(&a_vol).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            // Take top 25
+            watchlist_tokens.truncate(25);
+
+            let mut watchlist_table = Table::new();
+            watchlist_table
+                .load_preset(UTF8_FULL)
+                .set_header([
+                    "#",
+                    "Symbol",
+                    "Name",
+                    "Price USD",
+                    "5m %",
+                    "1h %",
+                    "24h %",
+                    "Volume 24h",
+                    "Liquidity",
+                    "MCap",
+                    "Buys 1h",
+                    "Mint Address",
+                ]);
+
+            for (index, token) in watchlist_tokens.iter().enumerate() {
+                let price_usd = token.price_usd.parse::<f64>().unwrap_or(0.0);
+                let volume_24h = token.volume.h24;
+                let liquidity_usd = token.liquidity.usd;
+                let mcap = token.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                let buys_1h = token.txns.h1.buys;
+
+                // Format price change with colors
+                let change_5m = token.price_change.m5;
+                let change_1h = token.price_change.h1;
+                let change_24h = token.price_change.h24;
+
+                let format_change = |change: f64| -> String {
+                    if change > 0.0 {
+                        format!("📈+{:.1}%", change)
+                    } else if change < 0.0 {
+                        format!("📉{:.1}%", change)
+                    } else {
+                        "0.0%".to_string()
+                    }
+                };
+
+                // Format large numbers
+                let format_large_number = |value: f64| -> String {
+                    if value >= 1_000_000.0 {
+                        format!("{:.1}M", value / 1_000_000.0)
+                    } else if value >= 1_000.0 {
+                        format!("{:.1}K", value / 1_000.0)
+                    } else {
+                        format!("{:.0}", value)
+                    }
+                };
+
+                // Truncate name if too long
+                let display_name = if token.name.len() > 15 {
+                    format!("{}...", &token.name[..12])
+                } else {
+                    token.name.clone()
+                };
+
+                watchlist_table.add_row([
+                    (index + 1).to_string(),
+                    token.symbol.clone(),
+                    display_name,
+                    if price_usd > 0.0 { format!("${:.6}", price_usd) } else { "N/A".to_string() },
+                    format_change(change_5m),
+                    format_change(change_1h),
+                    format_change(change_24h),
+                    format!("${}", format_large_number(volume_24h)),
+                    format!("${}", format_large_number(liquidity_usd)),
+                    format!("${}", format_large_number(mcap)),
+                    buys_1h.to_string(),
+                    token.mint.clone(),
+                ]);
+            }
+
+            println!("📊 [TOP 25 WATCHLIST TOKENS] ═══════════════════════════════════════");
+            println!("🎯 Sorted by 24h volume • Updated from DexScreener & RugCheck APIs");
+            println!("══════════════════════════════════════════════════════════════════\n");
+            println!("{}\n", watchlist_table);
+        } else {
+            println!("📊 [WATCHLIST] No tokens loaded yet - waiting for DexScreener data\n");
+        }
+    }
+
+    if open_count > 0 {
+        println!("📋 [OPEN POSITIONS] ────────────────────────────────────────────────");
+        println!("{}\n", table);
+    } else {
+        println!("📭 No open positions - Bot is monitoring for opportunities\n");
+    }
+
+    // ── Enhanced recent-closed positions table with comprehensive data ───────────
     if !closed_guard.is_empty() {
         let mut closed_vec: Vec<_> = closed_guard.values().cloned().collect();
-        closed_vec.sort_by_key(|pos| pos.close_time.unwrap_or(pos.open_time));
+        closed_vec.sort_by(|a, b|
+            b.close_time.unwrap_or(b.open_time).cmp(&a.close_time.unwrap_or(a.open_time))
+        );
+
+        // Take only the most recent 15 closed positions for detailed analysis
+        closed_vec.truncate(15);
 
         let mut table_closed = Table::new();
-        table_closed.load_preset(UTF8_FULL).set_header([
-            "Mint",
-            "Entry Price",
-            "Close Price",
-            "Profit %",
-            "Profit SOL", // NEW COLUMN
-            "Peak Price",
-            "Tokens",
-            "SOL Spent",
-            "SOL Received",
-            "Open Time",
-            "Close Time",
-        ]);
+        table_closed
+            .load_preset(UTF8_FULL)
+            .set_header([
+                "#",
+                "Mint Address",
+                "Entry",
+                "Exit",
+                "Profit %",
+                "P/L SOL",
+                "Peak",
+                "Max %",
+                "Hold Time",
+                "DCA",
+                "Reason",
+                "Closed",
+            ]);
 
-        for pos in closed_vec {
+        let mut closed_total_profit = 0.0;
+        // closed_winners is already declared at function level
+        let mut total_closed_hold_time = 0.0;
+        let mut best_closed_trade = ("".to_string(), 0.0, "".to_string());
+        let mut worst_closed_trade = ("".to_string(), 0.0, "".to_string());
+
+        // We need to get mint addresses from closed positions
+        // Since closed positions HashMap uses mint as key, we can iterate over keys
+        let closed_positions_map: HashMap<String, Position> = closed_guard.clone();
+        let mut closed_with_mints: Vec<(String, Position)> = closed_positions_map
+            .into_iter()
+            .collect();
+        closed_with_mints.sort_by(|a, b|
+            b.1.close_time.unwrap_or(b.1.open_time).cmp(&a.1.close_time.unwrap_or(a.1.open_time))
+        );
+        closed_with_mints.truncate(15);
+
+        // Now reverse the order so most recent appears at the bottom of the table
+        closed_with_mints.reverse();
+
+        for (index, (mint, pos)) in closed_with_mints.iter().enumerate() {
             let close_price = if pos.token_amount > 0.0 {
                 pos.sol_received / pos.token_amount
             } else {
@@ -282,24 +596,187 @@ pub async fn print_open_positions() {
             };
 
             let profit_sol = pos.sol_received - pos.sol_spent;
+            closed_total_profit += profit_sol;
+
+            if profit_sol > 0.0 {
+                closed_winners += 1;
+                if profit_pct > best_closed_trade.1 {
+                    best_closed_trade = (
+                        mint.clone(),
+                        profit_pct,
+                        mint[..(8).min(mint.len())].to_string(),
+                    );
+                }
+            } else if profit_pct < worst_closed_trade.1 {
+                worst_closed_trade = (
+                    mint.clone(),
+                    profit_pct,
+                    mint[..(8).min(mint.len())].to_string(),
+                );
+            }
+
+            // Calculate max potential gain from peak
+            let max_gain_pct = if pos.entry_price > 0.0 {
+                ((pos.peak_price - pos.entry_price) / pos.entry_price) * 100.0
+            } else {
+                0.0
+            };
+
+            // Calculate position duration
+            let (duration, hold_hours) = if let Some(close_time) = pos.close_time {
+                let diff = close_time.signed_duration_since(pos.open_time);
+                let hours = diff.num_hours() as f64;
+                total_closed_hold_time += hours;
+
+                if hours < 24.0 {
+                    (format!("{:.1}h", hours), hours)
+                } else {
+                    let days = hours / 24.0;
+                    (format!("{:.1}d", days), hours)
+                }
+            } else {
+                ("-".to_string(), 0.0)
+            };
+
+            // Full mint address (no shortening)
+            let full_mint = mint.clone();
+
+            // Determine close reason based on profit and patterns
+            let close_reason = if profit_pct > 20.0 {
+                "🎯 TARGET"
+            } else if profit_pct > 0.0 {
+                "✅ PROFIT"
+            } else if profit_pct > -10.0 {
+                "🛑 STOP"
+            } else if profit_pct > -25.0 {
+                "📉 CUT"
+            } else {
+                "💀 RUG"
+            };
 
             table_closed.add_row([
-                "(closed)".into(),
-                format!("{:.9}", pos.entry_price),
-                format!("{:.9}", close_price),
-                format!("{:+.2}%", profit_pct),
-                format!("{:+.9}", profit_sol), // EXACT PROFIT SOL
-                format!("{:.9}", pos.peak_price),
-                format!("{:.9}", pos.token_amount),
-                format!("{:.9}", pos.sol_spent),
-                format!("{:.9}", pos.sol_received),
-                format_duration_ago(pos.open_time),
+                (index + 1).to_string(),
+                full_mint,
+                format!("{:.8}", pos.entry_price),
+                format!("{:.8}", close_price),
+                format!("{:+.1}%", profit_pct),
+                format!("{:+.4}", profit_sol),
+                format!("{:.8}", pos.peak_price),
+                format!("{:.1}%", max_gain_pct),
+                duration,
+                pos.dca_count.to_string(),
+                close_reason.to_string(),
                 pos.close_time.map(format_duration_ago).unwrap_or_else(|| "-".into()),
             ]);
         }
 
-        println!("📁 [Recent Closed Positions]\n{}\n", table_closed);
+        let closed_win_rate = if closed_with_mints.len() > 0 {
+            ((closed_winners as f64) / (closed_with_mints.len() as f64)) * 100.0
+        } else {
+            0.0
+        };
+
+        let avg_closed_hold_time = if closed_with_mints.len() > 0 {
+            total_closed_hold_time / (closed_with_mints.len() as f64)
+        } else {
+            0.0
+        };
+
+        println!("📁 [RECENT CLOSED POSITIONS] ═══════════════════════════════════════");
+        println!(
+            "📊 Closed P/L: {:+.3} SOL | Win Rate: {:.1}% ({}/{}) | Avg Hold: {:.1}h",
+            closed_total_profit,
+            closed_win_rate,
+            closed_winners,
+            closed_with_mints.len(),
+            avg_closed_hold_time
+        );
+
+        if !best_closed_trade.0.is_empty() {
+            println!(
+                "🏆 Best Trade: {} {:+.1}% | 📉 Worst: {} {:+.1}%",
+                best_closed_trade.2,
+                best_closed_trade.1,
+                worst_closed_trade.2,
+                worst_closed_trade.1
+            );
+        }
+
+        println!("═══════════════════════════════════════════════════════════════════\n");
+        println!("{}\n", table_closed);
     }
+
+    // ── Bot Analytics & Recommendations ──────────────────────────────────────
+    println!("🤖 [BOT ANALYTICS] ═════════════════════════════════════════════════");
+
+    let total_positions = open_count + closed_guard.len();
+    let overall_win_rate = if total_positions > 0 {
+        let total_winners = winners + closed_winners;
+        ((total_winners as f64) / (total_positions as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    println!(
+        "📈 Overall Performance: {}/{} trades | {:.1}% win rate",
+        winners + closed_winners,
+        total_positions,
+        overall_win_rate
+    );
+
+    println!("💡 Bot Recommendations:");
+    if portfolio_pct < -15.0 {
+        println!("   🔴 High losses detected - Consider reducing position sizes");
+        println!("   🔴 Review entry criteria - Current strategy may need adjustment");
+    } else if portfolio_pct > 15.0 {
+        println!("   🟢 Strong performance - Consider scaling up successful strategies");
+        println!("   🟢 Current parameters working well");
+    } else if win_rate < 40.0 && open_count > 5 {
+        println!("   🟡 Low win rate - Monitor entry signals more carefully");
+        println!("   🟡 Consider tightening stop-loss criteria");
+    } else {
+        println!("   🔵 Performance within acceptable range");
+        println!("   🔵 Continue current strategy with minor optimizations");
+    }
+
+    if avg_holding_hours > 48.0 {
+        println!("   ⏰ Long holding times detected - Consider faster profit-taking");
+    }
+
+    if dca_usage_rate > 70.0 {
+        println!("   💰 High DCA usage - Monitor for better entry timing");
+    }
+
+    println!("═══════════════════════════════════════════════════════════════════");
+    println!("🔄 Bot Status: ACTIVE | Next scan in progress...\n");
+
+    // ── Price Loading Status Warning ──────────────────────────────────────────
+    let positions_guard = OPEN_POSITIONS.read().await;
+    let position_mints: Vec<String> = positions_guard.keys().cloned().collect();
+    drop(positions_guard);
+
+    if !position_mints.is_empty() {
+        let missing_prices = position_mints
+            .iter()
+            .filter(|mint| { !matches!(get_price_state(mint), PriceState::Loaded(_)) })
+            .count();
+
+        if missing_prices > 0 {
+            println!(
+                "⚠️ [PRICE STATUS] {}/{} positions have missing/invalid prices",
+                missing_prices,
+                position_mints.len()
+            );
+            println!("🚫 [TRADING] All buy/sell/DCA actions are BLOCKED until prices are loaded");
+            println!(
+                "📡 [SYSTEM] Rate limiting active: DexScreener (300/min), GeckoTerminal (30/min)"
+            );
+        } else {
+            println!("✅ [PRICE STATUS] All position prices loaded - Trading system active");
+        }
+    }
+
+    println!("═══════════════════════════════════════════════════════════════════");
 }
 
 /// Return the `decimals` of a mint account on–chain, with disk cache.
@@ -382,7 +859,7 @@ pub static PRICE_CACHE: Lazy<RwLock<HashMap<String, (u64, f64)>>> = Lazy::new(||
 );
 
 /// Pull every *Solana* `pairAddress` for the given token mint from DexScreener, with 2h cache.
-pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
+pub async fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
     let cache_path = ".solana_pairs_cache.json";
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let expire_secs = 2 * 3600;
@@ -411,7 +888,7 @@ pub fn fetch_solana_pairs(token_mint: &str) -> Result<Vec<Pubkey>> {
 
     // Fetch fresh from DexScreener
     println!("🔄 Fetching pools from DexScreener...");
-    let pools = fetch_combined_pools(token_mint)?;
+    let pools = fetch_combined_pools(token_mint).await?;
 
     if pools.is_empty() {
         bail!("No Solana pools found for mint {} from DexScreener", token_mint);
@@ -548,6 +1025,26 @@ pub fn format_duration_ago(from: DateTime<Utc>) -> String {
     }
 }
 
+/// Format duration as current age (not "ago") with support for days, hours, and minutes
+pub fn format_position_age(from: DateTime<Utc>) -> String {
+    let now = Utc::now();
+    let diff = now.signed_duration_since(from);
+
+    let days = diff.num_days();
+    let hours = diff.num_hours() % 24;
+    let minutes = diff.num_minutes() % 60;
+
+    if days > 0 {
+        if hours > 0 { format!("{}d {}h", days, hours) } else { format!("{}d", days) }
+    } else if hours > 0 {
+        if minutes > 0 { format!("{}h {}m", hours, minutes) } else { format!("{}h", hours) }
+    } else if minutes > 0 {
+        format!("{}m", minutes)
+    } else {
+        format!("{}s", diff.num_seconds().max(0))
+    }
+}
+
 /// Waits until either Ctrl‑C (SIGINT) or SIGTERM (from systemd) is received.
 pub async fn wait_for_shutdown_signal() {
     #[cfg(unix)]
@@ -591,10 +1088,12 @@ pub async fn add_skipped_sell(mint: &str) {
 }
 
 /// Fetch pools from DexScreener API and convert to PoolInfo format
-pub fn fetch_dexscreener_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
+pub async fn fetch_dexscreener_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
     let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", token_mint);
     println!("📊 Fetching DexScreener pools...");
-    let json: Value = Client::new().get(&url).send()?.json()?;
+    let client = reqwest::Client::new(); // Use async client
+    let response = client.get_with_rate_limit(&url, &DEXSCREENER_LIMITER).await?;
+    let json: Value = response.json().await?;
 
     let mut pools = Vec::new();
     if let Some(arr) = json.get("pairs").and_then(|v| v.as_array()) {
@@ -658,12 +1157,12 @@ pub fn fetch_dexscreener_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
 }
 
 /// Fetch pools from DexScreener only
-pub fn fetch_combined_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
+pub async fn fetch_combined_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
     let mut all_pools = Vec::new();
     let mut seen_addresses = HashSet::new();
 
     // Fetch from DexScreener
-    match fetch_dexscreener_pools(token_mint) {
+    match fetch_dexscreener_pools(token_mint).await {
         Ok(dex_pools) => {
             for pool in dex_pools {
                 if seen_addresses.insert(pool.address.clone()) {
@@ -706,6 +1205,6 @@ pub fn fetch_combined_pools(token_mint: &str) -> Result<Vec<PoolInfo>> {
 }
 
 /// Updated function that returns PoolInfo structs instead of just Pubkeys
-pub fn fetch_solana_pools_detailed(token_mint: &str) -> Result<Vec<PoolInfo>> {
-    fetch_combined_pools(token_mint)
+pub async fn fetch_solana_pools_detailed(token_mint: &str) -> Result<Vec<PoolInfo>> {
+    fetch_combined_pools(token_mint).await
 }

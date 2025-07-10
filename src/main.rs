@@ -11,6 +11,8 @@ mod strategy;
 mod performance;
 mod trades;
 mod ohlcv;
+mod rate_limiter;
+mod price_validation;
 
 use prelude::*;
 

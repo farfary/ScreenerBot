@@ -22,9 +22,10 @@ struct PoolAnalysis {
     error: Option<String>,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    
+
     if args.len() != 2 {
         eprintln!("Usage: {} <token_mint>", args[0]);
         eprintln!("Example: {} 4mu1ig6ML6ZQm5sVkWHVjuCttYADn9wguMsyvXsCbonk", args[0]);
@@ -32,15 +33,15 @@ fn main() -> Result<()> {
     }
 
     let token_mint = &args[1];
-    
+
     println!("🔍 {} {}", "Analyzing all pools for token:".cyan().bold(), token_mint.yellow());
     println!();
 
     // Initialize RPC client
     let rpc = &*RPC;
-    
+
     // Fetch all pools for this token
-    let pools = match fetch_combined_pools(token_mint) {
+    let pools = match fetch_combined_pools(token_mint).await {
         Ok(pools) => pools,
         Err(e) => {
             eprintln!("❌ Failed to fetch pools: {}", e);
@@ -59,10 +60,10 @@ fn main() -> Result<()> {
     // Analyze each pool
     let mut analyses = Vec::new();
     let mut successful_prices = Vec::new();
-    
+
     for (i, pool) in pools.iter().enumerate() {
         print!("⏳ Analyzing pool {}/{}: {} ... ", i + 1, pools.len(), pool.address.dimmed());
-        
+
         let pool_pk = match Pubkey::from_str(&pool.address) {
             Ok(pk) => pk,
             Err(e) => {
@@ -94,7 +95,8 @@ fn main() -> Result<()> {
                     "RVKd61ztZW9g2VZgPZrFYuXJcZ1t7xvaUo1NkL6MZ5w" => "Raydium AMM v4".to_string(),
                     "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM".to_string(),
                     "whirLb9FtDwZ2Bi4FXe65aaPaJqmCj7QSfUeCrpuHgx" => "Orca Whirlpool".to_string(),
-                    "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj" => "Raydium Launchpad".to_string(),
+                    "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj" =>
+                        "Raydium Launchpad".to_string(),
                     "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM".to_string(),
                     "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG" => "Meteora DYN2".to_string(),
                     owner => format!("Unknown ({})", &owner[..8]),
@@ -108,9 +110,13 @@ fn main() -> Result<()> {
             Ok((base_amt, quote_amt, base_mint, quote_mint)) => {
                 // Calculate price
                 let price = if base_amt > 0 {
-                    match (get_token_decimals(rpc, &base_mint), get_token_decimals(rpc, &quote_mint)) {
+                    match
+                        (get_token_decimals(rpc, &base_mint), get_token_decimals(rpc, &quote_mint))
+                    {
                         (Ok(base_dec), Ok(quote_dec)) => {
-                            let price = ((quote_amt as f64) / (base_amt as f64)) * (10f64).powi(base_dec as i32 - quote_dec as i32);
+                            let price =
+                                ((quote_amt as f64) / (base_amt as f64)) *
+                                (10f64).powi((base_dec as i32) - (quote_dec as i32));
                             Some(price)
                         }
                         _ => None,
@@ -160,37 +166,51 @@ fn main() -> Result<()> {
     }
 
     println!();
-    
+
     // Calculate price statistics
     if !successful_prices.is_empty() {
         successful_prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let min_price = successful_prices[0];
         let max_price = successful_prices[successful_prices.len() - 1];
-        let avg_price = successful_prices.iter().sum::<f64>() / successful_prices.len() as f64;
+        let avg_price = successful_prices.iter().sum::<f64>() / (successful_prices.len() as f64);
         let median_price = if successful_prices.len() % 2 == 0 {
-            (successful_prices[successful_prices.len() / 2 - 1] + successful_prices[successful_prices.len() / 2]) / 2.0
+            (successful_prices[successful_prices.len() / 2 - 1] +
+                successful_prices[successful_prices.len() / 2]) /
+                2.0
         } else {
             successful_prices[successful_prices.len() / 2]
         };
 
-        println!("📈 {} {}", "PRICE ANALYSIS".green().bold(), format!("({} successful pools)", successful_prices.len()).dimmed());
+        println!(
+            "📈 {} {}",
+            "PRICE ANALYSIS".green().bold(),
+            format!("({} successful pools)", successful_prices.len()).dimmed()
+        );
         println!("   {} {:.12} SOL", "Min Price:".blue().bold(), format!("{}", min_price).cyan());
         println!("   {} {:.12} SOL", "Max Price:".blue().bold(), format!("{}", max_price).cyan());
         println!("   {} {:.12} SOL", "Avg Price:".blue().bold(), format!("{}", avg_price).cyan());
         println!("   {} {:.12} SOL", "Median:  ".blue().bold(), format!("{}", median_price).cyan());
-        
+
         if max_price > min_price {
             let price_spread = ((max_price - min_price) / avg_price) * 100.0;
-            println!("   {} {:.2}%", "Spread:   ".blue().bold(), format!("{}", price_spread).yellow());
-            
+            println!(
+                "   {} {:.2}%",
+                "Spread:   ".blue().bold(),
+                format!("{}", price_spread).yellow()
+            );
+
             // Show arbitrage opportunities
             if price_spread > 5.0 {
                 println!("   {} Potential arbitrage opportunity detected!", "⚡".yellow().bold());
                 let profit_percent = ((max_price - min_price) / min_price) * 100.0;
-                println!("   {} {:.2}% profit potential", "💰".green().bold(), profit_percent.to_string().green().bold());
+                println!(
+                    "   {} {:.2}% profit potential",
+                    "💰".green().bold(),
+                    profit_percent.to_string().green().bold()
+                );
             }
         }
-        
+
         // Show price deviations for each pool
         println!();
         println!("📊 {} ", "PRICE DEVIATIONS FROM AVERAGE".green().bold());
@@ -202,11 +222,13 @@ fn main() -> Result<()> {
                 } else {
                     format!("{:.2}%", deviation).red()
                 };
-                let address_short = format!("{}...{}", 
-                    &analysis.address[..8], 
-                    &analysis.address[analysis.address.len()-8..]
+                let address_short = format!(
+                    "{}...{}",
+                    &analysis.address[..8],
+                    &analysis.address[analysis.address.len() - 8..]
                 );
-                println!("   {} {} {} ({})", 
+                println!(
+                    "   {} {} {} ({})",
                     analysis.pool_type.blue(),
                     address_short.dimmed(),
                     deviation_str,
@@ -220,15 +242,18 @@ fn main() -> Result<()> {
     // Detailed table
     println!("📋 {} ", "DETAILED POOL ANALYSIS".green().bold());
     println!();
-    
+
     // Sort by liquidity (highest first), then by price
     analyses.sort_by(|a, b| {
         let a_liq = a.liquidity_usd.unwrap_or(0.0);
         let b_liq = b.liquidity_usd.unwrap_or(0.0);
-        b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+        b_liq
+            .partial_cmp(&a_liq)
+            .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| {
                 match (a.price_sol, b.price_sol) {
-                    (Some(a_price), Some(b_price)) => b_price.partial_cmp(&a_price).unwrap_or(std::cmp::Ordering::Equal),
+                    (Some(a_price), Some(b_price)) =>
+                        b_price.partial_cmp(&a_price).unwrap_or(std::cmp::Ordering::Equal),
                     (Some(_), None) => std::cmp::Ordering::Less,
                     (None, Some(_)) => std::cmp::Ordering::Greater,
                     (None, None) => std::cmp::Ordering::Equal,
@@ -237,14 +262,15 @@ fn main() -> Result<()> {
     });
 
     // Header
-    println!("{:<4} {:<15} {:<50} {:<20} {:<15} {:<12} {:<10} {:<8}", 
-        "#".bold(), 
-        "Type".bold(), 
-        "Address".bold(), 
-        "Name".bold(), 
-        "Price (SOL)".bold(), 
-        "Liquidity".bold(), 
-        "Volume 24h".bold(), 
+    println!(
+        "{:<4} {:<15} {:<50} {:<20} {:<15} {:<12} {:<10} {:<8}",
+        "#".bold(),
+        "Type".bold(),
+        "Address".bold(),
+        "Name".bold(),
+        "Price (SOL)".bold(),
+        "Liquidity".bold(),
+        "Volume 24h".bold(),
         "Txs 24h".bold()
     );
     println!("{}", "─".repeat(140).dimmed());
@@ -256,13 +282,15 @@ fn main() -> Result<()> {
         } else {
             analysis.pool_type.clone()
         };
-        
-        let address_short = format!("{}...{}", 
-            &analysis.address[..8], 
-            &analysis.address[analysis.address.len()-8..]
+
+        let address_short = format!(
+            "{}...{}",
+            &analysis.address[..8],
+            &analysis.address[analysis.address.len() - 8..]
         );
-        
-        let name = analysis.name.as_ref()
+
+        let name = analysis.name
+            .as_ref()
             .map(|n| if n.len() > 18 { format!("{}...", &n[..15]) } else { n.clone() })
             .unwrap_or_else(|| "Unknown".dimmed().to_string());
 
@@ -279,18 +307,31 @@ fn main() -> Result<()> {
         };
 
         let liquidity_str = analysis.liquidity_usd
-            .map(|l| if l >= 1000.0 { format!("${:.0}k", l / 1000.0) } else { format!("${:.0}", l) })
+            .map(|l| (
+                if l >= 1000.0 {
+                    format!("${:.0}k", l / 1000.0)
+                } else {
+                    format!("${:.0}", l)
+                }
+            ))
             .unwrap_or_else(|| "N/A".dimmed().to_string());
 
         let volume_str = analysis.volume_24h_usd
-            .map(|v| if v >= 1000.0 { format!("${:.0}k", v / 1000.0) } else { format!("${:.0}", v) })
+            .map(|v| (
+                if v >= 1000.0 {
+                    format!("${:.0}k", v / 1000.0)
+                } else {
+                    format!("${:.0}", v)
+                }
+            ))
             .unwrap_or_else(|| "N/A".dimmed().to_string());
 
         let tx_str = analysis.tx_count_24h
             .map(|t| t.to_string())
             .unwrap_or_else(|| "N/A".dimmed().to_string());
 
-        println!("{:<4} {:<15} {:<50} {:<20} {:<15} {:<12} {:<10} {:<8}", 
+        println!(
+            "{:<4} {:<15} {:<50} {:<20} {:<15} {:<12} {:<10} {:<8}",
             rank.yellow(),
             pool_type.blue(),
             address_short.white(),
@@ -303,9 +344,10 @@ fn main() -> Result<()> {
 
         // Show reserves if available
         if let (Some(base), Some(quote)) = (analysis.base_reserve, analysis.quote_reserve) {
-            println!("     {} Base: {}, Quote: {}", 
-                "Reserves:".dimmed(), 
-                format!("{}", base).dimmed(), 
+            println!(
+                "     {} Base: {}, Quote: {}",
+                "Reserves:".dimmed(),
+                format!("{}", base).dimmed(),
                 format!("{}", quote).dimmed()
             );
         }
@@ -314,24 +356,35 @@ fn main() -> Result<()> {
         if let Some(error) = &analysis.error {
             println!("     {} {}", "Error:".red(), error.red());
         }
-        
+
         println!();
     }
 
     // Summary statistics
-    let working_pools = analyses.iter().filter(|a| a.price_sol.is_some()).count();
-    let total_liquidity: f64 = analyses.iter()
+    let working_pools = analyses
+        .iter()
+        .filter(|a| a.price_sol.is_some())
+        .count();
+    let total_liquidity: f64 = analyses
+        .iter()
         .filter_map(|a| a.liquidity_usd)
         .sum();
-    let total_volume: f64 = analyses.iter()
+    let total_volume: f64 = analyses
+        .iter()
         .filter_map(|a| a.volume_24h_usd)
         .sum();
-    let total_txs: u64 = analyses.iter()
+    let total_txs: u64 = analyses
+        .iter()
         .filter_map(|a| a.tx_count_24h)
         .sum();
 
     println!("📊 {} ", "SUMMARY STATISTICS".green().bold());
-    println!("   {} {} out of {}", "Working Pools:".blue().bold(), working_pools.to_string().green(), analyses.len());
+    println!(
+        "   {} {} out of {}",
+        "Working Pools:".blue().bold(),
+        working_pools.to_string().green(),
+        analyses.len()
+    );
     println!("   {} ${:.0}", "Total Liquidity:".blue().bold(), total_liquidity);
     println!("   {} ${:.0}", "Total Volume 24h:".blue().bold(), total_volume);
     println!("   {} {}", "Total Transactions 24h:".blue().bold(), total_txs.to_string().green());

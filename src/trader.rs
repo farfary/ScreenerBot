@@ -198,7 +198,7 @@ pub fn start_trader_loop() {
             if SHUTDOWN.load(Ordering::SeqCst) {
                 break;
             }
-            print_open_positions().await;
+            print_summary().await;
 
             // Print performance report every 10 cycles (roughly every 100 seconds)
             counter += 1;
@@ -930,12 +930,11 @@ async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
     }
 
     // If not in cache, try to find biggest pool
-    match
-        tokio::task::spawn_blocking({
-            let mint = mint.to_string();
-            move || {
-                let rpc = &crate::configs::RPC;
-                fetch_solana_pairs(&mint).and_then(|pools| {
+    match (
+        {
+            let rpc = &crate::configs::RPC;
+            match fetch_solana_pairs(&mint).await {
+                Ok(pools) => {
                     pools
                         .par_iter()
                         .filter_map(|pk| {
@@ -946,17 +945,18 @@ async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
                         .max_by_key(|&(_, liq)| liq)
                         .map(|(pk, _)| pk)
                         .ok_or_else(|| anyhow::anyhow!("no valid pools for {}", mint))
-                })
+                }
+                Err(e) => Err(e),
             }
-        }).await
-    {
-        Ok(Ok(pool_pk)) => {
+        }
+    ) {
+        Ok(pool_pk) => {
             // Cache the result
             {
                 POOL_CACHE.write().insert(mint.to_string(), pool_pk);
             }
             Some(pool_pk.to_string())
         }
-        _ => None,
+        Err(_) => None,
     }
 }

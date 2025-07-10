@@ -10,5 +10,7 @@ pub mod strategy;
 pub mod performance;
 pub mod trades;
 pub mod ohlcv;
+pub mod rate_limiter;
+pub mod price_validation;
 
 pub mod prelude;

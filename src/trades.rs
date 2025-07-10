@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::rate_limiter::{ RateLimitedRequest, GECKOTERMINAL_LIMITER };
 use serde::{ Deserialize, Serialize };
 use std::collections::{ HashMap, HashSet };
 use tokio::sync::RwLock;
@@ -288,13 +289,8 @@ pub async fn add_tokens_to_monitor(tokens: &[&Token]) {
         let mut pools = vec![token.pair_address.clone()];
 
         // Try to get additional pools from DexScreener data using helpers.rs
-        match
-            tokio::task::spawn_blocking({
-                let token_mint = token.mint.clone();
-                move || crate::helpers::fetch_combined_pools(&token_mint)
-            }).await
-        {
-            Ok(Ok(pool_infos)) => {
+        match crate::helpers::fetch_combined_pools(&token.mint).await {
+            Ok(pool_infos) => {
                 // Add up to 3 top pools (sorted by liquidity/volume in fetch_combined_pools)
                 for pool_info in pool_infos.into_iter().take(3) {
                     if !pools.contains(&pool_info.address) {
@@ -311,16 +307,9 @@ pub async fn add_tokens_to_monitor(tokens: &[&Token]) {
                     &token.mint[..8]
                 );
             }
-            Ok(Err(e)) => {
-                println!(
-                    "⚠️ Could not fetch additional pools for {}: {} - using primary pool only",
-                    token.symbol,
-                    e
-                );
-            }
             Err(e) => {
                 println!(
-                    "⚠️ Task spawn failed for {}: {} - using primary pool only",
+                    "⚠️ Could not fetch additional pools for {}: {} - using primary pool only",
                     token.symbol,
                     e
                 );
@@ -395,14 +384,9 @@ async fn get_top_pools_for_token(token_mint: &str, current_pools: &[String]) -> 
         return pools;
     }
 
-    // Use existing pool data from helpers.rs via spawn_blocking since it's synchronous
-    match
-        tokio::task::spawn_blocking({
-            let token_mint = token_mint.to_string();
-            move || crate::helpers::fetch_combined_pools(&token_mint)
-        }).await
-    {
-        Ok(Ok(pool_infos)) => {
+    // Use existing pool data from helpers.rs
+    match crate::helpers::fetch_combined_pools(token_mint).await {
+        Ok(pool_infos) => {
             // Pool data is already sorted by liquidity and volume in fetch_combined_pools
             // Get up to 3 top pools that aren't already in our list
             for pool_info in pool_infos.into_iter().take(3) {
@@ -414,11 +398,8 @@ async fn get_top_pools_for_token(token_mint: &str, current_pools: &[String]) -> 
                 }
             }
         }
-        Ok(Err(e)) => {
-            println!("❌ Failed to fetch pools for token {}: {}", token_mint, e);
-        }
         Err(e) => {
-            println!("❌ Task spawn failed for token {}: {}", token_mint, e);
+            println!("❌ Failed to fetch pools for token {}: {}", token_mint, e);
         }
     }
 
@@ -494,7 +475,7 @@ async fn fetch_pool_trades(pool_address: &str) -> Result<Vec<Trade>> {
     );
 
     let client = reqwest::Client::new();
-    let response = client.get(&url).header("accept", "application/json").send().await?;
+    let response = client.get_with_rate_limit(&url, &GECKOTERMINAL_LIMITER).await?;
 
     if !response.status().is_success() {
         return Err(anyhow::anyhow!("API request failed: {}", response.status()));

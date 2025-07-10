@@ -48,7 +48,7 @@ fn ensure_pool_cache_loaded() -> Result<()> {
     Ok(())
 }
 
-pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
+pub async fn price_from_biggest_pool_async(rpc: &RpcClient, mint: &str) -> Result<f64> {
     ensure_pool_cache_loaded()?;
 
     let t0 = Instant::now();
@@ -58,7 +58,7 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
     let pool_pk = if let Some(pk) = maybe {
         pk
     } else {
-        let pools = fetch_solana_pairs(mint)?;
+        let pools = fetch_solana_pairs(mint).await?;
         let (best, _liq) = pools
             .par_iter()
             .filter_map(|pk| {
@@ -110,6 +110,15 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
     PRICE_CACHE.write().unwrap().insert(mint.to_string(), (ts, price));
 
     Ok(price)
+}
+
+pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
+    // For now, use blocking runtime to call the async version
+    let rt = tokio::runtime::Handle
+        ::try_current()
+        .map_err(|_| anyhow!("No async runtime available"))?;
+
+    rt.block_on(price_from_biggest_pool_async(rpc, mint))
 }
 
 /// Batch fetch prices for multiple tokens to reduce RPC costs
@@ -311,7 +320,12 @@ pub fn flush_pool_cache_to_disk_nonblocking() {
 
 /// Helper: Find biggest pool for a single mint (used for cache misses)
 fn find_biggest_pool_for_mint(rpc: &RpcClient, mint: &str) -> Result<Pubkey> {
-    let pools = fetch_solana_pairs(mint)?;
+    // Use blocking runtime to call the async version
+    let rt = tokio::runtime::Handle
+        ::try_current()
+        .map_err(|_| anyhow!("No async runtime available"))?;
+
+    let pools = rt.block_on(fetch_solana_pairs(mint))?;
     let (best, _liq) = pools
         .par_iter()
         .filter_map(|pk| {

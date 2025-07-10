@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::price_validation::{ is_price_valid, get_trading_price };
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENHANCED ANTI-BOT WHALE-FOLLOWING MEME COIN STRATEGY V2.0
@@ -45,7 +46,7 @@ use crate::prelude::*;
 // • Rug loss offset: 10+ small wins per rug loss
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub const POSITIONS_CHECK_TIME_SEC: u64 = 15;
+pub const POSITIONS_CHECK_TIME_SEC: u64 = 30;
 pub const TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 30;
 
 // TRADING CONSTANTS - OPTIMIZED FOR 0.001 SOL TRADES
@@ -90,6 +91,33 @@ pub async fn should_buy(
         token.symbol,
         current_price
     );
+
+    // ✅ CRITICAL: Validate price before any trading decision
+    if !is_price_valid(current_price) {
+        println!(
+            "🚫 [ENTRY] {} | Invalid price: {:.12} - TRADING BLOCKED",
+            token.symbol,
+            current_price
+        );
+        return false;
+    }
+
+    // Double-check with cached price validation
+    if let Some(trading_price) = get_trading_price(&token.mint) {
+        let price_diff = (((current_price - trading_price) / trading_price) * 100.0).abs();
+        if price_diff > 10.0 {
+            println!(
+                "⚠️ [ENTRY] {} | Price mismatch: current={:.12}, cached={:.12} ({:.1}% diff) - using cached",
+                token.symbol,
+                current_price,
+                trading_price,
+                price_diff
+            );
+        }
+    } else {
+        println!("🚫 [ENTRY] {} | No valid cached price available - TRADING BLOCKED", token.symbol);
+        return false;
+    }
 
     if !can_buy {
         println!("❌ [ENTRY] {} | Trading blocked", token.symbol);
@@ -526,6 +554,652 @@ pub async fn should_buy(
                 confirmation_score -= 1;
             }
         }
+
+        println!(
+            "🎯 [OHLCV] {} | Technical score: {} | Whale threshold multiplier: {:.1}x",
+            token.symbol,
+            confirmation_score,
+            whale_threshold_multiple
+        );
+    } else {
+        println!("⚠️ [ENTRY] {} | No OHLCV data available - using basic analysis", token.symbol);
+    }
+
+    // ─── FUNDAMENTAL FILTERS ───
+
+    // 1. Minimum liquidity
+    if liquidity_sol < MIN_LIQUIDITY_SOL {
+        println!("💧 [ENTRY] {} | Low liquidity: {:.1}SOL", token.symbol, liquidity_sol);
+        return false;
+    }
+
+    // 2. Minimum volume
+    if volume_24h < MIN_VOLUME_USD {
+        println!("📊 [ENTRY] {} | Low volume: ${:.0}", token.symbol, volume_24h);
+        return false;
+    }
+
+    // 3. Minimum activity
+    if buys_1h < MIN_ACTIVITY_BUYS_1H {
+        println!("📈 [ENTRY] {} | Low buying: {}", token.symbol, buys_1h);
+        return false;
+    }
+
+    // 4. Avoid major dumps
+    if price_change_5m <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+        return false;
+    }
+
+    // 5. Minimum holders
+    if total_holders < MIN_HOLDER_COUNT {
+        println!("👥 [ENTRY] {} | Few holders: {}", token.symbol, total_holders);
+        return false;
+    }
+
+    // ─── WHALE VS BOT ANALYSIS ───
+
+    let total_txns_1h = buys_1h + sells_1h;
+    let buy_ratio = if total_txns_1h > 0 { (buys_1h as f64) / (total_txns_1h as f64) } else { 0.0 };
+    let avg_tx_size = if total_txns_1h > 0 { volume_1h / (total_txns_1h as f64) } else { 0.0 };
+
+    // Whale activity scoring
+    let whale_score = if avg_tx_size > WHALE_BUY_THRESHOLD_SOL * 2.0 {
+        1.0 // Very high whale activity
+    } else if avg_tx_size > WHALE_BUY_THRESHOLD_SOL {
+        0.7 // High whale activity
+    } else if avg_tx_size > WHALE_BUY_THRESHOLD_SOL * 0.5 {
+        0.4 // Medium whale activity
+    } else {
+        0.1 // Low whale activity
+    };
+
+    // Bot activity scoring (inverse relationship)
+    let bot_score = if avg_tx_size < 0.5 && total_txns_1h > 100 {
+        0.9 // Very high bot activity
+    } else if avg_tx_size < 1.0 && total_txns_1h > 50 {
+        0.6 // High bot activity
+    } else if avg_tx_size < 1.5 && total_txns_1h > 20 {
+        0.3 // Medium bot activity
+    } else {
+        0.1 // Low bot activity
+    };
+
+    println!(
+        "🐋 [ANALYSIS] AvgTx: ${:.2} | WhaleScore: {:.1} | BotScore: {:.1} | BuyRatio: {:.2}",
+        avg_tx_size,
+        whale_score,
+        bot_score,
+        buy_ratio
+    );
+
+    // ─── ENTRY CONDITIONS ───
+
+    let mut entry_score = 0.0;
+    let mut reasons = Vec::new();
+
+    // Strong whale activity (from dexscreener data)
+    if whale_score >= 0.6 {
+        entry_score += 0.3; // Reduced weight
+        reasons.push(format!("dex_whale_activity({:.1})", whale_score));
+    }
+
+    // Trades-based whale activity (more accurate)
+    if trades_score >= 0.5 {
+        entry_score += 0.4; // Higher weight for real trade data
+        reasons.push(format!("trades_whale({:.1})", trades_whale_activity));
+    }
+
+    // Low bot interference
+    if bot_score <= 0.4 {
+        entry_score += 0.2; // Reduced weight
+        reasons.push(format!("low_bots({:.1})", bot_score));
+    }
+
+    // Good buying pressure
+    if buy_ratio >= 0.6 {
+        entry_score += 0.15;
+        reasons.push(format!("buying_pressure({:.2})", buy_ratio));
+    }
+
+    // Controlled price movement (not FOMO)
+    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+        entry_score += 0.15;
+        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+    }
+
+    // Good liquidity
+    if liquidity_sol >= MIN_LIQUIDITY_SOL * 2.0 {
+        entry_score += 0.1;
+        reasons.push(format!("good_liquidity({:.0})", liquidity_sol));
+    }
+
+    // Reasonable volume activity
+    if volume_1h > volume_24h / 24.0 {
+        entry_score += 0.1;
+        reasons.push(format!("active_volume"));
+    }
+
+    // OHLCV Technical Analysis (if available)
+    if let Some(df) = dataframe {
+        println!("📊 [ENTRY] {} | OHLCV analysis available", token.symbol);
+
+        let primary_timeframe = df.get_primary_timeframe();
+
+        // Get current price from OHLCV data (more reliable than API price)
+        if let Some(ohlcv_price) = primary_timeframe.current_price() {
+            let price_diff_pct = (((current_price - ohlcv_price) / ohlcv_price) * 100.0).abs();
+            if price_diff_pct > 5.0 {
+                println!(
+                    "⚠️ [ENTRY] {} | Price discrepancy: API={:.8} vs OHLCV={:.8} ({:.1}%)",
+                    token.symbol,
+                    current_price,
+                    ohlcv_price,
+                    price_diff_pct
+                );
+            }
+        }
+
+        // Check for recent volatility (high volatility = risk)
+        if let Some(volatility) = primary_timeframe.volatility(20) {
+            if volatility > 15.0 {
+                println!(
+                    "⚠️ [ENTRY] {} | High volatility: {:.1}% - increasing caution",
+                    token.symbol,
+                    volatility
+                );
+                whale_threshold_multiple *= 1.5; // Require stronger whale signals in volatile markets
+            }
+        }
+
+        // Check for volume trends (increasing volume = good)
+        let recent_avg_volume = primary_timeframe.average_volume(5).unwrap_or(0.0);
+        let older_avg_volume = primary_timeframe.average_volume(20).unwrap_or(0.0);
+
+        if recent_avg_volume > older_avg_volume * 1.5 {
+            println!(
+                "📈 [ENTRY] {} | Volume surge detected: recent={:.0} vs avg={:.0}",
+                token.symbol,
+                recent_avg_volume,
+                older_avg_volume
+            );
+            confirmation_score += 1;
+        }
+
+        // Check for price momentum (recent price change)
+        if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
+            if price_change_5m > 2.0 {
+                println!(
+                    "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
+                    token.symbol,
+                    price_change_5m
+                );
+                confirmation_score += 1;
+            } else if price_change_5m < -3.0 {
+                println!(
+                    "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
+                    token.symbol,
+                    price_change_5m
+                );
+                confirmation_score -= 1;
+            }
+        }
+
+        // VWAP analysis (price vs volume weighted average)
+        if let Some(vwap) = primary_timeframe.vwap(20) {
+            if current_price > vwap * 1.02 {
+                println!(
+                    "📊 [ENTRY] {} | Price above VWAP: {:.8} vs {:.8} (+{:.1}%)",
+                    token.symbol,
+                    current_price,
+                    vwap,
+                    ((current_price - vwap) / vwap) * 100.0
+                );
+                confirmation_score += 1;
+            } else if current_price < vwap * 0.98 {
+                println!(
+                    "📊 [ENTRY] {} | Price below VWAP: {:.8} vs {:.8} ({:.1}%)",
+                    token.symbol,
+                    current_price,
+                    vwap,
+                    ((current_price - vwap) / vwap) * 100.0
+                );
+                confirmation_score -= 1;
+            }
+        }
+
+        println!(
+            "🎯 [OHLCV] {} | Technical score: {} | Whale threshold multiplier: {:.1}x",
+            token.symbol,
+            confirmation_score,
+            whale_threshold_multiple
+        );
+    } else {
+        println!("⚠️ [ENTRY] {} | No OHLCV data available - using basic analysis", token.symbol);
+    }
+
+    // ─── FUNDAMENTAL FILTERS ───
+
+    // 1. Minimum liquidity
+    if liquidity_sol < MIN_LIQUIDITY_SOL {
+        println!("💧 [ENTRY] {} | Low liquidity: {:.1}SOL", token.symbol, liquidity_sol);
+        return false;
+    }
+
+    // 2. Minimum volume
+    if volume_24h < MIN_VOLUME_USD {
+        println!("📊 [ENTRY] {} | Low volume: ${:.0}", token.symbol, volume_24h);
+        return false;
+    }
+
+    // 3. Minimum activity
+    if buys_1h < MIN_ACTIVITY_BUYS_1H {
+        println!("📈 [ENTRY] {} | Low buying: {}", token.symbol, buys_1h);
+        return false;
+    }
+
+    // 4. Avoid major dumps
+    if price_change_5m <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+        return false;
+    }
+
+    // 5. Minimum holders
+    if total_holders < MIN_HOLDER_COUNT {
+        println!("👥 [ENTRY] {} | Few holders: {}", token.symbol, total_holders);
+        return false;
+    }
+
+    // ─── WHALE VS BOT ANALYSIS ───
+
+    let total_txns_1h = buys_1h + sells_1h;
+    let buy_ratio = if total_txns_1h > 0 { (buys_1h as f64) / (total_txns_1h as f64) } else { 0.0 };
+    let avg_tx_size = if total_txns_1h > 0 { volume_1h / (total_txns_1h as f64) } else { 0.0 };
+
+    // Whale activity scoring
+    let whale_score = if avg_tx_size > WHALE_BUY_THRESHOLD_SOL * 2.0 {
+        1.0 // Very high whale activity
+    } else if avg_tx_size > WHALE_BUY_THRESHOLD_SOL {
+        0.7 // High whale activity
+    } else if avg_tx_size > WHALE_BUY_THRESHOLD_SOL * 0.5 {
+        0.4 // Medium whale activity
+    } else {
+        0.1 // Low whale activity
+    };
+
+    // Bot activity scoring (inverse relationship)
+    let bot_score = if avg_tx_size < 0.5 && total_txns_1h > 100 {
+        0.9 // Very high bot activity
+    } else if avg_tx_size < 1.0 && total_txns_1h > 50 {
+        0.6 // High bot activity
+    } else if avg_tx_size < 1.5 && total_txns_1h > 20 {
+        0.3 // Medium bot activity
+    } else {
+        0.1 // Low bot activity
+    };
+
+    println!(
+        "🐋 [ANALYSIS] AvgTx: ${:.2} | WhaleScore: {:.1} | BotScore: {:.1} | BuyRatio: {:.2}",
+        avg_tx_size,
+        whale_score,
+        bot_score,
+        buy_ratio
+    );
+
+    // ─── ENTRY CONDITIONS ───
+
+    let mut entry_score = 0.0;
+    let mut reasons = Vec::new();
+
+    // Strong whale activity (from dexscreener data)
+    if whale_score >= 0.6 {
+        entry_score += 0.3; // Reduced weight
+        reasons.push(format!("dex_whale_activity({:.1})", whale_score));
+    }
+
+    // Trades-based whale activity (more accurate)
+    if trades_score >= 0.5 {
+        entry_score += 0.4; // Higher weight for real trade data
+        reasons.push(format!("trades_whale({:.1})", trades_whale_activity));
+    }
+
+    // Low bot interference
+    if bot_score <= 0.4 {
+        entry_score += 0.2; // Reduced weight
+        reasons.push(format!("low_bots({:.1})", bot_score));
+    }
+
+    // Good buying pressure
+    if buy_ratio >= 0.6 {
+        entry_score += 0.15;
+        reasons.push(format!("buying_pressure({:.2})", buy_ratio));
+    }
+
+    // Controlled price movement (not FOMO)
+    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+        entry_score += 0.15;
+        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+    }
+
+    // Good liquidity
+    if liquidity_sol >= MIN_LIQUIDITY_SOL * 2.0 {
+        entry_score += 0.1;
+        reasons.push(format!("good_liquidity({:.0})", liquidity_sol));
+    }
+
+    // Reasonable volume activity
+    if volume_1h > volume_24h / 24.0 {
+        entry_score += 0.1;
+        reasons.push(format!("active_volume"));
+    }
+
+    // OHLCV Technical Analysis (if available)
+    if let Some(df) = dataframe {
+        println!("📊 [ENTRY] {} | OHLCV analysis available", token.symbol);
+
+        let primary_timeframe = df.get_primary_timeframe();
+
+        // Get current price from OHLCV data (more reliable than API price)
+        if let Some(ohlcv_price) = primary_timeframe.current_price() {
+            let price_diff_pct = (((current_price - ohlcv_price) / ohlcv_price) * 100.0).abs();
+            if price_diff_pct > 5.0 {
+                println!(
+                    "⚠️ [ENTRY] {} | Price discrepancy: API={:.8} vs OHLCV={:.8} ({:.1}%)",
+                    token.symbol,
+                    current_price,
+                    ohlcv_price,
+                    price_diff_pct
+                );
+            }
+        }
+
+        // Check for recent volatility (high volatility = risk)
+        if let Some(volatility) = primary_timeframe.volatility(20) {
+            if volatility > 15.0 {
+                println!(
+                    "⚠️ [ENTRY] {} | High volatility: {:.1}% - increasing caution",
+                    token.symbol,
+                    volatility
+                );
+                whale_threshold_multiple *= 1.5; // Require stronger whale signals in volatile markets
+            }
+        }
+
+        // Check for volume trends (increasing volume = good)
+        let recent_avg_volume = primary_timeframe.average_volume(5).unwrap_or(0.0);
+        let older_avg_volume = primary_timeframe.average_volume(20).unwrap_or(0.0);
+
+        if recent_avg_volume > older_avg_volume * 1.5 {
+            println!(
+                "📈 [ENTRY] {} | Volume surge detected: recent={:.0} vs avg={:.0}",
+                token.symbol,
+                recent_avg_volume,
+                older_avg_volume
+            );
+            confirmation_score += 1;
+        }
+
+        // Check for price momentum (recent price change)
+        if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
+            if price_change_5m > 2.0 {
+                println!(
+                    "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
+                    token.symbol,
+                    price_change_5m
+                );
+                confirmation_score += 1;
+            } else if price_change_5m < -3.0 {
+                println!(
+                    "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
+                    token.symbol,
+                    price_change_5m
+                );
+                confirmation_score -= 1;
+            }
+        }
+
+        // VWAP analysis (price vs volume weighted average)
+        if let Some(vwap) = primary_timeframe.vwap(20) {
+            if current_price > vwap * 1.02 {
+                println!(
+                    "📊 [ENTRY] {} | Price above VWAP: {:.8} vs {:.8} (+{:.1}%)",
+                    token.symbol,
+                    current_price,
+                    vwap,
+                    ((current_price - vwap) / vwap) * 100.0
+                );
+                confirmation_score += 1;
+            } else if current_price < vwap * 0.98 {
+                println!(
+                    "📊 [ENTRY] {} | Price below VWAP: {:.8} vs {:.8} ({:.1}%)",
+                    token.symbol,
+                    current_price,
+                    vwap,
+                    ((current_price - vwap) / vwap) * 100.0
+                );
+                confirmation_score -= 1;
+            }
+        }
+
+        println!(
+            "🎯 [OHLCV] {} | Technical score: {} | Whale threshold multiplier: {:.1}x",
+            token.symbol,
+            confirmation_score,
+            whale_threshold_multiple
+        );
+    } else {
+        println!("⚠️ [ENTRY] {} | No OHLCV data available - using basic analysis", token.symbol);
+    }
+
+    // ─── FUNDAMENTAL FILTERS ───
+
+    // 1. Minimum liquidity
+    if liquidity_sol < MIN_LIQUIDITY_SOL {
+        println!("💧 [ENTRY] {} | Low liquidity: {:.1}SOL", token.symbol, liquidity_sol);
+        return false;
+    }
+
+    // 2. Minimum volume
+    if volume_24h < MIN_VOLUME_USD {
+        println!("📊 [ENTRY] {} | Low volume: ${:.0}", token.symbol, volume_24h);
+        return false;
+    }
+
+    // 3. Minimum activity
+    if buys_1h < MIN_ACTIVITY_BUYS_1H {
+        println!("📈 [ENTRY] {} | Low buying: {}", token.symbol, buys_1h);
+        return false;
+    }
+
+    // 4. Avoid major dumps
+    if price_change_5m <= BIG_DUMP_THRESHOLD {
+        println!("📉 [ENTRY] {} | Major dump: {:.1}%", token.symbol, price_change_5m);
+        return false;
+    }
+
+    // 5. Minimum holders
+    if total_holders < MIN_HOLDER_COUNT {
+        println!("👥 [ENTRY] {} | Few holders: {}", token.symbol, total_holders);
+        return false;
+    }
+
+    // ─── WHALE VS BOT ANALYSIS ───
+
+    let total_txns_1h = buys_1h + sells_1h;
+    let buy_ratio = if total_txns_1h > 0 { (buys_1h as f64) / (total_txns_1h as f64) } else { 0.0 };
+    let avg_tx_size = if total_txns_1h > 0 { volume_1h / (total_txns_1h as f64) } else { 0.0 };
+
+    // Whale activity scoring
+    let whale_score = if avg_tx_size > WHALE_BUY_THRESHOLD_SOL * 2.0 {
+        1.0 // Very high whale activity
+    } else if avg_tx_size > WHALE_BUY_THRESHOLD_SOL {
+        0.7 // High whale activity
+    } else if avg_tx_size > WHALE_BUY_THRESHOLD_SOL * 0.5 {
+        0.4 // Medium whale activity
+    } else {
+        0.1 // Low whale activity
+    };
+
+    // Bot activity scoring (inverse relationship)
+    let bot_score = if avg_tx_size < 0.5 && total_txns_1h > 100 {
+        0.9 // Very high bot activity
+    } else if avg_tx_size < 1.0 && total_txns_1h > 50 {
+        0.6 // High bot activity
+    } else if avg_tx_size < 1.5 && total_txns_1h > 20 {
+        0.3 // Medium bot activity
+    } else {
+        0.1 // Low bot activity
+    };
+
+    println!(
+        "🐋 [ANALYSIS] AvgTx: ${:.2} | WhaleScore: {:.1} | BotScore: {:.1} | BuyRatio: {:.2}",
+        avg_tx_size,
+        whale_score,
+        bot_score,
+        buy_ratio
+    );
+
+    // ─── ENTRY CONDITIONS ───
+
+    let mut entry_score = 0.0;
+    let mut reasons = Vec::new();
+
+    // Strong whale activity (from dexscreener data)
+    if whale_score >= 0.6 {
+        entry_score += 0.3; // Reduced weight
+        reasons.push(format!("dex_whale_activity({:.1})", whale_score));
+    }
+
+    // Trades-based whale activity (more accurate)
+    if trades_score >= 0.5 {
+        entry_score += 0.4; // Higher weight for real trade data
+        reasons.push(format!("trades_whale({:.1})", trades_whale_activity));
+    }
+
+    // Low bot interference
+    if bot_score <= 0.4 {
+        entry_score += 0.2; // Reduced weight
+        reasons.push(format!("low_bots({:.1})", bot_score));
+    }
+
+    // Good buying pressure
+    if buy_ratio >= 0.6 {
+        entry_score += 0.15;
+        reasons.push(format!("buying_pressure({:.2})", buy_ratio));
+    }
+
+    // Controlled price movement (not FOMO)
+    if price_change_5m >= -10.0 && price_change_5m <= ACCUMULATION_PATIENCE_THRESHOLD {
+        entry_score += 0.15;
+        reasons.push(format!("controlled_movement({:.1}%)", price_change_5m));
+    }
+
+    // Good liquidity
+    if liquidity_sol >= MIN_LIQUIDITY_SOL * 2.0 {
+        entry_score += 0.1;
+        reasons.push(format!("good_liquidity({:.0})", liquidity_sol));
+    }
+
+    // Reasonable volume activity
+    if volume_1h > volume_24h / 24.0 {
+        entry_score += 0.1;
+        reasons.push(format!("active_volume"));
+    }
+
+    // OHLCV Technical Analysis (if available)
+    if let Some(df) = dataframe {
+        println!("📊 [ENTRY] {} | OHLCV analysis available", token.symbol);
+
+        let primary_timeframe = df.get_primary_timeframe();
+
+        // Get current price from OHLCV data (more reliable than API price)
+        if let Some(ohlcv_price) = primary_timeframe.current_price() {
+            let price_diff_pct = (((current_price - ohlcv_price) / ohlcv_price) * 100.0).abs();
+            if price_diff_pct > 5.0 {
+                println!(
+                    "⚠️ [ENTRY] {} | Price discrepancy: API={:.8} vs OHLCV={:.8} ({:.1}%)",
+                    token.symbol,
+                    current_price,
+                    ohlcv_price,
+                    price_diff_pct
+                );
+            }
+        }
+
+        // Check for recent volatility (high volatility = risk)
+        if let Some(volatility) = primary_timeframe.volatility(20) {
+            if volatility > 15.0 {
+                println!(
+                    "⚠️ [ENTRY] {} | High volatility: {:.1}% - increasing caution",
+                    token.symbol,
+                    volatility
+                );
+                whale_threshold_multiple *= 1.5; // Require stronger whale signals in volatile markets
+            }
+        }
+
+        // Check for volume trends (increasing volume = good)
+        let recent_avg_volume = primary_timeframe.average_volume(5).unwrap_or(0.0);
+        let older_avg_volume = primary_timeframe.average_volume(20).unwrap_or(0.0);
+
+        if recent_avg_volume > older_avg_volume * 1.5 {
+            println!(
+                "📈 [ENTRY] {} | Volume surge detected: recent={:.0} vs avg={:.0}",
+                token.symbol,
+                recent_avg_volume,
+                older_avg_volume
+            );
+            confirmation_score += 1;
+        }
+
+        // Check for price momentum (recent price change)
+        if let Some(price_change_5m) = primary_timeframe.price_change_over_period(5) {
+            if price_change_5m > 2.0 {
+                println!(
+                    "🚀 [ENTRY] {} | Recent price momentum: +{:.1}%",
+                    token.symbol,
+                    price_change_5m
+                );
+                confirmation_score += 1;
+            } else if price_change_5m < -3.0 {
+                println!(
+                    "📉 [ENTRY] {} | Recent price decline: {:.1}% - reducing confidence",
+                    token.symbol,
+                    price_change_5m
+                );
+                confirmation_score -= 1;
+            }
+        }
+
+        // VWAP analysis (price vs volume weighted average)
+        if let Some(vwap) = primary_timeframe.vwap(20) {
+            if current_price > vwap * 1.02 {
+                println!(
+                    "📊 [ENTRY] {} | Price above VWAP: {:.8} vs {:.8} (+{:.1}%)",
+                    token.symbol,
+                    current_price,
+                    vwap,
+                    ((current_price - vwap) / vwap) * 100.0
+                );
+                confirmation_score += 1;
+            } else if current_price < vwap * 0.98 {
+                println!(
+                    "📊 [ENTRY] {} | Price below VWAP: {:.8} vs {:.8} ({:.1}%)",
+                    token.symbol,
+                    current_price,
+                    vwap,
+                    ((current_price - vwap) / vwap) * 100.0
+                );
+                confirmation_score -= 1;
+            }
+        }
+
+        println!(
+            "🎯 [OHLCV] {} | Technical score: {} | Whale threshold multiplier: {:.1}x",
+            token.symbol,
+            confirmation_score,
+            whale_threshold_multiple
+        );
     } else {
         println!("⚠️ [ENTRY] {} | No OHLCV data available - using basic analysis", token.symbol);
     }
@@ -583,6 +1257,29 @@ pub fn should_dca(
     trades: Option<&TokenTradesCache>,
     dataframe: Option<&crate::ohlcv::TokenOhlcvCache>
 ) -> bool {
+    // ✅ CRITICAL: Validate price before any DCA decision
+    if !is_price_valid(current_price) {
+        println!("🚫 [DCA] {} | Invalid price: {:.12} - DCA BLOCKED", token.symbol, current_price);
+        return false;
+    }
+
+    // Double-check with cached price validation
+    if let Some(trading_price) = get_trading_price(&token.mint) {
+        let price_diff = (((current_price - trading_price) / trading_price) * 100.0).abs();
+        if price_diff > 10.0 {
+            println!(
+                "⚠️ [DCA] {} | Price mismatch: current={:.12}, cached={:.12} ({:.1}% diff) - using cached",
+                token.symbol,
+                current_price,
+                trading_price,
+                price_diff
+            );
+        }
+    } else {
+        println!("🚫 [DCA] {} | No valid cached price available - DCA BLOCKED", token.symbol);
+        return false;
+    }
+
     let now = Utc::now();
     let elapsed = now - pos.open_time;
     let drop_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
@@ -779,6 +1476,33 @@ pub fn should_sell(
     trades: Option<&TokenTradesCache>,
     dataframe: Option<&crate::ohlcv::TokenOhlcvCache>
 ) -> (bool, String) {
+    // ✅ CRITICAL: Validate price before any selling decision
+    if !is_price_valid(current_price) {
+        println!(
+            "🚫 [SELL] {} | Invalid price: {:.12} - SELLING BLOCKED",
+            token.symbol,
+            current_price
+        );
+        return (false, format!("invalid_price({:.12})", current_price));
+    }
+
+    // Double-check with cached price validation
+    if let Some(trading_price) = get_trading_price(&token.mint) {
+        let price_diff = (((current_price - trading_price) / trading_price) * 100.0).abs();
+        if price_diff > 10.0 {
+            println!(
+                "⚠️ [SELL] {} | Price mismatch: current={:.12}, cached={:.12} ({:.1}% diff) - using cached",
+                token.symbol,
+                current_price,
+                trading_price,
+                price_diff
+            );
+        }
+    } else {
+        println!("🚫 [SELL] {} | No valid cached price available - SELLING BLOCKED", token.symbol);
+        return (false, "no_valid_price".to_string());
+    }
+
     let total_fees =
         ((1 + (pos.dca_count as usize)) as f64) * TRANSACTION_FEE_SOL + TRANSACTION_FEE_SOL;
     let current_value = current_price * pos.token_amount;
@@ -1127,16 +1851,4 @@ pub fn calculate_dca_size(_token: &Token, _pos: &Position) -> f64 {
     TRADE_SIZE_SOL // Same size as initial entry
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PERFORMANCE TRACKING (STUB - TO BE IMPLEMENTED)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-pub fn calculate_performance_multiplier() -> f64 {
-    // TODO: Implement based on recent win/loss history
-    1.0
-}
-
-pub fn calculate_adaptive_position_size(base_size: f64, _token: &Token) -> f64 {
-    // TODO: Implement adaptive sizing based on token quality and recent performance
-    base_size
-}
+// ═════════════════

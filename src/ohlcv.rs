@@ -1,9 +1,9 @@
 use crate::prelude::*;
+use crate::rate_limiter::{ RateLimitedRequest, GECKOTERMINAL_LIMITER };
 use serde::{ Deserialize, Serialize };
 use std::collections::{ HashMap, HashSet };
 use tokio::sync::RwLock;
 use once_cell::sync::Lazy;
-use chrono::{ DateTime, Utc };
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OHLCV CACHE SYSTEM - BACKGROUND TASK FOR PRICE/VOLUME DATA COLLECTION
@@ -100,6 +100,28 @@ pub static TOKENS_TO_MONITOR_OHLCV: Lazy<RwLock<HashMap<String, String>>> = Lazy
 pub static PRIORITY_TOKENS: Lazy<RwLock<HashSet<String>>> = Lazy::new(||
     RwLock::new(HashSet::new())
 );
+
+// Blacklisted tokens that consistently fail with 404 errors
+pub static BLACKLISTED_TOKENS: Lazy<RwLock<HashSet<String>>> = Lazy::new(||
+    RwLock::new(HashSet::new())
+);
+
+// Track failed attempts and backoff timing for tokens
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenBackoffInfo {
+    pub failure_count: u32,
+    pub last_attempt: u64,
+    pub next_retry: u64,
+    pub last_error: String,
+}
+
+pub static TOKEN_BACKOFF: Lazy<RwLock<HashMap<String, TokenBackoffInfo>>> = Lazy::new(||
+    RwLock::new(HashMap::new())
+);
+
+const MAX_FAILURES_BEFORE_BLACKLIST: u32 = 3;
+const INITIAL_BACKOFF_SECONDS: u64 = 300; // 5 minutes
+const MAX_BACKOFF_SECONDS: u64 = 86400; // 24 hours
 
 impl OhlcvCandle {
     pub fn new(timestamp: u64, open: f64, high: f64, low: f64, close: f64, volume: f64) -> Self {
@@ -394,6 +416,7 @@ pub fn start_ohlcv_cache_task() {
 
         // Load existing cache from disk
         load_ohlcv_cache().await;
+        load_blacklist_and_backoff().await;
 
         let mut cleanup_counter = 0;
         let mut priority_update_counter = 0;
@@ -425,6 +448,12 @@ pub fn start_ohlcv_cache_task() {
 
             // Save updated cache to disk
             save_ohlcv_cache().await;
+            save_blacklist_and_backoff().await;
+
+            // Show periodic status
+            if priority_update_counter == 0 {
+                get_blacklist_and_backoff_status().await;
+            }
 
             // Wait for next update cycle
             tokio::time::sleep(Duration::from_secs(OHLCV_UPDATE_INTERVAL_SECONDS)).await;
@@ -517,8 +546,201 @@ async fn update_all_monitored_tokens_ohlcv() {
     }
 }
 
+/// Handle token failure and implement backoff/blacklisting logic
+async fn handle_token_failure(token_mint: &str, failure_count: u32, is_token_not_found: bool) {
+    let now = std::time::SystemTime
+        ::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // If this is a 404 error, blacklist immediately
+    if is_token_not_found {
+        let mut backoff_map = TOKEN_BACKOFF.write().await;
+
+        // Update or create backoff info
+        let backoff_info = backoff_map.entry(token_mint.to_string()).or_insert(TokenBackoffInfo {
+            failure_count: 0,
+            last_attempt: now,
+            next_retry: now,
+            last_error: String::new(),
+        });
+
+        backoff_info.failure_count += failure_count;
+        backoff_info.last_attempt = now;
+        backoff_info.last_error = "TOKEN_NOT_FOUND".to_string();
+
+        // Blacklist if too many failures
+        if backoff_info.failure_count >= MAX_FAILURES_BEFORE_BLACKLIST {
+            let failure_count_copy = backoff_info.failure_count;
+            drop(backoff_map); // Release lock before acquiring blacklist lock
+
+            let mut blacklist = BLACKLISTED_TOKENS.write().await;
+            blacklist.insert(token_mint.to_string());
+            println!(
+                "🚫 Blacklisted token {} after {} 404 failures",
+                &token_mint[..8],
+                failure_count_copy
+            );
+
+            // Remove from monitoring to save resources
+            let mut monitor_list = TOKENS_TO_MONITOR_OHLCV.write().await;
+            monitor_list.remove(token_mint);
+        } else {
+            // Set exponential backoff for 404 errors
+            let backoff_seconds =
+                INITIAL_BACKOFF_SECONDS * (2_u64).pow(backoff_info.failure_count - 1);
+            let backoff_seconds = backoff_seconds.min(MAX_BACKOFF_SECONDS);
+            backoff_info.next_retry = now + backoff_seconds;
+
+            println!(
+                "⏰ Token {} in backoff for {} seconds after {} 404 failures",
+                &token_mint[..8],
+                backoff_seconds,
+                backoff_info.failure_count
+            );
+        }
+    } else {
+        // Handle other types of failures with shorter backoff
+        let mut backoff_map = TOKEN_BACKOFF.write().await;
+
+        let backoff_info = backoff_map.entry(token_mint.to_string()).or_insert(TokenBackoffInfo {
+            failure_count: 0,
+            last_attempt: now,
+            next_retry: now,
+            last_error: String::new(),
+        });
+
+        backoff_info.failure_count += failure_count;
+        backoff_info.last_attempt = now;
+        backoff_info.last_error = "API_ERROR".to_string();
+
+        // Shorter backoff for non-404 errors
+        let backoff_seconds =
+            (INITIAL_BACKOFF_SECONDS / 4) * (2_u64).pow((backoff_info.failure_count / 2).min(4));
+        let backoff_seconds = backoff_seconds.min(MAX_BACKOFF_SECONDS / 4);
+        backoff_info.next_retry = now + backoff_seconds;
+
+        println!(
+            "⏰ Token {} in backoff for {} seconds after {} API failures",
+            &token_mint[..8],
+            backoff_seconds,
+            backoff_info.failure_count
+        );
+    }
+}
+
+/// Clear backoff info for a token (called on successful update)
+async fn clear_token_backoff(token_mint: &str) {
+    let mut backoff_map = TOKEN_BACKOFF.write().await;
+    if backoff_map.remove(token_mint).is_some() {
+        println!("✅ Cleared backoff for token {}", &token_mint[..8]);
+    }
+}
+
+/// Clean up old cache files (older than 24 hours)
+async fn cleanup_old_ohlcv_cache_files() {
+    let now = std::time::SystemTime
+        ::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let max_age = OHLCV_CACHE_MAX_AGE_HOURS * 3600;
+    let mut cleaned_count = 0;
+
+    if let Ok(entries) = tokio::fs::read_dir(OHLCV_CACHE_DIR).await {
+        let mut entries = entries;
+
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if let Ok(metadata) = entry.metadata().await {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(modified_duration) = modified.duration_since(std::time::UNIX_EPOCH) {
+                        let file_age = now - modified_duration.as_secs();
+
+                        if file_age > max_age {
+                            if let Err(e) = tokio::fs::remove_file(entry.path()).await {
+                                println!("❌ Failed to remove old OHLCV cache file: {}", e);
+                            } else {
+                                cleaned_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if cleaned_count > 0 {
+        println!("🧹 Cleaned up {} old OHLCV cache files", cleaned_count);
+    }
+}
+
+/// Get blacklist and backoff status for debugging
+async fn get_blacklist_and_backoff_status() -> (usize, usize) {
+    let blacklist = BLACKLISTED_TOKENS.read().await;
+    let backoff_map = TOKEN_BACKOFF.read().await;
+
+    let blacklisted_count = blacklist.len();
+    let backoff_count = backoff_map.len();
+
+    if blacklisted_count > 0 || backoff_count > 0 {
+        println!(
+            "📊 OHLCV Status: {} blacklisted, {} in backoff",
+            blacklisted_count,
+            backoff_count
+        );
+
+        // Show some details
+        for (token, info) in backoff_map.iter() {
+            let now = std::time::SystemTime
+                ::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            if now < info.next_retry {
+                let remaining = info.next_retry - now;
+                println!(
+                    "  ⏰ {} in backoff for {} more seconds (failures: {})",
+                    &token[..8],
+                    remaining,
+                    info.failure_count
+                );
+            }
+        }
+    }
+
+    (blacklisted_count, backoff_count)
+}
+
 /// Update OHLCV data for a specific token
 async fn update_token_ohlcv(token_mint: &str, pool_address: &str) {
+    // Check if token is blacklisted
+    {
+        let blacklist = BLACKLISTED_TOKENS.read().await;
+        if blacklist.contains(token_mint) {
+            return; // Skip blacklisted tokens
+        }
+    }
+
+    // Check if token is in backoff period
+    {
+        let backoff_map = TOKEN_BACKOFF.read().await;
+        if let Some(backoff_info) = backoff_map.get(token_mint) {
+            let now = std::time::SystemTime
+                ::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            if now < backoff_info.next_retry {
+                // Still in backoff period, skip this token
+                return;
+            }
+        }
+    }
+
     // Get or create token cache
     let mut token_cache = {
         let cache = OHLCV_CACHE.read().await;
@@ -544,6 +766,9 @@ async fn update_token_ohlcv(token_mint: &str, pool_address: &str) {
         ("day", "1", &mut token_cache.day_1),
     ];
 
+    let mut failure_count = 0;
+    let mut is_token_not_found = false;
+
     for (timeframe, aggregate, dataframe) in timeframes {
         match fetch_ohlcv_data(pool_address, timeframe, aggregate).await {
             Ok(candles) => {
@@ -551,18 +776,42 @@ async fn update_token_ohlcv(token_mint: &str, pool_address: &str) {
                 println!("✅ Updated {}:{} OHLCV for {}", timeframe, aggregate, &token_mint[..8]);
             }
             Err(e) => {
-                println!(
-                    "❌ Failed to fetch {}:{} OHLCV for {}: {}",
-                    timeframe,
-                    aggregate,
-                    &token_mint[..8],
-                    e
-                );
+                let error_msg = e.to_string();
+
+                // Check if this is a 404 error indicating token not found
+                if error_msg.contains("TOKEN_NOT_FOUND") {
+                    is_token_not_found = true;
+                    failure_count += 1;
+                    println!(
+                        "❌ Token not found for {}:{} OHLCV for {}: {}",
+                        timeframe,
+                        aggregate,
+                        &token_mint[..8],
+                        e
+                    );
+                } else {
+                    failure_count += 1;
+                    println!(
+                        "❌ Failed to fetch {}:{} OHLCV for {}: {}",
+                        timeframe,
+                        aggregate,
+                        &token_mint[..8],
+                        e
+                    );
+                }
             }
         }
 
         // Rate limiting between timeframe requests
         tokio::time::sleep(Duration::from_millis(OHLCV_RATE_LIMIT_MS / 2)).await;
+    }
+
+    // Handle failures and blacklisting
+    if failure_count > 0 {
+        handle_token_failure(token_mint, failure_count, is_token_not_found).await;
+    } else {
+        // Clear any existing backoff info on success
+        clear_token_backoff(token_mint).await;
     }
 
     // Update cache timestamp
@@ -593,9 +842,15 @@ async fn fetch_ohlcv_data(
     );
 
     let client = reqwest::Client::new();
-    let response = client.get(&url).header("accept", "application/json").send().await?;
+    let response = client.get_with_rate_limit(&url, &GECKOTERMINAL_LIMITER).await?;
 
     if !response.status().is_success() {
+        // Create specific error for 404 to handle blacklisting
+        if response.status() == 404 {
+            return Err(
+                anyhow::anyhow!("TOKEN_NOT_FOUND: API request failed: {}", response.status())
+            );
+        }
         return Err(anyhow::anyhow!("API request failed: {}", response.status()));
     }
 
@@ -674,42 +929,91 @@ async fn save_token_ohlcv_to_disk(token_mint: &str, ohlcv_cache: &TokenOhlcvCach
     }
 }
 
-/// Clean up old cache files (older than 24 hours)
-async fn cleanup_old_ohlcv_cache_files() {
-    let now = std::time::SystemTime
-        ::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+/// Load blacklist and backoff data from disk
+async fn load_blacklist_and_backoff() {
+    // Load blacklist
+    let blacklist_file = format!("{}/blacklist.json", OHLCV_CACHE_DIR);
+    if let Ok(data) = tokio::fs::read(&blacklist_file).await {
+        if let Ok(blacklist) = serde_json::from_slice::<HashSet<String>>(&data) {
+            let mut blacklisted_tokens = BLACKLISTED_TOKENS.write().await;
+            *blacklisted_tokens = blacklist.clone();
+            println!("📥 Loaded {} blacklisted tokens from disk", blacklist.len());
+        }
+    }
 
-    let max_age = OHLCV_CACHE_MAX_AGE_HOURS * 3600;
-    let mut cleaned_count = 0;
+    // Load backoff data
+    let backoff_file = format!("{}/backoff.json", OHLCV_CACHE_DIR);
+    if let Ok(data) = tokio::fs::read(&backoff_file).await {
+        if let Ok(backoff_map) = serde_json::from_slice::<HashMap<String, TokenBackoffInfo>>(&data) {
+            let mut token_backoff = TOKEN_BACKOFF.write().await;
+            *token_backoff = backoff_map.clone();
+            println!("📥 Loaded {} tokens with backoff data from disk", backoff_map.len());
+        }
+    }
+}
 
-    if let Ok(entries) = tokio::fs::read_dir(OHLCV_CACHE_DIR).await {
-        let mut entries = entries;
+/// Save blacklist and backoff data to disk
+async fn save_blacklist_and_backoff() {
+    // Ensure cache directory exists
+    if let Err(e) = tokio::fs::create_dir_all(OHLCV_CACHE_DIR).await {
+        println!("❌ Failed to create OHLCV cache directory: {}", e);
+        return;
+    }
 
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            if let Ok(metadata) = entry.metadata().await {
-                if let Ok(modified) = metadata.modified() {
-                    if let Ok(modified_duration) = modified.duration_since(std::time::UNIX_EPOCH) {
-                        let file_age = now - modified_duration.as_secs();
-
-                        if file_age > max_age {
-                            if let Err(e) = tokio::fs::remove_file(entry.path()).await {
-                                println!("❌ Failed to remove old OHLCV cache file: {}", e);
-                            } else {
-                                cleaned_count += 1;
-                            }
-                        }
-                    }
-                }
+    // Save blacklist
+    {
+        let blacklist = BLACKLISTED_TOKENS.read().await;
+        let blacklist_file = format!("{}/blacklist.json", OHLCV_CACHE_DIR);
+        if let Ok(data) = serde_json::to_vec_pretty(&*blacklist) {
+            if let Err(e) = tokio::fs::write(&blacklist_file, data).await {
+                println!("❌ Failed to save blacklist: {}", e);
             }
         }
     }
 
-    if cleaned_count > 0 {
-        println!("🧹 Cleaned up {} old OHLCV cache files", cleaned_count);
+    // Save backoff data
+    {
+        let backoff_map = TOKEN_BACKOFF.read().await;
+        let backoff_file = format!("{}/backoff.json", OHLCV_CACHE_DIR);
+        if let Ok(data) = serde_json::to_vec_pretty(&*backoff_map) {
+            if let Err(e) = tokio::fs::write(&backoff_file, data).await {
+                println!("❌ Failed to save backoff data: {}", e);
+            }
+        }
     }
+}
+
+/// Add any token to monitoring (even if not watched/traded)
+pub async fn add_token_to_ohlcv_cache(token_mint: &str, pool_address: &str) {
+    let mut monitor_list = TOKENS_TO_MONITOR_OHLCV.write().await;
+    monitor_list.insert(token_mint.to_string(), pool_address.to_string());
+    println!("📊 Added {} to OHLCV cache monitoring", &token_mint[..8]);
+}
+
+/// Remove token from blacklist (manual recovery function)
+pub async fn remove_token_from_blacklist(token_mint: &str) -> bool {
+    let mut blacklist = BLACKLISTED_TOKENS.write().await;
+    let removed = blacklist.remove(token_mint);
+
+    if removed {
+        // Also clear any backoff info
+        let mut backoff_map = TOKEN_BACKOFF.write().await;
+        backoff_map.remove(token_mint);
+        println!("🔓 Removed token {} from blacklist", &token_mint[..8]);
+    }
+
+    removed
+}
+
+/// Get blacklist and backoff status for monitoring/debugging
+pub async fn get_ohlcv_error_status() -> (Vec<String>, usize) {
+    let blacklist = BLACKLISTED_TOKENS.read().await;
+    let backoff_map = TOKEN_BACKOFF.read().await;
+
+    let blacklisted_tokens: Vec<String> = blacklist.iter().cloned().collect();
+    let backoff_count = backoff_map.len();
+
+    (blacklisted_tokens, backoff_count)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -798,11 +1102,4 @@ pub async fn get_ohlcv_cache_summary() -> (usize, u64, u64) {
 /// Force update OHLCV data for a specific token (for immediate use)
 pub async fn force_update_token_ohlcv(token_mint: &str, pool_address: &str) {
     update_token_ohlcv(token_mint, pool_address).await;
-}
-
-/// Add any token to monitoring (even if not watched/traded)
-pub async fn add_token_to_ohlcv_cache(token_mint: &str, pool_address: &str) {
-    let mut monitor_list = TOKENS_TO_MONITOR_OHLCV.write().await;
-    monitor_list.insert(token_mint.to_string(), pool_address.to_string());
-    println!("📊 Added {} to OHLCV cache monitoring", &token_mint[..8]);
 }

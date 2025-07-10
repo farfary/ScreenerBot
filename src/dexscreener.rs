@@ -1,4 +1,10 @@
 use crate::prelude::*;
+use crate::rate_limiter::{
+    RateLimitedRequest,
+    DEXSCREENER_LIMITER,
+    RUGCHECK_LIMITER,
+    GECKOTERMINAL_LIMITER,
+};
 
 use tokio::sync::RwLock;
 use once_cell::sync::Lazy;
@@ -773,12 +779,17 @@ pub fn start_dexscreener_loop() {
                 "https://api.geckoterminal.com/api/v2/tokens/info_recently_updated?include=network&network=solana",
             ];
 
-            // ── first-pass lists ───────────────────────────────────────────
+            // ── first-pass lists with rate limiting ────────────────────────────
             for url in endpoints {
                 if debug {
                     println!("🌐 [Screener] Requesting: {}", url);
                 }
-                if let Ok(resp) = client_insert.get(url).send().await {
+                if
+                    let Ok(resp) = client_insert.get_with_rate_limit(
+                        url,
+                        &DEXSCREENER_LIMITER
+                    ).await
+                {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(arr) = json.as_array() {
                             if debug {
@@ -835,12 +846,12 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            // ── RugCheck API endpoints ──────────────────────────────────
+            // ── RugCheck API endpoints with rate limiting ───────────────────
             for url in rugcheck_endpoints {
                 if debug {
                     println!("🔍 [RugCheck] Requesting: {}", url);
                 }
-                if let Ok(resp) = client_insert.get(url).send().await {
+                if let Ok(resp) = client_insert.get_with_rate_limit(url, &RUGCHECK_LIMITER).await {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(arr) = json.as_array() {
                             if debug {
@@ -894,12 +905,17 @@ pub fn start_dexscreener_loop() {
                 }
             }
 
-            // ── GeckoTerminal API endpoints ─────────────────────────────
+            // ── GeckoTerminal API endpoints with rate limiting ──────────────
             for url in geckoterminal_endpoints {
                 if debug {
                     println!("🦎 [GeckoTerminal] Requesting: {}", url);
                 }
-                if let Ok(resp) = client_insert.get(url).send().await {
+                if
+                    let Ok(resp) = client_insert.get_with_rate_limit(
+                        url,
+                        &GECKOTERMINAL_LIMITER
+                    ).await
+                {
                     if let Ok(json) = resp.json::<Value>().await {
                         if let Some(data_arr) = json["data"].as_array() {
                             if debug {
