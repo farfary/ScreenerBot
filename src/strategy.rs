@@ -45,6 +45,9 @@ use crate::prelude::*;
 // • Rug loss offset: 10+ small wins per rug loss
 // ═══════════════════════════════════════════════════════════════════════════════
 
+pub const POSITIONS_CHECK_TIME_SEC: u64 = 15;
+pub const TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 30;
+
 // TRADING CONSTANTS - OPTIMIZED FOR 0.001 SOL TRADES
 pub const TRADE_SIZE_SOL: f64 = 0.001; // Your specified trade size
 pub const MAX_OPEN_POSITIONS: usize = 20; // Reduced for better management

@@ -556,7 +556,7 @@ async fn position_monitor_loop() {
         } // end for mint
 
         // Fast position checking - every 2 seconds
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(POSITIONS_CHECK_TIME_SEC)).await;
     }
 }
 
@@ -728,7 +728,7 @@ async fn token_discovery_loop() {
         }
 
         // Slower discovery checking - every 15 seconds
-        sleep(Duration::from_secs(15)).await;
+        sleep(Duration::from_secs(TOKEN_DISCOVERY_CHECK_TIME_SEC)).await;
     }
 }
 
