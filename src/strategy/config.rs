@@ -240,3 +240,101 @@ pub const MIN_ADAPTIVE_THRESHOLD: f64 = 0.3; // Minimum threshold floor
 pub const MAX_DANGER_RATIO: f64 = 0.6; // Maximum danger signal ratio before rejection
 pub const PANIC_SELLING_THRESHOLD: u64 = 15; // Small sells indicating panic
 pub const VOLUME_ACCUMULATION_MULTIPLIER: f64 = 2.0; // Volume spike during dip threshold
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🚫 ENHANCED ENTRY CONTROLS - PREVENT BUYING ON TOPS & AFTER PROFIT EXITS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── 15M HIGH AVOIDANCE ───
+pub const TIMEFRAME_HIGH_LOOKBACK_PERIODS: usize = 20; // Check last 20 periods for highs
+pub const NEAR_15M_HIGH_THRESHOLD_PCT: f64 = 2.0; // Don't buy within 2% of 15m high
+pub const NEAR_5M_HIGH_THRESHOLD_PCT: f64 = 1.0; // Don't buy within 1% of 5m high
+
+// ─── ENHANCED COOLDOWN SYSTEM ───
+pub const SAME_TOKEN_ENTRY_COOLDOWN_HOURS: i64 = 6; // Minimum 6 hours between entries for same token
+pub const PROFITABLE_EXIT_COOLDOWN_HOURS: i64 = 12; // Longer cooldown after profitable exits
+pub const LOSS_EXIT_COOLDOWN_HOURS: i64 = 2; // Shorter cooldown after losses (for DCA opportunities)
+
+// ─── PROFITABLE EXIT RE-ENTRY CONTROLS ───
+pub const MIN_PRICE_DROP_AFTER_PROFIT_PCT: f64 = 8.0; // Must drop 8% from profitable exit price
+pub const MAX_RECENT_EXITS_LOOKBACK_HOURS: i64 = 72; // Check exits within last 72 hours
+pub const MIN_PROFIT_EXIT_THRESHOLD_PCT: f64 = 3.0; // Consider exits >3% profit as "profitable"
+
+// ─── DOWNTREND DETECTION ───
+pub const DOWNTREND_TIMEFRAME_PERIODS: usize = 15; // Check trend over 15 periods
+pub const DOWNTREND_MIN_DECLINE_PCT: f64 = 10.0; // Need 10% decline to confirm downtrend
+pub const UPTREND_REJECTION_THRESHOLD_PCT: f64 = 15.0; // Reject entries in strong uptrends >15%
+
+// ─── TREND-AWARE DIP BUYING ───
+pub const DOWNTREND_DIP_BONUS: f64 = 0.2; // Bonus score for dips in downtrends
+pub const UPTREND_DIP_PENALTY: f64 = -0.3; // Penalty for buying in uptrends
+pub const SIDEWAYS_TREND_THRESHOLD_PCT: f64 = 5.0; // ±5% considered sideways
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🚀 ULTRA-AGGRESSIVE PROFESSIONAL EXIT STRATEGY V3.0
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── ULTRA-FAST SCALPING PARAMETERS ───
+pub const SCALP_PROFIT_THRESHOLD: f64 = 0.1; // Minimum 0.1% for scalping mode
+pub const ULTRA_MICRO_PROFIT_THRESHOLD: f64 = 0.05; // 0.05% for extreme scalping
+pub const HIGH_VELOCITY_THRESHOLD: f64 = 2.0; // 2%/minute = high velocity
+pub const EXTREME_VELOCITY_THRESHOLD: f64 = 5.0; // 5%/minute = extreme velocity
+
+// ─── MULTI-TIMEFRAME MOMENTUM THRESHOLDS ───
+pub const MOMENTUM_1M_THRESHOLD: f64 = -0.3; // 1-minute momentum threshold
+pub const MOMENTUM_5M_THRESHOLD: f64 = -0.8; // 5-minute momentum threshold
+pub const MOMENTUM_15M_THRESHOLD: f64 = -1.5; // 15-minute momentum threshold
+pub const MOMENTUM_1H_THRESHOLD: f64 = -2.5; // 1-hour momentum threshold
+
+// ─── PROFIT-VELOCITY BASED EXITS ───
+pub const MIN_VELOCITY_FOR_MICRO_EXIT: f64 = 0.1; // Minimum velocity for micro exits
+pub const VELOCITY_DECAY_THRESHOLD: f64 = 0.5; // Velocity decay warning
+pub const PROFIT_VELOCITY_EXTREME: f64 = 10.0; // Extreme profit velocity
+
+// ─── DYNAMIC TRAILING STOP PARAMETERS ───
+pub const ULTRA_TIGHT_TRAIL_MASSIVE: f64 = 1.0; // 1% trail for 100%+ profits
+pub const ULTRA_TIGHT_TRAIL_LARGE: f64 = 1.5; // 1.5% trail for 50%+ profits
+pub const TIGHT_TRAIL_MEDIUM: f64 = 2.5; // 2.5% trail for 20%+ profits
+pub const NORMAL_TRAIL_SMALL: f64 = 4.0; // 4% trail for 5%+ profits
+
+// ─── WHALE ACTIVITY ANALYSIS LEVELS ───
+pub const WHALE_DISTRIBUTION_HEAVY: f64 = -500.0; // Heavy distribution threshold
+pub const WHALE_DISTRIBUTION_MODERATE: f64 = -200.0; // Moderate distribution threshold
+pub const WHALE_ACCUMULATION_STRONG: f64 = 300.0; // Strong accumulation threshold
+pub const WHALE_ACCUMULATION_MODERATE: f64 = 100.0; // Moderate accumulation threshold
+
+// ─── TIME-BASED URGENCY ESCALATION ───
+pub const TIME_URGENCY_6H: f64 = 5.0; // 6+ hours = 5x urgency
+pub const TIME_URGENCY_4H: f64 = 3.0; // 4+ hours = 3x urgency
+pub const TIME_URGENCY_3H: f64 = 2.0; // 3+ hours = 2x urgency
+pub const TIME_URGENCY_2H: f64 = 1.5; // 2+ hours = 1.5x urgency
+pub const TIME_URGENCY_1H: f64 = 1.2; // 1+ hour = 1.2x urgency
+
+// ─── LIQUIDITY EMERGENCY LEVELS ───
+pub const CRITICAL_LIQUIDITY_SOL: f64 = 2.0; // Critical liquidity level
+pub const LOW_LIQUIDITY_SOL: f64 = 5.0; // Low liquidity warning level
+pub const MIN_LIQUIDITY_FOR_HOLD: f64 = 8.0; // Minimum liquidity to continue holding
+
+// ─── TECHNICAL ANALYSIS MULTIPLIERS ───
+pub const MOMENTUM_DECELERATION_MULT: f64 = 2.5; // Momentum deceleration multiplier
+pub const VOLUME_DECLINE_MULT: f64 = 1.8; // Volume decline multiplier
+pub const RESISTANCE_LEVEL_MULT: f64 = 1.5; // At resistance multiplier
+pub const VWAP_EXTENDED_MULT: f64 = 1.4; // Extended from VWAP multiplier
+
+// ─── REAL-TIME POOL PRICE ANALYSIS ───
+pub const REAL_TIME_PRICE_WEIGHT: f64 = 0.8; // 80% weight for pool price vs API price
+pub const INSTANT_PRICE_SPIKE_THRESHOLD: f64 = 2.0; // 2%+ instant spike detection
+pub const INSTANT_PRICE_DUMP_THRESHOLD: f64 = -1.5; // 1.5%+ instant dump detection
+pub const POOL_PRICE_VELOCITY_HIGH: f64 = 1.0; // 1%+ price change per check cycle
+pub const POOL_PRICE_VELOCITY_EXTREME: f64 = 3.0; // 3%+ price change per check cycle
+
+// ─── SUB-SECOND PRICE ACTION THRESHOLDS ───
+pub const INSTANT_MOMENTUM_THRESHOLD: f64 = 0.5; // 0.5%+ instant momentum
+pub const RAPID_PRICE_CHANGE_THRESHOLD: f64 = 1.0; // 1%+ rapid price change
+pub const POOL_PRICE_DIVERGENCE_THRESHOLD: f64 = 2.0; // 2%+ divergence from API price
+pub const REAL_TIME_EXIT_MULTIPLIER: f64 = 2.0; // 2x more aggressive with real-time data
+
+// ─── POOL-BASED MOMENTUM DETECTION ───
+pub const POOL_MOMENTUM_SAMPLE_SIZE: usize = 10; // Track last 10 price samples
+pub const POOL_MOMENTUM_ACCELERATION_THRESHOLD: f64 = 0.3; // 0.3%+ acceleration
+pub const POOL_MOMENTUM_DECELERATION_THRESHOLD: f64 = -0.2; // 0.2%+ deceleration

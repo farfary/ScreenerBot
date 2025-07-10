@@ -572,7 +572,7 @@ async fn position_monitor_loop() {
             // ───────── POSITION MANAGEMENT (using strategy.rs) ───────────────────────────────
             if let Some(mut pos) = pos_opt {
                 // Get strategy decision for this position
-                let action = evaluate_position(&token, &pos, current_price);
+                let action = evaluate_position(&token, &pos, current_price).await;
 
                 match action {
                     PositionAction::DCA { sol_amount } => {

@@ -5,10 +5,63 @@ use super::dca::should_dca;
 use super::exit::should_sell;
 
 /// Check if we can enter a position for this token (cooldown management)
-pub fn can_enter_token_position(_token_mint: &str) -> (bool, i64) {
-    // Simplified - always allow for now
-    // In production, implement persistent cooldown tracking
-    (true, ENTRY_COOLDOWN_MINUTES + 1)
+pub async fn can_enter_token_position(token_mint: &str) -> (bool, i64) {
+    let now = Utc::now();
+
+    // Check if we currently have an open position for this token
+    let has_open_position = {
+        let positions = OPEN_POSITIONS.read().await;
+        positions.contains_key(token_mint)
+    };
+
+    if has_open_position {
+        return (false, 0); // Can't enter if we already have a position
+    }
+
+    // Check recent closed positions for this token
+    let (can_enter, minutes_since_last) = {
+        let closed_positions = CLOSED_POSITIONS.read().await;
+
+        if let Some(last_position) = closed_positions.get(token_mint) {
+            if let Some(close_time) = last_position.close_time {
+                let time_since_close = now - close_time;
+                let minutes_since = time_since_close.num_minutes();
+
+                // Calculate profit from last position
+                let profit_pct = if last_position.sol_spent > 0.0 {
+                    ((last_position.sol_received - last_position.sol_spent) /
+                        last_position.sol_spent) *
+                        100.0
+                } else {
+                    0.0
+                };
+
+                // Determine cooldown based on exit outcome
+                let required_cooldown_hours = if profit_pct >= MIN_PROFIT_EXIT_THRESHOLD_PCT {
+                    PROFITABLE_EXIT_COOLDOWN_HOURS
+                } else {
+                    LOSS_EXIT_COOLDOWN_HOURS
+                };
+
+                let required_cooldown_minutes = required_cooldown_hours * 60;
+
+                if minutes_since < required_cooldown_minutes {
+                    (false, minutes_since)
+                } else {
+                    (true, minutes_since)
+                }
+            } else {
+                // Position without close time, use general cooldown
+                let required_cooldown_minutes = SAME_TOKEN_ENTRY_COOLDOWN_HOURS * 60;
+                (true, required_cooldown_minutes + 1) // Allow entry
+            }
+        } else {
+            // No previous position found
+            (true, ENTRY_COOLDOWN_MINUTES + 1) // Allow entry
+        }
+    };
+
+    (can_enter, minutes_since_last)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -26,7 +79,11 @@ pub enum PositionAction {
     },
 }
 
-pub fn evaluate_position(token: &Token, pos: &Position, current_price: f64) -> PositionAction {
+pub async fn evaluate_position(
+    token: &Token,
+    pos: &Position,
+    current_price: f64
+) -> PositionAction {
     let profit_pct = if pos.sol_spent > 0.0 {
         let current_value = current_price * pos.token_amount;
         ((current_value - pos.sol_spent) / pos.sol_spent) * 100.0
@@ -48,14 +105,10 @@ pub fn evaluate_position(token: &Token, pos: &Position, current_price: f64) -> P
     let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
 
     // Get trades data for this token
-    let trades_data = futures::executor::block_on(async {
-        crate::trades::get_token_trades(&token.mint).await
-    });
+    let trades_data = crate::trades::get_token_trades(&token.mint).await;
 
     // Get OHLCV dataframe for this token
-    let ohlcv_dataframe = futures::executor::block_on(async {
-        crate::ohlcv::get_token_ohlcv_dataframe(&token.mint).await
-    });
+    let ohlcv_dataframe = crate::ohlcv::get_token_ohlcv_dataframe(&token.mint).await;
 
     // 1. Check DCA
     if should_dca(token, pos, current_price, trades_data.as_ref(), ohlcv_dataframe.as_ref()) {

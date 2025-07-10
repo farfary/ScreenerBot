@@ -1,11 +1,14 @@
 use crate::prelude::*;
 use crate::price_validation::{ is_price_valid, get_trading_price };
 use super::config::*;
+use super::position::can_enter_token_position;
 use super::price_analysis::{
     get_realtime_price_analysis,
     calculate_trade_size_sol,
     get_price_change_with_fallback,
 };
+const NEAR_15M_HIGH_THRESHOLD_PCT: f64 = 1.5; // % threshold for 15m high proximity warning
+const NEAR_5M_HIGH_THRESHOLD_PCT: f64 = 1.0; // % threshold for 5m high proximity warning
 
 /// Analyze if a price dump is dangerous or a healthy dip opportunity
 fn analyze_dump_safety(
@@ -170,8 +173,8 @@ fn analyze_swing_entry_opportunity(
     }
 
     // 2. Momentum reversal signals
-    let (change_1m, is_1m_realtime) = get_price_change_with_fallback(token, 1);
-    let (change_15m, is_15m_realtime) = get_price_change_with_fallback(token, 15);
+    let (change_1m, _is_1m_realtime) = get_price_change_with_fallback(token, 1);
+    let (_change_15m, _is_15m_realtime) = get_price_change_with_fallback(token, 15);
 
     // Look for momentum shifts (short-term recovery from longer-term decline)
     if change_1m > MOMENTUM_REVERSAL_THRESHOLD && price_analysis.change_5m < -2.0 {
@@ -285,9 +288,26 @@ pub async fn should_buy(
     }
 
     // ─── ENTRY COOLDOWN CHECK ───
-    let (can_enter, minutes_since_last) = can_enter_token_position(&token.mint);
+    let (can_enter, minutes_since_last) = can_enter_token_position(&token.mint).await;
     if !can_enter {
         println!("⏸️ [ENTRY] {} | Cooldown active ({}min)", token.symbol, minutes_since_last);
+        return false;
+    }
+
+    // ─── CHECK FOR RECENT HIGHS (ANTI-FOMO) ───
+    if let Some(df) = dataframe {
+        if is_near_recent_highs(current_price, df) {
+            println!(
+                "🚫 [ENTRY] {} | Price near recent 15m/5m highs - avoiding FOMO buy",
+                token.symbol
+            );
+            return false;
+        }
+    }
+
+    // ─── CHECK RECENT PROFITABLE EXITS ───
+    if check_recent_profitable_exits(&token.mint, current_price) {
+        println!("🚫 [ENTRY] {} | Recent profitable exit - must buy lower", token.symbol);
         return false;
     }
 
@@ -343,7 +363,6 @@ pub async fn should_buy(
     // ─── TRADES DATA ANALYSIS ───
     let mut trades_score = 0.0;
     let mut trades_whale_activity = 0.0;
-    let mut trades_info = String::from("no_data");
 
     if let Some(trades_cache) = trades {
         // Analyze whale activity from trades data
@@ -409,7 +428,7 @@ pub async fn should_buy(
 
         trades_score = trades_whale_activity + bot_penalty;
 
-        trades_info = format!(
+        let trades_info = format!(
             "whale_net:${:.0}|whales_1h:{}|large_buys:{}|large_sells:{}|small_1h:{}",
             whale_net_flow,
             whale_trades_1h.len(),
@@ -435,6 +454,24 @@ pub async fn should_buy(
 
     if let Some(df) = dataframe {
         println!("📊 [ENTRY] {} | OHLCV analysis available", token.symbol);
+
+        // ─── TREND ANALYSIS (PREFER DOWNTREND ENTRIES) ───
+        let trend_bonus = analyze_price_trend(current_price, df);
+
+        if trend_bonus < -20.0 {
+            println!(
+                "🚫 [ENTRY] {} | Strong uptrend detected - avoiding entry (trend score: {:.1})",
+                token.symbol,
+                trend_bonus
+            );
+            return false;
+        }
+
+        println!(
+            "📊 [TREND] {} | Trend score: {:.1} (negative=uptrend, positive=downtrend)",
+            token.symbol,
+            trend_bonus
+        );
 
         let primary_timeframe = df.get_primary_timeframe();
 
@@ -709,6 +746,33 @@ pub async fn should_buy(
         reasons.push(format!("realtime_price_data"));
     }
 
+    // ENHANCED: Trend analysis bonus/penalty
+    if let Some(_) = dataframe {
+        let trend_bonus = analyze_price_trend(current_price, dataframe.unwrap());
+        if trend_bonus > 0.0 {
+            // Positive score for downtrend (good for buying dips)
+            let trend_score = (trend_bonus / 100.0).min(0.25); // Cap at 0.25
+            entry_score += trend_score;
+            reasons.push(format!("downtrend_dip_opportunity({:.2})", trend_score));
+            println!(
+                "📉 [TREND] Downtrend bonus: +{:.2} (trend score: {:.1})",
+                trend_score,
+                trend_bonus
+            );
+        } else if trend_bonus > -10.0 {
+            // Small penalty for mild uptrend
+            let trend_penalty = (trend_bonus.abs() / 100.0).min(0.1);
+            entry_score -= trend_penalty;
+            reasons.push(format!("mild_uptrend_penalty(-{:.2})", trend_penalty));
+            println!(
+                "⚠️ [TREND] Mild uptrend penalty: -{:.2} (trend score: {:.1})",
+                trend_penalty,
+                trend_bonus
+            );
+        }
+        // Strong uptrends are already blocked above
+    }
+
     println!("🎯 [SCORE] {:.2} | {:?}", entry_score, reasons);
 
     // ─── FINAL DECISION WITH ADAPTIVE THRESHOLDS ───
@@ -812,4 +876,171 @@ pub async fn should_buy(
         swing_score
     );
     false
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS FOR ENHANCED ENTRY CONTROLS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Check if current price is near recent 15m or 5m highs (anti-FOMO)
+fn is_near_recent_highs(current_price: f64, dataframe: &crate::ohlcv::TokenOhlcvCache) -> bool {
+    let primary_timeframe = dataframe.get_primary_timeframe();
+
+    // Check 15m high
+    if let Some(high_15m) = primary_timeframe.highest_price(15) {
+        let distance_from_high_15m = ((current_price - high_15m) / high_15m) * 100.0;
+        if distance_from_high_15m > -NEAR_15M_HIGH_THRESHOLD_PCT {
+            println!(
+                "🚫 [ANTI_FOMO] Current price {:.8} is {:.1}% below 15m high {:.8} (threshold: {:.1}%)",
+                current_price,
+                distance_from_high_15m.abs(),
+                high_15m,
+                NEAR_15M_HIGH_THRESHOLD_PCT
+            );
+            return true;
+        }
+    }
+
+    // Check 5m high
+    if let Some(high_5m) = primary_timeframe.highest_price(5) {
+        let distance_from_high_5m = ((current_price - high_5m) / high_5m) * 100.0;
+        if distance_from_high_5m > -NEAR_5M_HIGH_THRESHOLD_PCT {
+            println!(
+                "🚫 [ANTI_FOMO] Current price {:.8} is {:.1}% below 5m high {:.8} (threshold: {:.1}%)",
+                current_price,
+                distance_from_high_5m.abs(),
+                high_5m,
+                NEAR_5M_HIGH_THRESHOLD_PCT
+            );
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Check if we recently exited this token profitably and current price is too high
+fn check_recent_profitable_exits(mint: &str, current_price: f64) -> bool {
+    use crate::persistence::CLOSED_POSITIONS;
+
+    // Check closed positions in memory
+    let rt = tokio::runtime::Handle::current();
+    let closed_positions = rt.block_on(async { CLOSED_POSITIONS.read().await.clone() });
+
+    // Look for recent profitable exits for this token
+    for (_key, position) in closed_positions.iter() {
+        if let Some(close_time) = position.close_time {
+            let minutes_since_exit = (chrono::Utc::now().timestamp() - close_time.timestamp()) / 60;
+
+            // Only check recent exits (within last 72 hours)
+            if minutes_since_exit <= MAX_RECENT_EXITS_LOOKBACK_HOURS * 60 {
+                let profit_pct =
+                    ((position.sol_received - position.sol_spent) / position.sol_spent) * 100.0;
+
+                // If it was profitable, ensure we buy lower
+                if profit_pct > MIN_PROFIT_EXIT_THRESHOLD_PCT {
+                    let price_vs_exit =
+                        ((current_price - position.peak_price) / position.peak_price) * 100.0;
+
+                    if price_vs_exit > -MIN_PRICE_DROP_AFTER_PROFIT_PCT {
+                        println!(
+                            "🚫 [PROFIT_CONTROL] {} | Recent profitable exit (+{:.1}%) {}min ago at {:.8}, current {:.8} (+{:.1}% vs exit)",
+                            mint,
+                            profit_pct,
+                            minutes_since_exit,
+                            position.peak_price,
+                            current_price,
+                            price_vs_exit
+                        );
+                        return true;
+                    } else {
+                        println!(
+                            "✅ [PROFIT_CONTROL] {} | Can re-enter: profitable exit (+{:.1}%) {}min ago at {:.8}, current {:.8} ({:.1}% vs exit)",
+                            mint,
+                            profit_pct,
+                            minutes_since_exit,
+                            position.peak_price,
+                            current_price,
+                            price_vs_exit
+                        );
+                        return false; // Found a recent profitable exit but price is acceptable
+                    }
+                }
+            }
+        }
+    }
+
+    false // No recent profitable exits found or no restriction
+}
+
+/// Analyze price trend to prefer downtrend entries over uptrend
+/// Returns: positive score for downtrends (good for buying), negative score for uptrends (bad for buying)
+fn analyze_price_trend(current_price: f64, dataframe: &crate::ohlcv::TokenOhlcvCache) -> f64 {
+    let primary_timeframe = dataframe.get_primary_timeframe();
+
+    let mut trend_score = 0.0;
+    let mut trend_signals = Vec::new();
+
+    // 1. Price position relative to recent price levels using available methods
+    if let Some(recent_high) = primary_timeframe.highest_price(20) {
+        let price_vs_high20 = ((current_price - recent_high) / recent_high) * 100.0;
+
+        if price_vs_high20 < -5.0 {
+            trend_score += 15.0; // Strong downtrend - great for buying dips
+            trend_signals.push("strong_downtrend_vs_high20");
+        } else if price_vs_high20 < -2.0 {
+            trend_score += 10.0; // Moderate downtrend
+            trend_signals.push("moderate_downtrend_vs_high20");
+        } else if price_vs_high20 > -1.0 {
+            trend_score -= 15.0; // Near highs - avoid buying
+            trend_signals.push("near_recent_highs");
+        }
+    }
+
+    // 2. Recent price momentum (compare current vs older candles)
+    if let Some(price_change_10) = primary_timeframe.price_change_over_period(10) {
+        if price_change_10 < -3.0 {
+            trend_score += 10.0; // Strong downward momentum - good for dip buying
+            trend_signals.push("strong_down_momentum");
+        } else if price_change_10 < -1.0 {
+            trend_score += 5.0; // Mild downward momentum
+            trend_signals.push("mild_down_momentum");
+        } else if price_change_10 > 3.0 {
+            trend_score -= 10.0; // Strong upward momentum - avoid
+            trend_signals.push("strong_up_momentum");
+        } else if price_change_10 > 1.0 {
+            trend_score -= 5.0; // Mild upward momentum
+            trend_signals.push("mild_up_momentum");
+        }
+    }
+
+    // 3. Volatility and trend consistency
+    if let Some(volatility) = primary_timeframe.volatility(10) {
+        if volatility > 20.0 {
+            trend_score -= 5.0; // High volatility reduces confidence
+            trend_signals.push("high_volatility");
+        } else if volatility < 5.0 {
+            trend_score += 5.0; // Low volatility increases confidence
+            trend_signals.push("low_volatility");
+        }
+    }
+
+    // 4. Recent highs and lows analysis
+    if let Some(recent_high) = primary_timeframe.highest_price(20) {
+        if let Some(recent_low) = primary_timeframe.lowest_price(20) {
+            let position_in_range = (current_price - recent_low) / (recent_high - recent_low);
+
+            if position_in_range < 0.3 {
+                trend_score += 8.0; // Near recent lows - good for buying
+                trend_signals.push("near_recent_lows");
+            } else if position_in_range > 0.7 {
+                trend_score -= 8.0; // Near recent highs - avoid buying
+                trend_signals.push("near_recent_highs_range");
+            }
+        }
+    }
+
+    println!("📊 [TREND_ANALYSIS] Score: {:.1} | Signals: {:?}", trend_score, trend_signals);
+
+    trend_score
 }
