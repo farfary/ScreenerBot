@@ -1,8 +1,8 @@
 use screenerbot::prelude::*;
+use screenerbot::helpers::RPC;
 
 use anyhow::Result;
 use colored::Colorize;
-use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -182,6 +182,37 @@ fn main() -> Result<()> {
         if max_price > min_price {
             let price_spread = ((max_price - min_price) / avg_price) * 100.0;
             println!("   {} {:.2}%", "Spread:   ".blue().bold(), format!("{}", price_spread).yellow());
+            
+            // Show arbitrage opportunities
+            if price_spread > 5.0 {
+                println!("   {} Potential arbitrage opportunity detected!", "⚡".yellow().bold());
+                let profit_percent = ((max_price - min_price) / min_price) * 100.0;
+                println!("   {} {:.2}% profit potential", "💰".green().bold(), profit_percent.to_string().green().bold());
+            }
+        }
+        
+        // Show price deviations for each pool
+        println!();
+        println!("📊 {} ", "PRICE DEVIATIONS FROM AVERAGE".green().bold());
+        for analysis in &analyses {
+            if let Some(price) = analysis.price_sol {
+                let deviation = ((price - avg_price) / avg_price) * 100.0;
+                let deviation_str = if deviation > 0.0 {
+                    format!("+{:.2}%", deviation).green()
+                } else {
+                    format!("{:.2}%", deviation).red()
+                };
+                let address_short = format!("{}...{}", 
+                    &analysis.address[..8], 
+                    &analysis.address[analysis.address.len()-8..]
+                );
+                println!("   {} {} {} ({})", 
+                    analysis.pool_type.blue(),
+                    address_short.dimmed(),
+                    deviation_str,
+                    format!("{:.12} SOL", price).cyan()
+                );
+            }
         }
         println!();
     }
@@ -301,8 +332,8 @@ fn main() -> Result<()> {
 
     println!("📊 {} ", "SUMMARY STATISTICS".green().bold());
     println!("   {} {} out of {}", "Working Pools:".blue().bold(), working_pools.to_string().green(), analyses.len());
-    println!("   {} ${:.0}", "Total Liquidity:".blue().bold(), total_liquidity.to_string().green());
-    println!("   {} ${:.0}", "Total Volume 24h:".blue().bold(), total_volume.to_string().green());
+    println!("   {} ${:.0}", "Total Liquidity:".blue().bold(), total_liquidity);
+    println!("   {} ${:.0}", "Total Volume 24h:".blue().bold(), total_volume);
     println!("   {} {}", "Total Transactions 24h:".blue().bold(), total_txs.to_string().green());
 
     // Pool type breakdown
