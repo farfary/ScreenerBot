@@ -45,7 +45,7 @@ pub async fn buy_gmgn(
         owner,
         0.5,
         "ExactIn",
-        0.00002,
+        TRANSACTION_FEE_SOL,
         false
     );
     println!("🔍 GET QUOTE URL:\n{url}");

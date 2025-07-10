@@ -238,6 +238,8 @@ async fn position_monitor_loop() {
         }
 
         // Get only open position mints for monitoring
+        // IMPORTANT: Monitor ALL open positions regardless of blacklist status
+        // Blacklist only prevents NEW entries, but existing positions must be tracked
         let position_mints: Vec<String> = {
             let pos = OPEN_POSITIONS.read().await;
             pos.keys().cloned().collect()
@@ -320,17 +322,46 @@ async fn position_monitor_loop() {
                     }
                     Ok(Err(e)) => {
                         eprintln!("❌ [FALLBACK] Price error for {}: {}", symbol, e);
-                        if
-                            e.to_string().contains("no valid pools") ||
-                            e.to_string().contains("Unsupported program id") ||
-                            e.to_string().contains("is not an SPL-Token mint") ||
-                            e.to_string().contains("AccountNotFound") ||
-                            e.to_string().contains("base reserve is zero")
-                        {
-                            println!("⚠️ Blacklisting mint: {}", mint);
-                            crate::configs::add_to_blacklist(&mint).await;
+
+                        // Check if this token has an open position
+                        let has_open_position = {
+                            let positions = OPEN_POSITIONS.read().await;
+                            positions.contains_key(mint.as_str())
+                        };
+
+                        if has_open_position {
+                            println!("⚠️ [POSITION] {} has open position but price fetch failed - using last known price", mint);
+                            println!(
+                                "📊 [POSITION] Token may be rugged/problematic but we continue monitoring the open position"
+                            );
+                            // For open positions, use the last cached price if available
+                            let cached_price = {
+                                PRICE_CACHE.read()
+                                    .unwrap()
+                                    .get(mint)
+                                    .map(|&(_, p)| p)
+                                    .unwrap_or(0.0)
+                            };
+                            if cached_price > 0.0 {
+                                cached_price
+                            } else {
+                                println!("⚠️ [POSITION] No cached price for {} - cannot monitor position", mint);
+                                continue;
+                            }
+                        } else {
+                            // Only blacklist tokens that DON'T have open positions
+                            if
+                                e.to_string().contains("no valid pools") ||
+                                e.to_string().contains("Unsupported program id") ||
+                                e.to_string().contains("is not an SPL-Token mint") ||
+                                e.to_string().contains("AccountNotFound") ||
+                                e.to_string().contains("base reserve is zero")
+                            {
+                                println!("⚠️ Blacklisting mint (no open position): {}", mint);
+                                crate::configs::add_to_blacklist(&mint).await;
+                            }
+                            continue;
                         }
-                        continue;
                     }
                     _ => {
                         eprintln!("❌ [FALLBACK] Failed to fetch price for {}", mint);
