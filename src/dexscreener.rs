@@ -803,6 +803,9 @@ pub fn start_dexscreener_loop() {
                 "https://api.geckoterminal.com/api/v2/tokens/info_recently_updated?include=network&network=solana",
             ];
 
+            // Raydium API endpoints
+            let raydium_endpoints = ["https://api-v3.raydium.io/mint/list"];
+
             // ── first-pass lists with rate limiting ────────────────────────────
             for url in endpoints {
                 if debug {
@@ -982,6 +985,91 @@ pub fn start_dexscreener_loop() {
                                         .as_str()
                                         .unwrap_or_default()
                                         .into(),
+                                    txns: Txns {
+                                        m5: TxnCount { buys: 0, sells: 0 },
+                                        h1: TxnCount { buys: 0, sells: 0 },
+                                        h6: TxnCount { buys: 0, sells: 0 },
+                                        h24: TxnCount { buys: 0, sells: 0 },
+                                    },
+                                    volume: Volume { m5: 0.0, h1: 0.0, h6: 0.0, h24: 0.0 },
+                                    price_change: PriceChange {
+                                        m5: 0.0,
+                                        h1: 0.0,
+                                        h6: 0.0,
+                                        h24: 0.0,
+                                    },
+                                    liquidity: Liquidity { usd: 0.0, base: 0.0, quote: 0.0 },
+                                    pair_created_at: 0,
+                                    rug_check: RugCheckData::default(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Raydium API endpoints ──────────────────────────────────────
+            for url in raydium_endpoints {
+                if debug {
+                    println!("🌊 [Raydium] Requesting: {}", url);
+                }
+                if
+                    let Ok(resp) = client_insert
+                        .get(url)
+                        .header(
+                            "User-Agent",
+                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                        )
+                        .header("Accept", "application/json")
+                        .send().await
+                {
+                    if let Ok(json) = resp.json::<Value>().await {
+                        if let Some(mint_list) = json["data"]["mintList"].as_array() {
+                            if debug {
+                                println!("✅ {} tokens from {}", mint_list.len(), url);
+                            }
+                            for item in mint_list {
+                                let mint = item["address"].as_str().unwrap_or_default().to_string();
+                                if mint.is_empty() || BLACKLIST.read().await.contains(&mint) {
+                                    continue;
+                                }
+
+                                // Filter out tokens with empty symbol/name if desired
+                                let symbol = item["symbol"].as_str().unwrap_or_default();
+                                let name = item["name"].as_str().unwrap_or_default();
+
+                                if symbol.is_empty() && name.is_empty() {
+                                    continue; // Skip tokens without basic info
+                                }
+
+                                new_tokens.push(Token {
+                                    mint,
+                                    balance: "0".into(),
+                                    ata_pubkey: "".into(),
+                                    program_id: item["programId"]
+                                        .as_str()
+                                        .unwrap_or_default()
+                                        .into(),
+                                    name: name.into(),
+                                    symbol: symbol.into(),
+                                    dex_id: String::new(),
+                                    url: String::new(),
+                                    pair_address: String::new(),
+                                    labels: item["tags"]
+                                        .as_array()
+                                        .unwrap_or(&vec![])
+                                        .iter()
+                                        .filter_map(|v| v.as_str().map(String::from))
+                                        .collect(),
+                                    quote_address: String::new(),
+                                    quote_name: String::new(),
+                                    quote_symbol: String::new(),
+                                    price_native: String::new(),
+                                    price_usd: String::new(),
+                                    last_price_usd: String::new(),
+                                    volume_usd: String::new(),
+                                    fdv_usd: String::new(),
+                                    image_url: item["logoURI"].as_str().unwrap_or_default().into(),
                                     txns: Txns {
                                         m5: TxnCount { buys: 0, sells: 0 },
                                         h1: TxnCount { buys: 0, sells: 0 },

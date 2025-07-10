@@ -209,6 +209,9 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
 
     // ── Enhanced stats calculation with comprehensive metrics ───────────────────────────
     let open_count = positions_guard.len();
+    let closed_count = closed_guard.len();
+    // Get position mints early for later use in price status checking
+    let position_mints: Vec<String> = positions_guard.keys().cloned().collect();
     let mut total_unrealized_sol = 0.0;
     let mut total_invested_sol = 0.0;
     let mut winners = 0;
@@ -391,11 +394,27 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
         ]);
 
     for (index, (mint, pos)) in positions_vec.iter().enumerate() {
-        let current_price = PRICE_CACHE.read()
-            .map_err(|e| format!("Failed to acquire PRICE_CACHE lock: {:?}", e))?
-            .get(*mint)
-            .map(|&(_ts, price)| price)
-            .unwrap_or(0.0);
+        let current_price = match
+            tokio::time::timeout(Duration::from_secs(2), async {
+                match PRICE_CACHE.read() {
+                    Ok(cache) =>
+                        cache
+                            .get(*mint)
+                            .map(|&(_ts, price)| price)
+                            .unwrap_or(0.0),
+                    Err(e) => {
+                        println!("⚠️ [PRICE_CACHE] Error acquiring lock: {:?}", e);
+                        0.0
+                    }
+                }
+            }).await
+        {
+            Ok(price) => price,
+            Err(_) => {
+                println!("⚠️ [PRICE_CACHE] Timeout acquiring lock for mint: {}", mint);
+                0.0
+            }
+        };
 
         // Check if price is valid/loaded
         let price_loaded = current_price > 0.0;
@@ -886,10 +905,14 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
         println!("{}\n", table_closed);
     }
 
+    // Drop the guards here as we're done with the raw data
+    drop(positions_guard);
+    drop(closed_guard);
+
     // ── Bot Analytics & Recommendations ──────────────────────────────────────
     println!("🤖 [BOT ANALYTICS] ═════════════════════════════════════════════════");
 
-    let total_positions = open_count + closed_guard.len();
+    let total_positions = open_count + closed_count;
     let overall_win_rate = if total_positions > 0 {
         let total_winners = winners + closed_winners;
         ((total_winners as f64) / (total_positions as f64)) * 100.0
@@ -931,12 +954,7 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
     println!("🔄 Bot Status: ACTIVE | Next scan in progress...\n");
 
     // ── Price Loading Status Warning ──────────────────────────────────────────
-    let positions_guard = tokio::time
-        ::timeout(Duration::from_secs(5), OPEN_POSITIONS.read()).await
-        .map_err(|_| "Timeout acquiring OPEN_POSITIONS lock for price status check")?;
-    let position_mints: Vec<String> = positions_guard.keys().cloned().collect();
-    drop(positions_guard);
-
+    // Use the position_mints we collected earlier
     if !position_mints.is_empty() {
         let missing_prices = position_mints
             .iter()
