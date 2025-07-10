@@ -515,56 +515,80 @@ pub async fn ensure_watchlist_rugcheck_cached(debug: bool) {
 
     let client = reqwest::Client::new();
     let mut rugcheck_cache = load_rugcheck_cache(debug).await;
-    let mut tokens = TOKENS.write().await;
-    let now = std::time::SystemTime
-        ::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
 
-    for token in tokens.iter_mut() {
-        // Check if we need to refresh RugCheck data (older than 24 hours or missing)
-        let needs_refresh = match token.rug_check.checked_at {
-            Some(checked_at) => now - checked_at >= 86400, // 24 hours
-            None => true, // No data at all
-        };
+    // Get list of tokens that need updates WITHOUT holding the write lock
+    let tokens_to_update: Vec<(String, String)> = {
+        let tokens = TOKENS.read().await;
+        let now = std::time::SystemTime
+            ::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
 
-        if needs_refresh {
-            if debug {
-                println!("🔍 [RugCheck] Refreshing data for watch list token: {}", token.symbol);
-            }
+        tokens
+            .iter()
+            .filter_map(|token| {
+                let needs_refresh = match token.rug_check.checked_at {
+                    Some(checked_at) => now - checked_at >= 86400, // 24 hours
+                    None => true, // No data at all
+                };
 
-            if
-                let Some(rug_data) = fetch_rug_check_data(
-                    &client,
-                    &token.mint,
-                    debug,
-                    &mut rugcheck_cache
-                ).await
-            {
-                token.rug_check = rug_data;
-
-                if debug {
-                    println!(
-                        "✅ [RugCheck] Updated {} ({}): score={}, normalized={}, rugged={}",
-                        token.symbol,
-                        token.mint,
-                        token.rug_check.score,
-                        token.rug_check.score_normalised,
-                        token.rug_check.rugged
-                    );
+                if needs_refresh {
+                    Some((token.mint.clone(), token.symbol.clone()))
+                } else {
+                    if debug {
+                        println!(
+                            "� [RugCheck] {} has fresh cached data (age: {} hours)",
+                            token.symbol,
+                            (now - token.rug_check.checked_at.unwrap_or(0)) / 3600
+                        );
+                    }
+                    None
                 }
-            }
+            })
+            .collect()
+    };
 
-            // Be respectful to the API
-            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-        } else if debug {
-            println!(
-                "📋 [RugCheck] {} has fresh cached data (age: {} hours)",
-                token.symbol,
-                (now - token.rug_check.checked_at.unwrap_or(0)) / 3600
-            );
+    if debug && !tokens_to_update.is_empty() {
+        println!("🔍 [RugCheck] Need to update {} tokens", tokens_to_update.len());
+    }
+
+    // Process each token and update them individually to minimize lock time
+    for (mint, symbol) in tokens_to_update {
+        if debug {
+            println!("🔍 [RugCheck] Refreshing data for watch list token: {}", symbol);
         }
+
+        if
+            let Some(rug_data) = fetch_rug_check_data(
+                &client,
+                &mint,
+                debug,
+                &mut rugcheck_cache
+            ).await
+        {
+            // Only hold the write lock for the brief update
+            {
+                let mut tokens = TOKENS.write().await;
+                if let Some(token) = tokens.iter_mut().find(|t| t.mint == mint) {
+                    token.rug_check = rug_data.clone();
+
+                    if debug {
+                        println!(
+                            "✅ [RugCheck] Updated {} ({}): score={}, normalized={}, rugged={}",
+                            symbol,
+                            mint,
+                            rug_data.score,
+                            rug_data.score_normalised,
+                            rug_data.rugged
+                        );
+                    }
+                }
+            } // Write lock is released here
+        }
+
+        // Be respectful to the API - but don't hold the lock during sleep
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
     }
 }
 
@@ -1199,7 +1223,6 @@ pub fn start_dexscreener_loop() {
                 println!("🔓 [RugCheck] RugCheck is disabled - skipping data fetch");
             }
 
-            const MAX_TOKENS: usize = 100;
             const MIN_PRICE_SOL: f64 = 0.000000001;
             const MAX_PRICE_SOL: f64 = 0.01;
 

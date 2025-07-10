@@ -305,7 +305,33 @@ async fn update_performance_metrics() {
 
 /// Get current performance metrics
 pub async fn get_performance_metrics() -> PerformanceMetrics {
-    PERFORMANCE_METRICS.read().await.clone()
+    // Add timeout to prevent hanging
+    use std::time::Duration;
+
+    match tokio::time::timeout(Duration::from_secs(5), PERFORMANCE_METRICS.read()).await {
+        Ok(metrics) => metrics.clone(),
+        Err(_) => {
+            eprintln!(
+                "⚠️ [PERFORMANCE] Timeout acquiring PERFORMANCE_METRICS lock, returning default"
+            );
+            // Return default metrics if timeout occurs
+            PerformanceMetrics {
+                total_trades: 0,
+                winning_trades: 0,
+                losing_trades: 0,
+                rug_count: 0,
+                win_rate: 0.0,
+                avg_win_pct: 0.0,
+                avg_loss_pct: 0.0,
+                avg_hold_time_minutes: 0.0,
+                total_profit_sol: 0.0,
+                best_trade_pct: 0.0,
+                worst_trade_pct: 0.0,
+                recent_performance_7d: 0.0,
+                recent_win_rate_7d: 0.0,
+            }
+        }
+    }
 }
 
 /// Calculate adaptive position sizing based on recent performance
@@ -343,7 +369,19 @@ pub async fn calculate_adaptive_position_size(base_size: f64) -> f64 {
 
 /// Print detailed performance report
 pub async fn print_performance_report() {
-    let metrics = get_performance_metrics().await;
+    // Add error handling to prevent crashes
+    if let Err(e) = print_performance_report_inner().await {
+        eprintln!("💥 [PERFORMANCE REPORT] Error occurred: {:?}", e);
+    }
+}
+
+/// Internal implementation with error handling
+async fn print_performance_report_inner() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::time::Duration;
+
+    let metrics = tokio::time
+        ::timeout(Duration::from_secs(10), get_performance_metrics()).await
+        .map_err(|_| "Timeout getting performance metrics")?;
 
     println!("\n═══════════════════════════════════════════════════════════");
     println!("📊 PERFORMANCE REPORT");
@@ -362,6 +400,8 @@ pub async fn print_performance_report() {
     println!("📅 Recent 7d Profit: {:.6} SOL", metrics.recent_performance_7d);
     println!("📅 Recent 7d Win Rate: {:.1}%", metrics.recent_win_rate_7d * 100.0);
     println!("═══════════════════════════════════════════════════════════\n");
+
+    Ok(())
 }
 
 /// Get adaptive entry threshold based on recent performance

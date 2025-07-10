@@ -187,10 +187,25 @@ pub fn get_biggest_token_amount(token_mint: &str) -> u64 {
 /// Enhanced summary function that serves as the main bot interface
 /// Provides comprehensive portfolio analysis and trading insights
 pub async fn print_summary() {
-    use comfy_table::{ Table, presets::UTF8_FULL };
+    // Wrap the entire function in error handling to prevent crashes
+    if let Err(e) = print_summary_inner().await {
+        eprintln!("💥 [PRINT SUMMARY] Error occurred: {:?}", e);
+    }
+}
 
-    let positions_guard = OPEN_POSITIONS.read().await;
-    let closed_guard = CLOSED_POSITIONS.read().await;
+/// Internal implementation of print_summary with proper error handling
+async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use comfy_table::{ Table, presets::UTF8_FULL };
+    use std::time::Duration;
+
+    // Add timeout for acquiring locks to prevent hanging
+    let positions_guard = tokio::time
+        ::timeout(Duration::from_secs(5), OPEN_POSITIONS.read()).await
+        .map_err(|_| "Timeout acquiring OPEN_POSITIONS lock")?;
+
+    let closed_guard = tokio::time
+        ::timeout(Duration::from_secs(5), CLOSED_POSITIONS.read()).await
+        .map_err(|_| "Timeout acquiring CLOSED_POSITIONS lock")?;
 
     // ── Enhanced stats calculation with comprehensive metrics ───────────────────────────
     let open_count = positions_guard.len();
@@ -242,7 +257,7 @@ pub async fn print_summary() {
 
     for (index, (mint, pos)) in positions_vec.iter().enumerate() {
         let current_price = PRICE_CACHE.read()
-            .unwrap()
+            .map_err(|e| format!("Failed to acquire PRICE_CACHE lock: {:?}", e))?
             .get(*mint)
             .map(|&(_ts, price)| price)
             .unwrap_or(0.0);
@@ -430,101 +445,116 @@ pub async fn print_summary() {
     println!("════════════════════════════════════════════════════════════════════\n");
 
     // ── Top 25 Watchlist Tokens ──────────────────────────────────────────────────
-    {
-        let tokens_guard = TOKENS.read().await;
-        if !tokens_guard.is_empty() {
-            let mut watchlist_tokens: Vec<_> = tokens_guard.iter().collect();
+    // Make this section optional to prevent blocking when token loading is happening
+    match tokio::time::timeout(Duration::from_secs(2), TOKENS.read()).await {
+        Ok(tokens_guard) => {
+            if !tokens_guard.is_empty() {
+                let mut watchlist_tokens: Vec<_> = tokens_guard.iter().collect();
 
-            // Sort by volume (highest first)
-            watchlist_tokens.sort_by(|a, b| {
-                let a_vol = a.volume.h24;
-                let b_vol = b.volume.h24;
-                b_vol.partial_cmp(&a_vol).unwrap_or(std::cmp::Ordering::Equal)
-            });
+                // Sort by volume (highest first)
+                watchlist_tokens.sort_by(|a, b| {
+                    let a_vol = a.volume.h24;
+                    let b_vol = b.volume.h24;
+                    b_vol.partial_cmp(&a_vol).unwrap_or(std::cmp::Ordering::Equal)
+                });
 
-            // Take top 25
-            watchlist_tokens.truncate(25);
+                // Take top 25
+                watchlist_tokens.truncate(25);
 
-            let mut watchlist_table = Table::new();
-            watchlist_table
-                .load_preset(UTF8_FULL)
-                .set_header([
-                    "#",
-                    "Symbol",
-                    "Name",
-                    "Price USD",
-                    "5m %",
-                    "1h %",
-                    "24h %",
-                    "Volume 24h",
-                    "Liquidity",
-                    "MCap",
-                    "Buys 1h",
-                    "Mint Address",
-                ]);
+                let mut watchlist_table = Table::new();
+                watchlist_table
+                    .load_preset(UTF8_FULL)
+                    .set_header([
+                        "#",
+                        "Symbol",
+                        "Name",
+                        "Price USD",
+                        "5m %",
+                        "1h %",
+                        "24h %",
+                        "Volume 24h",
+                        "Liquidity",
+                        "MCap",
+                        "Buys 1h",
+                        "Mint Address",
+                    ]);
 
-            for (index, token) in watchlist_tokens.iter().enumerate() {
-                let price_usd = token.price_usd.parse::<f64>().unwrap_or(0.0);
-                let volume_24h = token.volume.h24;
-                let liquidity_usd = token.liquidity.usd;
-                let mcap = token.fdv_usd.parse::<f64>().unwrap_or(0.0);
-                let buys_1h = token.txns.h1.buys;
+                for (index, token) in watchlist_tokens.iter().enumerate() {
+                    let price_usd = token.price_usd.parse::<f64>().unwrap_or(0.0);
+                    let volume_24h = token.volume.h24;
+                    let liquidity_usd = token.liquidity.usd;
+                    let mcap = token.fdv_usd.parse::<f64>().unwrap_or(0.0);
+                    let buys_1h = token.txns.h1.buys;
 
-                // Format price change with colors
-                let change_5m = token.price_change.m5;
-                let change_1h = token.price_change.h1;
-                let change_24h = token.price_change.h24;
+                    // Format price change with colors
+                    let change_5m = token.price_change.m5;
+                    let change_1h = token.price_change.h1;
+                    let change_24h = token.price_change.h24;
 
-                let format_change = |change: f64| -> String {
-                    if change > 0.0 {
-                        format!("📈+{:.1}%", change)
-                    } else if change < 0.0 {
-                        format!("📉{:.1}%", change)
+                    let format_change = |change: f64| -> String {
+                        if change > 0.0 {
+                            format!("📈+{:.1}%", change)
+                        } else if change < 0.0 {
+                            format!("📉{:.1}%", change)
+                        } else {
+                            "0.0%".to_string()
+                        }
+                    };
+
+                    // Format large numbers
+                    let format_large_number = |value: f64| -> String {
+                        if value >= 1_000_000.0 {
+                            format!("{:.1}M", value / 1_000_000.0)
+                        } else if value >= 1_000.0 {
+                            format!("{:.1}K", value / 1_000.0)
+                        } else {
+                            format!("{:.0}", value)
+                        }
+                    };
+
+                    // Truncate name if too long
+                    let display_name = if token.name.len() > 15 {
+                        format!("{}...", &token.name[..12])
                     } else {
-                        "0.0%".to_string()
-                    }
-                };
+                        token.name.clone()
+                    };
 
-                // Format large numbers
-                let format_large_number = |value: f64| -> String {
-                    if value >= 1_000_000.0 {
-                        format!("{:.1}M", value / 1_000_000.0)
-                    } else if value >= 1_000.0 {
-                        format!("{:.1}K", value / 1_000.0)
-                    } else {
-                        format!("{:.0}", value)
-                    }
-                };
+                    watchlist_table.add_row([
+                        (index + 1).to_string(),
+                        token.symbol.clone(),
+                        display_name,
+                        if price_usd > 0.0 {
+                            format!("${:.6}", price_usd)
+                        } else {
+                            "N/A".to_string()
+                        },
+                        format_change(change_5m),
+                        format_change(change_1h),
+                        format_change(change_24h),
+                        format!("${}", format_large_number(volume_24h)),
+                        format!("${}", format_large_number(liquidity_usd)),
+                        format!("${}", format_large_number(mcap)),
+                        buys_1h.to_string(),
+                        token.mint.clone(),
+                    ]);
+                }
 
-                // Truncate name if too long
-                let display_name = if token.name.len() > 15 {
-                    format!("{}...", &token.name[..12])
-                } else {
-                    token.name.clone()
-                };
-
-                watchlist_table.add_row([
-                    (index + 1).to_string(),
-                    token.symbol.clone(),
-                    display_name,
-                    if price_usd > 0.0 { format!("${:.6}", price_usd) } else { "N/A".to_string() },
-                    format_change(change_5m),
-                    format_change(change_1h),
-                    format_change(change_24h),
-                    format!("${}", format_large_number(volume_24h)),
-                    format!("${}", format_large_number(liquidity_usd)),
-                    format!("${}", format_large_number(mcap)),
-                    buys_1h.to_string(),
-                    token.mint.clone(),
-                ]);
+                println!("📊 [TOP 25 WATCHLIST TOKENS] ═══════════════════════════════════════");
+                println!("🎯 Sorted by 24h volume • Updated from DexScreener & RugCheck APIs");
+                println!("══════════════════════════════════════════════════════════════════\n");
+                println!("{}\n", watchlist_table);
+            } else {
+                println!("📊 [WATCHLIST] No tokens loaded yet - waiting for DexScreener data\n");
             }
-
-            println!("📊 [TOP 25 WATCHLIST TOKENS] ═══════════════════════════════════════");
-            println!("🎯 Sorted by 24h volume • Updated from DexScreener & RugCheck APIs");
-            println!("══════════════════════════════════════════════════════════════════\n");
-            println!("{}\n", watchlist_table);
-        } else {
-            println!("📊 [WATCHLIST] No tokens loaded yet - waiting for DexScreener data\n");
+        }
+        Err(_) => {
+            // Timeout acquiring TOKENS lock - this is expected during token loading
+            println!(
+                "📊 [WATCHLIST] Token data being updated - skipping watchlist display this cycle\n"
+            );
+            println!(
+                "🔄 [INFO] DexScreener is currently refreshing token data, watchlist will return next cycle\n"
+            );
         }
     }
 
@@ -537,58 +567,24 @@ pub async fn print_summary() {
 
     // ── Enhanced recent-closed positions table with comprehensive data ───────────
     if !closed_guard.is_empty() {
-        let mut closed_vec: Vec<_> = closed_guard.values().cloned().collect();
-        closed_vec.sort_by(|a, b|
-            b.close_time.unwrap_or(b.open_time).cmp(&a.close_time.unwrap_or(a.open_time))
+        // First, analyze ALL closed positions for comprehensive metrics
+        let closed_positions_map: HashMap<String, Position> = closed_guard.clone();
+        let mut all_closed_with_mints: Vec<(String, Position)> = closed_positions_map
+            .into_iter()
+            .collect();
+        all_closed_with_mints.sort_by(|a, b|
+            b.1.close_time.unwrap_or(b.1.open_time).cmp(&a.1.close_time.unwrap_or(a.1.open_time))
         );
 
-        // Take only the most recent 15 closed positions for detailed analysis
-        closed_vec.truncate(15);
-
-        let mut table_closed = Table::new();
-        table_closed
-            .load_preset(UTF8_FULL)
-            .set_header([
-                "#",
-                "Mint Address",
-                "Entry",
-                "Exit",
-                "Profit %",
-                "P/L SOL",
-                "Peak",
-                "Max %",
-                "Hold Time",
-                "DCA",
-                "Reason",
-                "Closed",
-            ]);
-
+        // Calculate metrics on ALL closed positions
         let mut closed_total_profit = 0.0;
         // closed_winners is already declared at function level
         let mut total_closed_hold_time = 0.0;
         let mut best_closed_trade = ("".to_string(), 0.0, "".to_string());
         let mut worst_closed_trade = ("".to_string(), 0.0, "".to_string());
 
-        // We need to get mint addresses from closed positions
-        // Since closed positions HashMap uses mint as key, we can iterate over keys
-        let closed_positions_map: HashMap<String, Position> = closed_guard.clone();
-        let mut closed_with_mints: Vec<(String, Position)> = closed_positions_map
-            .into_iter()
-            .collect();
-        closed_with_mints.sort_by(|a, b|
-            b.1.close_time.unwrap_or(b.1.open_time).cmp(&a.1.close_time.unwrap_or(a.1.open_time))
-        );
-        closed_with_mints.truncate(15);
-
-        // Now reverse the order so most recent appears at the bottom of the table
-        closed_with_mints.reverse();
-
-        for (index, (mint, pos)) in closed_with_mints.iter().enumerate() {
-            let close_price = if pos.token_amount > 0.0 {
-                pos.sol_received / pos.token_amount
-            } else {
-                0.0
-            };
+        // Process ALL closed positions for analysis
+        for (mint, pos) in &all_closed_with_mints {
             let profit_pct = if pos.sol_spent > 0.0 {
                 ((pos.sol_received - pos.sol_spent) / pos.sol_spent) * 100.0
             } else {
@@ -615,6 +611,54 @@ pub async fn print_summary() {
                 );
             }
 
+            // Calculate position duration
+            if let Some(close_time) = pos.close_time {
+                let diff = close_time.signed_duration_since(pos.open_time);
+                let hours = diff.num_hours() as f64;
+                total_closed_hold_time += hours;
+            }
+        }
+
+        // Now create table with only the most recent 15 positions for display
+        let mut closed_with_mints: Vec<(String, Position)> = all_closed_with_mints.clone();
+        closed_with_mints.truncate(15);
+
+        // Reverse the order so most recent appears at the bottom of the table
+        closed_with_mints.reverse();
+
+        let mut table_closed = Table::new();
+        table_closed
+            .load_preset(UTF8_FULL)
+            .set_header([
+                "#",
+                "Mint Address",
+                "Entry",
+                "Exit",
+                "Profit %",
+                "P/L SOL",
+                "Peak",
+                "Max %",
+                "Hold Time",
+                "DCA",
+                "Reason",
+                "Closed",
+            ]);
+
+        // Populate table with only recent 15 positions (analysis already done above)
+        for (index, (mint, pos)) in closed_with_mints.iter().enumerate() {
+            let close_price = if pos.token_amount > 0.0 {
+                pos.sol_received / pos.token_amount
+            } else {
+                0.0
+            };
+            let profit_pct = if pos.sol_spent > 0.0 {
+                ((pos.sol_received - pos.sol_spent) / pos.sol_spent) * 100.0
+            } else {
+                0.0
+            };
+
+            let profit_sol = pos.sol_received - pos.sol_spent;
+
             // Calculate max potential gain from peak
             let max_gain_pct = if pos.entry_price > 0.0 {
                 ((pos.peak_price - pos.entry_price) / pos.entry_price) * 100.0
@@ -623,19 +667,18 @@ pub async fn print_summary() {
             };
 
             // Calculate position duration
-            let (duration, hold_hours) = if let Some(close_time) = pos.close_time {
+            let duration = if let Some(close_time) = pos.close_time {
                 let diff = close_time.signed_duration_since(pos.open_time);
                 let hours = diff.num_hours() as f64;
-                total_closed_hold_time += hours;
 
                 if hours < 24.0 {
-                    (format!("{:.1}h", hours), hours)
+                    format!("{:.1}h", hours)
                 } else {
                     let days = hours / 24.0;
-                    (format!("{:.1}d", days), hours)
+                    format!("{:.1}d", days)
                 }
             } else {
-                ("-".to_string(), 0.0)
+                "-".to_string()
             };
 
             // Full mint address (no shortening)
@@ -670,25 +713,26 @@ pub async fn print_summary() {
             ]);
         }
 
-        let closed_win_rate = if closed_with_mints.len() > 0 {
-            ((closed_winners as f64) / (closed_with_mints.len() as f64)) * 100.0
+        // Calculate metrics based on ALL closed positions
+        let closed_win_rate = if all_closed_with_mints.len() > 0 {
+            ((closed_winners as f64) / (all_closed_with_mints.len() as f64)) * 100.0
         } else {
             0.0
         };
 
-        let avg_closed_hold_time = if closed_with_mints.len() > 0 {
-            total_closed_hold_time / (closed_with_mints.len() as f64)
+        let avg_closed_hold_time = if all_closed_with_mints.len() > 0 {
+            total_closed_hold_time / (all_closed_with_mints.len() as f64)
         } else {
             0.0
         };
 
-        println!("📁 [RECENT CLOSED POSITIONS] ═══════════════════════════════════════");
+        println!("📁 [CLOSED POSITIONS ANALYSIS] ════════════════════════════════════");
         println!(
-            "📊 Closed P/L: {:+.3} SOL | Win Rate: {:.1}% ({}/{}) | Avg Hold: {:.1}h",
+            "📊 Total Closed P/L: {:+.3} SOL | Win Rate: {:.1}% ({}/{}) | Avg Hold: {:.1}h",
             closed_total_profit,
             closed_win_rate,
             closed_winners,
-            closed_with_mints.len(),
+            all_closed_with_mints.len(),
             avg_closed_hold_time
         );
 
@@ -702,7 +746,8 @@ pub async fn print_summary() {
             );
         }
 
-        println!("═══════════════════════════════════════════════════════════════════\n");
+        println!("═══════════════════════════════════════════════════════════════════");
+        println!("📋 Recent 15 Closed Positions (detailed table):");
         println!("{}\n", table_closed);
     }
 
@@ -751,7 +796,9 @@ pub async fn print_summary() {
     println!("🔄 Bot Status: ACTIVE | Next scan in progress...\n");
 
     // ── Price Loading Status Warning ──────────────────────────────────────────
-    let positions_guard = OPEN_POSITIONS.read().await;
+    let positions_guard = tokio::time
+        ::timeout(Duration::from_secs(5), OPEN_POSITIONS.read()).await
+        .map_err(|_| "Timeout acquiring OPEN_POSITIONS lock for price status check")?;
     let position_mints: Vec<String> = positions_guard.keys().cloned().collect();
     drop(positions_guard);
 
@@ -777,6 +824,9 @@ pub async fn print_summary() {
     }
 
     println!("═══════════════════════════════════════════════════════════════════");
+
+    // Return success
+    Ok(())
 }
 
 /// Return the `decimals` of a mint account on–chain, with disk cache.

@@ -50,6 +50,7 @@ pub const POSITIONS_CHECK_TIME_SEC: u64 = 30;
 pub const TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 30;
 
 // TRADING CONSTANTS - OPTIMIZED FOR 0.001 SOL TRADES
+pub const MAX_TOKENS: usize = 100;
 pub const TRADE_SIZE_SOL: f64 = 0.001; // Your specified trade size
 pub const MAX_OPEN_POSITIONS: usize = 20; // Reduced for better management
 pub const MIN_HOLD_TIME_SECONDS: i64 = 30; // Faster exits allowed

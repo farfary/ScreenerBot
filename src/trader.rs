@@ -194,20 +194,66 @@ pub fn start_trader_loop() {
     // ── positions print task ──────────────────────────────────────────────────────
     task::spawn(async move {
         let mut counter = 0;
+        let mut consecutive_failures = 0;
+
         loop {
             if SHUTDOWN.load(Ordering::SeqCst) {
+                println!("🔄 [PRINT TASK] Shutdown signal received, stopping print task");
                 break;
             }
-            print_summary().await;
 
-            // Print performance report every 10 cycles (roughly every 100 seconds)
-            counter += 1;
-            if counter % 10 == 0 {
-                print_performance_report().await;
+            // Add error handling and timeout for print_summary
+            let print_result = tokio::time::timeout(
+                Duration::from_secs(30), // 30 second timeout
+                print_summary()
+            ).await;
+
+            match print_result {
+                Ok(_) => {
+                    consecutive_failures = 0; // Reset failure counter on success
+
+                    // Print performance report every 10 cycles (roughly every 100 seconds)
+                    counter += 1;
+                    if counter % 10 == 0 {
+                        let perf_result = tokio::time::timeout(
+                            Duration::from_secs(15),
+                            print_performance_report()
+                        ).await;
+
+                        if let Err(e) = perf_result {
+                            eprintln!("⚠️ [PRINT TASK] Performance report timed out: {:?}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    consecutive_failures += 1;
+                    eprintln!(
+                        "💥 [PRINT TASK] Summary print failed/timed out (failure #{}: {:?}",
+                        consecutive_failures,
+                        e
+                    );
+
+                    // If we have too many consecutive failures, increase the sleep time
+                    if consecutive_failures >= 3 {
+                        eprintln!(
+                            "🚨 [PRINT TASK] Too many consecutive failures, extending sleep to 30 seconds"
+                        );
+                        sleep(Duration::from_secs(30)).await;
+                        consecutive_failures = 0; // Reset after extended sleep
+                        continue;
+                    }
+                }
+            }
+
+            // Add heartbeat log every 60 cycles (10 minutes) to confirm task is alive
+            if counter % 60 == 0 {
+                println!("💓 [PRINT TASK] Heartbeat - task running normally (cycle {})", counter);
             }
 
             sleep(Duration::from_secs(POSITIONS_PRINT_TIME)).await;
         }
+
+        println!("⏹️ [PRINT TASK] Print summary task stopped");
     });
 }
 
