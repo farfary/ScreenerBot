@@ -56,21 +56,49 @@ pub fn should_dca(
         return false;
     }
 
-    // 2. Enhanced cooldown check
-    if pos.dca_count > 0 && (now - pos.last_dca_time).num_minutes() < DCA_COOLDOWN_MINUTES {
-        println!("⏰ [DCA] {} | Cooldown active", token.symbol);
-        return false;
+    // ✅ FIXED: More strict DCA timing validation
+    // 2. Enhanced cooldown check - more strict timing
+    if pos.dca_count > 0 {
+        let time_since_last_dca = (now - pos.last_dca_time).num_minutes();
+        if time_since_last_dca < DCA_COOLDOWN_MINUTES {
+            println!(
+                "⏰ [DCA] {} | Cooldown active ({} min ago)",
+                token.symbol,
+                time_since_last_dca
+            );
+            return false;
+        }
+
+        // Additional check: ensure significant time has passed since position opening for any DCA
+        if elapsed.num_minutes() < 45 {
+            println!(
+                "⏰ [DCA] {} | Position too new for DCA ({} min old)",
+                token.symbol,
+                elapsed.num_minutes()
+            );
+            return false;
+        }
     }
 
     // 3. Enhanced minimum hold time (longer for DCA)
     if elapsed.num_minutes() < 30 {
-        // Increased from 15 to 30 minutes
         println!("⏰ [DCA] {} | Hold longer for DCA consideration", token.symbol);
         return false;
     }
 
-    // 4. ENHANCED DCA TRIGGER LOGIC - Two-tier system
-    // Quick DCA for strong whale signals at -8%, standard DCA at -15%
+    // ✅ FIXED: More strict price drop requirements
+    // 4. Ensure actual price drop from entry (not just from peak)
+    let drop_from_entry = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+    if drop_from_entry > -8.0 {
+        println!(
+            "📈 [DCA] {} | Insufficient drop from entry: {:.1}% (need <-8%)",
+            token.symbol,
+            drop_from_entry
+        );
+        return false;
+    }
+
+    // 5. Enhanced DCA trigger logic with stricter requirements
     let whale_confirmed_quick_dca = if let Some(trades_cache) = trades {
         let recent_whale_volume: f64 = trades_cache
             .get_whale_trades(DCA_WHALE_CONFIRMATION_THRESHOLD, 0)

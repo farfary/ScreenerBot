@@ -760,13 +760,26 @@ async fn token_discovery_loop() {
         if !watchlist_tokens.is_empty() {
             watchlist_cycle_counter += 1;
 
-            // Filter out tokens that already have open positions
+            // ✅ FIXED: Better filtering of tokens with open positions
             let watchlist_to_check: Vec<String> = {
                 let open_positions = OPEN_POSITIONS.read().await;
-                watchlist_tokens
-                    .into_iter()
-                    .filter(|mint| !open_positions.contains_key(mint))
-                    .collect()
+                let mut filtered_tokens = Vec::new();
+
+                for mint in watchlist_tokens {
+                    if !open_positions.contains_key(&mint) {
+                        // Double-check cooldown before adding to check list
+                        let (can_enter, _) = can_enter_token_position(&mint).await;
+                        if can_enter {
+                            filtered_tokens.push(mint);
+                        } else {
+                            println!("⏰ [WATCHLIST] {} is in cooldown, skipping", mint);
+                        }
+                    } else {
+                        println!("📊 [WATCHLIST] {} already has open position, skipping", mint);
+                    }
+                }
+
+                filtered_tokens
             };
 
             if !watchlist_to_check.is_empty() {
@@ -794,6 +807,26 @@ async fn token_discovery_loop() {
                     for (mint, current_price) in prices.iter() {
                         if shutdown::is_shutdown_requested() {
                             return;
+                        }
+
+                        // ✅ FIXED: Double-check position doesn't exist before buying
+                        {
+                            let open_positions = OPEN_POSITIONS.read().await;
+                            if open_positions.contains_key(mint) {
+                                println!("🚫 [WATCHLIST] {} already has position, skipping buy", mint);
+                                continue;
+                            }
+                        }
+
+                        // ✅ FIXED: Check cooldown again before buying
+                        let (can_enter, minutes_since) = can_enter_token_position(mint).await;
+                        if !can_enter {
+                            println!(
+                                "⏰ [WATCHLIST] {} in cooldown ({} min ago), skipping",
+                                mint,
+                                minutes_since
+                            );
+                            continue;
                         }
 
                         // Process watchlist token re-entry logic
@@ -845,6 +878,15 @@ async fn token_discovery_loop() {
                                     dynamic_trade_size
                                 );
 
+                                // ✅ FIXED: Final check before executing buy
+                                {
+                                    let open_positions = OPEN_POSITIONS.read().await;
+                                    if open_positions.contains_key(mint) {
+                                        println!("🚫 [WATCHLIST] {} position created during processing, aborting buy", mint);
+                                        continue;
+                                    }
+                                }
+
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
                                 match
@@ -857,33 +899,45 @@ async fn token_discovery_loop() {
                                     Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [WATCHLIST RE-ENTRY] BUY success: {tx}");
 
-                                        // Create position with ACTUAL tokens received
-                                        let new_position = Position {
-                                            entry_price: *current_price,
-                                            peak_price: *current_price,
-                                            dca_count: 0,
-                                            token_amount: actual_tokens_received,
-                                            sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
-                                            sol_received: 0.0,
-                                            open_time: Utc::now(),
-                                            close_time: None,
-                                            last_dca_price: *current_price,
-                                            last_dca_time: Utc::now(),
-                                        };
+                                        // ✅ FIXED: Check if position was created during buy execution
+                                        let mut should_create_position = true;
+                                        {
+                                            let open_positions = OPEN_POSITIONS.read().await;
+                                            if open_positions.contains_key(mint) {
+                                                println!("⚠️ [WATCHLIST] Position already exists for {}, this might be a DCA", mint);
+                                                should_create_position = false;
+                                            }
+                                        }
 
-                                        OPEN_POSITIONS.write().await.insert(
-                                            mint.clone(),
-                                            new_position
-                                        );
-                                        save_open().await;
+                                        if should_create_position {
+                                            // Create position with ACTUAL tokens received
+                                            let new_position = Position {
+                                                entry_price: *current_price,
+                                                peak_price: *current_price,
+                                                dca_count: 0,
+                                                token_amount: actual_tokens_received,
+                                                sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
+                                                sol_received: 0.0,
+                                                open_time: Utc::now(),
+                                                close_time: None,
+                                                last_dca_price: *current_price,
+                                                last_dca_time: Utc::now(),
+                                            };
 
-                                        // Update watchlist priority (successful re-entry)
-                                        persistence::add_to_watchlist(
-                                            mint,
-                                            symbol,
-                                            name,
-                                            *current_price
-                                        ).await;
+                                            OPEN_POSITIONS.write().await.insert(
+                                                mint.clone(),
+                                                new_position
+                                            );
+                                            save_open().await;
+
+                                            // Update watchlist priority (successful re-entry)
+                                            persistence::add_to_watchlist(
+                                                mint,
+                                                symbol,
+                                                name,
+                                                *current_price
+                                            ).await;
+                                        }
 
                                         // Break to avoid opening too many positions at once
                                         break;
@@ -909,17 +963,22 @@ async fn token_discovery_loop() {
                 let open_positions = OPEN_POSITIONS.read().await;
                 let blacklist = BLACKLIST.read().await;
 
-                tokens
-                    .iter()
-                    .map(|tok| tok.mint.clone())
-                    .filter(|mint| {
-                        // Only include NEW tokens that:
-                        // 1. Are NOT blacklisted
-                        // 2. Do NOT have open positions
-                        // 3. Are NOT in our watchlist (these are handled above)
-                        !blacklist.contains(mint) && !open_positions.contains_key(mint)
-                    })
-                    .collect()
+                let mut filtered_mints = Vec::new();
+
+                for token in tokens.iter() {
+                    let mint = &token.mint;
+
+                    // ✅ FIXED: More thorough filtering
+                    if !blacklist.contains(mint) && !open_positions.contains_key(mint) {
+                        // Additional check for cooldown
+                        let (can_enter, _) = can_enter_token_position(mint).await;
+                        if can_enter {
+                            filtered_mints.push(mint.clone());
+                        }
+                    }
+                }
+
+                filtered_mints
             };
 
             if !discovery_mints.is_empty() {
@@ -949,6 +1008,25 @@ async fn token_discovery_loop() {
                     for (mint, current_price) in prices.iter() {
                         if shutdown::is_shutdown_requested() {
                             return;
+                        }
+
+                        // ✅ FIXED: Same protection as watchlist
+                        {
+                            let open_positions = OPEN_POSITIONS.read().await;
+                            if open_positions.contains_key(mint) {
+                                println!("🚫 [NEW DISCOVERY] {} already has position, skipping", mint);
+                                continue;
+                            }
+                        }
+
+                        let (can_enter, minutes_since) = can_enter_token_position(mint).await;
+                        if !can_enter {
+                            println!(
+                                "⏰ [NEW DISCOVERY] {} in cooldown ({} min ago), skipping",
+                                mint,
+                                minutes_since
+                            );
+                            continue;
                         }
 
                         // Find token info
@@ -994,6 +1072,16 @@ async fn token_discovery_loop() {
                                     *current_price,
                                     dynamic_trade_size
                                 );
+
+                                // ✅ FIXED: Final check before executing buy
+                                {
+                                    let open_positions = OPEN_POSITIONS.read().await;
+                                    if open_positions.contains_key(mint) {
+                                        println!("🚫 [NEW DISCOVERY] {} position created during processing, aborting buy", mint);
+                                        continue;
+                                    }
+                                }
+
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
                                 match
@@ -1006,38 +1094,50 @@ async fn token_discovery_loop() {
                                     Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [NEW DISCOVERY] BUY success: {tx}");
 
-                                        // Create position with ACTUAL tokens received
-                                        let new_position = Position {
-                                            entry_price: *current_price,
-                                            peak_price: *current_price,
-                                            dca_count: 0,
-                                            token_amount: actual_tokens_received,
-                                            sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
-                                            sol_received: 0.0,
-                                            open_time: Utc::now(),
-                                            close_time: None,
-                                            last_dca_price: *current_price,
-                                            last_dca_time: Utc::now(),
-                                        };
+                                        // ✅ FIXED: Same position creation protection
+                                        let mut should_create_position = true;
+                                        {
+                                            let open_positions = OPEN_POSITIONS.read().await;
+                                            if open_positions.contains_key(mint) {
+                                                println!("⚠️ [NEW DISCOVERY] Position already exists for {}, this might be a DCA", mint);
+                                                should_create_position = false;
+                                            }
+                                        }
 
-                                        OPEN_POSITIONS.write().await.insert(
-                                            mint.clone(),
-                                            new_position
-                                        );
-                                        save_open().await;
+                                        if should_create_position {
+                                            // Create position with ACTUAL tokens received
+                                            let new_position = Position {
+                                                entry_price: *current_price,
+                                                peak_price: *current_price,
+                                                dca_count: 0,
+                                                token_amount: actual_tokens_received,
+                                                sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
+                                                sol_received: 0.0,
+                                                open_time: Utc::now(),
+                                                close_time: None,
+                                                last_dca_price: *current_price,
+                                                last_dca_time: Utc::now(),
+                                            };
 
-                                        // Add to watchlist for future monitoring
-                                        persistence::add_to_watchlist(
-                                            mint,
-                                            symbol,
-                                            name,
-                                            *current_price
-                                        ).await;
-                                        println!(
-                                            "📋 Added {} ({}) to watchlist for continuous monitoring",
-                                            symbol,
-                                            mint
-                                        );
+                                            OPEN_POSITIONS.write().await.insert(
+                                                mint.clone(),
+                                                new_position
+                                            );
+                                            save_open().await;
+
+                                            // Add to watchlist for future monitoring
+                                            persistence::add_to_watchlist(
+                                                mint,
+                                                symbol,
+                                                name,
+                                                *current_price
+                                            ).await;
+                                            println!(
+                                                "📋 Added {} ({}) to watchlist for continuous monitoring",
+                                                symbol,
+                                                mint
+                                            );
+                                        }
                                     }
                                     Err(e) => {
                                         println!("❌ [NEW DISCOVERY] BUY failed: {}", e);

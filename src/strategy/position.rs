@@ -112,8 +112,47 @@ pub async fn evaluate_position(
     // Get OHLCV dataframe for this token
     let ohlcv_dataframe = crate::ohlcv::get_token_ohlcv_dataframe(&token.mint).await;
 
-    // 1. Check DCA
+    // ✅ FIXED: Add validation for DCA timing and conditions
+    let now = Utc::now();
+    let time_since_open = now - pos.open_time;
+    let time_since_last_dca = if pos.dca_count > 0 {
+        now - pos.last_dca_time
+    } else {
+        time_since_open
+    };
+
+    // 1. Check DCA with enhanced validation
     if should_dca(token, pos, current_price, trades_data.as_ref(), ohlcv_dataframe.as_ref()) {
+        // ✅ Additional safety checks for DCA
+        if time_since_open.num_minutes() < 30 {
+            println!(
+                "⏰ [POSITION] {} | DCA blocked: position too new ({} min)",
+                token.symbol,
+                time_since_open.num_minutes()
+            );
+            return PositionAction::Hold;
+        }
+
+        if pos.dca_count > 0 && time_since_last_dca.num_minutes() < 20 {
+            println!(
+                "⏰ [POSITION] {} | DCA blocked: last DCA too recent ({} min ago)",
+                token.symbol,
+                time_since_last_dca.num_minutes()
+            );
+            return PositionAction::Hold;
+        }
+
+        // Check if price has actually dropped significantly since entry
+        let drop_from_entry = ((current_price - pos.entry_price) / pos.entry_price) * 100.0;
+        if drop_from_entry > -5.0 {
+            println!(
+                "📈 [POSITION] {} | DCA blocked: insufficient drop from entry ({:.1}%)",
+                token.symbol,
+                drop_from_entry
+            );
+            return PositionAction::Hold;
+        }
+
         return PositionAction::DCA { sol_amount: dynamic_trade_size };
     }
 

@@ -80,13 +80,13 @@ pub const MAX_MARKET_CAP_USD: f64 = 1200000000.0; // $1.2B maximum market cap
 pub const MARKET_CAP_SCALING_FACTOR: f64 = 0.5; // 50% weight for market cap scaling
 
 // Liquidity impact thresholds (prevent whale anger)
-pub const MAX_TRADE_PCT_OF_LIQUIDITY: f64 = 0.5; // Max 0.5% of total liquidity per trade
+pub const MAX_TRADE_PCT_OF_LIQUIDITY: f64 = 0.1; // Max 0.5% of total liquidity per trade
 pub const WHALE_ANGER_THRESHOLD_PCT: f64 = 1.0; // Avoid trades >1% of liquidity
 pub const SAFE_LIQUIDITY_BUFFER: f64 = 2.0; // 2x safety buffer
 
 // ─── ENHANCED POSITION MANAGEMENT ───
 pub const MAX_TOKENS: usize = 100;
-pub const MAX_OPEN_POSITIONS: usize = 25; // Increased for more opportunities
+pub const MAX_OPEN_POSITIONS: usize = 35; // Increased for more opportunities
 pub const MAX_DCA_COUNT: u8 = 2; // Allow 2 DCA rounds for better averaging
 pub const DCA_SIZE_FACTOR: f64 = 1.2; // Slightly larger DCA for better averaging
 pub const DCA_BASE_TRIGGER_PCT: f64 = -15.0; // More aggressive DCA trigger (was -20%)
@@ -104,10 +104,10 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.000015; // Transaction fee
 pub const SLIPPAGE_BPS: f64 = 1.0; // Slightly higher slippage for execution
 
 // ─── ENTRY FILTERS - FUNDAMENTAL REQUIREMENTS (RELAXED FOR MORE OPPORTUNITIES) ───
-pub const MIN_VOLUME_USD: f64 = 1500.0; // Reduced from 3000 for more opportunities
-pub const MIN_LIQUIDITY_SOL: f64 = 5.0; // Reduced from 8 SOL for smaller tokens
-pub const MIN_ACTIVITY_BUYS_1H: u64 = 2; // Reduced from 3 for more flexibility
-pub const MIN_HOLDER_COUNT: u64 = 8; // Reduced from 10 for newer tokens
+pub const MIN_VOLUME_USD: f64 = 500.0; // Reduced from 1500 for more opportunities
+pub const MIN_LIQUIDITY_SOL: f64 = 2.0; // Reduced from 5 SOL for smaller/newer tokens
+pub const MIN_ACTIVITY_BUYS_1H: u64 = 1; // Reduced from 2 for more flexibility
+pub const MIN_HOLDER_COUNT: u64 = 5; // Reduced from 8 for newer tokens
 
 // ─── ENHANCED UPTREND DETECTION AND ENTRY OPTIMIZATION ───
 pub const UPTREND_MOMENTUM_THRESHOLD: f64 = 3.0; // Enter uptrends above 3% momentum
@@ -160,20 +160,20 @@ pub const VWAP_BEARISH_THRESHOLD: f64 = 0.98; // Price below VWAP
 pub const VOLATILITY_MULTIPLIER: f64 = 1.5; // Increase caution in volatile markets
 
 // ─── ENTRY SCORING THRESHOLDS (RELAXED FOR MORE BUYS) ───
-pub const MIN_WHALE_SCORE: f64 = 0.4; // Reduced from 0.6
-pub const MIN_TRADES_SCORE: f64 = 0.3; // Reduced from 0.5
-pub const MAX_BOT_SCORE: f64 = 0.6; // Increased from 0.4 (more tolerant)
-pub const MIN_BUY_RATIO: f64 = 0.5; // Reduced from 0.6
-pub const ACCUMULATION_RANGE_MIN: f64 = -15.0; // Wider range (was -10%)
-pub const ACCUMULATION_RANGE_MAX: f64 = 15.0; // Allow moderate pumps
-pub const LIQUIDITY_MULTIPLIER: f64 = 1.5; // Reduced threshold
+pub const MIN_WHALE_SCORE: f64 = 0.2; // Reduced from 0.4
+pub const MIN_TRADES_SCORE: f64 = 0.2; // Reduced from 0.3
+pub const MAX_BOT_SCORE: f64 = 0.8; // Increased from 0.6 (more tolerant)
+pub const MIN_BUY_RATIO: f64 = 0.4; // Reduced from 0.5
+pub const ACCUMULATION_RANGE_MIN: f64 = -25.0; // Wider range (was -15%)
+pub const ACCUMULATION_RANGE_MAX: f64 = 25.0; // Allow bigger pumps (was 15%)
+pub const LIQUIDITY_MULTIPLIER: f64 = 1.2; // Reduced threshold (was 1.5)
 
 // ─── ADAPTIVE ENTRY THRESHOLDS (DYNAMIC BASED ON MARKET CONDITIONS) ───
-pub const BASE_ENTRY_THRESHOLD: f64 = 0.6; // Reduced from typical 0.8+ for more opportunities
-pub const UPTREND_ENTRY_THRESHOLD: f64 = 0.5; // Lower threshold for uptrend entries
-pub const DOWNTREND_ENTRY_THRESHOLD: f64 = 0.4; // Even lower for downtrend dip buys
-pub const HIGH_VOLUME_BONUS: f64 = 0.1; // Bonus for high volume conditions
-pub const REAL_TIME_PRICE_BONUS: f64 = 0.15; // Higher bonus for real-time pool prices
+pub const BASE_ENTRY_THRESHOLD: f64 = 0.3; // Reduced from 0.6 for more opportunities
+pub const UPTREND_ENTRY_THRESHOLD: f64 = 0.25; // Lower threshold for uptrend entries
+pub const DOWNTREND_ENTRY_THRESHOLD: f64 = 0.2; // Even lower for downtrend dip buys
+pub const HIGH_VOLUME_BONUS: f64 = 0.15; // Increased bonus for high volume conditions
+pub const REAL_TIME_PRICE_BONUS: f64 = 0.2; // Higher bonus for real-time pool prices
 
 // ─── SELL STRATEGY PARAMETERS ───
 pub const WHALE_DISTRIBUTION_THRESHOLD: f64 = -200.0; // Heavy whale selling
@@ -277,14 +277,14 @@ pub const NEAR_15M_HIGH_THRESHOLD_PCT: f64 = 2.0; // Don't buy within 2% of 15m 
 pub const NEAR_5M_HIGH_THRESHOLD_PCT: f64 = 1.0; // Don't buy within 1% of 5m high
 
 // ─── ENHANCED COOLDOWN SYSTEM ───
-pub const SAME_TOKEN_ENTRY_COOLDOWN_HOURS: i64 = 6; // Minimum 6 hours between entries for same token
-pub const PROFITABLE_EXIT_COOLDOWN_HOURS: i64 = 12; // Longer cooldown after profitable exits
-pub const LOSS_EXIT_COOLDOWN_HOURS: i64 = 2; // Shorter cooldown after losses (for DCA opportunities)
+pub const SAME_TOKEN_ENTRY_COOLDOWN_HOURS: i64 = 2; // Reduced from 6 hours
+pub const PROFITABLE_EXIT_COOLDOWN_HOURS: i64 = 4; // Reduced from 12 hours
+pub const LOSS_EXIT_COOLDOWN_HOURS: i64 = 1; // Reduced from 2 hours
 
 // ─── PROFITABLE EXIT RE-ENTRY CONTROLS ───
-pub const MIN_PRICE_DROP_AFTER_PROFIT_PCT: f64 = 8.0; // Must drop 8% from profitable exit price
-pub const MAX_RECENT_EXITS_LOOKBACK_HOURS: i64 = 72; // Check exits within last 72 hours
-pub const MIN_PROFIT_EXIT_THRESHOLD_PCT: f64 = 3.0; // Consider exits >3% profit as "profitable"
+pub const MIN_PRICE_DROP_AFTER_PROFIT_PCT: f64 = 3.0; // Reduced from 8% for faster re-entries
+pub const MAX_RECENT_EXITS_LOOKBACK_HOURS: i64 = 24; // Reduced from 72 hours
+pub const MIN_PROFIT_EXIT_THRESHOLD_PCT: f64 = 5.0; // Only count bigger profits (was 3%)
 
 // ─── DOWNTREND DETECTION ───
 pub const DOWNTREND_TIMEFRAME_PERIODS: usize = 15; // Check trend over 15 periods
