@@ -69,24 +69,76 @@ pub fn should_dca(
         return false;
     }
 
-    // 4. MUCH more conservative drop requirement (-20% instead of -15%)
-    if drop_pct > DCA_BASE_TRIGGER_PCT {
-        println!(
-            "📈 [DCA] {} | Drop insufficient for enhanced threshold: {:.1}% > {:.1}%",
-            token.symbol,
-            drop_pct,
-            DCA_BASE_TRIGGER_PCT
-        );
+    // 4. ENHANCED DCA TRIGGER LOGIC - Two-tier system
+    // Quick DCA for strong whale signals at -8%, standard DCA at -15%
+    let whale_confirmed_quick_dca = if let Some(trades_cache) = trades {
+        let recent_whale_volume: f64 = trades_cache
+            .get_whale_trades(DCA_WHALE_CONFIRMATION_THRESHOLD, 0)
+            .iter()
+            .filter(
+                |t|
+                    t.kind == "buy" &&
+                    t.timestamp >
+                        std::time::SystemTime
+                            ::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() - 1800
+            ) // Last 30 minutes
+            .map(|t| t.volume_usd)
+            .sum();
+
+        recent_whale_volume >= DCA_WHALE_CONFIRMATION_THRESHOLD
+    } else {
+        false
+    };
+
+    // Apply appropriate DCA trigger threshold
+    let dca_trigger = if whale_confirmed_quick_dca {
+        DCA_QUICK_TRIGGER_PCT
+    } else {
+        DCA_BASE_TRIGGER_PCT
+    };
+
+    if drop_pct > dca_trigger {
+        if whale_confirmed_quick_dca {
+            println!(
+                "⚡ [DCA] {} | Quick DCA threshold not met: {:.1}% > {:.1}% (whale confirmed)",
+                token.symbol,
+                drop_pct,
+                dca_trigger
+            );
+        } else {
+            println!(
+                "📈 [DCA] {} | Standard DCA threshold not met: {:.1}% > {:.1}%",
+                token.symbol,
+                drop_pct,
+                dca_trigger
+            );
+        }
         return false;
     }
 
-    // 5. Enhanced liquidity check (higher requirement for DCA)
-    if liquidity_sol < MIN_LIQUIDITY_SOL * 2.0 {
-        // Require 2x the normal liquidity
+    println!(
+        "✅ [DCA] {} | {} trigger met: {:.1}% <= {:.1}%",
+        token.symbol,
+        if whale_confirmed_quick_dca {
+            "Quick DCA"
+        } else {
+            "Standard DCA"
+        },
+        drop_pct,
+        dca_trigger
+    );
+
+    // 5. Liquidity check (reasonable requirement)
+    if liquidity_sol < MIN_LIQUIDITY_SOL * 1.5 {
+        // Reduced from 2.0x
         println!(
-            "💧 [DCA] {} | Insufficient liquidity for DCA: {:.1}SOL",
+            "💧 [DCA] {} | Insufficient liquidity for DCA: {:.1}SOL (need {:.1}SOL)",
             token.symbol,
-            liquidity_sol
+            liquidity_sol,
+            MIN_LIQUIDITY_SOL * 1.5
         );
         return false;
     }
@@ -113,18 +165,31 @@ pub fn should_dca(
         0.0
     };
 
-    // Require higher buy ratio for DCA
-    if buy_ratio < 0.6 {
-        // Increased from 0.4
-        println!("📉 [DCA] {} | Insufficient buy ratio for DCA: {:.2}", token.symbol, buy_ratio);
+    // 7. IMPROVED whale activity check - more flexible but still selective
+    let buys_1h = token.txns.h1.buys;
+    let sells_1h = token.txns.h1.sells;
+    let buy_ratio = if buys_1h + sells_1h > 0 {
+        (buys_1h as f64) / ((buys_1h + sells_1h) as f64)
+    } else {
+        0.0
+    };
+
+    // More flexible buy ratio requirement
+    if buy_ratio < 0.45 {
+        // Reduced from 0.6
+        println!(
+            "📉 [DCA] {} | Buy ratio too low for DCA: {:.2} (need >0.45)",
+            token.symbol,
+            buy_ratio
+        );
         return false;
     }
 
     let mut strong_whale_accumulation = false;
 
     if let Some(trades_cache) = trades {
-        // Check for STRONG whale accumulation (2x normal requirement)
-        let whale_trades_30min = trades_cache.get_whale_trades(100.0, 0); // Higher threshold
+        // More reasonable whale activity check
+        let whale_trades_30min = trades_cache.get_whale_trades(50.0, 0); // Reduced from 100.0
         let recent_whale_buys: f64 = whale_trades_30min
             .iter()
             .filter(
@@ -135,8 +200,8 @@ pub fn should_dca(
                             ::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
-                            .as_secs() - 1800
-            ) // Last 30 minutes
+                            .as_secs() - 1800 // Last 30 minutes
+            )
             .map(|t| t.volume_usd)
             .sum();
 
@@ -151,33 +216,22 @@ pub fn should_dca(
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_secs() - 1800
-            ) // Last 30 minutes
+            )
             .map(|t| t.volume_usd)
             .sum();
 
         let whale_net_flow = recent_whale_buys - recent_whale_sells;
 
-        // Require 2x the normal whale accumulation for DCA
-        if whale_net_flow > MODERATE_WHALE_ACCUMULATION_USD * 2.0 {
-            strong_whale_accumulation = true;
-            println!(
-                "🐋 [DCA] {} | STRONG whale accumulation detected: ${:.0} net flow",
-                token.symbol,
-                whale_net_flow
-            );
-        } else {
-            println!(
-                "📉 [DCA] {} | Insufficient whale accumulation for DCA: ${:.0} net flow (need ${:.0}+)",
-                token.symbol,
-                whale_net_flow,
-                MODERATE_WHALE_ACCUMULATION_USD * 2.0
-            );
-        }
-    }
+        // More flexible whale requirement
+        strong_whale_accumulation = whale_net_flow > 50.0; // Reduced from higher requirements
 
-    if !strong_whale_accumulation {
-        println!("🐋 [DCA] {} | Strong whale accumulation required for DCA", token.symbol);
-        return false;
+        println!(
+            "🐋 [DCA] {} | Whale flow 30min: ${:.0} (buys: ${:.0}, sells: ${:.0})",
+            token.symbol,
+            whale_net_flow,
+            recent_whale_buys,
+            recent_whale_sells
+        );
     }
 
     // Final validation: DCA approved if we reach here with strong whale accumulation

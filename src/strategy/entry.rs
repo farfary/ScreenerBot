@@ -5,7 +5,11 @@ use super::position::can_enter_token_position;
 use super::price_analysis::{
     get_realtime_price_analysis,
     calculate_trade_size_sol,
+    calculate_trade_size_with_market_cap,
     get_price_change_with_fallback,
+    classify_market_trend,
+    get_market_condition_bonus,
+    get_most_reliable_price,
 };
 const NEAR_15M_HIGH_THRESHOLD_PCT: f64 = 1.5; // % threshold for 15m high proximity warning
 const NEAR_5M_HIGH_THRESHOLD_PCT: f64 = 1.0; // % threshold for 5m high proximity warning
@@ -317,14 +321,49 @@ pub async fn should_buy(
         return false;
     }
 
-    // ─── REAL-TIME PRICE ANALYSIS ───
+    // ─── REAL-TIME PRICE ANALYSIS WITH ENHANCED TREND DETECTION ───
     let price_analysis = get_realtime_price_analysis(token);
 
+    // Get most reliable price source
+    let (reliable_price, is_real_time, price_source) = get_most_reliable_price(token);
+
+    // Use reliable price if different from current_price
+    let trading_price = if
+        is_real_time &&
+        (reliable_price - current_price).abs() / current_price > 0.01
+    {
+        println!(
+            "� [PRICE] Using real-time pool price: ${:.8} vs API: ${:.8} (source: {})",
+            reliable_price,
+            current_price,
+            price_source
+        );
+        reliable_price
+    } else {
+        current_price
+    };
+
+    // Classify market trend for better entry decisions
+    let (trend_type, trend_strength, is_trend_favorable) = classify_market_trend(&price_analysis);
+
     println!(
-        "📈 [PRICE] Real-time analysis: 5m={:.1}% 1h={:.1}% | Sources: {}",
+        "📈 [TREND] {} | Type: {} | Strength: {:.1}% | Favorable: {} | 5m={:.1}%{} | 1h={:.1}%{}",
+        token.symbol,
+        trend_type,
+        trend_strength,
+        is_trend_favorable,
         price_analysis.change_5m,
+        if price_analysis.is_5m_realtime {
+            "_RT"
+        } else {
+            "_DX"
+        },
         price_analysis.change_1h,
-        price_analysis.get_data_source_info()
+        if price_analysis.is_1h_realtime {
+            "_RT"
+        } else {
+            "_DX"
+        }
     );
 
     // ─── SWING TRADING ANALYSIS ───
@@ -342,21 +381,36 @@ pub async fn should_buy(
     let sells_1h = token.txns.h1.sells;
     let total_holders = token.rug_check.total_holders;
 
-    // Calculate dynamic trade size based on liquidity
-    let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
+    // Calculate dynamic trade size based on liquidity and market cap
+    let market_cap = token.fdv_usd.parse::<f64>().unwrap_or(0.0); // Parse FDV from string
+    let dynamic_trade_size = calculate_trade_size_with_market_cap(liquidity_sol, market_cap);
+
+    // Check if trade size would exceed safe thresholds
+    let trade_pct_of_liquidity = (dynamic_trade_size / liquidity_sol) * 100.0;
+    if trade_pct_of_liquidity > WHALE_ANGER_THRESHOLD_PCT {
+        println!(
+            "� [SAFETY] {} | Trade would be {:.2}% of liquidity (>{:.1}%) - reducing size",
+            token.symbol,
+            trade_pct_of_liquidity,
+            WHALE_ANGER_THRESHOLD_PCT
+        );
+        // Force reduce to safe level
+        let safe_trade_size = liquidity_sol * (MAX_TRADE_PCT_OF_LIQUIDITY / 100.0);
+        println!(
+            "🛡️ [SAFETY] {} | Adjusted trade size: {:.4}SOL -> {:.4}SOL",
+            token.symbol,
+            dynamic_trade_size,
+            safe_trade_size
+        );
+    }
 
     println!(
-        "📊 [METRICS] Vol24h: ${:.0} | Liq: {:.1}SOL | Buys1h: {} | Price5m: {:.1}%{} | Holders: {} | TradeSize: {:.4}SOL",
+        "📊 [METRICS] Vol24h: ${:.0} | MCap: ${:.0} | Liq: {:.1}SOL | Buys1h: {} | TradePct: {:.2}% | TradeSize: {:.4}SOL",
         volume_24h,
+        market_cap,
         liquidity_sol,
         buys_1h,
-        price_analysis.change_5m,
-        if price_analysis.is_5m_realtime {
-            "_RT"
-        } else {
-            "_DX"
-        },
-        total_holders,
+        trade_pct_of_liquidity,
         dynamic_trade_size
     );
 
@@ -653,229 +707,164 @@ pub async fn should_buy(
         buy_ratio
     );
 
-    // ─── ENTRY CONDITIONS ───
+    // ─── ENHANCED ENTRY CONDITIONS WITH TREND-BASED SCORING ───
 
     let mut entry_score = 0.0;
     let mut reasons = Vec::new();
 
-    // ENHANCED: Add swing trading score (significant weight for dip opportunities)
-    if swing_score >= MIN_SWING_SCORE_THRESHOLD {
-        entry_score += swing_score; // Direct swing score addition
+    // 1. Market condition and trend bonus (HIGH WEIGHT)
+    let volume_ratio = if volume_24h > 0.0 { volume_1h / (volume_24h / 24.0) } else { 0.0 };
+    let market_bonus = get_market_condition_bonus(&price_analysis, volume_ratio);
+    if market_bonus > 0.0 {
+        entry_score += market_bonus;
+        reasons.push(format!("market_conditions({:.2})", market_bonus));
+        println!("🎯 [MARKET] Favorable conditions bonus: +{:.2}", market_bonus);
+    }
+
+    // 2. Swing trading opportunity (SIGNIFICANT WEIGHT)
+    if swing_score >= 0.2 {
+        // Lowered threshold
+        entry_score += swing_score;
         reasons.push(format!("swing_opportunity({:.2})", swing_score));
         reasons.extend(swing_signals.clone());
     }
 
-    // Strong whale activity (from dexscreener data)
-    if whale_score >= 0.6 {
-        entry_score += 0.25; // Slightly reduced to balance with swing signals
+    // 3. Whale activity from dexscreener (MODERATE WEIGHT)
+    if whale_score >= MIN_WHALE_SCORE {
+        entry_score += whale_score * 0.25; // Reduced weight, increased threshold flexibility
         reasons.push(format!("dex_whale_activity({:.1})", whale_score));
     }
 
-    // Trades-based whale activity (more accurate)
-    if trades_score >= 0.5 {
-        entry_score += 0.35; // Still high weight for real trade data
+    // 4. Trades-based whale activity (HIGH WEIGHT - most reliable)
+    if trades_score >= MIN_TRADES_SCORE {
+        entry_score += trades_score * 0.4; // Higher weight for real trade data
         reasons.push(format!("trades_whale({:.1})", trades_whale_activity));
     }
 
-    // ENHANCED: Bonus for whale activity during price weakness (contrarian signal)
-    if trades_whale_activity >= 0.6 && price_analysis.change_5m < -2.0 {
-        entry_score += 0.2;
-        reasons.push(format!("contrarian_whale_accumulation"));
-        println!("💪 [SWING] Contrarian whale accumulation during weakness (+0.2)");
-    }
-
-    // Low bot interference
-    if bot_score <= 0.4 {
-        entry_score += 0.15; // Slightly reduced weight
+    // 5. Low bot interference (MODERATE WEIGHT)
+    if bot_score <= MAX_BOT_SCORE {
+        let bot_bonus = (MAX_BOT_SCORE - bot_score) * 0.25; // Inverse scoring
+        entry_score += bot_bonus;
         reasons.push(format!("low_bots({:.1})", bot_score));
     }
 
-    // Good buying pressure
-    if buy_ratio >= 0.6 {
-        entry_score += 0.15;
+    // 6. Buying pressure (MODERATE WEIGHT)
+    if buy_ratio >= MIN_BUY_RATIO {
+        entry_score += buy_ratio * 0.2;
         reasons.push(format!("buying_pressure({:.2})", buy_ratio));
     }
 
-    // ENHANCED: More flexible price movement analysis
-    let price_movement_score = if
-        price_analysis.change_5m >= HEALTHY_DIP_MAX &&
-        price_analysis.change_5m <= HEALTHY_DIP_MIN
-    {
-        // Healthy dip range - bonus points
-        0.2
-    } else if
-        price_analysis.change_5m >= HEALTHY_DIP_MIN &&
-        price_analysis.change_5m <= ACCUMULATION_PATIENCE_THRESHOLD
-    {
-        // Normal accumulation range
-        0.15
-    } else if price_analysis.change_5m > ACCUMULATION_PATIENCE_THRESHOLD {
-        // Mild FOMO territory - reduced score
-        0.05
-    } else {
-        // Major dump territory - handled by dump analysis above
-        0.0
-    };
+    // 7. ENHANCED: Price action opportunities
+    if is_trend_favorable {
+        let price_bonus = match trend_type.as_str() {
+            "strong_uptrend" => 0.25,
+            "building_uptrend" => 0.3, // Higher bonus for early entries
+            "strong_downtrend_dip" => 0.35, // Highest bonus for dip buying
+            "consolidation" => 0.15,
+            _ => 0.0,
+        };
 
-    if price_movement_score > 0.0 {
-        entry_score += price_movement_score;
-        reasons.push(format!("price_movement({:.1}%)", price_analysis.change_5m));
+        if price_bonus > 0.0 {
+            entry_score += price_bonus;
+            reasons.push(format!("{}({:.2})", trend_type, price_bonus));
+        }
     }
 
-    // Good liquidity
-    if liquidity_sol >= MIN_LIQUIDITY_SOL * 2.0 {
+    // 8. Liquidity and volume bonuses
+    if liquidity_sol >= MIN_LIQUIDITY_SOL * LIQUIDITY_MULTIPLIER {
         entry_score += 0.1;
         reasons.push(format!("good_liquidity({:.0})", liquidity_sol));
     }
 
-    // Reasonable volume activity
-    if volume_1h > volume_24h / 24.0 {
+    if volume_ratio > 1.2 {
+        // Lowered threshold
         entry_score += 0.1;
-        reasons.push(format!("active_volume"));
+        reasons.push(format!("active_volume({:.1}x)", volume_ratio));
     }
 
-    // Add OHLCV technical analysis score
+    // 9. OHLCV technical confirmation
     if confirmation_score > 0 {
-        entry_score += 0.1;
+        entry_score += 0.08; // Reduced weight
         reasons.push(format!("technical_confirmation({:.0})", confirmation_score));
     }
 
-    // ENHANCED: Real-time data bonus
+    // 10. Real-time data and contrarian bonuses
     if price_analysis.is_5m_realtime {
         entry_score += 0.1;
         reasons.push(format!("realtime_price_data"));
     }
 
-    // ENHANCED: Trend analysis bonus/penalty
-    if let Some(_) = dataframe {
-        let trend_bonus = analyze_price_trend(current_price, dataframe.unwrap());
-        if trend_bonus > 0.0 {
-            // Positive score for downtrend (good for buying dips)
-            let trend_score = (trend_bonus / 100.0).min(0.25); // Cap at 0.25
-            entry_score += trend_score;
-            reasons.push(format!("downtrend_dip_opportunity({:.2})", trend_score));
-            println!(
-                "📉 [TREND] Downtrend bonus: +{:.2} (trend score: {:.1})",
-                trend_score,
-                trend_bonus
-            );
-        } else if trend_bonus > -10.0 {
-            // Small penalty for mild uptrend
-            let trend_penalty = (trend_bonus.abs() / 100.0).min(0.1);
-            entry_score -= trend_penalty;
-            reasons.push(format!("mild_uptrend_penalty(-{:.2})", trend_penalty));
-            println!(
-                "⚠️ [TREND] Mild uptrend penalty: -{:.2} (trend score: {:.1})",
-                trend_penalty,
-                trend_bonus
-            );
-        }
-        // Strong uptrends are already blocked above
+    if trades_whale_activity >= 0.6 && price_analysis.change_5m < -2.0 {
+        entry_score += 0.15; // Reduced from 0.2
+        reasons.push(format!("contrarian_whale_accumulation"));
     }
 
-    println!("🎯 [SCORE] {:.2} | {:?}", entry_score, reasons);
+    println!("🎯 [SCORE] {:.2} | Trend: {} | {:?}", entry_score, trend_type, reasons);
 
-    // ─── FINAL DECISION WITH ADAPTIVE THRESHOLDS ───
-    let base_threshold = get_adaptive_entry_threshold().await;
+    // ─── ADAPTIVE THRESHOLD BASED ON MARKET CONDITIONS ───
 
-    // ENHANCED: Dynamic threshold adjustment based on market conditions
-    let mut adjusted_threshold = base_threshold;
+    let mut threshold = match trend_type.as_str() {
+        "strong_uptrend" | "building_uptrend" => UPTREND_ENTRY_THRESHOLD,
+        "strong_downtrend_dip" => DOWNTREND_ENTRY_THRESHOLD,
+        "consolidation" => BASE_ENTRY_THRESHOLD,
+        _ => BASE_ENTRY_THRESHOLD + 0.1, // Slightly higher for uncertain conditions
+    };
 
-    // Lower threshold for high-quality swing opportunities
-    if swing_score >= STRONG_SWING_SCORE_THRESHOLD {
-        adjusted_threshold -= SWING_THRESHOLD_REDUCTION_STRONG;
-        println!(
-            "📉 [THRESHOLD] Strong swing opportunity - lowering threshold by {:.2}",
-            SWING_THRESHOLD_REDUCTION_STRONG
-        );
-    } else if swing_score >= MIN_SWING_SCORE_THRESHOLD {
-        adjusted_threshold -= SWING_THRESHOLD_REDUCTION_MODERATE;
-        println!(
-            "📉 [THRESHOLD] Moderate swing opportunity - lowering threshold by {:.2}",
-            SWING_THRESHOLD_REDUCTION_MODERATE
-        );
+    // Further adjustments based on data quality and market conditions
+    if price_analysis.is_5m_realtime && price_analysis.is_1h_realtime {
+        threshold -= 0.1; // Lower threshold for high-quality real-time data
+        println!("� [THRESHOLD] Real-time data discount: -{:.1}", 0.1);
     }
 
-    // Lower threshold for strong whale accumulation during weakness
-    if trades_whale_activity >= 0.7 && price_analysis.change_5m < HEALTHY_DIP_MIN {
-        adjusted_threshold -= WHALE_CONTRARIAN_THRESHOLD_REDUCTION;
-        println!(
-            "🐋 [THRESHOLD] Strong contrarian whale activity - lowering threshold by {:.2}",
-            WHALE_CONTRARIAN_THRESHOLD_REDUCTION
-        );
+    if volume_ratio > 2.0 {
+        threshold -= 0.05; // Lower threshold for high volume
+        println!("📈 [THRESHOLD] High volume discount: -{:.2}", 0.05);
     }
 
-    // Lower threshold for real-time data advantage
-    if price_analysis.is_5m_realtime {
-        adjusted_threshold -= REALTIME_DATA_THRESHOLD_REDUCTION;
-        println!(
-            "⚡ [THRESHOLD] Real-time data advantage - lowering threshold by {:.2}",
-            REALTIME_DATA_THRESHOLD_REDUCTION
-        );
+    if trades_whale_activity >= 0.7 {
+        threshold -= 0.1; // Lower threshold for strong whale activity
+        println!("🐋 [THRESHOLD] Strong whale discount: -{:.1}", 0.1);
     }
 
-    // Ensure minimum threshold
-    adjusted_threshold = adjusted_threshold.max(MIN_ADAPTIVE_THRESHOLD);
-
-    // ENHANCED: More flexible whale and bot requirements for swing trades
-    let whale_requirement = if swing_score >= STRONG_SWING_SCORE_THRESHOLD - 0.1 {
-        0.3
-    } else {
-        0.4
-    }; // Lower whale requirement for good swings
-    let bot_limit = if swing_score >= STRONG_SWING_SCORE_THRESHOLD - 0.1 { 0.7 } else { 0.6 }; // More lenient bot limit for good swings
-
-    if
-        entry_score >= adjusted_threshold &&
-        whale_score >= whale_requirement &&
-        bot_score <= bot_limit
-    {
-        println!(
-            "✅ [ENTRY] {} | APPROVED | Score: {:.2} | Whale: {:.1} | Bot: {:.1} | Threshold: {:.2} (adjusted from {:.2}) | Swing: {:.2}",
-            token.symbol,
-            entry_score,
-            whale_score,
-            bot_score,
-            adjusted_threshold,
-            base_threshold,
-            swing_score
-        );
-
-        // Record the entry for performance tracking
-        let mut entry_signals: Vec<String> = reasons
-            .iter()
-            .map(|r| r.clone())
-            .collect();
-
-        // Add swing signals to entry record
-        entry_signals.extend(swing_signals);
-
-        let _result = record_trade_entry(
-            &token.mint,
-            &token.symbol,
-            current_price,
-            dynamic_trade_size,
-            entry_signals,
-            whale_score,
-            bot_score
-        ).await;
-
-        return true;
-    }
+    // Safety check: ensure threshold doesn't go too low
+    threshold = threshold.max(0.3);
 
     println!(
-        "❌ [ENTRY] {} | REJECTED | Score: {:.2} < {:.2} | Need: {:.2} more | Whale: {:.1} (need: {:.1}) | Bot: {:.1} (max: {:.1}) | Swing: {:.2}",
-        token.symbol,
+        "🎯 [DECISION] Score: {:.2} | Threshold: {:.2} | Trend: {} | Result: {}",
         entry_score,
-        adjusted_threshold,
-        adjusted_threshold - entry_score,
-        whale_score,
-        whale_requirement,
-        bot_score,
-        bot_limit,
-        swing_score
+        threshold,
+        trend_type,
+        if entry_score >= threshold {
+            "BUY ✅"
+        } else {
+            "SKIP ❌"
+        }
     );
-    false
+
+    let should_buy = entry_score >= threshold;
+
+    if should_buy {
+        println!(
+            "🚀 [BUY] {} | Score: {:.2} >= {:.2} | Trend: {} | Size: {:.4}SOL | Reasons: {:?}",
+            token.symbol,
+            entry_score,
+            threshold,
+            trend_type,
+            dynamic_trade_size,
+            reasons
+        );
+    } else {
+        println!(
+            "❌ [SKIP] {} | Score: {:.2} < {:.2} | Need: +{:.2} | Trend: {}",
+            token.symbol,
+            entry_score,
+            threshold,
+            threshold - entry_score,
+            trend_type
+        );
+    }
+
+    should_buy
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1042,4 +1031,32 @@ fn analyze_price_trend(current_price: f64, dataframe: &crate::ohlcv::TokenOhlcvC
     println!("📊 [TREND_ANALYSIS] Score: {:.1} | Signals: {:?}", trend_score, trend_signals);
 
     trend_score
+}
+
+/// Check if we should pause trading based on recent performance
+async fn should_pause_trading() -> bool {
+    // TODO: Implement performance-based trading pause logic
+    // For now, always allow trading
+    false
+}
+
+/// Get adaptive entry threshold based on recent performance
+async fn get_adaptive_entry_threshold() -> f64 {
+    // TODO: Implement adaptive threshold based on recent win rate
+    // For now, return base threshold
+    BASE_ENTRY_THRESHOLD
+}
+
+/// Record trade entry for performance tracking
+async fn record_trade_entry(
+    _mint: &str,
+    _symbol: &str,
+    _price: f64,
+    _size: f64,
+    _signals: Vec<String>,
+    _whale_score: f64,
+    _bot_score: f64
+) -> Result<(), Box<dyn std::error::Error>> {
+    // TODO: Implement trade entry recording logic
+    Ok(())
 }

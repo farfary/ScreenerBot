@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use super::config::*;
-use super::price_analysis::calculate_trade_size_sol;
+use super::price_analysis::{ calculate_trade_size_sol, calculate_trade_size_with_market_cap };
 use super::dca::should_dca;
 use super::exit::should_sell;
 
@@ -91,18 +91,20 @@ pub async fn evaluate_position(
         0.0
     };
 
+    // Calculate dynamic trade size based on current liquidity and market cap
+    let liquidity_sol = token.liquidity.base + token.liquidity.quote;
+    let market_cap = token.fdv_usd.parse::<f64>().unwrap_or(0.0); // Parse FDV from string
+    let dynamic_trade_size = calculate_trade_size_with_market_cap(liquidity_sol, market_cap);
+
     println!(
-        "🎯 [POSITION] {} | Price: ${:.8} | Profit: {:.2}% | DCA: {}/{}",
+        "🎯 [POSITION] {} | Price: ${:.8} | Profit: {:.2}% | DCA: {}/{} | TradeSize: {:.4}SOL",
         token.symbol,
         current_price,
         profit_pct,
         pos.dca_count,
-        MAX_DCA_COUNT
+        MAX_DCA_COUNT,
+        dynamic_trade_size
     );
-
-    // Calculate dynamic trade size based on current liquidity
-    let liquidity_sol = token.liquidity.base + token.liquidity.quote;
-    let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
 
     // Get trades data for this token
     let trades_data = crate::trades::get_token_trades(&token.mint).await;
@@ -142,8 +144,12 @@ pub fn get_profit_bucket(pos: &Position, current_price: f64) -> i32 {
     (profit_pct / 2.0).floor() as i32 // Every 2%
 }
 
-/// Calculate DCA size based on current liquidity
+/// Calculate DCA size based on current liquidity and market cap
 pub fn calculate_dca_size(token: &Token, _pos: &Position) -> f64 {
     let liquidity_sol = token.liquidity.base + token.liquidity.quote;
-    calculate_trade_size_sol(liquidity_sol)
+    let market_cap = token.fdv_usd.parse::<f64>().unwrap_or(0.0);
+    let base_size = calculate_trade_size_with_market_cap(liquidity_sol, market_cap);
+
+    // Apply DCA size factor
+    base_size * DCA_SIZE_FACTOR
 }

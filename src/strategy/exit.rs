@@ -163,8 +163,9 @@ pub fn should_sell(
             return (true, format!("dca_time_limit({:.2}%)", profit_pct));
         }
 
-        // 3. DCA Aggressive Momentum Exit - Exit on any 2% negative momentum
-        if token.price_change.m5 < DCA_AGGRESSIVE_EXIT_THRESHOLD {
+        // 3. DCA Enhanced Momentum Exit - More flexible exit conditions
+        if token.price_change.m5 < -3.0 {
+            // Reduced from -2.0 for DCA_AGGRESSIVE_EXIT_THRESHOLD
             println!(
                 "📉 [SELL] {} | DCA MOMENTUM EXIT: {:.1}%",
                 token.symbol,
