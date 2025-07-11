@@ -10,6 +10,7 @@ pub use crate::trader::*;
 pub use crate::strategy::*;
 pub use crate::performance::*;
 pub use crate::trades::*;
+pub use crate::shutdown::*;
 // Note: rate_limiter and price_validation are re-exported individually where needed
 
 pub use crate::pools::cpmm::*;

@@ -12,5 +12,6 @@ pub mod trades;
 pub mod ohlcv;
 pub mod rate_limiter;
 pub mod price_validation;
+pub mod shutdown;
 
 pub mod prelude;

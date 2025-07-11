@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::shutdown;
 use crate::rate_limiter::{
     RateLimitedRequest,
     DEXSCREENER_LIMITER,
@@ -776,7 +777,7 @@ pub fn start_dexscreener_loop() {
         let mut dexscreener_cache = load_dexscreener_cache(debug).await;
 
         loop {
-            if SHUTDOWN.load(Ordering::SeqCst) {
+            if shutdown::is_shutdown_requested() {
                 break;
             }
 

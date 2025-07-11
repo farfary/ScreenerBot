@@ -189,6 +189,11 @@ pub fn get_biggest_token_amount(token_mint: &str) -> u64 {
     biggest
 }
 
+/// Returns the largest single-ATA amount as f64 for calculations
+pub fn get_biggest_token_amount_f64(token_mint: &str) -> f64 {
+    get_biggest_token_amount(token_mint) as f64
+}
+
 /// Enhanced summary function that serves as the main bot interface
 /// Provides comprehensive portfolio analysis and trading insights
 pub async fn print_summary() {
@@ -312,9 +317,10 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
                         }
                     };
 
-                    // Truncate name if too long
-                    let display_name = if token.name.len() > 12 {
-                        format!("{}...", &token.name[..9])
+                    // Truncate name if too long (using char-based slicing for Unicode safety)
+                    let display_name = if token.name.chars().count() > 12 {
+                        let truncated: String = token.name.chars().take(9).collect();
+                        format!("{}...", truncated)
                     } else {
                         token.name.clone()
                     };
@@ -684,9 +690,10 @@ async fn print_summary_inner() -> Result<(), Box<dyn std::error::Error + Send + 
                         }
                     };
 
-                    // Truncate name if too long
-                    let display_name = if token.name.len() > 15 {
-                        format!("{}...", &token.name[..12])
+                    // Truncate name if too long (using char-based slicing for Unicode safety)
+                    let display_name = if token.name.chars().count() > 15 {
+                        let truncated: String = token.name.chars().take(12).collect();
+                        format!("{}...", truncated)
                     } else {
                         token.name.clone()
                     };

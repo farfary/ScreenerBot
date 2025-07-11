@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use crate::persistence;
 use crate::trades::get_token_trades;
+use crate::shutdown;
 use std::collections::VecDeque;
 use serde::{ Deserialize, Serialize };
 use rayon::prelude::*;
@@ -147,7 +148,7 @@ pub fn start_trader_loop() {
         use std::panic::AssertUnwindSafe;
 
         loop {
-            if SHUTDOWN.load(Ordering::SeqCst) {
+            if shutdown::is_shutdown_requested() {
                 break;
             }
 
@@ -172,7 +173,7 @@ pub fn start_trader_loop() {
         use std::panic::AssertUnwindSafe;
 
         loop {
-            if SHUTDOWN.load(Ordering::SeqCst) {
+            if shutdown::is_shutdown_requested() {
                 break;
             }
 
@@ -198,7 +199,7 @@ pub fn start_trader_loop() {
         let mut consecutive_failures = 0;
 
         loop {
-            if SHUTDOWN.load(Ordering::SeqCst) {
+            if shutdown::is_shutdown_requested() {
                 println!("🔄 [PRINT TASK] Shutdown signal received, stopping print task");
                 break;
             }
@@ -269,7 +270,7 @@ async fn position_monitor_loop() {
 
     /* ── wait for TOKENS ──────────────────────────────── */
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        if shutdown::is_shutdown_requested() {
             return;
         }
         if !TOKENS.read().await.is_empty() {
@@ -287,7 +288,7 @@ async fn position_monitor_loop() {
     let normal_check_interval = POSITIONS_CHECK_TIME_SEC / POSITIONS_FREQUENT_CHECK_TIME_SEC; // 30/5 = 6
 
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        if shutdown::is_shutdown_requested() {
             return;
         }
 
@@ -430,7 +431,7 @@ async fn position_monitor_loop() {
 
         /* ── iterate position mints and process with fetched prices ──────── */
         for mint in &position_mints {
-            if SHUTDOWN.load(Ordering::SeqCst) {
+            if shutdown::is_shutdown_requested() {
                 return;
             }
 
@@ -589,7 +590,7 @@ async fn position_monitor_loop() {
                         // Store original position before DCA
                         let _original_position = pos.clone();
 
-                        match crate::swap_gmgn::buy_gmgn_with_amounts(&mint, lamports).await {
+                        match shutdown::safe_buy_gmgn_with_amounts(&mint, lamports, &symbol).await {
                             Ok((tx, actual_tokens_added)) => {
                                 pos.token_amount += actual_tokens_added;
                                 pos.sol_spent += sol_amount + TRANSACTION_FEE_SOL;
@@ -628,7 +629,7 @@ async fn position_monitor_loop() {
                             }
                         }
 
-                        match sell_all_gmgn(&mint, current_price).await {
+                        match shutdown::safe_sell_all_gmgn(&mint, current_price, &symbol).await {
                             Ok(tx) => {
                                 // Use consistent profit calculation method
                                 let current_value = current_price * pos.token_amount;
@@ -733,7 +734,7 @@ async fn token_discovery_loop() {
 
     /* ── wait for TOKENS ──────────────────────────────── */
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        if shutdown::is_shutdown_requested() {
             return;
         }
         if !TOKENS.read().await.is_empty() {
@@ -748,7 +749,7 @@ async fn token_discovery_loop() {
     let mut discovery_cycle_counter = 0;
 
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        if shutdown::is_shutdown_requested() {
             return;
         }
 
@@ -791,7 +792,7 @@ async fn token_discovery_loop() {
                         .unwrap_or_else(|_| HashMap::new());
 
                     for (mint, current_price) in prices.iter() {
-                        if SHUTDOWN.load(Ordering::SeqCst) {
+                        if shutdown::is_shutdown_requested() {
                             return;
                         }
 
@@ -846,7 +847,7 @@ async fn token_discovery_loop() {
 
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
-                                match crate::swap_gmgn::buy_gmgn_with_amounts(mint, lamports).await {
+                                match shutdown::safe_buy_gmgn_with_amounts(mint, lamports, symbol).await {
                                     Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [WATCHLIST RE-ENTRY] BUY success: {tx}");
 
@@ -940,7 +941,7 @@ async fn token_discovery_loop() {
                         .unwrap_or_else(|_| HashMap::new());
 
                     for (mint, current_price) in prices.iter() {
-                        if SHUTDOWN.load(Ordering::SeqCst) {
+                        if shutdown::is_shutdown_requested() {
                             return;
                         }
 
@@ -989,7 +990,7 @@ async fn token_discovery_loop() {
                                 );
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
-                                match crate::swap_gmgn::buy_gmgn_with_amounts(mint, lamports).await {
+                                match shutdown::safe_buy_gmgn_with_amounts(mint, lamports, symbol).await {
                                     Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [NEW DISCOVERY] BUY success: {tx}");
 

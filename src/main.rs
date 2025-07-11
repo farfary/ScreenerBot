@@ -13,13 +13,14 @@ mod trades;
 mod ohlcv;
 mod rate_limiter;
 mod price_validation;
+mod shutdown;
 
 use prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 1 ─ install signal handlers
-    install_sigint_handler()?;
+    // 1 ─ install NEW shutdown handlers with transaction safety
+    shutdown::install_shutdown_handlers()?;
 
     // 2 ─ restore caches
     persistence::load_cache().await?;
@@ -34,26 +35,25 @@ async fn main() -> Result<()> {
     // 4 ─ periodic autosave task
     let autosaver = task::spawn(persistence::autosave_loop());
 
-    // 5 ─ block until the first shutdown signal arrives
-    wait_for_shutdown_signal().await;
+    // 5 ─ run until shutdown (the shutdown system handles all cleanup internally)
+    println!("🚀 [MAIN] All systems started. Use Ctrl+C for graceful shutdown.");
+    
+    // Keep the main thread alive until shutdown
+    loop {
+        if shutdown::is_shutdown_requested() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 
-    println!("⏹  shutdown signal caught, flushing state …");
-
-    // 6 ─ broadcast shutdown flag so every long‑running loop stops
-    SHUTDOWN.store(true, Ordering::Release);
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-    // 7 ─ abort autosaver if still pending
+    // Abort autosaver if still running
     autosaver.abort();
     let _ = autosaver.await;
 
-    // 8 ─ final flush to disk
-    persistence::save_open().await;
-    persistence::save_closed().await;
-    persistence::save_watchlist().await;
-    let _ = performance::save_performance_history().await;
-    flush_pool_cache_to_disk_nonblocking();
-
-    println!("✅ graceful shutdown complete.");
-    process::exit(0);
+    // Note: All other cleanup is handled by the shutdown system
+    println!("✅ [MAIN] Main loop exited, shutdown system handling cleanup.");
+    
+    // Give shutdown system time to complete
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    Ok(())
 }

@@ -1,5 +1,6 @@
 #![allow(warnings)]
 use crate::prelude::*;
+use crate::shutdown;
 
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
@@ -113,7 +114,7 @@ pub async fn autosave_loop() {
     use std::sync::atomic::Ordering;
 
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        if shutdown::is_shutdown_requested() {
             break;
         }
 
