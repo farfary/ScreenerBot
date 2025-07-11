@@ -847,7 +847,13 @@ async fn token_discovery_loop() {
 
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
-                                match shutdown::safe_buy_gmgn_with_amounts(mint, lamports, symbol).await {
+                                match
+                                    shutdown::safe_buy_gmgn_with_amounts(
+                                        mint,
+                                        lamports,
+                                        symbol
+                                    ).await
+                                {
                                     Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [WATCHLIST RE-ENTRY] BUY success: {tx}");
 
@@ -990,7 +996,13 @@ async fn token_discovery_loop() {
                                 );
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
-                                match shutdown::safe_buy_gmgn_with_amounts(mint, lamports, symbol).await {
+                                match
+                                    shutdown::safe_buy_gmgn_with_amounts(
+                                        mint,
+                                        lamports,
+                                        symbol
+                                    ).await
+                                {
                                     Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [NEW DISCOVERY] BUY success: {tx}");
 

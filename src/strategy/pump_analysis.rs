@@ -19,15 +19,6 @@ impl PumpIntensity {
             PumpIntensity::Extreme => EXTREME_PUMP_TRAILING_MULTIPLIER,
         }
     }
-
-    pub fn get_momentum_multiplier(&self) -> f64 {
-        match self {
-            PumpIntensity::Normal => 1.0,
-            PumpIntensity::Fast => FAST_PUMP_MOMENTUM_MULTIPLIER,
-            PumpIntensity::VeryFast => FAST_PUMP_MOMENTUM_MULTIPLIER * 1.3,
-            PumpIntensity::Extreme => FAST_PUMP_MOMENTUM_MULTIPLIER * 1.6,
-        }
-    }
 }
 
 /// Detect pump velocity and intensity
