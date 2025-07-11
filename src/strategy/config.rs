@@ -69,8 +69,8 @@ pub const TIME_BASED_SELL_MULTIPLIER_3H: f64 = 2.0; // 100% more aggressive afte
 
 // ─── OPTIMIZED TRADING SIZE PARAMETERS (BASED ON PERFORMANCE ANALYSIS) ───
 // Analysis shows medium trades (0.0015-0.005 SOL) have best performance (9.02% avg profit)
-pub const MIN_TRADE_SIZE_SOL: f64 = 0.0015; // Increased from 0.001 (sweet spot analysis)
-pub const MAX_TRADE_SIZE_SOL: f64 = 0.008; // Reduced from 0.01 (focus on performing range)
+pub const MIN_TRADE_SIZE_SOL: f64 = 0.001; // Increased from 0.001 (sweet spot analysis)
+pub const MAX_TRADE_SIZE_SOL: f64 = 0.003; // Reduced from 0.01 (focus on performing range)
 pub const MIN_LIQUIDITY_FOR_MIN_SIZE: f64 = 15.0; // Increased for safety
 pub const MAX_LIQUIDITY_FOR_MAX_SIZE: f64 = 8000.0; // Reduced to prevent oversizing
 
@@ -338,3 +338,10 @@ pub const REAL_TIME_EXIT_MULTIPLIER: f64 = 2.0; // 2x more aggressive with real-
 pub const POOL_MOMENTUM_SAMPLE_SIZE: usize = 10; // Track last 10 price samples
 pub const POOL_MOMENTUM_ACCELERATION_THRESHOLD: f64 = 0.3; // 0.3%+ acceleration
 pub const POOL_MOMENTUM_DECELERATION_THRESHOLD: f64 = -0.2; // 0.2%+ deceleration
+
+// ─── LOSS CONTROL POLICY PARAMETERS ───
+pub const FORBIDDEN_LOSS_ZONE_MIN: f64 = 0.0; // Upper bound of forbidden zone (breakeven)
+pub const FORBIDDEN_LOSS_ZONE_MAX: f64 = -50.0; // Lower bound of forbidden zone
+pub const CATASTROPHIC_LOSS_THRESHOLD: f64 = -50.0; // Threshold for catastrophic loss sales
+pub const EMERGENCY_RUG_LOSS_THRESHOLD: f64 = -30.0; // Min loss for emergency rug override
+pub const CATASTROPHIC_TIME_LIMIT_MINUTES: i64 = 4320; // 3 days max hold for catastrophic losses

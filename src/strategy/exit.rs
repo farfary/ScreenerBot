@@ -836,22 +836,20 @@ pub fn should_sell(
         return (true, format!("ultra_trailing_stop({:.3}%)", profit_pct));
     }
 
-    // ═══ RUG/COLLAPSE DETECTION - ONLY SELL LOSSES IN EXTREME SITUATIONS ═══
+    // ═══ RUG/COLLAPSE DETECTION - ENHANCED FOR LOSS CONTROL ═══
 
     let liquidity_sol = token.liquidity.base + token.liquidity.quote;
     let is_rug_detected = detect_rug_or_collapse(token, liquidity_sol, &price_analysis, profit_pct);
 
-    // Only allow selling at loss if it's a confirmed rug/collapse
-    if profit_pct <= 0.0 && is_rug_detected {
+    // Enhanced rug detection logging for loss decisions
+    if is_rug_detected {
         println!(
-            "🚨 [RUG-DETECTED] {} | EMERGENCY LOSS EXIT: {:.3}% loss - RUG/COLLAPSE CONFIRMED",
-            token.symbol,
-            profit_pct
+            "� [RUG-CONFIRMED] {} | RUG/COLLAPSE DETECTED - May override loss restrictions",
+            token.symbol
         );
-        return (true, format!("rug_emergency_exit({:.3}%)", profit_pct));
     }
 
-    // ENHANCED LIQUIDITY PROTECTION - Only sell at profit unless it's a rug
+    // ENHANCED LIQUIDITY PROTECTION - Different behavior based on profit/loss
     if liquidity_sol < 2.0 {
         if profit_pct > 0.0 {
             println!(
@@ -861,9 +859,10 @@ pub fn should_sell(
                 profit_pct
             );
             return (true, format!("emergency_liquidity({:.3}%)", profit_pct));
-        } else if is_rug_detected {
+        } else if is_rug_detected && profit_pct <= -30.0 {
+            // Only sell at loss if liquidity is critical AND it's a confirmed rug AND loss is significant
             println!(
-                "🚨 [RUG-LIQUIDITY] {} | CRITICAL LIQUIDITY + RUG: {:.1}SOL + {:.3}% loss",
+                "🚨 [RUG-LIQUIDITY] {} | CRITICAL LIQUIDITY + RUG + HEAVY LOSS: {:.1}SOL + {:.3}% loss",
                 token.symbol,
                 liquidity_sol,
                 profit_pct
@@ -871,7 +870,7 @@ pub fn should_sell(
             return (true, format!("rug_liquidity_emergency({:.3}%)", profit_pct));
         } else {
             println!(
-                "🔒 [HOLD-LOSS] {} | CRITICAL LIQUIDITY but HOLDING LOSS: {:.1}SOL + {:.3}% loss",
+                "🔒 [HOLD-CRITICAL] {} | CRITICAL LIQUIDITY but HOLDING: {:.1}SOL + {:.3}% (no confirmed rug or loss not severe enough)",
                 token.symbol,
                 liquidity_sol,
                 profit_pct
@@ -944,34 +943,66 @@ pub fn should_sell(
         return (true, format!("velocity_decay_exit({:.2}%)", profit_pct));
     }
 
-    // ═══ ENHANCED NEVER SELL AT LOSS POLICY - UNLESS RUG DETECTED ═══
-    if profit_pct <= 0.0 {
-        // Calculate loss severity for detailed logging
-        let loss_severity = if profit_pct <= -50.0 {
-            "EXTREME"
-        } else if profit_pct <= -30.0 {
-            "SEVERE"
-        } else if profit_pct <= -15.0 {
-            "HEAVY"
-        } else if profit_pct <= -5.0 {
-            "MODERATE"
+    // ═══ ENHANCED LOSS CONTROL POLICY - NO SELLING BETWEEN 0% TO -50% ═══
+    if profit_pct <= FORBIDDEN_LOSS_ZONE_MIN {
+        // CATASTROPHIC LOSS PROTECTION: Allow selling only if loss is worse than -50%
+        if profit_pct <= CATASTROPHIC_LOSS_THRESHOLD {
+            // Check if it's been enough time or if it's a confirmed rug
+            if is_rug_detected {
+                println!(
+                    "💀 [CATASTROPHIC-RUG] {} | EXTREME LOSS + RUG: {:.3}% - EMERGENCY EXIT",
+                    token.symbol,
+                    profit_pct
+                );
+                return (true, format!("catastrophic_rug_exit({:.3}%)", profit_pct));
+            } else if held_minutes >= CATASTROPHIC_TIME_LIMIT_MINUTES {
+                // 3 days holding period for catastrophic losses
+                println!(
+                    "⏰ [CATASTROPHIC-TIME] {} | EXTREME LOSS + 3+ DAYS: {:.3}% - FORCED EXIT",
+                    token.symbol,
+                    profit_pct
+                );
+                return (true, format!("catastrophic_time_exit({:.3}%)", profit_pct));
+            } else {
+                println!(
+                    "🔒 [CATASTROPHIC-HOLD] {} | EXTREME LOSS: {:.3}% - HOLDING ({}min < 3days)",
+                    token.symbol,
+                    profit_pct,
+                    held_minutes
+                );
+                return (false, format!("catastrophic_hold({:.3}%)", profit_pct));
+            }
         } else {
-            "MINOR"
-        };
+            // FORBIDDEN ZONE: 0% to -50% loss - NEVER SELL (except emergency rug)
+            let loss_severity = if profit_pct <= -30.0 {
+                "HEAVY"
+            } else if profit_pct <= -15.0 {
+                "MODERATE"
+            } else if profit_pct <= -5.0 {
+                "MINOR"
+            } else {
+                "SMALL"
+            };
 
-        println!(
-            "🔒 [NO-LOSS-SELLING] {} | {} LOSS: {:.3}% - HOLDING UNTIL RECOVERY OR RUG CONFIRMED",
-            token.symbol,
-            loss_severity,
-            profit_pct
-        );
-
-        // Even with severe losses, we don't sell unless it's a confirmed rug
-        // This protects against temporary market downturns and allows for recovery
-        return (
-            false,
-            format!("no_loss_policy_{}({:.3}%)", loss_severity.to_lowercase(), profit_pct),
-        );
+            // Only allow selling in forbidden zone if it's an extreme emergency rug
+            if is_rug_detected && profit_pct <= EMERGENCY_RUG_LOSS_THRESHOLD {
+                println!(
+                    "� [EMERGENCY-RUG] {} | {} LOSS + CONFIRMED RUG: {:.3}% - EMERGENCY EXIT",
+                    token.symbol,
+                    loss_severity,
+                    profit_pct
+                );
+                return (true, format!("emergency_rug_override({:.3}%)", profit_pct));
+            } else {
+                println!(
+                    "🔒 [FORBIDDEN-ZONE] {} | {} LOSS: {:.3}% - HOLDING (0% to -50% no-sell zone)",
+                    token.symbol,
+                    loss_severity,
+                    profit_pct
+                );
+                return (false, format!("forbidden_zone_hold({:.3}%)", profit_pct));
+            }
+        }
     }
 
     println!(

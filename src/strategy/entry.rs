@@ -306,7 +306,7 @@ pub async fn should_buy(
     }
 
     // ─── CHECK RECENT PROFITABLE EXITS ───
-    if check_recent_profitable_exits(&token.mint, current_price) {
+    if check_recent_profitable_exits(&token.mint, current_price).await {
         println!("🚫 [ENTRY] {} | Recent profitable exit - must buy lower", token.symbol);
         return false;
     }
@@ -920,12 +920,11 @@ fn is_near_recent_highs(current_price: f64, dataframe: &crate::ohlcv::TokenOhlcv
 }
 
 /// Check if we recently exited this token profitably and current price is too high
-fn check_recent_profitable_exits(mint: &str, current_price: f64) -> bool {
+async fn check_recent_profitable_exits(mint: &str, current_price: f64) -> bool {
     use crate::persistence::CLOSED_POSITIONS;
 
     // Check closed positions in memory
-    let rt = tokio::runtime::Handle::current();
-    let closed_positions = rt.block_on(async { CLOSED_POSITIONS.read().await.clone() });
+    let closed_positions = CLOSED_POSITIONS.read().await.clone();
 
     // Look for recent profitable exits for this token
     for (_key, position) in closed_positions.iter() {

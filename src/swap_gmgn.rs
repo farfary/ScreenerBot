@@ -1,7 +1,7 @@
 #![allow(warnings)]
 use crate::prelude::*;
 
-use anyhow::{ Context, Result };
+use anyhow::{ Context, Result, anyhow };
 use base64::{ engine::general_purpose, Engine };
 use reqwest::Client;
 use serde_json::Value;
@@ -114,9 +114,9 @@ pub async fn buy_gmgn_detailed(
                         let confirm_time = confirm_start.elapsed().as_millis() as u64;
                         swap_result.set_final_status("SUCCESS".to_string(), Some(confirm_time));
 
-                        // -------- 5. derive effective price -----------------------------
+                        // -------- 5. derive effective price and token amount -----------------------------
                         match
-                            effective_swap_price(
+                            crate::helpers::get_swap_results(
                                 &rpc_client,
                                 &sig_str,
                                 &wallet_pk,
@@ -124,15 +124,17 @@ pub async fn buy_gmgn_detailed(
                                 in_amount // lamports we fed in
                             )
                         {
-                            Ok(price) => {
+                            Ok((price, tokens_received)) => {
                                 swap_result.set_effective_price(price);
+                                swap_result.set_tokens_received(tokens_received);
                                 println!("📈 EFFECTIVE BUY PRICE: {:.9} SOL per token", price);
+                                println!("🪙 ACTUAL TOKENS RECEIVED: {:.9}", tokens_received);
                             }
                             Err(e) => {
                                 swap_result.set_effective_price_error(
-                                    format!("could not derive price: {e}")
+                                    format!("could not derive swap results: {e}")
                                 );
-                                eprintln!("⚠️  could not derive price: {e}");
+                                eprintln!("⚠️  could not derive swap results: {e}");
                             }
                         }
                     }
@@ -473,6 +475,7 @@ pub struct SwapResult {
     // Effective pricing (calculated on-chain)
     pub effective_price: Option<f64>,
     pub effective_price_error: Option<String>,
+    pub tokens_received: Option<f64>, // Actual tokens received from the swap
 
     // Execution details
     pub execution_time_ms: u64,
@@ -575,6 +578,7 @@ impl SwapResult {
                 api_transaction_id,
                 effective_price: None,
                 effective_price_error: None,
+                tokens_received: None,
                 execution_time_ms,
                 confirmation_time_ms: None,
                 final_status: "FAILED".to_string(),
@@ -659,6 +663,7 @@ impl SwapResult {
             api_transaction_id,
             effective_price: None,
             effective_price_error: None,
+            tokens_received: None,
             execution_time_ms,
             confirmation_time_ms: None,
             final_status: "PENDING".to_string(),
@@ -680,6 +685,10 @@ impl SwapResult {
 
     pub fn set_effective_price_error(&mut self, error: String) {
         self.effective_price_error = Some(error);
+    }
+
+    pub fn set_tokens_received(&mut self, tokens: f64) {
+        self.tokens_received = Some(tokens);
     }
 
     /// Prints a comprehensive summary of the swap result
@@ -733,3 +742,26 @@ impl SwapResult {
 // ──────────────────────────────────────────────────────────────────────
 // UPDATED SWAP FUNCTIONS
 // ──────────────────────────────────────────────────────────────────────
+
+/// Submit a buy swap and return both transaction signature and actual tokens received.
+/// Returns (tx_signature, tokens_received)
+pub async fn buy_gmgn_with_amounts(
+    token_mint_address: &str,
+    in_amount: u64 // lamports you want to swap
+) -> Result<(String, f64)> {
+    let swap_result = buy_gmgn_detailed(token_mint_address, in_amount).await?;
+
+    if !swap_result.success {
+        return Err(anyhow!("Swap failed: {}", swap_result.error_message.unwrap_or_default()));
+    }
+
+    let tx_signature = swap_result.transaction_signature.ok_or_else(||
+        anyhow!("No transaction signature available")
+    )?;
+
+    let tokens_received = swap_result.tokens_received.ok_or_else(||
+        anyhow!("No tokens received information available")
+    )?;
+
+    Ok((tx_signature, tokens_received))
+}

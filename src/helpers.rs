@@ -7,13 +7,25 @@ use crate::dexscreener::TOKENS;
 use std::{ fs, str::FromStr };
 use chrono::{ DateTime, Utc };
 use serde::Deserialize;
-use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_request::TokenAccountsFilter;
-use solana_sdk::{ pubkey::Pubkey, signature::{ Keypair, Signer } };
+use solana_client::{
+    rpc_client::RpcClient,
+    rpc_config::RpcTransactionConfig,
+    rpc_request::TokenAccountsFilter,
+};
+use solana_sdk::{
+    pubkey::Pubkey,
+    signature::{ Keypair, Signer, Signature },
+    commitment_config::CommitmentConfig,
+};
 use solana_account_decoder::UiAccountData;
+use solana_transaction_status::{
+    UiTransactionTokenBalance,
+    UiTransactionEncoding,
+    option_serializer::OptionSerializer,
+};
 use once_cell::sync::Lazy;
 use bs58;
-use anyhow::{ anyhow, Result, bail };
+use anyhow::{ Result, anyhow, bail };
 use spl_token::state::{ Mint, Account };
 use solana_program::program_pack::Pack;
 use std::collections::HashMap;
@@ -25,13 +37,6 @@ use std::{ fs::{ File }, time::{ Instant } };
 use rayon::prelude::*;
 use std::{ sync::RwLock };
 use std::time::{ SystemTime, UNIX_EPOCH };
-use solana_client::{ rpc_config::RpcTransactionConfig };
-use solana_sdk::{ commitment_config::CommitmentConfig, signature::Signature };
-use solana_transaction_status::{
-    option_serializer::OptionSerializer,
-    UiTransactionEncoding,
-    UiTransactionTokenBalance,
-};
 use std::sync::atomic::{ AtomicBool, Ordering };
 use tokio::time::{ sleep, Duration };
 use tokio::task;
@@ -1204,6 +1209,78 @@ pub fn effective_swap_price(
     println!("📈 effective price: {price:.12} SOL per token");
 
     Ok(price)
+}
+
+/// Return both the effective price and actual token amount received from a swap
+/// Returns (effective_price_per_token, actual_tokens_received)
+pub fn get_swap_results(
+    rpc: &RpcClient,
+    tx_sig_str: &str,
+    wallet: &Pubkey,
+    token_mint: &Pubkey,
+    lamports_in: u64
+) -> Result<(f64, f64)> {
+    // ───── hard-coded fee you want to deduct ─────
+    const SWAP_FEE_SOL: f64 = 0.000005; // <── tweak here
+    const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
+    let fee_lamports = (SWAP_FEE_SOL * LAMPORTS_PER_SOL) as u64;
+    // ---------------------------------------------
+
+    println!("🔍 fetching tx {tx_sig_str} for swap results");
+    let sig = Signature::from_str(tx_sig_str)?;
+
+    let tx = rpc.get_transaction_with_config(&sig, RpcTransactionConfig {
+        encoding: Some(UiTransactionEncoding::JsonParsed),
+        commitment: Some(CommitmentConfig::confirmed()),
+        max_supported_transaction_version: Some(0),
+    })?;
+    let meta = tx.transaction.meta.ok_or_else(|| anyhow!("transaction meta missing"))?;
+
+    // ---- helpers ----------------------------------------------------------
+    fn opt_ref<'a, T>(os: &'a OptionSerializer<T>) -> Option<&'a T> {
+        Option::<&T>::from(os.as_ref())
+    }
+    fn balance(
+        list: &OptionSerializer<Vec<UiTransactionTokenBalance>>,
+        owner: &Pubkey,
+        mint: &Pubkey
+    ) -> f64 {
+        opt_ref(list)
+            .and_then(|v| {
+                v.iter().find(|b| {
+                    b.mint == mint.to_string() && opt_ref(&b.owner) == Some(&owner.to_string())
+                })
+            })
+            .and_then(|b| b.ui_token_amount.ui_amount)
+            .unwrap_or(0.0)
+    }
+    // -----------------------------------------------------------------------
+
+    let pre = balance(&meta.pre_token_balances, wallet, token_mint);
+    let post = balance(&meta.post_token_balances, wallet, token_mint);
+    let delta = post - pre;
+
+    println!("🧮 balances  → pre: {pre}, post: {post}, delta: {delta}");
+
+    if delta <= 0.0 {
+        return Err(anyhow!("no token balance increase detected"));
+    }
+
+    // subtract fee before computing price
+    let effective_lamports = lamports_in.saturating_sub(fee_lamports);
+    let sol_spent = (effective_lamports as f64) / LAMPORTS_PER_SOL;
+    let price = sol_spent / delta;
+
+    println!(
+        "💰 lamports_in: {lamports_in}  (= {:.9} SOL)",
+        (lamports_in as f64) / LAMPORTS_PER_SOL
+    );
+    println!("💸 minus fee  : {fee_lamports} (= {SWAP_FEE_SOL:.9} SOL)");
+    println!("💰 spent used : {effective_lamports} (= {sol_spent:.9} SOL)");
+    println!("📈 effective price: {price:.12} SOL per token");
+    println!("🪙 tokens received: {delta}");
+
+    Ok((price, delta))
 }
 
 pub fn install_sigint_handler() -> Result<()> {

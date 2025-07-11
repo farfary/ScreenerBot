@@ -589,10 +589,9 @@ async fn position_monitor_loop() {
                         // Store original position before DCA
                         let _original_position = pos.clone();
 
-                        match buy_gmgn(&mint, lamports).await {
-                            Ok(tx) => {
-                                let added = sol_amount / current_price;
-                                pos.token_amount += added;
+                        match crate::swap_gmgn::buy_gmgn_with_amounts(&mint, lamports).await {
+                            Ok((tx, actual_tokens_added)) => {
+                                pos.token_amount += actual_tokens_added;
                                 pos.sol_spent += sol_amount + TRANSACTION_FEE_SOL;
                                 pos.dca_count += 1;
                                 pos.entry_price = pos.sol_spent / pos.token_amount;
@@ -603,11 +602,12 @@ async fn position_monitor_loop() {
                                 save_open().await;
 
                                 println!(
-                                    "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}%) | {tx}",
+                                    "🟢 DCA #{:02} {} @ {:.9} (∆{:.2}%) | Tokens: +{:.9} | {tx}",
                                     pos.dca_count,
                                     symbol,
                                     current_price,
-                                    drop_pct
+                                    drop_pct,
+                                    actual_tokens_added
                                 );
                             }
                             Err(e) => {
@@ -846,24 +846,24 @@ async fn token_discovery_loop() {
 
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
-                                // Create position before transaction
-                                let bought = dynamic_trade_size / *current_price;
-                                let new_position = Position {
-                                    entry_price: *current_price,
-                                    peak_price: *current_price,
-                                    dca_count: 0,
-                                    token_amount: bought,
-                                    sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
-                                    sol_received: 0.0,
-                                    open_time: Utc::now(),
-                                    close_time: None,
-                                    last_dca_price: *current_price,
-                                    last_dca_time: Utc::now(),
-                                };
-
-                                match buy_gmgn(mint, lamports).await {
-                                    Ok(tx) => {
+                                match crate::swap_gmgn::buy_gmgn_with_amounts(mint, lamports).await {
+                                    Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [WATCHLIST RE-ENTRY] BUY success: {tx}");
+
+                                        // Create position with ACTUAL tokens received
+                                        let new_position = Position {
+                                            entry_price: *current_price,
+                                            peak_price: *current_price,
+                                            dca_count: 0,
+                                            token_amount: actual_tokens_received,
+                                            sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
+                                            sol_received: 0.0,
+                                            open_time: Utc::now(),
+                                            close_time: None,
+                                            last_dca_price: *current_price,
+                                            last_dca_time: Utc::now(),
+                                        };
+
                                         OPEN_POSITIONS.write().await.insert(
                                             mint.clone(),
                                             new_position
@@ -989,24 +989,24 @@ async fn token_discovery_loop() {
                                 );
                                 let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
 
-                                // Create position before transaction
-                                let bought = dynamic_trade_size / *current_price;
-                                let new_position = Position {
-                                    entry_price: *current_price,
-                                    peak_price: *current_price,
-                                    dca_count: 0,
-                                    token_amount: bought,
-                                    sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
-                                    sol_received: 0.0,
-                                    open_time: Utc::now(),
-                                    close_time: None,
-                                    last_dca_price: *current_price,
-                                    last_dca_time: Utc::now(),
-                                };
-
-                                match buy_gmgn(mint, lamports).await {
-                                    Ok(tx) => {
+                                match crate::swap_gmgn::buy_gmgn_with_amounts(mint, lamports).await {
+                                    Ok((tx, actual_tokens_received)) => {
                                         println!("✅ [NEW DISCOVERY] BUY success: {tx}");
+
+                                        // Create position with ACTUAL tokens received
+                                        let new_position = Position {
+                                            entry_price: *current_price,
+                                            peak_price: *current_price,
+                                            dca_count: 0,
+                                            token_amount: actual_tokens_received,
+                                            sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
+                                            sol_received: 0.0,
+                                            open_time: Utc::now(),
+                                            close_time: None,
+                                            last_dca_price: *current_price,
+                                            last_dca_time: Utc::now(),
+                                        };
+
                                         OPEN_POSITIONS.write().await.insert(
                                             mint.clone(),
                                             new_position
