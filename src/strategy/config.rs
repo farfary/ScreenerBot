@@ -50,39 +50,30 @@
 // ─── TIMING PARAMETERS ───
 pub const POSITIONS_CHECK_TIME_SEC: u64 = 30; // Normal position check interval
 pub const POSITIONS_FREQUENT_CHECK_TIME_SEC: u64 = 5; // Frequent check for profitable positions (>2%)
-pub const TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 30;
-pub const WATCHLIST_CHECK_TIME_SEC: u64 = 10; // Check watchlist tokens more frequently
-pub const NEW_TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 60; // Check new tokens less frequently
+pub const TOKEN_DISCOVERY_CHECK_TIME_SEC: u64 = 300; // DexScreener data refresh interval (new tokens)
+pub const PRICE_MONITORING_CHECK_TIME_SEC: u64 = 30; // Price updates for discovered tokens (waiting for entry)
+
 // ─── OPTIMIZED EXIT TIMING (ADDRESSING LONG HOLD INEFFICIENCY) ───
 // Analysis shows long holds (>3h) miss 6.8% profit on average
-pub const MIN_HOLD_TIME_SECONDS: i64 = 30; // Faster exits allowed
-pub const MAX_HOLD_TIME_SECONDS: i64 = 7200; // Reduced to 2 hours max (was 6h)
-pub const PROFITABLE_MAX_HOLD_MINUTES: i64 = 90; // Even shorter for profitable positions
 pub const POSITIONS_PRINT_TIME: u64 = 10; // Print every 10 seconds
 pub const ENTRY_COOLDOWN_MINUTES: i64 = 15; // Faster re-entry
 pub const DCA_COOLDOWN_MINUTES: i64 = 30; // Faster DCA attempts
 
-// ─── TIME-BASED EXIT URGENCY MULTIPLIERS ───
-pub const TIME_BASED_SELL_MULTIPLIER_1H: f64 = 1.1; // 10% more aggressive after 1h
-pub const TIME_BASED_SELL_MULTIPLIER_2H: f64 = 1.3; // 30% more aggressive after 2h
-pub const TIME_BASED_SELL_MULTIPLIER_3H: f64 = 2.0; // 100% more aggressive after 3h
-
 // ─── OPTIMIZED TRADING SIZE PARAMETERS (SCALED BY LIQUIDITY AND MARKET CAP) ───
 // Dynamic scaling from $1K to $1.2B market cap and $1K to $5M liquidity
 pub const MIN_TRADE_SIZE_SOL: f64 = 0.001; // Minimum trade size for small tokens
-pub const MAX_TRADE_SIZE_SOL: f64 = 0.02; // Maximum trade size for high liquidity tokens
-pub const MIN_LIQUIDITY_FOR_MIN_SIZE: f64 = 5.0; // Start scaling from 5 SOL liquidity
-pub const MAX_LIQUIDITY_FOR_MAX_SIZE: f64 = 20000.0; // Scale up to 20K SOL (~$5M liquidity)
+pub const MAX_TRADE_SIZE_SOL: f64 = 0.005; // Maximum trade size for high liquidity tokens
+pub const MIN_LIQUIDITY_FOR_MIN_SIZE: f64 = 10.0; // Start scaling from 5 SOL liquidity
+pub const MAX_LIQUIDITY_FOR_MAX_SIZE: f64 = 30000.0; // Scale up to 20K SOL (~$5M liquidity)
 
 // Market cap based scaling
-pub const MIN_MARKET_CAP_USD: f64 = 1000.0; // $1K minimum market cap
-pub const MAX_MARKET_CAP_USD: f64 = 1200000000.0; // $1.2B maximum market cap
+pub const MIN_MARKET_CAP_USD: f64 = 10000.0; // $1K minimum market cap
+pub const MAX_MARKET_CAP_USD: f64 = 2500000000.0; // $1.2B maximum market cap
 pub const MARKET_CAP_SCALING_FACTOR: f64 = 0.5; // 50% weight for market cap scaling
 
 // Liquidity impact thresholds (prevent whale anger)
 pub const MAX_TRADE_PCT_OF_LIQUIDITY: f64 = 0.1; // Max 0.5% of total liquidity per trade
 pub const WHALE_ANGER_THRESHOLD_PCT: f64 = 1.0; // Avoid trades >1% of liquidity
-pub const SAFE_LIQUIDITY_BUFFER: f64 = 2.0; // 2x safety buffer
 
 // ─── ENHANCED POSITION MANAGEMENT ───
 pub const MAX_TOKENS: usize = 100;
@@ -97,7 +88,6 @@ pub const DCA_WHALE_CONFIRMATION_THRESHOLD: f64 = 200.0; // USD whale volume for
 pub const DCA_MAX_HOLD_TIME_MINUTES: i64 = 180; // 3 hours max for DCA positions (was 2h)
 pub const DCA_PROFIT_TARGET: f64 = 2.5; // Lower profit target for quicker exits
 pub const DCA_SELL_MULTIPLIER: f64 = 1.5; // Reduced sell pressure multiplier
-pub const DCA_MOMENTUM_MULTIPLIER: f64 = 1.3; // Slightly more sensitive to momentum
 
 // ─── TRADING COSTS ───
 pub const TRANSACTION_FEE_SOL: f64 = 0.000015; // Transaction fee
@@ -107,25 +97,16 @@ pub const SLIPPAGE_BPS: f64 = 1.0; // Slightly higher slippage for execution
 pub const MIN_VOLUME_USD: f64 = 500.0; // Reduced from 1500 for more opportunities
 pub const MIN_LIQUIDITY_SOL: f64 = 2.0; // Reduced from 5 SOL for smaller/newer tokens
 pub const MIN_ACTIVITY_BUYS_1H: u64 = 1; // Reduced from 2 for more flexibility
-pub const MIN_HOLDER_COUNT: u64 = 5; // Reduced from 8 for newer tokens
+pub const MIN_HOLDER_COUNT: u64 = 100; // Reduced from 8 for newer tokens
 
 // ─── ENHANCED UPTREND DETECTION AND ENTRY OPTIMIZATION ───
 pub const UPTREND_MOMENTUM_THRESHOLD: f64 = 3.0; // Enter uptrends above 3% momentum
-pub const STRONG_UPTREND_MOMENTUM: f64 = 8.0; // Strong uptrend above 8%
 pub const UPTREND_VOLUME_CONFIRMATION: f64 = 1.3; // Volume should be 1.3x average
 pub const DOWNTREND_DIP_OPPORTUNITY: f64 = -5.0; // Buy dips below -5% in downtrends
 pub const CONSOLIDATION_RANGE: f64 = 2.0; // +/- 2% considered consolidation
 
 // ─── WHALE DETECTION THRESHOLDS ───
-pub const WHALE_BUY_THRESHOLD_SOL: f64 = 2.0; // Minimum SOL for whale trade
-pub const LARGE_WHALE_MULTIPLIER: f64 = 2.0; // 4+ SOL for large whale
-pub const MEDIUM_WHALE_MULTIPLIER: f64 = 0.5; // 1+ SOL for medium whale
-
-// ─── RISK MANAGEMENT ───
-pub const BIG_DUMP_THRESHOLD: f64 = -25.0; // Avoid tokens with major dumps
-pub const ACCUMULATION_PATIENCE_THRESHOLD: f64 = 12.0; // Allow moderate pump before entry
-pub const MAX_PRICE_DIFFERENCE_PCT: f64 = 10.0; // Max price difference between sources
-pub const HIGH_VOLATILITY_THRESHOLD: f64 = 15.0; // High volatility warning
+pub const WHALE_BUY_THRESHOLD_SOL: f64 = 0.5; // Minimum SOL for whale trade
 
 // ─── WHALE ACTIVITY SCORING ───
 pub const STRONG_WHALE_ACCUMULATION_USD: f64 = 500.0; // Strong whale net flow
@@ -134,38 +115,11 @@ pub const LARGE_TRADE_THRESHOLD_USD: f64 = 100.0; // Large trade detection
 pub const MEDIUM_TRADE_THRESHOLD_USD: f64 = 50.0; // Medium trade detection
 pub const SMALL_TRADE_THRESHOLD_USD: f64 = 10.0; // Small/bot trade detection
 
-// ─── BOT DETECTION PARAMETERS ───
-pub const HIGH_BOT_ACTIVITY_AVG_SIZE: f64 = 0.5; // SOL - very small avg trade
-pub const HIGH_BOT_ACTIVITY_COUNT: u64 = 100; // Many small transactions
-pub const MEDIUM_BOT_ACTIVITY_AVG_SIZE: f64 = 1.0; // SOL - small avg trade
-pub const MEDIUM_BOT_ACTIVITY_COUNT: u64 = 50; // Moderate transaction count
-pub const LOW_BOT_ACTIVITY_AVG_SIZE: f64 = 1.5; // SOL - reasonable avg trade
-pub const LOW_BOT_ACTIVITY_COUNT: u64 = 20; // Low transaction count
-
-// ─── ENTRY SCORING WEIGHTS ───
-pub const WHALE_SCORE_WEIGHT: f64 = 0.3; // Weight for whale activity
-pub const TRADES_SCORE_WEIGHT: f64 = 0.4; // Weight for trades data (higher)
-pub const BOT_SCORE_WEIGHT: f64 = 0.2; // Weight for anti-bot scoring
-pub const BUY_RATIO_WEIGHT: f64 = 0.15; // Weight for buy/sell ratio
-pub const PRICE_MOMENTUM_WEIGHT: f64 = 0.15; // Weight for price momentum
-pub const LIQUIDITY_BONUS_WEIGHT: f64 = 0.1; // Weight for extra liquidity
-pub const VOLUME_MOMENTUM_WEIGHT: f64 = 0.1; // Weight for volume momentum
-
-// ─── TECHNICAL ANALYSIS PARAMETERS ───
-pub const VOLUME_SURGE_MULTIPLIER: f64 = 1.5; // Recent vs older volume
-pub const POSITIVE_MOMENTUM_THRESHOLD: f64 = 2.0; // Price change %
-pub const NEGATIVE_MOMENTUM_THRESHOLD: f64 = -3.0; // Price decline %
-pub const VWAP_BULLISH_THRESHOLD: f64 = 1.02; // Price above VWAP
-pub const VWAP_BEARISH_THRESHOLD: f64 = 0.98; // Price below VWAP
-pub const VOLATILITY_MULTIPLIER: f64 = 1.5; // Increase caution in volatile markets
-
 // ─── ENTRY SCORING THRESHOLDS (RELAXED FOR MORE BUYS) ───
 pub const MIN_WHALE_SCORE: f64 = 0.2; // Reduced from 0.4
 pub const MIN_TRADES_SCORE: f64 = 0.2; // Reduced from 0.3
 pub const MAX_BOT_SCORE: f64 = 0.8; // Increased from 0.6 (more tolerant)
 pub const MIN_BUY_RATIO: f64 = 0.4; // Reduced from 0.5
-pub const ACCUMULATION_RANGE_MIN: f64 = -25.0; // Wider range (was -15%)
-pub const ACCUMULATION_RANGE_MAX: f64 = 25.0; // Allow bigger pumps (was 15%)
 pub const LIQUIDITY_MULTIPLIER: f64 = 1.2; // Reduced threshold (was 1.5)
 
 // ─── ADAPTIVE ENTRY THRESHOLDS (DYNAMIC BASED ON MARKET CONDITIONS) ───
@@ -174,39 +128,6 @@ pub const UPTREND_ENTRY_THRESHOLD: f64 = 0.25; // Lower threshold for uptrend en
 pub const DOWNTREND_ENTRY_THRESHOLD: f64 = 0.2; // Even lower for downtrend dip buys
 pub const HIGH_VOLUME_BONUS: f64 = 0.15; // Increased bonus for high volume conditions
 pub const REAL_TIME_PRICE_BONUS: f64 = 0.2; // Higher bonus for real-time pool prices
-
-// ─── SELL STRATEGY PARAMETERS ───
-pub const WHALE_DISTRIBUTION_THRESHOLD: f64 = -200.0; // Heavy whale selling
-pub const MODERATE_SELLING_THRESHOLD: f64 = -50.0; // Moderate selling pressure
-pub const RECENT_MOMENTUM_THRESHOLD: f64 = -1.0; // Bearish momentum
-pub const RESISTANCE_DISTANCE_THRESHOLD: f64 = 1.0; // Distance from resistance
-pub const VOLUME_DECLINE_MULTIPLIER: f64 = 0.7; // Volume decline indicator
-pub const PROFITABLE_VWAP_THRESHOLD: f64 = 1.05; // Extended above VWAP
-pub const MIN_PROFIT_FOR_VWAP_SELL: f64 = 1.0; // Min profit for VWAP sell
-
-// ─── SELL MULTIPLIERS ───
-pub const WHALE_DISTRIBUTION_MULTIPLIER: f64 = 1.5; // Aggressive on whale distribution
-pub const MODERATE_SELLING_MULTIPLIER: f64 = 1.2; // Moderate selling pressure
-pub const MOMENTUM_MULTIPLIER: f64 = 1.3; // Bearish momentum
-pub const RESISTANCE_MULTIPLIER: f64 = 1.2; // At resistance level
-pub const VWAP_EXTENDED_MULTIPLIER: f64 = 1.15; // Extended above VWAP
-
-// ─── OPTIMIZED PROFIT TAKING THRESHOLDS ───
-// Tightened based on analysis - currently missing 2.07% profit on average
-pub const WEAK_SELL_THRESHOLD: f64 = -1.5; // Tightened from -2.0
-pub const MEDIUM_SELL_THRESHOLD: f64 = -2.5; // Tightened from -3.0
-pub const STRONG_SELL_THRESHOLD: f64 = -4.0; // Tightened from -5.0
-pub const EMERGENCY_EXIT_MIN_PROFIT: f64 = 0.3; // Min profit for emergency exit
-
-// ─── PROFIT-LEVEL BASED TRAILING STOPS ───
-pub const QUICK_PROFIT_TRAILING_STOP: f64 = 3.0; // 0.5-3% profits: 3% stop
-pub const SMALL_PROFIT_TRAILING_STOP: f64 = 5.0; // 3-10% profits: 5% stop
-pub const MEDIUM_PROFIT_TRAILING_STOP: f64 = 8.0; // 10-25% profits: 8% stop
-pub const LARGE_PROFIT_TRAILING_STOP: f64 = 12.0; // 25%+ profits: 12% stop
-
-// ─── PARTIAL PROFIT TAKING SYSTEM ───
-pub const PARTIAL_PROFIT_LEVELS: [f64; 3] = [5.0, 10.0, 20.0]; // Take profits at these levels
-pub const PARTIAL_PROFIT_PERCENTAGE: f64 = 25.0; // Sell 25% at each level
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🚀 FAST PUMP DETECTION & VELOCITY-BASED PROFIT TAKING
@@ -217,9 +138,6 @@ pub const FAST_PUMP_VELOCITY_5M: f64 = 8.0; // 8%+ in 5 minutes = fast pump
 pub const VERY_FAST_PUMP_VELOCITY_5M: f64 = 15.0; // 15%+ in 5 minutes = very fast pump
 pub const EXTREME_PUMP_VELOCITY_5M: f64 = 25.0; // 25%+ in 5 minutes = extreme pump
 
-pub const FAST_PUMP_VELOCITY_1M: f64 = 3.0; // 3%+ in 1 minute = fast pump
-pub const VERY_FAST_PUMP_VELOCITY_1M: f64 = 6.0; // 6%+ in 1 minute = very fast pump
-
 // ─── PUMP MOMENTUM DECELERATION DETECTION ───
 pub const MOMENTUM_DECELERATION_THRESHOLD: f64 = 0.5; // 50% momentum loss = danger
 pub const VELOCITY_LOSS_WARNING: f64 = 0.3; // 30% velocity loss = warning
@@ -229,16 +147,8 @@ pub const FAST_PUMP_TRAILING_MULTIPLIER: f64 = 0.6; // Tighten trailing stops to
 pub const VERY_FAST_PUMP_TRAILING_MULTIPLIER: f64 = 0.4; // Tighten to 40% during very fast pumps
 pub const EXTREME_PUMP_TRAILING_MULTIPLIER: f64 = 0.25; // Tighten to 25% during extreme pumps
 
-pub const FAST_PUMP_MOMENTUM_MULTIPLIER: f64 = 2.0; // 2x more sensitive to momentum during pumps
-pub const VELOCITY_EXIT_MULTIPLIER: f64 = 3.0; // 3x more aggressive on velocity loss
-
 // ─── VOLUME-VELOCITY CORRELATION THRESHOLDS ───
 pub const PUMP_VOLUME_DECLINE_THRESHOLD: f64 = 0.6; // Volume drops to 60% during pump = distribution
-pub const HIGH_VELOCITY_LOW_VOLUME_MULTIPLIER: f64 = 2.5; // Extra aggressive when volume doesn't match pump
-
-// ─── DYNAMIC PROFIT TARGETS FOR FAST PUMPS ───
-pub const FAST_PUMP_QUICK_EXIT_PCT: f64 = 1.5; // Take 1.5%+ profits immediately in fast pumps
-pub const VELOCITY_BASED_MIN_PROFIT: f64 = 0.8; // Minimum 0.8% to consider velocity exits
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 📉 SMART DIP BUYING & SWING TRADING PARAMETERS
@@ -251,30 +161,12 @@ pub const DANGEROUS_DUMP_THRESHOLD: f64 = -25.0; // Major dump threshold
 pub const EXTREME_DUMP_THRESHOLD: f64 = -40.0; // Extreme dump threshold
 
 // ─── SWING TRADING SCORING ───
-pub const MIN_SWING_SCORE_THRESHOLD: f64 = 0.3; // Minimum swing score for consideration
-pub const STRONG_SWING_SCORE_THRESHOLD: f64 = 0.5; // Strong swing opportunity
 pub const MOMENTUM_REVERSAL_THRESHOLD: f64 = 1.0; // 1m price change for reversal signal
-
-// ─── ADAPTIVE THRESHOLD ADJUSTMENTS ───
-pub const SWING_THRESHOLD_REDUCTION_STRONG: f64 = 0.15; // Strong swing opportunity adjustment
-pub const SWING_THRESHOLD_REDUCTION_MODERATE: f64 = 0.1; // Moderate swing opportunity adjustment
-pub const WHALE_CONTRARIAN_THRESHOLD_REDUCTION: f64 = 0.1; // Whale accumulation during weakness
-pub const REALTIME_DATA_THRESHOLD_REDUCTION: f64 = 0.05; // Real-time data advantage
-pub const MIN_ADAPTIVE_THRESHOLD: f64 = 0.3; // Minimum threshold floor
 
 // ─── DANGER SIGNAL ANALYSIS ───
 pub const MAX_DANGER_RATIO: f64 = 0.6; // Maximum danger signal ratio before rejection
 pub const PANIC_SELLING_THRESHOLD: u64 = 15; // Small sells indicating panic
 pub const VOLUME_ACCUMULATION_MULTIPLIER: f64 = 2.0; // Volume spike during dip threshold
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 🚫 ENHANCED ENTRY CONTROLS - PREVENT BUYING ON TOPS & AFTER PROFIT EXITS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ─── 15M HIGH AVOIDANCE ───
-pub const TIMEFRAME_HIGH_LOOKBACK_PERIODS: usize = 20; // Check last 20 periods for highs
-pub const NEAR_15M_HIGH_THRESHOLD_PCT: f64 = 2.0; // Don't buy within 2% of 15m high
-pub const NEAR_5M_HIGH_THRESHOLD_PCT: f64 = 1.0; // Don't buy within 1% of 5m high
 
 // ─── ENHANCED COOLDOWN SYSTEM ───
 pub const SAME_TOKEN_ENTRY_COOLDOWN_HOURS: i64 = 2; // Reduced from 6 hours
@@ -285,85 +177,6 @@ pub const LOSS_EXIT_COOLDOWN_HOURS: i64 = 1; // Reduced from 2 hours
 pub const MIN_PRICE_DROP_AFTER_PROFIT_PCT: f64 = 3.0; // Reduced from 8% for faster re-entries
 pub const MAX_RECENT_EXITS_LOOKBACK_HOURS: i64 = 24; // Reduced from 72 hours
 pub const MIN_PROFIT_EXIT_THRESHOLD_PCT: f64 = 5.0; // Only count bigger profits (was 3%)
-
-// ─── DOWNTREND DETECTION ───
-pub const DOWNTREND_TIMEFRAME_PERIODS: usize = 15; // Check trend over 15 periods
-pub const DOWNTREND_MIN_DECLINE_PCT: f64 = 10.0; // Need 10% decline to confirm downtrend
-pub const UPTREND_REJECTION_THRESHOLD_PCT: f64 = 15.0; // Reject entries in strong uptrends >15%
-
-// ─── TREND-AWARE DIP BUYING ───
-pub const DOWNTREND_DIP_BONUS: f64 = 0.2; // Bonus score for dips in downtrends
-pub const UPTREND_DIP_PENALTY: f64 = -0.3; // Penalty for buying in uptrends
-pub const SIDEWAYS_TREND_THRESHOLD_PCT: f64 = 5.0; // ±5% considered sideways
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 🚀 ULTRA-AGGRESSIVE PROFESSIONAL EXIT STRATEGY V3.0
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ─── ULTRA-FAST SCALPING PARAMETERS ───
-pub const SCALP_PROFIT_THRESHOLD: f64 = 0.1; // Minimum 0.1% for scalping mode
-pub const ULTRA_MICRO_PROFIT_THRESHOLD: f64 = 0.05; // 0.05% for extreme scalping
-pub const HIGH_VELOCITY_THRESHOLD: f64 = 2.0; // 2%/minute = high velocity
-pub const EXTREME_VELOCITY_THRESHOLD: f64 = 5.0; // 5%/minute = extreme velocity
-
-// ─── MULTI-TIMEFRAME MOMENTUM THRESHOLDS ───
-pub const MOMENTUM_1M_THRESHOLD: f64 = -0.3; // 1-minute momentum threshold
-pub const MOMENTUM_5M_THRESHOLD: f64 = -0.8; // 5-minute momentum threshold
-pub const MOMENTUM_15M_THRESHOLD: f64 = -1.5; // 15-minute momentum threshold
-pub const MOMENTUM_1H_THRESHOLD: f64 = -2.5; // 1-hour momentum threshold
-
-// ─── PROFIT-VELOCITY BASED EXITS ───
-pub const MIN_VELOCITY_FOR_MICRO_EXIT: f64 = 0.1; // Minimum velocity for micro exits
-pub const VELOCITY_DECAY_THRESHOLD: f64 = 0.5; // Velocity decay warning
-pub const PROFIT_VELOCITY_EXTREME: f64 = 10.0; // Extreme profit velocity
-
-// ─── DYNAMIC TRAILING STOP PARAMETERS ───
-pub const ULTRA_TIGHT_TRAIL_MASSIVE: f64 = 1.0; // 1% trail for 100%+ profits
-pub const ULTRA_TIGHT_TRAIL_LARGE: f64 = 1.5; // 1.5% trail for 50%+ profits
-pub const TIGHT_TRAIL_MEDIUM: f64 = 2.5; // 2.5% trail for 20%+ profits
-pub const NORMAL_TRAIL_SMALL: f64 = 4.0; // 4% trail for 5%+ profits
-
-// ─── WHALE ACTIVITY ANALYSIS LEVELS ───
-pub const WHALE_DISTRIBUTION_HEAVY: f64 = -500.0; // Heavy distribution threshold
-pub const WHALE_DISTRIBUTION_MODERATE: f64 = -200.0; // Moderate distribution threshold
-pub const WHALE_ACCUMULATION_STRONG: f64 = 300.0; // Strong accumulation threshold
-pub const WHALE_ACCUMULATION_MODERATE: f64 = 100.0; // Moderate accumulation threshold
-
-// ─── TIME-BASED URGENCY ESCALATION ───
-pub const TIME_URGENCY_6H: f64 = 5.0; // 6+ hours = 5x urgency
-pub const TIME_URGENCY_4H: f64 = 3.0; // 4+ hours = 3x urgency
-pub const TIME_URGENCY_3H: f64 = 2.0; // 3+ hours = 2x urgency
-pub const TIME_URGENCY_2H: f64 = 1.5; // 2+ hours = 1.5x urgency
-pub const TIME_URGENCY_1H: f64 = 1.2; // 1+ hour = 1.2x urgency
-
-// ─── LIQUIDITY EMERGENCY LEVELS ───
-pub const CRITICAL_LIQUIDITY_SOL: f64 = 2.0; // Critical liquidity level
-pub const LOW_LIQUIDITY_SOL: f64 = 5.0; // Low liquidity warning level
-pub const MIN_LIQUIDITY_FOR_HOLD: f64 = 8.0; // Minimum liquidity to continue holding
-
-// ─── TECHNICAL ANALYSIS MULTIPLIERS ───
-pub const MOMENTUM_DECELERATION_MULT: f64 = 2.5; // Momentum deceleration multiplier
-pub const VOLUME_DECLINE_MULT: f64 = 1.8; // Volume decline multiplier
-pub const RESISTANCE_LEVEL_MULT: f64 = 1.5; // At resistance multiplier
-pub const VWAP_EXTENDED_MULT: f64 = 1.4; // Extended from VWAP multiplier
-
-// ─── REAL-TIME POOL PRICE ANALYSIS ───
-pub const REAL_TIME_PRICE_WEIGHT: f64 = 0.8; // 80% weight for pool price vs API price
-pub const INSTANT_PRICE_SPIKE_THRESHOLD: f64 = 2.0; // 2%+ instant spike detection
-pub const INSTANT_PRICE_DUMP_THRESHOLD: f64 = -1.5; // 1.5%+ instant dump detection
-pub const POOL_PRICE_VELOCITY_HIGH: f64 = 1.0; // 1%+ price change per check cycle
-pub const POOL_PRICE_VELOCITY_EXTREME: f64 = 3.0; // 3%+ price change per check cycle
-
-// ─── SUB-SECOND PRICE ACTION THRESHOLDS ───
-pub const INSTANT_MOMENTUM_THRESHOLD: f64 = 0.5; // 0.5%+ instant momentum
-pub const RAPID_PRICE_CHANGE_THRESHOLD: f64 = 1.0; // 1%+ rapid price change
-pub const POOL_PRICE_DIVERGENCE_THRESHOLD: f64 = 2.0; // 2%+ divergence from API price
-pub const REAL_TIME_EXIT_MULTIPLIER: f64 = 2.0; // 2x more aggressive with real-time data
-
-// ─── POOL-BASED MOMENTUM DETECTION ───
-pub const POOL_MOMENTUM_SAMPLE_SIZE: usize = 10; // Track last 10 price samples
-pub const POOL_MOMENTUM_ACCELERATION_THRESHOLD: f64 = 0.3; // 0.3%+ acceleration
-pub const POOL_MOMENTUM_DECELERATION_THRESHOLD: f64 = -0.2; // 0.2%+ deceleration
 
 // ─── LOSS CONTROL POLICY PARAMETERS ───
 pub const FORBIDDEN_LOSS_ZONE_MIN: f64 = 0.0; // Upper bound of forbidden zone (breakeven)

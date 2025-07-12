@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 pub mod configs;
 pub mod helpers;
 pub mod swap_gmgn;

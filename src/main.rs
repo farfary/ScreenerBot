@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 mod prelude;
 mod dexscreener;
 mod trader;
@@ -37,6 +39,16 @@ async fn main() -> Result<()> {
 
     // 5 ─ run until shutdown (the shutdown system handles all cleanup internally)
     println!("🚀 [MAIN] All systems started. Use Ctrl+C for graceful shutdown.");
+    println!(
+        "⏱️  [TIMING] Position Monitor: profitable {}s | all {}s",
+        crate::strategy::config::POSITIONS_FREQUENT_CHECK_TIME_SEC,
+        crate::strategy::config::POSITIONS_CHECK_TIME_SEC
+    );
+    println!(
+        "⏱️  [TIMING] Price Monitor: {}s | Token Discovery: {}s",
+        crate::strategy::config::PRICE_MONITORING_CHECK_TIME_SEC,
+        crate::strategy::config::TOKEN_DISCOVERY_CHECK_TIME_SEC
+    );
 
     // Keep the main thread alive until shutdown
     loop {

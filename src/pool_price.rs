@@ -1,3 +1,38 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// DUAL-TIER PRICING SYSTEM - OPTIMIZED FOR RPC COST & SPEED
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// This module implements a smart pricing system that balances speed and RPC costs:
+//
+// 🚀 FAST TIER (for positions & known tokens):
+//    - batch_prices_fast_tier() - Only fetches tokens with cached pool addresses
+//    - batch_prices_for_positions() - Priority pricing for open positions
+//    - Near-instant pricing since pool discovery is skipped
+//    - Minimal RPC calls (1 batch call for all tokens)
+//
+// 🔍 DISCOVERY TIER (for new tokens):
+//    - batch_prices_discovery_tier() - Handles pool discovery for new tokens
+//    - batch_prices_for_discovery() - Optimized for token candidates
+//    - More expensive but caches results for future fast access
+//    - Processes in small batches to avoid timeouts
+//
+// 🧠 SMART ROUTING:
+//    - batch_prices_smart() - Automatically chooses best strategy
+//    - batch_prices_from_pools() - Balanced dual-tier approach
+//    - Analyzes token mix and routes accordingly
+//
+// USAGE EXAMPLES:
+//   - Position monitoring: batch_prices_for_positions(rpc, position_mints)
+//   - Token discovery: batch_prices_for_discovery(rpc, candidate_mints)
+//   - Mixed scenarios: batch_prices_smart(rpc, all_mints)
+//
+// This ensures:
+// ✅ Open positions get instant price updates (critical for trading)
+// ✅ New token discovery still works but doesn't slow down position monitoring
+// ✅ RPC costs are minimized through intelligent batching and caching
+// ✅ Pool cache grows over time, making the system faster
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #![allow(warnings)]
 use crate::prelude::*;
 
@@ -121,83 +156,67 @@ pub fn price_from_biggest_pool(rpc: &RpcClient, mint: &str) -> Result<f64> {
     rt.block_on(price_from_biggest_pool_async(rpc, mint))
 }
 
-/// Batch fetch prices for multiple tokens to reduce RPC costs
+/// Fast batch pricing for tokens with known pools (priority tokens like open positions)
 /// Returns HashMap<mint, price> for successful fetches
-/// Logs important info including RPC savings
-///
-/// CRITICAL: These real-time prices should be used for all trading decisions (buy/sell/DCA)
-/// to ensure accurate execution prices rather than historical dataframe prices.
-pub fn batch_prices_from_pools(rpc: &RpcClient, mints: &[String]) -> HashMap<String, f64> {
+/// This function only processes tokens that already have cached pool addresses
+pub fn batch_prices_fast_tier(rpc: &RpcClient, mints: &[String]) -> HashMap<String, f64> {
     if mints.is_empty() {
         return HashMap::new();
     }
 
-    println!("💰 [BATCH] Fetching prices for {} tokens to save RPC costs...", mints.len());
-    let batch_start = Instant::now();
+    let debug_prices = crate::configs::ARGS.iter().any(|a| a == "--debug-prices");
 
     ensure_pool_cache_loaded().unwrap_or_else(|e| {
         eprintln!("⚠️ Failed to load pool cache: {}", e);
     });
 
-    // 1. Collect all pool addresses that we need to fetch
+    // Only process tokens with known pool addresses
     let mut mint_to_pool: HashMap<String, Pubkey> = HashMap::new();
-    let mut missing_pools: Vec<String> = Vec::new();
-
     {
         let cache = POOL_CACHE.read();
         for mint in mints {
             if let Some(&pool_pk) = cache.get(mint) {
                 mint_to_pool.insert(mint.clone(), pool_pk);
-            } else {
-                missing_pools.push(mint.clone());
+                if debug_prices {
+                    println!("⚡ [DEBUG-PRICES] Found cached pool for {}: {}", mint, pool_pk);
+                }
+            } else if debug_prices {
+                println!("⚠️ [DEBUG-PRICES] No cached pool found for {}", mint);
             }
         }
     }
 
-    // 2. For missing pools, find biggest pools (this still requires individual calls)
-    for mint in &missing_pools {
-        match find_biggest_pool_for_mint(rpc, mint) {
-            Ok(pool_pk) => {
-                mint_to_pool.insert(mint.clone(), pool_pk);
-                // Cache it
-                POOL_CACHE.write().insert(mint.clone(), pool_pk);
-            }
-            Err(e) => {
-                eprintln!("❌ Failed to find pool for {}: {}", mint, e);
-            }
+    if mint_to_pool.is_empty() {
+        if debug_prices {
+            println!("⚠️ [DEBUG-PRICES] No tokens have cached pools for fast pricing");
         }
-    }
-
-    if !missing_pools.is_empty() {
-        println!("🔍 [BATCH] Found {} new pools, cached for future use", missing_pools.len());
-        tokio::task::spawn_blocking(flush_pool_cache_to_disk);
-    }
-
-    // 3. Batch fetch all pool accounts
-    let pool_addresses: Vec<Pubkey> = mint_to_pool.values().copied().collect();
-    let mint_order: Vec<String> = mint_to_pool.keys().cloned().collect();
-
-    if pool_addresses.is_empty() {
-        println!("⚠️ [BATCH] No valid pools found for any tokens");
         return HashMap::new();
     }
 
-    println!(
-        "📡 [BATCH] Fetching {} pool accounts in single RPC call (vs {} individual calls)",
-        pool_addresses.len(),
-        pool_addresses.len()
-    );
+    if debug_prices {
+        println!(
+            "⚡ [DEBUG-PRICES] Fast pricing {} tokens with known pools...",
+            mint_to_pool.len()
+        );
+    }
+
+    let fast_start = Instant::now();
+    let pool_addresses: Vec<Pubkey> = mint_to_pool.values().copied().collect();
+    let mint_order: Vec<String> = mint_to_pool.keys().cloned().collect();
 
     let accounts_result = rpc.get_multiple_accounts(&pool_addresses);
     let accounts = match accounts_result {
         Ok(accounts) => accounts,
         Err(e) => {
-            eprintln!("❌ [BATCH] Failed to fetch multiple accounts: {}", e);
+            if debug_prices {
+                eprintln!("❌ [DEBUG-PRICES] Failed to fetch multiple accounts: {}", e);
+            } else {
+                eprintln!("❌ [FAST] Failed to fetch multiple accounts: {}", e);
+            }
             return HashMap::new();
         }
     };
 
-    // 4. Process each account to get prices
     let mut prices = HashMap::new();
     let mut successful_prices = 0;
 
@@ -206,71 +225,642 @@ pub fn batch_prices_from_pools(rpc: &RpcClient, mints: &[String]) -> HashMap<Str
         let pool_pk = pool_addresses[i];
 
         if let Some(account) = account_opt {
+            if debug_prices {
+                println!(
+                    "⚡ [DEBUG-PRICES] Decoding fast price for {} from pool {}",
+                    mint,
+                    pool_pk
+                );
+            }
+
             match decode_pool_account_to_price(rpc, &pool_pk, account) {
                 Ok(price) => {
-                    let prev_price = {
-                        PRICE_CACHE.read()
-                            .unwrap()
-                            .get(mint)
-                            .map(|&(_, p)| p)
-                    };
-
-                    // Calculate price change
-                    let pct = match prev_price {
-                        Some(p) if p != 0.0 => ((price - p) / p) * 100.0,
-                        _ => 0.0,
-                    };
-
-                    // Log significant price changes
-                    if pct.abs() > 1.0 {
-                        // Only log changes > 1%
-                        let pct_str = if pct > 0.0 {
-                            format!("\x1b[32;1m+{:.2}%\x1b[0m", pct)
-                        } else {
-                            format!("\x1b[31;1m{:.2}%\x1b[0m", pct)
-                        };
-
-                        let symbol = mint.chars().take(4).collect::<String>();
-                        println!(
-                            "📊 [BATCH] {} → {} \x1b[1m{:.12}\x1b[0m SOL",
-                            symbol,
-                            pct_str,
-                            price
-                        );
-                    }
-
-                    // Update price cache
-                    let ts = std::time::SystemTime
-                        ::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-                    PRICE_CACHE.write().unwrap().insert(mint.clone(), (ts, price));
-
+                    update_price_cache_with_change_log(mint, price);
                     prices.insert(mint.clone(), price);
                     successful_prices += 1;
+
+                    if debug_prices {
+                        println!("✅ [DEBUG-PRICES] Fast price for {}: {:.9}", mint, price);
+                    }
                 }
                 Err(e) => {
-                    eprintln!("❌ [BATCH] Failed to decode price for {}: {}", mint, e);
+                    // CRITICAL FIX: Remove failed pools from cache
+                    POOL_CACHE.write().remove(mint);
+
+                    if debug_prices {
+                        eprintln!(
+                            "❌ [DEBUG-PRICES] Failed to decode fast price for {}: {} - REMOVED FROM CACHE",
+                            mint,
+                            e
+                        );
+                    } else {
+                        eprintln!(
+                            "❌ [FAST] Failed to decode price for {}: {} - REMOVED FROM CACHE",
+                            mint,
+                            e
+                        );
+                    }
                 }
             }
         } else {
-            eprintln!("❌ [BATCH] Account not found for {}", mint);
+            // ALSO FIX: Remove pools with no account data
+            POOL_CACHE.write().remove(mint);
+
+            if debug_prices {
+                println!(
+                    "⚠️ [DEBUG-PRICES] No account data for {} (pool: {}) - REMOVED FROM CACHE",
+                    mint,
+                    pool_pk
+                );
+            }
         }
     }
 
-    let batch_duration = batch_start.elapsed();
-    let rpc_savings = pool_addresses.len().saturating_sub(1); // We saved this many RPC calls
+    if debug_prices {
+        println!(
+            "⚡ [DEBUG-PRICES] Fast tier completed in {}ms - Priced: {}/{} tokens - RPC calls saved: {}",
+            fast_start.elapsed().as_millis(),
+            successful_prices,
+            mint_order.len(),
+            pool_addresses.len().saturating_sub(1)
+        );
+    } else {
+        println!(
+            "⚡ [FAST] {} known pools priced in {} ms - RPC saved: {}",
+            successful_prices,
+            fast_start.elapsed().as_millis(),
+            pool_addresses.len().saturating_sub(1)
+        );
+    }
 
-    println!(
-        "✅ [BATCH] Completed in {} ms - Success: {}/{} - Saved {} RPC calls 💰",
-        batch_duration.as_millis(),
-        successful_prices,
-        mints.len(),
-        rpc_savings
-    );
+    // Save the updated cache to disk (async, non-blocking)
+    tokio::task::spawn_blocking(flush_pool_cache_to_disk);
 
     prices
+}
+
+/// Slower batch pricing for tokens that need pool discovery
+/// This function handles the expensive pool discovery process
+pub fn batch_prices_discovery_tier(rpc: &RpcClient, mints: &[String]) -> HashMap<String, f64> {
+    if mints.is_empty() {
+        return HashMap::new();
+    }
+
+    let debug_prices = crate::configs::ARGS.iter().any(|a| a == "--debug-prices");
+
+    ensure_pool_cache_loaded().unwrap_or_else(|e| {
+        eprintln!("⚠️ Failed to load pool cache: {}", e);
+    });
+
+    // Only process tokens that need pool discovery
+    let mut missing_pools: Vec<String> = Vec::new();
+    {
+        let cache = POOL_CACHE.read();
+        for mint in mints {
+            if !cache.contains_key(mint) {
+                missing_pools.push(mint.clone());
+            }
+        }
+    }
+
+    if missing_pools.is_empty() {
+        if debug_prices {
+            println!("🔍 [DEBUG-PRICES] No tokens need pool discovery");
+        }
+        return HashMap::new();
+    }
+
+    let discovery_start = Instant::now();
+    println!("🔍 [DISCOVERY] Finding pools for {} new tokens...", missing_pools.len());
+
+    let mut mint_to_pool: HashMap<String, Pubkey> = HashMap::new();
+    let mut successful_discoveries = 0;
+    let mut failed_discoveries = 0;
+
+    // Process discovery in smaller batches to avoid timeouts
+    let batch_size = 5; // Process 5 tokens at a time
+    for (batch_idx, chunk) in missing_pools.chunks(batch_size).enumerate() {
+        if debug_prices {
+            println!(
+                "🔍 [DEBUG-PRICES] Processing batch {} ({} tokens)...",
+                batch_idx + 1,
+                chunk.len()
+            );
+        }
+
+        for mint in chunk {
+            if debug_prices {
+                println!("🔍 [DEBUG-PRICES] Finding pool for token: {}", mint);
+            }
+
+            match find_biggest_pool_for_mint(rpc, mint) {
+                Ok(pool_pk) => {
+                    mint_to_pool.insert(mint.clone(), pool_pk);
+                    // Cache immediately for future fast access
+                    POOL_CACHE.write().insert(mint.clone(), pool_pk);
+                    successful_discoveries += 1;
+
+                    if debug_prices {
+                        println!("✅ [DEBUG-PRICES] Found pool for {}: {}", mint, pool_pk);
+                    }
+                }
+                Err(e) => {
+                    failed_discoveries += 1;
+                    if debug_prices {
+                        eprintln!("❌ [DEBUG-PRICES] Failed to find pool for {}: {}", mint, e);
+                    } else {
+                        eprintln!("❌ [DISCOVERY] Failed to find pool for {}: {}", mint, e);
+                    }
+                }
+            }
+        }
+
+        // Small delay between batches to avoid overwhelming the system
+        if chunk.len() == batch_size {
+            if debug_prices {
+                println!("🔍 [DEBUG-PRICES] Batch {} completed, pausing 100ms...", batch_idx + 1);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+
+    if !mint_to_pool.is_empty() {
+        if debug_prices {
+            println!(
+                "🔍 [DEBUG-PRICES] Pool discovery completed - Success: {}, Failed: {}",
+                successful_discoveries,
+                failed_discoveries
+            );
+            println!(
+                "🔍 [DEBUG-PRICES] Fetching prices for {} discovered pools...",
+                mint_to_pool.len()
+            );
+        }
+
+        // Save discovered pools to disk
+        tokio::task::spawn_blocking(flush_pool_cache_to_disk);
+
+        // Now get prices for discovered pools
+        let pool_addresses: Vec<Pubkey> = mint_to_pool.values().copied().collect();
+        let mint_order: Vec<String> = mint_to_pool.keys().cloned().collect();
+
+        let accounts_result = rpc.get_multiple_accounts(&pool_addresses);
+        let accounts = match accounts_result {
+            Ok(accounts) => accounts,
+            Err(e) => {
+                if debug_prices {
+                    eprintln!("❌ [DEBUG-PRICES] Failed to fetch pool accounts: {}", e);
+                } else {
+                    eprintln!("❌ [DISCOVERY] Failed to fetch pool accounts: {}", e);
+                }
+                return HashMap::new();
+            }
+        };
+
+        let mut prices = HashMap::new();
+        let mut successful_prices = 0;
+
+        for (i, account_opt) in accounts.iter().enumerate() {
+            let mint = &mint_order[i];
+            let pool_pk = pool_addresses[i];
+
+            if let Some(account) = account_opt {
+                if debug_prices {
+                    println!("🔍 [DEBUG-PRICES] Decoding price for {} from pool {}", mint, pool_pk);
+                }
+
+                match decode_pool_account_to_price(rpc, &pool_pk, account) {
+                    Ok(price) => {
+                        update_price_cache_with_change_log(mint, price);
+                        prices.insert(mint.clone(), price);
+                        successful_prices += 1;
+
+                        if debug_prices {
+                            println!("✅ [DEBUG-PRICES] Got price for {}: {:.9}", mint, price);
+                        }
+                    }
+                    Err(e) => {
+                        // CRITICAL FIX: Remove failed pools from cache
+                        POOL_CACHE.write().remove(mint);
+
+                        if debug_prices {
+                            eprintln!(
+                                "❌ [DEBUG-PRICES] Failed to decode price for {}: {} - REMOVED FROM CACHE",
+                                mint,
+                                e
+                            );
+                        } else {
+                            eprintln!(
+                                "❌ [DISCOVERY] Failed to decode price for {}: {} - REMOVED FROM CACHE",
+                                mint,
+                                e
+                            );
+                        }
+                    }
+                }
+            } else {
+                // Remove pools with no account data
+                POOL_CACHE.write().remove(mint);
+
+                if debug_prices {
+                    println!(
+                        "⚠️ [DEBUG-PRICES] No account data for {} (pool: {}) - REMOVED FROM CACHE",
+                        mint,
+                        pool_pk
+                    );
+                }
+            }
+        }
+
+        if debug_prices {
+            println!(
+                "🔍 [DEBUG-PRICES] Discovery pricing completed in {}ms - Discoveries: {}/{}, Prices: {}/{}",
+                discovery_start.elapsed().as_millis(),
+                successful_discoveries,
+                missing_pools.len(),
+                successful_prices,
+                mint_to_pool.len()
+            );
+        } else {
+            println!(
+                "🔍 [DISCOVERY] Completed in {} ms - Found: {}/{} pools - Priced: {} tokens",
+                discovery_start.elapsed().as_millis(),
+                mint_to_pool.len(),
+                missing_pools.len(),
+                successful_prices
+            );
+        }
+
+        prices
+    } else {
+        if debug_prices {
+            println!(
+                "❌ [DEBUG-PRICES] No pools found for any new tokens after {} attempts",
+                missing_pools.len()
+            );
+        } else {
+            println!("❌ [DISCOVERY] No pools found for any new tokens");
+        }
+        HashMap::new()
+    }
+}
+
+/// Dual-tier pricing system: Fast for known pools, slower for discovery
+/// This is the main entry point that combines both tiers optimally
+pub fn batch_prices_from_pools(rpc: &RpcClient, mints: &[String]) -> HashMap<String, f64> {
+    if mints.is_empty() {
+        return HashMap::new();
+    }
+
+    println!("💰 [DUAL-TIER] Processing {} tokens with optimized pricing...", mints.len());
+
+    // Separate tokens into fast and discovery tiers
+    let (known_tokens, unknown_tokens) = {
+        ensure_pool_cache_loaded().unwrap_or_else(|e| {
+            eprintln!("⚠️ Failed to load pool cache: {}", e);
+        });
+
+        let cache = POOL_CACHE.read();
+        let mut known = Vec::new();
+        let mut unknown = Vec::new();
+
+        for mint in mints {
+            if cache.contains_key(mint) {
+                known.push(mint.clone());
+            } else {
+                unknown.push(mint.clone());
+            }
+        }
+        (known, unknown)
+    };
+
+    let mut all_prices = HashMap::new();
+
+    // Fast tier: Process known tokens immediately
+    if !known_tokens.is_empty() {
+        let fast_prices = batch_prices_fast_tier(rpc, &known_tokens);
+        all_prices.extend(fast_prices);
+    }
+
+    // Discovery tier: Process unknown tokens (slower)
+    if !unknown_tokens.is_empty() {
+        let discovery_prices = batch_prices_discovery_tier(rpc, &unknown_tokens);
+        all_prices.extend(discovery_prices);
+    }
+
+    let total_success = all_prices.len();
+    let total_requested = mints.len();
+
+    println!(
+        "✅ [DUAL-TIER] Completed - Fast: {}, Discovery: {}, Total: {}/{} 💰",
+        known_tokens.len(),
+        unknown_tokens.len(),
+        total_success,
+        total_requested
+    );
+
+    all_prices
+}
+
+/// Priority pricing for open positions (highest priority - must be fast)
+/// Uses only fast tier since position tokens should have known pools
+pub fn batch_prices_for_positions(
+    rpc: &RpcClient,
+    position_mints: &[String]
+) -> HashMap<String, f64> {
+    if position_mints.is_empty() {
+        return HashMap::new();
+    }
+
+    println!("⚡ [POSITIONS] Fast pricing for {} open positions...", position_mints.len());
+    let start = Instant::now();
+
+    // Use only fast tier for positions - they should all have known pools
+    let prices = batch_prices_fast_tier(rpc, position_mints);
+
+    // If any position tokens are missing from fast tier, this is unusual
+    let missing_count = position_mints.len() - prices.len();
+    if missing_count > 0 {
+        eprintln!("⚠️ [POSITIONS] {} position tokens missing from cache - this shouldn't happen!", missing_count);
+
+        // For positions, we need prices immediately, so do emergency discovery
+        let missing_mints: Vec<String> = position_mints
+            .iter()
+            .filter(|mint| !prices.contains_key(*mint))
+            .cloned()
+            .collect();
+
+        if !missing_mints.is_empty() {
+            println!(
+                "🚨 [POSITIONS] Emergency discovery for {} missing position tokens",
+                missing_mints.len()
+            );
+            let emergency_prices = batch_prices_discovery_tier(rpc, &missing_mints);
+            let total_prices = prices.into_iter().chain(emergency_prices).collect();
+
+            println!(
+                "⚡ [POSITIONS] Completed with emergency discovery in {} ms",
+                start.elapsed().as_millis()
+            );
+            return total_prices;
+        }
+    }
+
+    println!("⚡ [POSITIONS] Completed fast pricing in {} ms", start.elapsed().as_millis());
+    prices
+}
+
+/// Discovery pricing for new token candidates (lower priority - can be slower)
+/// Uses discovery tier since these are new tokens
+pub fn batch_prices_for_discovery(
+    rpc: &RpcClient,
+    candidate_mints: &[String]
+) -> HashMap<String, f64> {
+    if candidate_mints.is_empty() {
+        return HashMap::new();
+    }
+
+    println!("🔍 [CANDIDATES] Discovery pricing for {} new tokens...", candidate_mints.len());
+
+    // Use dual-tier but prioritize discovery since these are likely new
+    batch_prices_from_pools(rpc, candidate_mints)
+}
+
+/// Separated discovery pricing for token discovery - processes known and unknown pools separately
+/// This prevents slow pool discovery from blocking fast pricing of known tokens
+pub fn batch_prices_for_discovery_separated(
+    rpc: &RpcClient,
+    candidate_mints: &[String],
+    debug: bool
+) -> HashMap<String, f64> {
+    if candidate_mints.is_empty() {
+        return HashMap::new();
+    }
+
+    if debug {
+        println!(
+            "🔍 [DEBUG-PRICES] Starting separated discovery pricing for {} tokens",
+            candidate_mints.len()
+        );
+    }
+
+    ensure_pool_cache_loaded().unwrap_or_else(|e| {
+        if debug {
+            eprintln!("⚠️ [DEBUG-PRICES] Failed to load pool cache: {}", e);
+        }
+    });
+
+    // Separate tokens into known and unknown pools
+    let (known_tokens, unknown_tokens) = {
+        let cache = POOL_CACHE.read();
+        let mut known = Vec::new();
+        let mut unknown = Vec::new();
+
+        for mint in candidate_mints {
+            if cache.contains_key(mint) {
+                known.push(mint.clone());
+            } else {
+                unknown.push(mint.clone());
+            }
+        }
+
+        if debug {
+            println!(
+                "🔍 [DEBUG-PRICES] Token separation - Known: {}, Unknown: {}",
+                known.len(),
+                unknown.len()
+            );
+        }
+
+        (known, unknown)
+    };
+
+    let mut all_prices = HashMap::new();
+    let discovery_start = std::time::Instant::now();
+
+    // STEP 1: Process known tokens first (fast)
+    if !known_tokens.is_empty() {
+        if debug {
+            println!(
+                "⚡ [DEBUG-PRICES] Processing {} known tokens (fast tier)...",
+                known_tokens.len()
+            );
+        }
+
+        let fast_start = std::time::Instant::now();
+        let fast_prices = batch_prices_fast_tier(rpc, &known_tokens);
+
+        if debug {
+            println!(
+                "⚡ [DEBUG-PRICES] Fast tier completed in {}ms - Got {}/{} prices",
+                fast_start.elapsed().as_millis(),
+                fast_prices.len(),
+                known_tokens.len()
+            );
+        }
+
+        all_prices.extend(fast_prices);
+    }
+
+    // STEP 2: Process unknown tokens (slower, but limited)
+    if !unknown_tokens.is_empty() {
+        if debug {
+            println!(
+                "🔍 [DEBUG-PRICES] Processing {} unknown tokens (discovery tier)...",
+                unknown_tokens.len()
+            );
+        }
+
+        // Limit unknown tokens processing to avoid blocking
+        let max_unknown_per_cycle = 10; // Process max 10 unknown tokens per discovery cycle
+        let limited_unknown: Vec<String> = unknown_tokens
+            .iter()
+            .take(max_unknown_per_cycle)
+            .cloned()
+            .collect();
+
+        if limited_unknown.len() < unknown_tokens.len() && debug {
+            println!(
+                "🔍 [DEBUG-PRICES] Limited unknown token processing to {} tokens (from {})",
+                limited_unknown.len(),
+                unknown_tokens.len()
+            );
+        }
+
+        let discovery_tier_start = std::time::Instant::now();
+        let discovery_prices = batch_prices_discovery_tier(rpc, &limited_unknown);
+
+        if debug {
+            println!(
+                "🔍 [DEBUG-PRICES] Discovery tier completed in {}ms - Got {}/{} prices",
+                discovery_tier_start.elapsed().as_millis(),
+                discovery_prices.len(),
+                limited_unknown.len()
+            );
+        }
+
+        all_prices.extend(discovery_prices);
+    }
+
+    let total_duration = discovery_start.elapsed();
+    if debug {
+        println!(
+            "✅ [DEBUG-PRICES] Separated discovery completed in {}ms - Total: {}/{} prices",
+            total_duration.as_millis(),
+            all_prices.len(),
+            candidate_mints.len()
+        );
+    } else {
+        println!(
+            "🔍 [DISCOVERY-SEPARATED] Fast: {} | Discovery: {} | Total: {}/{} in {}ms",
+            known_tokens.len(),
+            std::cmp::min(unknown_tokens.len(), 10),
+            all_prices.len(),
+            candidate_mints.len(),
+            total_duration.as_millis()
+        );
+    }
+
+    all_prices
+}
+
+/// Smart pricing that automatically chooses the best strategy based on token mix
+/// This analyzes the token list and uses the most efficient pricing approach
+pub fn batch_prices_smart(rpc: &RpcClient, mints: &[String]) -> HashMap<String, f64> {
+    if mints.is_empty() {
+        return HashMap::new();
+    }
+
+    ensure_pool_cache_loaded().unwrap_or_else(|e| {
+        eprintln!("⚠️ Failed to load pool cache: {}", e);
+    });
+
+    // Analyze the token mix
+    let (known_count, unknown_count) = {
+        let cache = POOL_CACHE.read();
+        let known = mints
+            .iter()
+            .filter(|mint| cache.contains_key(*mint))
+            .count();
+        let unknown = mints.len() - known;
+        (known, unknown)
+    };
+
+    let known_ratio = (known_count as f64) / (mints.len() as f64);
+
+    // Choose strategy based on token mix
+    if known_ratio >= 0.8 {
+        // Mostly known tokens - prioritize speed
+        println!(
+            "⚡ [SMART] Using fast-priority strategy ({:.0}% known tokens)",
+            known_ratio * 100.0
+        );
+
+        let mut all_prices = HashMap::new();
+
+        // Fast tier first
+        let known_tokens: Vec<String> = {
+            let cache = POOL_CACHE.read();
+            mints
+                .iter()
+                .filter(|mint| cache.contains_key(*mint))
+                .cloned()
+                .collect()
+        };
+
+        if !known_tokens.is_empty() {
+            all_prices.extend(batch_prices_fast_tier(rpc, &known_tokens));
+        }
+
+        // Quick discovery for remaining
+        let remaining: Vec<String> = mints
+            .iter()
+            .filter(|mint| !all_prices.contains_key(*mint))
+            .cloned()
+            .collect();
+
+        if !remaining.is_empty() {
+            all_prices.extend(batch_prices_discovery_tier(rpc, &remaining));
+        }
+
+        all_prices
+    } else {
+        // Many unknown tokens - use balanced approach
+        println!("🔍 [SMART] Using balanced strategy ({:.0}% known tokens)", known_ratio * 100.0);
+        batch_prices_from_pools(rpc, mints)
+    }
+}
+
+/// Helper function to update price cache and log significant changes
+fn update_price_cache_with_change_log(mint: &str, price: f64) {
+    let prev_price = {
+        PRICE_CACHE.read()
+            .unwrap()
+            .get(mint)
+            .map(|&(_, p)| p)
+    };
+
+    // Calculate price change
+    let pct = match prev_price {
+        Some(p) if p != 0.0 => ((price - p) / p) * 100.0,
+        _ => 0.0,
+    };
+
+    // Log significant price changes
+    if pct.abs() > 1.0 {
+        let pct_str = if pct > 0.0 {
+            format!("\x1b[32;1m+{:.2}%\x1b[0m", pct)
+        } else {
+            format!("\x1b[31;1m{:.2}%\x1b[0m", pct)
+        };
+
+        let symbol = mint.chars().take(4).collect::<String>();
+        println!("📊 {} → {} \x1b[1m{:.12}\x1b[0m SOL", symbol, pct_str, price);
+    }
+
+    // Update price cache
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    PRICE_CACHE.write().unwrap().insert(mint.to_string(), (ts, price));
 }
 
 // --- replace the two helpers -----------------------------------------------

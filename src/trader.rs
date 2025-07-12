@@ -1,5 +1,4 @@
 use crate::prelude::*;
-use crate::persistence;
 use crate::trades::get_token_trades;
 use crate::shutdown;
 use std::collections::VecDeque;
@@ -168,6 +167,31 @@ pub fn start_trader_loop() {
         }
     });
 
+    // ── Start price monitoring task for discovered tokens ──────────────────────────────────────────────────────
+    task::spawn(async move {
+        use std::panic::AssertUnwindSafe;
+
+        loop {
+            if shutdown::is_shutdown_requested() {
+                break;
+            }
+
+            // run the price monitoring logic and trap panics
+            let run = AssertUnwindSafe(price_monitoring_loop()).catch_unwind().await;
+
+            match run {
+                Ok(_) => {
+                    break;
+                } // exited via SHUTDOWN
+                Err(e) => {
+                    eprintln!("💥 [PANIC] Price monitoring crashed: {:?}", e);
+                    eprintln!("🔄 [RESTART] Restarting price monitoring in 3 seconds...");
+                    sleep(Duration::from_secs(3)).await;
+                }
+            }
+        }
+    });
+
     // ── Start token discovery task ──────────────────────────────────────────────────────
     task::spawn(async move {
         use std::panic::AssertUnwindSafe;
@@ -323,11 +347,11 @@ async fn position_monitor_loop() {
             let positions = OPEN_POSITIONS.read().await;
             let mut profitable_mints = Vec::new();
 
-            // Use batch pricing to efficiently check all positions
+            // Use fast pricing for positions (they should have known pools)
             let prices = tokio::task
                 ::spawn_blocking({
                     let mints = all_position_mints.clone();
-                    move || batch_prices_from_pools(&crate::configs::RPC, &mints)
+                    move || batch_prices_for_positions(&crate::configs::RPC, &mints)
                 }).await
                 .unwrap_or_default();
 
@@ -352,7 +376,7 @@ async fn position_monitor_loop() {
 
             if !profitable_mints.is_empty() {
                 println!(
-                    "� [POSITION MONITOR] PROFITABLE CHECK - Monitoring {}/{} profitable positions (>2%) (cycle {})",
+                    "📊 [POSITION MONITOR] PROFITABLE CHECK - Monitoring {}/{} profitable positions (>2%) (cycle {})",
                     profitable_mints.len(),
                     all_position_mints.len(),
                     cycle_counter
@@ -386,9 +410,6 @@ async fn position_monitor_loop() {
             }
         }
 
-        // Check if trading is blocked - simple check without complex transaction manager
-        // For now, we'll allow trading since transactions are confirmed immediately
-
         /* ── BATCH PRICE FETCHING for positions only ─────────── */
         println!("🔄 [POSITION MONITOR] Checking {} open positions...", position_mints.len());
         let cycle_start = Instant::now();
@@ -396,10 +417,10 @@ async fn position_monitor_loop() {
         let prices = tokio::task
             ::spawn_blocking({
                 let mints = position_mints.clone();
-                move || batch_prices_from_pools(&crate::configs::RPC, &mints)
+                move || batch_prices_for_positions(&crate::configs::RPC, &mints)
             }).await
             .unwrap_or_else(|e| {
-                eprintln!("❌ [POSITION MONITOR] Batch price fetch panicked: {}", e);
+                eprintln!("❌ [POSITION MONITOR] Fast position pricing panicked: {}", e);
                 HashMap::new()
             });
 
@@ -727,10 +748,137 @@ async fn position_monitor_loop() {
     }
 }
 
-/// Token discovery task - scans for new buy opportunities every 15 seconds
+/// Price monitoring task - monitors price changes for discovered tokens (not in positions)
+async fn price_monitoring_loop() {
+    use std::time::Instant;
+    println!("🔥 [PRICE MONITOR] Started price monitoring task for discovered tokens");
+    println!("📊 [PRICE MONITOR] Price updates: every {}s", PRICE_MONITORING_CHECK_TIME_SEC);
+    println!("🔍 [PRICE MONITOR] Monitors tokens without open positions for entry opportunities");
+
+    /* ── wait for TOKENS ──────────────────────────────── */
+    loop {
+        if shutdown::is_shutdown_requested() {
+            return;
+        }
+        if !TOKENS.read().await.is_empty() {
+            break;
+        }
+        println!("⏳ [PRICE MONITOR] Waiting for TOKENS to be loaded …");
+        sleep(Duration::from_secs(1)).await;
+    }
+    println!("✅ [PRICE MONITOR] TOKENS loaded! Starting price monitoring.");
+
+    let mut cycle_counter = 0;
+
+    loop {
+        if shutdown::is_shutdown_requested() {
+            return;
+        }
+
+        let cycle_start = Instant::now();
+        cycle_counter += 1;
+
+        // Get tokens that are discovered but not in open positions
+        let tokens_to_monitor: Vec<String> = {
+            let tokens = TOKENS.read().await;
+            let open_positions = OPEN_POSITIONS.read().await;
+            let mut filtered_tokens = Vec::new();
+
+            for token in tokens.iter() {
+                // Only monitor tokens that are NOT in open positions
+                if !open_positions.contains_key(&token.mint) {
+                    filtered_tokens.push(token.mint.clone());
+                }
+            }
+
+            filtered_tokens
+        };
+
+        if !tokens_to_monitor.is_empty() {
+            println!(
+                "💰 [PRICE MONITOR] Cycle #{} - Monitoring {} tokens for price changes...",
+                cycle_counter,
+                tokens_to_monitor.len()
+            );
+
+            // Get current prices for monitoring tokens
+            let prices = tokio::task
+                ::spawn_blocking({
+                    let mints = tokens_to_monitor.clone();
+                    move || {
+                        println!("💰 [PRICE MONITOR] Getting prices for {} tokens", mints.len());
+
+                        // Use the same separated pricing strategy as token discovery
+                        crate::pool_price::batch_prices_for_discovery_separated(
+                            &crate::configs::RPC,
+                            &mints,
+                            false // No debug for price monitoring by default
+                        )
+                    }
+                }).await
+                .unwrap_or_else(|e| {
+                    eprintln!("❌ [PRICE MONITOR] Batch pricing failed: {:?}", e);
+                    HashMap::new()
+                });
+
+            let mut price_updates = 0;
+            let mut successful_prices = 0;
+
+            for (mint, price) in prices {
+                if price > 0.0 {
+                    successful_prices += 1;
+
+                    // Find token symbol for better logging
+                    let symbol = {
+                        let tokens = TOKENS.read().await;
+                        tokens
+                            .iter()
+                            .find(|t| t.mint == mint)
+                            .map(|t| t.symbol.clone())
+                            .unwrap_or_else(|| mint[..8].to_string())
+                    };
+
+                    // Log price update (only for tokens we're actively tracking)
+                    if cycle_counter % 10 == 0 {
+                        // Every 10th cycle (reduce spam)
+                        println!("💰 [PRICE UPDATE] {} price: ${:.9}", symbol, price);
+                    }
+                    price_updates += 1;
+                }
+            }
+
+            if cycle_counter % 5 == 0 {
+                // Every 5th cycle
+                println!(
+                    "📊 [PRICE MONITOR] Cycle #{} completed: {}/{} prices updated ({:.1}% success) in {:.2}s",
+                    cycle_counter,
+                    successful_prices,
+                    tokens_to_monitor.len(),
+                    if tokens_to_monitor.len() > 0 {
+                        ((successful_prices as f64) / (tokens_to_monitor.len() as f64)) * 100.0
+                    } else {
+                        0.0
+                    },
+                    cycle_start.elapsed().as_secs_f64()
+                );
+            }
+        } else {
+            if cycle_counter % 20 == 0 {
+                // Every 20th cycle when no tokens to monitor
+                println!(
+                    "💰 [PRICE MONITOR] No tokens to monitor (all tokens have open positions or list is empty)"
+                );
+            }
+        }
+
+        sleep(Duration::from_secs(PRICE_MONITORING_CHECK_TIME_SEC)).await;
+    }
+}
+
+/// Token discovery task - scans TOKENS list for new buy opportunities
 async fn token_discovery_loop() {
     use std::time::Instant;
-    println!("🔥 [TOKEN DISCOVERY] Started prioritized watchlist + discovery task");
+    println!("🔥 [TOKEN DISCOVERY] Started token discovery task using TOKENS list only");
 
     /* ── wait for TOKENS ──────────────────────────────── */
     loop {
@@ -743,10 +891,9 @@ async fn token_discovery_loop() {
         println!("⏳ [TOKEN DISCOVERY] Waiting for TOKENS to be loaded …");
         sleep(Duration::from_secs(1)).await;
     }
-    println!("✅ [TOKEN DISCOVERY] TOKENS loaded! Starting prioritized monitoring.");
+    println!("✅ [TOKEN DISCOVERY] TOKENS loaded! Starting token discovery monitoring.");
 
-    let mut watchlist_cycle_counter = 0;
-    let mut discovery_cycle_counter = 0;
+    let mut cycle_counter = 0;
 
     loop {
         if shutdown::is_shutdown_requested() {
@@ -754,444 +901,414 @@ async fn token_discovery_loop() {
         }
 
         let cycle_start = Instant::now();
+        let debug_discovery = crate::configs::ARGS.iter().any(|a| a == "--debug-token-discovery");
 
-        // PRIORITY 1: Always check watchlist tokens first
-        let watchlist_tokens = persistence::get_priority_watchlist_tokens(50).await;
-        if !watchlist_tokens.is_empty() {
-            watchlist_cycle_counter += 1;
+        // Get all available tokens from TOKENS list for discovery
+        let tokens_to_check: Vec<String> = {
+            let tokens = TOKENS.read().await;
+            let open_positions = OPEN_POSITIONS.read().await;
+            let mut filtered_tokens = Vec::new();
 
-            // ✅ FIXED: Better filtering of tokens with open positions
-            let watchlist_to_check: Vec<String> = {
+            if debug_discovery {
+                println!("🔍 [DEBUG-DISCOVERY] Total tokens in TOKENS list: {}", tokens.len());
+                println!("🔍 [DEBUG-DISCOVERY] Open positions count: {}", open_positions.len());
+            }
+
+            for token in tokens.iter() {
+                // Skip tokens that already have open positions
+                if !open_positions.contains_key(&token.mint) {
+                    // Check cooldown before adding to check list
+                    let (can_enter, minutes_since) = can_enter_token_position(&token.mint).await;
+                    if can_enter {
+                        filtered_tokens.push(token.mint.clone());
+                        if debug_discovery {
+                            println!(
+                                "🔍 [DEBUG-DISCOVERY] Added {} ({}) to check list",
+                                token.symbol,
+                                token.mint
+                            );
+                        }
+                    } else if debug_discovery {
+                        println!(
+                            "🔍 [DEBUG-DISCOVERY] Skipped {} ({}) - in cooldown ({} min ago)",
+                            token.symbol,
+                            token.mint,
+                            minutes_since
+                        );
+                    }
+                } else if debug_discovery {
+                    println!(
+                        "🔍 [DEBUG-DISCOVERY] Skipped {} ({}) - has open position",
+                        token.symbol,
+                        token.mint
+                    );
+                }
+            }
+
+            if debug_discovery {
+                println!(
+                    "🔍 [DEBUG-DISCOVERY] Filtered tokens to check: {}",
+                    filtered_tokens.len()
+                );
+            }
+
+            filtered_tokens
+        };
+
+        if !tokens_to_check.is_empty() {
+            cycle_counter += 1;
+
+            println!(
+                "🔍 [TOKEN DISCOVERY] Cycle #{} - Checking {} available tokens for entry opportunities...",
+                cycle_counter,
+                tokens_to_check.len()
+            );
+
+            if debug_discovery {
+                println!(
+                    "🔍 [DEBUG-DISCOVERY] Cycle #{} tokens to check: {:?}",
+                    cycle_counter,
+                    tokens_to_check.iter().take(10).collect::<Vec<_>>()
+                );
+                if tokens_to_check.len() > 10 {
+                    println!(
+                        "🔍 [DEBUG-DISCOVERY] ... and {} more tokens",
+                        tokens_to_check.len() - 10
+                    );
+                }
+            }
+
+            // Check if we can open more positions
+            let can_open_more = {
                 let open_positions = OPEN_POSITIONS.read().await;
-                let mut filtered_tokens = Vec::new();
+                open_positions.len() < MAX_OPEN_POSITIONS
+            };
 
-                for mint in watchlist_tokens {
-                    if !open_positions.contains_key(&mint) {
-                        // Double-check cooldown before adding to check list
-                        let (can_enter, _) = can_enter_token_position(&mint).await;
-                        if can_enter {
-                            filtered_tokens.push(mint);
+            if debug_discovery {
+                let open_count = {
+                    let open_positions = OPEN_POSITIONS.read().await;
+                    open_positions.len()
+                };
+                println!(
+                    "🔍 [DEBUG-DISCOVERY] Can open more positions: {} (current: {}, max: {})",
+                    can_open_more,
+                    open_count,
+                    MAX_OPEN_POSITIONS
+                );
+            }
+
+            if can_open_more {
+                // Check tokens for entry opportunities using separated pricing strategy
+                let debug_prices = crate::configs::ARGS.iter().any(|a| a == "--debug-prices");
+
+                if debug_discovery {
+                    println!(
+                        "🔍 [DEBUG-DISCOVERY] Starting batch pricing for {} tokens",
+                        tokens_to_check.len()
+                    );
+                }
+
+                let prices = tokio::task
+                    ::spawn_blocking({
+                        let mints = tokens_to_check.clone();
+                        move || {
+                            if debug_prices {
+                                println!(
+                                    "🔍 [DEBUG-PRICES] Starting token discovery pricing for {} tokens",
+                                    mints.len()
+                                );
+                            }
+
+                            // Use separated pricing strategy for token discovery
+                            crate::pool_price::batch_prices_for_discovery_separated(
+                                &crate::configs::RPC,
+                                &mints,
+                                debug_prices
+                            )
+                        }
+                    }).await
+                    .unwrap_or_else(|e| {
+                        eprintln!("❌ [TOKEN DISCOVERY] Batch pricing failed: {:?}", e);
+                        HashMap::new()
+                    });
+
+                if debug_discovery {
+                    println!(
+                        "🔍 [DEBUG-DISCOVERY] Received {} prices from batch pricing",
+                        prices.len()
+                    );
+                    if prices.is_empty() {
+                        println!(
+                            "🔍 [DEBUG-DISCOVERY] No prices received, skipping token evaluation"
+                        );
+                    }
+                }
+
+                for (mint, current_price) in prices.iter() {
+                    if shutdown::is_shutdown_requested() {
+                        return;
+                    }
+
+                    if debug_discovery {
+                        println!(
+                            "🔍 [DEBUG-DISCOVERY] Evaluating token {} at price {:.9}",
+                            mint,
+                            current_price
+                        );
+                    }
+
+                    // Double-check position doesn't exist before buying
+                    {
+                        let open_positions = OPEN_POSITIONS.read().await;
+                        if open_positions.contains_key(mint) {
+                            if debug_discovery {
+                                println!("🔍 [DEBUG-DISCOVERY] Skipping {} - position created during processing", mint);
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Check cooldown again before buying
+                    let (can_enter, minutes_since) = can_enter_token_position(mint).await;
+                    if !can_enter {
+                        if debug_discovery {
+                            println!(
+                                "🔍 [DEBUG-DISCOVERY] Skipping {} - in cooldown ({} min ago)",
+                                mint,
+                                minutes_since
+                            );
                         } else {
-                            println!("⏰ [WATCHLIST] {} is in cooldown, skipping", mint);
-                        }
-                    } else {
-                        println!("📊 [WATCHLIST] {} already has open position, skipping", mint);
-                    }
-                }
-
-                filtered_tokens
-            };
-
-            if !watchlist_to_check.is_empty() {
-                println!(
-                    "📋 [WATCHLIST PRIORITY] Cycle #{} - Checking {} watchlist tokens for re-entry opportunities...",
-                    watchlist_cycle_counter,
-                    watchlist_to_check.len()
-                );
-
-                // Check if we can open more positions
-                let can_open_more = {
-                    let open_positions = OPEN_POSITIONS.read().await;
-                    open_positions.len() < MAX_OPEN_POSITIONS
-                };
-
-                if can_open_more {
-                    // Check watchlist tokens for entry opportunities
-                    let prices = tokio::task
-                        ::spawn_blocking({
-                            let mints = watchlist_to_check.clone();
-                            move || batch_prices_from_pools(&crate::configs::RPC, &mints)
-                        }).await
-                        .unwrap_or_else(|_| HashMap::new());
-
-                    for (mint, current_price) in prices.iter() {
-                        if shutdown::is_shutdown_requested() {
-                            return;
-                        }
-
-                        // ✅ FIXED: Double-check position doesn't exist before buying
-                        {
-                            let open_positions = OPEN_POSITIONS.read().await;
-                            if open_positions.contains_key(mint) {
-                                println!("🚫 [WATCHLIST] {} already has position, skipping buy", mint);
-                                continue;
-                            }
-                        }
-
-                        // ✅ FIXED: Check cooldown again before buying
-                        let (can_enter, minutes_since) = can_enter_token_position(mint).await;
-                        if !can_enter {
                             println!(
-                                "⏰ [WATCHLIST] {} in cooldown ({} min ago), skipping",
+                                "⏰ [TOKEN DISCOVERY] {} in cooldown ({} min ago), skipping",
                                 mint,
                                 minutes_since
                             );
-                            continue;
+                        }
+                        continue;
+                    }
+
+                    // Process token entry logic
+                    let token_info = {
+                        let tokens = TOKENS.read().await;
+                        tokens
+                            .iter()
+                            .find(|t| t.mint == *mint)
+                            .cloned()
+                    };
+
+                    if let Some(token) = token_info {
+                        if debug_discovery {
+                            println!(
+                                "🔍 [DEBUG-DISCOVERY] Found token info for {}: {} ({})",
+                                mint,
+                                token.symbol,
+                                token.name
+                            );
+                            println!(
+                                "🔍 [DEBUG-DISCOVERY] Token liquidity: {:.2} SOL",
+                                token.liquidity.base + token.liquidity.quote
+                            );
                         }
 
-                        // Process watchlist token re-entry logic
-                        let token_info = {
-                            let tokens = TOKENS.read().await;
-                            tokens
-                                .iter()
-                                .find(|t| t.mint == *mint)
-                                .cloned()
-                        };
+                        // Check if we should buy this token
+                        let trades = get_token_trades(mint).await;
+                        let ohlcv = crate::ohlcv::get_token_ohlcv_dataframe(mint).await;
 
-                        if let Some(token) = token_info {
-                            // Update watchlist last seen
-                            persistence::update_watchlist_token_seen(mint, *current_price).await;
+                        if debug_discovery {
+                            println!(
+                                "🔍 [DEBUG-DISCOVERY] Trades data available: {}",
+                                trades.is_some()
+                            );
+                            println!(
+                                "🔍 [DEBUG-DISCOVERY] OHLCV data available: {}",
+                                ohlcv.is_some()
+                            );
+                        }
 
-                            // Check if we should buy this watchlist token
-                            let trades = get_token_trades(mint).await;
-                            let ohlcv = crate::ohlcv::get_token_ohlcv_dataframe(mint).await;
+                        if
+                            should_buy(
+                                &token,
+                                true, // Enable buying for token discovery
+                                *current_price,
+                                trades.as_ref(),
+                                ohlcv.as_ref()
+                            ).await
+                        {
+                            let symbol = if token.symbol.is_empty() {
+                                "UNKNOWN"
+                            } else {
+                                &token.symbol
+                            };
+                            let name = if token.name.is_empty() { "UNKNOWN" } else { &token.name };
 
-                            if
-                                should_buy(
-                                    &token,
-                                    true,
-                                    *current_price,
-                                    trades.as_ref(),
-                                    ohlcv.as_ref()
-                                ).await
-                            {
-                                let symbol = if token.symbol.is_empty() {
-                                    "UNKNOWN"
-                                } else {
-                                    &token.symbol
-                                };
-                                let name = if token.name.is_empty() {
-                                    "UNKNOWN"
-                                } else {
-                                    &token.name
-                                };
+                            // Calculate dynamic trade size
+                            let liquidity_sol = token.liquidity.base + token.liquidity.quote;
+                            let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
 
-                                // Calculate dynamic trade size
-                                let liquidity_sol = token.liquidity.base + token.liquidity.quote;
-                                let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
-
+                            if debug_discovery {
+                                println!("🔍 [DEBUG-DISCOVERY] BUY DECISION: {} passed should_buy() check", symbol);
                                 println!(
-                                    "🎯 [WATCHLIST RE-ENTRY] {} ({}): price={:.9} size={:.4}SOL",
-                                    symbol,
+                                    "🔍 [DEBUG-DISCOVERY] Calculated trade size: {:.4} SOL (liquidity: {:.2} SOL)",
+                                    dynamic_trade_size,
+                                    liquidity_sol
+                                );
+                            }
+
+                            println!(
+                                "🎯 [TOKEN DISCOVERY] ENTRY BUY {}: price={:.9} size={:.4}SOL",
+                                symbol,
+                                *current_price,
+                                dynamic_trade_size
+                            );
+
+                            // Final check before executing buy
+                            {
+                                let open_positions = OPEN_POSITIONS.read().await;
+                                if open_positions.contains_key(mint) {
+                                    if debug_discovery {
+                                        println!("🔍 [DEBUG-DISCOVERY] Aborting buy for {} - position created during final check", mint);
+                                    } else {
+                                        println!("🚫 [TOKEN DISCOVERY] {} position created during processing, aborting buy", mint);
+                                    }
+                                    continue;
+                                }
+                            }
+
+                            let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
+
+                            if debug_discovery {
+                                println!(
+                                    "🔍 [DEBUG-DISCOVERY] Executing buy for {} with {} lamports",
                                     mint,
-                                    *current_price,
-                                    dynamic_trade_size
+                                    lamports
                                 );
-
-                                // ✅ FIXED: Final check before executing buy
-                                {
-                                    let open_positions = OPEN_POSITIONS.read().await;
-                                    if open_positions.contains_key(mint) {
-                                        println!("🚫 [WATCHLIST] {} position created during processing, aborting buy", mint);
-                                        continue;
-                                    }
-                                }
-
-                                let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
-
-                                match
-                                    shutdown::safe_buy_gmgn_with_amounts(
-                                        mint,
-                                        lamports,
-                                        symbol
-                                    ).await
-                                {
-                                    Ok((tx, actual_tokens_received)) => {
-                                        println!("✅ [WATCHLIST RE-ENTRY] BUY success: {tx}");
-
-                                        // ✅ FIXED: Check if position was created during buy execution
-                                        let mut should_create_position = true;
-                                        {
-                                            let open_positions = OPEN_POSITIONS.read().await;
-                                            if open_positions.contains_key(mint) {
-                                                println!("⚠️ [WATCHLIST] Position already exists for {}, this might be a DCA", mint);
-                                                should_create_position = false;
-                                            }
-                                        }
-
-                                        if should_create_position {
-                                            // Create position with ACTUAL tokens received
-                                            let new_position = Position {
-                                                entry_price: *current_price,
-                                                peak_price: *current_price,
-                                                dca_count: 0,
-                                                token_amount: actual_tokens_received,
-                                                sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
-                                                sol_received: 0.0,
-                                                open_time: Utc::now(),
-                                                close_time: None,
-                                                last_dca_price: *current_price,
-                                                last_dca_time: Utc::now(),
-                                            };
-
-                                            OPEN_POSITIONS.write().await.insert(
-                                                mint.clone(),
-                                                new_position
-                                            );
-                                            save_open().await;
-
-                                            // Update watchlist priority (successful re-entry)
-                                            persistence::add_to_watchlist(
-                                                mint,
-                                                symbol,
-                                                name,
-                                                *current_price
-                                            ).await;
-                                        }
-
-                                        // Break to avoid opening too many positions at once
-                                        break;
-                                    }
-                                    Err(e) => {
-                                        println!("❌ [WATCHLIST RE-ENTRY] BUY failed: {}", e);
-                                    }
-                                }
                             }
-                        }
-                    }
-                }
-            }
-        }
 
-        // PRIORITY 2: New token discovery (less frequent)
-        discovery_cycle_counter += 1;
-
-        // Only do new discovery every 6 cycles (roughly every minute with 10s watchlist checks)
-        if discovery_cycle_counter % 6 == 0 {
-            let discovery_mints: Vec<String> = {
-                let tokens = TOKENS.read().await;
-                let open_positions = OPEN_POSITIONS.read().await;
-                let blacklist = BLACKLIST.read().await;
-
-                let mut filtered_mints = Vec::new();
-
-                for token in tokens.iter() {
-                    let mint = &token.mint;
-
-                    // ✅ FIXED: More thorough filtering
-                    if !blacklist.contains(mint) && !open_positions.contains_key(mint) {
-                        // Additional check for cooldown
-                        let (can_enter, _) = can_enter_token_position(mint).await;
-                        if can_enter {
-                            filtered_mints.push(mint.clone());
-                        }
-                    }
-                }
-
-                filtered_mints
-            };
-
-            if !discovery_mints.is_empty() {
-                println!(
-                    "🔍 [NEW DISCOVERY] Cycle #{} - Scanning {} new tokens for initial opportunities...",
-                    discovery_cycle_counter / 6,
-                    discovery_mints.len()
-                );
-
-                // Check if we can open more positions
-                let can_open_more = {
-                    let open_positions = OPEN_POSITIONS.read().await;
-                    open_positions.len() < MAX_OPEN_POSITIONS
-                };
-
-                if can_open_more {
-                    // Sample only a subset for performance (first 20 tokens)
-                    let sample_mints: Vec<String> = discovery_mints.into_iter().take(20).collect();
-
-                    let prices = tokio::task
-                        ::spawn_blocking({
-                            let mints = sample_mints.clone();
-                            move || batch_prices_from_pools(&crate::configs::RPC, &mints)
-                        }).await
-                        .unwrap_or_else(|_| HashMap::new());
-
-                    for (mint, current_price) in prices.iter() {
-                        if shutdown::is_shutdown_requested() {
-                            return;
-                        }
-
-                        // ✅ FIXED: Same protection as watchlist
-                        {
-                            let open_positions = OPEN_POSITIONS.read().await;
-                            if open_positions.contains_key(mint) {
-                                println!("🚫 [NEW DISCOVERY] {} already has position, skipping", mint);
-                                continue;
-                            }
-                        }
-
-                        let (can_enter, minutes_since) = can_enter_token_position(mint).await;
-                        if !can_enter {
-                            println!(
-                                "⏰ [NEW DISCOVERY] {} in cooldown ({} min ago), skipping",
-                                mint,
-                                minutes_since
-                            );
-                            continue;
-                        }
-
-                        // Find token info
-                        let token_info = {
-                            let tokens = TOKENS.read().await;
-                            tokens
-                                .iter()
-                                .find(|t| t.mint == *mint)
-                                .cloned()
-                        };
-
-                        if let Some(token) = token_info {
-                            let trades = get_token_trades(mint).await;
-                            let ohlcv = crate::ohlcv::get_token_ohlcv_dataframe(mint).await;
-
-                            if
-                                should_buy(
-                                    &token,
-                                    true,
-                                    *current_price,
-                                    trades.as_ref(),
-                                    ohlcv.as_ref()
-                                ).await
+                            match
+                                shutdown::safe_buy_gmgn_with_amounts(mint, lamports, symbol).await
                             {
-                                let symbol = if token.symbol.is_empty() {
-                                    "UNKNOWN"
-                                } else {
-                                    &token.symbol
-                                };
-                                let name = if token.name.is_empty() {
-                                    "UNKNOWN"
-                                } else {
-                                    &token.name
-                                };
-
-                                // Calculate dynamic trade size
-                                let liquidity_sol = token.liquidity.base + token.liquidity.quote;
-                                let dynamic_trade_size = calculate_trade_size_sol(liquidity_sol);
-
-                                println!(
-                                    "🚀 [NEW DISCOVERY] ENTRY BUY {}: price={:.9} size={:.4}SOL",
-                                    symbol,
-                                    *current_price,
-                                    dynamic_trade_size
-                                );
-
-                                // ✅ FIXED: Final check before executing buy
-                                {
-                                    let open_positions = OPEN_POSITIONS.read().await;
-                                    if open_positions.contains_key(mint) {
-                                        println!("🚫 [NEW DISCOVERY] {} position created during processing, aborting buy", mint);
-                                        continue;
+                                Ok((tx, actual_tokens_received)) => {
+                                    if debug_discovery {
+                                        println!(
+                                            "🔍 [DEBUG-DISCOVERY] Buy successful for {}: tx={}, tokens_received={:.9}",
+                                            mint,
+                                            tx,
+                                            actual_tokens_received
+                                        );
                                     }
-                                }
+                                    println!("✅ [TOKEN DISCOVERY] BUY success: {tx}");
 
-                                let lamports = (dynamic_trade_size * 1_000_000_000.0) as u64;
-
-                                match
-                                    shutdown::safe_buy_gmgn_with_amounts(
-                                        mint,
-                                        lamports,
-                                        symbol
-                                    ).await
-                                {
-                                    Ok((tx, actual_tokens_received)) => {
-                                        println!("✅ [NEW DISCOVERY] BUY success: {tx}");
-
-                                        // ✅ FIXED: Same position creation protection
-                                        let mut should_create_position = true;
-                                        {
-                                            let open_positions = OPEN_POSITIONS.read().await;
-                                            if open_positions.contains_key(mint) {
-                                                println!("⚠️ [NEW DISCOVERY] Position already exists for {}, this might be a DCA", mint);
-                                                should_create_position = false;
+                                    // Check if position was created during buy execution
+                                    let mut should_create_position = true;
+                                    {
+                                        let open_positions = OPEN_POSITIONS.read().await;
+                                        if open_positions.contains_key(mint) {
+                                            if debug_discovery {
+                                                println!("🔍 [DEBUG-DISCOVERY] Position already exists for {} after buy, might be a DCA", mint);
+                                            } else {
+                                                println!("⚠️ [TOKEN DISCOVERY] Position already exists for {}, this might be a DCA", mint);
                                             }
-                                        }
-
-                                        if should_create_position {
-                                            // Create position with ACTUAL tokens received
-                                            let new_position = Position {
-                                                entry_price: *current_price,
-                                                peak_price: *current_price,
-                                                dca_count: 0,
-                                                token_amount: actual_tokens_received,
-                                                sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
-                                                sol_received: 0.0,
-                                                open_time: Utc::now(),
-                                                close_time: None,
-                                                last_dca_price: *current_price,
-                                                last_dca_time: Utc::now(),
-                                            };
-
-                                            OPEN_POSITIONS.write().await.insert(
-                                                mint.clone(),
-                                                new_position
-                                            );
-                                            save_open().await;
-
-                                            // Add to watchlist for future monitoring
-                                            persistence::add_to_watchlist(
-                                                mint,
-                                                symbol,
-                                                name,
-                                                *current_price
-                                            ).await;
-                                            println!(
-                                                "📋 Added {} ({}) to watchlist for continuous monitoring",
-                                                symbol,
-                                                mint
-                                            );
+                                            should_create_position = false;
                                         }
                                     }
-                                    Err(e) => {
-                                        println!("❌ [NEW DISCOVERY] BUY failed: {}", e);
+
+                                    if should_create_position {
+                                        if debug_discovery {
+                                            println!("🔍 [DEBUG-DISCOVERY] Creating new position for {}", mint);
+                                        }
+                                        // Create position with ACTUAL tokens received
+                                        let new_position = Position {
+                                            entry_price: *current_price,
+                                            peak_price: *current_price,
+                                            dca_count: 0,
+                                            token_amount: actual_tokens_received,
+                                            sol_spent: dynamic_trade_size + TRANSACTION_FEE_SOL,
+                                            sol_received: 0.0,
+                                            open_time: Utc::now(),
+                                            close_time: None,
+                                            last_dca_price: *current_price,
+                                            last_dca_time: Utc::now(),
+                                        };
+
+                                        OPEN_POSITIONS.write().await.insert(
+                                            mint.clone(),
+                                            new_position
+                                        );
+                                        save_open().await;
+
+                                        if debug_discovery {
+                                            println!("🔍 [DEBUG-DISCOVERY] Position created and saved for {}", mint);
+                                        }
+                                    }
+
+                                    // Break to avoid opening too many positions at once
+                                    if debug_discovery {
+                                        println!(
+                                            "🔍 [DEBUG-DISCOVERY] Breaking token discovery loop after successful buy"
+                                        );
+                                    }
+                                    break;
+                                }
+                                Err(e) => {
+                                    if debug_discovery {
+                                        println!(
+                                            "🔍 [DEBUG-DISCOVERY] Buy failed for {}: {}",
+                                            mint,
+                                            e
+                                        );
+                                    } else {
+                                        println!("❌ [TOKEN DISCOVERY] BUY failed: {}", e);
                                     }
                                 }
-
-                                // Break to avoid opening too many positions at once
-                                break;
                             }
+                        } else if debug_discovery {
+                            println!("🔍 [DEBUG-DISCOVERY] Token {} did not pass should_buy() check", mint);
                         }
+                    } else if debug_discovery {
+                        println!("🔍 [DEBUG-DISCOVERY] No token info found for mint {}", mint);
                     }
                 }
+            } else {
+                if debug_discovery {
+                    let open_count = {
+                        let open_positions = OPEN_POSITIONS.read().await;
+                        open_positions.len()
+                    };
+                    println!(
+                        "� [DEBUG-DISCOVERY] Maximum positions reached: {}/{}",
+                        open_count,
+                        MAX_OPEN_POSITIONS
+                    );
+                } else {
+                    println!(
+                        "�📊 [TOKEN DISCOVERY] Maximum positions reached, skipping new entries"
+                    );
+                }
             }
+        } else if debug_discovery {
+            println!("🔍 [DEBUG-DISCOVERY] No tokens to check in this cycle");
         }
 
         let cycle_duration = cycle_start.elapsed();
-        println!(
-            "⏱️ [MONITORING] Cycle completed in {:.2}s (watchlist={}, new_discovery={})",
-            cycle_duration.as_secs_f64(),
-            watchlist_cycle_counter,
-            discovery_cycle_counter
-        );
+        if debug_discovery {
+            println!(
+                "🔍 [DEBUG-DISCOVERY] Cycle #{} completed in {:.2}s - checked {} tokens",
+                cycle_counter,
+                cycle_duration.as_secs_f64(),
+                tokens_to_check.len()
+            );
+        } else {
+            println!(
+                "⏱️ [TOKEN DISCOVERY] Cycle #{} completed in {:.2}s",
+                cycle_counter,
+                cycle_duration.as_secs_f64()
+            );
+        }
 
-        // Prioritized sleep: watchlist gets checked every 10 seconds
-        sleep(Duration::from_secs(WATCHLIST_CHECK_TIME_SEC)).await;
+        // Use TOKEN_DISCOVERY_CHECK_TIME_SEC for consistent timing
+        sleep(Duration::from_secs(TOKEN_DISCOVERY_CHECK_TIME_SEC)).await;
     }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CLEAN TRADING ARCHITECTURE - SEPARATION OF CONCERNS
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// This trading system properly separates STRATEGY from EXECUTION:
-//
-// 📋 STRATEGY.RS (Decision Making):
-//    - should_buy() - Entry decisions
-//    - should_sell() - Exit decisions
-//    - should_dca() - DCA decisions
-//    - evaluate_position() - Comprehensive position analysis
-//    - All trading logic and signal calculations
-//
-// ⚙️ TRADER.RS (Execution Engine):
-//    - Position monitoring loops (2s for positions, 15s for discovery)
-//    - Price fetching and caching
-//    - Calling strategy functions for decisions
-//    - Executing buy_gmgn/sell_gmgn based on strategy recommendations
-//    - Managing position state and transaction records
-//
-// This ensures:
-// ✅ Clean separation between "what to do" (strategy) and "how to do it" (trader)
-// ✅ Strategy logic is centralized and testable
-// ✅ Trader focuses on execution and state management
-// ✅ Easy to modify trading strategy without touching execution code
-// ═══════════════════════════════════════════════════════════════════════════════
 
 // ── utils.rs (or wherever you keep helpers) ──────────────────────────────────
 pub async fn sell_token(
@@ -1264,58 +1381,4 @@ pub async fn sell_token(
     let is_rug = profit_pct < -80.0; // Consider >80% loss as potential rug
     let exit_reason = if profit_pct > 0.0 { "profit_taking" } else { "stop_loss" };
     let _ = record_trade_exit(mint, sell_price, sol_received, exit_reason, dca_count, is_rug).await;
-}
-
-// Helper function to get pool address from mint
-async fn get_pool_address_for_mint(mint: &str) -> Option<String> {
-    // Use existing pool finding logic from pool_price.rs
-    use crate::pool_price::POOL_CACHE;
-    use crate::helpers::fetch_solana_pairs;
-    use crate::pools::decoder::decode_any_pool;
-
-    // First check cache
-    {
-        let cache = POOL_CACHE.read();
-        if let Some(pool_pk) = cache.get(mint) {
-            return Some(pool_pk.to_string());
-        }
-    }
-
-    // If not in cache, try to find biggest pool
-    match (
-        {
-            let rpc = &crate::configs::RPC;
-            match fetch_solana_pairs(&mint).await {
-                Ok(pools) => {
-                    pools
-                        .par_iter()
-                        .filter_map(|pk| {
-                            decode_any_pool(rpc, pk)
-                                .ok()
-                                .map(|(b, q, _, _)| (*pk, (b as u128) + (q as u128)))
-                        })
-                        .max_by_key(|&(_, liq)| liq)
-                        .map(|(pk, _)| pk)
-                        .ok_or_else(|| anyhow::anyhow!("no valid pools for {}", mint))
-                }
-                Err(e) => Err(e),
-            }
-        }
-    ) {
-        Ok(pool_pk) => {
-            // Cache the result
-            {
-                POOL_CACHE.write().insert(mint.to_string(), pool_pk);
-            }
-            Some(pool_pk.to_string())
-        }
-        Err(_) => None,
-    }
-}
-
-/// Helper function for synchronous watchlist check (to avoid async in filter)
-fn is_watchlist_token_sync(mint: &str) -> bool {
-    // This is a simple synchronous check - we'll use a more efficient approach
-    // For now, return false to not break existing logic, but we'll prioritize watchlist in the main loop
-    false
 }
