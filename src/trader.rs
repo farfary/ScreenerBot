@@ -1125,15 +1125,7 @@ async fn token_discovery_loop() {
                             );
                         }
 
-                        if
-                            should_buy(
-                                &token,
-                                true, // Enable buying for token discovery
-                                *current_price,
-                                trades.as_ref(),
-                                ohlcv.as_ref()
-                            ).await
-                        {
+                        if should_buy(&token, trades.as_ref(), ohlcv.as_ref()).await {
                             let symbol = if token.symbol.is_empty() {
                                 "UNKNOWN"
                             } else {

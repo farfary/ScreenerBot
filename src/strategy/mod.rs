@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// STRATEGY MODULE - ENHANCED ANTI-BOT WHALE-FOLLOWING TRADING STRATEGY V2.0
+// STRATEGY MODULE - HIGH-SUCCESS RATE TRADING STRATEGY V3.0
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub mod config;
+pub mod helpers;
 pub mod pump_analysis;
 pub mod price_analysis;
 pub mod entry;
@@ -10,8 +11,9 @@ pub mod dca;
 pub mod exit;
 pub mod position;
 
-// Re-export main public APIs to maintain backward compatibility
+// Re-export main public APIs
 pub use config::*;
+pub use helpers::*;
 pub use pump_analysis::{
     PumpIntensity,
     detect_pump_intensity,
