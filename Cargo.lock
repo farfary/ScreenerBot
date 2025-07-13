@@ -4604,6 +4604,7 @@ name = "screenerbot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "bincode",
@@ -4659,6 +4660,7 @@ dependencies = [
  "spl-token-confidential-transfer-ciphertext-arithmetic 0.3.0",
  "tabled",
  "teloxide",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite 0.21.0",
  "tokio-util 0.6.10",

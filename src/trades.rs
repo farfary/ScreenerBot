@@ -1,4 +1,3 @@
-use crate::prelude::*;
 use crate::rate_limiter::{ RateLimitedRequest, GECKOTERMINAL_LIMITER };
 use serde::{ Deserialize, Serialize };
 use std::collections::{ HashMap, HashSet };
@@ -11,9 +10,9 @@ use chrono::DateTime;
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // 🎯 PURPOSE:
-// • Cache 24h trade data for all watched tokens and open positions
-// • Provide trade data to should_buy, should_sell, should_dca functions
-// • Non-blocking background task that doesn't interfere with trading
+// • Cache 24h trade data for all watched tokens and analysis
+// • Provide trade data to market analysis and monitoring functions
+// • Non-blocking background task that doesn't interfere with analysis
 // • Disk-based cache with automatic cleanup of old data
 //
 // 📁 CACHE LOCATION: .cache_trades/
@@ -293,8 +292,8 @@ pub async fn add_tokens_to_monitor(tokens: &[&Token]) {
             Ok(pool_infos) => {
                 // Add up to 3 top pools (sorted by liquidity/volume in fetch_combined_pools)
                 for pool_info in pool_infos.into_iter().take(3) {
-                    if !pools.contains(&pool_info.address) {
-                        pools.push(pool_info.address);
+                    if !pools.contains(&pool_info) {
+                        pools.push(pool_info);
                         if pools.len() >= 3 {
                             break;
                         }
@@ -390,8 +389,8 @@ async fn get_top_pools_for_token(token_mint: &str, current_pools: &[String]) -> 
             // Pool data is already sorted by liquidity and volume in fetch_combined_pools
             // Get up to 3 top pools that aren't already in our list
             for pool_info in pool_infos.into_iter().take(3) {
-                if !pools.contains(&pool_info.address) {
-                    pools.push(pool_info.address);
+                if !pools.contains(&pool_info) {
+                    pools.push(pool_info);
                     if pools.len() >= 3 {
                         break;
                     }
@@ -608,7 +607,7 @@ async fn cleanup_old_cache_files() {
 // PUBLIC API FUNCTIONS FOR STRATEGY MODULES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Get trades data for a token (used by should_buy, should_sell, should_dca)
+/// Get trades data for a token (used by analysis and monitoring functions)
 pub async fn get_token_trades(token_mint: &str) -> Option<TokenTradesCache> {
     let cache = TRADES_CACHE.read().await;
     cache.get(token_mint).cloned()
