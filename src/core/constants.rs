@@ -2,6 +2,9 @@
 pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
+// Network constants
+pub const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
+
 // Default trading parameters
 pub const DEFAULT_SLIPPAGE_BPS: u16 = 50; // 0.5%
 pub const DEFAULT_PRIORITY_FEE: u64 = 1000; // microlamports
@@ -16,8 +19,6 @@ pub const PRICE_CACHE_TTL_MINUTES: u64 = 5;
 
 // API rate limits
 pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: u32 = 300;
-pub const GECKOTERMINAL_RATE_LIMIT_PER_MINUTE: u32 = 30;
-pub const HELIUS_RATE_LIMIT_PER_SECOND: u32 = 10;
 
 // Portfolio settings
 pub const MIN_POSITION_VALUE_USD: f64 = 0.1;
@@ -49,9 +50,7 @@ pub const PERCENTAGE_DISPLAY_PRECISION: usize = 2;
 
 // API endpoints
 pub const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/latest";
-pub const GECKOTERMINAL_API_BASE: &str = "https://api.geckoterminal.com/api/v2";
 pub const RUGCHECK_API_BASE: &str = "https://api.rugcheck.xyz/v1";
-pub const RAYDIUM_API_BASE: &str = "https://api.raydium.io/v2";
 
 // Console display colors
 pub const COLOR_GREEN: &str = "\x1b[32m";

@@ -45,7 +45,7 @@ impl WalletManager {
             );
         }
 
-        let rpc = RpcManager::new(&config.rpc_url)?;
+        let rpc = RpcManager::new(crate::core::constants::DEFAULT_RPC_URL)?;
 
         Ok(Self {
             keypair,

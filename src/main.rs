@@ -10,6 +10,7 @@ mod trader;
 mod portfolio;
 mod cache;
 mod prelude;
+mod swap;
 
 use core::BotRuntime;
 

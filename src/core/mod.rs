@@ -35,12 +35,12 @@ impl BotRuntime {
     pub async fn new(config_path: &str) -> Result<Self> {
         let config = BotConfig::load(config_path)?;
 
-        let rpc_client = RpcManager::new(&config.rpc_url)?;
+        let rpc_client = RpcManager::new(crate::core::constants::DEFAULT_RPC_URL)?;
         let wallet_manager = WalletManager::new(&config)?;
-        let cache = CacheManager::new(&config.cache_settings)?;
-        let screener = ScreenerManager::new(&config.screener_config)?;
-        let trader = TraderManager::new(&config.trader_config)?;
-        let portfolio = PortfolioManager::new(&config.portfolio_config)?;
+        let cache = CacheManager::new(&config)?;
+        let screener = ScreenerManager::new(&config)?;
+        let trader = TraderManager::new(&config)?;
+        let portfolio = PortfolioManager::new(&config)?;
 
         Ok(Self {
             config,
@@ -72,7 +72,7 @@ impl BotRuntime {
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(self.config.loop_delay_secs)).await;
+            tokio::time::sleep(Duration::from_secs(60)).await; // Default 1 minute loop delay
         }
 
         log::info!("🛑 ScreenerBot stopped");
