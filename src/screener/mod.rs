@@ -6,6 +6,8 @@ use crate::core::{
     ScreenerSource,
     TokenMetrics,
     VerificationStatus,
+    LiquidityProvider,
+    TokenInfo,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -41,7 +43,7 @@ impl ScreenerManager {
         }
 
         if config.sources.geckoterminal_enabled {
-            sources.push(Box::new(GeckoTerminalSource::new(&config.gecko_api_base)));
+            sources.push(Box::new(GeckoTerminalSource::new()));
         }
 
         if config.sources.raydium_enabled {
@@ -202,6 +204,11 @@ impl BaseTokenOpportunity {
 
         Ok(TokenOpportunity {
             mint,
+            token: TokenInfo {
+                mint,
+                symbol: self.symbol.clone(),
+                name: self.name.clone(),
+            },
             symbol: self.symbol,
             name: self.name,
             source: self.source,
@@ -210,6 +217,9 @@ impl BaseTokenOpportunity {
             verification_status: verification,
             risk_score,
             confidence_score,
+            liquidity_provider: LiquidityProvider::Other("Unknown".to_string()),
+            social_metrics: None,
+            risk_factors: Vec::new(),
         })
     }
 
@@ -254,7 +264,7 @@ impl BaseTokenOpportunity {
         metrics: &TokenMetrics,
         verification: &VerificationStatus
     ) -> f64 {
-        let mut confidence = 0.3; // Base confidence
+        let mut confidence: f64 = 0.3; // Base confidence
 
         // Volume factor
         if metrics.volume_24h > 100000.0 {

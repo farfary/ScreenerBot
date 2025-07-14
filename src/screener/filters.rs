@@ -1,6 +1,7 @@
 use crate::core::{ BotResult, BotError, ScreenerFilters, TokenOpportunity };
 
 /// Filters for screening token opportunities
+#[derive(Debug)]
 pub struct OpportunityFilter {
     filters: ScreenerFilters,
 }

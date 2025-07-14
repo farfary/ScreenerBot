@@ -4,6 +4,7 @@ use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 
 /// Portfolio display formatter for console output
+#[derive(Debug)]
 pub struct PortfolioDisplay {
     show_colors: bool,
     compact_mode: bool,

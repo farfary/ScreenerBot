@@ -16,6 +16,7 @@ use crate::cache::CacheManager;
 use solana_sdk::pubkey::Pubkey;
 use chrono::{ Utc, DateTime };
 use std::collections::HashMap;
+use std::str::FromStr;
 
 mod tracker;
 mod analyzer;
@@ -35,7 +36,7 @@ pub struct PortfolioManager {
     config: PortfolioConfig,
     current_portfolio: Portfolio,
     tracker: PositionTracker,
-    analyzer: PerformanceAnalyzer,
+    analyzer: PortfolioAnalyzer,
     display: PortfolioDisplay,
 }
 

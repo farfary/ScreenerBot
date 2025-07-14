@@ -5,6 +5,7 @@ use chrono::Utc;
 use std::str::FromStr;
 
 /// Trade execution engine
+#[derive(Debug)]
 pub struct TradeExecutor {
     config: TraderConfig,
 }

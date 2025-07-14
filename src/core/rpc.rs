@@ -10,11 +10,19 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 /// RPC client manager with automatic retry and error handling
-#[derive(Debug)]
 pub struct RpcManager {
-    client: RpcClient,
+    pub client: RpcClient,
     timeout_duration: Duration,
     max_retries: u32,
+}
+
+impl std::fmt::Debug for RpcManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RpcManager")
+            .field("timeout_duration", &self.timeout_duration)
+            .field("max_retries", &self.max_retries)
+            .finish()
+    }
 }
 
 impl RpcManager {
@@ -52,25 +60,25 @@ impl RpcManager {
     }
 
     /// Get recent signatures for address
-    pub async fn get_signatures_for_address(
-        &self,
-        address: &Pubkey,
-        limit: usize
-    ) -> BotResult<Vec<solana_transaction_status::ConfirmedSignatureInfo>> {
-        self.retry_operation(|| {
-            self.client.get_signatures_for_address_with_config(
-                address,
-                solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
-                    limit: Some(limit),
-                    ..Default::default()
-                }
-            )
-        }).await
-    }
+    // pub async fn get_signatures_for_address(
+    //     &self,
+    //     address: &Pubkey,
+    //     limit: usize
+    // ) -> BotResult<Vec<solana_transaction_status::ConfirmedSignatureInfo>> {
+    //     self.retry_operation(|| {
+    //         self.client.get_signatures_for_address_with_config(
+    //             address,
+    //             solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
+    //                 limit: Some(limit),
+    //                 ..Default::default()
+    //             }
+    //         )
+    //     }).await
+    // }
 
     /// Generic retry wrapper for RPC operations
     async fn retry_operation<T, F>(&self, operation: F) -> BotResult<T>
-        where F: Fn() -> Result<T, solana_client::client_error::ClientError>, T: Send
+        where F: Fn() -> Result<T, solana_client::client_error::ClientError> + Send + Sync, T: Send
     {
         let mut last_error = None;
 
@@ -134,6 +142,6 @@ impl RpcManager {
 
     /// Get block time
     pub async fn get_block_time(&self, slot: u64) -> BotResult<Option<i64>> {
-        self.retry_operation(|| { self.client.get_block_time(slot) }).await
+        self.retry_operation(|| { self.client.get_block_time(slot).map(|time| Some(time)) }).await
     }
 }

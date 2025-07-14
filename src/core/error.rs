@@ -18,6 +18,10 @@ pub enum BotError {
 
     #[error("Network error: {0}")] Network(String),
 
+    #[error("API error: {0}")] Api(String),
+
+    #[error("Parsing error: {0}")] Parsing(String),
+
     #[error("Parse error: {0}")] Parse(String),
 
     #[error("Insufficient funds: need {needed} SOL, have {available} SOL")] InsufficientFunds {
@@ -93,6 +97,24 @@ impl BotError {
             BotError::Timeout { .. } => Some(5),
             _ => None,
         }
+    }
+}
+
+impl From<solana_client::client_error::ClientError> for BotError {
+    fn from(err: solana_client::client_error::ClientError) -> Self {
+        BotError::Rpc(format!("Solana client error: {}", err))
+    }
+}
+
+impl From<reqwest::Error> for BotError {
+    fn from(err: reqwest::Error) -> Self {
+        BotError::Network(format!("HTTP request error: {}", err))
+    }
+}
+
+impl Into<rusqlite::Error> for BotError {
+    fn into(self) -> rusqlite::Error {
+        rusqlite::Error::ToSqlConversionFailure(Box::new(self))
     }
 }
 

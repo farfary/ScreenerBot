@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use chrono::{ Utc, Duration };
 
 /// Trading strategy implementation
+#[derive(Debug)]
 pub struct TradingStrategy {
     config: TraderConfig,
 }
@@ -138,7 +139,7 @@ impl TradingStrategy {
 
     /// Evaluate technical indicators and return a score
     fn evaluate_technical_indicators(&self, indicators: &HashMap<String, f64>) -> f64 {
-        let mut score = 0.5; // Base score
+        let mut score: f64 = 0.5; // Base score
 
         // Risk-adjusted potential
         if let Some(&potential) = indicators.get("risk_adjusted_potential") {

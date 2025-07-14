@@ -11,6 +11,7 @@ use chrono::{ Utc, DateTime };
 use std::collections::HashMap;
 
 /// Position tracker for building and maintaining portfolio positions
+#[derive(Debug)]
 pub struct PositionTracker;
 
 impl PositionTracker {

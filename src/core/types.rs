@@ -3,6 +3,26 @@ use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use chrono::{ DateTime, Utc };
 
+// Liquidity provider types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum LiquidityProvider {
+    Raydium,
+    Orca,
+    Jupiter,
+    Meteora,
+    PumpFun,
+    Other(String),
+}
+
+/// Risk level enum
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
 /// Token balance information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBalance {
@@ -63,6 +83,7 @@ pub struct ParsedTransactionData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenOpportunity {
     pub mint: Pubkey,
+    pub token: TokenInfo, // Added for backward compatibility
     pub symbol: String,
     pub name: String,
     pub source: ScreenerSource,
@@ -71,6 +92,16 @@ pub struct TokenOpportunity {
     pub verification_status: VerificationStatus,
     pub risk_score: f64,
     pub confidence_score: f64,
+    pub liquidity_provider: LiquidityProvider,
+    pub social_metrics: Option<SocialMetrics>,
+    pub risk_factors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenInfo {
+    pub mint: Pubkey,
+    pub symbol: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +132,8 @@ pub struct VerificationStatus {
     pub is_boosted: bool,
     pub rugcheck_score: Option<f64>,
     pub security_flags: Vec<String>,
+    pub has_socials: bool,
+    pub contract_verified: bool,
 }
 
 /// Trading signal generated from analysis
@@ -116,7 +149,7 @@ pub struct TradeSignal {
     pub analysis_data: TradeAnalysis,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SignalType {
     Buy,
     Sell,
@@ -141,14 +174,6 @@ pub struct RiskAssessment {
     pub volatility_risk: RiskLevel,
     pub concentration_risk: RiskLevel,
     pub smart_money_risk: RiskLevel,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RiskLevel {
-    Low,
-    Medium,
-    High,
-    Critical,
 }
 
 /// Portfolio position
@@ -212,6 +237,26 @@ pub struct TradeResult {
     pub error_message: Option<String>,
     pub gas_used: u64,
     pub pool_used: Option<Pubkey>,
+}
+
+impl Default for TradeResult {
+    fn default() -> Self {
+        Self {
+            transaction_id: String::new(),
+            trade_type: SignalType::Buy,
+            token: Pubkey::default(),
+            amount_sol: 0.0,
+            amount_token: 0,
+            price_per_token: 0.0,
+            slippage_actual: 0.0,
+            fees_paid: 0,
+            executed_at: Utc::now(),
+            success: false,
+            error_message: None,
+            gas_used: 0,
+            pool_used: None,
+        }
+    }
 }
 
 /// Market data for tokens
@@ -300,4 +345,13 @@ pub enum RebalanceAction {
     Reduce,
     Increase,
     Close,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SocialMetrics {
+    pub twitter_followers: Option<u64>,
+    pub telegram_members: Option<u64>,
+    pub website_url: Option<String>,
+    pub twitter_url: Option<String>,
+    pub telegram_url: Option<String>,
 }

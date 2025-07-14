@@ -2,6 +2,7 @@ use crate::core::{ BotResult, BotError, TokenOpportunity, RiskLevel, RiskAssessm
 use std::collections::HashMap;
 
 /// Analyzer for token opportunities
+#[derive(Debug)]
 pub struct OpportunityAnalyzer {}
 
 impl OpportunityAnalyzer {

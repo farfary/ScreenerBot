@@ -9,7 +9,7 @@ mod screener;
 mod trader;
 mod portfolio;
 mod cache;
-mod pools;
+mod prelude;
 
 use core::BotRuntime;
 

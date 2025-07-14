@@ -238,8 +238,8 @@ impl BotConfig {
             return Err(anyhow::anyhow!("rpc_url is required"));
         }
 
-        if self.trading.entry_amount_sol <= 0.0 {
-            return Err(anyhow::anyhow!("entry_amount_sol must be positive"));
+        if self.trading.sol_threshold <= 0.0 {
+            return Err(anyhow::anyhow!("sol_threshold must be positive"));
         }
 
         Ok(())

@@ -10,6 +10,7 @@ use crate::core::{
 use std::collections::HashMap;
 
 /// Trade analysis engine
+#[derive(Debug)]
 pub struct TradeAnalyzer {}
 
 impl TradeAnalyzer {

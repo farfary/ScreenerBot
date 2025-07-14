@@ -9,11 +9,12 @@ pub mod error;
 pub mod rpc;
 pub mod types;
 
-pub use config::*;
-pub use constants::*;
-pub use error::*;
-pub use rpc::*;
+/// Re-export important types
 pub use types::*;
+pub use config::*;
+pub use error::*;
+pub use rpc::RpcManager;
+pub use constants::*;
 
 /// Core bot runtime that manages all components
 #[derive(Debug)]
@@ -101,7 +102,7 @@ impl BotRuntime {
         self.trader.initialize().await?;
 
         // Load and update portfolio
-        self.portfolio.initialize(&self.wallet_manager, &self.cache).await?;
+        self.portfolio.initialize(self).await?;
 
         log::info!("✅ All components initialized successfully");
         Ok(())
@@ -163,12 +164,7 @@ impl BotRuntime {
         let mut signals = Vec::new();
 
         for opportunity in opportunities {
-            if
-                let Some(signal) = self.trader.analyze_opportunity(
-                    &opportunity,
-                    &self.portfolio
-                ).await?
-            {
+            if let Some(signal) = self.trader.analyze_opportunity(&opportunity).await? {
                 signals.push(signal);
             }
         }
@@ -182,7 +178,7 @@ impl BotRuntime {
         log::info!("💱 Executing {} trades...", signals.len());
 
         for signal in signals {
-            match self.trader.execute_trade(&signal, &self.wallet_manager).await {
+            match self.trader.execute_trade(&signal).await {
                 Ok(result) => {
                     log::info!("✅ Trade executed: {:?}", result);
                     // Cache the trade result
@@ -219,10 +215,42 @@ pub struct WalletManager {
     // Will be implemented in next step
 }
 
+impl WalletManager {
+    pub fn new(_config: &BotConfig) -> BotResult<Self> {
+        Ok(Self {})
+    }
+
+    pub async fn initialize(&mut self) -> BotResult<()> {
+        Ok(())
+    }
+
+    pub async fn get_all_balances(&self) -> BotResult<Vec<TokenBalance>> {
+        Ok(vec![])
+    }
+
+    pub async fn get_recent_transactions(&self) -> BotResult<Vec<WalletTransaction>> {
+        Ok(vec![])
+    }
+}
+
 /// Cache management for storing transactions and token data
 #[derive(Debug)]
 pub struct CacheManager {
     // Will be implemented in next step
+}
+
+impl CacheManager {
+    pub fn new(_config: &BotConfig) -> BotResult<Self> {
+        Ok(Self {})
+    }
+
+    pub async fn initialize(&mut self) -> BotResult<()> {
+        Ok(())
+    }
+
+    pub async fn store_trade_result(&self, _result: &TradeResult) -> BotResult<()> {
+        Ok(())
+    }
 }
 
 /// Screener for finding new token opportunities
@@ -231,14 +259,73 @@ pub struct ScreenerManager {
     // Will be implemented in next step
 }
 
+impl ScreenerManager {
+    pub fn new(_config: &BotConfig) -> BotResult<Self> {
+        Ok(Self {})
+    }
+
+    pub async fn initialize(&mut self) -> BotResult<()> {
+        Ok(())
+    }
+
+    pub async fn scan_opportunities(&self) -> BotResult<Vec<TokenOpportunity>> {
+        Ok(vec![])
+    }
+}
+
 /// Trading execution and strategy
 #[derive(Debug)]
 pub struct TraderManager {
     // Will be implemented in next step
 }
 
+impl TraderManager {
+    pub fn new(_config: &BotConfig) -> BotResult<Self> {
+        Ok(Self {})
+    }
+
+    pub async fn initialize(&mut self) -> BotResult<()> {
+        Ok(())
+    }
+
+    pub async fn analyze_opportunity(
+        &self,
+        _opportunity: &TokenOpportunity
+    ) -> BotResult<Option<TradeSignal>> {
+        Ok(None)
+    }
+
+    pub async fn execute_trade(&self, _signal: &TradeSignal) -> BotResult<TradeResult> {
+        Ok(TradeResult::default())
+    }
+}
+
 /// Portfolio tracking and analysis
 #[derive(Debug)]
 pub struct PortfolioManager {
     // Will be implemented in next step
+}
+
+impl PortfolioManager {
+    pub fn new(_config: &BotConfig) -> BotResult<Self> {
+        Ok(Self {})
+    }
+
+    pub async fn initialize(&mut self, _manager: &BotRuntime) -> BotResult<()> {
+        Ok(())
+    }
+
+    pub async fn update(
+        &mut self,
+        _balances: Vec<TokenBalance>,
+        _transactions: Vec<WalletTransaction>,
+        _cache: &CacheManager
+    ) -> BotResult<()> {
+        Ok(())
+    }
+
+    pub async fn print_status(&self) -> BotResult<()> {
+        println!("Portfolio Status: No positions");
+        Ok(())
+    }
 }

@@ -6,6 +6,7 @@ use num_format::{ Locale, ToFormattedString };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::account::Account;
+use solana_sdk::program_pack::Pack;
 
 pub fn decode_cpmm(rpc: &RpcClient, pool_pk: &Pubkey) -> Result<(u64, u64, Pubkey, Pubkey)> {
     let acct = rpc.get_account(pool_pk)?;
@@ -39,4 +40,16 @@ pub fn decode_cpmm_from_account(
         b.to_formatted_string(&Locale::en)
     );
     Ok((a, b, mint_a, mint_b))
+}
+
+// Utility function to get the mint from a token account
+pub fn get_token_account_mint(
+    rpc: &solana_client::rpc_client::RpcClient,
+    account_pubkey: &Pubkey
+) -> anyhow::Result<Pubkey> {
+    use solana_sdk::program_pack::Pack;
+
+    let account_info = rpc.get_account(account_pubkey)?;
+    let token_account = spl_token::state::Account::unpack(&account_info.data)?;
+    Ok(token_account.mint)
 }
