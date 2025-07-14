@@ -282,7 +282,7 @@ impl CacheManager {
                     row.get::<_, String>(6)?, // status
                     row.get::<_, i64>(7)?, // block_time
                     row.get::<_, i64>(8)?, // slot
-                    row.get::<_, String>(9)?, // parsed_data
+                    row.get::<_, Option<String>>(9)?, // parsed_data (nullable)
                 ))
             })
             .map_err(|e| BotError::Database(e))?;
@@ -487,7 +487,7 @@ impl CacheManager {
         fees: f64,
         status: String,
         slot: i64,
-        parsed_data: String
+        parsed_data: Option<String>
     ) -> BotResult<WalletTransaction> {
         use crate::core::{ TransactionType, TransactionStatus };
         use std::str::FromStr;
@@ -513,10 +513,9 @@ impl CacheManager {
             .unwrap_or(TransactionStatus::Success);
 
         // Parse optional data
-        let parsed_data: Option<crate::core::ParsedTransactionData> = if parsed_data.is_empty() {
-            None
-        } else {
-            serde_json::from_str(&parsed_data).ok()
+        let parsed_data: Option<crate::core::ParsedTransactionData> = match parsed_data {
+            Some(data) if !data.is_empty() => serde_json::from_str(&data).ok(),
+            _ => None,
         };
 
         Ok(WalletTransaction {

@@ -3,7 +3,7 @@ pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
 // Network constants
-pub const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
+pub const DEFAULT_RPC_URL: &str = "https://lb.drpc.org/solana/Av7uqDf0ZEvytvOyAG1UTCf2Dt-cYH4R8L1fUldpACY1";
 
 // Default trading parameters
 pub const DEFAULT_SLIPPAGE_BPS: u16 = 50; // 0.5%

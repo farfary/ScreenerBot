@@ -18,7 +18,14 @@ pub mod sources;
 pub mod filters;
 pub mod analysis;
 
-pub use sources::*;
+// Re-export the new structure
+pub use sources::{ 
+    TokenSource, 
+    DexScreenerSource, 
+    GeckoTerminalSource, 
+    RaydiumSource, 
+    RugCheckSource 
+};
 pub use filters::*;
 pub use analysis::*;
 
@@ -169,137 +176,4 @@ impl std::fmt::Debug for ScreenerManager {
     }
 }
 
-/// Trait for token data sources
-#[async_trait::async_trait]
-pub trait TokenSource {
-    /// Get the name of this source
-    fn name(&self) -> &str;
 
-    /// Initialize the source
-    async fn initialize(&mut self) -> BotResult<()>;
-
-    /// Get new tokens from this source
-    async fn get_new_tokens(&self) -> BotResult<Vec<TokenOpportunity>>;
-
-    /// Get detailed info about a specific token
-    async fn get_token_info(&self, mint: &Pubkey) -> BotResult<Option<TokenOpportunity>>;
-
-    /// Check if the source is healthy/available
-    async fn health_check(&self) -> BotResult<bool>;
-}
-
-/// Base token opportunity that can be extended by sources
-pub struct BaseTokenOpportunity {
-    pub mint: String,
-    pub symbol: String,
-    pub name: String,
-    pub source: ScreenerSource,
-}
-
-impl BaseTokenOpportunity {
-    /// Convert to full TokenOpportunity with metrics and verification
-    pub async fn to_opportunity(
-        self,
-        metrics: TokenMetrics,
-        verification: VerificationStatus
-    ) -> BotResult<TokenOpportunity> {
-        let mint = Pubkey::from_str(&self.mint).map_err(|e|
-            BotError::Parse(format!("Invalid mint address: {}", e))
-        )?;
-
-        // Calculate basic scores
-        let risk_score = self.calculate_risk_score(&metrics, &verification);
-        let confidence_score = self.calculate_confidence_score(&metrics, &verification);
-
-        Ok(TokenOpportunity {
-            mint,
-            token: TokenInfo {
-                mint,
-                symbol: self.symbol.clone(),
-                name: self.name.clone(),
-            },
-            symbol: self.symbol,
-            name: self.name,
-            source: self.source,
-            discovery_time: Utc::now(),
-            metrics,
-            verification_status: verification,
-            risk_score,
-            confidence_score,
-            liquidity_provider: LiquidityProvider::Other("Unknown".to_string()),
-            social_metrics: None,
-            risk_factors: Vec::new(),
-        })
-    }
-
-    /// Calculate risk score based on metrics and verification
-    fn calculate_risk_score(
-        &self,
-        metrics: &TokenMetrics,
-        verification: &VerificationStatus
-    ) -> f64 {
-        let mut risk = 0.5; // Base risk
-
-        // Age factor (newer = higher risk)
-        if metrics.age_hours < 1.0 {
-            risk += 0.3;
-        } else if metrics.age_hours < 24.0 {
-            risk += 0.2;
-        }
-
-        // Liquidity factor
-        if metrics.liquidity_usd < 10000.0 {
-            risk += 0.2;
-        }
-
-        // Verification factors
-        if verification.is_verified {
-            risk -= 0.2;
-        }
-
-        if verification.has_profile {
-            risk -= 0.1;
-        }
-
-        // Security flags
-        risk += (verification.security_flags.len() as f64) * 0.1;
-
-        risk.clamp(0.0, 1.0)
-    }
-
-    /// Calculate confidence score
-    fn calculate_confidence_score(
-        &self,
-        metrics: &TokenMetrics,
-        verification: &VerificationStatus
-    ) -> f64 {
-        let mut confidence: f64 = 0.3; // Base confidence
-
-        // Volume factor
-        if metrics.volume_24h > 100000.0 {
-            confidence += 0.3;
-        } else if metrics.volume_24h > 10000.0 {
-            confidence += 0.2;
-        } else if metrics.volume_24h > 1000.0 {
-            confidence += 0.1;
-        }
-
-        // Liquidity factor
-        if metrics.liquidity_usd > 50000.0 {
-            confidence += 0.2;
-        } else if metrics.liquidity_usd > 10000.0 {
-            confidence += 0.1;
-        }
-
-        // Verification bonus
-        if verification.is_verified {
-            confidence += 0.2;
-        }
-
-        if verification.has_profile {
-            confidence += 0.1;
-        }
-
-        confidence.clamp(0.0, 1.0)
-    }
-}

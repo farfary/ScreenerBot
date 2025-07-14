@@ -83,12 +83,49 @@ impl<'a> BalanceManager<'a> {
         &self,
         (_pubkey, account): (Pubkey, solana_client::rpc_response::RpcKeyedAccount)
     ) -> BotResult<Option<TokenBalance>> {
-        let account_data = account.account.data
-            .decode()
-            .ok_or_else(|| BotError::Parse("Failed to decode account data".to_string()))?;
+        // Handle different account data formats
+        let account_data = match &account.account.data {
+            solana_account_decoder::UiAccountData::Binary(data, encoding) => {
+                match encoding {
+                    solana_account_decoder::UiAccountEncoding::Base64 => {
+                        use base64::prelude::*;
+                        BASE64_STANDARD.decode(data).map_err(|e| {
+                            log::debug!("Base64 decode error: {}", e);
+                            BotError::Parse(format!("Failed to decode base64 account data: {}", e))
+                        })?
+                    }
+                    solana_account_decoder::UiAccountEncoding::Base58 => {
+                        bs58::decode(data).into_vec().map_err(|e| {
+                            log::debug!("Base58 decode error: {}", e);
+                            BotError::Parse(format!("Failed to decode base58 account data: {}", e))
+                        })?
+                    }
+                    _ => {
+                        log::debug!("Unsupported account data encoding: {:?}", encoding);
+                        return Err(BotError::Parse(format!("Unsupported account data encoding: {:?}", encoding)));
+                    }
+                }
+            }
+            solana_account_decoder::UiAccountData::Json(_) => {
+                log::debug!("Received JSON account data format, skipping token account parsing");
+                return Ok(None);
+            }
+            solana_account_decoder::UiAccountData::LegacyBinary(data) => {
+                use base64::prelude::*;
+                BASE64_STANDARD.decode(data).map_err(|e| {
+                    log::debug!("Legacy binary decode error: {}", e);
+                    BotError::Parse(format!("Failed to decode legacy binary account data: {}", e))
+                })?
+            }
+        };
 
         // Parse token account data
         if account_data.len() < TokenAccount::LEN {
+            log::debug!(
+                "🔍 Account data too short: {} bytes, expected at least {}",
+                account_data.len(),
+                TokenAccount::LEN
+            );
             return Ok(None);
         }
 
