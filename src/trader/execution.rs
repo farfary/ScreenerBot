@@ -2,7 +2,6 @@ use crate::core::{ BotResult, BotError, TraderConfig, TradeSignal, TradeResult, 
 use crate::wallet::WalletManager;
 use solana_sdk::{ pubkey::Pubkey, transaction::Transaction, instruction::Instruction };
 use chrono::Utc;
-use std::str::FromStr;
 
 /// Trade execution engine
 #[derive(Debug)]

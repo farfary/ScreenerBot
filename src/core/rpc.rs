@@ -1,32 +1,28 @@
 use crate::core::{ BotError, BotResult };
-use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_client::{ RpcClient, GetConfirmedSignaturesForAddress2Config };
+use solana_transaction_status::UiTransactionEncoding;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::Signature,
     transaction::Transaction,
 };
-use std::time::Duration;
-use tokio::time::timeout;
+use std::sync::{ Arc, Mutex };
+use std::time::{ Duration, Instant };
 
-/// RPC client manager with automatic retry and error handling
 pub struct RpcManager {
     pub client: RpcClient,
-    timeout_duration: Duration,
-    max_retries: u32,
+    last_request_time: Arc<Mutex<Instant>>,
+    request_delay: Duration,
 }
 
 impl std::fmt::Debug for RpcManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RpcManager")
-            .field("timeout_duration", &self.timeout_duration)
-            .field("max_retries", &self.max_retries)
-            .finish()
+        f.debug_struct("RpcManager").field("request_delay", &self.request_delay).finish()
     }
 }
 
 impl RpcManager {
-    /// Create a new RPC manager
     pub fn new(rpc_url: &str) -> BotResult<Self> {
         let client = RpcClient::new_with_commitment(
             rpc_url.to_string(),
@@ -35,97 +31,134 @@ impl RpcManager {
 
         Ok(Self {
             client,
-            timeout_duration: Duration::from_secs(30),
-            max_retries: 3,
+            last_request_time: Arc::new(Mutex::new(Instant::now())),
+            request_delay: Duration::from_millis(100), // 100ms delay between requests
         })
     }
 
-    /// Get account balance
-    pub async fn get_balance(&self, pubkey: &Pubkey) -> BotResult<u64> {
-        // Since RpcClient doesn't implement Clone, use a simpler approach
-        self.client.get_balance(pubkey).map_err(|e| BotError::Rpc(e.to_string()))
-    }
-
-    /// Get token balance
-    pub async fn get_token_balance(&self, _pubkey: &Pubkey) -> BotResult<u64> {
-        // Simplified implementation for compilation
-        Ok(0)
-    }
-
-    /// Send transaction
-    pub async fn send_transaction(&self, _transaction: &Transaction) -> BotResult<Signature> {
-        // Simplified implementation for compilation
-        Err(BotError::Rpc("Not implemented in simulation mode".to_string()))
-    }
-
-    /// Get recent signatures for address
-    // pub async fn get_signatures_for_address(
-    //     &self,
-    //     address: &Pubkey,
-    //     limit: usize
-    // ) -> BotResult<Vec<solana_transaction_status::ConfirmedSignatureInfo>> {
-    //     self.retry_operation(|| {
-    //         self.client.get_signatures_for_address_with_config(
-    //             address,
-    //             solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
-    //                 limit: Some(limit),
-    //                 ..Default::default()
-    //             }
-    //         )
-    //     }).await
-    // }
-
-    /// Generic retry wrapper for RPC operations
-    fn retry_operation_sync<T>(
-        &self,
-        operation: impl Fn() -> Result<T, solana_client::client_error::ClientError>
-    ) -> BotResult<T> {
+    /// Execute operation with retry logic for network resilience
+    fn retry_operation_sync<T, F>(&self, mut operation: F) -> BotResult<T>
+        where F: FnMut() -> Result<T, solana_client::client_error::ClientError>
+    {
+        let max_retries = 3;
         let mut last_error = None;
 
-        for attempt in 0..=self.max_retries {
+        for attempt in 0..max_retries {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(1000 * attempt));
+            }
+
+            // Rate limiting
+            {
+                let mut last_time = self.last_request_time.lock().unwrap();
+                let now = Instant::now();
+                let elapsed = now.duration_since(*last_time);
+
+                if elapsed < self.request_delay {
+                    std::thread::sleep(self.request_delay - elapsed);
+                }
+                *last_time = Instant::now();
+            }
+
             match operation() {
                 Ok(result) => {
                     return Ok(result);
                 }
                 Err(e) => {
-                    last_error = Some(BotError::Rpc(e.to_string()));
-                    if attempt < self.max_retries {
-                        std::thread::sleep(
-                            std::time::Duration::from_millis(100 * ((attempt + 1) as u64))
-                        );
-                    }
+                    last_error = Some(e);
                 }
             }
         }
 
-        Err(last_error.unwrap_or(BotError::Rpc("Unknown RPC error".to_string())))
+        Err(BotError::Rpc(format!("Max retries exceeded: {:?}", last_error.unwrap())))
     }
 
-    /// Set custom timeout
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout_duration = timeout;
+    /// Get token accounts for a wallet
+    pub async fn get_token_accounts_by_owner(
+        &self,
+        owner: &Pubkey,
+        program_id: &Pubkey
+    ) -> BotResult<Vec<(Pubkey, solana_client::rpc_response::RpcKeyedAccount)>> {
+        use solana_client::rpc_request::TokenAccountsFilter;
+
+        let accounts = self.retry_operation_sync(|| {
+            self.client.get_token_accounts_by_owner(
+                owner,
+                TokenAccountsFilter::ProgramId(*program_id)
+            )
+        })?;
+
+        Ok(
+            accounts
+                .into_iter()
+                .map(|account| { (account.pubkey.parse().unwrap(), account) })
+                .collect()
+        )
     }
 
-    /// Set max retries
-    pub fn set_max_retries(&mut self, retries: u32) {
-        self.max_retries = retries;
+    /// Get signatures for an address
+    pub async fn get_signatures_for_address(
+        &self,
+        address: &Pubkey,
+        limit: usize
+    ) -> BotResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
+        self.retry_operation_sync(|| {
+            let config = GetConfirmedSignaturesForAddress2Config {
+                before: None,
+                until: None,
+                limit: Some(limit),
+                commitment: Some(self.client.commitment()),
+            };
+            self.client.get_signatures_for_address_with_config(address, config)
+        })
     }
 
-    /// Check if RPC is healthy
-    pub async fn health_check(&self) -> BotResult<bool> {
-        // Simplified implementation
-        Ok(true)
+    /// Get transaction details
+    pub async fn get_transaction_with_config(
+        &self,
+        signature: &Signature,
+        encoding: UiTransactionEncoding
+    ) -> BotResult<solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta> {
+        self.retry_operation_sync(|| {
+            let config = solana_client::rpc_config::RpcTransactionConfig {
+                encoding: Some(encoding),
+                commitment: Some(self.client.commitment()),
+                max_supported_transaction_version: Some(0),
+            };
+            self.client.get_transaction_with_config(signature, config)
+        })
+    }
+
+    /// Send transaction
+    pub async fn send_transaction(&self, transaction: &Transaction) -> BotResult<Signature> {
+        self.retry_operation_sync(|| { self.client.send_and_confirm_transaction(transaction) })
     }
 
     /// Get current slot
     pub async fn get_slot(&self) -> BotResult<u64> {
-        // Simplified implementation
-        Ok(0)
+        self.retry_operation_sync(|| { self.client.get_slot() })
     }
 
     /// Get block time
-    pub async fn get_block_time(&self, _slot: u64) -> BotResult<Option<i64>> {
-        // Simplified implementation
-        Ok(None)
+    pub async fn get_block_time(&self, slot: u64) -> BotResult<Option<i64>> {
+        self.retry_operation_sync(|| { self.client.get_block_time(slot) }).map(Some)
+    }
+
+    /// Get balance
+    pub async fn get_balance(&self, pubkey: &Pubkey) -> BotResult<u64> {
+        self.retry_operation_sync(|| { self.client.get_balance(pubkey) })
+    }
+
+    /// Health check
+    pub async fn health_check(&self) -> BotResult<()> {
+        // Simple health check by getting the slot
+        self.get_slot().await.map(|_| ())
+    }
+
+    /// Get latest blockhash for signing transactions
+    pub fn get_latest_blockhash(
+        &self
+    ) -> Result<solana_sdk::hash::Hash, solana_client::client_error::ClientError> {
+        self.client.get_latest_blockhash()
     }
 }

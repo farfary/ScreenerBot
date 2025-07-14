@@ -8,9 +8,8 @@ use crate::core::{
     LiquidityProvider,
     TokenInfo,
 };
-use async_trait::async_trait;
 use reqwest::Client;
-use serde::{ Deserialize, Serialize };
+use serde::Deserialize;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use chrono::{ Utc, DateTime };

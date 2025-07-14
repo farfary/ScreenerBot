@@ -1,20 +1,18 @@
 use crate::core::{ BotResult, BotError, BotConfig, TokenBalance, WalletTransaction, RpcManager };
+use crate::cache::CacheManager;
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{ Keypair, Signature },
     signer::Signer,
     transaction::Transaction,
 };
-use spl_token::state::Account as TokenAccount;
-use std::collections::HashMap;
 use std::str::FromStr;
-use chrono::{ DateTime, Utc };
 
 pub mod manager;
 pub mod transactions;
 pub mod balances;
 
-pub use manager::*;
+// Export public modules and structs
 pub use transactions::*;
 pub use balances::*;
 
@@ -25,6 +23,7 @@ pub struct WalletManager {
     pub public_key: Pubkey,
     config: BotConfig,
     rpc: RpcManager,
+    cache: Option<CacheManager>,
 }
 
 impl WalletManager {
@@ -52,7 +51,15 @@ impl WalletManager {
             public_key,
             config: config.clone(),
             rpc,
+            cache: None,
         })
+    }
+
+    /// Create a new wallet manager with cache
+    pub fn with_cache(config: &BotConfig, cache: CacheManager) -> BotResult<Self> {
+        let mut wallet = Self::new(config)?;
+        wallet.cache = Some(cache);
+        Ok(wallet)
     }
 
     /// Initialize the wallet manager
@@ -69,9 +76,8 @@ impl WalletManager {
         }
 
         // Verify RPC connection
-        let health = self.rpc.health_check().await?;
-        if !health {
-            return Err(BotError::Rpc("RPC health check failed".to_string()));
+        if let Err(e) = self.rpc.health_check().await {
+            return Err(BotError::Rpc(format!("RPC health check failed: {}", e)));
         }
 
         log::info!("✅ Wallet manager initialized successfully");
@@ -90,10 +96,43 @@ impl WalletManager {
         balance_manager.get_all_token_balances(&self.public_key).await
     }
 
-    /// Get recent transactions
+    /// Get recent transactions with caching support
     pub async fn get_recent_transactions(&self) -> BotResult<Vec<WalletTransaction>> {
-        let tx_manager = TransactionManager::new(&self.rpc);
+        let tx_manager = if let Some(cache) = &self.cache {
+            TransactionManager::with_cache(&self.rpc, cache)
+        } else {
+            TransactionManager::new(&self.rpc)
+        };
+
         tx_manager.get_recent_transactions(&self.public_key, 50).await
+    }
+
+    /// Get transaction history for a specific token with caching
+    pub async fn get_token_transaction_history(
+        &self,
+        token_mint: &Pubkey
+    ) -> BotResult<Vec<WalletTransaction>> {
+        let tx_manager = if let Some(cache) = &self.cache {
+            TransactionManager::with_cache(&self.rpc, cache)
+        } else {
+            TransactionManager::new(&self.rpc)
+        };
+
+        tx_manager.get_token_transactions(&self.public_key, token_mint).await
+    }
+
+    /// Get transaction statistics
+    pub async fn get_transaction_stats(
+        &self,
+        days: u32
+    ) -> BotResult<crate::wallet::transactions::TransactionStats> {
+        let tx_manager = if let Some(cache) = &self.cache {
+            TransactionManager::with_cache(&self.rpc, cache)
+        } else {
+            TransactionManager::new(&self.rpc)
+        };
+
+        tx_manager.get_transaction_stats(&self.public_key, days).await
     }
 
     /// Sign and send a transaction
@@ -121,12 +160,30 @@ impl WalletManager {
         Ok(current_balance >= amount_needed + 0.001) // Leave some for fees
     }
 
-    /// Get transaction history for a specific token
-    pub async fn get_token_transaction_history(
-        &self,
-        token_mint: &Pubkey
-    ) -> BotResult<Vec<WalletTransaction>> {
-        let tx_manager = TransactionManager::new(&self.rpc);
-        tx_manager.get_token_transactions(&self.public_key, token_mint).await
+    /// Force refresh transaction cache
+    pub async fn refresh_transaction_cache(&self) -> BotResult<()> {
+        if let Some(cache) = &self.cache {
+            log::info!("🔄 Refreshing transaction cache...");
+
+            // Get fresh transactions from RPC (bypassing cache)
+            let tx_manager = TransactionManager::new(&self.rpc);
+            let fresh_transactions = tx_manager.get_recent_transactions(
+                &self.public_key,
+                100
+            ).await?;
+
+            // Cache the fresh transactions
+            for transaction in fresh_transactions {
+                cache.cache_transaction(&self.public_key, &transaction).await?;
+            }
+
+            log::info!("✅ Transaction cache refreshed");
+        }
+        Ok(())
+    }
+
+    /// Get cache statistics if cache is available
+    pub async fn get_cache_stats(&self) -> Option<crate::cache::CacheStats> {
+        if let Some(cache) = &self.cache { cache.get_cache_stats().await.ok() } else { None }
     }
 }

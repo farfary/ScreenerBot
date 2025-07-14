@@ -1,4 +1,4 @@
-use crate::core::{ BotResult, BotError, ScreenerFilters, TokenOpportunity };
+use crate::core::{ BotResult, ScreenerFilters, TokenOpportunity };
 
 /// Filters for screening token opportunities
 #[derive(Debug)]

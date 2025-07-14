@@ -1,6 +1,4 @@
 use anyhow::Result;
-use serde::{ Deserialize, Serialize };
-use std::collections::HashMap;
 use tokio::time::{ Duration, Instant };
 
 pub mod config;
@@ -43,8 +41,11 @@ impl BotRuntime {
         let config = BotConfig::load(config_path)?;
 
         let rpc_client = RpcManager::new(crate::core::constants::DEFAULT_RPC_URL)?;
-        let wallet_manager = WalletManager::new(&config)?;
         let cache = CacheManager::new(&config)?;
+
+        // Create wallet manager with cache support
+        let wallet_manager = WalletManager::with_cache(&config, cache.clone())?;
+
         let screener = ScreenerManager::new(&config)?;
         let trader = TraderManager::new(&config)?;
         let portfolio = PortfolioManager::new(&config)?;

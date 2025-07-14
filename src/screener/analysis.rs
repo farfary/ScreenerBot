@@ -1,4 +1,4 @@
-use crate::core::{ BotResult, BotError, TokenOpportunity, RiskLevel, RiskAssessment };
+use crate::core::{ BotResult, TokenOpportunity, RiskLevel };
 use std::collections::HashMap;
 
 /// Analyzer for token opportunities

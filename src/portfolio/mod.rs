@@ -7,7 +7,6 @@ use crate::core::{
     WalletTransaction,
     PortfolioHealth,
     RebalanceRecommendation,
-    RebalanceAction,
 };
 use crate::wallet::WalletManager;
 use crate::cache::CacheManager;
@@ -22,9 +21,7 @@ use tracker::PositionTracker;
 use analyzer::PortfolioAnalyzer;
 use display::PortfolioDisplay;
 
-pub use tracker::*;
-pub use analyzer::*;
-pub use display::*;
+// Re-export public interfaces
 
 /// Main portfolio manager for tracking and analyzing positions
 #[derive(Debug)]

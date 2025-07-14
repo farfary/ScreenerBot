@@ -1,9 +1,9 @@
 use crate::core::{ BotResult, BotError, TokenBalance, RpcManager };
 use solana_sdk::pubkey::Pubkey;
-use spl_token::state::{ Account as TokenAccount, Mint };
+use spl_token::state::Account as TokenAccount;
 use solana_program::program_pack::Pack;
 use chrono::Utc;
-use std::collections::HashMap;
+use std::str::FromStr;
 
 /// Manages wallet balance queries and updates
 pub struct BalanceManager<'a> {
@@ -59,11 +59,23 @@ impl<'a> BalanceManager<'a> {
     /// Get all token accounts for a wallet
     async fn get_token_accounts(
         &self,
-        _wallet: &Pubkey
+        wallet: &Pubkey
     ) -> BotResult<Vec<(Pubkey, solana_client::rpc_response::RpcKeyedAccount)>> {
-        // Simplified implementation for compilation
-        log::info!("Getting token accounts (simulation mode)");
-        Ok(Vec::new())
+        log::info!("🔍 Getting token accounts for wallet: {}", wallet);
+
+        // Use SPL Token program ID
+        let spl_token_program = spl_token::id();
+
+        match self.rpc.get_token_accounts_by_owner(wallet, &spl_token_program).await {
+            Ok(accounts) => {
+                log::info!("✅ Found {} token accounts", accounts.len());
+                Ok(accounts)
+            }
+            Err(e) => {
+                log::warn!("⚠️ Failed to get token accounts: {}, using empty list", e);
+                Ok(Vec::new())
+            }
+        }
     }
 
     /// Parse a token account into TokenBalance
@@ -139,5 +151,3 @@ impl<'a> BalanceManager<'a> {
         Ok(None)
     }
 }
-
-use std::str::FromStr;

@@ -12,17 +12,16 @@ use rusqlite::{ Connection, params, Row };
 use serde::{ Serialize, de::DeserializeOwned };
 use std::collections::HashMap;
 use std::sync::{ Arc, Mutex };
-use chrono::{ DateTime, Utc };
+use chrono::Utc;
 use solana_sdk::pubkey::Pubkey;
 
 pub mod database;
 pub mod storage;
 
-pub use database::*;
-pub use storage::*;
+// Re-export public interfaces
 
 /// Cache manager for storing and retrieving data
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CacheManager {
     db: Arc<Mutex<Connection>>,
     config: CacheConfig,
@@ -444,35 +443,6 @@ impl CacheManager {
         Ok(())
     }
 
-    /// Clean up expired cache entries
-    pub async fn cleanup_expired_entries(&self) -> BotResult<()> {
-        let db = self.db.lock().unwrap();
-        let max_age_hours = self.config.max_cache_age_hours;
-
-        // Clean old market data
-        db
-            .execute(
-                "DELETE FROM market_data WHERE updated_at < datetime('now', '-' || ?1 || ' hours')",
-                params![max_age_hours]
-            )
-            .map_err(|e| BotError::Database(e))?;
-
-        // Clean old balance snapshots (keep last 30 days)
-        db
-            .execute(
-                "DELETE FROM wallet_balances WHERE created_at < datetime('now', '-30 days')",
-                []
-            )
-            .map_err(|e| BotError::Database(e))?;
-
-        // Clean memory cache
-        let mut memory_cache = self.memory_cache.lock().unwrap();
-        memory_cache.retain(|_, entry| !entry.is_expired());
-
-        log::debug!("🧹 Cache cleanup completed");
-        Ok(())
-    }
-
     /// Generic cache storage for JSON data
     pub async fn store_json<T: Serialize>(
         &self,
@@ -522,17 +492,130 @@ impl CacheManager {
         use crate::core::{ TransactionType, TransactionStatus };
         use std::str::FromStr;
 
+        // Parse transaction type
+        let transaction_type: TransactionType = serde_json
+            ::from_str(&transaction_type)
+            .unwrap_or(TransactionType::Unknown);
+
+        // Parse tokens involved
+        let tokens_involved: Vec<Pubkey> = serde_json
+            ::from_str(&tokens_involved)
+            .unwrap_or_default();
+
+        // Parse token changes
+        let token_changes: HashMap<Pubkey, i64> = serde_json
+            ::from_str(&token_changes)
+            .unwrap_or_default();
+
+        // Parse status
+        let status: TransactionStatus = serde_json
+            ::from_str(&status)
+            .unwrap_or(TransactionStatus::Success);
+
+        // Parse optional data
+        let parsed_data: Option<crate::core::ParsedTransactionData> = if parsed_data.is_empty() {
+            None
+        } else {
+            serde_json::from_str(&parsed_data).ok()
+        };
+
         Ok(WalletTransaction {
             signature,
-            transaction_type: TransactionType::Unknown, // Default for now
-            tokens_involved: Vec::new(), // Parse from string if needed
+            transaction_type,
+            tokens_involved,
             sol_change: sol_change as i64,
-            token_changes: std::collections::HashMap::new(), // Parse from string if needed
+            token_changes,
             fees: fees as u64,
-            status: TransactionStatus::Success, // Default for now
+            status,
             block_time: Some(block_time),
             slot: slot as u64,
-            parsed_data: None, // Could parse JSON string if needed
+            parsed_data,
         })
     }
+
+    /// Clean up expired cache entries
+    pub async fn cleanup_expired_entries(&self) -> BotResult<()> {
+        let db = self.db.lock().unwrap();
+
+        // Clean up old transactions (older than configured TTL)
+        let ttl_hours = crate::core::constants::TRANSACTION_CACHE_TTL_HOURS;
+        db.execute(
+            "DELETE FROM transactions WHERE created_at < datetime('now', ?1)",
+            params![format!("-{} hours", ttl_hours)]
+        )?;
+
+        // Clean up old market data
+        let market_ttl_hours = crate::core::constants::DEFAULT_CACHE_TTL_HOURS;
+        db.execute(
+            "DELETE FROM market_data WHERE updated_at < datetime('now', ?1)",
+            params![format!("-{} hours", market_ttl_hours)]
+        )?;
+
+        // Clean up old balance snapshots
+        db.execute(
+            "DELETE FROM wallet_balances WHERE created_at < datetime('now', '-7 days')",
+            []
+        )?;
+
+        log::debug!("🧹 Cleaned up expired cache entries");
+        Ok(())
+    }
+
+    /// Get transaction count for a wallet
+    pub async fn get_transaction_count(&self, wallet: &Pubkey) -> BotResult<usize> {
+        let db = self.db.lock().unwrap();
+
+        let count: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM transactions WHERE wallet_address = ?1",
+                params![wallet.to_string()],
+                |row| row.get(0)
+            )
+            .unwrap_or(0);
+
+        Ok(count as usize)
+    }
+
+    /// Check if cache is enabled for transactions
+    pub fn is_transaction_cache_enabled(&self) -> bool {
+        self.config.cache_transactions
+    }
+
+    /// Get cache statistics
+    pub async fn get_cache_stats(&self) -> BotResult<CacheStats> {
+        let db = self.db.lock().unwrap();
+
+        let transaction_count: i64 = db
+            .query_row("SELECT COUNT(*) FROM transactions", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let market_data_count: i64 = db
+            .query_row("SELECT COUNT(*) FROM market_data", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let trade_results_count: i64 = db
+            .query_row("SELECT COUNT(*) FROM trade_results", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let memory_cache_size = {
+            let cache = self.memory_cache.lock().unwrap();
+            cache.len()
+        };
+
+        Ok(CacheStats {
+            transaction_count: transaction_count as usize,
+            market_data_count: market_data_count as usize,
+            trade_results_count: trade_results_count as usize,
+            memory_cache_size,
+        })
+    }
+}
+
+/// Cache statistics
+#[derive(Debug, Clone)]
+pub struct CacheStats {
+    pub transaction_count: usize,
+    pub market_data_count: usize,
+    pub trade_results_count: usize,
+    pub memory_cache_size: usize,
 }
