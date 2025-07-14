@@ -1,5 +1,5 @@
 //! DexScreener API integration for token discovery
-//! 
+//!
 //! This module provides access to multiple DexScreener endpoints:
 //! - Token Profiles: Latest tokens with profile data
 //! - Token Boosts: Promoted/boosted tokens with higher visibility
@@ -83,11 +83,15 @@ impl DexScreenerSource {
             .get(&url)
             .header("Accept", "application/json")
             .send().await
-            .map_err(|e| BotError::Network(format!("DexScreener profiles API request failed: {}", e)))?;
+            .map_err(|e|
+                BotError::Network(format!("DexScreener profiles API request failed: {}", e))
+            )?;
 
         if !response.status().is_success() {
             return Err(
-                BotError::Api(format!("DexScreener profiles API returned status: {}", response.status()))
+                BotError::Api(
+                    format!("DexScreener profiles API returned status: {}", response.status())
+                )
             );
         }
 
@@ -116,11 +120,15 @@ impl DexScreenerSource {
             .get(&url)
             .header("Accept", "application/json")
             .send().await
-            .map_err(|e| BotError::Network(format!("DexScreener boosts API request failed: {}", e)))?;
+            .map_err(|e|
+                BotError::Network(format!("DexScreener boosts API request failed: {}", e))
+            )?;
 
         if !response.status().is_success() {
             return Err(
-                BotError::Api(format!("DexScreener boosts API returned status: {}", response.status()))
+                BotError::Api(
+                    format!("DexScreener boosts API returned status: {}", response.status())
+                )
             );
         }
 
@@ -141,13 +149,19 @@ impl DexScreenerSource {
 
     /// Convert DexScreener links to SocialLink
     fn convert_links(&self, links: &Option<Vec<DexScreenerLink>>) -> Vec<SocialLink> {
-        links.as_ref().map(|links| {
-            links.iter().map(|link| SocialLink {
-                link_type: link.link_type.clone(),
-                label: link.label.clone(),
-                url: link.url.clone(),
-            }).collect()
-        }).unwrap_or_default()
+        links
+            .as_ref()
+            .map(|links| {
+                links
+                    .iter()
+                    .map(|link| SocialLink {
+                        link_type: link.link_type.clone(),
+                        label: link.label.clone(),
+                        url: link.url.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Convert token profile to BaseTokenDiscovery
@@ -181,7 +195,10 @@ impl DexScreenerSource {
     }
 
     /// Filter to only include Solana tokens and remove duplicates
-    fn filter_and_dedupe_discoveries(&self, discoveries: Vec<BaseTokenDiscovery>) -> Vec<BaseTokenDiscovery> {
+    fn filter_and_dedupe_discoveries(
+        &self,
+        discoveries: Vec<BaseTokenDiscovery>
+    ) -> Vec<BaseTokenDiscovery> {
         let mut seen_addresses = HashSet::new();
         let mut filtered = Vec::new();
 
@@ -271,11 +288,13 @@ impl TokenSource for DexScreenerSource {
         for discovery in filtered_discoveries {
             match discovery.to_opportunity() {
                 Ok(opportunity) => {
-                    log::debug!(
-                        "Created opportunity for token: {} ({})",
-                        opportunity.symbol,
-                        if discovery.boost_amount.is_some() { "boosted" } else { "profile" }
-                    );
+                    log::debug!("Created opportunity for token: {} ({})", opportunity.symbol, if
+                        discovery.boost_amount.is_some()
+                    {
+                        "boosted"
+                    } else {
+                        "profile"
+                    });
                     opportunities.push(opportunity);
                 }
                 Err(e) => {

@@ -95,14 +95,23 @@ impl<'a> BalanceManager<'a> {
                         })?
                     }
                     solana_account_decoder::UiAccountEncoding::Base58 => {
-                        bs58::decode(data).into_vec().map_err(|e| {
-                            log::debug!("Base58 decode error: {}", e);
-                            BotError::Parse(format!("Failed to decode base58 account data: {}", e))
-                        })?
+                        bs58
+                            ::decode(data)
+                            .into_vec()
+                            .map_err(|e| {
+                                log::debug!("Base58 decode error: {}", e);
+                                BotError::Parse(
+                                    format!("Failed to decode base58 account data: {}", e)
+                                )
+                            })?
                     }
                     _ => {
                         log::debug!("Unsupported account data encoding: {:?}", encoding);
-                        return Err(BotError::Parse(format!("Unsupported account data encoding: {:?}", encoding)));
+                        return Err(
+                            BotError::Parse(
+                                format!("Unsupported account data encoding: {:?}", encoding)
+                            )
+                        );
                     }
                 }
             }

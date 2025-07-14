@@ -19,12 +19,12 @@ pub mod filters;
 pub mod analysis;
 
 // Re-export the new structure
-pub use sources::{ 
-    TokenSource, 
-    DexScreenerSource, 
-    GeckoTerminalSource, 
-    RaydiumSource, 
-    RugCheckSource 
+pub use sources::{
+    TokenSource,
+    DexScreenerSource,
+    GeckoTerminalSource,
+    RaydiumSource,
+    RugCheckSource,
 };
 pub use filters::*;
 pub use analysis::*;
@@ -175,5 +175,3 @@ impl std::fmt::Debug for ScreenerManager {
             .finish()
     }
 }
-
-

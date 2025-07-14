@@ -1,12 +1,12 @@
 //! Token discovery sources module
-//! 
+//!
 //! This module contains different sources for discovering new tokens
 //! Each source implements the TokenSource trait to provide a standardized interface
 
-use crate::core::types::{TokenOpportunity, TokenInfo};
+use crate::core::types::{ TokenOpportunity, TokenInfo };
 use crate::core::BotResult;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
@@ -87,7 +87,8 @@ impl BaseTokenDiscovery {
 
         // Create verification status
         let verification_status = crate::core::VerificationStatus {
-            is_verified: self.description.is_some() && !self.description.as_ref().unwrap().is_empty(),
+            is_verified: self.description.is_some() &&
+            !self.description.as_ref().unwrap().is_empty(),
             has_profile: true,
             is_boosted: self.boost_amount.is_some(),
             rugcheck_score: None,
@@ -127,7 +128,11 @@ impl BaseTokenDiscovery {
             discovery_time: chrono::Utc::now(),
             liquidity_provider: crate::core::LiquidityProvider::Other("Unknown".to_string()),
             verification_status,
-            risk_score: if self.boost_amount.is_some() { 0.2 } else { 0.3 }, // Boosted tokens might be lower risk
+            risk_score: if self.boost_amount.is_some() {
+                0.2
+            } else {
+                0.3
+            }, // Boosted tokens might be lower risk
             social_metrics: None,
             risk_factors: Vec::new(),
         })
@@ -142,7 +147,7 @@ impl BaseTokenDiscovery {
                 return (symbol, name);
             }
         }
-        
+
         // Fallback to address
         let symbol = self.token_address.chars().take(8).collect::<String>().to_uppercase();
         let name = format!("Token_{}", symbol);
