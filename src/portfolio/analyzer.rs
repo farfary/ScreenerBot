@@ -1,8 +1,16 @@
-use crate::core::{ BotResult, Position, PortfolioHealth, RebalanceRecommendation, RebalanceAction };
+use crate::core::{
+    BotResult,
+    Position,
+    PortfolioHealth,
+    RebalanceRecommendation,
+    RebalanceAction,
+    WalletTransaction,
+};
 use chrono::{ Utc, Duration };
 use std::collections::HashMap;
 
 /// Portfolio analyzer for performance metrics and recommendations
+#[derive(Debug)]
 pub struct PortfolioAnalyzer {
     min_position_value: f64,
     max_position_percentage: f64,
@@ -417,6 +425,105 @@ impl PortfolioAnalyzer {
             ).to_string(),
         }
     }
+
+    /// Calculate performance metrics for the portfolio
+    pub fn calculate_performance_metrics(
+        &self,
+        positions: &[Position],
+        transactions: &[WalletTransaction]
+    ) -> PerformanceMetrics {
+        let total_value: f64 = positions
+            .iter()
+            .map(|p| p.current_value_sol)
+            .sum();
+        let total_invested: f64 = positions
+            .iter()
+            .map(|p| p.total_invested_sol)
+            .sum();
+        let total_pnl = total_value - total_invested;
+        let total_pnl_percentage = if total_invested > 0.0 {
+            (total_pnl / total_invested) * 100.0
+        } else {
+            0.0
+        };
+
+        let profitable_positions = positions
+            .iter()
+            .filter(|p| p.unrealized_pnl > 0.0)
+            .count();
+        let losing_positions = positions
+            .iter()
+            .filter(|p| p.unrealized_pnl < 0.0)
+            .count();
+        let win_rate = if positions.len() > 0 {
+            ((profitable_positions as f64) / (positions.len() as f64)) * 100.0
+        } else {
+            0.0
+        };
+
+        PerformanceMetrics {
+            total_value_sol: total_value,
+            total_invested_sol: total_invested,
+            total_pnl_sol: total_pnl,
+            total_pnl_percentage,
+            best_performing_position: positions
+                .iter()
+                .max_by(|a, b|
+                    a.unrealized_pnl_percentage.partial_cmp(&b.unrealized_pnl_percentage).unwrap()
+                )
+                .map(|p| p.token.to_string())
+                .unwrap_or_default(),
+            worst_performing_position: positions
+                .iter()
+                .min_by(|a, b|
+                    a.unrealized_pnl_percentage.partial_cmp(&b.unrealized_pnl_percentage).unwrap()
+                )
+                .map(|p| p.token.to_string())
+                .unwrap_or_default(),
+            total_trades: transactions.len(),
+            profitable_trades: profitable_positions,
+            losing_trades: losing_positions,
+            win_rate,
+            largest_position_size: positions
+                .iter()
+                .map(|p| p.current_value_sol)
+                .fold(0.0, f64::max),
+            portfolio_diversification_score: self.calculate_diversification_score(positions) as u8,
+        }
+    }
+
+    /// Calculate diversification score (0-100)
+    fn calculate_diversification_score(&self, positions: &[Position]) -> f64 {
+        if positions.is_empty() {
+            return 100.0;
+        }
+
+        let total_value: f64 = positions
+            .iter()
+            .map(|p| p.current_value_sol)
+            .sum();
+        if total_value <= 0.0 {
+            return 100.0;
+        }
+
+        // Calculate Herfindahl-Hirschman Index (HHI) for concentration
+        let hhi: f64 = positions
+            .iter()
+            .map(|p| {
+                let weight = p.current_value_sol / total_value;
+                weight * weight
+            })
+            .sum();
+
+        // Convert HHI to diversification score (100 = perfect diversification, 0 = one position)
+        let max_positions = 10.0; // Assume ideal is 10 positions
+        let ideal_hhi = 1.0 / max_positions;
+        let diversification_score = (1.0 - (hhi - ideal_hhi).abs()) * 100.0;
+
+        diversification_score.max(0.0).min(100.0)
+    }
+
+    // ...existing code...
 }
 
 /// Individual position analysis result
@@ -438,4 +545,21 @@ pub struct DiversificationAnalysis {
     pub herfindahl_index: f64,
     pub diversification_score: u8,
     pub concentration_risk: String,
+}
+
+/// Performance metrics for the portfolio
+#[derive(Debug, Clone)]
+pub struct PerformanceMetrics {
+    pub total_value_sol: f64,
+    pub total_invested_sol: f64,
+    pub total_pnl_sol: f64,
+    pub total_pnl_percentage: f64,
+    pub best_performing_position: String,
+    pub worst_performing_position: String,
+    pub total_trades: usize,
+    pub profitable_trades: usize,
+    pub losing_trades: usize,
+    pub win_rate: f64,
+    pub largest_position_size: f64,
+    pub portfolio_diversification_score: u8,
 }

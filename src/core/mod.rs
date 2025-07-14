@@ -9,6 +9,13 @@ pub mod error;
 pub mod rpc;
 pub mod types;
 
+// Import actual implementations from other modules
+use crate::wallet::WalletManager;
+use crate::cache::CacheManager;
+use crate::screener::ScreenerManager;
+use crate::trader::TraderManager;
+use crate::portfolio::PortfolioManager;
+
 /// Re-export important types
 pub use types::*;
 pub use config::*;
@@ -102,7 +109,7 @@ impl BotRuntime {
         self.trader.initialize().await?;
 
         // Load and update portfolio
-        self.portfolio.initialize(self).await?;
+        self.portfolio.initialize(&self.wallet_manager, &self.cache).await?;
 
         log::info!("✅ All components initialized successfully");
         Ok(())
@@ -149,7 +156,7 @@ impl BotRuntime {
         let recent_txs = self.wallet_manager.get_recent_transactions().await?;
 
         // Update portfolio with new data
-        self.portfolio.update(balances, recent_txs, &self.cache).await?;
+        self.portfolio.update(balances, &recent_txs, &self.cache).await?;
 
         Ok(())
     }
@@ -164,7 +171,12 @@ impl BotRuntime {
         let mut signals = Vec::new();
 
         for opportunity in opportunities {
-            if let Some(signal) = self.trader.analyze_opportunity(&opportunity).await? {
+            if
+                let Some(signal) = self.trader.analyze_opportunity(
+                    &opportunity,
+                    &self.portfolio.current_portfolio
+                ).await?
+            {
                 signals.push(signal);
             }
         }
@@ -178,7 +190,7 @@ impl BotRuntime {
         log::info!("💱 Executing {} trades...", signals.len());
 
         for signal in signals {
-            match self.trader.execute_trade(&signal).await {
+            match self.trader.execute_trade(&signal, &self.wallet_manager).await {
                 Ok(result) => {
                     log::info!("✅ Trade executed: {:?}", result);
                     // Cache the trade result
@@ -206,126 +218,5 @@ impl BotRuntime {
         error_str.contains("wallet access") ||
             error_str.contains("private key") ||
             error_str.contains("insufficient funds")
-    }
-}
-
-/// Wallet management for the bot
-#[derive(Debug)]
-pub struct WalletManager {
-    // Will be implemented in next step
-}
-
-impl WalletManager {
-    pub fn new(_config: &BotConfig) -> BotResult<Self> {
-        Ok(Self {})
-    }
-
-    pub async fn initialize(&mut self) -> BotResult<()> {
-        Ok(())
-    }
-
-    pub async fn get_all_balances(&self) -> BotResult<Vec<TokenBalance>> {
-        Ok(vec![])
-    }
-
-    pub async fn get_recent_transactions(&self) -> BotResult<Vec<WalletTransaction>> {
-        Ok(vec![])
-    }
-}
-
-/// Cache management for storing transactions and token data
-#[derive(Debug)]
-pub struct CacheManager {
-    // Will be implemented in next step
-}
-
-impl CacheManager {
-    pub fn new(_config: &BotConfig) -> BotResult<Self> {
-        Ok(Self {})
-    }
-
-    pub async fn initialize(&mut self) -> BotResult<()> {
-        Ok(())
-    }
-
-    pub async fn store_trade_result(&self, _result: &TradeResult) -> BotResult<()> {
-        Ok(())
-    }
-}
-
-/// Screener for finding new token opportunities
-#[derive(Debug)]
-pub struct ScreenerManager {
-    // Will be implemented in next step
-}
-
-impl ScreenerManager {
-    pub fn new(_config: &BotConfig) -> BotResult<Self> {
-        Ok(Self {})
-    }
-
-    pub async fn initialize(&mut self) -> BotResult<()> {
-        Ok(())
-    }
-
-    pub async fn scan_opportunities(&self) -> BotResult<Vec<TokenOpportunity>> {
-        Ok(vec![])
-    }
-}
-
-/// Trading execution and strategy
-#[derive(Debug)]
-pub struct TraderManager {
-    // Will be implemented in next step
-}
-
-impl TraderManager {
-    pub fn new(_config: &BotConfig) -> BotResult<Self> {
-        Ok(Self {})
-    }
-
-    pub async fn initialize(&mut self) -> BotResult<()> {
-        Ok(())
-    }
-
-    pub async fn analyze_opportunity(
-        &self,
-        _opportunity: &TokenOpportunity
-    ) -> BotResult<Option<TradeSignal>> {
-        Ok(None)
-    }
-
-    pub async fn execute_trade(&self, _signal: &TradeSignal) -> BotResult<TradeResult> {
-        Ok(TradeResult::default())
-    }
-}
-
-/// Portfolio tracking and analysis
-#[derive(Debug)]
-pub struct PortfolioManager {
-    // Will be implemented in next step
-}
-
-impl PortfolioManager {
-    pub fn new(_config: &BotConfig) -> BotResult<Self> {
-        Ok(Self {})
-    }
-
-    pub async fn initialize(&mut self, _manager: &BotRuntime) -> BotResult<()> {
-        Ok(())
-    }
-
-    pub async fn update(
-        &mut self,
-        _balances: Vec<TokenBalance>,
-        _transactions: Vec<WalletTransaction>,
-        _cache: &CacheManager
-    ) -> BotResult<()> {
-        Ok(())
-    }
-
-    pub async fn print_status(&self) -> BotResult<()> {
-        println!("Portfolio Status: No positions");
-        Ok(())
     }
 }

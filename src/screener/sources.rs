@@ -249,10 +249,18 @@ impl DexScreenerSource {
             token: TokenInfo {
                 mint: token,
                 symbol: pair.base_token.symbol.clone(),
-                name: pair.base_token.name.clone().unwrap_or_else(|| "Unknown".to_string()),
+                name: if pair.base_token.name.is_empty() {
+                    "Unknown".to_string()
+                } else {
+                    pair.base_token.name.clone()
+                },
             },
             symbol: pair.base_token.symbol.clone(),
-            name: pair.base_token.name.clone().unwrap_or_else(|| "Unknown".to_string()),
+            name: if pair.base_token.name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                pair.base_token.name.clone()
+            },
             metrics,
             source: ScreenerSource::DexScreener,
             confidence_score: confidence,
@@ -307,7 +315,7 @@ impl TokenSource for DexScreenerSource {
             match self.pair_to_opportunity(&pair) {
                 Ok(opportunity) => {
                     log::debug!(
-                        "Created opportunity for token: {} ({})",
+                        "Created opportunity for token: {} ({:?})",
                         opportunity.symbol,
                         opportunity.token
                     );

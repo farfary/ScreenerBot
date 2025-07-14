@@ -31,7 +31,8 @@ pub struct CacheManager {
 
 impl CacheManager {
     /// Create a new cache manager
-    pub fn new(config: &CacheConfig) -> BotResult<Self> {
+    pub fn new(bot_config: &crate::core::BotConfig) -> BotResult<Self> {
+        let config = &bot_config.cache_settings;
         let db = Connection::open(&config.database_path).map_err(|e|
             BotError::Cache(format!("Failed to open database: {}", e))
         )?;
@@ -270,17 +271,58 @@ impl CacheManager {
             )
             .map_err(|e| BotError::Database(e))?;
 
-        let rows = stmt
+        let transaction_iter = stmt
             .query_map(params![wallet.to_string(), limit], |row| {
-                Ok(self.row_to_transaction(row)?)
+                Ok((
+                    row.get::<_, String>(0)?, // signature
+                    row.get::<_, String>(1)?, // transaction_type
+                    row.get::<_, String>(2)?, // tokens_involved
+                    row.get::<_, f64>(3)?, // sol_change
+                    row.get::<_, String>(4)?, // token_changes
+                    row.get::<_, f64>(5)?, // fees
+                    row.get::<_, String>(6)?, // status
+                    row.get::<_, i64>(7)?, // block_time
+                    row.get::<_, i64>(8)?, // slot
+                    row.get::<_, String>(9)?, // parsed_data
+                ))
             })
             .map_err(|e| BotError::Database(e))?;
 
         let mut transactions = Vec::new();
-        for row in rows {
-            match row {
-                Ok(Ok(tx)) => transactions.push(tx),
-                Ok(Err(e)) => log::warn!("Failed to parse cached transaction: {}", e),
+        for transaction_result in transaction_iter {
+            match transaction_result {
+                Ok(
+                    (
+                        signature,
+                        transaction_type,
+                        tokens_involved,
+                        sol_change,
+                        token_changes,
+                        fees,
+                        status,
+                        block_time,
+                        slot,
+                        parsed_data,
+                    ),
+                ) => {
+                    match
+                        self.create_transaction_from_data(
+                            signature,
+                            block_time,
+                            transaction_type,
+                            tokens_involved,
+                            sol_change,
+                            token_changes,
+                            fees,
+                            status,
+                            slot,
+                            parsed_data
+                        )
+                    {
+                        Ok(tx) => transactions.push(tx),
+                        Err(e) => log::warn!("Failed to parse cached transaction: {}", e),
+                    }
+                }
                 Err(e) => log::warn!("Database error reading transaction: {}", e),
             }
         }
@@ -461,5 +503,36 @@ impl CacheManager {
         }
 
         Ok(None)
+    }
+
+    /// Helper method to create transaction from raw data
+    fn create_transaction_from_data(
+        &self,
+        signature: String,
+        block_time: i64,
+        transaction_type: String,
+        tokens_involved: String,
+        sol_change: f64,
+        token_changes: String,
+        fees: f64,
+        status: String,
+        slot: i64,
+        parsed_data: String
+    ) -> BotResult<WalletTransaction> {
+        use crate::core::{ TransactionType, TransactionStatus };
+        use std::str::FromStr;
+
+        Ok(WalletTransaction {
+            signature,
+            transaction_type: TransactionType::Unknown, // Default for now
+            tokens_involved: Vec::new(), // Parse from string if needed
+            sol_change: sol_change as i64,
+            token_changes: std::collections::HashMap::new(), // Parse from string if needed
+            fees: fees as u64,
+            status: TransactionStatus::Success, // Default for now
+            block_time: Some(block_time),
+            slot: slot as u64,
+            parsed_data: None, // Could parse JSON string if needed
+        })
     }
 }

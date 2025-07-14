@@ -35,7 +35,8 @@ pub struct TraderManager {
 
 impl TraderManager {
     /// Create a new trader manager
-    pub fn new(config: &TraderConfig) -> BotResult<Self> {
+    pub fn new(bot_config: &crate::core::BotConfig) -> BotResult<Self> {
+        let config = &bot_config.trader_config;
         let strategy = TradingStrategy::new(config);
         let executor = TradeExecutor::new(config);
         let analyzer = TradeAnalyzer::new();

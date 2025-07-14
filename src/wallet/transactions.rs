@@ -49,4 +49,15 @@ impl<'a> TransactionManager<'a> {
         // Stub implementation for simulation mode
         Ok(None)
     }
+
+    /// Get token-specific transactions for a wallet address
+    pub async fn get_token_transactions(
+        &self,
+        _address: &Pubkey,
+        _token_mint: &Pubkey
+    ) -> BotResult<Vec<WalletTransaction>> {
+        // Stub implementation for simulation mode
+        log::info!("Getting token transactions (simulation mode)");
+        Ok(Vec::new())
+    }
 }
