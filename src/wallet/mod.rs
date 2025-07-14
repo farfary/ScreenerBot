@@ -11,10 +11,12 @@ use std::str::FromStr;
 pub mod manager;
 pub mod transactions;
 pub mod balances;
+pub mod display;
 
 // Export public modules and structs
 pub use transactions::*;
 pub use balances::*;
+pub use display::WalletStatusDisplay;
 
 /// Main wallet manager for the bot
 #[derive(Debug)]
@@ -71,6 +73,14 @@ impl WalletManager {
         let balance = self.get_sol_balance().await?;
         log::info!("💰 SOL balance: {:.6} SOL", balance);
 
+        // Get all token balances for initial assessment
+        let balances = self.get_all_balances().await?;
+        let token_count = balances.len().saturating_sub(1); // Exclude SOL
+
+        // Display startup status
+        WalletStatusDisplay::display_startup_status(&self.public_key, balance, token_count);
+
+        // Balance warnings
         if balance < 0.01 {
             log::warn!("⚠️ Low SOL balance, may not be able to perform trades");
         }
@@ -121,18 +131,44 @@ impl WalletManager {
         tx_manager.get_token_transactions(&self.public_key, token_mint).await
     }
 
-    /// Get transaction statistics
-    pub async fn get_transaction_stats(
+    /// Display comprehensive wallet status
+    pub async fn display_wallet_status(
         &self,
-        days: u32
-    ) -> BotResult<crate::wallet::transactions::TransactionStats> {
-        let tx_manager = if let Some(cache) = &self.cache {
-            TransactionManager::with_cache(&self.rpc, cache)
-        } else {
-            TransactionManager::new(&self.rpc)
-        };
+        positions: &[crate::core::Position],
+        portfolio_health: &crate::core::PortfolioHealth
+    ) -> BotResult<()> {
+        log::info!("📊 Generating comprehensive wallet status...");
 
-        tx_manager.get_transaction_stats(&self.public_key, days).await
+        // Get current balances
+        let balances = self.get_all_balances().await?;
+
+        // Get recent transactions
+        let recent_transactions = self.get_recent_transactions().await?;
+
+        // Create display formatter
+        let display = WalletStatusDisplay::new().with_colors(true).with_transaction_summary(true);
+
+        // Display comprehensive wallet status
+        display.display_wallet_status(
+            &self.public_key,
+            &balances,
+            positions,
+            portfolio_health,
+            &recent_transactions
+        );
+
+        Ok(())
+    }
+
+    /// Display quick wallet status for regular updates
+    pub async fn display_quick_status(
+        &self,
+        portfolio_health: &crate::core::PortfolioHealth
+    ) -> BotResult<()> {
+        let balances = self.get_all_balances().await?;
+        let display = WalletStatusDisplay::new();
+        display.display_quick_status(&balances, portfolio_health);
+        Ok(())
     }
 
     /// Sign and send a transaction

@@ -113,6 +113,28 @@ impl BotRuntime {
         self.portfolio.initialize(&self.wallet_manager, &self.cache).await?;
 
         log::info!("✅ All components initialized successfully");
+
+        // Display comprehensive wallet status after warmup
+        self.display_post_warmup_status().await?;
+
+        Ok(())
+    }
+
+    /// Display comprehensive wallet status after initialization and warmup
+    async fn display_post_warmup_status(&mut self) -> Result<()> {
+        log::info!("📊 Generating post-warmup wallet status report...");
+
+        // Update portfolio with latest data first
+        self.update_portfolio().await?;
+
+        // Get current portfolio health and positions
+        let portfolio_health = self.portfolio.get_portfolio_health();
+        let positions = &self.portfolio.current_portfolio.positions;
+
+        // Display comprehensive wallet status
+        self.wallet_manager.display_wallet_status(positions, &portfolio_health).await?;
+
+        log::info!("✅ Wallet status report generated successfully");
         Ok(())
     }
 
@@ -208,7 +230,13 @@ impl BotRuntime {
 
     /// Print current portfolio status to console
     async fn print_portfolio_status(&self) -> Result<()> {
+        // Print standard portfolio status
         self.portfolio.print_status().await?;
+
+        // Add quick wallet status for regular updates
+        let portfolio_health = self.portfolio.get_portfolio_health();
+        self.wallet_manager.display_quick_status(&portfolio_health).await?;
+
         Ok(())
     }
 

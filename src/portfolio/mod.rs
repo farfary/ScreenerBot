@@ -22,6 +22,7 @@ use analyzer::PortfolioAnalyzer;
 use display::PortfolioDisplay;
 
 // Re-export public interfaces
+pub use analyzer::PositionAnalysis;
 
 /// Main portfolio manager for tracking and analyzing positions
 #[derive(Debug)]
@@ -90,15 +91,95 @@ impl PortfolioManager {
         Ok(())
     }
 
-    /// Print status - stub implementation
+    /// Print status - enhanced implementation with wallet integration
     pub async fn print_status(&self) -> BotResult<()> {
-        println!("Portfolio Value: {:.4} SOL", self.current_portfolio.total_value_sol);
-        println!("Positions: {}", self.current_portfolio.positions.len());
+        log::debug!("📊 Printing portfolio status");
+
+        // Basic portfolio metrics
         println!(
-            "Total PnL: {:.4} SOL ({:.2}%)",
+            "┌─ Portfolio Summary ─────────────────────────────────────────────────────────────────────┐"
+        );
+        println!(
+            "│ Total Value:     {:<15.4} SOL                                           │",
+            self.current_portfolio.total_value_sol
+        );
+        println!(
+            "│ Total Invested:  {:<15.4} SOL                                           │",
+            self.current_portfolio.total_invested_sol
+        );
+        println!(
+            "│ Unrealized P&L:  {:<15.4} SOL ({:+.2}%)                                │",
             self.current_portfolio.total_unrealized_pnl,
             self.current_portfolio.total_unrealized_pnl_percentage
         );
+        println!(
+            "│ Active Positions: {:<3} positions                                               │",
+            self.current_portfolio.positions.len()
+        );
+        println!(
+            "│ SOL Balance:     {:<15.6} SOL                                           │",
+            self.current_portfolio.sol_balance
+        );
+        println!(
+            "└─────────────────────────────────────────────────────────────────────────────────────────┘"
+        );
+
+        // Performance metrics summary
+        let metrics = &self.current_portfolio.performance_metrics;
+        if metrics.total_trades > 0 {
+            println!(
+                "┌─ Performance Metrics ───────────────────────────────────────────────────────────────────┐"
+            );
+            println!(
+                "│ Total Trades:    {:<3} ({} wins, {} losses)                                      │",
+                metrics.total_trades,
+                metrics.winning_trades,
+                metrics.losing_trades
+            );
+            println!(
+                "│ Win Rate:        {:<6.1}%                                                        │",
+                metrics.win_rate
+            );
+            println!(
+                "│ Profit Factor:   {:<8.2}                                                        │",
+                metrics.profit_factor
+            );
+            if metrics.best_trade_pnl != 0.0 {
+                println!(
+                    "│ Best Trade:      {:<15.4} SOL                                           │",
+                    metrics.best_trade_pnl
+                );
+                println!(
+                    "│ Worst Trade:     {:<15.4} SOL                                           │",
+                    metrics.worst_trade_pnl
+                );
+            }
+            println!(
+                "└─────────────────────────────────────────────────────────────────────────────────────────┘"
+            );
+        }
+
+        // Display individual positions if any
+        if !self.current_portfolio.positions.is_empty() {
+            println!(
+                "┌─ Active Positions ──────────────────────────────────────────────────────────────────────┐"
+            );
+            for (i, position) in self.current_portfolio.positions.iter().enumerate() {
+                let pnl_indicator = if position.unrealized_pnl >= 0.0 { "📈" } else { "📉" };
+                println!(
+                    "│ {:2}. {} {:<10} - {:.4} SOL ({:+.1}%)                                         │",
+                    i + 1,
+                    pnl_indicator,
+                    position.symbol,
+                    position.current_value_sol,
+                    position.unrealized_pnl_percentage
+                );
+            }
+            println!(
+                "└─────────────────────────────────────────────────────────────────────────────────────────┘"
+            );
+        }
+
         Ok(())
     }
 
