@@ -6,7 +6,11 @@ use crate::trading::transaction_manager::TransactionManager;
 use crate::types::TransactionType;
 use anyhow::Result;
 use base64::{ Engine as _, engine::general_purpose };
-use solana_sdk::{ signature::{ Keypair, Signature, Signer }, transaction::Transaction };
+use solana_sdk::{
+    signature::{ Keypair, Signature, Signer },
+    transaction::{ Transaction, VersionedTransaction },
+    message::VersionedMessage,
+};
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
 
@@ -159,6 +163,7 @@ impl SwapManager {
         request: &SwapRequest,
         wallet_keypair: &Keypair
     ) -> Result<SwapResult, SwapError> {
+        let start_time = Instant::now();
         let user_public_key = wallet_keypair.pubkey().to_string();
 
         // Get the transaction from the appropriate DEX
@@ -266,11 +271,14 @@ impl SwapManager {
         Ok(SwapResult {
             success: true,
             signature: Some(signature.to_string()),
-            dex_used: route.dex.clone(),
+            dex_used: route.dex.to_string(),
             input_amount,
             output_amount,
-            price_impact,
+            slippage: 0.0, // TODO: Calculate actual slippage
+            fee: 0, // TODO: Calculate proper fee
             fee_lamports,
+            price_impact,
+            execution_time_ms: start_time.elapsed().as_millis() as u64,
             route: route.clone(),
             error: None,
             block_height: Some(block_height),
@@ -321,17 +329,46 @@ impl SwapManager {
         )
     }
 
-    /// Decode base64 transaction
+    /// Decode base64 transaction - supports both legacy and versioned transactions
     fn decode_transaction(&self, transaction_data: &str) -> Result<Transaction, SwapError> {
         let transaction_bytes = general_purpose::STANDARD
             .decode(transaction_data)
             .map_err(|e| SwapError::SerializationError(format!("Base64 decode failed: {}", e)))?;
 
-        bincode
-            ::deserialize(&transaction_bytes)
-            .map_err(|e|
-                SwapError::SerializationError(format!("Transaction deserialize failed: {}", e))
-            )
+        // First try to deserialize as a legacy transaction
+        if let Ok(transaction) = bincode::deserialize::<Transaction>(&transaction_bytes) {
+            return Ok(transaction);
+        }
+
+        // If that fails, try to deserialize as a versioned transaction and convert to legacy
+        match bincode::deserialize::<VersionedTransaction>(&transaction_bytes) {
+            Ok(versioned_tx) => {
+                // Convert versioned transaction to legacy transaction
+                match versioned_tx.message {
+                    VersionedMessage::Legacy(legacy_message) => {
+                        Ok(Transaction {
+                            signatures: versioned_tx.signatures,
+                            message: legacy_message,
+                        })
+                    }
+                    VersionedMessage::V0(_) => {
+                        // For V0 messages, we need to resolve the lookup tables
+                        // For now, return an error suggesting to use legacy transactions
+                        Err(
+                            SwapError::SerializationError(
+                                "Versioned transactions with lookup tables not supported. Please use legacy transactions.".to_string()
+                            )
+                        )
+                    }
+                }
+            }
+            Err(e) =>
+                Err(
+                    SwapError::SerializationError(
+                        format!("Failed to deserialize transaction (both legacy and versioned): {}", e)
+                    )
+                ),
+        }
     }
 
     /// Get the best quote without executing

@@ -138,28 +138,26 @@ impl GmgnSwap {
     fn parse_gmgn_quote(
         &self,
         quote_data: &GmgnApiData,
-        _request: &SwapRequest
+        request: &SwapRequest
     ) -> Result<SwapRoute, SwapError> {
         let quote = quote_data.quote
             .as_ref()
             .ok_or_else(|| SwapError::ApiError("Missing quote data in GMGN response".to_string()))?;
 
-        let route_plan = quote.route_plan
-            .iter()
-            .map(|plan| RoutePlan {
-                swap_info: SwapInfo {
-                    amm_key: plan.swapInfo.ammKey.clone(),
-                    label: plan.swapInfo.label.clone(),
-                    input_mint: plan.swapInfo.inputMint.clone(),
-                    output_mint: plan.swapInfo.outputMint.clone(),
-                    in_amount: plan.swapInfo.inAmount.clone(),
-                    out_amount: plan.swapInfo.outAmount.clone(),
-                    fee_amount: plan.swapInfo.feeAmount.clone(),
-                    fee_mint: plan.swapInfo.feeMint.clone(),
-                },
-                percent: plan.percent,
-            })
-            .collect();
+        // Create a basic route plan since GMGN doesn't provide detailed routing info
+        let route_plan = vec![RoutePlan {
+            swap_info: SwapInfo {
+                amm_key: "gmgn_pool".to_string(),
+                label: "GMGN".to_string(),
+                input_mint: request.input_mint.clone(),
+                output_mint: request.output_mint.clone(),
+                in_amount: quote.input_amount.clone(),
+                out_amount: quote.output_amount.clone(),
+                fee_amount: "0".to_string(),
+                fee_mint: request.input_mint.clone(),
+            },
+            percent: 100,
+        }];
 
         let platform_fee = if self.config.referral_fee_bps > 0 {
             Some(PlatformFee {
@@ -172,18 +170,18 @@ impl GmgnSwap {
 
         Ok(SwapRoute {
             dex: DexType::Gmgn,
-            input_mint: quote.input_mint.clone(),
-            output_mint: quote.output_mint.clone(),
+            input_mint: request.input_mint.clone(),
+            output_mint: request.output_mint.clone(),
             in_amount: quote.input_amount.clone(),
             out_amount: quote.output_amount.clone(),
-            other_amount_threshold: quote.other_amount_threshold.clone(),
-            swap_mode: "ExactIn".to_string(), // GMGN default
-            slippage_bps: quote.slippage_bps,
+            other_amount_threshold: quote.output_amount.clone(), // Use output amount as threshold
+            swap_mode: "ExactIn".to_string(),
+            slippage_bps: request.slippage_bps,
             platform_fee,
-            price_impact_pct: quote.price_impact_pct.clone(),
+            price_impact_pct: quote.price_impact.clone().unwrap_or_else(|| "0".to_string()),
             route_plan,
-            context_slot: Some(quote.context_slot),
-            time_taken: Some(quote.time_taken),
+            context_slot: None,
+            time_taken: None,
         })
     }
 

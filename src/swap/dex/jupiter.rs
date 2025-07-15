@@ -3,6 +3,7 @@ use anyhow::Result;
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
+use log; // Add log import
 
 pub struct JupiterSwap {
     config: JupiterConfig,
@@ -40,6 +41,9 @@ impl JupiterSwap {
             params.push(("restrictIntermediateTokens", "true".to_string()));
         }
 
+        log::debug!("Jupiter quote request URL: {}", url);
+        log::debug!("Jupiter quote params: {:?}", params);
+
         let response = self.client
             .get(&url)
             .query(&params)
@@ -47,13 +51,20 @@ impl JupiterSwap {
             .map_err(|e| SwapError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
+            log::error!("Jupiter API error - Status: {}, Body: {}", status, error_text);
             return Err(SwapError::ApiError(format!("Jupiter API error: {}", error_text)));
         }
 
         let quote: Value = response
             .json().await
             .map_err(|e| SwapError::SerializationError(e.to_string()))?;
+
+        log::debug!(
+            "Jupiter quote response: {}",
+            serde_json::to_string_pretty(&quote).unwrap_or_default()
+        );
 
         self.parse_jupiter_quote(&quote, request)
     }
@@ -82,6 +93,11 @@ impl JupiterSwap {
             "skipUserAccountsRpcCalls": false
         });
 
+        log::debug!(
+            "Jupiter swap request: {}",
+            serde_json::to_string_pretty(&swap_request).unwrap_or_default()
+        );
+
         let response = self.client
             .post(&url)
             .json(&swap_request)
@@ -89,13 +105,20 @@ impl JupiterSwap {
             .map_err(|e| SwapError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
+            log::error!("Jupiter swap API error - Status: {}, Body: {}", status, error_text);
             return Err(SwapError::ApiError(format!("Jupiter swap API error: {}", error_text)));
         }
 
         let swap_response: Value = response
             .json().await
             .map_err(|e| SwapError::SerializationError(e.to_string()))?;
+
+        log::debug!(
+            "Jupiter swap response: {}",
+            serde_json::to_string_pretty(&swap_response).unwrap_or_default()
+        );
 
         Ok(SwapTransaction {
             swap_transaction: swap_response["swapTransaction"]
@@ -118,6 +141,11 @@ impl JupiterSwap {
         quote: &Value,
         request: &SwapRequest
     ) -> Result<SwapRoute, SwapError> {
+        // Check if the quote contains an error
+        if let Some(error) = quote.get("error") {
+            return Err(SwapError::ApiError(format!("Jupiter API error: {}", error)));
+        }
+
         let input_mint = quote["inputMint"]
             .as_str()
             .ok_or_else(|| SwapError::SerializationError("Missing inputMint".to_string()))?
@@ -172,6 +200,11 @@ impl JupiterSwap {
             })
             .collect();
 
+        // Validate that we got meaningful output
+        if out_amount == "0" || out_amount.is_empty() {
+            return Err(SwapError::InvalidRoute("Jupiter returned zero output amount".to_string()));
+        }
+
         Ok(SwapRoute {
             dex: DexType::Jupiter,
             input_mint,
@@ -190,6 +223,26 @@ impl JupiterSwap {
     }
 
     fn route_to_jupiter_quote(&self, route: &SwapRoute) -> Value {
+        let route_plan: Vec<Value> = route.route_plan
+            .iter()
+            .map(|plan| {
+                serde_json::json!({
+                "swapInfo": {
+                    "ammKey": plan.swap_info.amm_key,
+                    "label": plan.swap_info.label,
+                    "inputMint": plan.swap_info.input_mint,
+                    "outputMint": plan.swap_info.output_mint,
+                    "inAmount": plan.swap_info.in_amount,
+                    "outAmount": plan.swap_info.out_amount,
+                    "feeAmount": plan.swap_info.fee_amount,
+                    "feeMint": plan.swap_info.fee_mint
+                },
+                "percent": plan.percent,
+                "bps": 10000  // Default to 100% for compatibility
+            })
+            })
+            .collect();
+
         serde_json::json!({
             "inputMint": route.input_mint,
             "inAmount": route.in_amount,
@@ -200,21 +253,7 @@ impl JupiterSwap {
             "slippageBps": route.slippage_bps,
             "platformFee": route.platform_fee,
             "priceImpactPct": route.price_impact_pct,
-            "routePlan": route.route_plan.iter().map(|plan| {
-                serde_json::json!({
-                    "swapInfo": {
-                        "ammKey": plan.swap_info.amm_key,
-                        "label": plan.swap_info.label,
-                        "inputMint": plan.swap_info.input_mint,
-                        "outputMint": plan.swap_info.output_mint,
-                        "inAmount": plan.swap_info.in_amount,
-                        "outAmount": plan.swap_info.out_amount,
-                        "feeAmount": plan.swap_info.fee_amount,
-                        "feeMint": plan.swap_info.fee_mint
-                    },
-                    "percent": plan.percent
-                })
-            }).collect::<Vec<_>>(),
+            "routePlan": route_plan,
             "contextSlot": route.context_slot,
             "timeTaken": route.time_taken
         })
@@ -241,11 +280,13 @@ impl JupiterSwap {
                 .into_iter()
                 .filter_map(|token| {
                     Some(TokenInfo {
-                        mint: token["address"].as_str()?.to_string(),
-                        symbol: token["symbol"].as_str()?.to_string(),
-                        name: token["name"].as_str()?.to_string(),
+                        address: token["address"].as_str()?.to_string(),
+                        chain_id: 101, // Solana mainnet
                         decimals: token["decimals"].as_u64()? as u8,
+                        name: token["name"].as_str()?.to_string(),
+                        symbol: token["symbol"].as_str()?.to_string(),
                         logo_uri: token["logoURI"].as_str().map(|s| s.to_string()),
+                        tags: vec![], // Jupiter doesn't provide tags in this format
                     })
                 })
                 .collect()

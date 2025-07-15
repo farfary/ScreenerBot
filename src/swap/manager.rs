@@ -1,6 +1,4 @@
-use super::gmgn::GmgnSwap;
-use super::jupiter::JupiterSwap;
-use super::raydium::RaydiumSwap;
+use super::dex::{ GmgnSwap, JupiterSwap, RaydiumSwap };
 use super::routes::RouteSelector;
 use super::types::*;
 use crate::config::Config;
@@ -9,7 +7,11 @@ use crate::trading::transaction_manager::TransactionManager;
 use crate::types::TransactionType;
 use anyhow::Result;
 use base64::{ Engine as _, engine::general_purpose };
-use solana_sdk::{ signature::{ Keypair, Signature, Signer }, transaction::Transaction };
+use solana_sdk::{
+    signature::{ Keypair, Signature, Signer },
+    transaction::{ Transaction, VersionedTransaction },
+    message::VersionedMessage,
+};
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
 
@@ -87,15 +89,35 @@ impl SwapManager {
             return Err(SwapError::InvalidRoute("No routes found".to_string()));
         }
 
+        log::info!("📊 Found {} initial routes", routes.len());
+
         // Filter routes by slippage
-        let filtered_routes = self.route_selector.filter_by_slippage(routes);
+        let filtered_routes = self.route_selector.filter_by_slippage(routes.clone());
 
         if filtered_routes.is_empty() {
+            // Find the minimum slippage from available routes
+            let min_slippage_bps =
+                (
+                    routes
+                        .iter()
+                        .map(|r| r.slippage_bps)
+                        .min()
+                        .unwrap_or(0) as f64
+                ) / 10000.0;
+
+            log::warn!(
+                "⚠️ All routes exceed max slippage. Min available: {}%, Max allowed: {}%",
+                min_slippage_bps * 100.0,
+                self.config.max_slippage * 100.0
+            );
+
             return Err(SwapError::SlippageTooHigh {
                 expected: self.config.max_slippage,
-                actual: 999.0, // Indicates all routes exceeded slippage
+                actual: min_slippage_bps,
             });
         }
+
+        log::info!("✅ {} routes passed slippage filter", filtered_routes.len());
 
         // Select the best route
         let best_route = self.route_selector.select_best_route(filtered_routes)?;
@@ -324,17 +346,46 @@ impl SwapManager {
         )
     }
 
-    /// Decode base64 transaction
+    /// Decode base64 transaction - supports both legacy and versioned transactions
     fn decode_transaction(&self, transaction_data: &str) -> Result<Transaction, SwapError> {
         let transaction_bytes = general_purpose::STANDARD
             .decode(transaction_data)
             .map_err(|e| SwapError::SerializationError(format!("Base64 decode failed: {}", e)))?;
 
-        bincode
-            ::deserialize(&transaction_bytes)
-            .map_err(|e|
-                SwapError::SerializationError(format!("Transaction deserialize failed: {}", e))
-            )
+        // First try to deserialize as a legacy transaction
+        if let Ok(transaction) = bincode::deserialize::<Transaction>(&transaction_bytes) {
+            return Ok(transaction);
+        }
+
+        // If that fails, try to deserialize as a versioned transaction and convert to legacy
+        match bincode::deserialize::<VersionedTransaction>(&transaction_bytes) {
+            Ok(versioned_tx) => {
+                // Convert versioned transaction to legacy transaction
+                match versioned_tx.message {
+                    VersionedMessage::Legacy(legacy_message) => {
+                        Ok(Transaction {
+                            signatures: versioned_tx.signatures,
+                            message: legacy_message,
+                        })
+                    }
+                    VersionedMessage::V0(_) => {
+                        // For V0 messages, we need to resolve the lookup tables
+                        // For now, return an error suggesting to use legacy transactions
+                        Err(
+                            SwapError::SerializationError(
+                                "Versioned transactions with lookup tables not supported. Please use legacy transactions.".to_string()
+                            )
+                        )
+                    }
+                }
+            }
+            Err(e) =>
+                Err(
+                    SwapError::SerializationError(
+                        format!("Failed to deserialize transaction (both legacy and versioned): {}", e)
+                    )
+                ),
+        }
     }
 
     /// Get the best quote without executing
@@ -345,12 +396,22 @@ impl SwapManager {
             return Err(SwapError::InvalidRoute("No routes found".to_string()));
         }
 
-        let filtered_routes = self.route_selector.filter_by_slippage(routes);
+        let filtered_routes = self.route_selector.filter_by_slippage(routes.clone());
 
         if filtered_routes.is_empty() {
+            // Find the minimum slippage from available routes
+            let min_slippage_bps =
+                (
+                    routes
+                        .iter()
+                        .map(|r| r.slippage_bps)
+                        .min()
+                        .unwrap_or(0) as f64
+                ) / 10000.0;
+
             return Err(SwapError::SlippageTooHigh {
                 expected: self.config.max_slippage,
-                actual: 999.0,
+                actual: min_slippage_bps,
             });
         }
 

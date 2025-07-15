@@ -214,8 +214,6 @@ impl Default for Config {
                     enabled: false, // Disabled by default since it requires API key
                     base_url: "https://gmgn.ai/defi/quoterv1".to_string(),
                     timeout_seconds: 15,
-                    api_key: "".to_string(),
-                    referral_account: "".to_string(),
                     referral_fee_bps: 0,
                 },
             },

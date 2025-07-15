@@ -1,6 +1,7 @@
 use anyhow::Result;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
+use std::time::Duration;
 
 pub struct RpcManager {
     clients: Vec<RpcClient>,
@@ -14,8 +15,17 @@ impl RpcManager {
 
         let clients: Vec<RpcClient> = urls
             .into_iter()
-            .map(|url| { RpcClient::new_with_commitment(url, CommitmentConfig::confirmed()) })
+            .map(|url| {
+                log::info!("🔗 Initializing RPC client: {}", url);
+                RpcClient::new_with_timeout_and_commitment(
+                    url,
+                    Duration::from_secs(30),
+                    CommitmentConfig::confirmed()
+                )
+            })
             .collect();
+
+        log::info!("✅ RPC Manager initialized with {} endpoints", clients.len());
 
         Self {
             clients,
@@ -32,20 +42,24 @@ impl RpcManager {
             let index = (start_index + attempt) % self.clients.len();
             let client = &self.clients[index];
 
+            log::debug!("🔄 Trying RPC endpoint {} (attempt {})", index + 1, attempt + 1);
+
             // Try the operation directly without spawn_blocking for simplicity
             match operation(client) {
                 Ok(result) => {
                     // Update current index to successful RPC
                     self.current_index.store(index, std::sync::atomic::Ordering::Relaxed);
+                    log::debug!("✅ RPC endpoint {} succeeded", index + 1);
                     return Ok(result);
                 }
                 Err(e) => {
-                    log::warn!("RPC attempt {} failed: {}", index + 1, e);
+                    log::warn!("❌ RPC endpoint {} failed: {}", index + 1, e);
                     continue;
                 }
             }
         }
 
+        log::error!("💥 All {} RPC endpoints failed", self.clients.len());
         Err(anyhow::anyhow!("All RPC endpoints failed"))
     }
 
