@@ -161,6 +161,36 @@ impl CacheManager {
             )
             .map_err(|e| BotError::Database(e))?;
 
+        // Discovered tokens table (for tracking new token discoveries)
+        db
+            .execute(
+                "CREATE TABLE IF NOT EXISTS discovered_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mint TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT NOT NULL,
+                source TEXT NOT NULL,
+                discovery_time DATETIME NOT NULL,
+                price_usd REAL NOT NULL,
+                volume_24h REAL NOT NULL,
+                liquidity_usd REAL NOT NULL,
+                market_cap REAL,
+                price_change_24h REAL,
+                age_hours REAL NOT NULL,
+                risk_score REAL NOT NULL,
+                confidence_score REAL NOT NULL,
+                liquidity_provider TEXT NOT NULL,
+                is_verified BOOLEAN DEFAULT FALSE,
+                has_profile BOOLEAN DEFAULT FALSE,
+                risk_factors TEXT,
+                first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(mint, source)
+            )",
+                []
+            )
+            .map_err(|e| BotError::Database(e))?;
+
         // Create indexes for better performance
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_transactions_wallet ON transactions(wallet_address)",
@@ -177,6 +207,14 @@ impl CacheManager {
         )?;
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_wallet_balances_wallet ON wallet_balances(wallet_address)",
+            []
+        )?;
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_discovered_tokens_mint ON discovered_tokens(mint)",
+            []
+        )?;
+        db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_discovered_tokens_discovery_time ON discovered_tokens(discovery_time DESC)",
             []
         )?;
 
@@ -556,6 +594,12 @@ impl CacheManager {
             []
         )?;
 
+        // Clean up old discovered tokens
+        db.execute(
+            "DELETE FROM discovered_tokens WHERE last_seen < datetime('now', '-30 days')",
+            []
+        )?;
+
         log::debug!("🧹 Cleaned up expired cache entries");
         Ok(())
     }
@@ -607,6 +651,154 @@ impl CacheManager {
             trade_results_count: trade_results_count as usize,
             memory_cache_size,
         })
+    }
+
+    /// Cache a discovered token opportunity
+    pub async fn cache_token_opportunity(&self, token: &crate::core::TokenOpportunity) -> BotResult<bool> {
+        let db = self.db.lock().unwrap();
+        
+        // Check if this token from this source was already seen
+        let existing = db
+            .prepare("SELECT mint FROM discovered_tokens WHERE mint = ?1 AND source = ?2")?
+            .exists(params![token.mint.to_string(), serde_json::to_string(&token.source)?])?;
+        
+        let risk_factors_json = serde_json::to_string(&token.risk_factors)?;
+        let source_str = serde_json::to_string(&token.source)?;
+        let liquidity_provider_str = serde_json::to_string(&token.liquidity_provider)?;
+        
+        if existing {
+            // Update existing entry with latest data
+            db
+                .execute(
+                    "UPDATE discovered_tokens SET 
+                    price_usd = ?1, volume_24h = ?2, liquidity_usd = ?3, market_cap = ?4,
+                    price_change_24h = ?5, risk_score = ?6, confidence_score = ?7,
+                    is_verified = ?8, has_profile = ?9, risk_factors = ?10, last_seen = ?11
+                    WHERE mint = ?12 AND source = ?13",
+                    params![
+                        token.metrics.price_usd,
+                        token.metrics.volume_24h,
+                        token.metrics.liquidity_usd,
+                        token.metrics.market_cap,
+                        token.metrics.price_change_24h,
+                        token.risk_score,
+                        token.confidence_score,
+                        token.verification_status.is_verified,
+                        token.verification_status.has_profile,
+                        risk_factors_json,
+                        Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                        token.mint.to_string(),
+                        source_str
+                    ]
+                )
+                .map_err(|e| BotError::Database(e))?;
+            return Ok(false); // Not a new token
+        } else {
+            // Insert new token
+            db
+                .execute(
+                    "INSERT INTO discovered_tokens 
+                    (mint, symbol, name, source, discovery_time, price_usd, volume_24h, 
+                     liquidity_usd, market_cap, price_change_24h, age_hours, risk_score, 
+                     confidence_score, liquidity_provider, is_verified, has_profile, risk_factors)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                    params![
+                        token.mint.to_string(),
+                        token.symbol,
+                        token.name,
+                        source_str,
+                        token.discovery_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        token.metrics.price_usd,
+                        token.metrics.volume_24h,
+                        token.metrics.liquidity_usd,
+                        token.metrics.market_cap,
+                        token.metrics.price_change_24h,
+                        token.metrics.age_hours,
+                        token.risk_score,
+                        token.confidence_score,
+                        liquidity_provider_str,
+                        token.verification_status.is_verified,
+                        token.verification_status.has_profile,
+                        risk_factors_json
+                    ]
+                )
+                .map_err(|e| BotError::Database(e))?;
+            return Ok(true); // New token discovered
+        }
+    }
+
+    /// Get all discovered tokens from a specific source
+    pub async fn get_discovered_tokens(&self, source: Option<&crate::core::ScreenerSource>, limit: Option<usize>) -> BotResult<Vec<(String, String, String)>> {
+        let db = self.db.lock().unwrap();
+        
+        let query = if let Some(src) = source {
+            let source_str = serde_json::to_string(src)?;
+            if let Some(lmt) = limit {
+                format!("SELECT mint, symbol, name FROM discovered_tokens WHERE source = '{}' ORDER BY discovery_time DESC LIMIT {}", source_str, lmt)
+            } else {
+                format!("SELECT mint, symbol, name FROM discovered_tokens WHERE source = '{}' ORDER BY discovery_time DESC", source_str)
+            }
+        } else {
+            if let Some(lmt) = limit {
+                format!("SELECT mint, symbol, name FROM discovered_tokens ORDER BY discovery_time DESC LIMIT {}", lmt)
+            } else {
+                "SELECT mint, symbol, name FROM discovered_tokens ORDER BY discovery_time DESC".to_string()
+            }
+        };
+
+        let mut stmt = db.prepare(&query)?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?
+            ))
+        })?;
+
+        let mut tokens = Vec::new();
+        for row in rows {
+            tokens.push(row?);
+        }
+
+        Ok(tokens)
+    }
+
+    /// Check if a token has been seen before from any source
+    pub async fn is_token_known(&self, mint: &solana_sdk::pubkey::Pubkey) -> BotResult<bool> {
+        let db = self.db.lock().unwrap();
+        
+        let exists = db
+            .prepare("SELECT 1 FROM discovered_tokens WHERE mint = ?1 LIMIT 1")?
+            .exists(params![mint.to_string()])?;
+            
+        Ok(exists)
+    }
+
+    /// Get token discovery count by source
+    pub async fn get_discovery_stats(&self) -> BotResult<Vec<(String, usize)>> {
+        let db = self.db.lock().unwrap();
+        
+        let mut stmt = db.prepare("SELECT source, COUNT(*) FROM discovered_tokens GROUP BY source")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, usize>(1)?
+            ))
+        })?;
+
+        let mut stats = Vec::new();
+        for row in rows {
+            let (source_json, count) = row?;
+            // Try to deserialize the source to get a nice display name
+            let source_name = if let Ok(src) = serde_json::from_str::<crate::core::ScreenerSource>(&source_json) {
+                format!("{:?}", src)
+            } else {
+                source_json
+            };
+            stats.push((source_name, count));
+        }
+
+        Ok(stats)
     }
 }
 

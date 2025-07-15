@@ -12,6 +12,10 @@ panic = "abort"      # drop unwinding
 strip = "symbols"    # remove symbol table
 
 
+[lib]
+name = "screenerbot"
+path = "src/lib.rs"
+
 [[bin]]
 name = "screenerbot"
 path = "src/main.rs"

@@ -35,6 +35,7 @@ pub struct ScreenerManager {
     sources: Vec<Box<dyn TokenSource + Send + Sync>>,
     filters: OpportunityFilter,
     analyzer: OpportunityAnalyzer,
+    cache: crate::cache::CacheManager,
 }
 
 impl ScreenerManager {
@@ -62,12 +63,14 @@ impl ScreenerManager {
 
         let filters = OpportunityFilter::new(&config.filters);
         let analyzer = OpportunityAnalyzer::new();
+        let cache = crate::cache::CacheManager::new(bot_config)?;
 
         Ok(Self {
             config: config.clone(),
             sources,
             filters,
             analyzer,
+            cache,
         })
     }
 
@@ -75,6 +78,9 @@ impl ScreenerManager {
     pub async fn initialize(&mut self) -> BotResult<()> {
         log::info!("🔍 Initializing screener...");
         log::info!("📡 Active sources: {}", self.sources.len());
+
+        // Initialize cache system
+        self.cache.initialize().await?;
 
         // Initialize all sources
         for source in &mut self.sources {
@@ -90,13 +96,52 @@ impl ScreenerManager {
         log::info!("🔎 Scanning for new opportunities...");
 
         let mut all_opportunities = Vec::new();
+        let mut new_token_count = 0;
 
         // Collect opportunities from all sources
         for source in &self.sources {
             match source.get_new_tokens().await {
-                Ok(mut tokens) => {
+                Ok(tokens) => {
                     log::debug!("📊 Source {} found {} tokens", source.name(), tokens.len());
-                    all_opportunities.append(&mut tokens);
+                    
+                    // Process each token for caching and new discovery logging
+                    for token in tokens {
+                        // Cache the token and check if it's new
+                        match self.cache.cache_token_opportunity(&token).await {
+                            Ok(is_new) => {
+                                if is_new {
+                                    new_token_count += 1;
+                                    log::info!(
+                                        "🚀 NEW TOKEN DISCOVERED! {} ({}) from {} - Price: ${:.6} | Liquidity: ${:.2} | Volume: ${:.2}",
+                                        token.symbol,
+                                        token.name,
+                                        format!("{:?}", token.source),
+                                        token.metrics.price_usd,
+                                        token.metrics.liquidity_usd,
+                                        token.metrics.volume_24h
+                                    );
+                                    
+                                    // Additional details for new high-value tokens
+                                    if token.metrics.liquidity_usd > 100000.0 {
+                                        log::info!(
+                                            "💎 HIGH-VALUE NEW TOKEN: {} | Mint: {} | Risk Score: {:.2} | Confidence: {:.2}",
+                                            token.symbol,
+                                            token.mint,
+                                            token.risk_score,
+                                            token.confidence_score
+                                        );
+                                    }
+                                } else {
+                                    log::debug!("🔄 Updated existing token: {} from {}", token.symbol, format!("{:?}", token.source));
+                                }
+                                all_opportunities.push(token);
+                            }
+                            Err(e) => {
+                                log::warn!("⚠️ Failed to cache token {}: {}", token.symbol, e);
+                                all_opportunities.push(token); // Still include in opportunities
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     log::warn!("⚠️ Source {} failed: {}", source.name(), e);
@@ -105,7 +150,20 @@ impl ScreenerManager {
             }
         }
 
-        log::info!("🎯 Found {} raw opportunities", all_opportunities.len());
+        log::info!("🎯 Found {} total opportunities ({} new tokens discovered)", all_opportunities.len(), new_token_count);
+
+        // Log discovery statistics
+        if new_token_count > 0 {
+            match self.cache.get_discovery_stats().await {
+                Ok(stats) => {
+                    log::info!("📈 Discovery stats by source:");
+                    for (source, count) in stats {
+                        log::info!("  📊 {}: {} tokens", source, count);
+                    }
+                }
+                Err(e) => log::warn!("Failed to get discovery stats: {}", e)
+            }
+        }
 
         // Remove duplicates based on mint address
         all_opportunities = self.deduplicate_opportunities(all_opportunities);
@@ -162,6 +220,46 @@ impl ScreenerManager {
     pub fn update_config(&mut self, config: ScreenerConfig) {
         self.config = config;
         self.filters = OpportunityFilter::new(&self.config.filters);
+    }
+
+    /// Get recently discovered tokens from cache
+    pub async fn get_recent_discoveries(&self, limit: Option<usize>) -> BotResult<Vec<(String, String, String)>> {
+        self.cache.get_discovered_tokens(None, limit).await
+    }
+
+    /// Get discovery statistics by source
+    pub async fn get_discovery_statistics(&self) -> BotResult<Vec<(String, usize)>> {
+        self.cache.get_discovery_stats().await
+    }
+
+    /// Check if a token is already known
+    pub async fn is_token_known(&self, mint: &Pubkey) -> BotResult<bool> {
+        self.cache.is_token_known(mint).await
+    }
+
+    /// Display recent token discoveries
+    pub async fn display_recent_discoveries(&self, limit: usize) -> BotResult<()> {
+        let tokens = self.get_recent_discoveries(Some(limit)).await?;
+        let stats = self.get_discovery_statistics().await?;
+        
+        log::info!("📚 Recent Token Discoveries (Last {}):", limit);
+        log::info!("{}", "=".repeat(80));
+        
+        if tokens.is_empty() {
+            log::info!("No tokens discovered yet.");
+        } else {
+            for (i, (mint, symbol, name)) in tokens.iter().enumerate() {
+                log::info!("{}. {} ({}) - {}", i + 1, symbol, name, &mint[..8]);
+            }
+        }
+        
+        log::info!("");
+        log::info!("📊 Discovery Statistics:");
+        for (source, count) in stats {
+            log::info!("  {} tokens from {}", count, source);
+        }
+        
+        Ok(())
     }
 }
 
