@@ -3,6 +3,9 @@ use serde::{ Deserialize, Serialize };
 use std::fs;
 use std::path::Path;
 
+// Import swap types
+use crate::swap::types::{SwapConfig, JupiterConfig, RaydiumConfig, GmgnConfig};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub main_wallet_private: String,
@@ -19,6 +22,8 @@ pub struct Config {
     pub wallet: WalletConfig,
     #[serde(default)]
     pub trading: TradingConfig,
+    #[serde(default)]
+    pub swap: SwapConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +182,37 @@ impl Default for Config {
                     cache_duration_hours: 720, // 30 days
                     track_pnl: true,
                     auto_calculate_profits: true,
+                },
+            },
+            swap: SwapConfig {
+                enabled: true,
+                default_dex: "jupiter".to_string(),
+                is_anti_mev: false,
+                max_slippage: 0.01, // 1%
+                timeout_seconds: 30,
+                retry_attempts: 3,
+                dex_preferences: vec!["jupiter".to_string(), "raydium".to_string(), "gmgn".to_string()],
+                jupiter: JupiterConfig {
+                    enabled: true,
+                    base_url: "https://quote-api.jup.ag/v6".to_string(),
+                    timeout_seconds: 15,
+                    max_accounts: 64,
+                    only_direct_routes: false,
+                    as_legacy_transaction: false,
+                },
+                raydium: RaydiumConfig {
+                    enabled: true,
+                    base_url: "https://api.raydium.io/v2".to_string(),
+                    timeout_seconds: 15,
+                    pool_type: "all".to_string(),
+                },
+                gmgn: GmgnConfig {
+                    enabled: false, // Disabled by default since it requires API key
+                    base_url: "https://gmgn.ai/defi/quoterv1".to_string(),
+                    timeout_seconds: 15,
+                    api_key: "".to_string(),
+                    referral_account: "".to_string(),
+                    referral_fee_bps: 0,
                 },
             },
         }
