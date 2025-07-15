@@ -2,16 +2,12 @@ use crate::config::Config;
 use crate::database::Database;
 use crate::logger::Logger;
 use crate::types::WalletPosition;
+use crate::rpc_manager::RpcManager;
 use anyhow::{ Context, Result };
 use chrono::Utc;
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    pubkey::Pubkey,
-    signature::{ Keypair, Signer },
-    program_pack::Pack,
-};
+use solana_sdk::{ pubkey::Pubkey, signature::{ Keypair, Signer }, program_pack::Pack };
 use spl_token_2022::state::{ Account, Mint };
+use spl_token;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,7 +17,7 @@ use tokio::time;
 pub struct WalletTracker {
     config: Config,
     database: Arc<Database>,
-    rpc_client: RpcClient,
+    rpc_manager: Arc<RpcManager>,
     wallet_keypair: Keypair,
     positions: Arc<RwLock<HashMap<String, WalletPosition>>>,
     is_running: Arc<RwLock<bool>>,
@@ -31,15 +27,18 @@ impl WalletTracker {
     pub fn new(config: Config, database: Arc<Database>) -> Result<Self> {
         let wallet_keypair = Keypair::from_base58_string(&config.main_wallet_private);
 
-        let rpc_client = RpcClient::new_with_commitment(
-            config.rpc_url.clone(),
-            CommitmentConfig::confirmed()
+        let rpc_manager = Arc::new(
+            RpcManager::new(config.rpc_url.clone(), config.rpc_fallbacks.clone())
+        );
+
+        Logger::wallet(
+            &format!("Initialized RPC manager with {} endpoints", rpc_manager.get_client_count())
         );
 
         Ok(Self {
             config,
             database,
-            rpc_client,
+            rpc_manager,
             wallet_keypair,
             positions: Arc::new(RwLock::new(HashMap::new())),
             is_running: Arc::new(RwLock::new(false)),
@@ -89,9 +88,11 @@ impl WalletTracker {
     }
 
     pub async fn get_sol_balance(&self) -> Result<f64> {
-        let balance = self.rpc_client
-            .get_balance(&self.wallet_keypair.pubkey())
-            .context("Failed to get SOL balance")?;
+        let wallet_pubkey = self.wallet_keypair.pubkey();
+
+        let balance = self.rpc_manager.execute_with_fallback(move |client| {
+            client.get_balance(&wallet_pubkey).context("Failed to get SOL balance")
+        }).await?;
 
         Ok((balance as f64) / 1_000_000_000.0) // Convert lamports to SOL
     }
@@ -101,16 +102,19 @@ impl WalletTracker {
 
         let wallet_pubkey = self.wallet_keypair.pubkey();
 
-        // Get all token accounts for this wallet
-        let token_accounts = self.rpc_client
-            .get_token_accounts_by_owner(
-                &wallet_pubkey,
-                solana_client::rpc_request::TokenAccountsFilter::ProgramId(spl_token_2022::id())
-            )
-            .context("Failed to get token accounts")?;
+        // Get token accounts with retry logic and fallback to different program IDs
+        let token_accounts = self
+            .get_token_accounts_with_retry(&wallet_pubkey).await
+            .context("Failed to get token accounts after retries")?;
 
         let mut new_positions = HashMap::new();
         let mut total_value_usd = 0.0;
+
+        if token_accounts.is_empty() {
+            Logger::wallet("No SPL token accounts found - wallet contains only SOL");
+        } else {
+            Logger::wallet(&format!("Processing {} token accounts...", token_accounts.len()));
+        }
 
         for token_account in token_accounts {
             if let Some(data) = token_account.account.data.decode() {
@@ -256,7 +260,11 @@ impl WalletTracker {
     }
 
     async fn get_token_decimals(&self, mint: &Pubkey) -> Result<u8> {
-        let account_info = self.rpc_client.get_account(mint).context("Failed to get mint account")?;
+        let mint_copy = *mint;
+
+        let account_info = self.rpc_manager.execute_with_fallback(move |client| {
+            client.get_account(&mint_copy).context("Failed to get mint account")
+        }).await?;
 
         let mint_info = Mint::unpack(&account_info.data).context("Failed to parse mint data")?;
 
@@ -271,6 +279,60 @@ impl WalletTracker {
         // 3. Calculate based on liquidity pools
         Ok(0.0)
     }
+
+    async fn get_token_accounts_with_retry(
+        &self,
+        wallet_pubkey: &Pubkey
+    ) -> Result<Vec<solana_client::rpc_response::RpcKeyedAccount>> {
+        use solana_client::rpc_request::TokenAccountsFilter;
+
+        // Try different program IDs with RPC fallback support
+        let program_ids = [
+            spl_token::id(), // Original SPL Token program
+            spl_token_2022::id(), // Token-2022 program
+        ];
+
+        for program_id in &program_ids {
+            let wallet_pubkey_copy = *wallet_pubkey;
+            let program_id_copy = *program_id;
+
+            match
+                self.rpc_manager.execute_with_fallback(move |client| {
+                    client
+                        .get_token_accounts_by_owner(
+                            &wallet_pubkey_copy,
+                            TokenAccountsFilter::ProgramId(program_id_copy)
+                        )
+                        .context("Failed to get token accounts")
+                }).await
+            {
+                Ok(accounts) => {
+                    if !accounts.is_empty() {
+                        Logger::wallet(
+                            &format!(
+                                "Found {} token accounts using program ID: {}",
+                                accounts.len(),
+                                program_id
+                            )
+                        );
+                        return Ok(accounts);
+                    }
+                }
+                Err(e) => {
+                    Logger::wallet(
+                        &format!("Failed to get accounts for program {}: {}", program_id, e)
+                    );
+                    continue;
+                }
+            }
+        }
+
+        // If we get here, all attempts failed
+        Logger::wallet(
+            "No token accounts found with any program ID - wallet may have no SPL tokens"
+        );
+        Ok(Vec::new()) // Return empty vector instead of error for wallets with no tokens
+    }
 }
 
 impl Clone for WalletTracker {
@@ -278,10 +340,7 @@ impl Clone for WalletTracker {
         Self {
             config: self.config.clone(),
             database: Arc::clone(&self.database),
-            rpc_client: RpcClient::new_with_commitment(
-                self.config.rpc_url.clone(),
-                CommitmentConfig::confirmed()
-            ),
+            rpc_manager: Arc::clone(&self.rpc_manager),
             wallet_keypair: Keypair::try_from(&self.wallet_keypair.to_bytes()[..]).unwrap(),
             positions: Arc::clone(&self.positions),
             is_running: Arc::clone(&self.is_running),

@@ -1,628 +1,250 @@
-# ScreenerBot - Solana DEX Trading Bot
+# 🤖 ScreenerBot - Advanced Solana DEX Trading Bot
 
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org/)
-[![Solana](https://img.shields.io/badge/solana-2.3.1-purple.svg)](https://solana.com/)
+[![Solana](https://img.shields.io/badge/solana-mainnet-purple.svg)](https://solana.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A comprehensive Solana DEX trading bot with token discovery, wallet tracking, and automated trading capabilities.
+A sophisticated, multi-source token discovery and trading bot for the Solana ecosystem with real-time monitoring, intelligent filtering, and automated trading capabilities.
 
-## Features
+## 🔥 Key Features
 
-### 🔍 Discovery Module
+### 🔍 **Multi-Source Token Discovery**
+- **DexScreener Integration**: Latest token profiles, boosted tokens, and top trending tokens
+- **RugCheck Integration**: New tokens, recent activity, trending tokens, and verified tokens  
+- **Real-time Discovery**: Continuous background scanning with configurable intervals
+- **Smart Filtering**: Liquidity, volume, market cap, and custom blacklist filtering
+- **Duplicate Detection**: Automatic deduplication across multiple sources
 
-- **Background Token Discovery**: Continuously scans multiple DEX sources (Raydium, Jupiter, Orca)
-- **Intelligent Filtering**: Configurable filters for liquidity, volume, market cap
-- **Caching System**: Stores discovered tokens in SQLite database
-- **Real-time Updates**: Keeps token data fresh with periodic updates
+### 💼 **Advanced Wallet Tracking**
+- **Real-time Balance Monitoring**: SOL and SPL token balance tracking
+- **Position Management**: Track all token positions with P&L calculations
+- **Portfolio Analytics**: Total portfolio value and performance metrics
+- **Transaction History**: Complete transaction logging and analysis
 
-### 💼 Wallet Tracker
-
-- **Position Monitoring**: Tracks all SPL token positions in your wallet
-- **P&L Calculation**: Real-time profit/loss tracking for each position
-- **Portfolio Overview**: Complete portfolio valuation and performance metrics
-- **Balance Tracking**: SOL and token balance monitoring
-
-### 📈 Trading Module (Optional)
-
-- **Signal Generation**: AI-driven buy/sell signals based on market analysis
+### 📊 **Intelligent Trading Engine**
+- **Signal Generation**: Advanced market analysis and trading signals
 - **Risk Management**: Configurable stop-loss and take-profit levels
-- **Safety Features**: Trading disabled by default, requires explicit enabling
-- **Position Sizing**: Intelligent position sizing based on portfolio percentage
+- **Confidence Scoring**: AI-driven confidence metrics for each trade signal
+- **Safety Features**: Trading disabled by default with comprehensive safeguards
 
-### 🎨 Console UI
+### 🎯 **Professional Console Interface**
+- **Real-time Dashboard**: Live status updates with emoji indicators
+- **Discovery Alerts**: Immediate notifications when new tokens are found
+- **Color-coded Logging**: Easy-to-read status messages with timestamps
+- **Performance Metrics**: Discovery rates, portfolio performance, and system health
 
-- **Real-time Dashboard**: Beautiful console interface with live updates
-- **Color-coded Logging**: Easy-to-read colored output for different modules
-- **Status Display**: Live status of all modules and current positions
-- **Performance Metrics**: Discovery rates, portfolio performance, signal confidence
+## 🚀 Quick Start
 
-## Installation
+### Prerequisites
+- Rust 1.70+ installed
+- Solana CLI tools (optional, for advanced features)
+- Active internet connection for API access
 
-1. **Clone the repository**:
+### Installation
 
+1. **Clone the repository:**
    ```bash
    git clone <repository-url>
    cd ScreenerBot
    ```
 
-2. **Install Rust** (if not already installed):
-
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source $HOME/.cargo/env
+2. **Configure your settings:**
+   Edit `configs.json` with your wallet private key and preferences:
+   ```json
+   {
+     "main_wallet_private": "YOUR_SOLANA_PRIVATE_KEY_HERE",
+     "rpc_url": "https://api.mainnet-beta.solana.com",
+     "discovery": {
+       "enabled": true,
+       "interval_seconds": 60,
+       "sources": ["dexscreener", "rugcheck"]
+     }
+   }
    ```
 
-3. **Build the project**:
+3. **Build and run:**
    ```bash
    cargo build --release
-   ```
-
-## Configuration
-
-The bot uses `configs.json` for all configuration. Key settings include:
-
-### Wallet Configuration
-
-```json
-{
-  "main_wallet_private": "your_wallet_private_key_here",
-  "rpc_url": "https://api.mainnet-beta.solana.com"
-}
-```
-
-### Discovery Settings
-
-```json
-{
-  "discovery": {
-    "enabled": true,
-    "interval_seconds": 300,
-    "min_liquidity": 10000.0,
-    "min_volume_24h": 50000.0,
-    "sources": ["raydium", "jupiter", "orca"]
-  }
-}
-```
-
-### Trading Configuration (IMPORTANT: Disabled by default)
-
-```json
-{
-  "trader": {
-    "enabled": false, // MUST be explicitly enabled
-    "max_position_size": 0.1, // 10% of portfolio
-    "stop_loss_percentage": 5.0,
-    "take_profit_percentage": 20.0,
-    "min_confidence_score": 0.7
-  }
-}
-```
-
-## Usage
-
-1. **First Run**:
-
-   ```bash
    cargo run
    ```
 
-   This will create a default `configs.json` file.
+## 📋 Configuration Guide
 
-2. **Configure Your Wallet**:
-
-   - Edit `configs.json` and add your wallet private key
-   - Adjust discovery and trading parameters as needed
-
-3. **Run the Bot**:
-
-   ```bash
-   cargo run --release
-   ```
-
-4. **Monitor**: The console will show real-time status of all modules
-
-## Safety Features
-
-- **Trading Disabled by Default**: The trading module is disabled by default and must be explicitly enabled
-- **Configuration Validation**: Comprehensive validation of all configuration parameters
-- **Database Backups**: All discovered tokens and positions are stored in SQLite for persistence
-- **Error Handling**: Robust error handling with detailed logging
-- **Graceful Shutdown**: Ctrl+C handling for clean shutdown
-
-## Module Architecture
-
-### Discovery Module (`src/discovery.rs`)
-
-- Token discovery from multiple DEX sources
-- Filtering and validation
-- Database caching
-- Background operation
-
-### Wallet Tracker (`src/wallet.rs`)
-
-- SPL token account monitoring
-- Position tracking and P&L calculation
-- Real-time balance updates
-
-### Trader (`src/trader.rs`)
-
-- Market analysis and signal generation
-- Risk management
-- Trade execution framework (placeholder)
-
-### Database (`src/database.rs`)
-
-- SQLite-based persistence
-- Token information storage
-- Position tracking
-- Performance metrics
-
-### Logger (`src/logger.rs`)
-
-- Beautiful console output
-- Color-coded messages
-- Module-specific formatting
-
-## Data Storage
-
-All data is stored in `cache.db` (SQLite database):
-
-- **Tokens**: Discovered token information, prices, liquidity
-- **Positions**: Wallet positions and P&L tracking
-- **Stats**: Discovery statistics and performance metrics
-
-## Development
-
-### Adding New DEX Sources
-
-To add a new DEX source:
-
-1. Implement the discovery logic in `src/discovery.rs`
-2. Add the source name to the `sources` array in config
-3. Implement the specific API calls for that DEX
-
-### Extending Trading Logic
-
-The trading module is designed to be extensible:
-
-1. Add new analysis methods in `src/trader.rs`
-2. Implement custom signal generation logic
-3. Add new risk management parameters
-
-## Security Considerations
-
-- **Private Key Storage**: Store private keys securely, consider using environment variables
-- **RPC Endpoints**: Use reliable RPC endpoints, consider rate limiting
-- **Trading Limits**: Always set appropriate position sizes and stop losses
-- **Testing**: Test thoroughly on devnet before using on mainnet
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Disclaimer
-
-This software is for educational and research purposes. Trading cryptocurrencies involves significant risk. Always do your own research and never invest more than you can afford to lose. The authors are not responsible for any financial losses incurred while using this software.
-
-## Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
-
----
-
-**⚠️ IMPORTANT**: Always start with `"trader": { "enabled": false }` in your configuration and thoroughly test the discovery and wallet tracking features before enabling trading functionality.
-
-**ScreenerBot** is an advanced, automated cryptocurrency trading bot specifically designed for the Solana ecosystem. It provides intelligent token discovery, risk assessment, and automated trading capabilities with comprehensive portfolio management.
-
-## ✨ Features
-
-### 🔍 **Multi-Source Token Screening**
-
-- **DexScreener Integration**: Real-time token discovery from DEX aggregators
-- **GeckoTerminal Support**: Professional-grade market data
-- **Raydium Native**: Direct integration with Solana's premier DEX
-- **RugCheck Analysis**: Automated security and rug-pull risk assessment
-
-### 💱 **Advanced Trading Engine**
-
-- **Jupiter Aggregator**: Optimal routing for best execution prices
-- **GMGN Integration**: Professional trading interface support
-- **Automated DCA**: Dollar-cost averaging for position building
-- **Risk Management**: Stop-loss, take-profit, and position sizing
-- **Slippage Protection**: Configurable slippage tolerance
-
-### 📊 **Portfolio Management**
-
-- **Real-time P&L Tracking**: Comprehensive profit/loss monitoring
-- **Position Analytics**: Detailed performance metrics per token
-- **Rebalancing Recommendations**: AI-driven portfolio optimization
-- **Historical Performance**: Transaction history and trend analysis
-
-### 🗄️ **Intelligent Caching**
-
-- **SQLite Database**: Local caching for faster operations
-- **Transaction History**: Persistent storage of all trades
-- **Token Metadata**: Cached token information and metrics
-- **Market Data**: Historical price and volume data
-
-### 🛡️ **Security & Risk Management**
-
-- **Wallet Integration**: Secure keypair management
-- **Transaction Simulation**: Pre-execution validation
-- **Risk Scoring**: Multi-factor risk assessment
-- **Position Limits**: Configurable exposure controls
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- **Rust** (2021 edition or later)
-- **Solana CLI** tools
-- **Git**
-
-### Installation
-
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/farfary/ScreenerBot.git
-   cd ScreenerBot
-   ```
-
-2. **Build the project**
-
-   ```bash
-   cargo build --release
-   ```
-
-3. **Configure your settings**
-
-   ```bash
-   cp configs.json.example configs.json
-   # Edit configs.json with your wallet and preferences
-   ```
-
-4. **Run the bot**
-   ```bash
-   cargo run --release
-   ```
-
-## ⚙️ Configuration
-
-### Basic Configuration (`configs.json`)
-
+### Discovery Configuration
 ```json
-{
-  "main_wallet_public": "YOUR_WALLET_PUBLIC_KEY",
-  "main_wallet_private": "YOUR_WALLET_PRIVATE_KEY",
-
-  "trading": {
-    "entry_amount_sol": 0.001,
-    "max_positions": 50,
-    "dca_enabled": true
-  },
-
-  "screener_config": {
-    "sources": {
-      "dexscreener_enabled": true,
-      "geckoterminal_enabled": true,
-      "raydium_enabled": true,
-      "rugcheck_enabled": true
-    },
-    "filters": {
-      "min_volume_24h": 1000.0,
-      "min_liquidity": 5000.0,
-      "max_age_hours": 24,
-      "require_verified": false
-    }
-  }
+"discovery": {
+  "enabled": true,
+  "interval_seconds": 60,           // Discovery frequency (seconds)
+  "min_liquidity": 10000.0,         // Minimum liquidity filter ($)
+  "min_volume_24h": 50000.0,        // Minimum 24h volume ($)
+  "max_market_cap": 1000000.0,      // Maximum market cap ($)
+  "min_market_cap": 10000.0,        // Minimum market cap ($)
+  "blacklisted_tokens": [],         // Tokens to ignore
+  "sources": ["dexscreener", "rugcheck"]  // Active discovery sources
 }
 ```
 
-### Trading Parameters
+### Trading Configuration
+```json
+"trader": {
+  "enabled": false,                 // KEEP FALSE for safety
+  "max_position_size": 0.1,         // Max position size (SOL)
+  "stop_loss_percentage": 5.0,      // Stop loss %
+  "take_profit_percentage": 20.0,   // Take profit %
+  "max_slippage": 1.0,             // Max slippage %
+  "min_confidence_score": 0.7       // Min confidence for trades
+}
+```
 
-| Parameter                | Description                  | Default |
-| ------------------------ | ---------------------------- | ------- |
-| `entry_amount_sol`       | SOL amount per trade         | 0.001   |
-| `max_positions`          | Maximum concurrent positions | 50      |
-| `dca_enabled`            | Enable dollar-cost averaging | true    |
-| `take_profit_percentage` | Profit-taking threshold      | 20%     |
-| `max_slippage`           | Maximum acceptable slippage  | 5%      |
+## 🔌 API Sources
 
-### Screening Filters
+### DexScreener APIs
+- **Token Profiles**: `https://api.dexscreener.com/token-profiles/latest/v1`
+- **Latest Boosts**: `https://api.dexscreener.com/token-boosts/latest/v1`
+- **Top Boosts**: `https://api.dexscreener.com/token-boosts/top/v1`
+- **Rate Limit**: 60 requests/minute
 
-| Filter             | Description                      | Default  |
-| ------------------ | -------------------------------- | -------- |
-| `min_volume_24h`   | Minimum 24h trading volume (USD) | 1000     |
-| `min_liquidity`    | Minimum liquidity (USD)          | 5000     |
-| `max_age_hours`    | Maximum token age                | 24 hours |
-| `require_verified` | Only verified tokens             | false    |
+### RugCheck APIs
+- **New Tokens**: `https://api.rugcheck.xyz/v1/stats/new_tokens`
+- **Recent Activity**: `https://api.rugcheck.xyz/v1/stats/recent`
+- **Trending**: `https://api.rugcheck.xyz/v1/stats/trending`
+- **Verified**: `https://api.rugcheck.xyz/v1/stats/verified`
 
 ## 🏗️ Architecture
 
+### Module Structure
 ```
-ScreenerBot/
-├── src/
-│   ├── core/           # Core bot runtime and configuration
-│   ├── wallet/         # Solana wallet management
-│   ├── screener/       # Token discovery and analysis
-│   ├── trader/         # Trading logic and execution
-│   ├── portfolio/      # Portfolio tracking and analytics
-│   ├── cache/          # Data persistence and caching
-│   └── swap/           # DEX integration and routing
-├── configs.json        # Bot configuration
-└── cache.db           # SQLite database (auto-created)
-```
-
-### Core Components
-
-#### 🧠 **BotRuntime** (`src/core/`)
-
-- Central coordinator managing all bot components
-- Configuration loading and validation
-- Main execution loop with 60-second cycles
-- Graceful shutdown handling
-
-#### 👛 **WalletManager** (`src/wallet/`)
-
-- Solana wallet integration and key management
-- Balance tracking (SOL and SPL tokens)
-- Transaction history and parsing
-- Token account discovery
-
-#### 🔍 **ScreenerManager** (`src/screener/`)
-
-- Multi-source token discovery
-- Risk assessment and scoring
-- Opportunity filtering and ranking
-- Market data aggregation
-
-#### 💱 **TraderManager** (`src/trader/`)
-
-- Trade signal generation
-- Order execution and routing
-- Position management
-- Risk controls and limits
-
-#### 📈 **PortfolioManager** (`src/portfolio/`)
-
-- Real-time portfolio tracking
-- Performance analytics
-- P&L calculation
-- Rebalancing recommendations
-
-## 🔌 API Integrations
-
-### Supported DEX Protocols
-
-- **Jupiter Aggregator**: Optimal swap routing
-- **Raydium**: Native Solana AMM
-- **Orca**: Low-slippage trading
-- **Serum**: Orderbook-based trading
-
-### Data Sources
-
-- **DexScreener**: Real-time DEX data
-- **GeckoTerminal**: Professional market data
-- **RugCheck**: Security analysis
-- **Solana RPC**: On-chain data
-
-## 📊 Monitoring & Analytics
-
-### Real-time Metrics
-
-- **Portfolio Value**: Current total value in SOL
-- **Active Positions**: Number of open positions
-- **Total P&L**: Unrealized + realized profits/losses
-- **Success Rate**: Percentage of profitable trades
-
-### Performance Analytics
-
-- **Trade Frequency**: Average trades per day
-- **Hold Duration**: Average position holding time
-- **Risk-Adjusted Returns**: Sharpe ratio and volatility
-- **Drawdown Analysis**: Maximum portfolio decline
-
-## 🛠️ Development
-
-### Building from Source
-
-```bash
-# Debug build
-cargo build
-
-# Release build (optimized)
-cargo build --release
-
-# Run tests
-cargo test
-
-# Check code formatting
-cargo fmt
-
-# Run linter
-cargo clippy
+src/
+├── discovery/              # Multi-source token discovery
+│   ├── mod.rs             # Main discovery orchestrator
+│   └── sources/           # Individual API source implementations
+│       ├── dexscreener.rs # DexScreener API integration
+│       ├── rugcheck.rs    # RugCheck API integration
+│       └── mod.rs         # Source trait definition
+├── wallet.rs              # Wallet tracking and portfolio management
+├── trader.rs              # Trading signal generation and execution
+├── database.rs            # SQLite persistence layer
+├── logger.rs              # Console UI and logging system
+├── config.rs              # Configuration management
+├── types.rs               # Core data structures
+└── main.rs                # Application orchestration
 ```
 
-### Project Structure
+### Key Components
 
-```rust
-// Core modules
-mod core;      // Bot runtime and configuration
-mod wallet;    // Solana wallet management
-mod screener;  // Token discovery
-mod trader;    // Trading execution
-mod portfolio; // Portfolio tracking
-mod cache;     // Data persistence
-mod swap;      // DEX integrations
-```
+**Discovery Engine**
+- Pluggable source architecture using traits
+- Concurrent API fetching with rate limiting
+- Real-time filtering and deduplication
+- Persistent caching with SQLite
 
-### Key Dependencies
+**Wallet Tracker**
+- SPL token account monitoring
+- Real-time balance calculations
+- Position tracking with P&L
+- Portfolio performance analytics
 
-| Crate            | Version | Purpose                       |
-| ---------------- | ------- | ----------------------------- |
-| `solana-sdk`     | 2.3.1   | Solana blockchain integration |
-| `spl-token-2022` | 8.0.1   | Token program support         |
-| `tokio`          | 1.0     | Async runtime                 |
-| `reqwest`        | 0.11    | HTTP client                   |
-| `rusqlite`       | 0.29    | SQLite database               |
-| `jup-ag`         | 0.8.0   | Jupiter aggregator            |
+**Trading System**
+- Market signal generation
+- Risk management algorithms
+- Confidence-based decision making
+- Safety-first approach
 
-## 🔐 Security Considerations
-
-### Private Key Management
-
-- **Never commit private keys** to version control
-- Use environment variables or secure config files
-- Consider hardware wallet integration for production
-
-### Risk Management
-
-- **Start with small amounts** while testing
-- **Monitor positions closely** during initial runs
-- **Set appropriate stop-losses** to limit downside
-
-### Network Security
-
-- **Use secure RPC endpoints** (avoid public/free RPCs for production)
-- **Implement rate limiting** to avoid API restrictions
-- **Monitor for suspicious transactions**
-
-## 📈 Trading Strategies
-
-### Built-in Strategies
-
-#### 1. **Momentum Trading**
-
-- Detects tokens with high volume spikes
-- Enters positions on confirmed breakouts
-- Uses trailing stops for profit protection
-
-#### 2. **Mean Reversion**
-
-- Identifies oversold conditions
-- Dollar-cost averages into positions
-- Exits on return to mean price levels
-
-#### 3. **Liquidity Farming**
-
-- Targets newly listed tokens with growing liquidity
-- Focuses on tokens with verified development teams
-- Implements strict risk controls
-
-### Custom Strategy Development
-
-```rust
-// Example custom strategy implementation
-impl TradingStrategy {
-    pub fn analyze_opportunity(&self, token: &TokenOpportunity) -> Option<TradeSignal> {
-        // Your custom logic here
-        if self.meets_criteria(token) {
-            Some(TradeSignal::new(
-                token.mint,
-                TradeType::Buy,
-                self.calculate_entry_amount(token),
-                self.calculate_confidence(token)
-            ))
-        } else {
-            None
-        }
-    }
-}
-```
-
-## 🚨 Error Handling & Troubleshooting
-
-### Common Issues
-
-#### **Connection Errors**
+## 📈 Sample Output
 
 ```
-Error: RPC connection failed
+════════════════════════════════════════════════════════════
+🤖 SCREENER BOT - SOLANA DEX TRADER BOT
+════════════════════════════════════════════════════════════
+ℹ️  [12:09:32] Starting ScreenerBot...
+✅ [12:09:32] Configuration loaded successfully
+✅ [12:09:32] Database initialized successfully
+🔎 [12:09:47] 🆕 NEW TOKEN FOUND via RUGCHECK: PILLWAR (Token 6ywvC36Q) | 💰 MC: $0 | 💧 Liq: $0 | 📊 Vol: $0
+🔎 [12:09:47] 🆕 NEW TOKEN FOUND via RUGCHECK: DeepSeekAI (Token Dbt8kXUE) | 💰 MC: $0 | 💧 Liq: $0 | 📊 Vol: $0
+🔎 [12:09:47] ✅ DISCOVERY found 35 new tokens from RugCheck
+💼 [12:09:48] WALLET: SOL Balance: 0.5767 SOL
+📈 [12:09:48] TRADER: DISABLED (for safety)
 ```
 
-**Solution**: Check your Solana RPC endpoint configuration and network connectivity.
+## 🛡️ Safety Features
 
-#### **Insufficient Balance**
+- **Trading Disabled by Default**: Prevents accidental trades
+- **Read-only Wallet Operations**: Only monitors, doesn't execute
+- **Comprehensive Error Handling**: Robust error recovery
+- **Rate Limiting**: Respects API limits to prevent bans
+- **Data Validation**: Strict input validation and sanitization
 
-```
-Error: Insufficient SOL balance for transaction
-```
+## 🔧 Development
 
-**Solution**: Ensure your wallet has enough SOL for trading and transaction fees.
+### Adding New Discovery Sources
 
-#### **API Rate Limits**
+1. **Create source file**: `src/discovery/sources/newsource.rs`
+2. **Implement SourceTrait**:
+   ```rust
+   use super::SourceTrait;
+   use async_trait::async_trait;
+   
+   pub struct NewSource {
+       client: Client,
+   }
+   
+   #[async_trait]
+   impl SourceTrait for NewSource {
+       fn name(&self) -> &str { "NewSource" }
+       async fn discover(&self) -> Result<Vec<TokenInfo>> {
+           // Implementation
+       }
+   }
+   ```
+3. **Register in mod.rs**: Add to sources module
+4. **Add to config**: Include in `configs.json` sources array
 
-```
-Warning: DexScreener API rate limit exceeded
-```
+### Database Schema
+```sql
+-- Tokens table
+CREATE TABLE tokens (
+    mint TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    name TEXT NOT NULL,
+    decimals INTEGER NOT NULL,
+    -- ... additional fields
+);
 
-**Solution**: The bot automatically handles rate limits with exponential backoff.
-
-### Logging Configuration
-
-```bash
-# Set log level (debug, info, warn, error)
-RUST_LOG=screenerbot=debug cargo run
-
-# Log to file
-cargo run 2>&1 | tee bot.log
+-- Positions table  
+CREATE TABLE positions (
+    wallet_address TEXT NOT NULL,
+    mint TEXT NOT NULL,
+    balance REAL NOT NULL,
+    -- ... additional fields
+);
 ```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. **Fork** the repository
-2. **Create** a feature branch
-3. **Implement** your changes with tests
-4. **Submit** a pull request
-
-### Code Standards
-
-- Follow Rust formatting (`cargo fmt`)
-- Pass all lints (`cargo clippy`)
-- Include comprehensive tests
-- Document public APIs
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`
+3. Make your changes and add tests
+4. Commit: `git commit -m 'Add feature-name'`
+5. Push: `git push origin feature-name`
+6. Submit a pull request
 
 ## ⚠️ Disclaimer
 
-**IMPORTANT**: This software is for educational and research purposes only. Cryptocurrency trading involves substantial risk of loss. The authors are not responsible for any financial losses incurred through the use of this bot.
+This software is for educational and research purposes only. Trading cryptocurrencies involves significant risk and may result in financial loss. Always:
 
-- **Use at your own risk**
-- **Never invest more than you can afford to lose**
-- **Thoroughly test with small amounts first**
-- **Understand the risks involved in automated trading**
+- Test thoroughly on devnet/testnet first
+- Start with small amounts
+- Never trade more than you can afford to lose
+- Understand the risks of automated trading
+- Comply with local regulations
 
-## 🙏 Acknowledgments
+## 📝 License
 
-- **Solana Foundation** for the robust blockchain infrastructure
-- **Jupiter Protocol** for excellent swap aggregation
-- **Rust Community** for the amazing ecosystem
-- **Contributors** who help improve this project
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 📞 Support
+## 🆘 Support
 
-- **Issues**: [GitHub Issues](https://github.com/farfary/ScreenerBot/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/farfary/ScreenerBot/discussions)
-- **Documentation**: [Wiki](https://github.com/farfary/ScreenerBot/wiki)
-
----
-
-**Happy Trading! 🚀**
-
-_Built with ❤️ for the Solana ecosystem_
+- Create an issue for bug reports
+- Join our Discord for community support
+- Check the Wiki for advanced configuration
+- Review the API documentation for integration details

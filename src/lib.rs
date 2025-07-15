@@ -5,6 +5,8 @@ pub mod wallet;
 pub mod trader;
 pub mod logger;
 pub mod types;
+pub mod rpc_manager;
+pub mod pricing;
 
 pub use config::Config;
 pub use database::Database;
@@ -12,3 +14,5 @@ pub use discovery::Discovery;
 pub use wallet::WalletTracker;
 pub use trader::Trader;
 pub use logger::Logger;
+pub use rpc_manager::RpcManager;
+pub use pricing::PricingManager;

@@ -7,10 +7,18 @@ use std::path::Path;
 pub struct Config {
     pub main_wallet_private: String,
     pub rpc_url: String,
+    #[serde(default)]
+    pub rpc_fallbacks: Vec<String>,
     pub discovery: DiscoveryConfig,
     pub trader: TraderConfig,
     pub database: DatabaseConfig,
     pub general: GeneralConfig,
+    #[serde(default)]
+    pub pricing: Option<PricingConfig>,
+    #[serde(default)]
+    pub wallet: WalletConfig,
+    #[serde(default)]
+    pub trading: TradingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,11 +57,39 @@ pub struct GeneralConfig {
     pub ui_refresh_rate_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingConfig {
+    pub enabled: bool,
+    pub update_interval_secs: u64,
+    pub top_tokens_count: usize,
+    pub cache_ttl_secs: u64,
+    pub max_cache_size: usize,
+    pub gecko_terminal_enabled: bool,
+    pub pool_calculation_enabled: bool,
+    pub priority_update_interval_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WalletConfig {
+    pub enabled: bool,
+    pub track_portfolio: bool,
+    pub refresh_interval_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TradingConfig {
+    pub enabled: bool,
+    pub max_slippage: f64,
+    pub min_liquidity_usd: f64,
+    pub max_position_size_sol: f64,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             main_wallet_private: String::new(),
             rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
+            rpc_fallbacks: vec![],
             discovery: DiscoveryConfig {
                 enabled: true,
                 interval_seconds: 300, // 5 minutes
@@ -81,6 +117,27 @@ impl Default for Config {
                 log_level: "info".to_string(),
                 update_interval_seconds: 30,
                 ui_refresh_rate_ms: 1000,
+            },
+            pricing: Some(PricingConfig {
+                enabled: true,
+                update_interval_secs: 300, // 5 minutes
+                top_tokens_count: 100,
+                cache_ttl_secs: 300, // 5 minutes
+                max_cache_size: 10000,
+                gecko_terminal_enabled: true,
+                pool_calculation_enabled: true,
+                priority_update_interval_secs: 30, // 30 seconds for priority tokens
+            }),
+            wallet: WalletConfig {
+                enabled: true,
+                track_portfolio: true,
+                refresh_interval_secs: 30,
+            },
+            trading: TradingConfig {
+                enabled: false, // Disabled by default for safety
+                max_slippage: 0.05, // 5%
+                min_liquidity_usd: 50000.0, // $50k minimum liquidity
+                max_position_size_sol: 1.0, // 1 SOL max position
             },
         }
     }

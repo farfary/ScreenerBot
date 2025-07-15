@@ -1,4 +1,5 @@
 use crate::types::{ TokenInfo, WalletPosition, DiscoveryStats };
+use crate::pricing::{ TokenInfo as PricingTokenInfo, TokenPrice, PoolInfo, PoolType };
 use anyhow::{ Context, Result };
 use chrono::{ DateTime, Utc };
 use rusqlite::{ params, Connection, Row };
@@ -74,6 +75,66 @@ impl Database {
             )",
             []
         )?;
+
+        // Add new tables for pricing module
+        // Token prices table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS token_prices (
+                address TEXT PRIMARY KEY,
+                price_usd REAL NOT NULL,
+                price_sol REAL,
+                market_cap REAL,
+                volume_24h REAL NOT NULL,
+                liquidity_usd REAL NOT NULL,
+                source TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                last_updated TEXT NOT NULL
+            )",
+            []
+        )?;
+
+        // Pool information table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS pools (
+                address TEXT PRIMARY KEY,
+                pool_type TEXT NOT NULL,
+                token_0 TEXT NOT NULL,
+                token_1 TEXT NOT NULL,
+                reserve_0 INTEGER NOT NULL,
+                reserve_1 INTEGER NOT NULL,
+                liquidity_usd REAL NOT NULL,
+                volume_24h REAL NOT NULL,
+                fee_tier REAL,
+                last_updated TEXT NOT NULL
+            )",
+            []
+        )?;
+
+        // Token info extended table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS token_info_extended (
+                address TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                decimals INTEGER NOT NULL,
+                total_supply INTEGER,
+                last_updated TEXT NOT NULL
+            )",
+            []
+        )?;
+
+        // Create indexes for pricing tables
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_token_prices_timestamp ON token_prices(timestamp)",
+            []
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pools_liquidity ON pools(liquidity_usd DESC)",
+            []
+        )?;
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pools_tokens ON pools(token_0, token_1)", [])?;
 
         // Create indexes for better performance
         conn.execute(
@@ -263,6 +324,192 @@ impl Database {
         )?;
 
         Ok((total, active))
+    }
+
+    // New methods for pricing module
+    pub async fn update_token_info(&self, token_info: &PricingTokenInfo) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Update token info
+        conn.execute(
+            "INSERT OR REPLACE INTO token_info_extended 
+            (address, name, symbol, decimals, total_supply, last_updated)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                token_info.address,
+                token_info.name,
+                token_info.symbol,
+                token_info.decimals,
+                token_info.total_supply,
+                token_info.last_updated
+            ]
+        )?;
+
+        // Update price if available
+        if let Some(price) = &token_info.price {
+            self.update_token_price_internal(&conn, price)?;
+        }
+
+        // Update pools
+        for pool in &token_info.pools {
+            self.update_pool_info_internal(&conn, pool)?;
+        }
+
+        Ok(())
+    }
+
+    fn update_token_price_internal(&self, conn: &Connection, price: &TokenPrice) -> Result<()> {
+        conn.execute(
+            "INSERT OR REPLACE INTO token_prices 
+            (address, price_usd, price_sol, market_cap, volume_24h, liquidity_usd, source, timestamp, last_updated)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                price.address,
+                price.price_usd,
+                price.price_sol,
+                price.market_cap,
+                price.volume_24h,
+                price.liquidity_usd,
+                format!("{:?}", price.source),
+                price.timestamp,
+                Utc::now().to_rfc3339()
+            ]
+        )?;
+        Ok(())
+    }
+
+    fn update_pool_info_internal(&self, conn: &Connection, pool: &PoolInfo) -> Result<()> {
+        conn.execute(
+            "INSERT OR REPLACE INTO pools 
+            (address, pool_type, token_0, token_1, reserve_0, reserve_1, liquidity_usd, volume_24h, fee_tier, last_updated)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                pool.address,
+                format!("{:?}", pool.pool_type),
+                pool.token_0,
+                pool.token_1,
+                pool.reserve_0,
+                pool.reserve_1,
+                pool.liquidity_usd,
+                pool.volume_24h,
+                pool.fee_tier,
+                pool.last_updated
+            ]
+        )?;
+        Ok(())
+    }
+
+    pub async fn get_top_tokens_by_liquidity(&self, limit: usize) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT t.address FROM token_info_extended t
+             LEFT JOIN (
+                 SELECT token_0 as token, SUM(liquidity_usd) as total_liquidity
+                 FROM pools 
+                 GROUP BY token_0
+                 UNION ALL
+                 SELECT token_1 as token, SUM(liquidity_usd) as total_liquidity
+                 FROM pools 
+                 GROUP BY token_1
+             ) p ON t.address = p.token
+             ORDER BY COALESCE(p.total_liquidity, 0) DESC
+             LIMIT ?1"
+        )?;
+
+        let token_addresses: Result<Vec<String>, rusqlite::Error> = stmt
+            .query_map([limit], |row| Ok(row.get::<_, String>(0)?))
+            .unwrap()
+            .collect();
+
+        Ok(token_addresses?)
+    }
+
+    pub async fn get_token_pools(&self, token_address: &str) -> Result<Vec<PoolInfo>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT * FROM pools WHERE token_0 = ?1 OR token_1 = ?1 ORDER BY liquidity_usd DESC"
+        )?;
+
+        let pool_iter = stmt.query_map([token_address], |row| {
+            match self.row_to_pool_info(row) {
+                Ok(pool) => Ok(pool),
+                Err(_) => Err(rusqlite::Error::InvalidQuery),
+            }
+        })?;
+
+        let mut pools = Vec::new();
+        for pool in pool_iter {
+            pools.push(pool?);
+        }
+
+        Ok(pools)
+    }
+
+    pub async fn get_cached_token_price(&self, token_address: &str) -> Result<Option<TokenPrice>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT * FROM token_prices WHERE address = ?1")?;
+
+        let price_iter = stmt.query_map([token_address], |row| {
+            match self.row_to_token_price(row) {
+                Ok(price) => Ok(price),
+                Err(_) => Err(rusqlite::Error::InvalidQuery),
+            }
+        })?;
+
+        for price in price_iter {
+            return Ok(Some(price?));
+        }
+
+        Ok(None)
+    }
+
+    fn row_to_pool_info(&self, row: &Row) -> Result<PoolInfo, anyhow::Error> {
+        let pool_type_str: String = row.get("pool_type")?;
+        let pool_type = match pool_type_str.as_str() {
+            "Raydium" => PoolType::Raydium,
+            "PumpFun" => PoolType::PumpFun,
+            "Meteora" => PoolType::Meteora,
+            "Orca" => PoolType::Orca,
+            "Serum" => PoolType::Serum,
+            _ => PoolType::Unknown(pool_type_str),
+        };
+
+        Ok(PoolInfo {
+            address: row.get("address")?,
+            pool_type,
+            token_0: row.get("token_0")?,
+            token_1: row.get("token_1")?,
+            reserve_0: row.get("reserve_0")?,
+            reserve_1: row.get("reserve_1")?,
+            liquidity_usd: row.get("liquidity_usd")?,
+            volume_24h: row.get("volume_24h")?,
+            fee_tier: row.get("fee_tier")?,
+            last_updated: row.get("last_updated")?,
+        })
+    }
+
+    fn row_to_token_price(&self, row: &Row) -> Result<TokenPrice, anyhow::Error> {
+        use crate::pricing::PriceSource;
+
+        let source_str: String = row.get("source")?;
+        let source = match source_str.as_str() {
+            "GeckoTerminal" => PriceSource::GeckoTerminal,
+            "PoolCalculation" => PriceSource::PoolCalculation,
+            "Cache" => PriceSource::Cache,
+            _ => PriceSource::Cache,
+        };
+
+        Ok(TokenPrice {
+            address: row.get("address")?,
+            price_usd: row.get("price_usd")?,
+            price_sol: row.get("price_sol")?,
+            market_cap: row.get("market_cap")?,
+            volume_24h: row.get("volume_24h")?,
+            liquidity_usd: row.get("liquidity_usd")?,
+            timestamp: row.get("timestamp")?,
+            source,
+            is_cache: true,
+        })
     }
 
     // Helper methods

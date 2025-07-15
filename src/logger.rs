@@ -5,6 +5,10 @@ use std::io::{ self, Write };
 pub struct Logger;
 
 impl Logger {
+    pub fn new() -> Self {
+        Self
+    }
+
     pub fn info(message: &str) {
         Self::log(LogLevel::INFO, message);
     }

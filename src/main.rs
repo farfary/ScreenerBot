@@ -1,5 +1,5 @@
-use screenerbot::{ Config, Database, Discovery, WalletTracker, Trader, Logger };
 use anyhow::Result;
+use screenerbot::{ Config, Database, Discovery, Logger, PricingManager, Trader, WalletTracker };
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::Duration;
@@ -46,10 +46,28 @@ async fn main() -> Result<()> {
     Logger::separator();
     Logger::info("Initializing modules...");
 
+    // Pricing manager
+    let pricing_manager = Arc::new(
+        PricingManager::new(
+            Arc::clone(&database),
+            Arc::new(Logger::new()),
+            config.pricing
+                .as_ref()
+                .map(|p| p.update_interval_secs)
+                .unwrap_or(300), // 5 minutes default
+            config.pricing
+                .as_ref()
+                .map(|p| p.top_tokens_count)
+                .unwrap_or(100) // Top 100 tokens default
+        )
+    );
+    Logger::success("Pricing manager initialized");
+
     // Discovery module
     let discovery = Arc::new(Discovery::new(config.discovery.clone(), Arc::clone(&database)));
+    Logger::success("Discovery module initialized");
 
-    // Wallet tracker
+    // Wallet tracker (with pricing manager integration)
     let wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
         Ok(tracker) => {
             Logger::success("Wallet tracker initialized");
@@ -61,7 +79,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Trader (only if enabled)
+    // Trader module (with pricing manager integration)
     let trader = Arc::new(
         Trader::new(
             config.trader.clone(),
@@ -71,27 +89,32 @@ async fn main() -> Result<()> {
         )
     );
 
+    if config.trading.enabled {
+        Logger::success("Trader initialized");
+    } else {
+        Logger::warn("Trading module is disabled in configuration");
+    }
+
+    // Start modules
     Logger::separator();
     Logger::info("Starting modules...");
 
+    // Start pricing manager first
+    pricing_manager.start().await;
+    Logger::success("Pricing manager started");
+
     // Start discovery module
-    if let Err(e) = discovery.start().await {
-        Logger::error(&format!("Failed to start discovery: {}", e));
-        return Err(e);
-    }
+    discovery.start().await;
+    Logger::success("Discovery module started");
 
     // Start wallet tracker
-    if let Err(e) = wallet_tracker.start().await {
-        Logger::error(&format!("Failed to start wallet tracker: {}", e));
-        return Err(e);
-    }
+    wallet_tracker.start().await;
+    Logger::success("Wallet tracker started");
 
-    // Start trader (if enabled)
-    if config.trader.enabled {
-        if let Err(e) = trader.start().await {
-            Logger::error(&format!("Failed to start trader: {}", e));
-            return Err(e);
-        }
+    // Start trader if enabled
+    if config.trading.enabled {
+        trader.start().await;
+        Logger::success("Trader started");
     } else {
         Logger::warn("Trading module is disabled in configuration");
     }
@@ -105,6 +128,7 @@ async fn main() -> Result<()> {
     let status_discovery = Arc::clone(&discovery);
     let status_wallet = Arc::clone(&wallet_tracker);
     let status_trader = Arc::clone(&trader);
+    let status_pricing = Arc::clone(&pricing_manager);
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(5000)); // Update every 5 seconds
@@ -113,7 +137,12 @@ async fn main() -> Result<()> {
             interval.tick().await;
 
             // Display status
-            display_status(&status_discovery, &status_wallet, &status_trader).await;
+            display_status(
+                &status_discovery,
+                &status_wallet,
+                &status_trader,
+                &status_pricing
+            ).await;
         }
     });
 
@@ -134,6 +163,7 @@ async fn main() -> Result<()> {
     discovery.stop().await;
     wallet_tracker.stop().await;
     trader.stop().await;
+    // Note: pricing_manager doesn't need explicit stop - background tasks will be dropped
 
     Logger::success("ScreenerBot shutdown complete");
 
@@ -143,7 +173,8 @@ async fn main() -> Result<()> {
 async fn display_status(
     discovery: &Arc<Discovery>,
     wallet_tracker: &Arc<WalletTracker>,
-    trader: &Arc<Trader>
+    trader: &Arc<Trader>,
+    pricing_manager: &Arc<PricingManager>
 ) {
     // Clear screen and move cursor to top
     print!("\x1B[2J\x1B[1;1H");
@@ -256,6 +287,20 @@ async fn display_status(
     } else {
         Logger::trader("DISABLED (for safety)");
     }
+
+    Logger::separator();
+
+    // Pricing status
+    let cache_stats = pricing_manager.get_cache_stats().await;
+
+    Logger::info(
+        &format!(
+            "🏷️  PRICING: {} tokens cached | {} pools | {:.1}% hit rate",
+            cache_stats.valid_tokens,
+            cache_stats.valid_pools,
+            cache_stats.hit_rate_tokens() * 100.0
+        )
+    );
 
     Logger::separator();
     Logger::info(&format!("Last updated: {}", chrono::Utc::now().format("%H:%M:%S UTC")));

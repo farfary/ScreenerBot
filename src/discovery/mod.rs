@@ -1,3 +1,5 @@
+pub mod sources;
+
 use crate::config::DiscoveryConfig;
 use crate::database::Database;
 use crate::logger::Logger;
@@ -5,12 +7,13 @@ use crate::types::{ TokenInfo, DiscoveryStats };
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use reqwest::Client;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time;
+
+use sources::{ dexscreener::DexScreenerSource, rugcheck::RugCheckSource, SourceTrait };
 
 pub struct Discovery {
     config: DiscoveryConfig,
@@ -19,12 +22,14 @@ pub struct Discovery {
     token_cache: Arc<RwLock<HashMap<String, TokenInfo>>>,
     is_running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<DiscoveryStats>>,
+    sources: Vec<Box<dyn SourceTrait>>,
 }
 
 impl Discovery {
     pub fn new(config: DiscoveryConfig, database: Arc<Database>) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
+            .user_agent("ScreenerBot/1.0")
             .build()
             .expect("Failed to create HTTP client");
 
@@ -35,6 +40,11 @@ impl Discovery {
             discovery_rate_per_hour: 0.0,
         };
 
+        // Initialize all discovery sources
+        let mut sources: Vec<Box<dyn SourceTrait>> = Vec::new();
+        sources.push(Box::new(DexScreenerSource::new(client.clone())));
+        sources.push(Box::new(RugCheckSource::new(client.clone())));
+
         Self {
             config,
             database,
@@ -42,6 +52,7 @@ impl Discovery {
             token_cache: Arc::new(RwLock::new(HashMap::new())),
             is_running: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(stats)),
+            sources,
         }
     }
 
@@ -158,15 +169,17 @@ impl Discovery {
                         Logger::error(&format!("Failed to save discovery stats: {}", e));
                     }
 
-                    Logger::discovery(
-                        &format!(
-                            "Discovery complete. Found {} new tokens this run. Total: {}, Active: {}, Rate: {:.2}/hour",
-                            new_tokens,
-                            total_tokens,
-                            active_tokens,
-                            rate
-                        )
-                    );
+                    if new_tokens > 0 {
+                        Logger::discovery(
+                            &format!(
+                                "🎯 Discovery complete! Found {} NEW tokens this run! Total: {}, Active: {}, Rate: {:.2}/hour",
+                                new_tokens,
+                                total_tokens,
+                                active_tokens,
+                                rate
+                            )
+                        );
+                    }
                 }
                 Err(e) => {
                     Logger::error(&format!("Discovery failed: {}", e));
@@ -180,102 +193,56 @@ impl Discovery {
     async fn discover_tokens(&self) -> Result<u64> {
         let mut new_tokens_count = 0u64;
 
-        for source in &self.config.sources {
-            match source.as_str() {
-                "raydium" => {
-                    let tokens = self.discover_raydium_tokens().await?;
-                    new_tokens_count += self.process_discovered_tokens(tokens).await?;
+        // Run discovery from all enabled sources
+        for source_name in &self.config.sources {
+            if let Some(source) = self.find_source_by_name(source_name) {
+                Logger::discovery(&format!("🔍 Discovering from {}...", source.name()));
+
+                match source.discover().await {
+                    Ok(tokens) => {
+                        let processed = self.process_discovered_tokens(tokens, source_name).await?;
+                        new_tokens_count += processed;
+
+                        if processed > 0 {
+                            Logger::discovery(
+                                &format!(
+                                    "✅ {} found {} new tokens from {}",
+                                    "DISCOVERY",
+                                    processed,
+                                    source.name()
+                                )
+                            );
+                        } else {
+                            Logger::discovery(
+                                &format!(
+                                    "📊 {} checked {} - no new tokens",
+                                    "DISCOVERY",
+                                    source.name()
+                                )
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        Logger::error(
+                            &format!("❌ Failed to discover from {}: {}", source.name(), e)
+                        );
+                    }
                 }
-                "jupiter" => {
-                    let tokens = self.discover_jupiter_tokens().await?;
-                    new_tokens_count += self.process_discovered_tokens(tokens).await?;
-                }
-                "orca" => {
-                    let tokens = self.discover_orca_tokens().await?;
-                    new_tokens_count += self.process_discovered_tokens(tokens).await?;
-                }
-                _ => {
-                    Logger::warn(&format!("Unknown discovery source: {}", source));
-                }
+            } else {
+                Logger::warn(&format!("Unknown discovery source: {}", source_name));
             }
         }
 
         Ok(new_tokens_count)
     }
 
-    async fn discover_raydium_tokens(&self) -> Result<Vec<TokenInfo>> {
-        Logger::discovery("Discovering tokens from Raydium...");
-
-        // This is a placeholder implementation
-        // In a real implementation, you would call Raydium's API
-        let url = "https://api.raydium.io/v2/sdk/liquidity/mainnet.json";
-
-        let response = self.client.get(url).send().await.context("Failed to fetch Raydium pools")?;
-
-        let data: Value = response.json().await.context("Failed to parse Raydium response")?;
-
-        let mut tokens = Vec::new();
-
-        if let Some(official) = data["official"].as_array() {
-            for pool in official.iter().take(10) {
-                // Limit for demo
-                if let Some(token) = self.parse_raydium_pool(pool).await {
-                    if self.meets_criteria(&token) {
-                        tokens.push(token);
-                    }
-                }
-            }
-        }
-
-        Logger::discovery(&format!("Found {} qualifying tokens from Raydium", tokens.len()));
-        Ok(tokens)
-    }
-
-    async fn discover_jupiter_tokens(&self) -> Result<Vec<TokenInfo>> {
-        Logger::discovery("Discovering tokens from Jupiter...");
-
-        // Placeholder implementation for Jupiter API
-        // You would implement actual Jupiter API calls here
-        Ok(Vec::new())
-    }
-
-    async fn discover_orca_tokens(&self) -> Result<Vec<TokenInfo>> {
-        Logger::discovery("Discovering tokens from Orca...");
-
-        // Placeholder implementation for Orca API
-        // You would implement actual Orca API calls here
-        Ok(Vec::new())
-    }
-
-    async fn parse_raydium_pool(&self, pool: &Value) -> Option<TokenInfo> {
-        // This is a simplified parser - you'd need to adapt based on actual API response
-        let base_mint = pool["baseMint"].as_str()?;
-        let _quote_mint = pool["quoteMint"].as_str()?;
-
-        // For demo, we'll focus on the base token if it's not SOL/USDC
-        if
-            base_mint == "So11111111111111111111111111111111111111112" || // SOL
-            base_mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-        {
-            // USDC
-            return None;
-        }
-
-        Some(TokenInfo {
-            mint: base_mint.to_string(),
-            symbol: pool["baseSymbol"].as_str().unwrap_or("UNKNOWN").to_string(),
-            name: pool["baseName"].as_str().unwrap_or("Unknown Token").to_string(),
-            decimals: pool["baseDecimals"].as_u64().unwrap_or(9) as u8,
-            supply: 0, // Would need additional API call
-            market_cap: None,
-            price: pool["price"].as_f64(),
-            volume_24h: pool["volume24h"].as_f64(),
-            liquidity: pool["liquidity"].as_f64(),
-            pool_address: pool["id"].as_str().map(|s| s.to_string()),
-            discovered_at: Utc::now(),
-            last_updated: Utc::now(),
-            is_active: true,
-        })
+    fn find_source_by_name(&self, name: &str) -> Option<&Box<dyn SourceTrait>> {
+        self.sources
+            .iter()
+            .find(|source| {
+                source.name().to_lowercase() == name.to_lowercase() ||
+                    source.name().to_lowercase().contains(&name.to_lowercase())
+            })
     }
 
     fn meets_criteria(&self, token: &TokenInfo) -> bool {
@@ -315,11 +282,16 @@ impl Discovery {
         true
     }
 
-    async fn process_discovered_tokens(&self, tokens: Vec<TokenInfo>) -> Result<u64> {
+    async fn process_discovered_tokens(&self, tokens: Vec<TokenInfo>, source: &str) -> Result<u64> {
         let mut new_tokens_count = 0u64;
         let mut cache = self.token_cache.write().await;
 
         for token in tokens {
+            // Apply filtering criteria
+            if !self.meets_criteria(&token) {
+                continue;
+            }
+
             // Check if we already have this token
             if !cache.contains_key(&token.mint) {
                 // Save to database
@@ -332,13 +304,17 @@ impl Discovery {
                 cache.insert(token.mint.clone(), token.clone());
                 new_tokens_count += 1;
 
+                // Show new token discovery with detailed info
                 Logger::discovery(
                     &format!(
-                        "New token discovered: {} ({}) - Liquidity: ${:.0}, Volume: ${:.0}",
+                        "🆕 NEW TOKEN FOUND via {}: {} ({}) | 💰 MC: ${:.0} | 💧 Liq: ${:.0} | 📊 Vol: ${:.0} | 🔗 {}",
+                        source.to_uppercase(),
                         token.symbol,
-                        token.mint,
+                        token.name,
+                        token.market_cap.unwrap_or(0.0),
                         token.liquidity.unwrap_or(0.0),
-                        token.volume_24h.unwrap_or(0.0)
+                        token.volume_24h.unwrap_or(0.0),
+                        &token.mint[..8]
                     )
                 );
             } else {
@@ -362,6 +338,12 @@ impl Discovery {
 // Implement Clone for Discovery (needed for tokio::spawn)
 impl Clone for Discovery {
     fn clone(&self) -> Self {
+        // Note: We can't clone the sources easily due to trait objects
+        // For the clone, we'll recreate them
+        let mut sources: Vec<Box<dyn SourceTrait>> = Vec::new();
+        sources.push(Box::new(DexScreenerSource::new(self.client.clone())));
+        sources.push(Box::new(RugCheckSource::new(self.client.clone())));
+
         Self {
             config: self.config.clone(),
             database: Arc::clone(&self.database),
@@ -369,6 +351,7 @@ impl Clone for Discovery {
             token_cache: Arc::clone(&self.token_cache),
             is_running: Arc::clone(&self.is_running),
             stats: Arc::clone(&self.stats),
+            sources,
         }
     }
 }
