@@ -1,358 +1,224 @@
+//! Pool decoder manager for handling multiple DEX protocols
+//!
+//! This module provides a unified interface for decoding pool data from various
+//! DEX protocols on Solana, including auto-detection capabilities.
+
 use std::collections::HashMap;
-use serde::{ Deserialize, Serialize };
 use crate::pricing::{ PoolInfo, PoolType };
 
-pub struct PoolDecoder {
+// Import decoder modules
+use super::decoders::{
+    PoolDecoder as DecoderTrait,
+    PoolDecoderError,
+    RaydiumDecoder,
+    PumpFunDecoder,
+    MeteoraDecoder,
+    OrcaDecoder,
+};
+
+/// Main pool decoder manager that orchestrates different protocol decoders
+pub struct PoolDecoderManager {
     raydium_decoder: RaydiumDecoder,
     pumpfun_decoder: PumpFunDecoder,
     meteora_decoder: MeteoraDecoder,
     orca_decoder: OrcaDecoder,
+    // Decoder registry for extensibility
+    decoder_registry: HashMap<String, Box<dyn DecoderTrait + Send + Sync>>,
 }
 
-impl PoolDecoder {
+impl PoolDecoderManager {
+    /// Create a new pool decoder manager with all supported decoders
     pub fn new() -> Self {
         Self {
             raydium_decoder: RaydiumDecoder::new(),
             pumpfun_decoder: PumpFunDecoder::new(),
             meteora_decoder: MeteoraDecoder::new(),
             orca_decoder: OrcaDecoder::new(),
+            decoder_registry: HashMap::new(),
         }
     }
 
+    /// Register a custom decoder for a specific pool type
+    pub fn register_decoder<T>(&mut self, pool_type: String, decoder: T)
+        where T: DecoderTrait + Send + Sync + 'static
+    {
+        self.decoder_registry.insert(pool_type, Box::new(decoder));
+    }
+
+    /// Decode pool data based on the pool type information
     pub async fn decode_pool_data(
         &self,
         pool_info: &PoolInfo,
         raw_data: &[u8]
-    ) -> Result<DecodedPoolData, Box<dyn std::error::Error + Send + Sync>> {
-        match pool_info.pool_type {
+    ) -> Result<DecodedPoolData, PoolDecoderError> {
+        match &pool_info.pool_type {
             PoolType::Raydium => self.raydium_decoder.decode(raw_data).await,
             PoolType::PumpFun => self.pumpfun_decoder.decode(raw_data).await,
             PoolType::Meteora => self.meteora_decoder.decode(raw_data).await,
             PoolType::Orca => self.orca_decoder.decode(raw_data).await,
-            PoolType::Serum => self.raydium_decoder.decode(raw_data).await, // Raydium uses Serum
-            PoolType::Unknown(_) => {
-                // Try to auto-detect pool type from data structure
+            PoolType::Serum => {
+                // Raydium uses Serum markets as the underlying orderbook
+                self.raydium_decoder.decode(raw_data).await
+            }
+            PoolType::Unknown(pool_type_str) => {
+                // First try custom registered decoders
+                if let Some(decoder) = self.decoder_registry.get(pool_type_str) {
+                    return decoder.decode(raw_data).await;
+                }
+
+                // Fall back to auto-detection
                 self.auto_detect_and_decode(raw_data).await
             }
         }
     }
 
+    /// Attempt to auto-detect pool type and decode accordingly
     async fn auto_detect_and_decode(
         &self,
         raw_data: &[u8]
-    ) -> Result<DecodedPoolData, Box<dyn std::error::Error + Send + Sync>> {
-        // Try different decoders until one succeeds
-        if let Ok(data) = self.raydium_decoder.decode(raw_data).await {
-            return Ok(data);
+    ) -> Result<DecodedPoolData, PoolDecoderError> {
+        // Define decoder priority order for auto-detection
+        let decoders: Vec<&dyn DecoderTrait> = vec![
+            &self.raydium_decoder,
+            &self.pumpfun_decoder,
+            &self.meteora_decoder,
+            &self.orca_decoder
+        ];
+
+        // Try each decoder in order until one succeeds
+        for decoder in decoders {
+            if let Ok(data) = decoder.decode(raw_data).await {
+                return Ok(data);
+            }
         }
 
-        if let Ok(data) = self.pumpfun_decoder.decode(raw_data).await {
-            return Ok(data);
+        // Try custom decoders if built-in ones fail
+        for decoder in self.decoder_registry.values() {
+            if let Ok(data) = decoder.decode(raw_data).await {
+                return Ok(data);
+            }
         }
 
-        if let Ok(data) = self.meteora_decoder.decode(raw_data).await {
-            return Ok(data);
-        }
+        Err(PoolDecoderError::AutoDetectionFailed)
+    }
 
-        if let Ok(data) = self.orca_decoder.decode(raw_data).await {
-            return Ok(data);
-        }
+    /// Get supported pool types
+    pub fn supported_pool_types(&self) -> Vec<PoolType> {
+        vec![
+            PoolType::Raydium,
+            PoolType::PumpFun,
+            PoolType::Meteora,
+            PoolType::Orca,
+            PoolType::Serum
+        ]
+    }
 
-        Err("Unable to decode pool data with any known decoder".into())
+    /// Check if a pool type is supported
+    pub fn supports_pool_type(&self, pool_type: &PoolType) -> bool {
+        match pool_type {
+            | PoolType::Raydium
+            | PoolType::PumpFun
+            | PoolType::Meteora
+            | PoolType::Orca
+            | PoolType::Serum => true,
+            PoolType::Unknown(pool_type_str) => self.decoder_registry.contains_key(pool_type_str),
+        }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DecodedPoolData {
-    pub pool_type: PoolType,
-    pub token_a_mint: String,
-    pub token_b_mint: String,
-    pub token_a_vault: String,
-    pub token_b_vault: String,
-    pub token_a_amount: u64,
-    pub token_b_amount: u64,
-    pub fee_rate: f64,
-    pub sqrt_price: Option<u128>,
-    pub tick_current: Option<i32>,
-    pub liquidity: Option<u128>,
-    pub additional_data: HashMap<String, serde_json::Value>,
-}
-
-// Raydium Pool Decoder
-pub struct RaydiumDecoder;
-
-impl RaydiumDecoder {
-    pub fn new() -> Self {
-        Self
-    }
-
-    pub async fn decode(
-        &self,
-        data: &[u8]
-    ) -> Result<DecodedPoolData, Box<dyn std::error::Error + Send + Sync>> {
-        if data.len() < 752 {
-            return Err("Invalid Raydium pool data length".into());
-        }
-
-        // Raydium AMM Pool structure (simplified)
-        // This is a basic implementation - actual Raydium pools have complex structures
-        let token_a_amount = u64::from_le_bytes(
-            data[200..208].try_into().map_err(|_| "Failed to parse token A amount")?
-        );
-
-        let token_b_amount = u64::from_le_bytes(
-            data[208..216].try_into().map_err(|_| "Failed to parse token B amount")?
-        );
-
-        // Extract mint addresses (32 bytes each)
-        let token_a_mint = bs58::encode(&data[40..72]).into_string();
-        let token_b_mint = bs58::encode(&data[72..104]).into_string();
-
-        // Extract vault addresses (32 bytes each)
-        let token_a_vault = bs58::encode(&data[104..136]).into_string();
-        let token_b_vault = bs58::encode(&data[136..168]).into_string();
-
-        let mut additional_data = HashMap::new();
-        additional_data.insert(
-            "status".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(1))
-        );
-        additional_data.insert(
-            "nonce".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(data[8]))
-        );
-
-        Ok(DecodedPoolData {
-            pool_type: PoolType::Raydium,
-            token_a_mint,
-            token_b_mint,
-            token_a_vault,
-            token_b_vault,
-            token_a_amount,
-            token_b_amount,
-            fee_rate: 0.0025, // Default Raydium fee
-            sqrt_price: None,
-            tick_current: None,
-            liquidity: None,
-            additional_data,
-        })
+impl Default for PoolDecoderManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-// PumpFun Pool Decoder
-pub struct PumpFunDecoder;
+// Re-export commonly used types for backward compatibility
+pub use super::decoders::DecodedPoolData;
 
-impl PumpFunDecoder {
-    pub fn new() -> Self {
-        Self
-    }
-
-    pub async fn decode(
-        &self,
-        data: &[u8]
-    ) -> Result<DecodedPoolData, Box<dyn std::error::Error + Send + Sync>> {
-        if data.len() < 200 {
-            return Err("Invalid PumpFun pool data length".into());
-        }
-
-        // PumpFun bonding curve structure (simplified)
-        let virtual_token_reserves = u64::from_le_bytes(
-            data[32..40].try_into().map_err(|_| "Failed to parse virtual token reserves")?
-        );
-
-        let virtual_sol_reserves = u64::from_le_bytes(
-            data[40..48].try_into().map_err(|_| "Failed to parse virtual SOL reserves")?
-        );
-
-        let real_token_reserves = u64::from_le_bytes(
-            data[48..56].try_into().map_err(|_| "Failed to parse real token reserves")?
-        );
-
-        let real_sol_reserves = u64::from_le_bytes(
-            data[56..64].try_into().map_err(|_| "Failed to parse real SOL reserves")?
-        );
-
-        // Token mint address
-        let token_mint = bs58::encode(&data[8..40]).into_string();
-        let sol_mint = "So11111111111111111111111111111111111111112".to_string(); // Wrapped SOL
-
-        let mut additional_data = HashMap::new();
-        additional_data.insert(
-            "virtual_token_reserves".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(virtual_token_reserves))
-        );
-        additional_data.insert(
-            "virtual_sol_reserves".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(virtual_sol_reserves))
-        );
-        additional_data.insert(
-            "real_token_reserves".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(real_token_reserves))
-        );
-        additional_data.insert(
-            "real_sol_reserves".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(real_sol_reserves))
-        );
-
-        Ok(DecodedPoolData {
-            pool_type: PoolType::PumpFun,
-            token_a_mint: token_mint,
-            token_b_mint: sol_mint,
-            token_a_vault: String::new(),
-            token_b_vault: String::new(),
-            token_a_amount: real_token_reserves,
-            token_b_amount: real_sol_reserves,
-            fee_rate: 0.01, // 1% fee for PumpFun
-            sqrt_price: None,
-            tick_current: None,
-            liquidity: None,
-            additional_data,
-        })
-    }
-}
-
-// Meteora Pool Decoder
-pub struct MeteoraDecoder;
-
-impl MeteoraDecoder {
-    pub fn new() -> Self {
-        Self
-    }
-
-    pub async fn decode(
-        &self,
-        data: &[u8]
-    ) -> Result<DecodedPoolData, Box<dyn std::error::Error + Send + Sync>> {
-        if data.len() < 1000 {
-            return Err("Invalid Meteora pool data length".into());
-        }
-
-        // Meteora DLMM (Dynamic Liquidity Market Maker) structure
-        let active_id = i32::from_le_bytes(
-            data[200..204].try_into().map_err(|_| "Failed to parse active ID")?
-        );
-
-        let bin_step = u16::from_le_bytes(
-            data[204..206].try_into().map_err(|_| "Failed to parse bin step")?
-        );
-
-        // Token mints
-        let token_x_mint = bs58::encode(&data[32..64]).into_string();
-        let token_y_mint = bs58::encode(&data[64..96]).into_string();
-
-        // Reserves (simplified - actual Meteora has complex bin structure)
-        let reserve_x = u64::from_le_bytes(
-            data[300..308].try_into().map_err(|_| "Failed to parse reserve X")?
-        );
-
-        let reserve_y = u64::from_le_bytes(
-            data[308..316].try_into().map_err(|_| "Failed to parse reserve Y")?
-        );
-
-        let mut additional_data = HashMap::new();
-        additional_data.insert(
-            "active_id".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(active_id))
-        );
-        additional_data.insert(
-            "bin_step".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(bin_step))
-        );
-
-        Ok(DecodedPoolData {
-            pool_type: PoolType::Meteora,
-            token_a_mint: token_x_mint,
-            token_b_mint: token_y_mint,
-            token_a_vault: String::new(),
-            token_b_vault: String::new(),
-            token_a_amount: reserve_x,
-            token_b_amount: reserve_y,
-            fee_rate: (bin_step as f64) / 10000.0, // Convert bin step to fee rate
-            sqrt_price: None,
-            tick_current: Some(active_id),
-            liquidity: None,
-            additional_data,
-        })
-    }
-}
-
-// Orca Pool Decoder
-pub struct OrcaDecoder;
-
-impl OrcaDecoder {
-    pub fn new() -> Self {
-        Self
-    }
-
-    pub async fn decode(
-        &self,
-        data: &[u8]
-    ) -> Result<DecodedPoolData, Box<dyn std::error::Error + Send + Sync>> {
-        if data.len() < 600 {
-            return Err("Invalid Orca pool data length".into());
-        }
-
-        // Orca Whirlpool structure
-        let sqrt_price = u128::from_le_bytes(
-            data[100..116].try_into().map_err(|_| "Failed to parse sqrt price")?
-        );
-
-        let tick_current_index = i32::from_le_bytes(
-            data[116..120].try_into().map_err(|_| "Failed to parse tick current index")?
-        );
-
-        let liquidity = u128::from_le_bytes(
-            data[120..136].try_into().map_err(|_| "Failed to parse liquidity")?
-        );
-
-        // Token mints
-        let token_mint_a = bs58::encode(&data[8..40]).into_string();
-        let token_mint_b = bs58::encode(&data[40..72]).into_string();
-
-        // Token vaults
-        let token_vault_a = bs58::encode(&data[72..104]).into_string();
-        let token_vault_b = bs58::encode(&data[104..136]).into_string();
-
-        // Fee rate (in hundredths of a bip)
-        let fee_rate = u16::from_le_bytes(
-            data[200..202].try_into().map_err(|_| "Failed to parse fee rate")?
-        );
-
-        let mut additional_data = HashMap::new();
-        additional_data.insert(
-            "tick_spacing".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(data[202]))
-        );
-        additional_data.insert(
-            "protocol_fee_rate".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(data[204]))
-        );
-
-        Ok(DecodedPoolData {
-            pool_type: PoolType::Orca,
-            token_a_mint: token_mint_a,
-            token_b_mint: token_mint_b,
-            token_a_vault: token_vault_a,
-            token_b_vault: token_vault_b,
-            token_a_amount: 0, // Need to fetch from vault accounts
-            token_b_amount: 0, // Need to fetch from vault accounts
-            fee_rate: (fee_rate as f64) / 1_000_000.0, // Convert to decimal
-            sqrt_price: Some(sqrt_price),
-            tick_current: Some(tick_current_index),
-            liquidity: Some(liquidity),
-            additional_data,
-        })
-    }
-}
+// Legacy type alias for backward compatibility
+pub type PoolDecoder = PoolDecoderManager;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pricing::PoolType;
 
     #[test]
-    fn test_pool_decoder_creation() {
-        let decoder = PoolDecoder::new();
-        // Basic test to ensure decoder can be created
-        assert_eq!(std::mem::size_of_val(&decoder), std::mem::size_of::<PoolDecoder>());
+    fn test_pool_decoder_manager_creation() {
+        let manager = PoolDecoderManager::new();
+        assert!(manager.supports_pool_type(&PoolType::Raydium));
+        assert!(manager.supports_pool_type(&PoolType::PumpFun));
+        assert!(manager.supports_pool_type(&PoolType::Meteora));
+        assert!(manager.supports_pool_type(&PoolType::Orca));
+        assert!(manager.supports_pool_type(&PoolType::Serum));
+    }
+
+    #[test]
+    fn test_supported_pool_types() {
+        let manager = PoolDecoderManager::new();
+        let supported_types = manager.supported_pool_types();
+
+        assert!(supported_types.contains(&PoolType::Raydium));
+        assert!(supported_types.contains(&PoolType::PumpFun));
+        assert!(supported_types.contains(&PoolType::Meteora));
+        assert!(supported_types.contains(&PoolType::Orca));
+        assert!(supported_types.contains(&PoolType::Serum));
+    }
+
+    #[test]
+    fn test_unknown_pool_type_support() {
+        let manager = PoolDecoderManager::new();
+        let unknown_type = PoolType::Unknown("CustomDEX".to_string());
+
+        // Should not be supported initially
+        assert!(!manager.supports_pool_type(&unknown_type));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_data_handling() {
+        let manager = PoolDecoderManager::new();
+        let pool_info = PoolInfo {
+            pool_type: PoolType::Raydium,
+            address: "test".to_string(),
+            reserve_0: 0,
+            reserve_1: 0,
+            token_0: "token0".to_string(),
+            token_1: "token1".to_string(),
+            liquidity_usd: 0.0,
+            volume_24h: 0.0,
+            fee_tier: None,
+            last_updated: 0,
+        };
+
+        // Test with insufficient data
+        let short_data = vec![0u8; 10];
+        let result = manager.decode_pool_data(&pool_info, &short_data).await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PoolDecoderError::InvalidDataLength { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_auto_detection_with_no_matches() {
+        let manager = PoolDecoderManager::new();
+        let pool_info = PoolInfo {
+            pool_type: PoolType::Unknown("NonexistentDEX".to_string()),
+            address: "test".to_string(),
+            reserve_0: 0,
+            reserve_1: 0,
+            token_0: "token0".to_string(),
+            token_1: "token1".to_string(),
+            liquidity_usd: 0.0,
+            volume_24h: 0.0,
+            fee_tier: None,
+            last_updated: 0,
+        };
+
+        // Test with data that won't match any decoder
+        let invalid_data = vec![0u8; 100];
+        let result = manager.decode_pool_data(&pool_info, &invalid_data).await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PoolDecoderError::AutoDetectionFailed));
     }
 }

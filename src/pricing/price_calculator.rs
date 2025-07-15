@@ -1,17 +1,16 @@
-use std::collections::HashMap;
 use std::time::{ SystemTime, UNIX_EPOCH };
 use crate::pricing::{ PoolInfo, PoolType };
-use crate::pricing::pool_decoders::{ DecodedPoolData, PoolDecoder };
+use crate::pricing::pool_decoders::{ DecodedPoolData, PoolDecoderManager };
 
 pub struct PriceCalculator {
-    pool_decoder: PoolDecoder,
+    pool_decoder: PoolDecoderManager,
     sol_price_cache: Option<(f64, u64)>, // (price, timestamp)
 }
 
 impl PriceCalculator {
     pub fn new() -> Self {
         Self {
-            pool_decoder: PoolDecoder::new(),
+            pool_decoder: PoolDecoderManager::new(),
             sol_price_cache: None,
         }
     }
@@ -293,7 +292,7 @@ impl PriceCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
+    use std::time::{ SystemTime, UNIX_EPOCH };
 
     #[tokio::test]
     async fn test_price_calculator() {
@@ -310,7 +309,7 @@ mod tests {
             liquidity_usd: 15000000.0, // 15M USD
             volume_24h: 1000000.0,
             fee_tier: Some(0.0025),
-            last_updated: Instant::now(),
+            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
         };
 
         match calculator.calculate_pool_price(&pool).await {
@@ -338,7 +337,7 @@ mod tests {
             liquidity_usd: 15000000.0,
             volume_24h: 1000000.0,
             fee_tier: Some(0.0025),
-            last_updated: Instant::now(),
+            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
         };
 
         match calculator.calculate_slippage_impact(&pool, 1000.0, true).await {

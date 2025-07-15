@@ -7,12 +7,13 @@ use crate::database::Database;
 use crate::logger::Logger;
 
 pub mod gecko_terminal;
+pub mod decoders;
 pub mod pool_decoders;
 pub mod price_calculator;
 pub mod cache;
 
 use gecko_terminal::GeckoTerminalClient;
-use pool_decoders::PoolDecoder;
+use pool_decoders::PoolDecoderManager;
 use price_calculator::PriceCalculator;
 use cache::PriceCache;
 
@@ -62,7 +63,7 @@ pub struct PoolInfo {
     pub last_updated: u64, // Unix timestamp
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PoolType {
     Raydium,
     PumpFun,
@@ -74,7 +75,7 @@ pub enum PoolType {
 
 pub struct PricingManager {
     gecko_client: GeckoTerminalClient,
-    pool_decoder: PoolDecoder,
+    pool_decoder: PoolDecoderManager,
     price_calculator: PriceCalculator,
     cache: Arc<RwLock<PriceCache>>,
     database: Arc<Database>,
@@ -95,7 +96,7 @@ impl PricingManager {
 
         Self {
             gecko_client: GeckoTerminalClient::new(client.clone()),
-            pool_decoder: PoolDecoder::new(),
+            pool_decoder: PoolDecoderManager::new(),
             price_calculator: PriceCalculator::new(),
             cache: Arc::new(RwLock::new(PriceCache::new())),
             database,
