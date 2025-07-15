@@ -1,9 +1,6 @@
-use super::gmgn::GmgnSwap;
-use super::jupiter::JupiterSwap;
-use super::raydium::RaydiumSwap;
-use super::routes::RouteSelector;
-use super::types::*;
-use crate::config::Config;
+use crate::swap::dex::{GmgnSwap, JupiterSwap, RaydiumSwap};
+use crate::swap::core::routes::RouteSelector;
+use crate::swap::types::*;
 use crate::rpc_manager::RpcManager;
 use crate::trading::transaction_manager::TransactionManager;
 use crate::types::TransactionType;

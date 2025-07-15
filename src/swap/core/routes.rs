@@ -1,4 +1,4 @@
-use super::types::*;
+use crate::swap::types::*;
 use anyhow::Result;
 use std::cmp::Ordering;
 

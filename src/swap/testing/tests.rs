@@ -1,4 +1,4 @@
-use super::*;
+use crate::swap::*;
 use crate::config::{Config, TransactionManagerConfig};
 use crate::database::Database;
 use crate::rpc_manager::RpcManager;
@@ -418,7 +418,7 @@ mod tests {
     #[tokio::test]
     async fn test_gmgn_01_sol_quote() {
         // Test GMGN with 0.01 SOL (10,000,000 lamports) as requested
-        use super::manager::SwapManager;
+        use crate::swap::core::manager::SwapManager;
         use solana_sdk::signature::Keypair;
         
         let swap_config = SwapConfig {
@@ -518,8 +518,8 @@ mod tests {
     #[tokio::test]
     async fn test_gmgn_direct_api() {
         // Test GMGN API directly
-        use super::gmgn::GmgnSwap;
-        use super::types::*;
+        use crate::swap::dex::gmgn::GmgnSwap;
+        use crate::swap::types::*;
         
         let config = GmgnConfig {
             enabled: true,
