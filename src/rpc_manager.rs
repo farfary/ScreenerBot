@@ -1,6 +1,8 @@
 use anyhow::Result;
+use solana_account_decoder::parse_token::UiTokenAmount;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::pubkey::Pubkey;
 use std::time::Duration;
 
 pub struct RpcManager {
@@ -70,5 +72,21 @@ impl RpcManager {
 
     pub fn get_client_count(&self) -> usize {
         self.clients.len()
+    }
+
+    pub async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
+        let pubkey = *pubkey;
+        self.execute_with_fallback(move |client| {
+            client.get_balance(&pubkey).map_err(|e| anyhow::anyhow!("RPC error: {}", e))
+        }).await
+    }
+
+    pub async fn get_token_account_balance(&self, pubkey: &Pubkey) -> Result<UiTokenAmount> {
+        let pubkey = *pubkey;
+        self.execute_with_fallback(move |client| {
+            client
+                .get_token_account_balance(&pubkey)
+                .map_err(|e| anyhow::anyhow!("RPC error: {}", e))
+        }).await
     }
 }

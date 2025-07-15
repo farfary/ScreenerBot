@@ -184,6 +184,7 @@ impl SwapManager {
         request: &SwapRequest,
         wallet_keypair: &Keypair
     ) -> Result<SwapResult, SwapError> {
+        let start_time = Instant::now();
         let user_public_key = wallet_keypair.pubkey().to_string();
 
         // Get the transaction from the appropriate DEX
@@ -288,16 +289,22 @@ impl SwapManager {
             log::warn!("Failed to record transaction: {}", e);
         }
 
+        let execution_time_ms = start_time.elapsed().as_millis() as u64;
+        let slippage = (price_impact / 100.0).min(self.config.max_slippage);
+
         Ok(SwapResult {
             success: true,
             signature: Some(signature.to_string()),
-            dex_used: route.dex.clone(),
+            dex_used: route.dex.to_string(),
             input_amount,
             output_amount,
-            price_impact,
+            slippage,
+            fee: fee_lamports,
             fee_lamports,
-            route: route.clone(),
+            price_impact,
+            execution_time_ms,
             error: None,
+            route: route.clone(),
             block_height: Some(block_height),
         })
     }
