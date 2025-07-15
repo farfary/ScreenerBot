@@ -26,21 +26,19 @@ impl RaydiumSwap {
 
         // Raydium V2 API for quotes
         let url = format!("{}/swap/route", self.config.base_url);
-        
+
         let params = vec![
             ("inputMint", request.input_mint.clone()),
             ("outputMint", request.output_mint.clone()),
             ("amount", request.amount.to_string()),
             ("slippageBps", request.slippage_bps.to_string()),
-            ("onlyDirectRoutes", "false".to_string()),
+            ("onlyDirectRoutes", "false".to_string())
         ];
 
-        let response = self
-            .client
+        let response = self.client
             .get(&url)
             .query(&params)
-            .send()
-            .await
+            .send().await
             .map_err(|e| SwapError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
@@ -49,8 +47,7 @@ impl RaydiumSwap {
         }
 
         let quote: Value = response
-            .json()
-            .await
+            .json().await
             .map_err(|e| SwapError::SerializationError(e.to_string()))?;
 
         self.parse_raydium_quote(&quote, request)
@@ -59,11 +56,12 @@ impl RaydiumSwap {
     pub async fn get_swap_transaction(
         &self,
         route: &SwapRoute,
-        user_public_key: &str,
+        user_public_key: &str
     ) -> Result<SwapTransaction, SwapError> {
         let url = format!("{}/swap", self.config.base_url);
 
-        let swap_request = serde_json::json!({
+        let swap_request =
+            serde_json::json!({
             "route": self.route_to_raydium_format(route),
             "userPublicKey": user_public_key,
             "wrapSol": true,
@@ -72,12 +70,10 @@ impl RaydiumSwap {
             "computeUnitPriceMicroLamports": null
         });
 
-        let response = self
-            .client
+        let response = self.client
             .post(&url)
             .json(&swap_request)
-            .send()
-            .await
+            .send().await
             .map_err(|e| SwapError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
@@ -86,25 +82,28 @@ impl RaydiumSwap {
         }
 
         let swap_response: Value = response
-            .json()
-            .await
+            .json().await
             .map_err(|e| SwapError::SerializationError(e.to_string()))?;
 
         Ok(SwapTransaction {
             swap_transaction: swap_response["swapTransaction"]
                 .as_str()
-                .ok_or_else(|| SwapError::SerializationError("Missing swapTransaction".to_string()))?
+                .ok_or_else(||
+                    SwapError::SerializationError("Missing swapTransaction".to_string())
+                )?
                 .to_string(),
-            last_valid_block_height: swap_response["lastValidBlockHeight"]
-                .as_u64()
-                .unwrap_or(0),
+            last_valid_block_height: swap_response["lastValidBlockHeight"].as_u64().unwrap_or(0),
             priority_fee_info: None,
         })
     }
 
-    fn parse_raydium_quote(&self, quote: &Value, request: &SwapRequest) -> Result<SwapRoute, SwapError> {
+    fn parse_raydium_quote(
+        &self,
+        quote: &Value,
+        request: &SwapRequest
+    ) -> Result<SwapRoute, SwapError> {
         let data = &quote["data"];
-        
+
         let input_mint = data["inputMint"]
             .as_str()
             .ok_or_else(|| SwapError::SerializationError("Missing inputMint".to_string()))?
@@ -127,13 +126,12 @@ impl RaydiumSwap {
 
         let other_amount_threshold = data["otherAmountThreshold"]
             .as_str()
-            .ok_or_else(|| SwapError::SerializationError("Missing otherAmountThreshold".to_string()))?
+            .ok_or_else(||
+                SwapError::SerializationError("Missing otherAmountThreshold".to_string())
+            )?
             .to_string();
 
-        let price_impact_pct = data["priceImpactPct"]
-            .as_str()
-            .unwrap_or("0")
-            .to_string();
+        let price_impact_pct = data["priceImpactPct"].as_str().unwrap_or("0").to_string();
 
         // Parse route plan for Raydium
         let route_plan = data["routePlan"]
@@ -204,12 +202,10 @@ impl RaydiumSwap {
 
     pub async fn get_pools(&self) -> Result<Vec<Value>, SwapError> {
         let url = format!("{}/pools", self.config.base_url);
-        
-        let response = self
-            .client
+
+        let response = self.client
             .get(&url)
-            .send()
-            .await
+            .send().await
             .map_err(|e| SwapError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
@@ -217,21 +213,23 @@ impl RaydiumSwap {
         }
 
         let pools: Value = response
-            .json()
-            .await
+            .json().await
             .map_err(|e| SwapError::SerializationError(e.to_string()))?;
 
-        Ok(pools["data"].as_array().unwrap_or(&vec![]).clone())
+        Ok(
+            pools["data"]
+                .as_array()
+                .unwrap_or(&vec![])
+                .clone()
+        )
     }
 
     pub async fn get_pool_info(&self, pool_id: &str) -> Result<Value, SwapError> {
         let url = format!("{}/pools/{}", self.config.base_url, pool_id);
-        
-        let response = self
-            .client
+
+        let response = self.client
             .get(&url)
-            .send()
-            .await
+            .send().await
             .map_err(|e| SwapError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
@@ -239,8 +237,7 @@ impl RaydiumSwap {
         }
 
         let pool_info: Value = response
-            .json()
-            .await
+            .json().await
             .map_err(|e| SwapError::SerializationError(e.to_string()))?;
 
         Ok(pool_info)
@@ -256,11 +253,7 @@ impl RaydiumSwap {
 
     pub fn get_supported_pool_types(&self) -> Vec<String> {
         match self.config.pool_type.as_str() {
-            "all" => vec![
-                "standard".to_string(),
-                "concentrated".to_string(),
-                "stable".to_string(),
-            ],
+            "all" => vec!["standard".to_string(), "concentrated".to_string(), "stable".to_string()],
             specific => vec![specific.to_string()],
         }
     }
@@ -338,7 +331,7 @@ mod tests {
     fn test_raydium_config() {
         let config = create_test_config();
         let raydium = RaydiumSwap::new(config);
-        
+
         assert!(raydium.is_enabled());
         assert!(!raydium.supports_anti_mev());
         assert!(!raydium.get_supported_pool_types().is_empty());

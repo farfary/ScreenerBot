@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 // Import swap types
-use crate::swap::types::{SwapConfig, JupiterConfig, RaydiumConfig, GmgnConfig};
+use crate::swap::types::{ SwapConfig, JupiterConfig, RaydiumConfig, GmgnConfig };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -191,7 +191,11 @@ impl Default for Config {
                 max_slippage: 0.01, // 1%
                 timeout_seconds: 30,
                 retry_attempts: 3,
-                dex_preferences: vec!["jupiter".to_string(), "raydium".to_string(), "gmgn".to_string()],
+                dex_preferences: vec![
+                    "jupiter".to_string(),
+                    "raydium".to_string(),
+                    "gmgn".to_string()
+                ],
                 jupiter: JupiterConfig {
                     enabled: true,
                     base_url: "https://quote-api.jup.ag/v6".to_string(),

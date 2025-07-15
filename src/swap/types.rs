@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -25,13 +25,23 @@ pub struct SwapConfig {
     pub gmgn: GmgnConfig,
 }
 
-fn default_enabled() -> bool { true }
-fn default_dex() -> String { "jupiter".to_string() }
-fn default_max_slippage() -> f64 { 0.01 }
-fn default_timeout_seconds() -> u64 { 30 }
-fn default_retry_attempts() -> u32 { 3 }
-fn default_dex_preferences() -> Vec<String> { 
-    vec!["jupiter".to_string(), "raydium".to_string(), "gmgn".to_string()] 
+fn default_enabled() -> bool {
+    true
+}
+fn default_dex() -> String {
+    "jupiter".to_string()
+}
+fn default_max_slippage() -> f64 {
+    0.01
+}
+fn default_timeout_seconds() -> u64 {
+    30
+}
+fn default_retry_attempts() -> u32 {
+    3
+}
+fn default_dex_preferences() -> Vec<String> {
+    vec!["jupiter".to_string(), "raydium".to_string(), "gmgn".to_string()]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -50,9 +60,15 @@ pub struct JupiterConfig {
     pub as_legacy_transaction: bool,
 }
 
-fn default_jupiter_url() -> String { "https://quote-api.jup.ag/v6".to_string() }
-fn default_timeout_seconds_15() -> u64 { 15 }
-fn default_max_accounts() -> u32 { 64 }
+fn default_jupiter_url() -> String {
+    "https://quote-api.jup.ag/v6".to_string()
+}
+fn default_timeout_seconds_15() -> u64 {
+    15
+}
+fn default_max_accounts() -> u32 {
+    64
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RaydiumConfig {
@@ -66,8 +82,12 @@ pub struct RaydiumConfig {
     pub pool_type: String,
 }
 
-fn default_raydium_url() -> String { "https://api.raydium.io/v2".to_string() }
-fn default_pool_type() -> String { "all".to_string() }
+fn default_raydium_url() -> String {
+    "https://api.raydium.io/v2".to_string()
+}
+fn default_pool_type() -> String {
+    "all".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GmgnConfig {
@@ -85,7 +105,9 @@ pub struct GmgnConfig {
     pub referral_fee_bps: u32,
 }
 
-fn default_gmgn_url() -> String { "https://gmgn.ai/defi/quoterv1".to_string() }
+fn default_gmgn_url() -> String {
+    "https://gmgn.ai/defi/quoterv1".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DexType {
@@ -328,26 +350,21 @@ pub struct GmgnSwapResponse {
 // Error types
 #[derive(Debug, thiserror::Error)]
 pub enum SwapError {
-    #[error("DEX not available: {0}")]
-    DexNotAvailable(String),
-    #[error("Invalid route: {0}")]
-    InvalidRoute(String),
-    #[error("Slippage too high: expected {expected}, got {actual}")]
-    SlippageTooHigh { expected: f64, actual: f64 },
+    #[error("DEX not available: {0}")] DexNotAvailable(String),
+    #[error("Invalid route: {0}")] InvalidRoute(String),
+    #[error("Slippage too high: expected {expected}, got {actual}")] SlippageTooHigh {
+        expected: f64,
+        actual: f64,
+    },
     #[error("Insufficient liquidity")]
     InsufficientLiquidity,
-    #[error("Transaction failed: {0}")]
-    TransactionFailed(String),
-    #[error("Network error: {0}")]
-    NetworkError(String),
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
-    #[error("Invalid parameters: {0}")]
-    InvalidParameters(String),
+    #[error("Transaction failed: {0}")] TransactionFailed(String),
+    #[error("Network error: {0}")] NetworkError(String),
+    #[error("Serialization error: {0}")] SerializationError(String),
+    #[error("Invalid parameters: {0}")] InvalidParameters(String),
     #[error("Timeout")]
     Timeout,
-    #[error("API error: {0}")]
-    ApiError(String),
+    #[error("API error: {0}")] ApiError(String),
 }
 
 impl From<solana_client::client_error::ClientError> for SwapError {
@@ -363,39 +380,36 @@ pub const USDT_MINT: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 
 pub fn get_common_tokens() -> HashMap<String, TokenInfo> {
     let mut tokens = HashMap::new();
-    
-    tokens.insert(
-        SOL_MINT.to_string(),
-        TokenInfo {
-            mint: SOL_MINT.to_string(),
-            symbol: "SOL".to_string(),
-            name: "Wrapped SOL".to_string(),
-            decimals: 9,
-            logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png".to_string()),
-        },
-    );
-    
-    tokens.insert(
-        USDC_MINT.to_string(),
-        TokenInfo {
-            mint: USDC_MINT.to_string(),
-            symbol: "USDC".to_string(),
-            name: "USD Coin".to_string(),
-            decimals: 6,
-            logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png".to_string()),
-        },
-    );
-    
-    tokens.insert(
-        USDT_MINT.to_string(),
-        TokenInfo {
-            mint: USDT_MINT.to_string(),
-            symbol: "USDT".to_string(),
-            name: "Tether USD".to_string(),
-            decimals: 6,
-            logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.png".to_string()),
-        },
-    );
-    
+
+    tokens.insert(SOL_MINT.to_string(), TokenInfo {
+        mint: SOL_MINT.to_string(),
+        symbol: "SOL".to_string(),
+        name: "Wrapped SOL".to_string(),
+        decimals: 9,
+        logo_uri: Some(
+            "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png".to_string()
+        ),
+    });
+
+    tokens.insert(USDC_MINT.to_string(), TokenInfo {
+        mint: USDC_MINT.to_string(),
+        symbol: "USDC".to_string(),
+        name: "USD Coin".to_string(),
+        decimals: 6,
+        logo_uri: Some(
+            "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png".to_string()
+        ),
+    });
+
+    tokens.insert(USDT_MINT.to_string(), TokenInfo {
+        mint: USDT_MINT.to_string(),
+        symbol: "USDT".to_string(),
+        name: "Tether USD".to_string(),
+        decimals: 6,
+        logo_uri: Some(
+            "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.png".to_string()
+        ),
+    });
+
     tokens
 }

@@ -1,4 +1,4 @@
-use crate::swap::types::*;
+use super::types::*;
 use anyhow::Result;
 use reqwest::Client;
 use std::time::Duration;

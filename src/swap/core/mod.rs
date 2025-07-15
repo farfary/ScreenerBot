@@ -1,5 +1,5 @@
 /// Core swap functionality and orchestration
-/// 
+///
 /// This module contains the main swap management logic:
 /// - SwapManager: Main orchestrator for swap operations
 /// - RouteSelector: Logic for selecting optimal routes and DEXes

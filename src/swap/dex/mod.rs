@@ -1,5 +1,5 @@
 /// DEX implementations for different protocols
-/// 
+///
 /// This module contains implementations for various DEX protocols:
 /// - Jupiter: Solana's premier DEX aggregator
 /// - Raydium: Popular AMM on Solana
@@ -29,11 +29,7 @@ pub fn create_dex_instances(config: &SwapConfig) -> DexInstances {
         None
     };
 
-    let gmgn = if config.gmgn.enabled {
-        Some(GmgnSwap::new(config.gmgn.clone()))
-    } else {
-        None
-    };
+    let gmgn = if config.gmgn.enabled { Some(GmgnSwap::new(config.gmgn.clone())) } else { None };
 
     DexInstances {
         jupiter,
@@ -53,22 +49,22 @@ impl DexInstances {
     /// Get the names of all available DEXes
     pub fn get_available_dex_names(&self) -> Vec<&'static str> {
         let mut names = Vec::new();
-        
+
         if self.jupiter.is_some() {
             names.push("jupiter");
         }
-        
+
         if self.raydium.is_some() {
             names.push("raydium");
         }
-        
+
         if self.gmgn.is_some() {
             names.push("gmgn");
         }
-        
+
         names
     }
-    
+
     /// Check if a specific DEX is available
     pub fn has_dex(&self, name: &str) -> bool {
         match name.to_lowercase().as_str() {

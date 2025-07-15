@@ -9,16 +9,24 @@ pub mod utils;
 pub mod testing;
 
 // Re-export main components
-pub use core::{SwapManager, RouteSelector};
-pub use dex::{DexInstances, JupiterSwap, RaydiumSwap, GmgnSwap};
+pub use core::{ SwapManager, RouteSelector };
+pub use dex::{ DexInstances, JupiterSwap, RaydiumSwap, GmgnSwap };
 pub use types::*;
 
 // Re-export specific utils to avoid conflicts
 pub use utils::{
-    sol_to_lamports, lamports_to_sol, usdc_to_micro_usdc, micro_usdc_to_usdc,
-    get_token_decimals, token_to_raw_amount, raw_amount_to_token,
-    create_swap_request, create_sol_to_usdc_request, create_usdc_to_sol_request,
-    format_amount, calculate_slippage
+    sol_to_lamports,
+    lamports_to_sol,
+    usdc_to_micro_usdc,
+    micro_usdc_to_usdc,
+    get_token_decimals,
+    token_to_raw_amount,
+    raw_amount_to_token,
+    create_swap_request,
+    create_sol_to_usdc_request,
+    create_usdc_to_sol_request,
+    format_amount,
+    calculate_slippage,
 };
 
 use crate::config::Config;
@@ -31,7 +39,7 @@ use std::sync::Arc;
 pub fn create_swap_manager(
     config: &Config,
     rpc_manager: Arc<RpcManager>,
-    transaction_manager: Arc<TransactionManager>,
+    transaction_manager: Arc<TransactionManager>
 ) -> Result<SwapManager> {
     let swap_config = SwapConfig {
         enabled: config.swap.enabled,

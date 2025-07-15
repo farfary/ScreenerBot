@@ -1,6 +1,9 @@
-use crate::swap::dex::{ GmgnSwap, JupiterSwap, RaydiumSwap };
-use crate::swap::core::routes::RouteSelector;
-use crate::swap::types::*;
+use super::gmgn::GmgnSwap;
+use super::jupiter::JupiterSwap;
+use super::raydium::RaydiumSwap;
+use super::routes::RouteSelector;
+use super::types::*;
+use crate::config::Config;
 use crate::rpc_manager::RpcManager;
 use crate::trading::transaction_manager::TransactionManager;
 use crate::types::TransactionType;
@@ -427,21 +430,10 @@ mod tests {
             RpcManager::new("https://api.mainnet-beta.solana.com".to_string(), vec![])
         );
         let database = Arc::new(Database::new("test.db").unwrap());
-
-        // Create a test config with a valid private key
-        let test_keypair = Keypair::new();
-        let mut test_config = Config::default();
-        test_config.main_wallet_private = bs58::encode(&test_keypair.to_bytes()).into_string();
-
-        let wallet_tracker = match WalletTracker::new(test_config.clone(), database.clone()) {
-            Ok(tracker) => Arc::new(tracker),
-            Err(_) => {
-                // Skip test if wallet creation fails (expected in test environment)
-                println!("Skipping test due to wallet creation failure in test environment");
-                return;
-            }
-        };
-
+        let test_config = Config::default();
+        let wallet_tracker = Arc::new(
+            WalletTracker::new(test_config.clone(), database.clone()).unwrap()
+        );
         let transaction_manager = Arc::new(
             TransactionManager::new(
                 TransactionManagerConfig {
@@ -469,21 +461,10 @@ mod tests {
             RpcManager::new("https://api.mainnet-beta.solana.com".to_string(), vec![])
         );
         let database = Arc::new(Database::new("test.db").unwrap());
-
-        // Create a test config with a valid private key
-        let test_keypair = Keypair::new();
-        let mut test_config = Config::default();
-        test_config.main_wallet_private = bs58::encode(&test_keypair.to_bytes()).into_string();
-
-        let wallet_tracker = match WalletTracker::new(test_config.clone(), database.clone()) {
-            Ok(tracker) => Arc::new(tracker),
-            Err(_) => {
-                // Skip test if wallet creation fails (expected in test environment)
-                println!("Skipping test due to wallet creation failure in test environment");
-                return;
-            }
-        };
-
+        let test_config = Config::default();
+        let wallet_tracker = Arc::new(
+            WalletTracker::new(test_config.clone(), database.clone()).unwrap()
+        );
         let transaction_manager = Arc::new(
             TransactionManager::new(
                 TransactionManagerConfig {
