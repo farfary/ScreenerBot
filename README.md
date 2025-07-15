@@ -1,8 +1,224 @@
-# ScreenerBot 🤖
+# ScreenerBot - Solana DEX Trading Bot
 
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org/)
 [![Solana](https://img.shields.io/badge/solana-2.3.1-purple.svg)](https://solana.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+A comprehensive Solana DEX trading bot with token discovery, wallet tracking, and automated trading capabilities.
+
+## Features
+
+### 🔍 Discovery Module
+
+- **Background Token Discovery**: Continuously scans multiple DEX sources (Raydium, Jupiter, Orca)
+- **Intelligent Filtering**: Configurable filters for liquidity, volume, market cap
+- **Caching System**: Stores discovered tokens in SQLite database
+- **Real-time Updates**: Keeps token data fresh with periodic updates
+
+### 💼 Wallet Tracker
+
+- **Position Monitoring**: Tracks all SPL token positions in your wallet
+- **P&L Calculation**: Real-time profit/loss tracking for each position
+- **Portfolio Overview**: Complete portfolio valuation and performance metrics
+- **Balance Tracking**: SOL and token balance monitoring
+
+### 📈 Trading Module (Optional)
+
+- **Signal Generation**: AI-driven buy/sell signals based on market analysis
+- **Risk Management**: Configurable stop-loss and take-profit levels
+- **Safety Features**: Trading disabled by default, requires explicit enabling
+- **Position Sizing**: Intelligent position sizing based on portfolio percentage
+
+### 🎨 Console UI
+
+- **Real-time Dashboard**: Beautiful console interface with live updates
+- **Color-coded Logging**: Easy-to-read colored output for different modules
+- **Status Display**: Live status of all modules and current positions
+- **Performance Metrics**: Discovery rates, portfolio performance, signal confidence
+
+## Installation
+
+1. **Clone the repository**:
+
+   ```bash
+   git clone <repository-url>
+   cd ScreenerBot
+   ```
+
+2. **Install Rust** (if not already installed):
+
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source $HOME/.cargo/env
+   ```
+
+3. **Build the project**:
+   ```bash
+   cargo build --release
+   ```
+
+## Configuration
+
+The bot uses `configs.json` for all configuration. Key settings include:
+
+### Wallet Configuration
+
+```json
+{
+  "main_wallet_private": "your_wallet_private_key_here",
+  "rpc_url": "https://api.mainnet-beta.solana.com"
+}
+```
+
+### Discovery Settings
+
+```json
+{
+  "discovery": {
+    "enabled": true,
+    "interval_seconds": 300,
+    "min_liquidity": 10000.0,
+    "min_volume_24h": 50000.0,
+    "sources": ["raydium", "jupiter", "orca"]
+  }
+}
+```
+
+### Trading Configuration (IMPORTANT: Disabled by default)
+
+```json
+{
+  "trader": {
+    "enabled": false, // MUST be explicitly enabled
+    "max_position_size": 0.1, // 10% of portfolio
+    "stop_loss_percentage": 5.0,
+    "take_profit_percentage": 20.0,
+    "min_confidence_score": 0.7
+  }
+}
+```
+
+## Usage
+
+1. **First Run**:
+
+   ```bash
+   cargo run
+   ```
+
+   This will create a default `configs.json` file.
+
+2. **Configure Your Wallet**:
+
+   - Edit `configs.json` and add your wallet private key
+   - Adjust discovery and trading parameters as needed
+
+3. **Run the Bot**:
+
+   ```bash
+   cargo run --release
+   ```
+
+4. **Monitor**: The console will show real-time status of all modules
+
+## Safety Features
+
+- **Trading Disabled by Default**: The trading module is disabled by default and must be explicitly enabled
+- **Configuration Validation**: Comprehensive validation of all configuration parameters
+- **Database Backups**: All discovered tokens and positions are stored in SQLite for persistence
+- **Error Handling**: Robust error handling with detailed logging
+- **Graceful Shutdown**: Ctrl+C handling for clean shutdown
+
+## Module Architecture
+
+### Discovery Module (`src/discovery.rs`)
+
+- Token discovery from multiple DEX sources
+- Filtering and validation
+- Database caching
+- Background operation
+
+### Wallet Tracker (`src/wallet.rs`)
+
+- SPL token account monitoring
+- Position tracking and P&L calculation
+- Real-time balance updates
+
+### Trader (`src/trader.rs`)
+
+- Market analysis and signal generation
+- Risk management
+- Trade execution framework (placeholder)
+
+### Database (`src/database.rs`)
+
+- SQLite-based persistence
+- Token information storage
+- Position tracking
+- Performance metrics
+
+### Logger (`src/logger.rs`)
+
+- Beautiful console output
+- Color-coded messages
+- Module-specific formatting
+
+## Data Storage
+
+All data is stored in `cache.db` (SQLite database):
+
+- **Tokens**: Discovered token information, prices, liquidity
+- **Positions**: Wallet positions and P&L tracking
+- **Stats**: Discovery statistics and performance metrics
+
+## Development
+
+### Adding New DEX Sources
+
+To add a new DEX source:
+
+1. Implement the discovery logic in `src/discovery.rs`
+2. Add the source name to the `sources` array in config
+3. Implement the specific API calls for that DEX
+
+### Extending Trading Logic
+
+The trading module is designed to be extensible:
+
+1. Add new analysis methods in `src/trader.rs`
+2. Implement custom signal generation logic
+3. Add new risk management parameters
+
+## Security Considerations
+
+- **Private Key Storage**: Store private keys securely, consider using environment variables
+- **RPC Endpoints**: Use reliable RPC endpoints, consider rate limiting
+- **Trading Limits**: Always set appropriate position sizes and stop losses
+- **Testing**: Test thoroughly on devnet before using on mainnet
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Disclaimer
+
+This software is for educational and research purposes. Trading cryptocurrencies involves significant risk. Always do your own research and never invest more than you can afford to lose. The authors are not responsible for any financial losses incurred while using this software.
+
+## Support
+
+For issues, questions, or contributions, please open an issue on GitHub.
+
+---
+
+**⚠️ IMPORTANT**: Always start with `"trader": { "enabled": false }` in your configuration and thoroughly test the discovery and wallet tracking features before enabling trading functionality.
 
 **ScreenerBot** is an advanced, automated cryptocurrency trading bot specifically designed for the Solana ecosystem. It provides intelligent token discovery, risk assessment, and automated trading capabilities with comprehensive portfolio management.
 
