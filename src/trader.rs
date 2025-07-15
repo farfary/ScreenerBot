@@ -184,11 +184,11 @@ impl Trader {
 
         // Check for profit taking
         if let Some(pnl_pct) = position.pnl_percentage {
-            if pnl_pct >= self.config.take_profit_percentage {
+            if pnl_pct >= self.config.min_profit_percentage {
                 confidence += 0.8;
                 signal_type = SignalType::Sell;
                 reasons.push(format!("Take profit: {:.1}%", pnl_pct));
-            } else if pnl_pct <= -self.config.stop_loss_percentage {
+            } else if pnl_pct <= self.config.max_loss_percentage {
                 confidence += 0.9;
                 signal_type = SignalType::Sell;
                 reasons.push(format!("Stop loss: {:.1}%", pnl_pct));

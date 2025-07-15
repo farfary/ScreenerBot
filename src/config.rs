@@ -36,11 +36,25 @@ pub struct DiscoveryConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraderConfig {
     pub enabled: bool,
-    pub max_position_size: f64,
-    pub stop_loss_percentage: f64,
-    pub take_profit_percentage: f64,
+    pub trade_size_sol: f64,
+    pub max_open_positions: u32,
+    pub min_profit_percentage: f64,
+    pub max_loss_percentage: f64,
     pub max_slippage: f64,
     pub min_confidence_score: f64,
+    pub position_check_interval_secs: u64,
+    pub time_based_profit: TimeProfitConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeProfitConfig {
+    pub enabled: bool,
+    pub quick_profit_threshold_mins: u64,
+    pub quick_profit_target: f64,
+    pub medium_profit_threshold_hours: u64,
+    pub medium_profit_target: f64,
+    pub long_profit_threshold_hours: u64,
+    pub long_profit_target: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +96,15 @@ pub struct TradingConfig {
     pub max_slippage: f64,
     pub min_liquidity_usd: f64,
     pub max_position_size_sol: f64,
+    pub transaction_manager: TransactionManagerConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TransactionManagerConfig {
+    pub cache_transactions: bool,
+    pub cache_duration_hours: u64,
+    pub track_pnl: bool,
+    pub auto_calculate_profits: bool,
 }
 
 impl Default for Config {
@@ -102,11 +125,22 @@ impl Default for Config {
             },
             trader: TraderConfig {
                 enabled: false, // Start disabled for safety
-                max_position_size: 0.1, // 10% of wallet
-                stop_loss_percentage: 5.0,
-                take_profit_percentage: 20.0,
+                trade_size_sol: 0.001,
+                max_open_positions: 10,
+                min_profit_percentage: 3.0,
+                max_loss_percentage: -70.0,
                 max_slippage: 1.0,
                 min_confidence_score: 0.7,
+                position_check_interval_secs: 30,
+                time_based_profit: TimeProfitConfig {
+                    enabled: true,
+                    quick_profit_threshold_mins: 5,
+                    quick_profit_target: 100.0,
+                    medium_profit_threshold_hours: 1,
+                    medium_profit_target: 10.0,
+                    long_profit_threshold_hours: 24,
+                    long_profit_target: 3.0,
+                },
             },
             database: DatabaseConfig {
                 path: "cache.db".to_string(),
@@ -137,7 +171,13 @@ impl Default for Config {
                 enabled: false, // Disabled by default for safety
                 max_slippage: 0.05, // 5%
                 min_liquidity_usd: 50000.0, // $50k minimum liquidity
-                max_position_size_sol: 1.0, // 1 SOL max position
+                max_position_size_sol: 0.001, // 0.001 SOL max position
+                transaction_manager: TransactionManagerConfig {
+                    cache_transactions: true,
+                    cache_duration_hours: 720, // 30 days
+                    track_pnl: true,
+                    auto_calculate_profits: true,
+                },
             },
         }
     }
