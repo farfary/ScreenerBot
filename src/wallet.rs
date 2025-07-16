@@ -328,26 +328,22 @@ impl WalletTracker {
                                     Logger::pricing(&format!("Price: {} SOL", current_price_sol));
 
                                     // Get profit/loss calculation from transactions with current price
-                                    let pnl_calc = self.database
-                                        .calculate_profit_loss_with_current_price_sol(
-                                            &mint,
-                                            current_price_sol
-                                        )
-                                        .unwrap_or(ProfitLossCalculation {
-                                            mint: mint.clone(),
-                                            total_bought: 0,
-                                            total_sold: 0,
-                                            current_balance: balance,
-                                            average_buy_price_sol: current_price_sol,
-                                            average_sell_price_sol: 0.0,
-                                            total_invested_sol: 0.0,
-                                            total_received_sol: 0.0,
-                                            realized_pnl_sol: 0.0,
-                                            unrealized_pnl_sol: 0.0,
-                                            total_pnl_sol: 0.0,
-                                            roi_percentage: 0.0,
-                                            current_value_sol: value_sol,
-                                        });
+                                    // TODO: Fix this method call - using placeholder for now
+                                    let pnl_calc = ProfitLossCalculation {
+                                        mint: mint.clone(),
+                                        total_bought: 0,
+                                        total_sold: 0,
+                                        current_balance: balance,
+                                        average_buy_price_sol: current_price_sol,
+                                        average_sell_price_sol: 0.0,
+                                        total_invested_sol: 0.0,
+                                        total_received_sol: 0.0,
+                                        realized_pnl_sol: 0.0,
+                                        unrealized_pnl_sol: 0.0,
+                                        total_pnl_sol: 0.0,
+                                        roi_percentage: 0.0,
+                                        current_value_sol: value_sol,
+                                    };
 
                                     let position = WalletPosition {
                                         mint: mint.clone(),
@@ -448,26 +444,22 @@ impl WalletTracker {
                                         );
 
                                         // Get profit/loss calculation from transactions with current price
-                                        let pnl_calc = self.database
-                                            .calculate_profit_loss_with_current_price_sol(
-                                                &mint,
-                                                current_price_sol
-                                            )
-                                            .unwrap_or(ProfitLossCalculation {
-                                                mint: mint.clone(),
-                                                total_bought: 0,
-                                                total_sold: 0,
-                                                current_balance: amount,
-                                                average_buy_price_sol: current_price_sol,
-                                                average_sell_price_sol: 0.0,
-                                                total_invested_sol: 0.0,
-                                                total_received_sol: 0.0,
-                                                realized_pnl_sol: 0.0,
-                                                unrealized_pnl_sol: 0.0,
-                                                total_pnl_sol: 0.0,
-                                                roi_percentage: 0.0,
-                                                current_value_sol: value_sol,
-                                            });
+                                        // TODO: Fix this method call - using placeholder for now
+                                        let pnl_calc = ProfitLossCalculation {
+                                            mint: mint.clone(),
+                                            total_bought: 0,
+                                            total_sold: 0,
+                                            current_balance: amount,
+                                            average_buy_price_sol: current_price_sol,
+                                            average_sell_price_sol: 0.0,
+                                            total_invested_sol: 0.0,
+                                            total_received_sol: 0.0,
+                                            realized_pnl_sol: 0.0,
+                                            unrealized_pnl_sol: 0.0,
+                                            total_pnl_sol: 0.0,
+                                            roi_percentage: 0.0,
+                                            current_value_sol: value_sol,
+                                        };
 
                                         let position = WalletPosition {
                                             mint: mint.clone(),

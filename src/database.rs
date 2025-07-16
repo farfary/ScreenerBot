@@ -655,148 +655,110 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_wallet_transactions(
-        &self,
-        mint: Option<&str>
-    ) -> Result<Vec<crate::types::WalletTransaction>> {
-        let conn = self.conn.lock().unwrap();
-
-        if let Some(mint_str) = mint {
-            let query =
-                "SELECT signature, mint, transaction_type, amount, price_usd, value_usd, sol_amount, fee, block_time, slot, created_at 
-                         FROM wallet_transactions 
-                         WHERE mint = ?1 
-                         ORDER BY block_time DESC";
-
-            let mut stmt = conn.prepare(query)?;
-            let transaction_iter = stmt.query_map([mint_str], |row| {
-                self.row_to_wallet_transaction(row)
-            })?;
-
-            let mut transactions = Vec::new();
-            for transaction in transaction_iter {
-                transactions.push(transaction?);
-            }
-
-            Ok(transactions)
-        } else {
-            let query =
-                "SELECT signature, mint, transaction_type, amount, price_usd, value_usd, sol_amount, fee, block_time, slot, created_at 
-                         FROM wallet_transactions 
-                         ORDER BY block_time DESC";
-
-            let mut stmt = conn.prepare(query)?;
-            let transaction_iter = stmt.query_map([], |row| {
-                self.row_to_wallet_transaction(row)
-            })?;
-
-            let mut transactions = Vec::new();
-            for transaction in transaction_iter {
-                transactions.push(transaction?);
-            }
-
-            Ok(transactions)
-        }
-    }
-
+    /// Check if a transaction already exists in the database
     pub fn transaction_exists(&self, signature: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-
-        let mut stmt = conn.prepare(
-            "SELECT COUNT(*) FROM wallet_transactions WHERE signature = ?1"
-        )?;
-        let count: i64 = stmt.query_row(params![signature], |row| row.get(0))?;
-
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM wallet_transactions WHERE signature = ?1")?;
+        let count: i64 = stmt.query_row([signature], |row| row.get(0))?;
         Ok(count > 0)
     }
 
-    pub fn get_transactions_for_mint(
-        &self,
-        mint: &str
-    ) -> Result<Vec<crate::types::WalletTransaction>> {
-        self.get_wallet_transactions(Some(mint))
-    }
+    /// Get all wallet transactions for a specific mint, ordered by block_time
+    pub fn get_wallet_transactions_for_mint(&self, mint: &str) -> Result<Vec<crate::types::WalletTransaction>> {
+        let conn = self.conn.lock().unwrap();
+        let query = "SELECT signature, mint, transaction_type, amount, price_sol, value_sol, sol_amount, fee, block_time, slot, created_at 
+                     FROM wallet_transactions 
+                     WHERE mint = ?1 
+                     ORDER BY block_time ASC";
+        
+        let mut stmt = conn.prepare(query)?;
+        let transaction_iter = stmt.query_map([mint], |row| {
+            self.row_to_wallet_transaction_with_sol(row)
+        })?;
 
-    pub fn calculate_profit_loss(&self, mint: &str) -> Result<crate::types::ProfitLossCalculation> {
-        let transactions = self.get_transactions_for_mint(mint)?;
-
-        let mut total_bought = 0u64;
-        let mut total_sold = 0u64;
-        let mut total_invested = 0.0;
-        let mut total_received = 0.0;
-        let mut buy_values = Vec::new();
-        let mut sell_values = Vec::new();
-
-        for tx in &transactions {
-            match tx.transaction_type {
-                crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
-                    total_bought += tx.amount;
-                    if let Some(value) = tx.value_sol {
-                        total_invested += value;
-                        buy_values.push((tx.amount, value));
-                    }
-                }
-                crate::types::TransactionType::Sell => {
-                    total_sold += tx.amount;
-                    if let Some(value) = tx.value_sol {
-                        total_received += value;
-                        sell_values.push((tx.amount, value));
-                    }
-                }
-                _ => {}
-            }
+        let mut transactions = Vec::new();
+        for transaction in transaction_iter {
+            transactions.push(transaction?);
         }
-
-        let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
-
-        let average_buy_price = if total_bought > 0 && total_invested > 0.0 {
-            total_invested / (total_bought as f64)
-        } else {
-            0.0
-        };
-
-        let average_sell_price = if total_sold > 0 && total_received > 0.0 {
-            total_received / (total_sold as f64)
-        } else {
-            0.0
-        };
-
-        let realized_pnl = total_received - (total_sold as f64) * average_buy_price;
-
-        // For unrealized PnL, we need current price (placeholder for now)
-        let current_price = 0.0; // This should be fetched from pricing manager
-        let current_value = (current_balance as f64) * current_price;
-        let unrealized_pnl = current_value - (current_balance as f64) * average_buy_price;
-
-        let total_pnl = realized_pnl + unrealized_pnl;
-        let roi_percentage = if total_invested > 0.0 {
-            (total_pnl / total_invested) * 100.0
-        } else {
-            0.0
-        };
-
-        Ok(crate::types::ProfitLossCalculation {
-            mint: mint.to_string(),
-            total_bought,
-            total_sold,
-            current_balance,
-            average_buy_price_sol: average_buy_price,
-            average_sell_price_sol: average_sell_price,
-            total_invested_sol: total_invested,
-            total_received_sol: total_received,
-            realized_pnl_sol: realized_pnl,
-            unrealized_pnl_sol: unrealized_pnl,
-            total_pnl_sol: total_pnl,
-            roi_percentage,
-            current_value_sol: current_value,
-        })
+        Ok(transactions)
     }
 
-    fn row_to_wallet_transaction(
-        &self,
-        row: &Row
-    ) -> Result<crate::types::WalletTransaction, rusqlite::Error> {
-        let transaction_type_str: String = row.get("transaction_type")?;
+    /// Get all unique mints from transaction history
+    pub fn get_all_transaction_mints(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let query = "SELECT DISTINCT mint FROM wallet_transactions ORDER BY mint";
+        
+        let mut stmt = conn.prepare(query)?;
+        let mint_iter = stmt.query_map([], |row| {
+            Ok(row.get::<_, String>(0)?)
+        })?;
+
+        let mut mints = Vec::new();
+        for mint in mint_iter {
+            mints.push(mint?);
+        }
+        Ok(mints)
+    }
+
+    /// Get the latest transaction signature (for pagination)
+    pub fn get_latest_transaction_signature(&self) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let query = "SELECT signature FROM wallet_transactions ORDER BY block_time DESC, slot DESC LIMIT 1";
+        
+        let mut stmt = conn.prepare(query)?;
+        match stmt.query_row([], |row| Ok(row.get::<_, String>(0)?)) {
+            Ok(signature) => Ok(Some(signature)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Get historical price for a token at a specific timestamp
+    pub fn get_historical_price(&self, mint: &str, block_time: i64) -> Result<f64> {
+        let conn = self.conn.lock().unwrap();
+        
+        // Try to find a price within 1 hour of the requested time
+        let query = "SELECT price_sol FROM token_prices 
+                     WHERE address = ?1 AND ABS(timestamp - ?2) <= 3600 
+                     ORDER BY ABS(timestamp - ?2) LIMIT 1";
+        
+        let mut stmt = conn.prepare(query)?;
+        match stmt.query_row(params![mint, block_time], |row| {
+            Ok(row.get::<_, Option<f64>>(0)?.unwrap_or(0.0))
+        }) {
+            Ok(price) => Ok(price),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0.0),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Get transaction count for debugging
+    pub fn get_transaction_count(&self) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM wallet_transactions")?;
+        let count: i64 = stmt.query_row([], |row| row.get(0))?;
+        Ok(count)
+    }
+
+    /// Clean old transactions (keep only the most recent N transactions)
+    pub fn clean_old_transactions(&self, keep_count: usize) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        
+        // Delete all but the most recent transactions
+        let query = "DELETE FROM wallet_transactions 
+                     WHERE signature NOT IN (
+                         SELECT signature FROM wallet_transactions 
+                         ORDER BY block_time DESC, slot DESC 
+                         LIMIT ?1
+                     )";
+        
+        let deleted = conn.execute(query, params![keep_count as i64])?;
+        Ok(deleted as i64)
+    }
+
+    /// Row to WalletTransaction with SOL-based fields
+    fn row_to_wallet_transaction_with_sol(&self, row: &Row) -> Result<crate::types::WalletTransaction, rusqlite::Error> {
+        let transaction_type_str: String = row.get(2)?;
         let transaction_type = match transaction_type_str.as_str() {
             "Buy" => crate::types::TransactionType::Buy,
             "Sell" => crate::types::TransactionType::Sell,
@@ -805,187 +767,20 @@ impl Database {
             _ => crate::types::TransactionType::Transfer,
         };
 
-        let created_at_str: String = row.get("created_at")?;
-        let created_at = chrono::DateTime
-            ::parse_from_rfc3339(&created_at_str)
-            .map_err(|_|
-                rusqlite::Error::InvalidColumnType(
-                    10,
-                    "created_at".to_string(),
-                    rusqlite::types::Type::Text
-                )
-            )?
-            .with_timezone(&chrono::Utc);
-
         Ok(crate::types::WalletTransaction {
-            signature: row.get("signature")?,
-            mint: row.get("mint")?,
+            signature: row.get(0)?,
+            mint: row.get(1)?,
             transaction_type,
-            amount: row.get::<_, i64>("amount")? as u64,
-            price_sol: row.get("price_sol")?,
-            value_sol: row.get("value_sol")?,
-            sol_amount: row.get::<_, Option<i64>>("sol_amount")?.map(|x| x as u64),
-            fee: row.get::<_, Option<i64>>("fee")?.map(|x| x as u64),
-            block_time: row.get("block_time")?,
-            slot: row.get::<_, i64>("slot")? as u64,
-            created_at,
-        })
-    }
-
-    pub fn calculate_profit_loss_with_current_price(
-        &self,
-        mint: &str,
-        current_price: f64
-    ) -> Result<crate::types::ProfitLossCalculation> {
-        let transactions = self.get_transactions_for_mint(mint)?;
-
-        let mut total_bought = 0u64;
-        let mut total_sold = 0u64;
-        let mut total_invested_sol = 0.0;
-        let mut total_received_sol = 0.0;
-        let mut buy_values = Vec::new();
-        let mut sell_values = Vec::new();
-
-        for tx in &transactions {
-            match tx.transaction_type {
-                crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
-                    total_bought += tx.amount;
-                    if let Some(value_sol) = tx.value_sol {
-                        total_invested_sol += value_sol;
-                        buy_values.push((tx.amount, value_sol));
-                    }
-                }
-                crate::types::TransactionType::Sell => {
-                    total_sold += tx.amount;
-                    if let Some(value_sol) = tx.value_sol {
-                        total_received_sol += value_sol;
-                        sell_values.push((tx.amount, value_sol));
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
-
-        let average_buy_price = if total_bought > 0 && total_invested_sol > 0.0 {
-            total_invested_sol / (total_bought as f64)
-        } else {
-            current_price // Use current price as fallback
-        };
-
-        let average_sell_price = if total_sold > 0 && total_received_sol > 0.0 {
-            total_received_sol / (total_sold as f64)
-        } else {
-            0.0
-        };
-
-        let realized_pnl = total_received_sol - (total_sold as f64) * average_buy_price;
-
-        // Calculate unrealized PnL with current price
-        let current_value = (current_balance as f64) * current_price;
-        let unrealized_pnl = current_value - (current_balance as f64) * average_buy_price;
-
-        let total_pnl = realized_pnl + unrealized_pnl;
-        let roi_percentage = if total_invested_sol > 0.0 {
-            (total_pnl / total_invested_sol) * 100.0
-        } else {
-            0.0
-        };
-
-        Ok(crate::types::ProfitLossCalculation {
-            mint: mint.to_string(),
-            total_bought,
-            total_sold,
-            current_balance,
-            average_buy_price_sol: average_buy_price,
-            average_sell_price_sol: average_sell_price,
-            total_invested_sol: total_invested_sol,
-            total_received_sol: total_received_sol,
-            realized_pnl_sol: realized_pnl,
-            unrealized_pnl_sol: unrealized_pnl,
-            total_pnl_sol: total_pnl,
-            roi_percentage,
-            current_value_sol: current_value,
-        })
-    }
-
-    pub fn calculate_profit_loss_with_current_price_sol(
-        &self,
-        mint: &str,
-        current_price_sol: f64
-    ) -> Result<crate::types::ProfitLossCalculation> {
-        let transactions = self.get_transactions_for_mint(mint)?;
-
-        let mut total_bought = 0u64;
-        let mut total_sold = 0u64;
-        let mut total_invested_sol = 0.0;
-        let mut total_received_sol = 0.0;
-        let mut buy_values = Vec::new();
-        let mut sell_values = Vec::new();
-
-        for tx in &transactions {
-            match tx.transaction_type {
-                crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
-                    total_bought += tx.amount;
-                    if let Some(value_sol) = tx.value_sol {
-                        total_invested_sol += value_sol;
-                        buy_values.push((tx.amount, value_sol));
-                    }
-                }
-                crate::types::TransactionType::Sell => {
-                    total_sold += tx.amount;
-                    if let Some(value_sol) = tx.value_sol {
-                        total_received_sol += value_sol;
-                        sell_values.push((tx.amount, value_sol));
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
-
-        let average_buy_price_sol = if total_bought > 0 && total_invested_sol > 0.0 {
-            total_invested_sol / (total_bought as f64)
-        } else {
-            current_price_sol // Use current price as fallback
-        };
-
-        let average_sell_price_sol = if total_sold > 0 && total_received_sol > 0.0 {
-            total_received_sol / (total_sold as f64)
-        } else {
-            0.0
-        };
-
-        let realized_pnl_sol = total_received_sol - (total_sold as f64) * average_buy_price_sol;
-
-        // Calculate unrealized PnL with current price in SOL
-        let current_value_sol = (current_balance as f64) * current_price_sol;
-        let unrealized_pnl_sol =
-            current_value_sol - (current_balance as f64) * average_buy_price_sol;
-
-        let total_pnl_sol = realized_pnl_sol + unrealized_pnl_sol;
-        let roi_percentage = if total_invested_sol > 0.0 {
-            (total_pnl_sol / total_invested_sol) * 100.0
-        } else {
-            0.0
-        };
-
-        Ok(crate::types::ProfitLossCalculation {
-            mint: mint.to_string(),
-            total_bought,
-            total_sold,
-            current_balance,
-            average_buy_price_sol,
-            average_sell_price_sol,
-            total_invested_sol,
-            total_received_sol,
-            realized_pnl_sol,
-            unrealized_pnl_sol,
-            total_pnl_sol,
-            roi_percentage,
-            current_value_sol,
+            amount: row.get::<_, i64>(3)? as u64,
+            price_sol: row.get(4)?,
+            value_sol: row.get(5)?,
+            sol_amount: row.get::<_, Option<i64>>(6)?.map(|x| x as u64),
+            fee: row.get::<_, Option<i64>>(7)?.map(|x| x as u64),
+            block_time: row.get(8)?,
+            slot: row.get::<_, i64>(9)? as u64,
+            created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
+                .unwrap()
+                .with_timezone(&Utc),
         })
     }
 }

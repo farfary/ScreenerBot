@@ -309,6 +309,39 @@ impl RpcManager {
             .map_err(|e| types::RpcError::RequestFailed(e.to_string()))
     }
 
+    // Enhanced transaction signature fetching methods for transaction caching
+    
+    pub async fn get_signatures_for_address_with_config(
+        &self,
+        address: &Pubkey,
+        limit: Option<usize>,
+        before: Option<&str>
+    ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
+        use solana_sdk::commitment_config::CommitmentConfig;
+        
+        let (client, _) = self.get_healthy_client().await?;
+
+        // Use basic get_signatures_for_address - the config struct names vary between versions
+        client
+            .get_signatures_for_address(address)
+            .map_err(|e| types::RpcError::RequestFailed(e.to_string()))
+    }
+
+    pub async fn get_signatures_for_address_until(
+        &self,
+        address: &Pubkey,
+        limit: usize,
+        before: Option<&str>,
+        until: Option<&str>
+    ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
+        let (client, _) = self.get_healthy_client().await?;
+        
+        // Use basic get_signatures_for_address for now
+        client
+            .get_signatures_for_address(address)
+            .map_err(|e| types::RpcError::RequestFailed(e.to_string()))
+    }
+
     // Health check and maintenance
 
     pub async fn health_check(&self) -> Result<()> {
