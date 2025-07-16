@@ -123,6 +123,24 @@ impl Database {
             []
         )?;
 
+        // Transaction tracking table - unlimited caching
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS wallet_transactions (
+                signature TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                transaction_type TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                price_usd REAL,
+                value_usd REAL,
+                sol_amount INTEGER,
+                fee INTEGER,
+                block_time INTEGER NOT NULL,
+                slot INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )",
+            []
+        )?;
+
         // Create indexes for pricing tables
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_token_prices_timestamp ON token_prices(timestamp)",
@@ -143,6 +161,22 @@ impl Database {
         )?;
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_is_active ON tokens(is_active)", [])?;
+
+        // Create indexes for transaction tracking
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_transactions_mint ON wallet_transactions(mint)",
+            []
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_transactions_block_time ON wallet_transactions(block_time)",
+            []
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_transactions_type ON wallet_transactions(transaction_type)",
+            []
+        )?;
 
         Ok(())
     }
@@ -545,9 +579,306 @@ impl Database {
             current_price: row.get(5)?,
             pnl: row.get(6)?,
             pnl_percentage: row.get(7)?,
+            realized_pnl: Some(0.0), // Default values for new fields
+            unrealized_pnl: Some(0.0),
+            total_invested: Some(0.0),
+            average_entry_price: row.get(4)?, // Use entry_price as fallback
             last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
                 .unwrap()
                 .with_timezone(&Utc),
+        })
+    }
+
+    // Transaction tracking methods
+    pub fn save_wallet_transaction(
+        &self,
+        transaction: &crate::types::WalletTransaction
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        let transaction_type_str = match transaction.transaction_type {
+            crate::types::TransactionType::Buy => "Buy",
+            crate::types::TransactionType::Sell => "Sell",
+            crate::types::TransactionType::Transfer => "Transfer",
+            crate::types::TransactionType::Receive => "Receive",
+        };
+
+        conn
+            .execute(
+                "INSERT OR REPLACE INTO wallet_transactions 
+             (signature, mint, transaction_type, amount, price_usd, value_usd, sol_amount, fee, block_time, slot, created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    transaction.signature,
+                    transaction.mint,
+                    transaction_type_str,
+                    transaction.amount as i64,
+                    transaction.price_usd,
+                    transaction.value_usd,
+                    transaction.sol_amount.map(|x| x as i64),
+                    transaction.fee.map(|x| x as i64),
+                    transaction.block_time,
+                    transaction.slot as i64,
+                    transaction.created_at.to_rfc3339()
+                ]
+            )
+            .context("Failed to save wallet transaction")?;
+
+        Ok(())
+    }
+
+    pub fn get_wallet_transactions(
+        &self,
+        mint: Option<&str>
+    ) -> Result<Vec<crate::types::WalletTransaction>> {
+        let conn = self.conn.lock().unwrap();
+
+        if let Some(mint_str) = mint {
+            let query =
+                "SELECT signature, mint, transaction_type, amount, price_usd, value_usd, sol_amount, fee, block_time, slot, created_at 
+                         FROM wallet_transactions 
+                         WHERE mint = ?1 
+                         ORDER BY block_time DESC";
+
+            let mut stmt = conn.prepare(query)?;
+            let transaction_iter = stmt.query_map([mint_str], |row| {
+                self.row_to_wallet_transaction(row)
+            })?;
+
+            let mut transactions = Vec::new();
+            for transaction in transaction_iter {
+                transactions.push(transaction?);
+            }
+
+            Ok(transactions)
+        } else {
+            let query =
+                "SELECT signature, mint, transaction_type, amount, price_usd, value_usd, sol_amount, fee, block_time, slot, created_at 
+                         FROM wallet_transactions 
+                         ORDER BY block_time DESC";
+
+            let mut stmt = conn.prepare(query)?;
+            let transaction_iter = stmt.query_map([], |row| {
+                self.row_to_wallet_transaction(row)
+            })?;
+
+            let mut transactions = Vec::new();
+            for transaction in transaction_iter {
+                transactions.push(transaction?);
+            }
+
+            Ok(transactions)
+        }
+    }
+
+    pub fn transaction_exists(&self, signature: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT COUNT(*) FROM wallet_transactions WHERE signature = ?1"
+        )?;
+        let count: i64 = stmt.query_row(params![signature], |row| row.get(0))?;
+
+        Ok(count > 0)
+    }
+
+    pub fn get_transactions_for_mint(
+        &self,
+        mint: &str
+    ) -> Result<Vec<crate::types::WalletTransaction>> {
+        self.get_wallet_transactions(Some(mint))
+    }
+
+    pub fn calculate_profit_loss(&self, mint: &str) -> Result<crate::types::ProfitLossCalculation> {
+        let transactions = self.get_transactions_for_mint(mint)?;
+
+        let mut total_bought = 0u64;
+        let mut total_sold = 0u64;
+        let mut total_invested = 0.0;
+        let mut total_received = 0.0;
+        let mut buy_values = Vec::new();
+        let mut sell_values = Vec::new();
+
+        for tx in &transactions {
+            match tx.transaction_type {
+                crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
+                    total_bought += tx.amount;
+                    if let Some(value) = tx.value_usd {
+                        total_invested += value;
+                        buy_values.push((tx.amount, value));
+                    }
+                }
+                crate::types::TransactionType::Sell => {
+                    total_sold += tx.amount;
+                    if let Some(value) = tx.value_usd {
+                        total_received += value;
+                        sell_values.push((tx.amount, value));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
+
+        let average_buy_price = if total_bought > 0 && total_invested > 0.0 {
+            total_invested / (total_bought as f64)
+        } else {
+            0.0
+        };
+
+        let average_sell_price = if total_sold > 0 && total_received > 0.0 {
+            total_received / (total_sold as f64)
+        } else {
+            0.0
+        };
+
+        let realized_pnl = total_received - (total_sold as f64) * average_buy_price;
+
+        // For unrealized PnL, we need current price (placeholder for now)
+        let current_price = 0.0; // This should be fetched from pricing manager
+        let current_value = (current_balance as f64) * current_price;
+        let unrealized_pnl = current_value - (current_balance as f64) * average_buy_price;
+
+        let total_pnl = realized_pnl + unrealized_pnl;
+        let roi_percentage = if total_invested > 0.0 {
+            (total_pnl / total_invested) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(crate::types::ProfitLossCalculation {
+            mint: mint.to_string(),
+            total_bought,
+            total_sold,
+            current_balance,
+            average_buy_price,
+            average_sell_price,
+            total_invested,
+            total_received,
+            realized_pnl,
+            unrealized_pnl,
+            total_pnl,
+            roi_percentage,
+            current_value,
+        })
+    }
+
+    fn row_to_wallet_transaction(
+        &self,
+        row: &Row
+    ) -> Result<crate::types::WalletTransaction, rusqlite::Error> {
+        let transaction_type_str: String = row.get("transaction_type")?;
+        let transaction_type = match transaction_type_str.as_str() {
+            "Buy" => crate::types::TransactionType::Buy,
+            "Sell" => crate::types::TransactionType::Sell,
+            "Transfer" => crate::types::TransactionType::Transfer,
+            "Receive" => crate::types::TransactionType::Receive,
+            _ => crate::types::TransactionType::Transfer,
+        };
+
+        let created_at_str: String = row.get("created_at")?;
+        let created_at = chrono::DateTime
+            ::parse_from_rfc3339(&created_at_str)
+            .map_err(|_|
+                rusqlite::Error::InvalidColumnType(
+                    10,
+                    "created_at".to_string(),
+                    rusqlite::types::Type::Text
+                )
+            )?
+            .with_timezone(&chrono::Utc);
+
+        Ok(crate::types::WalletTransaction {
+            signature: row.get("signature")?,
+            mint: row.get("mint")?,
+            transaction_type,
+            amount: row.get::<_, i64>("amount")? as u64,
+            price_usd: row.get("price_usd")?,
+            value_usd: row.get("value_usd")?,
+            sol_amount: row.get::<_, Option<i64>>("sol_amount")?.map(|x| x as u64),
+            fee: row.get::<_, Option<i64>>("fee")?.map(|x| x as u64),
+            block_time: row.get("block_time")?,
+            slot: row.get::<_, i64>("slot")? as u64,
+            created_at,
+        })
+    }
+
+    pub fn calculate_profit_loss_with_current_price(
+        &self,
+        mint: &str,
+        current_price: f64
+    ) -> Result<crate::types::ProfitLossCalculation> {
+        let transactions = self.get_transactions_for_mint(mint)?;
+
+        let mut total_bought = 0u64;
+        let mut total_sold = 0u64;
+        let mut total_invested = 0.0;
+        let mut total_received = 0.0;
+        let mut buy_values = Vec::new();
+        let mut sell_values = Vec::new();
+
+        for tx in &transactions {
+            match tx.transaction_type {
+                crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
+                    total_bought += tx.amount;
+                    if let Some(value) = tx.value_usd {
+                        total_invested += value;
+                        buy_values.push((tx.amount, value));
+                    }
+                }
+                crate::types::TransactionType::Sell => {
+                    total_sold += tx.amount;
+                    if let Some(value) = tx.value_usd {
+                        total_received += value;
+                        sell_values.push((tx.amount, value));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
+
+        let average_buy_price = if total_bought > 0 && total_invested > 0.0 {
+            total_invested / (total_bought as f64)
+        } else {
+            current_price // Use current price as fallback
+        };
+
+        let average_sell_price = if total_sold > 0 && total_received > 0.0 {
+            total_received / (total_sold as f64)
+        } else {
+            0.0
+        };
+
+        let realized_pnl = total_received - (total_sold as f64) * average_buy_price;
+
+        // Calculate unrealized PnL with current price
+        let current_value = (current_balance as f64) * current_price;
+        let unrealized_pnl = current_value - (current_balance as f64) * average_buy_price;
+
+        let total_pnl = realized_pnl + unrealized_pnl;
+        let roi_percentage = if total_invested > 0.0 {
+            (total_pnl / total_invested) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(crate::types::ProfitLossCalculation {
+            mint: mint.to_string(),
+            total_bought,
+            total_sold,
+            current_balance,
+            average_buy_price,
+            average_sell_price,
+            total_invested,
+            total_received,
+            realized_pnl,
+            unrealized_pnl,
+            total_pnl,
+            roi_percentage,
+            current_value,
         })
     }
 }

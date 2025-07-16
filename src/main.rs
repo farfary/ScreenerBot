@@ -68,8 +68,9 @@ async fn main() -> Result<()> {
     Logger::success("Discovery module initialized");
 
     // Wallet tracker (with pricing manager integration)
-    let wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
-        Ok(tracker) => {
+    let mut wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
+        Ok(mut tracker) => {
+            tracker.set_pricing_manager(Arc::clone(&pricing_manager));
             Logger::success("Wallet tracker initialized");
             Arc::new(tracker)
         }
@@ -210,6 +211,9 @@ async fn display_status(
         for (i, position) in sorted_positions.iter().take(3).enumerate() {
             let balance = (position.balance as f64) / (10_f64).powi(position.decimals as i32);
             let pnl_color = if position.pnl_percentage.unwrap_or(0.0) >= 0.0 { "🟢" } else { "🔴" };
+            let realized_pnl = position.realized_pnl.unwrap_or(0.0);
+            let unrealized_pnl = position.unrealized_pnl.unwrap_or(0.0);
+            let total_invested = position.total_invested.unwrap_or(0.0);
 
             Logger::wallet(
                 &format!(
@@ -222,6 +226,17 @@ async fn display_status(
                     position.pnl_percentage.unwrap_or(0.0)
                 )
             );
+
+            if total_invested > 0.0 {
+                Logger::wallet(
+                    &format!(
+                        "     💰 Invested: ${:.2} | 📈 Realized: ${:.2} | 📊 Unrealized: ${:.2}",
+                        total_invested,
+                        realized_pnl,
+                        unrealized_pnl
+                    )
+                );
+            }
         }
     } else {
         Logger::wallet("STOPPED");

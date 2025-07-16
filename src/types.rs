@@ -27,6 +27,10 @@ pub struct WalletPosition {
     pub current_price: Option<f64>,
     pub pnl: Option<f64>,
     pub pnl_percentage: Option<f64>,
+    pub realized_pnl: Option<f64>,
+    pub unrealized_pnl: Option<f64>,
+    pub total_invested: Option<f64>,
+    pub average_entry_price: Option<f64>,
     pub last_updated: chrono::DateTime<chrono::Utc>,
 }
 
@@ -77,4 +81,44 @@ impl LogLevel {
     };
 }
 
-pub const RESET_COLOR: &str = "\x1b[0m]";
+pub const RESET_COLOR: &str = "\x1b[0m";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletTransaction {
+    pub signature: String,
+    pub mint: String,
+    pub transaction_type: TransactionType,
+    pub amount: u64,
+    pub price_usd: Option<f64>,
+    pub value_usd: Option<f64>,
+    pub sol_amount: Option<u64>,
+    pub fee: Option<u64>,
+    pub block_time: i64,
+    pub slot: u64,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransactionType {
+    Buy,
+    Sell,
+    Transfer,
+    Receive,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfitLossCalculation {
+    pub mint: String,
+    pub total_bought: u64,
+    pub total_sold: u64,
+    pub current_balance: u64,
+    pub average_buy_price: f64,
+    pub average_sell_price: f64,
+    pub total_invested: f64,
+    pub total_received: f64,
+    pub realized_pnl: f64,
+    pub unrealized_pnl: f64,
+    pub total_pnl: f64,
+    pub roi_percentage: f64,
+    pub current_value: f64,
+}

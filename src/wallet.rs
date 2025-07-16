@@ -1,11 +1,15 @@
 use crate::config::Config;
 use crate::database::Database;
 use crate::logger::Logger;
-use crate::types::WalletPosition;
+use crate::types::{ WalletPosition, WalletTransaction, TransactionType, ProfitLossCalculation };
 use crate::rpc::RpcManager;
+use crate::pricing::PricingManager;
 use anyhow::{ Context, Result };
 use chrono::Utc;
+use futures::FutureExt;
 use solana_sdk::{ pubkey::Pubkey, signature::{ Keypair, Signer }, program_pack::Pack };
+use solana_account_decoder::UiAccountData;
+use serde_json;
 use spl_token_2022::state::{ Account, Mint };
 use spl_token;
 use std::collections::HashMap;
@@ -18,9 +22,11 @@ pub struct WalletTracker {
     config: Config,
     database: Arc<Database>,
     rpc_manager: Arc<RpcManager>,
+    pricing_manager: Option<Arc<PricingManager>>,
     wallet_keypair: Keypair,
     positions: Arc<RwLock<HashMap<String, WalletPosition>>>,
     is_running: Arc<RwLock<bool>>,
+    last_signature: Arc<RwLock<Option<String>>>,
 }
 
 impl WalletTracker {
@@ -41,10 +47,129 @@ impl WalletTracker {
             config,
             database,
             rpc_manager,
+            pricing_manager: None,
             wallet_keypair,
             positions: Arc::new(RwLock::new(HashMap::new())),
             is_running: Arc::new(RwLock::new(false)),
+            last_signature: Arc::new(RwLock::new(None)),
         })
+    }
+
+    async fn fetch_and_cache_transactions(&self) -> Result<()> {
+        Logger::wallet("🔄 Starting transaction fetch...");
+        let wallet_pubkey = self.wallet_keypair.pubkey();
+
+        // Get only recent transaction signatures (limit to 10 for efficiency)
+        Logger::wallet("📡 Calling RPC for transaction signatures...");
+        let signatures = tokio::time::timeout(
+            Duration::from_secs(10), // 10 second timeout
+            self.rpc_manager.get_signatures_for_address(&wallet_pubkey, Some(10)) // Reduced from 50 to 10
+        ).await
+        .context("RPC call timed out after 10 seconds")?
+        .context("Failed to get transaction signatures")?;
+
+        Logger::wallet(&format!("📡 Received {} transaction signatures", signatures.len()));
+
+        let mut new_transactions = 0;
+        let mut processed = 0;
+        const MAX_PROCESS: usize = 5; // Only process up to 5 transactions per cycle
+
+        for (i, signature_info) in signatures.iter().enumerate() {
+            if processed >= MAX_PROCESS {
+                Logger::wallet(&format!("⏭️ Skipping remaining transactions (processed {}/{})", MAX_PROCESS, signatures.len()));
+                break;
+            }
+
+            let signature = signature_info.signature.clone();
+
+            // Check if we already have this transaction
+            if self.database.transaction_exists(&signature)? {
+                continue;
+            }
+
+            Logger::wallet(&format!("📄 Processing new transaction {}/{}: {}", i + 1, std::cmp::min(signatures.len(), MAX_PROCESS), signature));
+
+            // Fetch the transaction details with timeout
+            let transaction_result = tokio::time::timeout(
+                Duration::from_secs(3), // Reduced timeout to 3 seconds per transaction
+                self.rpc_manager.get_transaction(&signature)
+            ).await;
+
+            match transaction_result {
+                Ok(Ok(transaction)) => {
+                    if let Some(block_time) = transaction.block_time {
+                        // Parse the transaction for token transfers
+                        if
+                            let Some(wallet_tx) = self.parse_transaction_for_tokens(
+                                &transaction,
+                                &signature,
+                                block_time
+                            ).await
+                        {
+                            // Save to database
+                            if let Err(e) = self.database.save_wallet_transaction(&wallet_tx) {
+                                Logger::error(
+                                    &format!("Failed to save transaction {}: {}", signature, e)
+                                );
+                            } else {
+                                new_transactions += 1;
+                            }
+                        }
+                    }
+                },
+                Ok(Err(e)) => {
+                    Logger::warn(&format!("Failed to get transaction {}: {}", signature, e));
+                },
+                Err(_) => {
+                    Logger::warn(&format!("Transaction fetch timed out for {}", signature));
+                }
+            }
+
+            processed += 1;
+        }
+
+        if new_transactions > 0 {
+            Logger::wallet(&format!("💾 Cached {} new transactions", new_transactions));
+        } else {
+            Logger::wallet("💾 No new transactions to cache");
+        }
+
+        Logger::wallet("✅ Transaction fetch completed");
+        Ok(())
+    }
+
+    async fn parse_transaction_for_tokens(
+        &self,
+        transaction: &solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta,
+        signature: &str,
+        block_time: i64
+    ) -> Option<WalletTransaction> {
+        // For now, create a simple transaction entry to demonstrate the system
+        // In a full implementation, you would parse the actual transaction data
+        let mint = "So11111111111111111111111111111111111111112".to_string(); // SOL mint as placeholder
+
+        return Some(WalletTransaction {
+            signature: signature.to_string(),
+            mint,
+            transaction_type: TransactionType::Transfer,
+            amount: 1000000, // 0.001 SOL as placeholder
+            price_usd: Some(100.0), // Placeholder price
+            value_usd: Some(0.1), // Placeholder value
+            sol_amount: None,
+            fee: Some(5000), // 0.000005 SOL fee
+            block_time,
+            slot: transaction.slot,
+            created_at: Utc::now(),
+        });
+    }
+
+    async fn get_historical_price(&self, _mint: &str, _block_time: i64) -> Result<f64> {
+        // Placeholder for historical price fetching
+        // In a real implementation, you would:
+        // 1. Check if you have cached price data for this timestamp
+        // 2. Query a price API with historical data
+        // 3. Calculate price from pool data at that time
+        Ok(0.0)
     }
 
     pub async fn start(&self) -> Result<()> {
@@ -65,7 +190,19 @@ impl WalletTracker {
         // Start tracking loop
         let tracker = self.clone();
         tokio::spawn(async move {
-            tracker.run_tracking_loop().await;
+            // Wrap in a panic handler to catch any issues
+            let result = std::panic::AssertUnwindSafe(tracker.run_tracking_loop())
+                .catch_unwind()
+                .await;
+            
+            match result {
+                Ok(()) => {
+                    Logger::wallet("Wallet tracking loop completed normally");
+                },
+                Err(panic_info) => {
+                    Logger::error(&format!("💥 Wallet tracking loop panicked: {:?}", panic_info));
+                }
+            }
         });
 
         Ok(())
@@ -116,54 +253,87 @@ impl WalletTracker {
             Logger::wallet(&format!("Processing {} token accounts...", token_accounts.len()));
         }
 
-        for token_account in token_accounts {
-            if let Some(data) = token_account.account.data.decode() {
-                if let Ok(account_data) = self.parse_token_account(&data) {
-                    if account_data.amount > 0 {
-                        let mint = account_data.mint.to_string();
+        for (i, token_account) in token_accounts.iter().enumerate() {
+            Logger::wallet(&format!("🔍 Processing token account {}/{}", i + 1, token_accounts.len()));
+            
+            match &token_account.account.data {
+                UiAccountData::Binary(encoded_data, encoding) => {
+                    Logger::wallet(&format!("   📊 Raw account data: {} (encoding: {:?})", encoded_data.len(), encoding));
+                    
+                    if let Some(data) = token_account.account.data.decode() {
+                        Logger::wallet(&format!("✅ Successfully decoded token account data (size: {} bytes)", data.len()));
+                        
+                        // Log first few bytes of data for debugging
+                        let hex_data = data.iter().take(20).map(|b| format!("{:02x}", b)).collect::<Vec<String>>().join(" ");
+                        Logger::wallet(&format!("   📊 Data hex (first 20 bytes): {}", hex_data));
+                        
+                        match self.parse_token_account(&data) {
+                    Ok(account_data) => {
+                        Logger::wallet(&format!("✅ Successfully parsed token account"));
+                        Logger::wallet(&format!("   📍 Mint: {}", account_data.mint));
+                        Logger::wallet(&format!("   💰 Amount: {}", account_data.amount));
+                        
+                        if account_data.amount > 0 {
+                            Logger::wallet(&format!("✅ Token has non-zero balance: {}", account_data.amount));
+                            
+                            let mint = account_data.mint.to_string();
 
-                        // Get token info to determine decimals
-                        let decimals = self
-                            .get_token_decimals(&account_data.mint).await
-                            .unwrap_or(9);
+                            // Get token info to determine decimals
+                            let decimals = self
+                                .get_token_decimals(&account_data.mint).await
+                                .unwrap_or(9);
+                            
+                            Logger::wallet(&format!("   🔢 Decimals: {}", decimals));
 
-                        // Calculate actual balance
-                        let balance = account_data.amount;
-                        let actual_balance = (balance as f64) / (10_f64).powi(decimals as i32);
+                            // Calculate actual balance
+                            let balance = account_data.amount;
+                            let actual_balance = (balance as f64) / (10_f64).powi(decimals as i32);
+                            
+                            Logger::wallet(&format!("   💎 Actual balance: {}", actual_balance));
 
-                        // Try to get price (placeholder implementation)
-                        let current_price = self.get_token_price(&mint).await.unwrap_or(0.0);
-                        let value_usd = actual_balance * current_price;
-                        total_value_usd += value_usd;
+                            // Try to get price (placeholder implementation)
+                            let current_price = self.get_token_price(&mint).await.unwrap_or(0.0);
+                            let value_usd = actual_balance * current_price;
+                            total_value_usd += value_usd;
+                            
+                            Logger::wallet(&format!("   💲 Price: ${}, Value: ${}", current_price, value_usd));
 
-                        // Get existing position for PnL calculation
-                        let existing_position = self.positions.read().await.get(&mint).cloned();
-                        let (entry_price, pnl, pnl_percentage) = if
-                            let Some(existing) = existing_position
-                        {
-                            let entry = existing.entry_price.unwrap_or(current_price);
-                            let pnl_val = (current_price - entry) * actual_balance;
-                            let pnl_pct = if entry > 0.0 {
-                                ((current_price - entry) / entry) * 100.0
-                            } else {
-                                0.0
-                            };
-                            (Some(entry), Some(pnl_val), Some(pnl_pct))
-                        } else {
-                            (Some(current_price), Some(0.0), Some(0.0))
-                        };
+                            // Get profit/loss calculation from transactions with current price
+                            let pnl_calc = self.database
+                                .calculate_profit_loss_with_current_price(&mint, current_price)
+                                .unwrap_or(ProfitLossCalculation {
+                                    mint: mint.clone(),
+                                    total_bought: 0,
+                                    total_sold: 0,
+                                    current_balance: balance,
+                                    average_buy_price: current_price,
+                                    average_sell_price: 0.0,
+                                    total_invested: 0.0,
+                                    total_received: 0.0,
+                                    realized_pnl: 0.0,
+                                    unrealized_pnl: 0.0,
+                                    total_pnl: 0.0,
+                                    roi_percentage: 0.0,
+                                    current_value: value_usd,
+                                });
 
-                        let position = WalletPosition {
-                            mint: mint.clone(),
-                            balance,
-                            decimals,
-                            value_usd: Some(value_usd),
-                            entry_price,
+                            let position = WalletPosition {
+                                mint: mint.clone(),
+                                balance,
+                                decimals,
+                                value_usd: Some(value_usd),
+                            entry_price: Some(pnl_calc.average_buy_price),
                             current_price: Some(current_price),
-                            pnl,
-                            pnl_percentage,
+                            pnl: Some(pnl_calc.total_pnl),
+                            pnl_percentage: Some(pnl_calc.roi_percentage),
+                            realized_pnl: Some(pnl_calc.realized_pnl),
+                            unrealized_pnl: Some(pnl_calc.unrealized_pnl),
+                            total_invested: Some(pnl_calc.total_invested),
+                            average_entry_price: Some(pnl_calc.average_buy_price),
                             last_updated: Utc::now(),
                         };
+
+                        Logger::wallet(&format!("✅ Created position for {}", mint));
 
                         // Save to database
                         if let Err(e) = self.database.save_wallet_position(&position) {
@@ -172,9 +342,120 @@ impl WalletTracker {
                         }
 
                         new_positions.insert(mint, position);
+                            } else {
+                                Logger::wallet(&format!("⏭️ Skipping token with zero balance"));
+                            }
+                        },
+                        Err(e) => {
+                            Logger::warn(&format!("❌ Failed to parse token account: {}", e));
+                        }
                     }
+                } else {
+                    Logger::warn(&format!("❌ Failed to decode account data"));
                 }
-            }
+            },            UiAccountData::Json(json_data) => {
+                Logger::wallet(&format!("   📊 Account data is in JSON format"));
+                
+                // Check if it's a parsed account (for SPL tokens)
+                if let Some(parsed_info) = json_data.parsed.as_object() {
+                    Logger::wallet(&format!("   ✅ Found parsed info in JSON data"));
+                    
+                    // Extract mint and token amount from JSON
+                    if let (Some(info), Some(token_amount)) = (
+                        parsed_info.get("info"),
+                        parsed_info.get("info").and_then(|info| info.get("tokenAmount"))
+                    ) {
+                        if let (Some(mint_str), Some(amount_str), Some(decimals)) = (
+                            info.get("mint").and_then(|v| v.as_str()),
+                            token_amount.get("amount").and_then(|v| v.as_str()),
+                            token_amount.get("decimals").and_then(|v| v.as_u64())
+                        ) {                            Logger::wallet(&format!("   📍 Mint: {}", mint_str));
+                            
+                            if let Ok(amount) = amount_str.parse::<u64>() {
+                                Logger::wallet(&format!("   💰 Amount: {} (decimals: {})", amount, decimals));
+                                    
+                                    if amount > 0 {
+                                        Logger::wallet(&format!("✅ Token has non-zero balance: {}", amount));
+                                        
+                                        let mint = mint_str.to_string();
+                                        let decimals = decimals as u8;
+
+                                        // Calculate actual balance
+                                        let actual_balance = (amount as f64) / (10_f64).powi(decimals as i32);
+                                        
+                                        Logger::wallet(&format!("   💎 Actual balance: {}", actual_balance));
+
+                                        // Try to get price (placeholder implementation)
+                                        let current_price = self.get_token_price(&mint).await.unwrap_or(0.0);
+                                        let value_usd = actual_balance * current_price;
+                                        total_value_usd += value_usd;
+                                        
+                                        Logger::wallet(&format!("   💲 Price: ${}, Value: ${}", current_price, value_usd));
+
+                                        // Get profit/loss calculation from transactions with current price
+                                        let pnl_calc = self.database
+                                            .calculate_profit_loss_with_current_price(&mint, current_price)
+                                            .unwrap_or(ProfitLossCalculation {
+                                                mint: mint.clone(),
+                                                total_bought: 0,
+                                                total_sold: 0,
+                                                current_balance: amount,
+                                                average_buy_price: current_price,
+                                                average_sell_price: 0.0,
+                                                total_invested: 0.0,
+                                                total_received: 0.0,
+                                                realized_pnl: 0.0,
+                                                unrealized_pnl: 0.0,
+                                                total_pnl: 0.0,
+                                                roi_percentage: 0.0,
+                                                current_value: value_usd,
+                                            });
+
+                                        let position = WalletPosition {
+                                            mint: mint.clone(),
+                                            balance: amount,
+                                            decimals,
+                                            value_usd: Some(value_usd),
+                                            entry_price: Some(pnl_calc.average_buy_price),
+                                            current_price: Some(current_price),
+                                            pnl: Some(pnl_calc.total_pnl),
+                                            pnl_percentage: Some(pnl_calc.roi_percentage),
+                                            realized_pnl: Some(pnl_calc.realized_pnl),
+                                            unrealized_pnl: Some(pnl_calc.unrealized_pnl),
+                                            total_invested: Some(pnl_calc.total_invested),
+                                            average_entry_price: Some(pnl_calc.average_buy_price),
+                                            last_updated: Utc::now(),
+                                        };
+
+                                        Logger::wallet(&format!("✅ Created position for {}", mint));
+
+                                        // Save to database
+                                        if let Err(e) = self.database.save_wallet_position(&position) {
+                                            Logger::error(&format!("Failed to save position for {}: {}", mint, e));
+                                            continue;
+                                        }
+
+                                        new_positions.insert(mint, position);
+                                    } else {
+                                        Logger::wallet(&format!("⏭️ Skipping token with zero balance"));
+                                    }
+                                } else {
+                                    Logger::wallet(&format!("❌ Failed to parse amount: {}", amount_str));
+                                }
+                            } else {
+                                Logger::wallet(&format!("❌ Missing amount or decimals in tokenAmount"));
+                            }
+                        } else {
+                            Logger::wallet(&format!("❌ Missing mint or tokenAmount in JSON data"));
+                        }
+                } else {
+                    Logger::wallet(&format!("❌ No parsed info found in JSON data"));
+                }
+            },
+            UiAccountData::LegacyBinary(data) => {
+                Logger::wallet(&format!("   📊 Account data is legacy binary (size: {})", data.len()));
+            },
+        }
         }
 
         // Update positions
@@ -234,29 +515,67 @@ impl WalletTracker {
     async fn run_tracking_loop(&self) {
         Logger::wallet("Starting wallet tracking loop...");
 
-        let mut interval = time::interval(
-            Duration::from_secs(self.config.general.update_interval_seconds)
-        );
+        let mut interval = time::interval(Duration::from_secs(15)); // Update every 15 seconds
 
         loop {
             interval.tick().await;
 
             let is_running = self.is_running.read().await;
             if !*is_running {
+                Logger::wallet("🛑 Wallet tracking loop stopping (is_running = false)");
                 break;
             }
             drop(is_running);
 
-            if let Err(e) = self.refresh_positions().await {
-                Logger::error(&format!("Failed to refresh positions: {}", e));
+            Logger::wallet("🔄 Running 15-second refresh cycle...");
+
+            // Skip transaction processing for now to focus on SPL token detection
+            Logger::wallet("⏭️ Skipping transaction fetch to focus on SPL token scanning...");
+
+            // Then refresh positions with profit/loss calculation
+            Logger::wallet("🔍 Scanning for SPL token accounts...");
+            match self.refresh_positions().await {
+                Ok(()) => {
+                    Logger::wallet("✅ Position refresh completed");
+                },
+                Err(e) => {
+                    Logger::error(&format!("❌ Failed to refresh positions: {}", e));
+                    Logger::error(&format!("❌ Error details: {:?}", e));
+                }
             }
+
+            Logger::wallet("🏁 Refresh cycle completed, waiting 15 seconds...");
         }
 
         Logger::wallet("Wallet tracking loop stopped");
     }
 
     fn parse_token_account(&self, data: &[u8]) -> Result<Account> {
-        Account::unpack(data).context("Failed to parse token account data")
+        // Try parsing as SPL Token 2022 first
+        if let Ok(account) = spl_token_2022::state::Account::unpack(data) {
+            return Ok(account);
+        }
+
+        // Fallback to legacy SPL Token format
+        spl_token::state::Account::unpack(data)
+            .map(|legacy_account| {
+                // Convert legacy account to Token 2022 format
+                Account {
+                    mint: legacy_account.mint,
+                    owner: legacy_account.owner,
+                    amount: legacy_account.amount,
+                    delegate: legacy_account.delegate,
+                    state: match legacy_account.state {
+                        spl_token::state::AccountState::Uninitialized => spl_token_2022::state::AccountState::Uninitialized,
+                        spl_token::state::AccountState::Initialized => spl_token_2022::state::AccountState::Initialized,
+                        spl_token::state::AccountState::Frozen => spl_token_2022::state::AccountState::Frozen,
+                    },
+                    is_native: legacy_account.is_native,
+                    delegated_amount: legacy_account.delegated_amount,
+                    close_authority: legacy_account.close_authority,
+                }
+            })
+            .context("Failed to parse token account data as either SPL Token 2022 or legacy SPL Token")
     }
 
     async fn get_token_decimals(&self, mint: &Pubkey) -> Result<u8> {
@@ -269,12 +588,14 @@ impl WalletTracker {
         Ok(mint_info.decimals)
     }
 
-    async fn get_token_price(&self, _mint: &str) -> Result<f64> {
-        // Placeholder implementation
-        // In a real implementation, you would:
-        // 1. Query Jupiter API for price
-        // 2. Check if the token has a known price source
-        // 3. Calculate based on liquidity pools
+    async fn get_token_price(&self, mint: &str) -> Result<f64> {
+        if let Some(pricing_manager) = &self.pricing_manager {
+            if let Some(price_info) = pricing_manager.get_token_price(mint).await {
+                return Ok(price_info.price_usd);
+            }
+        }
+
+        // Fallback to 0.0 if no pricing manager or price not found
         Ok(0.0)
     }
 
@@ -335,9 +656,17 @@ impl Clone for WalletTracker {
             config: self.config.clone(),
             database: Arc::clone(&self.database),
             rpc_manager: Arc::clone(&self.rpc_manager),
+            pricing_manager: self.pricing_manager.as_ref().map(Arc::clone),
             wallet_keypair: Keypair::try_from(&self.wallet_keypair.to_bytes()[..]).unwrap(),
             positions: Arc::clone(&self.positions),
             is_running: Arc::clone(&self.is_running),
+            last_signature: Arc::clone(&self.last_signature),
         }
+    }
+}
+
+impl WalletTracker {
+    pub fn set_pricing_manager(&mut self, pricing_manager: Arc<PricingManager>) {
+        self.pricing_manager = Some(pricing_manager);
     }
 }

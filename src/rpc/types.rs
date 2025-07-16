@@ -94,6 +94,7 @@ pub enum RpcError {
     InvalidResponse(String),
     AllEndpointsFailed,
     ConfigurationError(String),
+    RequestFailed(String),
 }
 
 impl std::fmt::Display for RpcError {
@@ -104,6 +105,7 @@ impl std::fmt::Display for RpcError {
             RpcError::InvalidResponse(msg) => write!(f, "Invalid response: {}", msg),
             RpcError::AllEndpointsFailed => write!(f, "All RPC endpoints failed"),
             RpcError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
+            RpcError::RequestFailed(msg) => write!(f, "Request failed: {}", msg),
         }
     }
 }

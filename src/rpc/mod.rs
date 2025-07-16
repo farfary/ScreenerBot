@@ -275,6 +275,40 @@ impl RpcManager {
         }).await.map_err(|_| RpcError::AllEndpointsFailed)
     }
 
+    pub async fn get_signatures_for_address(
+        &self,
+        address: &Pubkey,
+        limit: Option<usize>
+    ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
+        let (client, _) = self.get_healthy_client().await?;
+        client
+            .get_signatures_for_address(address)
+            .map_err(|e| types::RpcError::RequestFailed(e.to_string()))
+    }
+
+    pub async fn get_transaction(
+        &self,
+        signature: &str
+    ) -> RpcResult<solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta> {
+        use solana_client::rpc_config::RpcTransactionConfig;
+        use solana_transaction_status::UiTransactionEncoding;
+
+        let signature = signature
+            .parse::<Signature>()
+            .map_err(|e| types::RpcError::RequestFailed(format!("Invalid signature: {}", e)))?;
+
+        let config = RpcTransactionConfig {
+            encoding: Some(UiTransactionEncoding::JsonParsed),
+            commitment: Some(CommitmentConfig::confirmed()),
+            max_supported_transaction_version: Some(0),
+        };
+
+        let (client, _) = self.get_healthy_client().await?;
+        client
+            .get_transaction_with_config(&signature, config)
+            .map_err(|e| types::RpcError::RequestFailed(e.to_string()))
+    }
+
     // Health check and maintenance
 
     pub async fn health_check(&self) -> Result<()> {

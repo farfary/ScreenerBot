@@ -65,6 +65,9 @@ pub struct WalletConfig {
     pub enabled: bool,
     pub track_portfolio: bool,
     pub refresh_interval_secs: u64,
+    pub track_transactions: bool,
+    pub transaction_cache_enabled: bool,
+    pub profit_loss_tracking: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +235,9 @@ impl Default for Config {
                 enabled: true,
                 track_portfolio: true,
                 refresh_interval_secs: 30,
+                track_transactions: false,
+                transaction_cache_enabled: false,
+                profit_loss_tracking: false,
             },
             swap: SwapConfig::default(),
             rpc: RpcConfig::default(),
