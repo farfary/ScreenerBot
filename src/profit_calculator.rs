@@ -1,11 +1,12 @@
 use crate::database::Database;
 use crate::logger::Logger;
 use crate::types::{ WalletPosition, ProfitLossCalculation, TransactionType };
-use anyhow::{ Context, Result };
+use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct ProfitLossCalculator {
     database: Arc<Database>,
 }
@@ -21,7 +22,7 @@ impl ProfitLossCalculator {
         mint: &str,
         current_price_sol: f64
     ) -> Result<ProfitLossCalculation> {
-        Logger::wallet(&format!("📊 Calculating P&L for token: {}", mint));
+        Logger::wallet(&format!("📊 Calculating P&L for token: {mint}"));
 
         // Get all transactions for this token, ordered by block_time
         let transactions = self.database.get_wallet_transactions_for_mint(mint)?;
@@ -99,11 +100,7 @@ impl ProfitLossCalculator {
         };
 
         // Calculate current balance
-        let current_balance = if total_bought >= total_sold {
-            total_bought - total_sold
-        } else {
-            0 // Cannot have negative balance
-        };
+        let current_balance = total_bought.saturating_sub(total_sold);
 
         // Calculate realized P&L (from completed trades)
         let realized_pnl_sol =
@@ -145,7 +142,7 @@ impl ProfitLossCalculator {
             current_value_sol,
         };
 
-        Logger::success(&format!("📊 P&L calculation completed for {}", mint));
+        Logger::success(&format!("📊 P&L calculation completed for {mint}"));
         Logger::print_key_value("Total Bought", &format!("{} tokens", total_bought));
         Logger::print_key_value("Total Sold", &format!("{} tokens", total_sold));
         Logger::print_key_value("Current Balance", &format!("{} tokens", current_balance));
@@ -406,6 +403,7 @@ impl ProfitLossCalculator {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct BuyTransaction {
     amount: u64,
     cost_per_token: f64,

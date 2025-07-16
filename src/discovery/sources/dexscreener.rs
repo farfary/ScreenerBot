@@ -16,6 +16,7 @@ pub struct DexScreenerSource {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DexScreenerTokenProfile {
     #[serde(rename = "chainId")]
     chain_id: String,
@@ -31,6 +32,7 @@ struct DexScreenerTokenProfile {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ProfileLink {
     #[serde(rename = "type")]
     link_type: Option<String>,
@@ -216,7 +218,7 @@ impl SourceTrait for DexScreenerSource {
                 all_tokens.append(&mut tokens);
             }
             Err(e) => {
-                Logger::warn(&format!("Failed to fetch DexScreener profiles: {}", e));
+                Logger::warn(&format!("Failed to fetch DexScreener profiles: {e}"));
             }
         }
 
@@ -225,7 +227,7 @@ impl SourceTrait for DexScreenerSource {
                 all_tokens.append(&mut tokens);
             }
             Err(e) => {
-                Logger::warn(&format!("Failed to fetch DexScreener latest boosts: {}", e));
+                Logger::warn(&format!("Failed to fetch DexScreener latest boosts: {e}"));
             }
         }
 
@@ -234,7 +236,7 @@ impl SourceTrait for DexScreenerSource {
                 all_tokens.append(&mut tokens);
             }
             Err(e) => {
-                Logger::warn(&format!("Failed to fetch DexScreener top boosts: {}", e));
+                Logger::warn(&format!("Failed to fetch DexScreener top boosts: {e}"));
             }
         }
 

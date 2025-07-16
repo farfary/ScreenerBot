@@ -103,9 +103,9 @@ impl GmgnProvider {
         &self,
         user_public_key: &Pubkey,
         quote: &SwapQuote,
-        wrap_sol: bool,
-        unwrap_sol: bool,
-        priority_fee: Option<u64>
+        _wrap_sol: bool,
+        _unwrap_sol: bool,
+        _priority_fee: Option<u64>
     ) -> SwapResult<SwapTransaction> {
         if !self.config.enabled {
             return Err(SwapError::ProviderNotAvailable(SwapProvider::Gmgn));
@@ -366,7 +366,7 @@ impl GmgnProvider {
         })
     }
 
-    pub async fn get_token_info(&self, mint: &Pubkey) -> SwapResult<Option<TokenInfo>> {
+    pub async fn get_token_info(&self, _mint: &Pubkey) -> SwapResult<Option<TokenInfo>> {
         // GMGN doesn't provide a separate token info endpoint
         // This would require integration with their token data API if available
         Ok(None)

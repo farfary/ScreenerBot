@@ -22,6 +22,7 @@ pub struct RpcManager {
     endpoints: Arc<RwLock<Vec<RpcEndpoint>>>,
     config: RpcConfig,
     stats: Arc<RwLock<RpcStats>>,
+    #[allow(dead_code)]
     current_index: Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -276,7 +277,7 @@ impl RpcManager {
     pub async fn get_signatures_for_address(
         &self,
         address: &Pubkey,
-        limit: Option<usize>
+        _limit: Option<usize>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
         let (client, _) = self.get_healthy_client().await?;
         client
@@ -312,8 +313,8 @@ impl RpcManager {
     pub async fn get_signatures_for_address_with_config(
         &self,
         address: &Pubkey,
-        limit: Option<usize>,
-        before: Option<&str>
+        _limit: Option<usize>,
+        _before: Option<&str>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
         let (client, _) = self.get_healthy_client().await?;
 
@@ -326,9 +327,9 @@ impl RpcManager {
     pub async fn get_signatures_for_address_until(
         &self,
         address: &Pubkey,
-        limit: usize,
-        before: Option<&str>,
-        until: Option<&str>
+        _limit: usize,
+        _before: Option<&str>,
+        _until: Option<&str>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
         let (client, _) = self.get_healthy_client().await?;
 

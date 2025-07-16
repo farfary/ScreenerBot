@@ -75,6 +75,7 @@ pub enum PoolType {
 
 pub struct PricingManager {
     gecko_client: GeckoTerminalClient,
+    #[allow(dead_code)]
     pool_decoder: PoolDecoderManager,
     price_calculator: PriceCalculator,
     cache: Arc<RwLock<PriceCache>>,

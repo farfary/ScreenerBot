@@ -15,6 +15,7 @@ pub struct RugCheckSource {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct RugCheckToken {
     mint: String,
     decimals: Option<u8>,

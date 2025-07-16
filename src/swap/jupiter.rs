@@ -188,7 +188,7 @@ impl JupiterProvider {
         })
     }
 
-    pub async fn get_token_info(&self, mint: &Pubkey) -> SwapResult<Option<TokenInfo>> {
+    pub async fn get_token_info(&self, _mint: &Pubkey) -> SwapResult<Option<TokenInfo>> {
         // Jupiter doesn't have a direct token info endpoint in v6
         // This would typically require integration with a token list or metadata service
         // For now, return None to indicate the information is not available from Jupiter

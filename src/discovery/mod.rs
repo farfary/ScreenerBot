@@ -41,9 +41,10 @@ impl Discovery {
         };
 
         // Initialize all discovery sources
-        let mut sources: Vec<Box<dyn SourceTrait>> = Vec::new();
-        sources.push(Box::new(DexScreenerSource::new(client.clone())));
-        sources.push(Box::new(RugCheckSource::new(client.clone())));
+        let sources: Vec<Box<dyn SourceTrait>> = vec![
+            Box::new(DexScreenerSource::new(client.clone())),
+            Box::new(RugCheckSource::new(client.clone()))
+        ];
 
         Self {
             config,

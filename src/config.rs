@@ -255,11 +255,11 @@ impl Config {
 
         let content = fs
             ::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {}", path))?;
+            .with_context(|| format!("Failed to read config file: {path}"))?;
 
         let config: Self = serde_json
             ::from_str(&content)
-            .with_context(|| format!("Failed to parse config file: {}", path))?;
+            .with_context(|| format!("Failed to parse config file: {path}"))?;
 
         // Validate required fields
         if config.main_wallet_private.is_empty() {
@@ -274,7 +274,7 @@ impl Config {
             ::to_string_pretty(self)
             .with_context(|| "Failed to serialize config")?;
 
-        fs::write(path, content).with_context(|| format!("Failed to write config file: {}", path))?;
+        fs::write(path, content).with_context(|| format!("Failed to write config file: {path}"))?;
 
         Ok(())
     }

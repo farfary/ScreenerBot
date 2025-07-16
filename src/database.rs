@@ -16,7 +16,7 @@ unsafe impl Sync for Database {}
 impl Database {
     pub fn new(db_path: &str) -> Result<Self> {
         let conn = Connection::open(db_path).with_context(||
-            format!("Failed to open database: {}", db_path)
+            format!("Failed to open database: {db_path}")
         )?;
 
         let db = Self { conn: Mutex::new(conn) };
@@ -237,10 +237,9 @@ impl Database {
     pub fn get_token(&self, mint: &str) -> Result<Option<TokenInfo>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT * FROM tokens WHERE mint = ?1")?;
+        let mut token_iter = stmt.query_map([mint], |row| { self.row_to_token_info(row) })?;
 
-        let token_iter = stmt.query_map([mint], |row| { Ok(self.row_to_token_info(row)?) })?;
-
-        for token in token_iter {
+        if let Some(token) = token_iter.next() {
             return Ok(Some(token?));
         }
 
@@ -251,13 +250,15 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let query = match limit {
             Some(l) =>
-                format!("SELECT * FROM tokens WHERE is_active = 1 ORDER BY last_updated DESC LIMIT {}", l),
+                format!(
+                    "SELECT * FROM tokens WHERE is_active = 1 ORDER BY last_updated DESC LIMIT {l}"
+                ),
             None =>
                 "SELECT * FROM tokens WHERE is_active = 1 ORDER BY last_updated DESC".to_string(),
         };
 
         let mut stmt = conn.prepare(&query)?;
-        let token_iter = stmt.query_map([], |row| { Ok(self.row_to_token_info(row)?) })?;
+        let token_iter = stmt.query_map([], |row| { self.row_to_token_info(row) })?;
 
         let mut tokens = Vec::new();
         for token in token_iter {
@@ -313,7 +314,7 @@ impl Database {
              FROM wallet_positions ORDER BY value_sol DESC"
         )?;
 
-        let position_iter = stmt.query_map([], |row| { Ok(self.row_to_wallet_position(row)?) })?;
+        let position_iter = stmt.query_map([], |row| { self.row_to_wallet_position(row) })?;
 
         let mut positions = Vec::new();
         for position in position_iter {
@@ -348,7 +349,7 @@ impl Database {
             "SELECT * FROM discovery_stats ORDER BY created_at DESC LIMIT 1"
         )?;
 
-        let stats_iter = stmt.query_map([], |row| {
+        let mut stats_iter = stmt.query_map([], |row| {
             Ok(DiscoveryStats {
                 total_tokens_discovered: row.get(1)?,
                 active_tokens: row.get(2)?,
@@ -359,7 +360,7 @@ impl Database {
             })
         })?;
 
-        for stats in stats_iter {
+        if let Some(stats) = stats_iter.next() {
             return Ok(Some(stats?));
         }
 
@@ -483,7 +484,7 @@ impl Database {
         )?;
 
         let token_addresses: Result<Vec<String>, rusqlite::Error> = stmt
-            .query_map([limit], |row| Ok(row.get::<_, String>(0)?))
+            .query_map([limit], |row| row.get::<_, String>(0))
             .unwrap()
             .collect();
 
@@ -515,14 +516,14 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT * FROM token_prices WHERE address = ?1")?;
 
-        let price_iter = stmt.query_map([token_address], |row| {
+        let mut price_iter = stmt.query_map([token_address], |row| {
             match self.row_to_token_price(row) {
                 Ok(price) => Ok(price),
                 Err(_) => Err(rusqlite::Error::InvalidQuery),
             }
         })?;
 
-        for price in price_iter {
+        if let Some(price) = price_iter.next() {
             return Ok(Some(price?));
         }
 
@@ -699,7 +700,7 @@ impl Database {
         let query = "SELECT DISTINCT mint FROM wallet_transactions ORDER BY mint";
 
         let mut stmt = conn.prepare(query)?;
-        let mint_iter = stmt.query_map([], |row| { Ok(row.get::<_, String>(0)?) })?;
+        let mint_iter = stmt.query_map([], |row| { row.get::<_, String>(0) })?;
 
         let mut mints = Vec::new();
         for mint in mint_iter {
@@ -715,7 +716,7 @@ impl Database {
             "SELECT signature FROM wallet_transactions ORDER BY block_time DESC, slot DESC LIMIT 1";
 
         let mut stmt = conn.prepare(query)?;
-        match stmt.query_row([], |row| Ok(row.get::<_, String>(0)?)) {
+        match stmt.query_row([], |row| row.get::<_, String>(0)) {
             Ok(signature) => Ok(Some(signature)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),

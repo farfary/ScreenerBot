@@ -287,8 +287,8 @@ impl SwapManager {
             .decode(&transaction.serialized_transaction)
             .map_err(|e|
                 SwapError::TransactionFailed(
-                    transaction.provider.clone(),
-                    format!("Failed to decode transaction: {}", e)
+                    transaction.provider,
+                    format!("Failed to decode transaction: {e}")
                 )
             )?;
 
@@ -296,8 +296,8 @@ impl SwapManager {
             ::deserialize(&transaction_bytes)
             .map_err(|e|
                 SwapError::TransactionFailed(
-                    transaction.provider.clone(),
-                    format!("Failed to deserialize transaction: {}", e)
+                    transaction.provider,
+                    format!("Failed to deserialize transaction: {e}")
                 )
             )?;
 
@@ -410,7 +410,7 @@ impl SwapManager {
     async fn validate_balance(&self, request: &SwapRequest, keypair: &Keypair) -> SwapResult<()> {
         let balance = self.rpc_manager
             .get_balance(&keypair.pubkey()).await
-            .map_err(|e| SwapError::InsufficientBalance(0, 0))?;
+            .map_err(|_e| SwapError::InsufficientBalance(0, 0))?;
 
         if balance < request.amount {
             return Err(SwapError::InsufficientBalance(request.amount, balance));

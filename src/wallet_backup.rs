@@ -1,21 +1,7 @@
-use crate::config::Config;
-use crate::database::Database;
-use crate::logger::Logger;
-use crate::types::{ WalletPosition, WalletTransaction, TransactionType, ProfitLossCalculation };
-use crate::rpc::RpcManager;
-use crate::pricing::PricingManager;
-use anyhow::{ Context, Result };
-use chrono::Utc;
-use futures::FutureExt;
-use solana_sdk::{ pubkey::Pubkey, signature::{ Keypair, Signer }, program_pack::Pack };
-use solana_account_decoder::UiAccountData;
-use spl_token_2022::state::{ Account, Mint };
-use spl_token;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
-use tokio::time;
+// Re-export the modular wallet system
+pub mod wallet;
+
+pub use wallet::*;
 
 pub struct WalletTracker {
     config: Config,

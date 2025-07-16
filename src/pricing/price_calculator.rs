@@ -241,7 +241,7 @@ impl PriceCalculator {
         &self,
         token_in: &str,
         token_out: &str,
-        amount_in: f64,
+        _amount_in: f64,
         pools: &[PoolInfo]
     ) -> Result<Vec<PoolInfo>, Box<dyn std::error::Error + Send + Sync>> {
         // Simple implementation - find direct pool first

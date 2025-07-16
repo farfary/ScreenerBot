@@ -20,6 +20,7 @@ struct GeckoResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct GeckoTokenData {
     id: String,
     r#type: String,
@@ -28,6 +29,7 @@ struct GeckoTokenData {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct GeckoTokenAttributes {
     address: String,
     name: String,
@@ -43,6 +45,7 @@ struct GeckoTokenAttributes {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct GeckoVolumeData {
     h24: Option<String>,
     h6: Option<String>,
@@ -61,6 +64,7 @@ struct GeckoTopPools {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct GeckoPoolRef {
     id: String,
     r#type: String,
@@ -74,6 +78,7 @@ struct GeckoIncluded {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct GeckoPoolAttributes {
     address: String,
     name: String,
@@ -214,7 +219,7 @@ impl GeckoTerminalClient {
 
     fn parse_pool_data(
         &self,
-        pool_id: &str,
+        _pool_id: &str,
         pool_attrs: &GeckoPoolAttributes
     ) -> Result<PoolInfo, Box<dyn std::error::Error + Send + Sync>> {
         // Determine pool type from address or name
