@@ -16,6 +16,10 @@ pub struct Config {
     pub pricing: Option<PricingConfig>,
     #[serde(default)]
     pub wallet: WalletConfig,
+    #[serde(default)]
+    pub swap: SwapConfig,
+    #[serde(default)]
+    pub rpc: RpcConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +67,131 @@ pub struct WalletConfig {
     pub refresh_interval_secs: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwapConfig {
+    pub enabled: bool,
+    pub default_slippage_bps: u16,
+    pub max_slippage_bps: u16,
+    pub min_amount_sol: f64,
+    pub max_amount_sol: f64,
+    pub default_priority_fee: u64,
+    pub max_priority_fee: u64,
+    pub compute_unit_price_micro_lamports: Option<u64>,
+    pub wrap_unwrap_sol: bool,
+    pub use_shared_accounts: bool,
+    pub jupiter: JupiterConfig,
+    pub gmgn: GmgnConfig,
+    pub raydium: RaydiumConfig,
+}
+
+impl Default for SwapConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_slippage_bps: 50,
+            max_slippage_bps: 100,
+            min_amount_sol: 0.001,
+            max_amount_sol: 100.0,
+            default_priority_fee: 1000,
+            max_priority_fee: 5000,
+            compute_unit_price_micro_lamports: Some(5000),
+            wrap_unwrap_sol: true,
+            use_shared_accounts: true,
+            jupiter: JupiterConfig::default(),
+            gmgn: GmgnConfig::default(),
+            raydium: RaydiumConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JupiterConfig {
+    pub enabled: bool,
+    pub api_url: String,
+    pub timeout_seconds: u64,
+    pub use_token_ledger: bool,
+    pub as_legacy_transaction: bool,
+}
+
+impl Default for JupiterConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            api_url: "https://quote-api.jup.ag".to_string(),
+            timeout_seconds: 10,
+            use_token_ledger: false,
+            as_legacy_transaction: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GmgnConfig {
+    pub enabled: bool,
+    pub api_url: String,
+    pub timeout_seconds: u64,
+    pub swap_mode: String,
+    pub fee: f64,
+    pub anti_mev: bool,
+}
+
+impl Default for GmgnConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            api_url: "https://gmgn.ai/api/v1/sol".to_string(),
+            timeout_seconds: 10,
+            swap_mode: "ExactIn".to_string(),
+            fee: 0.001,
+            anti_mev: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaydiumConfig {
+    pub enabled: bool,
+    pub api_url: String,
+    pub timeout_seconds: u64,
+    pub compute_unit_price_micro_lamports: u64,
+}
+
+impl Default for RaydiumConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            api_url: "https://api-v3.raydium.io".to_string(),
+            timeout_seconds: 10,
+            compute_unit_price_micro_lamports: 5000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpcConfig {
+    pub timeout_seconds: u64,
+    pub commitment: String,
+    pub max_retries: u32,
+    pub retry_delay_ms: u64,
+    pub fallback_enabled: bool,
+    pub health_check_interval_seconds: u64,
+    pub max_concurrent_requests: usize,
+}
+
+impl Default for RpcConfig {
+    fn default() -> Self {
+        Self {
+            timeout_seconds: 30,
+            commitment: "confirmed".to_string(),
+            max_retries: 3,
+            retry_delay_ms: 1000,
+            fallback_enabled: true,
+            health_check_interval_seconds: 60,
+            max_concurrent_requests: 10,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -104,6 +233,8 @@ impl Default for Config {
                 track_portfolio: true,
                 refresh_interval_secs: 30,
             },
+            swap: SwapConfig::default(),
+            rpc: RpcConfig::default(),
         }
     }
 }

@@ -2,7 +2,7 @@ use crate::config::Config;
 use crate::database::Database;
 use crate::logger::Logger;
 use crate::types::WalletPosition;
-use crate::rpc_manager::RpcManager;
+use crate::rpc::RpcManager;
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use solana_sdk::{ pubkey::Pubkey, signature::{ Keypair, Signer }, program_pack::Pack };
@@ -29,16 +29,13 @@ impl WalletTracker {
 
         let rpc_manager = Arc::new(
             RpcManager::new(
-                vec![config.rpc_url.clone()]
-                    .into_iter()
-                    .chain(config.rpc_fallbacks.clone())
-                    .collect()
+                config.rpc_url.clone(),
+                config.rpc_fallbacks.clone(),
+                config.rpc.clone()
             )?
         );
 
-        Logger::wallet(
-            &format!("Initialized RPC manager with {} endpoints", rpc_manager.get_client_count())
-        );
+        Logger::wallet("Initialized RPC manager");
 
         Ok(Self {
             config,
