@@ -428,7 +428,7 @@ mod tests {
     fn get_test_config() -> GmgnConfig {
         GmgnConfig {
             enabled: true,
-            api_url: "https://gmgn.ai/api/v1/sol".to_string(),
+            api_url: "https://gmgn.ai/defi/router/v1/sol/tx".to_string(),
             timeout_seconds: 10,
             swap_mode: "ExactIn".to_string(),
             fee: 0.001,
@@ -444,35 +444,37 @@ mod tests {
         let usdc_mint = Pubkey::from_str("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v").unwrap();
         let user_wallet = Pubkey::from_str("B2DtMPbpQWvHYTP1izFTYvKBvbzVc2SWvFPCYRTWws59").unwrap();
 
-        match
-            provider.get_quote_and_transaction(
-                &sol_mint,
-                &usdc_mint,
-                1000000,
-                100,
-                &user_wallet
-            ).await
-        {
-            Ok((quote, transaction)) => {
-                assert_eq!(quote.provider, SwapProvider::Gmgn);
-                assert_eq!(quote.input_mint, sol_mint);
-                assert_eq!(quote.output_mint, usdc_mint);
-                assert_eq!(quote.in_amount, 1000000);
-                assert!(quote.out_amount > 0);
-                assert_eq!(transaction.provider, SwapProvider::Gmgn);
-                assert!(!transaction.serialized_transaction.is_empty());
+        // First get a quote
+        let quote_result = provider.get_quote(&sol_mint, &usdc_mint, 1000000, 100).await;
+        match quote_result {
+            Ok(quote) => {
+                // Then get the transaction
+                match provider.get_swap_transaction(&user_wallet, &quote, false, false, None).await {
+                    Ok(transaction) => {
+                        assert_eq!(quote.provider, SwapProvider::Gmgn);
+                        assert_eq!(quote.input_mint, sol_mint);
+                        assert_eq!(quote.output_mint, usdc_mint);
+                        assert_eq!(quote.in_amount, 1000000);
+                        assert!(quote.out_amount > 0);
+                        assert_eq!(transaction.provider, SwapProvider::Gmgn);
+                        assert!(!transaction.serialized_transaction.is_empty());
 
-                println!("GMGN quote and transaction test passed:");
-                println!(
-                    "  {} SOL -> {} USDC",
-                    (quote.in_amount as f64) / 1e9,
-                    (quote.out_amount as f64) / 1e6
-                );
-                println!("  Price Impact: {:.2}%", quote.price_impact_pct);
-                println!("  Priority Fee: {} lamports", transaction.priority_fee);
+                        println!("GMGN quote and transaction test passed:");
+                        println!(
+                            "  {} SOL -> {} USDC",
+                            (quote.in_amount as f64) / 1e9,
+                            (quote.out_amount as f64) / 1e6
+                        );
+                        println!("  Price Impact: {:.2}%", quote.price_impact_pct);
+                        println!("  Priority Fee: {} lamports", transaction.priority_fee);
+                    }
+                    Err(e) => {
+                        println!("GMGN transaction test failed (API may be unavailable): {}", e);
+                    }
+                }
             }
             Err(e) => {
-                println!("GMGN test failed (API may be unavailable): {}", e);
+                println!("GMGN quote test failed (API may be unavailable): {}", e);
             }
         }
     }
