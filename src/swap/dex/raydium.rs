@@ -94,6 +94,8 @@ impl RaydiumSwap {
                 .to_string(),
             last_valid_block_height: swap_response["lastValidBlockHeight"].as_u64().unwrap_or(0),
             priority_fee_info: None,
+            transaction_format: crate::swap::types::TransactionFormat::Legacy, // Raydium uses legacy transactions
+            dex_type: crate::swap::types::DexType::Raydium, // Track DEX type
         })
     }
 

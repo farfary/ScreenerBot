@@ -34,6 +34,24 @@ pub enum SwapError {
     #[error("Serialization error: {0}")] SerializationError(String),
 }
 
+/// Transaction format types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TransactionFormat {
+    Legacy, // Jupiter, Raydium
+    Versioned, // GMGN, newer formats
+}
+
+impl TransactionFormat {
+    /// Get the expected transaction format for a DEX
+    pub fn for_dex(dex: &DexType) -> Self {
+        match dex {
+            DexType::Jupiter => TransactionFormat::Legacy,
+            DexType::Raydium => TransactionFormat::Legacy,
+            DexType::Gmgn => TransactionFormat::Versioned,
+        }
+    }
+}
+
 /// Supported DEX types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DexType {
@@ -223,6 +241,8 @@ pub struct SwapTransaction {
     pub swap_transaction: String,
     pub last_valid_block_height: u64,
     pub priority_fee_info: Option<PriorityFeeInfo>,
+    pub transaction_format: TransactionFormat, // Added to specify transaction format
+    pub dex_type: DexType, // Added to track which DEX generated this transaction
 }
 
 /// Priority fee information

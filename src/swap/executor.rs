@@ -65,8 +65,12 @@ impl SwapExecutor {
 
         debug!("Decoded transaction bytes length: {}", transaction_bytes.len());
 
-        // Try to execute the transaction with enhanced format detection
-        let signature = self.execute_transaction_bytes(&transaction_bytes, &route.dex).await?;
+        // Try to execute the transaction with proper format detection based on DEX type
+        let signature = self.execute_transaction_bytes(
+            &transaction_bytes,
+            &swap_transaction.transaction_format,
+            &swap_transaction.dex_type
+        ).await?;
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 
@@ -88,34 +92,39 @@ impl SwapExecutor {
         })
     }
 
-    /// Execute transaction bytes with proper format handling for both legacy and versioned transactions
+    /// Execute transaction bytes with proper format handling based on DEX requirements
     async fn execute_transaction_bytes(
         &self,
         transaction_bytes: &[u8],
+        transaction_format: &crate::swap::types::TransactionFormat,
         dex_type: &DexType
     ) -> Result<Signature> {
         if transaction_bytes.is_empty() {
             return Err(anyhow::anyhow!("Empty transaction bytes"));
         }
 
-        let first_byte = transaction_bytes[0];
-        debug!("Transaction first byte: {}, DEX: {:?}", first_byte, dex_type);
+        info!("🔄 Executing {:?} transaction for {:?}", transaction_format, dex_type);
 
-        // Check if this looks like a VersionedTransaction (starts with version byte 0 or 1)
-        if first_byte == 0 || first_byte == 1 {
-            // Try as VersionedTransaction first
-            match self.execute_versioned_transaction(transaction_bytes, dex_type).await {
-                Ok(signature) => {
-                    info!("✅ Successfully executed VersionedTransaction for {:?}", dex_type);
-                    return Ok(signature);
-                }
-                Err(e) => {
-                    debug!("VersionedTransaction execution failed for {:?}: {}", dex_type, e);
-                }
+        // Route to appropriate transaction handler based on format
+        match transaction_format {
+            crate::swap::types::TransactionFormat::Versioned => {
+                // Handle VersionedTransaction (GMGN)
+                self.execute_versioned_transaction(transaction_bytes, dex_type).await
+            }
+            crate::swap::types::TransactionFormat::Legacy => {
+                // Handle Legacy Transaction (Jupiter, Raydium)
+                self.execute_legacy_transaction(transaction_bytes, dex_type).await
             }
         }
+    }
 
-        // Fallback to legacy transaction handling
+    /// Execute a Legacy Transaction (for Jupiter and Raydium)
+    async fn execute_legacy_transaction(
+        &self,
+        transaction_bytes: &[u8],
+        dex_type: &DexType
+    ) -> Result<Signature> {
+        // Deserialize as legacy transaction
         let mut transaction: Transaction = match bincode::deserialize(transaction_bytes) {
             Ok(tx) => tx,
             Err(e) => {
@@ -124,13 +133,17 @@ impl SwapExecutor {
                     "Transaction bytes (first 32): {:?}",
                     &transaction_bytes[..std::cmp::min(32, transaction_bytes.len())]
                 );
-                return Err(anyhow::anyhow!("Failed to deserialize transaction: {}", e));
+                return Err(anyhow::anyhow!("Failed to deserialize legacy transaction: {}", e));
             }
         };
 
-        // Sign the legacy transaction
+        info!("Successfully deserialized Legacy Transaction for {:?}", dex_type);
+
+        // Get latest blockhash and update the transaction
         let recent_blockhash = self.rpc_manager.get_latest_blockhash().await?;
         transaction.message.recent_blockhash = recent_blockhash;
+
+        // Sign the legacy transaction
         transaction.sign(&[&self.keypair], recent_blockhash);
 
         // Send the transaction

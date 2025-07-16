@@ -175,6 +175,8 @@ impl GmgnSwap {
             swap_transaction: raw_tx.swap_transaction.clone(),
             last_valid_block_height: raw_tx.last_valid_block_height,
             priority_fee_info: None, // GMGN doesn't provide this in the same format
+            transaction_format: crate::swap::types::TransactionFormat::Versioned, // GMGN uses versioned transactions
+            dex_type: crate::swap::types::DexType::Gmgn, // Track DEX type
         })
     }
 

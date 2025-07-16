@@ -32,7 +32,7 @@ impl JupiterSwap {
             ("outputMint", request.output_mint.clone()),
             ("amount", request.amount.to_string()),
             ("slippageBps", request.slippage_bps.to_string()),
-            ("onlyDirectRoutes", self.config.only_direct_routes.to_string()),
+            ("onlyDirectRoutes", "false".to_string()), // Fixed: Force advanced routing to avoid shared account issues
             ("asLegacyTransaction", self.config.as_legacy_transaction.to_string()),
             ("maxAccounts", self.config.max_accounts.to_string())
         ];
@@ -81,7 +81,7 @@ impl JupiterSwap {
             "quoteResponse": self.route_to_jupiter_quote(route),
             "userPublicKey": user_public_key,
             "wrapAndUnwrapSol": true,
-            "useSharedAccounts": true,
+            "useSharedAccounts": false,  // Fixed: Set to false to avoid "Simple AMMs not supported" error
             "feeAccount": null,
             "trackingAccount": null,
             "computeUnitPriceMicroLamports": null,
@@ -133,6 +133,8 @@ impl JupiterSwap {
                     SwapError::SerializationError("Missing lastValidBlockHeight".to_string())
                 )?,
             priority_fee_info: None, // Jupiter doesn't return this in the same format
+            transaction_format: crate::swap::types::TransactionFormat::Legacy, // Jupiter uses legacy transactions
+            dex_type: crate::swap::types::DexType::Jupiter, // Track DEX type
         })
     }
 
