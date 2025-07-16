@@ -76,15 +76,7 @@ async fn main() -> Result<()> {
     println!("🎯 Slippage: {}bps ({}%)", slippage_bps, (slippage_bps as f64) / 100.0);
     println!("🔒 Anti-MEV: disabled (for lowest cost)\n");
 
-    // Confirm before proceeding
-    println!("❓ Do you want to proceed with REAL transaction execution? (type 'yes' to confirm)");
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
-    if input.trim().to_lowercase() != "yes" {
-        println!("❌ Test cancelled by user");
-        return Ok(());
-    }
-    println!();
+    println!("🚀 Starting automatic test execution...\n");
 
     // Test 1: Small SOL to BONK swap (and back)
     println!("=== TEST 1: REAL SOL → BONK → SOL ROUND TRIP ===");
