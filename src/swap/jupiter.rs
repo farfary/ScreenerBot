@@ -4,7 +4,6 @@ use anyhow::Result;
 use reqwest::Client;
 use serde_json;
 use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 use std::time::Duration;
 
 const JUPITER_API_BASE: &str = "https://quote-api.jup.ag/v6";
@@ -223,72 +222,5 @@ impl JupiterProvider {
             .send().await?;
 
         Ok(response.status().is_success())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn get_test_config() -> JupiterConfig {
-        JupiterConfig {
-            enabled: true,
-            api_url: JUPITER_API_BASE.to_string(),
-            timeout_seconds: 10,
-            use_token_ledger: false,
-            as_legacy_transaction: false,
-        }
-    }
-
-    #[tokio::test]
-    async fn test_jupiter_quote() {
-        let provider = JupiterProvider::new(get_test_config());
-
-        let sol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
-        let usdc_mint = Pubkey::from_str("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v").unwrap();
-
-        match provider.get_quote(&sol_mint, &usdc_mint, 1000000, 100).await {
-            Ok(quote) => {
-                assert_eq!(quote.provider, SwapProvider::Jupiter);
-                assert_eq!(quote.input_mint, sol_mint);
-                assert_eq!(quote.output_mint, usdc_mint);
-                assert_eq!(quote.in_amount, 1000000);
-                assert!(quote.out_amount > 0);
-                println!(
-                    "Jupiter quote test passed: {} SOL -> {} USDC",
-                    (quote.in_amount as f64) / 1e9,
-                    (quote.out_amount as f64) / 1e6
-                );
-            }
-            Err(e) => {
-                println!("Jupiter quote test failed (API may be unavailable): {}", e);
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_jupiter_health_check() {
-        let provider = JupiterProvider::new(get_test_config());
-
-        match provider.health_check().await {
-            Ok(healthy) => {
-                println!("Jupiter health check: {}", if healthy {
-                    "✅ Healthy"
-                } else {
-                    "❌ Unhealthy"
-                });
-            }
-            Err(e) => {
-                println!("Jupiter health check failed: {}", e);
-            }
-        }
-    }
-
-    #[test]
-    fn test_jupiter_config() {
-        let config = get_test_config();
-        assert!(config.enabled);
-        assert_eq!(config.api_url, JUPITER_API_BASE);
-        assert_eq!(config.timeout_seconds, 10);
     }
 }

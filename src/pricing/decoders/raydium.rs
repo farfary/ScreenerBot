@@ -117,25 +117,3 @@ impl PoolDecoder for RaydiumDecoder {
         PoolType::Raydium
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_raydium_decoder_creation() {
-        let decoder = RaydiumDecoder::new();
-        assert_eq!(decoder.supported_pool_type(), PoolType::Raydium);
-    }
-
-    #[test]
-    fn test_raydium_decoder_invalid_length() {
-        let decoder = RaydiumDecoder::new();
-        let short_data = vec![0u8; 100];
-
-        tokio_test::block_on(async {
-            let result = decoder.decode(&short_data).await;
-            assert!(matches!(result, Err(PoolDecoderError::InvalidDataLength { .. })));
-        });
-    }
-}

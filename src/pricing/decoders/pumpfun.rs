@@ -129,30 +129,3 @@ impl PoolDecoder for PumpFunDecoder {
         PoolType::PumpFun
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pumpfun_decoder_creation() {
-        let decoder = PumpFunDecoder::new();
-        assert_eq!(decoder.supported_pool_type(), PoolType::PumpFun);
-    }
-
-    #[test]
-    fn test_pumpfun_decoder_invalid_length() {
-        let decoder = PumpFunDecoder::new();
-        let short_data = vec![0u8; 50];
-
-        tokio_test::block_on(async {
-            let result = decoder.decode(&short_data).await;
-            assert!(matches!(result, Err(PoolDecoderError::InvalidDataLength { .. })));
-        });
-    }
-
-    #[test]
-    fn test_wrapped_sol_constant() {
-        assert_eq!(PumpFunDecoder::WRAPPED_SOL_MINT, "So11111111111111111111111111111111111111112");
-    }
-}

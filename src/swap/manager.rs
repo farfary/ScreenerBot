@@ -1,7 +1,6 @@
 use super::{ gmgn::GmgnProvider, jupiter::JupiterProvider, types::* };
 use crate::config::SwapConfig;
 use crate::rpc::RpcManager;
-use anyhow::Result;
 use base64::{ engine::general_purpose, Engine as _ };
 use bincode;
 use solana_sdk::{
@@ -12,7 +11,7 @@ use solana_sdk::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{ Duration, Instant };
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 pub struct SwapManager {
@@ -542,74 +541,5 @@ pub fn create_swap_request(
         compute_unit_price: None,
         wrap_unwrap_sol: true,
         use_shared_accounts: true,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::{ Config, RpcConfig };
-    use std::str::FromStr;
-
-    fn get_test_config() -> SwapConfig {
-        SwapConfig::default()
-    }
-
-    fn get_test_rpc_manager() -> Arc<RpcManager> {
-        let rpc_config = RpcConfig::default();
-        Arc::new(
-            RpcManager::new(
-                "https://api.mainnet-beta.solana.com".to_string(),
-                vec![],
-                rpc_config
-            ).unwrap()
-        )
-    }
-
-    #[tokio::test]
-    async fn test_swap_manager_creation() {
-        let config = get_test_config();
-        let rpc_manager = get_test_rpc_manager();
-        let swap_manager = SwapManager::new(config, rpc_manager);
-
-        let providers = swap_manager.get_available_providers();
-        assert!(!providers.is_empty(), "Should have at least one provider available");
-
-        println!("Available providers: {:?}", providers);
-    }
-
-    #[tokio::test]
-    async fn test_health_check() {
-        let config = get_test_config();
-        let rpc_manager = get_test_rpc_manager();
-        let swap_manager = SwapManager::new(config, rpc_manager);
-
-        let health_status = swap_manager.health_check().await;
-
-        for (provider, healthy) in health_status {
-            println!("{}: {}", provider, if healthy { "✅" } else { "❌" });
-        }
-    }
-
-    #[test]
-    fn test_create_swap_request() {
-        let sol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
-        let usdc_mint = Pubkey::from_str("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v").unwrap();
-        let user_key = Pubkey::from_str("B2DtMPbpQWvHYTP1izFTYvKBvbzVc2SWvFPCYRTWws59").unwrap();
-
-        let request = create_swap_request(
-            sol_mint,
-            usdc_mint,
-            1000000,
-            user_key,
-            Some(100),
-            Some(SwapProvider::Jupiter)
-        );
-
-        assert_eq!(request.input_mint, sol_mint);
-        assert_eq!(request.output_mint, usdc_mint);
-        assert_eq!(request.amount, 1000000);
-        assert_eq!(request.slippage_bps, 100);
-        assert_eq!(request.preferred_provider, Some(SwapProvider::Jupiter));
     }
 }

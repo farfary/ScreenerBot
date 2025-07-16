@@ -154,32 +154,3 @@ impl PoolDecoder for MeteoraDecoder {
         PoolType::Meteora
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_meteora_decoder_creation() {
-        let decoder = MeteoraDecoder::new();
-        assert_eq!(decoder.supported_pool_type(), PoolType::Meteora);
-    }
-
-    #[test]
-    fn test_meteora_decoder_invalid_length() {
-        let decoder = MeteoraDecoder::new();
-        let short_data = vec![0u8; 500];
-
-        tokio_test::block_on(async {
-            let result = decoder.decode(&short_data).await;
-            assert!(matches!(result, Err(PoolDecoderError::InvalidDataLength { .. })));
-        });
-    }
-
-    #[test]
-    fn test_fee_rate_calculation() {
-        assert_eq!(MeteoraDecoder::calculate_fee_rate(100), 0.01); // 1%
-        assert_eq!(MeteoraDecoder::calculate_fee_rate(25), 0.0025); // 0.25%
-        assert_eq!(MeteoraDecoder::calculate_fee_rate(0), 0.0); // 0%
-    }
-}

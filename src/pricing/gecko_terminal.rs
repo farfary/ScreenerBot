@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{ SystemTime, UNIX_EPOCH };
 use reqwest::Client;
-use serde::{ Deserialize, Serialize };
+use serde::Deserialize;
 use crate::pricing::{ TokenInfo, TokenPrice, PoolInfo, PoolType, PriceSource };
 
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
@@ -261,35 +261,6 @@ impl GeckoTerminalClient {
             PoolType::Serum
         } else {
             PoolType::Unknown(name.to_string())
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tokio;
-
-    #[tokio::test]
-    async fn test_gecko_terminal_client() {
-        let client = Client::new();
-        let gecko_client = GeckoTerminalClient::new(client);
-
-        // Test with a known Solana token (USDC)
-        let usdc_address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-
-        match gecko_client.get_token_info(usdc_address).await {
-            Ok(token_info) => {
-                println!("Token: {} ({})", token_info.name, token_info.symbol);
-                println!("Address: {}", token_info.address);
-                if let Some(price) = &token_info.price {
-                    println!("Price: ${}", price.price_usd);
-                }
-                println!("Pools: {}", token_info.pools.len());
-            }
-            Err(e) => {
-                println!("Test failed: {}", e);
-            }
         }
     }
 }

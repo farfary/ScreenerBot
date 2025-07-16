@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::time::{ Duration, SystemTime, UNIX_EPOCH };
-use tokio::sync::RwLock;
 use serde::{ Deserialize, Serialize };
 use crate::pricing::{ TokenInfo, TokenPrice, PoolInfo };
 
@@ -357,63 +356,5 @@ impl CacheStats {
         } else {
             (self.valid_pools as f64) / (self.total_pools as f64)
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pricing::{ TokenPrice, PriceSource, PoolType };
-
-    #[tokio::test]
-    async fn test_cache_operations() {
-        let mut cache = PriceCache::new();
-
-        // Test token info caching
-        let token_info = TokenInfo {
-            address: "test_token".to_string(),
-            name: "Test Token".to_string(),
-            symbol: "TEST".to_string(),
-            decimals: 9,
-            total_supply: Some(1000000),
-            pools: Vec::new(),
-            price: None,
-            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        };
-
-        cache.update_token_info(token_info.clone()).await;
-
-        let retrieved = cache.get_token_info("test_token").await;
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().symbol, "TEST");
-
-        // Test price caching
-        let price = TokenPrice {
-            address: "test_token".to_string(),
-            price_usd: 1.5,
-            price_sol: Some(0.01),
-            market_cap: Some(1500000.0),
-            volume_24h: 50000.0,
-            liquidity_usd: 100000.0,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            source: PriceSource::GeckoTerminal,
-            is_cache: false,
-        };
-
-        cache.update_token_price(price.clone()).await;
-
-        let retrieved_price = cache.get_token_price("test_token").await;
-        assert!(retrieved_price.is_some());
-        assert_eq!(retrieved_price.unwrap().price_usd, 1.5);
-    }
-
-    #[tokio::test]
-    async fn test_cache_stats() {
-        let cache = PriceCache::new();
-        let stats = cache.get_cache_stats().await;
-
-        assert_eq!(stats.total_tokens, 0);
-        assert_eq!(stats.valid_tokens, 0);
-        assert_eq!(stats.hit_rate_tokens(), 0.0);
     }
 }

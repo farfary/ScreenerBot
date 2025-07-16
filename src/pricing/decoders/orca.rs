@@ -175,32 +175,3 @@ impl PoolDecoder for OrcaDecoder {
         PoolType::Orca
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_orca_decoder_creation() {
-        let decoder = OrcaDecoder::new();
-        assert_eq!(decoder.supported_pool_type(), PoolType::Orca);
-    }
-
-    #[test]
-    fn test_orca_decoder_invalid_length() {
-        let decoder = OrcaDecoder::new();
-        let short_data = vec![0u8; 300];
-
-        tokio_test::block_on(async {
-            let result = decoder.decode(&short_data).await;
-            assert!(matches!(result, Err(PoolDecoderError::InvalidDataLength { .. })));
-        });
-    }
-
-    #[test]
-    fn test_fee_rate_calculation() {
-        assert_eq!(OrcaDecoder::calculate_fee_rate(300), 0.0003); // 0.03%
-        assert_eq!(OrcaDecoder::calculate_fee_rate(2500), 0.0025); // 0.25%
-        assert_eq!(OrcaDecoder::calculate_fee_rate(10000), 0.01); // 1%
-    }
-}

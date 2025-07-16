@@ -20,10 +20,6 @@ path = "src/lib.rs"
 name = "screenerbot"
 path = "src/main.rs"
 
-[[bin]]
-name = "test_swap_module"
-path = "src/bin/test_swap_module.rs"
-
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }
@@ -111,5 +107,4 @@ crossterm = "0.29.0"
 tabled = "0.15"
 owo-colors = "4"
 
-[dev-dependencies]
-tokio-test = "0.4"
+

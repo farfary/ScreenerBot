@@ -1,8 +1,7 @@
 pub mod types;
 
 use crate::config::RpcConfig;
-use anyhow::{ Context, Result };
-use solana_account_decoder::parse_token::UiTokenAmount;
+use anyhow::Result;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::{ RpcSendTransactionConfig, RpcSimulateTransactionConfig };
 use solana_client::rpc_request::TokenAccountsFilter;
@@ -11,9 +10,8 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::Signature,
-    transaction::{ Transaction, VersionedTransaction },
+    transaction::VersionedTransaction,
 };
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
@@ -317,8 +315,6 @@ impl RpcManager {
         limit: Option<usize>,
         before: Option<&str>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
-        use solana_sdk::commitment_config::CommitmentConfig;
-
         let (client, _) = self.get_healthy_client().await?;
 
         // Use basic get_signatures_for_address - the config struct names vary between versions

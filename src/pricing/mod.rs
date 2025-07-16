@@ -193,7 +193,7 @@ impl PricingManager {
         gecko_client: &GeckoTerminalClient,
         cache: &Arc<RwLock<PriceCache>>,
         database: &Arc<Database>,
-        logger: &Arc<Logger>,
+        _logger: &Arc<Logger>,
         token_addresses: &[String]
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Fetch token info from GeckoTerminal API

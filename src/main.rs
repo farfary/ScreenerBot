@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
     Logger::discovery("Discovery module initialized");
 
     // Wallet tracker (with pricing manager integration)
-    let mut wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
+    let wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
         Ok(mut tracker) => {
             tracker.set_pricing_manager(Arc::clone(&pricing_manager));
             Logger::wallet("Wallet tracker initialized");
@@ -85,11 +85,11 @@ async fn main() -> Result<()> {
     Logger::pricing("Pricing manager started");
 
     // Start discovery module
-    discovery.start().await;
+    let _ = discovery.start().await;
     Logger::discovery("Discovery module started");
 
     // Start wallet tracker
-    wallet_tracker.start().await;
+    let _ = wallet_tracker.start().await;
     Logger::wallet("Wallet tracker started");
 
     Logger::success("All modules started SUCCESSFULLY!");

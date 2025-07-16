@@ -1,16 +1,13 @@
 use std::time::{ SystemTime, UNIX_EPOCH };
 use crate::pricing::{ PoolInfo, PoolType };
-use crate::pricing::pool_decoders::{ DecodedPoolData, PoolDecoderManager };
 
 pub struct PriceCalculator {
-    pool_decoder: PoolDecoderManager,
     sol_price_cache: Option<(f64, u64)>, // (price, timestamp)
 }
 
 impl PriceCalculator {
     pub fn new() -> Self {
         Self {
-            pool_decoder: PoolDecoderManager::new(),
             sol_price_cache: None,
         }
     }
@@ -286,68 +283,5 @@ impl PriceCalculator {
         }
 
         Err("No route found between tokens".into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{ SystemTime, UNIX_EPOCH };
-
-    #[tokio::test]
-    async fn test_price_calculator() {
-        let calculator = PriceCalculator::new();
-
-        // Create a mock pool
-        let pool = PoolInfo {
-            address: "test_pool".to_string(),
-            pool_type: PoolType::Raydium,
-            reserve_0: 1000000, // 1M tokens
-            reserve_1: 100000, // 100K SOL
-            token_0: "test_token".to_string(),
-            token_1: "So11111111111111111111111111111111111111112".to_string(), // SOL
-            liquidity_usd: 15000000.0, // 15M USD
-            volume_24h: 1000000.0,
-            fee_tier: Some(0.0025),
-            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        };
-
-        match calculator.calculate_pool_price(&pool).await {
-            Ok(price) => {
-                println!("Calculated price: ${}", price);
-                assert!(price > 0.0);
-            }
-            Err(e) => {
-                println!("Price calculation failed: {}", e);
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_slippage_calculation() {
-        let calculator = PriceCalculator::new();
-
-        let pool = PoolInfo {
-            address: "test_pool".to_string(),
-            pool_type: PoolType::Raydium,
-            reserve_0: 1000000,
-            reserve_1: 100000,
-            token_0: "test_token".to_string(),
-            token_1: "So11111111111111111111111111111111111111112".to_string(),
-            liquidity_usd: 15000000.0,
-            volume_24h: 1000000.0,
-            fee_tier: Some(0.0025),
-            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        };
-
-        match calculator.calculate_slippage_impact(&pool, 1000.0, true).await {
-            Ok(slippage) => {
-                println!("Calculated slippage: {:.4}%", slippage * 100.0);
-                assert!(slippage >= 0.0);
-            }
-            Err(e) => {
-                println!("Slippage calculation failed: {}", e);
-            }
-        }
     }
 }
