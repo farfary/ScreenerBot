@@ -93,7 +93,8 @@ impl EnhancedWalletTracker {
         // Start tracking loop
         let tracker = self.clone();
         tokio::spawn(async move {
-            let result = std::panic::AssertUnwindSafe(tracker.run_enhanced_tracking_loop())
+            let result = std::panic
+                ::AssertUnwindSafe(tracker.run_enhanced_tracking_loop())
                 .catch_unwind().await;
 
             match result {
@@ -101,7 +102,9 @@ impl EnhancedWalletTracker {
                     Logger::success("Enhanced wallet tracking loop completed normally");
                 }
                 Err(panic_info) => {
-                    Logger::error(&format!("💥 Enhanced wallet tracking loop panicked: {:?}", panic_info));
+                    Logger::error(
+                        &format!("💥 Enhanced wallet tracking loop panicked: {:?}", panic_info)
+                    );
                 }
             }
         });
@@ -111,7 +114,7 @@ impl EnhancedWalletTracker {
 
     async fn initialize_transaction_cache(&self) -> Result<()> {
         Logger::wallet("🔧 Initializing comprehensive transaction cache...");
-        
+
         // Check if we already have transactions cached
         let existing_count = self.database.get_transaction_count()?;
         Logger::wallet(&format!("📊 Found {} existing transactions in cache", existing_count));
@@ -154,7 +157,9 @@ impl EnhancedWalletTracker {
             match self.transaction_cache.update_cache_with_new_transactions().await {
                 Ok(new_count) => {
                     if new_count > 0 {
-                        Logger::success(&format!("📦 Added {} new transactions to cache", new_count));
+                        Logger::success(
+                            &format!("📦 Added {} new transactions to cache", new_count)
+                        );
                     }
                 }
                 Err(e) => {
@@ -184,7 +189,8 @@ impl EnhancedWalletTracker {
         let wallet_pubkey = self.wallet_keypair.pubkey();
 
         // Get current token accounts
-        let token_accounts = self.get_token_accounts_with_retry(&wallet_pubkey).await
+        let token_accounts = self
+            .get_token_accounts_with_retry(&wallet_pubkey).await
             .context("Failed to get token accounts")?;
 
         let mut current_prices = HashMap::new();
@@ -194,7 +200,9 @@ impl EnhancedWalletTracker {
         Logger::wallet(&format!("🔍 Processing {} token accounts...", token_accounts.len()));
 
         for (i, token_account) in token_accounts.iter().enumerate() {
-            Logger::wallet(&format!("🔍 Processing token account {}/{}", i + 1, token_accounts.len()));
+            Logger::wallet(
+                &format!("🔍 Processing token account {}/{}", i + 1, token_accounts.len())
+            );
 
             match &token_account.account.data {
                 UiAccountData::Binary(encoded_data, encoding) => {
@@ -203,13 +211,17 @@ impl EnhancedWalletTracker {
                             Ok(account_data) => {
                                 if account_data.amount > 0 {
                                     let mint = account_data.mint.to_string();
-                                    
+
                                     // Get token decimals and current price
-                                    let decimals = self.get_token_decimals(&account_data.mint).await.unwrap_or(9);
-                                    let current_price_sol = self.get_token_price_in_sol(&mint).await.unwrap_or(0.0);
-                                    
+                                    let decimals = self
+                                        .get_token_decimals(&account_data.mint).await
+                                        .unwrap_or(9);
+                                    let current_price_sol = self
+                                        .get_token_price_in_sol(&mint).await
+                                        .unwrap_or(0.0);
+
                                     current_prices.insert(mint.clone(), current_price_sol);
-                                    
+
                                     // Calculate enhanced P&L using the profit calculator
                                     let position = self.profit_calculator.update_position_with_pnl(
                                         &mint,
@@ -222,17 +234,25 @@ impl EnhancedWalletTracker {
 
                                     Logger::print_balance(
                                         &mint,
-                                        (account_data.amount as f64) / (10_f64).powi(decimals as i32),
+                                        (account_data.amount as f64) /
+                                            (10_f64).powi(decimals as i32),
                                         position.value_sol
                                     );
 
-                                    if let (Some(pnl), Some(pnl_pct)) = (position.pnl_sol, position.pnl_percentage) {
+                                    if
+                                        let (Some(pnl), Some(pnl_pct)) = (
+                                            position.pnl_sol,
+                                            position.pnl_percentage,
+                                        )
+                                    {
                                         Logger::print_pnl(pnl, pnl_pct);
                                     }
 
                                     // Save to database
                                     if let Err(e) = self.database.save_wallet_position(&position) {
-                                        Logger::error(&format!("Failed to save position for {}: {}", mint, e));
+                                        Logger::error(
+                                            &format!("Failed to save position for {}: {}", mint, e)
+                                        );
                                         continue;
                                     }
 
@@ -247,32 +267,40 @@ impl EnhancedWalletTracker {
                 }
                 UiAccountData::Json(json_data) => {
                     if let Some(parsed_info) = json_data.parsed.as_object() {
-                        if let (Some(info), Some(token_amount)) = (
-                            parsed_info.get("info"),
-                            parsed_info.get("info").and_then(|info| info.get("tokenAmount")),
-                        ) {
-                            if let (Some(mint_str), Some(amount_str), Some(decimals)) = (
-                                info.get("mint").and_then(|v| v.as_str()),
-                                token_amount.get("amount").and_then(|v| v.as_str()),
-                                token_amount.get("decimals").and_then(|v| v.as_u64()),
-                            ) {
+                        if
+                            let (Some(info), Some(token_amount)) = (
+                                parsed_info.get("info"),
+                                parsed_info.get("info").and_then(|info| info.get("tokenAmount")),
+                            )
+                        {
+                            if
+                                let (Some(mint_str), Some(amount_str), Some(decimals)) = (
+                                    info.get("mint").and_then(|v| v.as_str()),
+                                    token_amount.get("amount").and_then(|v| v.as_str()),
+                                    token_amount.get("decimals").and_then(|v| v.as_u64()),
+                                )
+                            {
                                 if let Ok(amount) = amount_str.parse::<u64>() {
                                     if amount > 0 {
                                         let mint = mint_str.to_string();
                                         let decimals = decimals as u8;
-                                        let current_price_sol = self.get_token_price_in_sol(&mint).await.unwrap_or(0.0);
-                                        
+                                        let current_price_sol = self
+                                            .get_token_price_in_sol(&mint).await
+                                            .unwrap_or(0.0);
+
                                         current_prices.insert(mint.clone(), current_price_sol);
 
                                         // Calculate enhanced P&L
-                                        let position = self.profit_calculator.update_position_with_pnl(
-                                            &mint,
-                                            amount,
-                                            decimals,
-                                            current_price_sol
-                                        ).await?;
+                                        let position =
+                                            self.profit_calculator.update_position_with_pnl(
+                                                &mint,
+                                                amount,
+                                                decimals,
+                                                current_price_sol
+                                            ).await?;
 
-                                        total_portfolio_value_sol += position.value_sol.unwrap_or(0.0);
+                                        total_portfolio_value_sol +=
+                                            position.value_sol.unwrap_or(0.0);
 
                                         Logger::print_balance(
                                             &mint,
@@ -280,13 +308,28 @@ impl EnhancedWalletTracker {
                                             position.value_sol
                                         );
 
-                                        if let (Some(pnl), Some(pnl_pct)) = (position.pnl_sol, position.pnl_percentage) {
+                                        if
+                                            let (Some(pnl), Some(pnl_pct)) = (
+                                                position.pnl_sol,
+                                                position.pnl_percentage,
+                                            )
+                                        {
                                             Logger::print_pnl(pnl, pnl_pct);
                                         }
 
                                         // Save to database
-                                        if let Err(e) = self.database.save_wallet_position(&position) {
-                                            Logger::error(&format!("Failed to save position for {}: {}", mint, e));
+                                        if
+                                            let Err(e) = self.database.save_wallet_position(
+                                                &position
+                                            )
+                                        {
+                                            Logger::error(
+                                                &format!(
+                                                    "Failed to save position for {}: {}",
+                                                    mint,
+                                                    e
+                                                )
+                                            );
                                             continue;
                                         }
 
@@ -307,7 +350,9 @@ impl EnhancedWalletTracker {
         Logger::wallet("📊 Calculating portfolio-wide P&L...");
         match self.profit_calculator.calculate_portfolio_pnl(&current_prices).await {
             Ok(portfolio_pnl) => {
-                Logger::success(&format!("📊 Portfolio P&L calculated for {} tokens", portfolio_pnl.len()));
+                Logger::success(
+                    &format!("📊 Portfolio P&L calculated for {} tokens", portfolio_pnl.len())
+                );
             }
             Err(e) => {
                 Logger::error(&format!("Failed to calculate portfolio P&L: {}", e));
@@ -317,11 +362,13 @@ impl EnhancedWalletTracker {
         // Update positions
         *self.positions.write().await = new_positions.clone();
 
-        Logger::success(&format!(
-            "🎉 Enhanced portfolio updated: {} positions, Total value: {:.6} SOL",
-            new_positions.len(),
-            total_portfolio_value_sol
-        ));
+        Logger::success(
+            &format!(
+                "🎉 Enhanced portfolio updated: {} positions, Total value: {:.6} SOL",
+                new_positions.len(),
+                total_portfolio_value_sol
+            )
+        );
 
         Ok(())
     }
@@ -329,7 +376,8 @@ impl EnhancedWalletTracker {
     async fn load_existing_positions(&self) -> Result<()> {
         Logger::database("Loading existing positions from database...");
 
-        let positions = self.database.get_wallet_positions()
+        let positions = self.database
+            .get_wallet_positions()
             .context("Failed to load positions from database")?;
 
         let mut position_map = HashMap::new();
@@ -338,7 +386,9 @@ impl EnhancedWalletTracker {
         }
 
         *self.positions.write().await = position_map;
-        Logger::database(&format!("Loaded {} positions from database", self.positions.read().await.len()));
+        Logger::database(
+            &format!("Loaded {} positions from database", self.positions.read().await.len())
+        );
 
         Ok(())
     }
@@ -349,7 +399,8 @@ impl EnhancedWalletTracker {
             return Ok(account);
         }
 
-        spl_token::state::Account::unpack(data)
+        spl_token::state::Account
+            ::unpack(data)
             .map(|legacy_account| {
                 Account {
                     mint: legacy_account.mint,
@@ -397,18 +448,28 @@ impl EnhancedWalletTracker {
         let program_ids = [spl_token::id(), spl_token_2022::id()];
 
         for program_id in &program_ids {
-            match self.rpc_manager.get_token_accounts_by_owner(
-                wallet_pubkey,
-                TokenAccountsFilter::ProgramId(*program_id)
-            ).await {
+            match
+                self.rpc_manager.get_token_accounts_by_owner(
+                    wallet_pubkey,
+                    TokenAccountsFilter::ProgramId(*program_id)
+                ).await
+            {
                 Ok(accounts) => {
                     if !accounts.is_empty() {
-                        Logger::rpc(&format!("Found {} token accounts using program ID: {}", accounts.len(), program_id));
+                        Logger::rpc(
+                            &format!(
+                                "Found {} token accounts using program ID: {}",
+                                accounts.len(),
+                                program_id
+                            )
+                        );
                         return Ok(accounts);
                     }
                 }
                 Err(e) => {
-                    Logger::warn(&format!("Failed to get accounts for program {}: {}", program_id, e));
+                    Logger::warn(
+                        &format!("Failed to get accounts for program {}: {}", program_id, e)
+                    );
                     continue;
                 }
             }
@@ -448,12 +509,19 @@ impl EnhancedWalletTracker {
     }
 
     /// Get detailed transaction history for a specific token
-    pub async fn get_token_transaction_history(&self, mint: &str) -> Result<Vec<WalletTransaction>> {
+    pub async fn get_token_transaction_history(
+        &self,
+        mint: &str
+    ) -> Result<Vec<WalletTransaction>> {
         self.database.get_wallet_transactions_for_mint(mint)
     }
 
     /// Get comprehensive profit/loss calculation for a token
-    pub async fn get_token_pnl(&self, mint: &str, current_price_sol: f64) -> Result<ProfitLossCalculation> {
+    pub async fn get_token_pnl(
+        &self,
+        mint: &str,
+        current_price_sol: f64
+    ) -> Result<ProfitLossCalculation> {
         self.profit_calculator.calculate_token_pnl(mint, current_price_sol).await
     }
 

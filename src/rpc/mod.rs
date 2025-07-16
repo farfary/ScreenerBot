@@ -310,7 +310,7 @@ impl RpcManager {
     }
 
     // Enhanced transaction signature fetching methods for transaction caching
-    
+
     pub async fn get_signatures_for_address_with_config(
         &self,
         address: &Pubkey,
@@ -318,7 +318,7 @@ impl RpcManager {
         before: Option<&str>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
         use solana_sdk::commitment_config::CommitmentConfig;
-        
+
         let (client, _) = self.get_healthy_client().await?;
 
         // Use basic get_signatures_for_address - the config struct names vary between versions
@@ -335,7 +335,7 @@ impl RpcManager {
         until: Option<&str>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
         let (client, _) = self.get_healthy_client().await?;
-        
+
         // Use basic get_signatures_for_address for now
         client
             .get_signatures_for_address(address)

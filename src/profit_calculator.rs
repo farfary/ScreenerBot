@@ -16,12 +16,16 @@ impl ProfitLossCalculator {
     }
 
     /// Calculate comprehensive profit/loss for a specific token
-    pub async fn calculate_token_pnl(&self, mint: &str, current_price_sol: f64) -> Result<ProfitLossCalculation> {
+    pub async fn calculate_token_pnl(
+        &self,
+        mint: &str,
+        current_price_sol: f64
+    ) -> Result<ProfitLossCalculation> {
         Logger::wallet(&format!("📊 Calculating P&L for token: {}", mint));
 
         // Get all transactions for this token, ordered by block_time
         let transactions = self.database.get_wallet_transactions_for_mint(mint)?;
-        
+
         if transactions.is_empty() {
             return Ok(ProfitLossCalculation {
                 mint: mint.to_string(),
@@ -102,12 +106,14 @@ impl ProfitLossCalculator {
         };
 
         // Calculate realized P&L (from completed trades)
-        let realized_pnl_sol = total_received_sol - (total_invested_sol * (total_sold as f64) / (total_bought as f64).max(1.0));
+        let realized_pnl_sol =
+            total_received_sol -
+            (total_invested_sol * (total_sold as f64)) / (total_bought as f64).max(1.0);
 
         // Calculate unrealized P&L (current holdings at current price)
         let current_value_sol = (current_balance as f64) * current_price_sol;
         let unrealized_cost_basis = if total_bought > 0 {
-            total_invested_sol * (current_balance as f64) / (total_bought as f64)
+            (total_invested_sol * (current_balance as f64)) / (total_bought as f64)
         } else {
             0.0
         };
@@ -147,25 +153,31 @@ impl ProfitLossCalculator {
         Logger::print_key_value("Total Invested", &format!("{:.6} SOL", total_invested_sol));
         Logger::print_key_value("Realized P&L", &format!("{:.6} SOL", realized_pnl_sol));
         Logger::print_key_value("Unrealized P&L", &format!("{:.6} SOL", unrealized_pnl_sol));
-        Logger::print_key_value("Total P&L", &format!("{:.6} SOL ({:.2}%)", total_pnl_sol, roi_percentage));
+        Logger::print_key_value(
+            "Total P&L",
+            &format!("{:.6} SOL ({:.2}%)", total_pnl_sol, roi_percentage)
+        );
 
         Ok(result)
     }
 
     /// Calculate P&L for all tokens in the wallet
-    pub async fn calculate_portfolio_pnl(&self, current_prices: &HashMap<String, f64>) -> Result<HashMap<String, ProfitLossCalculation>> {
+    pub async fn calculate_portfolio_pnl(
+        &self,
+        current_prices: &HashMap<String, f64>
+    ) -> Result<HashMap<String, ProfitLossCalculation>> {
         Logger::wallet("📊 Calculating portfolio-wide P&L...");
 
         let mut portfolio_pnl = HashMap::new();
-        
+
         // Get all unique mints from transactions
         let mints = self.database.get_all_transaction_mints()?;
-        
+
         Logger::wallet(&format!("📊 Found {} unique tokens in transaction history", mints.len()));
 
         for mint in mints {
             let current_price = current_prices.get(&mint).copied().unwrap_or(0.0);
-            
+
             match self.calculate_token_pnl(&mint, current_price).await {
                 Ok(pnl) => {
                     portfolio_pnl.insert(mint.clone(), pnl);
@@ -177,12 +189,28 @@ impl ProfitLossCalculator {
         }
 
         // Calculate portfolio totals
-        let total_invested: f64 = portfolio_pnl.values().map(|p| p.total_invested_sol).sum();
-        let total_current_value: f64 = portfolio_pnl.values().map(|p| p.current_value_sol).sum();
-        let total_realized_pnl: f64 = portfolio_pnl.values().map(|p| p.realized_pnl_sol).sum();
-        let total_unrealized_pnl: f64 = portfolio_pnl.values().map(|p| p.unrealized_pnl_sol).sum();
+        let total_invested: f64 = portfolio_pnl
+            .values()
+            .map(|p| p.total_invested_sol)
+            .sum();
+        let total_current_value: f64 = portfolio_pnl
+            .values()
+            .map(|p| p.current_value_sol)
+            .sum();
+        let total_realized_pnl: f64 = portfolio_pnl
+            .values()
+            .map(|p| p.realized_pnl_sol)
+            .sum();
+        let total_unrealized_pnl: f64 = portfolio_pnl
+            .values()
+            .map(|p| p.unrealized_pnl_sol)
+            .sum();
         let total_pnl = total_realized_pnl + total_unrealized_pnl;
-        let portfolio_roi = if total_invested > 0.0 { (total_pnl / total_invested) * 100.0 } else { 0.0 };
+        let portfolio_roi = if total_invested > 0.0 {
+            (total_pnl / total_invested) * 100.0
+        } else {
+            0.0
+        };
 
         Logger::separator();
         Logger::wallet("📊 PORTFOLIO SUMMARY:");
@@ -190,7 +218,10 @@ impl ProfitLossCalculator {
         Logger::print_key_value("Current Value", &format!("{:.6} SOL", total_current_value));
         Logger::print_key_value("Realized P&L", &format!("{:.6} SOL", total_realized_pnl));
         Logger::print_key_value("Unrealized P&L", &format!("{:.6} SOL", total_unrealized_pnl));
-        Logger::print_key_value("Total P&L", &format!("{:.6} SOL ({:.2}%)", total_pnl, portfolio_roi));
+        Logger::print_key_value(
+            "Total P&L",
+            &format!("{:.6} SOL ({:.2}%)", total_pnl, portfolio_roi)
+        );
         Logger::separator();
 
         Ok(portfolio_pnl)
@@ -226,7 +257,10 @@ impl ProfitLossCalculator {
     }
 
     /// Get detailed transaction history for a token with running P&L
-    pub async fn get_token_transaction_history_with_pnl(&self, mint: &str) -> Result<Vec<TransactionWithRunningPnL>> {
+    pub async fn get_token_transaction_history_with_pnl(
+        &self,
+        mint: &str
+    ) -> Result<Vec<TransactionWithRunningPnL>> {
         let transactions = self.database.get_wallet_transactions_for_mint(mint)?;
         let mut history = Vec::new();
         let mut running_balance = 0i64;
@@ -287,9 +321,13 @@ pub struct TransactionWithRunningPnL {
 
 impl ProfitLossCalculator {
     /// Calculate FIFO (First In, First Out) cost basis for more accurate P&L
-    pub async fn calculate_fifo_pnl(&self, mint: &str, current_price_sol: f64) -> Result<FifoPnLCalculation> {
+    pub async fn calculate_fifo_pnl(
+        &self,
+        mint: &str,
+        current_price_sol: f64
+    ) -> Result<FifoPnLCalculation> {
         let transactions = self.database.get_wallet_transactions_for_mint(mint)?;
-        
+
         let mut buy_queue: Vec<BuyTransaction> = Vec::new();
         let mut total_realized_pnl = 0.0;
         let mut total_sold = 0u64;
@@ -315,7 +353,7 @@ impl ProfitLossCalculator {
                     while remaining_to_sell > 0 && !buy_queue.is_empty() {
                         let mut buy = buy_queue.remove(0);
                         let amount_to_match = remaining_to_sell.min(buy.amount);
-                        
+
                         // Calculate realized P&L for this portion
                         let cost_basis = (amount_to_match as f64) * buy.cost_per_token;
                         let proceeds = (amount_to_match as f64) * sale_price_per_token;

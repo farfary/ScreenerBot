@@ -658,19 +658,25 @@ impl Database {
     /// Check if a transaction already exists in the database
     pub fn transaction_exists(&self, signature: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM wallet_transactions WHERE signature = ?1")?;
+        let mut stmt = conn.prepare(
+            "SELECT COUNT(*) FROM wallet_transactions WHERE signature = ?1"
+        )?;
         let count: i64 = stmt.query_row([signature], |row| row.get(0))?;
         Ok(count > 0)
     }
 
     /// Get all wallet transactions for a specific mint, ordered by block_time
-    pub fn get_wallet_transactions_for_mint(&self, mint: &str) -> Result<Vec<crate::types::WalletTransaction>> {
+    pub fn get_wallet_transactions_for_mint(
+        &self,
+        mint: &str
+    ) -> Result<Vec<crate::types::WalletTransaction>> {
         let conn = self.conn.lock().unwrap();
-        let query = "SELECT signature, mint, transaction_type, amount, price_sol, value_sol, sol_amount, fee, block_time, slot, created_at 
+        let query =
+            "SELECT signature, mint, transaction_type, amount, price_sol, value_sol, sol_amount, fee, block_time, slot, created_at 
                      FROM wallet_transactions 
                      WHERE mint = ?1 
                      ORDER BY block_time ASC";
-        
+
         let mut stmt = conn.prepare(query)?;
         let transaction_iter = stmt.query_map([mint], |row| {
             self.row_to_wallet_transaction_with_sol(row)
@@ -687,11 +693,9 @@ impl Database {
     pub fn get_all_transaction_mints(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let query = "SELECT DISTINCT mint FROM wallet_transactions ORDER BY mint";
-        
+
         let mut stmt = conn.prepare(query)?;
-        let mint_iter = stmt.query_map([], |row| {
-            Ok(row.get::<_, String>(0)?)
-        })?;
+        let mint_iter = stmt.query_map([], |row| { Ok(row.get::<_, String>(0)?) })?;
 
         let mut mints = Vec::new();
         for mint in mint_iter {
@@ -703,8 +707,9 @@ impl Database {
     /// Get the latest transaction signature (for pagination)
     pub fn get_latest_transaction_signature(&self) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
-        let query = "SELECT signature FROM wallet_transactions ORDER BY block_time DESC, slot DESC LIMIT 1";
-        
+        let query =
+            "SELECT signature FROM wallet_transactions ORDER BY block_time DESC, slot DESC LIMIT 1";
+
         let mut stmt = conn.prepare(query)?;
         match stmt.query_row([], |row| Ok(row.get::<_, String>(0)?)) {
             Ok(signature) => Ok(Some(signature)),
@@ -716,16 +721,19 @@ impl Database {
     /// Get historical price for a token at a specific timestamp
     pub fn get_historical_price(&self, mint: &str, block_time: i64) -> Result<f64> {
         let conn = self.conn.lock().unwrap();
-        
+
         // Try to find a price within 1 hour of the requested time
-        let query = "SELECT price_sol FROM token_prices 
+        let query =
+            "SELECT price_sol FROM token_prices 
                      WHERE address = ?1 AND ABS(timestamp - ?2) <= 3600 
                      ORDER BY ABS(timestamp - ?2) LIMIT 1";
-        
+
         let mut stmt = conn.prepare(query)?;
-        match stmt.query_row(params![mint, block_time], |row| {
-            Ok(row.get::<_, Option<f64>>(0)?.unwrap_or(0.0))
-        }) {
+        match
+            stmt.query_row(params![mint, block_time], |row| {
+                Ok(row.get::<_, Option<f64>>(0)?.unwrap_or(0.0))
+            })
+        {
             Ok(price) => Ok(price),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0.0),
             Err(e) => Err(e.into()),
@@ -743,21 +751,25 @@ impl Database {
     /// Clean old transactions (keep only the most recent N transactions)
     pub fn clean_old_transactions(&self, keep_count: usize) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        
+
         // Delete all but the most recent transactions
-        let query = "DELETE FROM wallet_transactions 
+        let query =
+            "DELETE FROM wallet_transactions 
                      WHERE signature NOT IN (
                          SELECT signature FROM wallet_transactions 
                          ORDER BY block_time DESC, slot DESC 
                          LIMIT ?1
                      )";
-        
+
         let deleted = conn.execute(query, params![keep_count as i64])?;
         Ok(deleted as i64)
     }
 
     /// Row to WalletTransaction with SOL-based fields
-    fn row_to_wallet_transaction_with_sol(&self, row: &Row) -> Result<crate::types::WalletTransaction, rusqlite::Error> {
+    fn row_to_wallet_transaction_with_sol(
+        &self,
+        row: &Row
+    ) -> Result<crate::types::WalletTransaction, rusqlite::Error> {
         let transaction_type_str: String = row.get(2)?;
         let transaction_type = match transaction_type_str.as_str() {
             "Buy" => crate::types::TransactionType::Buy,

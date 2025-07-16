@@ -1,5 +1,5 @@
 use anyhow::Result;
-use screenerbot::{Config, Database};
+use screenerbot::{ Config, Database };
 use tokio;
 
 #[tokio::main]
@@ -12,10 +12,10 @@ async fn main() -> Result<()> {
     println!("✅ Enhanced profit calculation system has been implemented!");
     println!("📁 All modules created in separate files as requested:");
     println!("   - src/transaction_cache.rs");
-    println!("   - src/profit_calculator.rs");  
+    println!("   - src/profit_calculator.rs");
     println!("   - src/wallet_enhanced.rs");
     println!("   - Enhanced database methods in src/database.rs");
-    
+
     println!("\n🎯 Key Improvements Over Original System:");
     println!("==========================================");
     println!("❌ Before: Limited to 10 transactions, basic P&L calculation");
