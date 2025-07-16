@@ -28,7 +28,12 @@ impl WalletTracker {
         let wallet_keypair = Keypair::from_base58_string(&config.main_wallet_private);
 
         let rpc_manager = Arc::new(
-            RpcManager::new(config.rpc_url.clone(), config.rpc_fallbacks.clone())
+            RpcManager::new(
+                vec![config.rpc_url.clone()]
+                    .into_iter()
+                    .chain(config.rpc_fallbacks.clone())
+                    .collect()
+            )?
         );
 
         Logger::wallet(
@@ -90,9 +95,7 @@ impl WalletTracker {
     pub async fn get_sol_balance(&self) -> Result<f64> {
         let wallet_pubkey = self.wallet_keypair.pubkey();
 
-        let balance = self.rpc_manager.execute_with_fallback(move |client| {
-            client.get_balance(&wallet_pubkey).context("Failed to get SOL balance")
-        }).await?;
+        let balance = self.rpc_manager.get_balance(&wallet_pubkey).await?;
 
         Ok((balance as f64) / 1_000_000_000.0) // Convert lamports to SOL
     }
@@ -262,9 +265,7 @@ impl WalletTracker {
     async fn get_token_decimals(&self, mint: &Pubkey) -> Result<u8> {
         let mint_copy = *mint;
 
-        let account_info = self.rpc_manager.execute_with_fallback(move |client| {
-            client.get_account(&mint_copy).context("Failed to get mint account")
-        }).await?;
+        let account_info = self.rpc_manager.get_account(&mint_copy).await?;
 
         let mint_info = Mint::unpack(&account_info.data).context("Failed to parse mint data")?;
 
@@ -297,14 +298,10 @@ impl WalletTracker {
             let program_id_copy = *program_id;
 
             match
-                self.rpc_manager.execute_with_fallback(move |client| {
-                    client
-                        .get_token_accounts_by_owner(
-                            &wallet_pubkey_copy,
-                            TokenAccountsFilter::ProgramId(program_id_copy)
-                        )
-                        .context("Failed to get token accounts")
-                }).await
+                self.rpc_manager.get_token_accounts_by_owner(
+                    &wallet_pubkey_copy,
+                    TokenAccountsFilter::ProgramId(program_id_copy)
+                ).await
             {
                 Ok(accounts) => {
                     if !accounts.is_empty() {

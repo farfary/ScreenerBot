@@ -3,6 +3,7 @@ pub mod types;
 pub mod core;
 pub mod dex;
 pub mod utils;
+pub mod executor;
 
 // Testing module (conditionally compiled)
 #[cfg(test)]
@@ -11,6 +12,7 @@ pub mod testing;
 // Re-export main components
 pub use core::{ SwapManager, RouteSelector };
 pub use dex::{ DexInstances, JupiterSwap, RaydiumSwap, GmgnSwap };
+pub use executor::SwapExecutor;
 pub use types::*;
 
 // Re-export specific utils to avoid conflicts

@@ -197,9 +197,7 @@ impl SwapManager {
 
         // Get latest blockhash
         let blockhash = self.rpc_manager
-            .execute_with_fallback(|client| {
-                client.get_latest_blockhash().map_err(|e| anyhow::anyhow!(e))
-            }).await
+            .get_latest_blockhash().await
             .map_err(|e| SwapError::TransactionFailed(format!("Failed to get blockhash: {}", e)))?;
 
         transaction
@@ -212,11 +210,7 @@ impl SwapManager {
         let signature = self.send_transaction_with_retry(&transaction).await?;
 
         // Get current block height
-        let block_height = self.rpc_manager
-            .execute_with_fallback(|client| {
-                client.get_block_height().map_err(|e| anyhow::anyhow!(e))
-            }).await
-            .unwrap_or(0);
+        let block_height = self.rpc_manager.get_block_height().await.unwrap_or(0);
 
         // Parse amounts
         let input_amount = route.in_amount.parse().unwrap_or(0);
@@ -296,13 +290,7 @@ impl SwapManager {
             log::debug!("Sending transaction attempt {}/{}", attempt, self.config.retry_attempts);
 
             let transaction_clone = transaction.clone();
-            match
-                self.rpc_manager.execute_with_fallback(move |client| {
-                    client
-                        .send_and_confirm_transaction(&transaction_clone)
-                        .map_err(|e| anyhow::anyhow!(e))
-                }).await
-            {
+            match self.rpc_manager.send_and_confirm_transaction(&transaction_clone).await {
                 Ok(signature) => {
                     log::info!("✅ Transaction confirmed: {}", signature);
                     return Ok(signature);

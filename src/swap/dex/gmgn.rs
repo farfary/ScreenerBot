@@ -26,20 +26,44 @@ impl GmgnSwap {
         // Updated GMGN API URL structure
         let url = format!(
             "{}/defi/router/v1/sol/tx/get_swap_route",
-            self.config.base_url.trim_end_matches("/defi/quoterv1").trim_end_matches("/")
+            self.config.base_url.trim_end_matches('/')
         );
 
-        // Convert slippage from bps to percentage
-        let slippage_percent = (request.slippage_bps as f64) / 100.0; // Convert bps to percentage (50 bps = 0.5%)
+        // Convert slippage from bps to percentage and store in variables to avoid temporary value issues
+        let slippage_percent = (request.slippage_bps as f64) / 100.0;
+        let amount_str = request.amount.to_string();
+        let slippage_str = slippage_percent.to_string();
 
-        let params = [
+        // Prepare fee string if needed
+        let fee_str = if self.config.referral_fee_bps > 0 {
+            let fee_sol = ((self.config.referral_fee_bps as f64) / 10000.0) * 0.001; // Convert bps to SOL
+            Some(fee_sol.to_string())
+        } else {
+            None
+        };
+
+        let mut params = vec![
             ("token_in_address", request.input_mint.as_str()),
             ("token_out_address", request.output_mint.as_str()),
-            ("in_amount", &request.amount.to_string()),
+            ("in_amount", amount_str.as_str()),
             ("from_address", &request.user_public_key),
-            ("slippage", &slippage_percent.to_string()),
-            ("fee", &self.config.referral_fee_bps.to_string()), // Add required fee parameter
+            ("slippage", slippage_str.as_str()),
+            ("swap_mode", "ExactIn")
         ];
+
+        // Add anti-MEV parameter if enabled
+        if request.is_anti_mev {
+            params.push(("is_anti_mev", "true"));
+            params.push(("fee", "0.002")); // Minimum fee for anti-MEV
+        } else {
+            params.push(("is_anti_mev", "false"));
+            // Add referral fee if configured, otherwise use minimal fee for non-anti-MEV
+            if let Some(ref fee) = fee_str {
+                params.push(("fee", fee.as_str()));
+            } else {
+                params.push(("fee", "0.0001")); // Minimal fee for cheapest swap
+            }
+        }
 
         let response = self.client
             .get(&url)
@@ -85,19 +109,38 @@ impl GmgnSwap {
 
         let url = format!(
             "{}/defi/router/v1/sol/tx/get_swap_route",
-            self.config.base_url.trim_end_matches("/defi/quoterv1").trim_end_matches("/")
+            self.config.base_url.trim_end_matches('/')
         );
 
         let slippage_percent = (route.slippage_bps as f64) / 100.0;
+        let slippage_str = slippage_percent.to_string();
 
-        let params = [
+        // Prepare fee string if needed
+        let fee_str = if self.config.referral_fee_bps > 0 {
+            let fee_sol = ((self.config.referral_fee_bps as f64) / 10000.0) * 0.001; // Convert bps to SOL
+            Some(fee_sol.to_string())
+        } else {
+            None
+        };
+
+        let mut params = vec![
             ("token_in_address", route.input_mint.as_str()),
             ("token_out_address", route.output_mint.as_str()),
             ("in_amount", &route.in_amount),
             ("from_address", user_public_key),
-            ("slippage", &slippage_percent.to_string()),
-            ("fee", &self.config.referral_fee_bps.to_string()), // Add required fee parameter
+            ("slippage", slippage_str.as_str()),
+            ("swap_mode", route.swap_mode.as_str())
         ];
+
+        // Add anti-MEV parameter based on route configuration
+        params.push(("is_anti_mev", "false")); // We want lowest cost, so no anti-MEV
+
+        // Add fee parameter (required by GMGN API)
+        if let Some(ref fee) = fee_str {
+            params.push(("fee", fee.as_str()));
+        } else {
+            params.push(("fee", "0.0001")); // Minimal fee for cheapest swap
+        }
 
         let response = self.client
             .get(&url)
@@ -131,7 +174,7 @@ impl GmgnSwap {
         Ok(SwapTransaction {
             swap_transaction: raw_tx.swap_transaction.clone(),
             last_valid_block_height: raw_tx.last_valid_block_height,
-            priority_fee_info: None, // GMGN doesn't provide this
+            priority_fee_info: None, // GMGN doesn't provide this in the same format
         })
     }
 
@@ -149,12 +192,12 @@ impl GmgnSwap {
             swap_info: SwapInfo {
                 amm_key: "gmgn_pool".to_string(),
                 label: "GMGN".to_string(),
-                input_mint: request.input_mint.clone(),
-                output_mint: request.output_mint.clone(),
-                in_amount: quote.input_amount.clone(),
-                out_amount: quote.output_amount.clone(),
+                input_mint: quote.input_mint.clone(),
+                output_mint: quote.output_mint.clone(),
+                in_amount: quote.in_amount.clone(),
+                out_amount: quote.out_amount.clone(),
                 fee_amount: "0".to_string(),
-                fee_mint: request.input_mint.clone(),
+                fee_mint: quote.input_mint.clone(),
             },
             percent: 100,
         }];
@@ -170,18 +213,18 @@ impl GmgnSwap {
 
         Ok(SwapRoute {
             dex: DexType::Gmgn,
-            input_mint: request.input_mint.clone(),
-            output_mint: request.output_mint.clone(),
-            in_amount: quote.input_amount.clone(),
-            out_amount: quote.output_amount.clone(),
-            other_amount_threshold: quote.output_amount.clone(), // Use output amount as threshold
-            swap_mode: "ExactIn".to_string(),
-            slippage_bps: request.slippage_bps,
+            input_mint: quote.input_mint.clone(),
+            output_mint: quote.output_mint.clone(),
+            in_amount: quote.in_amount.clone(),
+            out_amount: quote.out_amount.clone(),
+            other_amount_threshold: quote.other_amount_threshold.clone(),
+            swap_mode: quote.swap_mode.clone(),
+            slippage_bps: quote.slippage_bps,
             platform_fee,
-            price_impact_pct: quote.price_impact.clone().unwrap_or_else(|| "0".to_string()),
+            price_impact_pct: quote.price_impact_pct.clone(),
             route_plan,
-            context_slot: None,
-            time_taken: None,
+            context_slot: quote.context_slot,
+            time_taken: quote.time_taken,
         })
     }
 
@@ -193,7 +236,7 @@ impl GmgnSwap {
 
         let url = format!(
             "{}/defi/router/v1/sol/tx/get_swap_route",
-            self.config.base_url.trim_end_matches("/defi/quoterv1").trim_end_matches("/")
+            self.config.base_url.trim_end_matches('/')
         );
 
         let params = [
@@ -202,6 +245,9 @@ impl GmgnSwap {
             ("in_amount", &small_amount.to_string()),
             ("from_address", dummy_pubkey),
             ("slippage", "0.5"),
+            ("swap_mode", "ExactIn"),
+            ("is_anti_mev", "false"),
+            ("fee", "0.0001"), // Minimal fee required by GMGN API
         ];
 
         let response = self.client
@@ -232,10 +278,10 @@ impl GmgnSwap {
             .ok_or_else(|| SwapError::ApiError("Missing quote data in GMGN response".to_string()))?;
 
         // Calculate price from the quote
-        let in_amount: f64 = quote.input_amount
+        let in_amount: f64 = quote.in_amount
             .parse()
             .map_err(|_| SwapError::SerializationError("Invalid input amount".to_string()))?;
-        let out_amount: f64 = quote.output_amount
+        let out_amount: f64 = quote.out_amount
             .parse()
             .map_err(|_| SwapError::SerializationError("Invalid output amount".to_string()))?;
 
@@ -273,10 +319,8 @@ mod tests {
     fn create_test_config() -> GmgnConfig {
         GmgnConfig {
             enabled: true,
-            base_url: "https://gmgn.ai".to_string(), // Updated to use the new base URL
+            base_url: "https://gmgn.ai".to_string(),
             timeout_seconds: 15,
-            api_key: "".to_string(), // No API key needed according to new docs
-            referral_account: "".to_string(),
             referral_fee_bps: 0,
         }
     }

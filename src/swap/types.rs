@@ -260,19 +260,78 @@ pub struct GmgnApiResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GmgnApiData {
-    pub raw_tx: Option<GmgnRawTx>,
     pub quote: Option<GmgnQuote>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GmgnRawTx {
-    pub swap_transaction: String,
-    pub last_valid_block_height: u64,
+    pub raw_tx: Option<GmgnRawTx>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GmgnQuote {
-    pub input_amount: String,
-    pub output_amount: String,
-    pub price_impact: Option<String>,
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+    #[serde(rename = "inAmount")]
+    pub in_amount: String,
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+    #[serde(rename = "outAmount")]
+    pub out_amount: String,
+    #[serde(rename = "otherAmountThreshold")]
+    pub other_amount_threshold: String,
+    #[serde(rename = "swapMode")]
+    pub swap_mode: String,
+    #[serde(rename = "slippageBps")]
+    #[serde(deserialize_with = "deserialize_string_or_number")]
+    pub slippage_bps: u32,
+    #[serde(rename = "platformFee")]
+    pub platform_fee: Option<serde_json::Value>,
+    #[serde(rename = "priceImpactPct")]
+    pub price_impact_pct: String,
+    #[serde(rename = "routePlan")]
+    pub route_plan: Vec<serde_json::Value>,
+    #[serde(rename = "contextSlot")]
+    pub context_slot: Option<u64>,
+    #[serde(rename = "timeTaken")]
+    pub time_taken: Option<f64>,
+}
+
+// Helper function to deserialize string or number as u32
+fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<u32, D::Error>
+    where D: serde::Deserializer<'de>
+{
+    use serde::de::{ self, Unexpected, Visitor };
+
+    struct StringOrNumber;
+
+    impl<'de> Visitor<'de> for StringOrNumber {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("string or number")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<u32, E> where E: de::Error {
+            value.parse().map_err(de::Error::custom)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<u32, E> where E: de::Error {
+            u32::try_from(value).map_err(de::Error::custom)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<u32, E> where E: de::Error {
+            u32::try_from(value).map_err(de::Error::custom)
+        }
+    }
+
+    deserializer.deserialize_any(StringOrNumber)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GmgnRawTx {
+    #[serde(rename = "swapTransaction")]
+    pub swap_transaction: String,
+    #[serde(rename = "lastValidBlockHeight")]
+    pub last_valid_block_height: u64,
+    #[serde(rename = "prioritizationFeeLamports")]
+    pub prioritization_fee_lamports: Option<u64>,
+    #[serde(rename = "recentBlockhash")]
+    pub recent_blockhash: Option<String>,
 }
