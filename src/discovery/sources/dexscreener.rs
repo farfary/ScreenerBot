@@ -1,5 +1,6 @@
 use super::SourceTrait;
 use crate::types::TokenInfo;
+use crate::Logger;
 use anyhow::{ Context, Result };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -215,7 +216,7 @@ impl SourceTrait for DexScreenerSource {
                 all_tokens.append(&mut tokens);
             }
             Err(e) => {
-                eprintln!("Failed to fetch DexScreener profiles: {}", e);
+                Logger::warn(&format!("Failed to fetch DexScreener profiles: {}", e));
             }
         }
 
@@ -224,7 +225,7 @@ impl SourceTrait for DexScreenerSource {
                 all_tokens.append(&mut tokens);
             }
             Err(e) => {
-                eprintln!("Failed to fetch DexScreener latest boosts: {}", e);
+                Logger::warn(&format!("Failed to fetch DexScreener latest boosts: {}", e));
             }
         }
 
@@ -233,7 +234,7 @@ impl SourceTrait for DexScreenerSource {
                 all_tokens.append(&mut tokens);
             }
             Err(e) => {
-                eprintln!("Failed to fetch DexScreener top boosts: {}", e);
+                Logger::warn(&format!("Failed to fetch DexScreener top boosts: {}", e));
             }
         }
 

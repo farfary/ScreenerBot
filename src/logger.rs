@@ -1,6 +1,6 @@
 use crate::types::{ LogLevel, RESET_COLOR };
-use chrono::Utc;
 use std::io::{ self, Write };
+use chrono::Utc;
 
 pub struct Logger;
 
@@ -30,40 +30,49 @@ impl Logger {
     }
 
     pub fn discovery(message: &str) {
-        let timestamp = Utc::now().format("%H:%M:%S");
-        println!("{}🔎 [{}] DISCOVERY: {}{}", "\x1b[95m", timestamp, message, RESET_COLOR);
-        io::stdout().flush().unwrap();
+        Self::log_with_category("🔎", "\x1b[95m", "DISCOVERY", message);
     }
 
     pub fn wallet(message: &str) {
-        let timestamp = Utc::now().format("%H:%M:%S");
-        println!("{}💼 [{}] WALLET: {}{}", "\x1b[94m", timestamp, message, RESET_COLOR);
-        io::stdout().flush().unwrap();
+        Self::log_with_category("💼", "\x1b[94m", "WALLET", message);
     }
 
     pub fn trader(message: &str) {
-        let timestamp = Utc::now().format("%H:%M:%S");
-        println!("{}📈 [{}] TRADER: {}{}", "\x1b[93m", timestamp, message, RESET_COLOR);
-        io::stdout().flush().unwrap();
+        Self::log_with_category("📈", "\x1b[93m", "TRADER", message);
     }
 
     pub fn header(title: &str) {
-        println!("\n{}", "═".repeat(60));
-        println!("{}🤖 SCREENER BOT - {}{}", "\x1b[96m", title, RESET_COLOR);
-        println!("{}", "═".repeat(60));
+        println!("\n{}{} ScreenerBot - {}{}", "\x1b[92m", "🤖", title, RESET_COLOR);
+        io::stdout().flush().unwrap();
     }
 
     pub fn separator() {
-        println!("{}", "─".repeat(60));
+        // Remove heavy separators for cleaner output
+    }
+
+    fn get_timestamp() -> String {
+        Utc::now().format("%H:%M:%S").to_string()
     }
 
     fn log(log_level: LogLevel, message: &str) {
-        let timestamp = Utc::now().format("%H:%M:%S");
         println!(
             "{}{} [{}] {}{}",
             log_level.color,
             log_level.prefix,
-            timestamp,
+            Self::get_timestamp(),
+            message,
+            RESET_COLOR
+        );
+        io::stdout().flush().unwrap();
+    }
+
+    fn log_with_category(icon: &str, color: &str, category: &str, message: &str) {
+        println!(
+            "{}{} [{}] {}: {}{}",
+            color,
+            icon,
+            Self::get_timestamp(),
+            category,
             message,
             RESET_COLOR
         );

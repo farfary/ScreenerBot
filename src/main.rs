@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     // Load configuration
     let config = match Config::load("configs.json") {
         Ok(config) => {
-            Logger::success("Configuration loaded successfully");
+            Logger::success("Configuration loaded");
             config
         }
         Err(e) => {
@@ -23,9 +23,7 @@ async fn main() -> Result<()> {
             Logger::info("Creating default configuration...");
             let config = Config::default();
             config.save("configs.json")?;
-            Logger::success(
-                "Default configuration created. Please edit configs.json with your settings."
-            );
+            Logger::success("Default configuration created. Edit configs.json with your settings.");
             return Ok(());
         }
     };
@@ -33,7 +31,7 @@ async fn main() -> Result<()> {
     // Initialize database
     let database = match Database::new(&config.database.path) {
         Ok(db) => {
-            Logger::success("Database initialized successfully");
+            Logger::success("Database initialized");
             Arc::new(db)
         }
         Err(e) => {
@@ -43,7 +41,6 @@ async fn main() -> Result<()> {
     };
 
     // Initialize modules
-    Logger::separator();
     Logger::info("Initializing modules...");
 
     // Pricing manager
@@ -81,7 +78,6 @@ async fn main() -> Result<()> {
     };
 
     // Start modules
-    Logger::separator();
     Logger::info("Starting modules...");
 
     // Start pricing manager first
@@ -96,7 +92,6 @@ async fn main() -> Result<()> {
     wallet_tracker.start().await;
     Logger::success("Wallet tracker started");
 
-    Logger::separator();
     Logger::success("All modules started successfully!");
     Logger::info("Press Ctrl+C to stop the bot");
     Logger::separator();
@@ -145,11 +140,6 @@ async fn display_status(
     wallet_tracker: &Arc<WalletTracker>,
     pricing_manager: &Arc<PricingManager>
 ) {
-    // Clear screen and move cursor to top
-    print!("\x1B[2J\x1B[1;1H");
-
-    Logger::header("SCREENER BOT STATUS");
-
     // Discovery status
     if discovery.is_running().await {
         let stats = discovery.get_stats().await;
@@ -157,106 +147,63 @@ async fn display_status(
 
         Logger::discovery(
             &format!(
-                "ACTIVE - {} tokens cached, {:.1} discoveries/hour",
+                "Active | {} tokens | {:.1}/hr discovery rate",
                 cached_tokens.len(),
                 stats.discovery_rate_per_hour
             )
         );
-
-        // Show some recent discoveries
-        let mut recent_tokens: Vec<_> = cached_tokens.values().collect();
-        recent_tokens.sort_by(|a, b| b.discovered_at.cmp(&a.discovered_at));
-
-        for (i, token) in recent_tokens.iter().take(3).enumerate() {
-            Logger::discovery(
-                &format!(
-                    "  {}. {} - ${:.4} | Vol: ${:.0} | Liq: ${:.0}",
-                    i + 1,
-                    token.symbol,
-                    token.price.unwrap_or(0.0),
-                    token.volume_24h.unwrap_or(0.0),
-                    token.liquidity.unwrap_or(0.0)
-                )
-            );
-        }
-    } else {
-        Logger::discovery("STOPPED");
     }
-
-    Logger::separator();
 
     // Wallet status
     if wallet_tracker.is_running().await {
         let positions = wallet_tracker.get_positions().await;
 
         if let Ok(sol_balance) = wallet_tracker.get_sol_balance().await {
-            Logger::wallet(&format!("SOL Balance: {:.4} SOL", sol_balance));
+            Logger::wallet(&format!("SOL: {:.4} | Positions: {}", sol_balance, positions.len()));
         }
 
-        Logger::wallet(&format!("Active Positions: {}", positions.len()));
-
-        // Show top positions by value
-        let mut sorted_positions: Vec<_> = positions.values().collect();
-        sorted_positions.sort_by(|a, b| {
-            b.value_usd.unwrap_or(0.0).partial_cmp(&a.value_usd.unwrap_or(0.0)).unwrap()
-        });
-
+        // Show portfolio value
         let mut total_value = 0.0;
-        for position in &sorted_positions {
+        for position in positions.values() {
             total_value += position.value_usd.unwrap_or(0.0);
         }
 
-        Logger::wallet(&format!("Total Portfolio Value: ${:.2}", total_value));
+        if total_value > 0.0 {
+            Logger::wallet(&format!("Portfolio Value: ${:.2}", total_value));
 
-        for (i, position) in sorted_positions.iter().take(3).enumerate() {
-            let balance = (position.balance as f64) / (10_f64).powi(position.decimals as i32);
-            let pnl_color = if position.pnl_percentage.unwrap_or(0.0) >= 0.0 { "🟢" } else { "🔴" };
-            let realized_pnl = position.realized_pnl.unwrap_or(0.0);
-            let unrealized_pnl = position.unrealized_pnl.unwrap_or(0.0);
-            let total_invested = position.total_invested.unwrap_or(0.0);
+            // Show top 3 positions
+            let mut sorted_positions: Vec<_> = positions.values().collect();
+            sorted_positions.sort_by(|a, b| {
+                b.value_usd.unwrap_or(0.0).partial_cmp(&a.value_usd.unwrap_or(0.0)).unwrap()
+            });
 
-            Logger::wallet(
-                &format!(
-                    "  {}. {} - {:.4} | ${:.2} | {} {:.1}%",
-                    i + 1,
-                    &position.mint[..8],
-                    balance,
-                    position.value_usd.unwrap_or(0.0),
-                    pnl_color,
-                    position.pnl_percentage.unwrap_or(0.0)
-                )
-            );
-
-            if total_invested > 0.0 {
+            for (i, position) in sorted_positions.iter().take(3).enumerate() {
+                let balance = (position.balance as f64) / (10_f64).powi(position.decimals as i32);
+                let pnl_color = if position.pnl_percentage.unwrap_or(0.0) >= 0.0 { "+" } else { "" };
+                
                 Logger::wallet(
                     &format!(
-                        "     💰 Invested: ${:.2} | 📈 Realized: ${:.2} | 📊 Unrealized: ${:.2}",
-                        total_invested,
-                        realized_pnl,
-                        unrealized_pnl
+                        "  {}. {}... | {:.4} | ${:.2} | {}{}%",
+                        i + 1,
+                        &position.mint[..8],
+                        balance,
+                        position.value_usd.unwrap_or(0.0),
+                        pnl_color,
+                        position.pnl_percentage.unwrap_or(0.0)
                     )
                 );
             }
         }
-    } else {
-        Logger::wallet("STOPPED");
     }
-
-    Logger::separator();
 
     // Pricing status
     let cache_stats = pricing_manager.get_cache_stats().await;
-
     Logger::info(
         &format!(
-            "🏷️  PRICING: {} tokens cached | {} pools | {:.1}% hit rate",
+            "Pricing: {} tokens | {} pools | {:.0}% hit rate",
             cache_stats.valid_tokens,
             cache_stats.valid_pools,
             cache_stats.hit_rate_tokens() * 100.0
         )
     );
-
-    Logger::separator();
-    Logger::info(&format!("Last updated: {}", chrono::Utc::now().format("%H:%M:%S UTC")));
-    Logger::info("Press Ctrl+C to exit");
 }
