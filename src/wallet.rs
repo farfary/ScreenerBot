@@ -4,7 +4,6 @@ use crate::logger::Logger;
 use crate::types::{ WalletPosition, WalletTransaction, TransactionType, ProfitLossCalculation };
 use crate::rpc::RpcManager;
 use crate::pricing::PricingManager;
-use crate::transaction_cache::TransactionCacheManager;
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use futures::FutureExt;
@@ -24,7 +23,6 @@ pub struct WalletTracker {
     rpc_manager: Arc<RpcManager>,
     pricing_manager: Option<Arc<PricingManager>>,
     wallet_keypair: Keypair,
-    transaction_cache: TransactionCacheManager,
     positions: Arc<RwLock<HashMap<String, WalletPosition>>>,
     is_running: Arc<RwLock<bool>>,
     last_signature: Arc<RwLock<Option<String>>>,
@@ -33,7 +31,6 @@ pub struct WalletTracker {
 impl WalletTracker {
     pub fn new(config: Config, database: Arc<Database>) -> Result<Self> {
         let wallet_keypair = Keypair::from_base58_string(&config.main_wallet_private);
-        let wallet_pubkey = wallet_keypair.pubkey();
 
         let rpc_manager = Arc::new(
             RpcManager::new(
@@ -41,13 +38,6 @@ impl WalletTracker {
                 config.rpc_fallbacks.clone(),
                 config.rpc.clone()
             )?
-        );
-
-        let transaction_cache = TransactionCacheManager::new(
-            Arc::clone(&database),
-            Arc::clone(&rpc_manager),
-            wallet_pubkey,
-            Some(1000) // Cache 1000 transactions as requested
         );
 
         Logger::wallet("Initialized RPC manager");
@@ -58,7 +48,6 @@ impl WalletTracker {
             rpc_manager,
             pricing_manager: None,
             wallet_keypair,
-            transaction_cache,
             positions: Arc::new(RwLock::new(HashMap::new())),
             is_running: Arc::new(RwLock::new(false)),
             last_signature: Arc::new(RwLock::new(None)),
@@ -261,15 +250,15 @@ impl WalletTracker {
         // Load existing positions from database
         self.load_existing_positions().await?;
 
-        // Start background transaction caching
+        // Fetch last 1000 transactions at startup and cache them
         Logger::separator();
-        Logger::wallet("🚀 STARTING BACKGROUND TRANSACTION CACHING");
-        match self.transaction_cache.start_background_caching().await {
+        Logger::wallet("🚀 INITIAL TRANSACTION CACHE SETUP");
+        match self.fetch_and_cache_transactions(Some(1000), true).await {
             Ok(()) => {
-                Logger::success("✅ Background transaction caching started");
+                Logger::success("✅ Initial transaction cache setup COMPLETED");
             }
             Err(e) => {
-                Logger::error(&format!("❌ Background transaction caching FAILED: {}", e));
+                Logger::error(&format!("❌ Initial transaction fetch FAILED: {}", e));
                 // Don't fail startup, just log the error and continue
             }
         }
@@ -299,10 +288,6 @@ impl WalletTracker {
     pub async fn stop(&self) {
         let mut is_running = self.is_running.write().await;
         *is_running = false;
-
-        // Stop background transaction caching
-        self.transaction_cache.stop_background_caching().await;
-
         Logger::info("Wallet tracker stopped");
     }
 
@@ -661,7 +646,7 @@ impl WalletTracker {
     async fn run_tracking_loop(&self) {
         Logger::wallet("Starting wallet tracking loop...");
 
-        let mut interval = time::interval(Duration::from_secs(60)); // Update every 60 seconds
+        let mut interval = time::interval(Duration::from_secs(15)); // Update every 15 seconds
 
         loop {
             interval.tick().await;
@@ -673,9 +658,12 @@ impl WalletTracker {
             }
             drop(is_running);
 
-            Logger::wallet("🔄 Running 60-second refresh cycle...");
+            Logger::wallet("🔄 Running 15-second refresh cycle...");
 
-            // Transaction caching is now handled in the background
+            // Skip transaction processing for now to focus on SPL token detection
+            Logger::debug("⏭️ Skipping transaction fetch to focus on SPL token scanning...");
+
+            // Then refresh positions with profit/loss calculation
             Logger::wallet("🔍 Scanning for SPL token accounts...");
             match self.refresh_positions().await {
                 Ok(()) => {
@@ -687,7 +675,7 @@ impl WalletTracker {
                 }
             }
 
-            Logger::wallet("🏁 Refresh cycle COMPLETED, waiting 60 seconds...");
+            Logger::wallet("🏁 Refresh cycle COMPLETED, waiting 15 seconds...");
         }
 
         Logger::success("Wallet tracking loop stopped");
@@ -811,7 +799,6 @@ impl Clone for WalletTracker {
             rpc_manager: Arc::clone(&self.rpc_manager),
             pricing_manager: self.pricing_manager.as_ref().map(Arc::clone),
             wallet_keypair: Keypair::try_from(&self.wallet_keypair.to_bytes()[..]).unwrap(),
-            transaction_cache: self.transaction_cache.clone(),
             positions: Arc::clone(&self.positions),
             is_running: Arc::clone(&self.is_running),
             last_signature: Arc::clone(&self.last_signature),

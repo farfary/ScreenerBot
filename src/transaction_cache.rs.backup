@@ -1,0 +1,633 @@
+use crate::database::Database;
+use crate::logger::Logger;
+use crate::rpc::RpcManager;
+use crate::types::{ WalletTransaction, TransactionType };
+use anyhow::{ Result, Context };
+use solana_sdk::pubkey::Pubkey;
+use solana_transaction_status::EncodedConfirmedTransactionWithSta    pub async fn cache_historical_tr        Logger::success(&format!("📥 Received {} transaction signatures in {:.2}s", 
+            signatures.len(), start_time.elapsed().as_secs_f64()));sactions(&self) -> Result<usize> {
+        let start_time = std::time::Instant::now();
+        Logger::wallet("📝 Starting multi-task historical transaction caching...");
+
+        let existing_count = self.database.get_transaction_count()?;
+        Logger::wallet(&format!("📊 Found {} existing transactions in cache", existing_count));
+
+        if existing_count >= 100 {
+            Logger::wallet("✅ Sufficient transactions already cached, skipping historical fetch");
+            return Ok(existing_count as usize);
+        }
+
+        // Fetch signatures with timeout
+        Logger::rpc(&format!("🌐 Fetching {} transaction signatures via RPC...", self.max_cache_size));tokio::sync::{ RwLock, Semaphore };
+use tokio::task::JoinSet;
+use std::sync::Arc;
+use std::time::{ Duration, Instant };
+
+pub struct TransactionCacheManager {
+    database: Arc<Database>,
+    rpc_manager: Arc<RpcManager>,
+    wallet_pubkey: Pubkey,
+    max_cache_size: usize,
+    is_running: Arc<RwLock<bool>>,
+    last_processed_signature: Arc<RwLock<Option<String>>>,
+    concurrent_limit: Arc<Semaphore>,
+    stats: Arc<RwLock<CacheStats>>,
+}
+
+#[derive(Debug, Default)]
+pub struct CacheStats {
+    pub total_processed: u64,
+    pub total_cached: u64,
+    pub total_skipped: u64,
+    pub total_errors: u64,
+    pub last_update: Option<Instant>,
+    pub average_processing_time_ms: f64,
+    pub cache_hits: u64,
+    pub rpc_calls: u64,
+    pub background_runs: u64,
+}
+
+impl TransactionCacheManager {
+    pub fn new(
+        database: Arc<Database>,
+        rpc_manager: Arc<RpcManager>,
+        wallet_pubkey: Pubkey,
+        max_cache_size: Option<usize>
+    ) -> Self {
+        let concurrent_limit = 5; // Allow up to 5 concurrent transaction fetches
+        
+        Logger::wallet(&format!("🔧 Initializing Transaction Cache Manager"));
+        Logger::wallet(&format!("📊 Wallet: {}", wallet_pubkey));
+        Logger::wallet(&format!("📦 Max cache size: {}", max_cache_size.unwrap_or(1000)));
+        Logger::wallet(&format!("🔄 Concurrent limit: {}", concurrent_limit));
+        
+        Self {
+            database,
+            rpc_manager,
+            wallet_pubkey,
+            max_cache_size: max_cache_size.unwrap_or(1000),
+            is_running: Arc::new(RwLock::new(false)),
+            last_processed_signature: Arc::new(RwLock::new(None)),
+            concurrent_limit: Arc::new(Semaphore::new(concurrent_limit)),
+            stats: Arc::new(RwLock::new(CacheStats::default())),
+        }
+    }
+
+    /// Start background transaction caching task
+    pub async fn start_background_caching(&self) -> Result<()> {
+        let mut is_running = self.is_running.write().await;
+        if *is_running {
+            Logger::warn("🚨 Transaction cache manager is already running");
+            return Ok(());
+        }
+        *is_running = true;
+        drop(is_running);
+
+        Logger::separator();
+        Logger::wallet("🚀 STARTING BACKGROUND TRANSACTION CACHING SYSTEM");
+        Logger::wallet(&format!("📍 Wallet: {}", self.wallet_pubkey));
+        Logger::wallet(&format!("🎯 Target cache size: {} transactions", self.max_cache_size));
+        Logger::separator();
+
+        // Initial cache setup with performance timing
+        let start_time = Instant::now();
+        let initial_count = self.cache_historical_transactions().await?;
+        let setup_duration = start_time.elapsed();
+        
+        Logger::separator();
+        Logger::success(&format!("✅ INITIAL CACHE SETUP COMPLETED"));
+        Logger::success(&format!("📊 Cached {} transactions", initial_count));
+        Logger::success(&format!("⏱️  Setup time: {:.2}s", setup_duration.as_secs_f64()));
+        Logger::success(&format!("📈 Processing rate: {:.1} tx/sec", 
+            initial_count as f64 / setup_duration.as_secs_f64().max(0.001)));
+        Logger::separator();
+
+        // Start background update task with enhanced logging
+        let cache_manager = self.clone();
+        tokio::spawn(async move {
+            Logger::wallet("🔄 Background update task spawned successfully");
+            cache_manager.run_background_update_loop().await;
+        });
+
+        // Start periodic statistics reporting task
+        let stats_manager = self.clone();
+        tokio::spawn(async move {
+            stats_manager.run_statistics_reporter().await;
+        });
+
+        // Start cleanup task
+        let cleanup_manager = self.clone();
+        tokio::spawn(async move {
+            cleanup_manager.run_periodic_cleanup().await;
+        });
+
+        Logger::success("🎉 All background tasks started successfully!");
+        Ok(())
+    }
+
+    /// Stop background caching
+    pub async fn stop_background_caching(&self) {
+        let mut is_running = self.is_running.write().await;
+        *is_running = false;
+        
+        // Log final statistics
+        let stats = self.stats.read().await;
+        Logger::separator();
+        Logger::wallet("🛑 STOPPING BACKGROUND TRANSACTION CACHING");
+        Logger::wallet(&format!("📊 Final Statistics:"));
+        Logger::wallet(&format!("   • Total Processed: {}", stats.total_processed));
+        Logger::wallet(&format!("   • Total Cached: {}", stats.total_cached));
+        Logger::wallet(&format!("   • Total Skipped: {}", stats.total_skipped));
+        Logger::wallet(&format!("   • Total Errors: {}", stats.total_errors));
+        Logger::wallet(&format!("   • RPC Calls Made: {}", stats.rpc_calls));
+        Logger::wallet(&format!("   • Background Runs: {}", stats.background_runs));
+        if stats.average_processing_time_ms > 0.0 {
+            Logger::wallet(&format!("   • Avg Processing Time: {:.2}ms", stats.average_processing_time_ms));
+        }
+        Logger::separator();
+    }
+
+    /// Main background update loop
+    async fn run_background_update_loop(&self) {
+        Logger::wallet("🔄 Starting background transaction update loop...");
+        let mut interval = tokio::time::interval(Duration::from_secs(30)); // Check every 30 seconds
+
+        loop {
+            interval.tick().await;
+
+            let is_running = self.is_running.read().await;
+            if !*is_running {
+                Logger::wallet("🛑 Background transaction caching loop stopping");
+                break;
+            }
+            drop(is_running);
+
+            // Update background run counter
+            {
+                let mut stats = self.stats.write().await;
+                stats.background_runs += 1;
+            }
+
+            let start_time = Instant::now();
+            
+            // Update cache with new transactions
+            match self.update_cache_with_new_transactions().await {
+                Ok(new_count) => {
+                    let duration = start_time.elapsed();
+                    
+                    if new_count > 0 {
+                        Logger::separator();
+                        Logger::success("🔄 BACKGROUND UPDATE COMPLETED");
+                        Logger::success(&format!("📦 New transactions cached: {}", new_count));
+                        Logger::success(&format!("⏱️  Update time: {:.2}s", duration.as_secs_f64()));
+                        Logger::success(&format!("📈 Processing rate: {:.1} tx/sec", 
+                            new_count as f64 / duration.as_secs_f64().max(0.001)));
+                        Logger::separator();
+                    } else {
+                        Logger::wallet("✅ Background update completed - no new transactions");
+                    }
+                    
+                    // Update statistics
+                    {
+                        let mut stats = self.stats.write().await;
+                        stats.last_update = Some(Instant::now());
+                        if stats.total_processed > 0 {
+                            stats.average_processing_time_ms = 
+                                (stats.average_processing_time_ms * (stats.total_processed - new_count as u64) as f64 + 
+                                 duration.as_millis() as f64) / stats.total_processed as f64;
+                        }
+                    }
+                }
+                Err(e) => {
+                    Logger::error(&format!("❌ Background update failed: {}", e));
+                    
+                    // Update error statistics
+                    {
+                        let mut stats = self.stats.write().await;
+                        stats.total_errors += 1;
+                    }
+                }
+            }
+        }
+
+        Logger::success("Background transaction caching loop stopped");
+    }
+
+    /// Periodic statistics reporter
+    async fn run_statistics_reporter(&self) {
+        let mut interval = tokio::time::interval(Duration::from_secs(300)); // Report every 5 minutes
+
+        loop {
+            interval.tick().await;
+
+            let is_running = self.is_running.read().await;
+            if !*is_running {
+                break;
+            }
+            drop(is_running);
+
+            let stats = self.stats.read().await;
+            let cache_count = self.database.get_transaction_count().unwrap_or(0);
+            
+            Logger::separator();
+            Logger::wallet("📊 TRANSACTION CACHE STATISTICS");
+            Logger::wallet(&format!("🗃️  Current cache size: {} transactions", cache_count));
+            Logger::wallet(&format!("📈 Total processed: {}", stats.total_processed));
+            Logger::wallet(&format!("💾 Total cached: {}", stats.total_cached));
+            Logger::wallet(&format!("⏭️  Total skipped: {}", stats.total_skipped));
+            Logger::wallet(&format!("❌ Total errors: {}", stats.total_errors));
+            Logger::wallet(&format!("🌐 RPC calls made: {}", stats.rpc_calls));
+            Logger::wallet(&format!("🔄 Background runs: {}", stats.background_runs));
+            
+            if stats.average_processing_time_ms > 0.0 {
+                Logger::wallet(&format!("⏱️  Avg processing time: {:.2}ms", stats.average_processing_time_ms));
+            }
+            
+            if let Some(last_update) = stats.last_update {
+                let since_last = last_update.elapsed();
+                Logger::wallet(&format!("🕐 Last update: {:.1}s ago", since_last.as_secs_f64()));
+            }
+            
+            let cache_utilization = (cache_count as f64 / self.max_cache_size as f64) * 100.0;
+            Logger::wallet(&format!("📊 Cache utilization: {:.1}%", cache_utilization));
+            Logger::separator();
+        }
+    }
+
+    /// Periodic cleanup task
+    async fn run_periodic_cleanup(&self) {
+        let mut interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
+
+        loop {
+            interval.tick().await;
+
+            let is_running = self.is_running.read().await;
+            if !*is_running {
+                break;
+            }
+            drop(is_running);
+
+            let cache_count = self.database.get_transaction_count().unwrap_or(0);
+            
+            if cache_count > self.max_cache_size as i64 {
+                Logger::wallet(&format!("🧹 Starting cache cleanup - current size: {}", cache_count));
+                
+                match self.cleanup_old_transactions().await {
+                    Ok(deleted_count) => {
+                        Logger::success(&format!("✅ Cleanup completed - deleted {} old transactions", deleted_count));
+                    }
+                    Err(e) => {
+                        Logger::error(&format!("❌ Cleanup failed: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Cache historical transactions (initial setup)
+    pub async fn cache_historical_transactions(&self) -> Result<usize> {
+        Logger::wallet("� Caching historical transactions...");
+
+        let existing_count = self.database.get_transaction_count()?;
+        Logger::wallet(&format!("📊 Found {} existing transactions in cache", existing_count));
+
+        if existing_count >= 100 {
+            Logger::wallet("✅ Sufficient transactions already cached, skipping historical fetch");
+            return Ok(existing_count as usize);
+        }
+
+        // Fetch signatures
+        Logger::rpc(&format!("📡 Fetching {} transaction signatures...", self.max_cache_size));
+        let signatures = tokio::time
+            ::timeout(
+                Duration::from_secs(60),
+                self.rpc_manager.get_signatures_for_address(
+                    &self.wallet_pubkey,
+                    Some(self.max_cache_size)
+                )
+            ).await
+            .context("RPC call timed out after 60 seconds")?
+            .context("Failed to get transaction signatures")?;
+
+        Logger::success(&format!("� Received {} transaction signatures in {:.2}s", 
+            signatures.len(), start_time.elapsed().as_secs_f64()));
+
+        // Filter out existing transactions first
+        let mut new_signatures = Vec::new();
+        let mut skipped_existing = 0;
+
+        for signature_info in &signatures {
+            if self.database.transaction_exists(&signature_info.signature)? {
+                skipped_existing += 1;
+            } else {
+                new_signatures.push(signature_info.clone());
+            }
+        }
+
+        Logger::wallet(&format!("🔍 Analysis: {} new, {} existing (skipped)", 
+            new_signatures.len(), skipped_existing));
+
+        if new_signatures.is_empty() {
+            Logger::success("✅ All transactions already cached");
+            return Ok(skipped_existing);
+        }
+
+        // Process in concurrent batches
+        let batch_size = 20;
+        let mut cached_count = 0;
+        let mut task_set: JoinSet<Result<(usize, usize), anyhow::Error>> = tokio::task::JoinSet::new();
+        let total_batches = (new_signatures.len() + batch_size - 1) / batch_size;
+
+        Logger::wallet(&format!("🚀 Processing {} signatures in {} batches (max {} concurrent)", 
+            new_signatures.len(), total_batches, 5));
+
+        for (batch_idx, batch) in new_signatures.chunks(batch_size).enumerate() {
+            let batch_signatures = batch.to_vec();
+            let cache_manager = Arc::clone(&Arc::new(self.clone()));
+            let batch_num = batch_idx + 1;
+            let permit = Arc::clone(&self.concurrent_limit).acquire_owned().await?;
+
+            task_set.spawn(async move {
+                let _permit = permit; // Hold permit for duration of task
+                let batch_start = std::time::Instant::now();
+                let mut batch_cached = 0;
+                let mut batch_errors = 0;
+
+                Logger::wallet(&format!("📦 Batch {}/{}: Processing {} signatures...", 
+                    batch_num, total_batches, batch_signatures.len()));
+
+                for (idx, sig_info) in batch_signatures.iter().enumerate() {
+                    match cache_manager.fetch_and_parse_transaction(&sig_info.signature).await {
+                        Ok(wallet_tx) => {
+                            match cache_manager.database.save_wallet_transaction(&wallet_tx) {
+                                Ok(_) => batch_cached += 1,
+                                Err(e) => {
+                                    Logger::error(&format!("💾 Batch {} - Failed to save transaction {}: {}", 
+                                        batch_num, sig_info.signature, e));
+                                    batch_errors += 1;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            Logger::debug(&format!("🔄 Batch {} - Failed to fetch transaction {}: {}", 
+                                batch_num, sig_info.signature, e));
+                            batch_errors += 1;
+                        }
+                    }
+
+                    // Small delay between transactions to avoid rate limiting
+                    if idx < batch_signatures.len() - 1 {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                }
+
+                Logger::success(&format!("✅ Batch {}/{} completed: {} cached, {} errors, {:.2}s", 
+                    batch_num, total_batches, batch_cached, batch_errors, 
+                    batch_start.elapsed().as_secs_f64()));
+
+                Ok::<(usize, usize), anyhow::Error>((batch_cached, batch_errors))
+            });
+
+            // Add small delay between batch starts to spread load
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        // Collect results from all batches
+        let mut total_errors = 0;
+        while let Some(result) = task_set.join_next().await {
+            match result {
+                Ok(Ok((batch_cached, batch_errors))) => {
+                    cached_count += batch_cached;
+                    total_errors += batch_errors;
+                }
+                Ok(Err(e)) => {
+                    Logger::error(&format!("🚨 Batch processing error: {}", e));
+                    total_errors += 1;
+                }
+                Err(e) => {
+                    Logger::error(&format!("🚨 Task join error: {}", e));
+                    total_errors += 1;
+                }
+            }
+        }
+
+        // Update last processed signature
+        if let Some(first_sig) = signatures.first() {
+            *self.last_processed_signature.write().await = Some(first_sig.signature.clone());
+        }
+
+        // Update statistics
+        {
+            let mut stats = self.stats.write().await;
+            stats.total_cached += cached_count as u64;
+            stats.total_errors += total_errors as u64;
+            stats.cache_hits += skipped_existing as u64;
+        }
+
+        let total_time = start_time.elapsed().as_secs_f64();
+        let throughput = new_signatures.len() as f64 / total_time;
+
+        Logger::success(&format!(
+            "🎯 Historical caching completed in {:.2}s: {} new cached, {} existing, {} errors (throughput: {:.1} tx/s)",
+            total_time, cached_count, skipped_existing, total_errors, throughput
+        ));
+
+        Ok(cached_count)
+    }
+
+    /// Update cache with new transactions since last check
+    pub async fn update_cache_with_new_transactions(&self) -> Result<usize> {
+        let start_time = std::time::Instant::now();
+        let last_signature = self.last_processed_signature.read().await.clone();
+        
+        Logger::wallet("🔄 Checking for new transactions...");
+
+        // Fetch recent signatures with timeout
+        let signatures = tokio::time
+            ::timeout(
+                Duration::from_secs(30),
+                self.rpc_manager.get_signatures_for_address(&self.wallet_pubkey, Some(50))
+            ).await
+            .context("RPC call timed out")?
+            .context("Failed to get recent transaction signatures")?;
+
+        Logger::debug(&format!("📡 Fetched {} recent signatures", signatures.len()));
+
+        // Filter for new signatures only
+        let mut new_signatures = Vec::new();
+        let mut found_existing = false;
+
+        for signature_info in signatures.iter() {
+            let signature = &signature_info.signature;
+
+            // If we reach a signature we've already processed, stop
+            if let Some(ref last_sig) = last_signature {
+                if signature == last_sig {
+                    found_existing = true;
+                    break;
+                }
+            }
+
+            // Check if we already have this transaction
+            if self.database.transaction_exists(signature)? {
+                found_existing = true;
+                break;
+            }
+
+            new_signatures.push(signature_info.clone());
+        }
+
+        if new_signatures.is_empty() {
+            Logger::debug("✅ No new transactions found");
+            return Ok(0);
+        }
+
+        Logger::wallet(&format!("🆕 Processing {} new transactions concurrently...", new_signatures.len()));
+
+        // Process new transactions concurrently
+        let mut task_set: JoinSet<Result<usize, anyhow::Error>> = tokio::task::JoinSet::new();
+        let mut cached_count = 0;
+
+        for (idx, sig_info) in new_signatures.iter().enumerate() {
+            let signature = sig_info.signature.clone();
+            let cache_manager = Arc::clone(&Arc::new(self.clone()));
+            let permit = Arc::clone(&self.concurrent_limit).acquire_owned().await?;
+
+            task_set.spawn(async move {
+                let _permit = permit; // Hold permit for duration of task
+                
+                match cache_manager.fetch_and_parse_transaction(&signature).await {
+                    Ok(wallet_tx) => {
+                        match cache_manager.database.save_wallet_transaction(&wallet_tx) {
+                            Ok(_) => {
+                                Logger::debug(&format!("💾 Cached new transaction {}", signature));
+                                Ok(1)
+                            }
+                            Err(e) => {
+                                Logger::error(&format!("💾 Failed to save transaction {}: {}", signature, e));
+                                Ok(0)
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        Logger::debug(&format!("🔄 Failed to fetch transaction {}: {}", signature, e));
+                        Ok(0)
+                    }
+                }
+            });
+        }
+
+        // Collect results
+        let mut total_errors = 0;
+        while let Some(result) = task_set.join_next().await {
+            match result {
+                Ok(Ok(count)) => cached_count += count,
+                Ok(Err(_)) | Err(_) => total_errors += 1,
+            }
+        }
+
+        // Update last processed signature
+        if let Some(first_sig) = signatures.first() {
+            *self.last_processed_signature.write().await = Some(first_sig.signature.clone());
+        }
+
+        // Update statistics
+        if cached_count > 0 {
+            let mut stats = self.stats.write().await;
+            stats.total_cached += cached_count as u64;
+            stats.total_errors += total_errors as u64;
+        }
+
+        let duration = start_time.elapsed().as_secs_f64();
+        
+        if cached_count > 0 {
+            Logger::success(&format!("✅ Cached {} new transactions in {:.2}s", cached_count, duration));
+        }
+
+        Ok(cached_count)
+    }
+
+    /// Fetch and parse a single transaction
+    async fn fetch_and_parse_transaction(&self, signature: &str) -> Result<WalletTransaction> {
+        Logger::debug(&format!("🔍 Fetching transaction: {}", signature));
+        
+        // Fetch transaction with timeout
+        let transaction = tokio::time
+            ::timeout(Duration::from_secs(10), self.rpc_manager.get_transaction(signature)).await
+            .context("Transaction fetch timed out")?
+            .context("Failed to get transaction")?;
+
+        Logger::debug(&format!("✅ Successfully fetched transaction: {}", signature));
+
+        // Parse transaction for token operations
+        self.parse_transaction_for_tokens(&transaction, signature).await.context(
+            "Failed to parse transaction"
+        )
+    }
+
+    /// Parse transaction for token operations
+    async fn parse_transaction_for_tokens(
+        &self,
+        transaction: &EncodedConfirmedTransactionWithStatusMeta,
+        signature: &str
+    ) -> Result<WalletTransaction> {
+        let block_time = transaction.block_time.unwrap_or(0);
+        let slot = transaction.slot;
+
+        // For now, create a placeholder transaction
+        // This should be enhanced to actually parse the transaction instructions
+        Ok(WalletTransaction {
+            signature: signature.to_string(),
+            mint: "placeholder".to_string(),
+            transaction_type: TransactionType::Transfer,
+            amount: 0,
+            price_sol: None,
+            value_sol: None,
+            sol_amount: None,
+            fee: None,
+            block_time,
+            slot,
+            created_at: chrono::Utc::now(),
+        })
+    }
+
+    /// Get cache statistics
+    pub async fn get_cache_stats(&self) -> Result<(usize, String)> {
+        let count = self.database.get_transaction_count()?;
+        let last_sig = self.last_processed_signature.read().await.clone();
+        let status = if *self.is_running.read().await {
+            "Running".to_string()
+        } else {
+            "Stopped".to_string()
+        };
+
+        Ok((
+            count as usize,
+            format!(
+                "{} (Last: {})",
+                status,
+                last_sig.map(|s| format!("{}...", &s[..8])).unwrap_or("None".to_string())
+            ),
+        ))
+    }
+
+    /// Clean old transactions to maintain cache size
+    pub async fn cleanup_old_transactions(&self) -> Result<i64> {
+        self.database.clean_old_transactions(self.max_cache_size)
+    }
+}
+
+impl Clone for TransactionCacheManager {
+    fn clone(&self) -> Self {
+        Self {
+            database: Arc::clone(&self.database),
+            rpc_manager: Arc::clone(&self.rpc_manager),
+            wallet_pubkey: self.wallet_pubkey,
+            max_cache_size: self.max_cache_size,
+            is_running: Arc::clone(&self.is_running),
+            last_processed_signature: Arc::clone(&self.last_processed_signature),
+            concurrent_limit: Arc::clone(&self.concurrent_limit),
+            stats: Arc::clone(&self.stats),
+        }
+    }
+}

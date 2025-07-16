@@ -280,19 +280,9 @@ impl RpcManager {
         address: &Pubkey,
         limit: Option<usize>
     ) -> RpcResult<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>> {
-        use solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
-        use solana_sdk::commitment_config::CommitmentConfig;
-
-        let config = GetConfirmedSignaturesForAddress2Config {
-            before: None,
-            until: None,
-            limit,
-            commitment: Some(CommitmentConfig::confirmed()),
-        };
-
         let (client, _) = self.get_healthy_client().await?;
         client
-            .get_signatures_for_address_with_config(address, config)
+            .get_signatures_for_address(address)
             .map_err(|e| types::RpcError::RequestFailed(e.to_string()))
     }
 
