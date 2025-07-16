@@ -1,14 +1,10 @@
 use screenerbot::{
     config::Config,
     rpc::RpcManager,
-    swap::{manager::SwapManager, types::*, raydium::RaydiumProvider},
+    swap::{ manager::SwapManager, types::*, raydium::RaydiumProvider },
 };
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::Keypair,
-    signer::Signer,
-};
-use std::{str::FromStr, sync::Arc};
+use solana_sdk::{ pubkey::Pubkey, signature::Keypair, signer::Signer };
+use std::{ str::FromStr, sync::Arc };
 use tokio;
 
 #[tokio::main]
@@ -25,22 +21,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize RPC manager
     let rpc_manager = Arc::new(
-        RpcManager::new(
-            config.rpc_url.clone(),
-            config.rpc_fallbacks.clone(),
-            config.rpc.clone()
-        )?
+        RpcManager::new(config.rpc_url.clone(), config.rpc_fallbacks.clone(), config.rpc.clone())?
     );
 
     // Initialize swap manager
     let swap_manager = SwapManager::new(config.swap.clone(), rpc_manager.clone());
 
     // Create keypair from private key
-    let private_key_bytes = bs58::decode(&config.main_wallet_private)
+    let private_key_bytes = bs58
+        ::decode(&config.main_wallet_private)
         .into_vec()
         .map_err(|e| format!("Failed to decode private key: {}", e))?;
-    let keypair = Keypair::try_from(&private_key_bytes[..])
-        .map_err(|e| format!("Failed to create keypair: {}", e))?;
+    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
+        format!("Failed to create keypair: {}", e)
+    )?;
 
     println!("💳 Wallet: {}", keypair.pubkey());
 
@@ -54,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         input_mint: sol_mint,
         output_mint: usdc_mint,
         amount: 1_000_000, // 0.001 SOL
-        slippage_bps: 100,  // 1%
+        slippage_bps: 100, // 1%
         wrap_unwrap_sol: true,
         use_shared_accounts: true,
         priority_fee: Some(100_000), // 0.1 lamports per CU
@@ -65,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔄 Swap Request:");
     println!("   From: {} SOL", (swap_request.amount as f64) / 1e9);
     println!("   To: USDC");
-    println!("   Slippage: {}%", swap_request.slippage_bps as f64 / 100.0);
+    println!("   Slippage: {}%", (swap_request.slippage_bps as f64) / 100.0);
     println!();
 
     // Test 1: Get quotes from all providers
@@ -84,10 +78,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 };
 
-                println!("✅ {}: {} USDC (impact: {:.2}%, route: {} steps)", 
-                    provider, 
-                    output_tokens, 
-                    quote.price_impact_pct, 
+                println!(
+                    "✅ {}: {} USDC (impact: {:.2}%, route: {} steps)",
+                    provider,
+                    output_tokens,
+                    quote.price_impact_pct,
                     quote.route_steps
                 );
             }
@@ -146,27 +141,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if raydium_config.enabled {
         println!("   Testing Raydium direct quote...");
         let raydium_provider = RaydiumProvider::new(raydium_config.clone());
-        
+
         match raydium_provider.get_quote(&sol_mint, &usdc_mint, 1_000_000, 300).await {
             Ok(quote) => {
                 println!("   ✅ Raydium quote: {} USDC", (quote.out_amount as f64) / 1e6);
-                
+
                 // Test transaction creation with higher slippage for Raydium
-                match raydium_provider.get_swap_transaction(
-                    &keypair.pubkey(),
-                    &quote,
-                    true,  // wrap SOL
-                    false, // unwrap SOL  
-                    Some(100_000)
-                ).await {
+                match
+                    raydium_provider.get_swap_transaction(
+                        &keypair.pubkey(),
+                        &quote,
+                        true, // wrap SOL
+                        false, // unwrap SOL
+                        Some(100_000)
+                    ).await
+                {
                     Ok(transaction) => {
                         println!("   ✅ Raydium transaction created successfully");
                         println!("      Priority fee: {} lamports", transaction.priority_fee);
-                        println!("      Transaction size: {} bytes", transaction.serialized_transaction.len());
-                        
+                        println!(
+                            "      Transaction size: {} bytes",
+                            transaction.serialized_transaction.len()
+                        );
+
                         // EXECUTING REAL RAYDIUM SWAP
                         let rpc_client = rpc_manager.get_rpc_client()?;
-                        match raydium_provider.execute_swap(&transaction, &keypair, &rpc_client).await {
+                        match
+                            raydium_provider.execute_swap(&transaction, &keypair, &rpc_client).await
+                        {
                             Ok(signature) => {
                                 println!("   🎉 Raydium swap executed: {}", signature);
                                 println!("      Explorer: https://solscan.io/tx/{}", signature);
@@ -202,13 +204,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Total swaps: {}", stats.total_swaps);
     println!("   Successful swaps: {}", stats.successful_swaps);
     println!("   Failed swaps: {}", stats.failed_swaps);
-    println!("   Success rate: {:.1}%", 
-        if stats.total_swaps > 0 {
-            (stats.successful_swaps as f64 / stats.total_swaps as f64) * 100.0
-        } else {
-            0.0
-        }
-    );
+    println!("   Success rate: {:.1}%", if stats.total_swaps > 0 {
+        ((stats.successful_swaps as f64) / (stats.total_swaps as f64)) * 100.0
+    } else {
+        0.0
+    });
     println!("   Total volume: ${:.2}", stats.total_volume);
     println!("   Average execution time: {} ms", stats.average_execution_time_ms);
 

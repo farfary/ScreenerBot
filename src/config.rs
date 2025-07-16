@@ -139,7 +139,7 @@ impl Default for GmgnConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            api_url: "https://gmgn.ai/api/v1/sol".to_string(),
+            api_url: "https://gmgn.ai/defi/router/v1/sol/tx".to_string(),
             timeout_seconds: 10,
             swap_mode: "ExactIn".to_string(),
             fee: 0.001,

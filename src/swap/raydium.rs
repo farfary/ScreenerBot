@@ -5,13 +5,13 @@ use reqwest::Client;
 use serde_json;
 use solana_sdk::{
     pubkey::Pubkey,
-    signature::{Keypair, Signature},
+    signature::{ Keypair, Signature },
     transaction::VersionedTransaction,
     signer::Signer,
     message::VersionedMessage,
 };
 use solana_client::rpc_client::RpcClient;
-use base64::{Engine as _, engine::general_purpose};
+use base64::{ Engine as _, engine::general_purpose };
 use bincode;
 use std::str::FromStr;
 use std::time::Duration;
@@ -35,8 +35,8 @@ struct RaydiumPriorityFeeData {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct RaydiumPriorityFeeTiers {
     vh: u64, // very high
-    h: u64,  // high
-    m: u64,  // medium
+    h: u64, // high
+    m: u64, // medium
 }
 
 pub struct RaydiumProvider {
@@ -240,7 +240,11 @@ impl RaydiumProvider {
         rpc_client: &RpcClient
     ) -> SwapResult<Signature> {
         // This method now follows the exact same pattern as the working test_quote_raydium.rs
-        self.send_raydium_transaction(&transaction.serialized_transaction, keypair, rpc_client).await
+        self.send_raydium_transaction(
+            &transaction.serialized_transaction,
+            keypair,
+            rpc_client
+        ).await
     }
 
     /// Send Raydium transaction using the exact same method as test_quote_raydium.rs
@@ -253,16 +257,32 @@ impl RaydiumProvider {
         // Decode the base64 transaction
         let transaction_bytes = general_purpose::STANDARD
             .decode(transaction_base64)
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to decode transaction: {}", e)))?;
+            .map_err(|e|
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("Failed to decode transaction: {}", e)
+                )
+            )?;
 
         // Deserialize into VersionedTransaction (Raydium uses V0 transactions)
-        let mut versioned_transaction: VersionedTransaction = bincode::deserialize(&transaction_bytes)
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to deserialize transaction: {}", e)))?;
+        let mut versioned_transaction: VersionedTransaction = bincode
+            ::deserialize(&transaction_bytes)
+            .map_err(|e|
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("Failed to deserialize transaction: {}", e)
+                )
+            )?;
 
         // Get the latest blockhash and update transaction
         let blockhash = rpc_client
             .get_latest_blockhash()
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to get blockhash: {}", e)))?;
+            .map_err(|e|
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("Failed to get blockhash: {}", e)
+                )
+            )?;
 
         // Update blockhash in the message
         match &mut versioned_transaction.message {
@@ -277,18 +297,31 @@ impl RaydiumProvider {
         // Clear existing signatures and sign with our wallet
         versioned_transaction.signatures.clear();
         let message = versioned_transaction.message.clone();
-        let message_bytes = bincode::serialize(&message)
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to serialize message: {}", e)))?;
+        let message_bytes = bincode
+            ::serialize(&message)
+            .map_err(|e|
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("Failed to serialize message: {}", e)
+                )
+            )?;
         let signature = keypair.sign_message(&message_bytes);
         versioned_transaction.signatures.push(signature);
 
         // Serialize the signed transaction
-        let signed_transaction_bytes = bincode::serialize(&versioned_transaction)
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to serialize signed transaction: {}", e)))?;
+        let signed_transaction_bytes = bincode
+            ::serialize(&versioned_transaction)
+            .map_err(|e|
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("Failed to serialize signed transaction: {}", e)
+                )
+            )?;
         let signed_transaction_base64 = general_purpose::STANDARD.encode(&signed_transaction_bytes);
 
         // Send using RPC with the exact same parameters as test_quote_raydium.rs
-        let params = serde_json::json!([
+        let params =
+            serde_json::json!([
             signed_transaction_base64,
             {
                 "encoding": "base64",
@@ -297,7 +330,8 @@ impl RaydiumProvider {
             }
         ]);
 
-        let request_body = serde_json::json!({
+        let request_body =
+            serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "sendTransaction",
@@ -309,31 +343,56 @@ impl RaydiumProvider {
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send().await
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("HTTP error: {}", e)))?;
+            .map_err(|e|
+                SwapError::TransactionFailed(SwapProvider::Raydium, format!("HTTP error: {}", e))
+            )?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(SwapError::TransactionFailed(SwapProvider::Raydium, format!("HTTP error: {}", error_text)));
+            return Err(
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("HTTP error: {}", error_text)
+                )
+            );
         }
 
-        let response_json: serde_json::Value = response.json().await
-            .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to parse response: {}", e)))?;
+        let response_json: serde_json::Value = response
+            .json().await
+            .map_err(|e|
+                SwapError::TransactionFailed(
+                    SwapProvider::Raydium,
+                    format!("Failed to parse response: {}", e)
+                )
+            )?;
 
         if let Some(error) = response_json.get("error") {
-            return Err(SwapError::TransactionFailed(SwapProvider::Raydium, format!("RPC error: {}", error)));
+            return Err(
+                SwapError::TransactionFailed(SwapProvider::Raydium, format!("RPC error: {}", error))
+            );
         }
 
         if let Some(result) = response_json.get("result") {
             if let Some(signature_str) = result.as_str() {
                 let transaction_signature = signature_str
                     .parse::<Signature>()
-                    .map_err(|e| SwapError::TransactionFailed(SwapProvider::Raydium, format!("Failed to parse signature: {}", e)))?;
+                    .map_err(|e|
+                        SwapError::TransactionFailed(
+                            SwapProvider::Raydium,
+                            format!("Failed to parse signature: {}", e)
+                        )
+                    )?;
 
                 return Ok(transaction_signature);
             }
         }
 
-        Err(SwapError::TransactionFailed(SwapProvider::Raydium, "Invalid response format".to_string()))
+        Err(
+            SwapError::TransactionFailed(
+                SwapProvider::Raydium,
+                "Invalid response format".to_string()
+            )
+        )
     }
 
     fn convert_raydium_quote_to_swap_quote(
@@ -405,23 +464,20 @@ impl RaydiumProvider {
             "V0"
         );
 
-        match self.client
-            .get(&url)
-            .timeout(Duration::from_secs(10))
-            .send().await {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        // Try to parse the response to ensure it's valid
-                        match response.json::<RaydiumSwapCompute>().await {
-                            Ok(raydium_response) => Ok(raydium_response.success),
-                            Err(_) => Ok(false)
-                        }
-                    } else {
-                        Ok(false)
+        match self.client.get(&url).timeout(Duration::from_secs(10)).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    // Try to parse the response to ensure it's valid
+                    match response.json::<RaydiumSwapCompute>().await {
+                        Ok(raydium_response) => Ok(raydium_response.success),
+                        Err(_) => Ok(false),
                     }
+                } else {
+                    Ok(false)
                 }
-                Err(_) => Ok(false)
             }
+            Err(_) => Ok(false),
+        }
     }
 
     pub async fn get_pools(&self) -> SwapResult<Vec<serde_json::Value>> {

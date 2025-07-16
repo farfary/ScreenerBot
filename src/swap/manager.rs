@@ -65,18 +65,12 @@ impl SwapManager {
         }
 
         if self.gmgn.is_available() {
-            let result = match
-                self.gmgn.get_quote_and_transaction(
-                    &request.input_mint,
-                    &request.output_mint,
-                    request.amount,
-                    request.slippage_bps,
-                    &request.user_public_key
-                ).await
-            {
-                Ok((quote, _)) => Ok(quote),
-                Err(e) => Err(e),
-            };
+            let result = self.gmgn.get_quote(
+                &request.input_mint,
+                &request.output_mint,
+                request.amount,
+                request.slippage_bps
+            ).await;
             quotes.insert(SwapProvider::Gmgn, result);
         }
 
@@ -156,15 +150,13 @@ impl SwapManager {
                 ).await?
             }
             SwapProvider::Gmgn => {
-                // GMGN returns both quote and transaction together
-                let (_, transaction) = self.gmgn.get_quote_and_transaction(
-                    &request.input_mint,
-                    &request.output_mint,
-                    request.amount,
-                    request.slippage_bps,
-                    &request.user_public_key
-                ).await?;
-                transaction
+                self.gmgn.get_swap_transaction(
+                    &request.user_public_key,
+                    quote,
+                    request.wrap_unwrap_sol,
+                    request.wrap_unwrap_sol,
+                    request.priority_fee
+                ).await?
             }
             SwapProvider::Raydium => {
                 self.raydium.get_swap_transaction(
@@ -267,14 +259,12 @@ impl SwapManager {
                 ).await?
             }
             SwapProvider::Gmgn => {
-                let (quote, _) = self.gmgn.get_quote_and_transaction(
+                self.gmgn.get_quote(
                     &request.input_mint,
                     &request.output_mint,
                     request.amount,
-                    request.slippage_bps,
-                    &request.user_public_key
-                ).await?;
-                quote
+                    request.slippage_bps
+                ).await?
             }
             SwapProvider::Raydium => {
                 self.raydium.get_quote(
@@ -311,16 +301,33 @@ impl SwapManager {
     ) -> SwapResult<Signature> {
         // For Raydium, use specialized execution method that handles V0 transactions properly
         if transaction.provider == SwapProvider::Raydium {
-            let rpc_client = self.rpc_manager.get_rpc_client()
-                .map_err(|e| SwapError::TransactionFailed(
-                    SwapProvider::Raydium,
-                    format!("Failed to get RPC client: {}", e)
-                ))?;
-            
+            let rpc_client = self.rpc_manager
+                .get_rpc_client()
+                .map_err(|e|
+                    SwapError::TransactionFailed(
+                        SwapProvider::Raydium,
+                        format!("Failed to get RPC client: {}", e)
+                    )
+                )?;
+
             return self.raydium.execute_swap(transaction, keypair, &rpc_client).await;
         }
 
-        // For Jupiter and GMGN, use the existing method
+        // For GMGN, use specialized execution method
+        if transaction.provider == SwapProvider::Gmgn {
+            let rpc_client = self.rpc_manager
+                .get_rpc_client()
+                .map_err(|e|
+                    SwapError::TransactionFailed(
+                        SwapProvider::Gmgn,
+                        format!("Failed to get RPC client: {}", e)
+                    )
+                )?;
+
+            return self.gmgn.execute_swap(transaction, keypair, &rpc_client).await;
+        }
+
+        // For Jupiter, use the existing method
         let transaction_bytes = general_purpose::STANDARD
             .decode(&transaction.serialized_transaction)
             .map_err(|e|
@@ -355,21 +362,24 @@ impl SwapManager {
         match &mut versioned_transaction.message {
             VersionedMessage::V0(ref mut v0_msg) => {
                 v0_msg.recent_blockhash = recent_blockhash;
-                
+
                 // Clear existing signatures and sign with our keypair
                 versioned_transaction.signatures.clear();
                 let message = versioned_transaction.message.clone();
-                let message_bytes = bincode::serialize(&message)
-                    .map_err(|e| SwapError::TransactionFailed(
-                        transaction.provider.clone(),
-                        format!("Failed to serialize V0 message: {}", e)
-                    ))?;
+                let message_bytes = bincode
+                    ::serialize(&message)
+                    .map_err(|e|
+                        SwapError::TransactionFailed(
+                            transaction.provider.clone(),
+                            format!("Failed to serialize V0 message: {}", e)
+                        )
+                    )?;
                 let signature = keypair.sign_message(&message_bytes);
                 versioned_transaction.signatures.push(signature);
             }
             VersionedMessage::Legacy(ref mut legacy_msg) => {
                 legacy_msg.recent_blockhash = recent_blockhash;
-                
+
                 // Create a legacy transaction for signing
                 let legacy_transaction = solana_sdk::transaction::Transaction::new(
                     &[keypair],

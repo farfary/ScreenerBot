@@ -367,7 +367,8 @@ impl RpcManager {
         }
 
         // Get the first healthy endpoint
-        let endpoint = endpoints.iter()
+        let endpoint = endpoints
+            .iter()
             .find(|e| e.healthy)
             .unwrap_or(&endpoints[0]);
 
