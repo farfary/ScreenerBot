@@ -7,6 +7,8 @@ pub mod types;
 pub mod rpc;
 pub mod pricing;
 pub mod swap;
+pub mod transaction_cache;
+pub mod profit_calculator;
 
 pub use config::Config;
 pub use database::Database;

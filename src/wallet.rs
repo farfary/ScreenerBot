@@ -644,9 +644,10 @@ impl WalletTracker {
     }
 
     async fn run_tracking_loop(&self) {
-        Logger::wallet("Starting wallet tracking loop...");
+        Logger::wallet("Starting enhanced wallet tracking loop...");
 
-        let mut interval = time::interval(Duration::from_secs(15)); // Update every 15 seconds
+        let mut interval = time::interval(Duration::from_secs(30)); // Update every 30 seconds
+        let mut summary_counter = 0;
 
         loop {
             interval.tick().await;
@@ -658,16 +659,24 @@ impl WalletTracker {
             }
             drop(is_running);
 
-            Logger::wallet("🔄 Running 15-second refresh cycle...");
+            Logger::wallet("🔄 Running enhanced refresh cycle...");
 
-            // Skip transaction processing for now to focus on SPL token detection
-            Logger::debug("⏭️ Skipping transaction fetch to focus on SPL token scanning...");
-
-            // Then refresh positions with profit/loss calculation
-            Logger::wallet("🔍 Scanning for SPL token accounts...");
+            // Refresh positions with profit/loss calculation
+            Logger::wallet("🔍 Refreshing portfolio positions...");
             match self.refresh_positions().await {
                 Ok(()) => {
-                    Logger::success("✅ Position refresh COMPLETED");
+                    Logger::success("✅ Portfolio refresh COMPLETED");
+
+                    // Every 5 cycles (2.5 minutes), show detailed summary
+                    summary_counter += 1;
+                    if summary_counter >= 5 {
+                        summary_counter = 0;
+
+                        Logger::wallet("� Displaying comprehensive portfolio summary...");
+                        if let Err(e) = self.display_portfolio_summary().await {
+                            Logger::error(&format!("Failed to display portfolio summary: {}", e));
+                        }
+                    }
                 }
                 Err(e) => {
                     Logger::error(&format!("❌ FAILED to refresh positions: {}", e));
@@ -675,10 +684,10 @@ impl WalletTracker {
                 }
             }
 
-            Logger::wallet("🏁 Refresh cycle COMPLETED, waiting 15 seconds...");
+            Logger::wallet("🏁 Enhanced refresh cycle COMPLETED, waiting 30 seconds...");
         }
 
-        Logger::success("Wallet tracking loop stopped");
+        Logger::success("Enhanced wallet tracking loop stopped");
     }
 
     fn parse_token_account(&self, data: &[u8]) -> Result<Account> {
@@ -789,6 +798,202 @@ impl WalletTracker {
         );
         Ok(Vec::new()) // Return empty vector instead of error for wallets with no tokens
     }
+
+    /// Get comprehensive portfolio summary with metrics
+    pub async fn get_portfolio_summary(&self) -> Result<PortfolioSummary> {
+        let positions = self.get_positions().await;
+        let sol_balance = self.get_sol_balance().await?;
+
+        let mut total_value_sol = sol_balance;
+        let mut total_invested_sol = 0.0;
+        let mut total_pnl_sol = 0.0;
+        let mut total_unrealized_pnl = 0.0;
+        let mut total_realized_pnl = 0.0;
+        let mut active_positions = 0;
+
+        for position in positions.values() {
+            if let Some(value) = position.value_sol {
+                total_value_sol += value;
+            }
+            if let Some(invested) = position.total_invested_sol {
+                total_invested_sol += invested;
+            }
+            if let Some(pnl) = position.pnl_sol {
+                total_pnl_sol += pnl;
+            }
+            if let Some(unrealized) = position.unrealized_pnl_sol {
+                total_unrealized_pnl += unrealized;
+            }
+            if let Some(realized) = position.realized_pnl_sol {
+                total_realized_pnl += realized;
+            }
+            if position.balance > 0 {
+                active_positions += 1;
+            }
+        }
+
+        let roi_percentage = if total_invested_sol > 0.0 {
+            (total_pnl_sol / total_invested_sol) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(PortfolioSummary {
+            sol_balance,
+            total_value_sol,
+            total_invested_sol,
+            total_pnl_sol,
+            unrealized_pnl_sol: total_unrealized_pnl,
+            realized_pnl_sol: total_realized_pnl,
+            roi_percentage,
+            active_positions,
+            total_positions: positions.len(),
+            largest_position_value: positions
+                .values()
+                .filter_map(|p| p.value_sol)
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0),
+        })
+    }
+
+    /// Get performance analytics for the portfolio
+    pub async fn get_performance_metrics(&self) -> Result<PerformanceMetrics> {
+        let positions = self.get_positions().await;
+
+        let total_tokens = positions.len();
+        let profitable_tokens = positions
+            .values()
+            .filter(|p| p.pnl_sol.unwrap_or(0.0) > 0.0)
+            .count();
+
+        let loss_making_tokens = positions
+            .values()
+            .filter(|p| p.pnl_sol.unwrap_or(0.0) < 0.0)
+            .count();
+
+        let win_rate = if total_tokens > 0 {
+            ((profitable_tokens as f64) / (total_tokens as f64)) * 100.0
+        } else {
+            0.0
+        };
+
+        let avg_roi = if !positions.is_empty() {
+            positions
+                .values()
+                .filter_map(|p| p.pnl_percentage)
+                .sum::<f64>() / (positions.len() as f64)
+        } else {
+            0.0
+        };
+
+        let best_performer = positions
+            .values()
+            .filter_map(|p| p.pnl_percentage.map(|roi| (p.mint.clone(), roi)))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        let worst_performer = positions
+            .values()
+            .filter_map(|p| p.pnl_percentage.map(|roi| (p.mint.clone(), roi)))
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        Ok(PerformanceMetrics {
+            total_tokens,
+            profitable_tokens,
+            loss_making_tokens,
+            win_rate,
+            average_roi: avg_roi,
+            best_performer,
+            worst_performer,
+        })
+    }
+
+    /// Enhanced portfolio display with detailed metrics
+    pub async fn display_portfolio_summary(&self) -> Result<()> {
+        let summary = self.get_portfolio_summary().await?;
+        let metrics = self.get_performance_metrics().await?;
+
+        Logger::separator();
+        Logger::success("📊 COMPREHENSIVE PORTFOLIO SUMMARY");
+        Logger::separator();
+
+        // Account balances
+        Logger::wallet("💰 ACCOUNT BALANCES:");
+        Logger::print_key_value("SOL Balance", &format!("{:.6} SOL", summary.sol_balance));
+        Logger::print_key_value(
+            "Total Portfolio Value",
+            &format!("{:.6} SOL", summary.total_value_sol)
+        );
+        Logger::print_key_value(
+            "Total Invested",
+            &format!("{:.6} SOL", summary.total_invested_sol)
+        );
+
+        // P&L Summary
+        Logger::wallet("📈 PROFIT & LOSS:");
+        Logger::print_key_value("Total P&L", &format!("{:.6} SOL", summary.total_pnl_sol));
+        Logger::print_key_value("Realized P&L", &format!("{:.6} SOL", summary.realized_pnl_sol));
+        Logger::print_key_value(
+            "Unrealized P&L",
+            &format!("{:.6} SOL", summary.unrealized_pnl_sol)
+        );
+        Logger::print_key_value("ROI", &format!("{:.2}%", summary.roi_percentage));
+
+        // Portfolio Composition
+        Logger::wallet("🔍 PORTFOLIO COMPOSITION:");
+        Logger::print_key_value("Total Positions", &summary.total_positions.to_string());
+        Logger::print_key_value("Active Positions", &summary.active_positions.to_string());
+        Logger::print_key_value(
+            "Largest Position",
+            &format!("{:.6} SOL", summary.largest_position_value)
+        );
+
+        // Performance Metrics
+        Logger::wallet("📊 PERFORMANCE METRICS:");
+        Logger::print_key_value("Win Rate", &format!("{:.1}%", metrics.win_rate));
+        Logger::print_key_value("Profitable Tokens", &metrics.profitable_tokens.to_string());
+        Logger::print_key_value("Loss-Making Tokens", &metrics.loss_making_tokens.to_string());
+        Logger::print_key_value("Average ROI", &format!("{:.2}%", metrics.average_roi));
+
+        if let Some((token, roi)) = &metrics.best_performer {
+            Logger::print_key_value("Best Performer", &format!("{} (+{:.2}%)", token, roi));
+        }
+
+        if let Some((token, roi)) = &metrics.worst_performer {
+            Logger::print_key_value("Worst Performer", &format!("{} ({:.2}%)", token, roi));
+        }
+
+        Logger::separator();
+        Ok(())
+    }
+
+    /// Get top performing positions
+    pub async fn get_top_positions(&self, limit: usize) -> Vec<WalletPosition> {
+        let positions = self.get_positions().await;
+        let mut sorted_positions: Vec<_> = positions.into_values().collect();
+
+        // Sort by value (descending)
+        sorted_positions.sort_by(|a, b| {
+            b.value_sol.unwrap_or(0.0).partial_cmp(&a.value_sol.unwrap_or(0.0)).unwrap()
+        });
+
+        sorted_positions.into_iter().take(limit).collect()
+    }
+
+    /// Get worst performing positions
+    pub async fn get_worst_positions(&self, limit: usize) -> Vec<WalletPosition> {
+        let positions = self.get_positions().await;
+        let mut sorted_positions: Vec<_> = positions
+            .into_values()
+            .filter(|p| p.pnl_percentage.is_some())
+            .collect();
+
+        // Sort by PnL percentage (ascending)
+        sorted_positions.sort_by(|a, b| {
+            a.pnl_percentage.unwrap_or(0.0).partial_cmp(&b.pnl_percentage.unwrap_or(0.0)).unwrap()
+        });
+
+        sorted_positions.into_iter().take(limit).collect()
+    }
 }
 
 impl Clone for WalletTracker {
@@ -810,4 +1015,29 @@ impl WalletTracker {
     pub fn set_pricing_manager(&mut self, pricing_manager: Arc<PricingManager>) {
         self.pricing_manager = Some(pricing_manager);
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct PortfolioSummary {
+    pub sol_balance: f64,
+    pub total_value_sol: f64,
+    pub total_invested_sol: f64,
+    pub total_pnl_sol: f64,
+    pub unrealized_pnl_sol: f64,
+    pub realized_pnl_sol: f64,
+    pub roi_percentage: f64,
+    pub active_positions: usize,
+    pub total_positions: usize,
+    pub largest_position_value: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PerformanceMetrics {
+    pub total_tokens: usize,
+    pub profitable_tokens: usize,
+    pub loss_making_tokens: usize,
+    pub win_rate: f64,
+    pub average_roi: f64,
+    pub best_performer: Option<(String, f64)>,
+    pub worst_performer: Option<(String, f64)>,
 }

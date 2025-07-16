@@ -123,15 +123,15 @@ impl Database {
             []
         )?;
 
-        // Transaction tracking table - unlimited caching
+        // Transaction tracking table - SOL-based pricing
         conn.execute(
             "CREATE TABLE IF NOT EXISTS wallet_transactions (
                 signature TEXT PRIMARY KEY,
                 mint TEXT NOT NULL,
                 transaction_type TEXT NOT NULL,
                 amount INTEGER NOT NULL,
-                price_usd REAL,
-                value_usd REAL,
+                price_sol REAL,
+                value_sol REAL,
                 sol_amount INTEGER,
                 fee INTEGER,
                 block_time INTEGER NOT NULL,
@@ -140,6 +140,10 @@ impl Database {
             )",
             []
         )?;
+
+        // Migrate old USD-based columns to SOL-based if they exist
+        let _ = conn.execute("ALTER TABLE wallet_transactions ADD COLUMN price_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_transactions ADD COLUMN value_sol REAL", []);
 
         // Create indexes for pricing tables
         conn.execute(
