@@ -1,5 +1,5 @@
 use anyhow::Result;
-use screenerbot::{ Config, Database, Discovery, Logger, PricingManager, Trader, WalletTracker };
+use screenerbot::{ Config, Database, Discovery, Logger, PricingManager, WalletTracker };
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::Duration;
@@ -79,16 +79,6 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Legacy Trader module (keeping for compatibility)
-    let trader = Arc::new(
-        Trader::new(
-            config.trader.clone(),
-            Arc::clone(&database),
-            Arc::clone(&discovery),
-            Arc::clone(&wallet_tracker)
-        )
-    );
-
     // Start modules
     Logger::separator();
     Logger::info("Starting modules...");
@@ -105,15 +95,6 @@ async fn main() -> Result<()> {
     wallet_tracker.start().await;
     Logger::success("Wallet tracker started");
 
-    // Start trader if enabled
-    if config.trader.enabled {
-        // Start legacy trader
-        trader.start().await;
-        Logger::success("Legacy trader started");
-    } else {
-        Logger::warn("Trading module is disabled in configuration");
-    }
-
     Logger::separator();
     Logger::success("All modules started successfully!");
     Logger::info("Press Ctrl+C to stop the bot");
@@ -122,7 +103,6 @@ async fn main() -> Result<()> {
     // Start status display loop
     let status_discovery = Arc::clone(&discovery);
     let status_wallet = Arc::clone(&wallet_tracker);
-    let status_trader = Arc::clone(&trader);
     let status_pricing = Arc::clone(&pricing_manager);
 
     tokio::spawn(async move {
@@ -132,12 +112,7 @@ async fn main() -> Result<()> {
             interval.tick().await;
 
             // Display status
-            display_status(
-                &status_discovery,
-                &status_wallet,
-                &status_trader,
-                &status_pricing
-            ).await;
+            display_status(&status_discovery, &status_wallet, &status_pricing).await;
         }
     });
 
@@ -157,7 +132,6 @@ async fn main() -> Result<()> {
 
     discovery.stop().await;
     wallet_tracker.stop().await;
-    trader.stop().await;
     // Note: pricing_manager doesn't need explicit stop - background tasks will be dropped
 
     Logger::success("ScreenerBot shutdown complete");
@@ -168,7 +142,6 @@ async fn main() -> Result<()> {
 async fn display_status(
     discovery: &Arc<Discovery>,
     wallet_tracker: &Arc<WalletTracker>,
-    trader: &Arc<Trader>,
     pricing_manager: &Arc<PricingManager>
 ) {
     // Clear screen and move cursor to top
@@ -252,35 +225,6 @@ async fn display_status(
         }
     } else {
         Logger::wallet("STOPPED");
-    }
-
-    Logger::separator();
-
-    // Trader status
-    if trader.is_running().await {
-        let signals = trader.get_active_signals().await;
-        Logger::trader(&format!("ACTIVE - {} signals generated", signals.len()));
-
-        // Show active signals
-        for (mint, signal) in signals.iter().take(3) {
-            let signal_emoji = match signal.signal_type {
-                screenerbot::types::SignalType::Buy => "🟢 BUY",
-                screenerbot::types::SignalType::Sell => "🔴 SELL",
-                screenerbot::types::SignalType::Hold => "🟡 HOLD",
-            };
-
-            Logger::trader(
-                &format!(
-                    "  {} {} - Confidence: {:.0}% | {}",
-                    signal_emoji,
-                    &mint[..8],
-                    signal.confidence * 100.0,
-                    signal.reason
-                )
-            );
-        }
-    } else {
-        Logger::trader("DISABLED (for safety)");
     }
 
     Logger::separator();

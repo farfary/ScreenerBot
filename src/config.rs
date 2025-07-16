@@ -10,7 +10,6 @@ pub struct Config {
     #[serde(default)]
     pub rpc_fallbacks: Vec<String>,
     pub discovery: DiscoveryConfig,
-    pub trader: TraderConfig,
     pub database: DatabaseConfig,
     pub general: GeneralConfig,
     #[serde(default)]
@@ -29,30 +28,6 @@ pub struct DiscoveryConfig {
     pub min_market_cap: Option<f64>,
     pub blacklisted_tokens: Vec<String>,
     pub sources: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TraderConfig {
-    pub enabled: bool,
-    pub trade_size_sol: f64,
-    pub max_open_positions: u32,
-    pub min_profit_percentage: f64,
-    pub max_loss_percentage: f64,
-    pub max_slippage: f64,
-    pub min_confidence_score: f64,
-    pub position_check_interval_secs: u64,
-    pub time_based_profit: TimeProfitConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimeProfitConfig {
-    pub enabled: bool,
-    pub quick_profit_threshold_mins: u64,
-    pub quick_profit_target: f64,
-    pub medium_profit_threshold_hours: u64,
-    pub medium_profit_target: f64,
-    pub long_profit_threshold_hours: u64,
-    pub long_profit_target: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,25 +78,6 @@ impl Default for Config {
                 min_market_cap: Some(10000.0), // 10K
                 blacklisted_tokens: vec![],
                 sources: vec!["raydium".to_string(), "jupiter".to_string(), "orca".to_string()],
-            },
-            trader: TraderConfig {
-                enabled: false, // Start disabled for safety
-                trade_size_sol: 0.001,
-                max_open_positions: 10,
-                min_profit_percentage: 3.0,
-                max_loss_percentage: -70.0,
-                max_slippage: 1.0,
-                min_confidence_score: 0.7,
-                position_check_interval_secs: 30,
-                time_based_profit: TimeProfitConfig {
-                    enabled: true,
-                    quick_profit_threshold_mins: 5,
-                    quick_profit_target: 100.0,
-                    medium_profit_threshold_hours: 1,
-                    medium_profit_target: 10.0,
-                    long_profit_threshold_hours: 24,
-                    long_profit_target: 3.0,
-                },
             },
             database: DatabaseConfig {
                 path: "cache.db".to_string(),

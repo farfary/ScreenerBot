@@ -31,24 +31,6 @@ pub struct WalletPosition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeSignal {
-    pub token_mint: String,
-    pub signal_type: SignalType,
-    pub confidence: f64,
-    pub price: f64,
-    pub volume: f64,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SignalType {
-    Buy,
-    Sell,
-    Hold,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveryStats {
     pub total_tokens_discovered: u64,
     pub active_tokens: u64,
