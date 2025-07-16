@@ -70,7 +70,7 @@ impl Discovery {
         *is_running = true;
         drop(is_running);
 
-        Logger::success("Discovery module started");
+        Logger::discovery("Discovery module started");
 
         // Load existing tokens from database
         self.load_existing_tokens().await?;

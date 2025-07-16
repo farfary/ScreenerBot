@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
             config
         }
         Err(e) => {
-            Logger::error(&format!("Failed to load config: {}", e));
+            Logger::error(&format!("FAILED to load config: {}", e));
             Logger::info("Creating default configuration...");
             let config = Config::default();
             config.save("configs.json")?;
@@ -31,11 +31,11 @@ async fn main() -> Result<()> {
     // Initialize database
     let database = match Database::new(&config.database.path) {
         Ok(db) => {
-            Logger::success("Database initialized");
+            Logger::database("Database initialized");
             Arc::new(db)
         }
         Err(e) => {
-            Logger::error(&format!("Failed to initialize database: {}", e));
+            Logger::error(&format!("FAILED to initialize database: {}", e));
             return Err(e);
         }
     };
@@ -58,21 +58,21 @@ async fn main() -> Result<()> {
                 .unwrap_or(100) // Top 100 tokens default
         )
     );
-    Logger::success("Pricing manager initialized");
+    Logger::pricing("Pricing manager initialized");
 
     // Discovery module
     let discovery = Arc::new(Discovery::new(config.discovery.clone(), Arc::clone(&database)));
-    Logger::success("Discovery module initialized");
+    Logger::discovery("Discovery module initialized");
 
     // Wallet tracker (with pricing manager integration)
     let mut wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
         Ok(mut tracker) => {
             tracker.set_pricing_manager(Arc::clone(&pricing_manager));
-            Logger::success("Wallet tracker initialized");
+            Logger::wallet("Wallet tracker initialized");
             Arc::new(tracker)
         }
         Err(e) => {
-            Logger::error(&format!("Failed to initialize wallet tracker: {}", e));
+            Logger::error(&format!("FAILED to initialize wallet tracker: {}", e));
             return Err(e);
         }
     };
@@ -82,17 +82,17 @@ async fn main() -> Result<()> {
 
     // Start pricing manager first
     pricing_manager.start().await;
-    Logger::success("Pricing manager started");
+    Logger::pricing("Pricing manager started");
 
     // Start discovery module
     discovery.start().await;
-    Logger::success("Discovery module started");
+    Logger::discovery("Discovery module started");
 
     // Start wallet tracker
     wallet_tracker.start().await;
-    Logger::success("Wallet tracker started");
+    Logger::wallet("Wallet tracker started");
 
-    Logger::success("All modules started successfully!");
+    Logger::success("All modules started SUCCESSFULLY!");
     Logger::info("Press Ctrl+C to stop the bot");
     Logger::separator();
 
@@ -179,8 +179,12 @@ async fn display_status(
 
             for (i, position) in sorted_positions.iter().take(3).enumerate() {
                 let balance = (position.balance as f64) / (10_f64).powi(position.decimals as i32);
-                let pnl_color = if position.pnl_percentage.unwrap_or(0.0) >= 0.0 { "+" } else { "" };
-                
+                let pnl_color = if position.pnl_percentage.unwrap_or(0.0) >= 0.0 {
+                    "+"
+                } else {
+                    ""
+                };
+
                 Logger::wallet(
                     &format!(
                         "  {}. {}... | {:.4} | ${:.2} | {}{}%",

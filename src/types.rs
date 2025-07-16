@@ -42,47 +42,6 @@ pub struct DiscoveryStats {
     pub discovery_rate_per_hour: f64,
 }
 
-#[derive(Debug, Clone)]
-pub struct LogLevel {
-    pub level: log::Level,
-    pub color: &'static str,
-    pub prefix: &'static str,
-}
-
-impl LogLevel {
-    pub const INFO: LogLevel = LogLevel {
-        level: log::Level::Info,
-        color: "\x1b[32m", // Green
-        prefix: "ℹ️ ",
-    };
-
-    pub const WARN: LogLevel = LogLevel {
-        level: log::Level::Warn,
-        color: "\x1b[33m", // Yellow
-        prefix: "⚠️ ",
-    };
-
-    pub const ERROR: LogLevel = LogLevel {
-        level: log::Level::Error,
-        color: "\x1b[31m", // Red
-        prefix: "❌",
-    };
-
-    pub const DEBUG: LogLevel = LogLevel {
-        level: log::Level::Debug,
-        color: "\x1b[36m", // Cyan
-        prefix: "🔍",
-    };
-
-    pub const SUCCESS: LogLevel = LogLevel {
-        level: log::Level::Info,
-        color: "\x1b[92m", // Bright Green
-        prefix: "✅",
-    };
-}
-
-pub const RESET_COLOR: &str = "\x1b[0m";
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletTransaction {
     pub signature: String,

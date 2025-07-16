@@ -108,7 +108,7 @@ impl PricingManager {
     }
 
     pub async fn start(&self) {
-        Logger::info("🏷️  PRICING: Starting pricing manager...");
+        Logger::pricing("Starting pricing manager...");
 
         let gecko_client = self.gecko_client.clone();
         let cache = self.cache.clone();
@@ -135,7 +135,7 @@ impl PricingManager {
                         &priority_tokens
                     ).await
                 {
-                    Logger::error(&format!("🏷️  PRICING: Failed to update prices: {}", e));
+                    Logger::error(&format!("FAILED to update prices: {}", e));
                 }
             }
         });
@@ -165,7 +165,7 @@ impl PricingManager {
             return Ok(());
         }
 
-        Logger::info(&format!("🏷️  PRICING: Updating {} token prices...", tokens_to_update.len()));
+        Logger::pricing(&format!("Updating {} token prices...", tokens_to_update.len()));
 
         // Update tokens in batches of 30 (API limit)
         const BATCH_SIZE: usize = 30;
@@ -179,7 +179,7 @@ impl PricingManager {
                     chunk
                 ).await
             {
-                Logger::error(&format!("🏷️  PRICING: Failed to update batch: {}", e));
+                Logger::error(&format!("FAILED to update batch: {}", e));
             }
 
             // Rate limiting - wait between batches
@@ -336,7 +336,7 @@ impl PricingManager {
 
     pub async fn add_priority_token(&self, token_address: String) {
         self.priority_tokens.write().await.push(token_address);
-        Logger::info("🏷️  PRICING: Added priority token for frequent updates");
+        Logger::pricing("Added priority token for frequent updates");
     }
 
     pub async fn remove_priority_token(&self, token_address: &str) {
