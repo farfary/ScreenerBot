@@ -4,6 +4,7 @@ use crate::logger::Logger;
 use crate::types::{ WalletPosition, WalletTransaction, TransactionType, ProfitLossCalculation };
 use crate::rpc::RpcManager;
 use crate::pricing::PricingManager;
+use crate::transaction_cache::TransactionCacheManager;
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use futures::FutureExt;
@@ -23,6 +24,7 @@ pub struct WalletTracker {
     rpc_manager: Arc<RpcManager>,
     pricing_manager: Option<Arc<PricingManager>>,
     wallet_keypair: Keypair,
+    transaction_cache: TransactionCacheManager,
     positions: Arc<RwLock<HashMap<String, WalletPosition>>>,
     is_running: Arc<RwLock<bool>>,
     last_signature: Arc<RwLock<Option<String>>>,
@@ -31,6 +33,7 @@ pub struct WalletTracker {
 impl WalletTracker {
     pub fn new(config: Config, database: Arc<Database>) -> Result<Self> {
         let wallet_keypair = Keypair::from_base58_string(&config.main_wallet_private);
+        let wallet_pubkey = wallet_keypair.pubkey();
 
         let rpc_manager = Arc::new(
             RpcManager::new(
@@ -38,6 +41,13 @@ impl WalletTracker {
                 config.rpc_fallbacks.clone(),
                 config.rpc.clone()
             )?
+        );
+
+        let transaction_cache = TransactionCacheManager::new(
+            Arc::clone(&database),
+            Arc::clone(&rpc_manager),
+            wallet_pubkey,
+            Some(1000) // Cache 1000 transactions as requested
         );
 
         Logger::wallet("Initialized RPC manager");
@@ -48,38 +58,54 @@ impl WalletTracker {
             rpc_manager,
             pricing_manager: None,
             wallet_keypair,
+            transaction_cache,
             positions: Arc::new(RwLock::new(HashMap::new())),
             is_running: Arc::new(RwLock::new(false)),
             last_signature: Arc::new(RwLock::new(None)),
         })
     }
 
-    async fn fetch_and_cache_transactions(&self) -> Result<()> {
-        Logger::wallet("🔄 Starting transaction fetch...");
+    async fn fetch_and_cache_transactions(
+        &self,
+        limit: Option<usize>,
+        is_startup: bool
+    ) -> Result<()> {
+        let action = if is_startup {
+            "🚀 Starting INITIAL transaction fetch"
+        } else {
+            "🔄 Starting routine transaction fetch"
+        };
+        Logger::wallet(action);
+
         let wallet_pubkey = self.wallet_keypair.pubkey();
 
-        // Get only recent transaction signatures (limit to 10 for efficiency)
-        Logger::rpc("📡 Calling RPC for transaction signatures...");
+        // For startup, fetch last 1000 transactions; for routine, fetch last 10
+        let fetch_limit = limit.unwrap_or(if is_startup { 1000 } else { 10 });
+
+        Logger::rpc(&format!("📡 Calling RPC for {} transaction signatures...", fetch_limit));
         let signatures = tokio::time
             ::timeout(
-                Duration::from_secs(10), // 10 second timeout
-                self.rpc_manager.get_signatures_for_address(&wallet_pubkey, Some(10)) // Reduced from 50 to 10
+                Duration::from_secs(30), // Increased timeout for large fetches
+                self.rpc_manager.get_signatures_for_address(&wallet_pubkey, Some(fetch_limit))
             ).await
-            .context("RPC call timed out after 10 seconds")?
+            .context("RPC call timed out after 30 seconds")?
             .context("Failed to get transaction signatures")?;
 
         Logger::rpc(&format!("📡 Received {} transaction signatures", signatures.len()));
 
         let mut new_transactions = 0;
         let mut processed = 0;
-        const MAX_PROCESS: usize = 5; // Only process up to 5 transactions per cycle
+        let mut skipped_existing = 0;
+
+        // For startup, process all transactions; for routine, limit to recent ones
+        let max_process = if is_startup { signatures.len() } else { 5 };
 
         for (i, signature_info) in signatures.iter().enumerate() {
-            if processed >= MAX_PROCESS {
+            if processed >= max_process {
                 Logger::wallet(
                     &format!(
-                        "⏭️ Skipping remaining transactions (processed {}/{})",
-                        MAX_PROCESS,
+                        "⏭️ Stopping at processing limit (processed {}/{})",
+                        max_process,
                         signatures.len()
                     )
                 );
@@ -90,21 +116,30 @@ impl WalletTracker {
 
             // Check if we already have this transaction
             if self.database.transaction_exists(&signature)? {
+                skipped_existing += 1;
+                if is_startup {
+                    // During startup, if we hit many existing transactions, we can stop early
+                    // as they're ordered by recency
+                    if skipped_existing >= 10 && processed < 20 {
+                        Logger::wallet("⚡ Hit many existing transactions early, stopping fetch");
+                        break;
+                    }
+                }
                 continue;
             }
 
             Logger::wallet(
                 &format!(
-                    "📄 Processing new transaction {}/{}: {}",
-                    i + 1,
-                    std::cmp::min(signatures.len(), MAX_PROCESS),
-                    signature
+                    "📄 Processing new transaction {}/{}: {}...",
+                    processed + 1,
+                    max_process,
+                    &signature[..16] // Show first 16 chars of signature
                 )
             );
 
             // Fetch the transaction details with timeout
             let transaction_result = tokio::time::timeout(
-                Duration::from_secs(3), // Reduced timeout to 3 seconds per transaction
+                Duration::from_secs(5), // 5 second timeout per transaction
                 self.rpc_manager.get_transaction(&signature)
             ).await;
 
@@ -139,6 +174,20 @@ impl WalletTracker {
             }
 
             processed += 1;
+
+            // Add small delay between transaction fetches to avoid overwhelming RPC
+            if is_startup && processed % 50 == 0 {
+                Logger::wallet(
+                    &format!(
+                        "📊 Progress: {}/{} processed, {} new, {} existing",
+                        processed,
+                        signatures.len(),
+                        new_transactions,
+                        skipped_existing
+                    )
+                );
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
 
         if new_transactions > 0 {
@@ -147,7 +196,19 @@ impl WalletTracker {
             Logger::database("💾 No new transactions to cache");
         }
 
-        Logger::success("✅ Transaction fetch COMPLETED");
+        if is_startup {
+            Logger::success(
+                &format!(
+                    "✅ INITIAL transaction fetch COMPLETED - processed {}, new {}, existing {}",
+                    processed,
+                    new_transactions,
+                    skipped_existing
+                )
+            );
+        } else {
+            Logger::success("✅ Routine transaction fetch COMPLETED");
+        }
+
         Ok(())
     }
 
@@ -200,6 +261,20 @@ impl WalletTracker {
         // Load existing positions from database
         self.load_existing_positions().await?;
 
+        // Start background transaction caching
+        Logger::separator();
+        Logger::wallet("🚀 STARTING BACKGROUND TRANSACTION CACHING");
+        match self.transaction_cache.start_background_caching().await {
+            Ok(()) => {
+                Logger::success("✅ Background transaction caching started");
+            }
+            Err(e) => {
+                Logger::error(&format!("❌ Background transaction caching FAILED: {}", e));
+                // Don't fail startup, just log the error and continue
+            }
+        }
+        Logger::separator();
+
         // Start tracking loop
         let tracker = self.clone();
         tokio::spawn(async move {
@@ -224,6 +299,10 @@ impl WalletTracker {
     pub async fn stop(&self) {
         let mut is_running = self.is_running.write().await;
         *is_running = false;
+
+        // Stop background transaction caching
+        self.transaction_cache.stop_background_caching().await;
+
         Logger::info("Wallet tracker stopped");
     }
 
@@ -582,7 +661,7 @@ impl WalletTracker {
     async fn run_tracking_loop(&self) {
         Logger::wallet("Starting wallet tracking loop...");
 
-        let mut interval = time::interval(Duration::from_secs(15)); // Update every 15 seconds
+        let mut interval = time::interval(Duration::from_secs(60)); // Update every 60 seconds
 
         loop {
             interval.tick().await;
@@ -594,12 +673,9 @@ impl WalletTracker {
             }
             drop(is_running);
 
-            Logger::wallet("🔄 Running 15-second refresh cycle...");
+            Logger::wallet("🔄 Running 60-second refresh cycle...");
 
-            // Skip transaction processing for now to focus on SPL token detection
-            Logger::debug("⏭️ Skipping transaction fetch to focus on SPL token scanning...");
-
-            // Then refresh positions with profit/loss calculation
+            // Transaction caching is now handled in the background
             Logger::wallet("🔍 Scanning for SPL token accounts...");
             match self.refresh_positions().await {
                 Ok(()) => {
@@ -611,7 +687,7 @@ impl WalletTracker {
                 }
             }
 
-            Logger::wallet("🏁 Refresh cycle COMPLETED, waiting 15 seconds...");
+            Logger::wallet("🏁 Refresh cycle COMPLETED, waiting 60 seconds...");
         }
 
         Logger::success("Wallet tracking loop stopped");
@@ -735,6 +811,7 @@ impl Clone for WalletTracker {
             rpc_manager: Arc::clone(&self.rpc_manager),
             pricing_manager: self.pricing_manager.as_ref().map(Arc::clone),
             wallet_keypair: Keypair::try_from(&self.wallet_keypair.to_bytes()[..]).unwrap(),
+            transaction_cache: self.transaction_cache.clone(),
             positions: Arc::clone(&self.positions),
             is_running: Arc::clone(&self.is_running),
             last_signature: Arc::clone(&self.last_signature),

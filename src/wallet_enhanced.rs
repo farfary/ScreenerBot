@@ -82,10 +82,12 @@ impl EnhancedWalletTracker {
 
         Logger::success("🚀 Enhanced Wallet Tracker started");
 
-        // Initialize transaction cache if not already done
-        if !*self.cache_initialized.read().await {
-            self.initialize_transaction_cache().await?;
-        }
+        // Start background transaction caching first
+        Logger::wallet("🔧 Starting background transaction caching...");
+        self.transaction_cache.start_background_caching().await?;
+
+        // Mark cache as initialized
+        *self.cache_initialized.write().await = true;
 
         // Load existing positions from database
         self.load_existing_positions().await?;
@@ -112,34 +114,10 @@ impl EnhancedWalletTracker {
         Ok(())
     }
 
-    async fn initialize_transaction_cache(&self) -> Result<()> {
-        Logger::wallet("🔧 Initializing comprehensive transaction cache...");
-
-        // Check if we already have transactions cached
-        let existing_count = self.database.get_transaction_count()?;
-        Logger::wallet(&format!("📊 Found {} existing transactions in cache", existing_count));
-
-        if existing_count < 100 {
-            // Cache historical transactions if we don't have enough
-            Logger::wallet("📦 Caching historical transactions...");
-            let cached_count = self.transaction_cache.cache_historical_transactions().await?;
-            Logger::success(&format!("✅ Cached {} historical transactions", cached_count));
-        } else {
-            // Just update with new transactions
-            Logger::wallet("🔄 Updating cache with new transactions...");
-            let new_count = self.transaction_cache.update_cache_with_new_transactions().await?;
-            Logger::success(&format!("✅ Added {} new transactions to cache", new_count));
-        }
-
-        *self.cache_initialized.write().await = true;
-        Logger::success("🎉 Transaction cache initialization completed");
-        Ok(())
-    }
-
     async fn run_enhanced_tracking_loop(&self) {
         Logger::wallet("🔄 Starting enhanced wallet tracking loop...");
 
-        let mut interval = time::interval(Duration::from_secs(30)); // Update every 30 seconds
+        let mut interval = time::interval(Duration::from_secs(60)); // Update every 60 seconds
 
         loop {
             interval.tick().await;
@@ -151,23 +129,10 @@ impl EnhancedWalletTracker {
             }
             drop(is_running);
 
-            Logger::wallet("🔄 Running enhanced 30-second refresh cycle...");
+            Logger::wallet("🔄 Running enhanced 60-second refresh cycle...");
 
-            // First, update transaction cache with any new transactions
-            match self.transaction_cache.update_cache_with_new_transactions().await {
-                Ok(new_count) => {
-                    if new_count > 0 {
-                        Logger::success(
-                            &format!("📦 Added {} new transactions to cache", new_count)
-                        );
-                    }
-                }
-                Err(e) => {
-                    Logger::error(&format!("❌ Failed to update transaction cache: {}", e));
-                }
-            }
-
-            // Then refresh positions with accurate profit/loss calculation
+            // Refresh positions with accurate profit/loss calculation
+            // Transaction caching is now handled in the background
             match self.refresh_positions_with_enhanced_pnl().await {
                 Ok(()) => {
                     Logger::success("✅ Enhanced position refresh completed");
@@ -483,6 +448,10 @@ impl EnhancedWalletTracker {
     pub async fn stop(&self) {
         let mut is_running = self.is_running.write().await;
         *is_running = false;
+
+        // Stop background transaction caching
+        self.transaction_cache.stop_background_caching().await;
+
         Logger::info("Enhanced wallet tracker stopped");
     }
 
