@@ -224,14 +224,14 @@ impl Logger {
         println!("  {} {}", format!("{}:", key).dimmed(), value.bright_white().bold());
     }
 
-    pub fn print_balance(token: &str, amount: f64, usd_value: Option<f64>) {
-        if let Some(usd) = usd_value {
+    pub fn print_balance(token: &str, amount: f64, sol_value: Option<f64>) {
+        if let Some(sol) = sol_value {
             println!(
                 "  {} {} {} {}",
                 "💎".bright_green(),
                 token.bright_white().bold(),
                 format!("{:.4}", amount).bright_white().bold(),
-                format!("(${:.2})", usd).green().bold()
+                format!("({:.6} SOL)", sol).green().bold()
             );
         } else {
             println!(
@@ -251,14 +251,14 @@ impl Logger {
                 println!(
                     "  {} PnL: {} ({}%)",
                     symbol.green().bold(),
-                    format!("${:.2}", pnl).green().bold(),
+                    format!("{:.6} SOL", pnl).green().bold(),
                     format!("{:.2}", percentage).green().bold()
                 ),
             "red" =>
                 println!(
                     "  {} PnL: {} ({}%)",
                     symbol.red().bold(),
-                    format!("${:.2}", pnl).red().bold(),
+                    format!("{:.6} SOL", pnl).red().bold(),
                     format!("{:.2}", percentage).red().bold()
                 ),
             _ => {}

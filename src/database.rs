@@ -178,6 +178,24 @@ impl Database {
             []
         )?;
 
+        // Migrate existing tables to SOL-based calculations
+        // Add new SOL-based columns if they don't exist
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN value_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN entry_price_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN current_price_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN pnl_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN realized_pnl_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN unrealized_pnl_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_positions ADD COLUMN total_invested_sol REAL", []);
+        let _ = conn.execute(
+            "ALTER TABLE wallet_positions ADD COLUMN average_entry_price_sol REAL",
+            []
+        );
+
+        // Add SOL-based columns to transactions table
+        let _ = conn.execute("ALTER TABLE wallet_transactions ADD COLUMN price_sol REAL", []);
+        let _ = conn.execute("ALTER TABLE wallet_transactions ADD COLUMN value_sol REAL", []);
+
         Ok(())
     }
 
@@ -259,18 +277,23 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO wallet_positions 
-            (mint, balance, decimals, value_usd, entry_price, current_price, 
-             pnl, pnl_percentage, last_updated)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            (mint, balance, decimals, value_sol, entry_price_sol, current_price_sol, 
+             pnl_sol, pnl_percentage, realized_pnl_sol, unrealized_pnl_sol, 
+             total_invested_sol, average_entry_price_sol, last_updated)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 position.mint,
                 position.balance,
                 position.decimals,
-                position.value_usd,
-                position.entry_price,
-                position.current_price,
-                position.pnl,
+                position.value_sol,
+                position.entry_price_sol,
+                position.current_price_sol,
+                position.pnl_sol,
                 position.pnl_percentage,
+                position.realized_pnl_sol,
+                position.unrealized_pnl_sol,
+                position.total_invested_sol,
+                position.average_entry_price_sol,
                 position.last_updated.to_rfc3339()
             ]
         )?;
@@ -279,7 +302,12 @@ impl Database {
 
     pub fn get_wallet_positions(&self) -> Result<Vec<WalletPosition>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT * FROM wallet_positions ORDER BY value_usd DESC")?;
+        let mut stmt = conn.prepare(
+            "SELECT mint, balance, decimals, value_sol, entry_price_sol, current_price_sol, 
+             pnl_sol, pnl_percentage, realized_pnl_sol, unrealized_pnl_sol, 
+             total_invested_sol, average_entry_price_sol, last_updated 
+             FROM wallet_positions ORDER BY value_sol DESC"
+        )?;
 
         let position_iter = stmt.query_map([], |row| { Ok(self.row_to_wallet_position(row)?) })?;
 
@@ -574,16 +602,16 @@ impl Database {
             mint: row.get(0)?,
             balance: row.get(1)?,
             decimals: row.get(2)?,
-            value_usd: row.get(3)?,
-            entry_price: row.get(4)?,
-            current_price: row.get(5)?,
-            pnl: row.get(6)?,
+            value_sol: row.get(3)?,
+            entry_price_sol: row.get(4)?,
+            current_price_sol: row.get(5)?,
+            pnl_sol: row.get(6)?,
             pnl_percentage: row.get(7)?,
-            realized_pnl: Some(0.0), // Default values for new fields
-            unrealized_pnl: Some(0.0),
-            total_invested: Some(0.0),
-            average_entry_price: row.get(4)?, // Use entry_price as fallback
-            last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(8)?)
+            realized_pnl_sol: row.get(8)?,
+            unrealized_pnl_sol: row.get(9)?,
+            total_invested_sol: row.get(10)?,
+            average_entry_price_sol: row.get(11)?,
+            last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(12)?)
                 .unwrap()
                 .with_timezone(&Utc),
         })
@@ -606,15 +634,15 @@ impl Database {
         conn
             .execute(
                 "INSERT OR REPLACE INTO wallet_transactions 
-             (signature, mint, transaction_type, amount, price_usd, value_usd, sol_amount, fee, block_time, slot, created_at) 
+             (signature, mint, transaction_type, amount, price_sol, value_sol, sol_amount, fee, block_time, slot, created_at) 
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     transaction.signature,
                     transaction.mint,
                     transaction_type_str,
                     transaction.amount as i64,
-                    transaction.price_usd,
-                    transaction.value_usd,
+                    transaction.price_sol,
+                    transaction.value_sol,
                     transaction.sol_amount.map(|x| x as i64),
                     transaction.fee.map(|x| x as i64),
                     transaction.block_time,
@@ -703,14 +731,14 @@ impl Database {
             match tx.transaction_type {
                 crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
                     total_bought += tx.amount;
-                    if let Some(value) = tx.value_usd {
+                    if let Some(value) = tx.value_sol {
                         total_invested += value;
                         buy_values.push((tx.amount, value));
                     }
                 }
                 crate::types::TransactionType::Sell => {
                     total_sold += tx.amount;
-                    if let Some(value) = tx.value_usd {
+                    if let Some(value) = tx.value_sol {
                         total_received += value;
                         sell_values.push((tx.amount, value));
                     }
@@ -752,15 +780,15 @@ impl Database {
             total_bought,
             total_sold,
             current_balance,
-            average_buy_price,
-            average_sell_price,
-            total_invested,
-            total_received,
-            realized_pnl,
-            unrealized_pnl,
-            total_pnl,
+            average_buy_price_sol: average_buy_price,
+            average_sell_price_sol: average_sell_price,
+            total_invested_sol: total_invested,
+            total_received_sol: total_received,
+            realized_pnl_sol: realized_pnl,
+            unrealized_pnl_sol: unrealized_pnl,
+            total_pnl_sol: total_pnl,
             roi_percentage,
-            current_value,
+            current_value_sol: current_value,
         })
     }
 
@@ -794,8 +822,8 @@ impl Database {
             mint: row.get("mint")?,
             transaction_type,
             amount: row.get::<_, i64>("amount")? as u64,
-            price_usd: row.get("price_usd")?,
-            value_usd: row.get("value_usd")?,
+            price_sol: row.get("price_sol")?,
+            value_sol: row.get("value_sol")?,
             sol_amount: row.get::<_, Option<i64>>("sol_amount")?.map(|x| x as u64),
             fee: row.get::<_, Option<i64>>("fee")?.map(|x| x as u64),
             block_time: row.get("block_time")?,
@@ -813,8 +841,8 @@ impl Database {
 
         let mut total_bought = 0u64;
         let mut total_sold = 0u64;
-        let mut total_invested = 0.0;
-        let mut total_received = 0.0;
+        let mut total_invested_sol = 0.0;
+        let mut total_received_sol = 0.0;
         let mut buy_values = Vec::new();
         let mut sell_values = Vec::new();
 
@@ -822,16 +850,16 @@ impl Database {
             match tx.transaction_type {
                 crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
                     total_bought += tx.amount;
-                    if let Some(value) = tx.value_usd {
-                        total_invested += value;
-                        buy_values.push((tx.amount, value));
+                    if let Some(value_sol) = tx.value_sol {
+                        total_invested_sol += value_sol;
+                        buy_values.push((tx.amount, value_sol));
                     }
                 }
                 crate::types::TransactionType::Sell => {
                     total_sold += tx.amount;
-                    if let Some(value) = tx.value_usd {
-                        total_received += value;
-                        sell_values.push((tx.amount, value));
+                    if let Some(value_sol) = tx.value_sol {
+                        total_received_sol += value_sol;
+                        sell_values.push((tx.amount, value_sol));
                     }
                 }
                 _ => {}
@@ -840,27 +868,27 @@ impl Database {
 
         let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
 
-        let average_buy_price = if total_bought > 0 && total_invested > 0.0 {
-            total_invested / (total_bought as f64)
+        let average_buy_price = if total_bought > 0 && total_invested_sol > 0.0 {
+            total_invested_sol / (total_bought as f64)
         } else {
             current_price // Use current price as fallback
         };
 
-        let average_sell_price = if total_sold > 0 && total_received > 0.0 {
-            total_received / (total_sold as f64)
+        let average_sell_price = if total_sold > 0 && total_received_sol > 0.0 {
+            total_received_sol / (total_sold as f64)
         } else {
             0.0
         };
 
-        let realized_pnl = total_received - (total_sold as f64) * average_buy_price;
+        let realized_pnl = total_received_sol - (total_sold as f64) * average_buy_price;
 
         // Calculate unrealized PnL with current price
         let current_value = (current_balance as f64) * current_price;
         let unrealized_pnl = current_value - (current_balance as f64) * average_buy_price;
 
         let total_pnl = realized_pnl + unrealized_pnl;
-        let roi_percentage = if total_invested > 0.0 {
-            (total_pnl / total_invested) * 100.0
+        let roi_percentage = if total_invested_sol > 0.0 {
+            (total_pnl / total_invested_sol) * 100.0
         } else {
             0.0
         };
@@ -870,15 +898,94 @@ impl Database {
             total_bought,
             total_sold,
             current_balance,
-            average_buy_price,
-            average_sell_price,
-            total_invested,
-            total_received,
-            realized_pnl,
-            unrealized_pnl,
-            total_pnl,
+            average_buy_price_sol: average_buy_price,
+            average_sell_price_sol: average_sell_price,
+            total_invested_sol: total_invested_sol,
+            total_received_sol: total_received_sol,
+            realized_pnl_sol: realized_pnl,
+            unrealized_pnl_sol: unrealized_pnl,
+            total_pnl_sol: total_pnl,
             roi_percentage,
-            current_value,
+            current_value_sol: current_value,
+        })
+    }
+
+    pub fn calculate_profit_loss_with_current_price_sol(
+        &self,
+        mint: &str,
+        current_price_sol: f64
+    ) -> Result<crate::types::ProfitLossCalculation> {
+        let transactions = self.get_transactions_for_mint(mint)?;
+
+        let mut total_bought = 0u64;
+        let mut total_sold = 0u64;
+        let mut total_invested_sol = 0.0;
+        let mut total_received_sol = 0.0;
+        let mut buy_values = Vec::new();
+        let mut sell_values = Vec::new();
+
+        for tx in &transactions {
+            match tx.transaction_type {
+                crate::types::TransactionType::Buy | crate::types::TransactionType::Receive => {
+                    total_bought += tx.amount;
+                    if let Some(value_sol) = tx.value_sol {
+                        total_invested_sol += value_sol;
+                        buy_values.push((tx.amount, value_sol));
+                    }
+                }
+                crate::types::TransactionType::Sell => {
+                    total_sold += tx.amount;
+                    if let Some(value_sol) = tx.value_sol {
+                        total_received_sol += value_sol;
+                        sell_values.push((tx.amount, value_sol));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let current_balance = if total_bought > total_sold { total_bought - total_sold } else { 0 };
+
+        let average_buy_price_sol = if total_bought > 0 && total_invested_sol > 0.0 {
+            total_invested_sol / (total_bought as f64)
+        } else {
+            current_price_sol // Use current price as fallback
+        };
+
+        let average_sell_price_sol = if total_sold > 0 && total_received_sol > 0.0 {
+            total_received_sol / (total_sold as f64)
+        } else {
+            0.0
+        };
+
+        let realized_pnl_sol = total_received_sol - (total_sold as f64) * average_buy_price_sol;
+
+        // Calculate unrealized PnL with current price in SOL
+        let current_value_sol = (current_balance as f64) * current_price_sol;
+        let unrealized_pnl_sol =
+            current_value_sol - (current_balance as f64) * average_buy_price_sol;
+
+        let total_pnl_sol = realized_pnl_sol + unrealized_pnl_sol;
+        let roi_percentage = if total_invested_sol > 0.0 {
+            (total_pnl_sol / total_invested_sol) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(crate::types::ProfitLossCalculation {
+            mint: mint.to_string(),
+            total_bought,
+            total_sold,
+            current_balance,
+            average_buy_price_sol,
+            average_sell_price_sol,
+            total_invested_sol,
+            total_received_sol,
+            realized_pnl_sol,
+            unrealized_pnl_sol,
+            total_pnl_sol,
+            roi_percentage,
+            current_value_sol,
         })
     }
 }

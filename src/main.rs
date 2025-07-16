@@ -165,16 +165,16 @@ async fn display_status(
         // Show portfolio value
         let mut total_value = 0.0;
         for position in positions.values() {
-            total_value += position.value_usd.unwrap_or(0.0);
+            total_value += position.value_sol.unwrap_or(0.0);
         }
 
         if total_value > 0.0 {
-            Logger::wallet(&format!("Portfolio Value: ${:.2}", total_value));
+            Logger::wallet(&format!("Portfolio Value: {:.6} SOL", total_value));
 
             // Show top 3 positions
             let mut sorted_positions: Vec<_> = positions.values().collect();
             sorted_positions.sort_by(|a, b| {
-                b.value_usd.unwrap_or(0.0).partial_cmp(&a.value_usd.unwrap_or(0.0)).unwrap()
+                b.value_sol.unwrap_or(0.0).partial_cmp(&a.value_sol.unwrap_or(0.0)).unwrap()
             });
 
             for (i, position) in sorted_positions.iter().take(3).enumerate() {
@@ -187,11 +187,11 @@ async fn display_status(
 
                 Logger::wallet(
                     &format!(
-                        "  {}. {}... | {:.4} | ${:.2} | {}{}%",
+                        "  {}. {}... | {:.4} | {:.6} SOL | {}{}%",
                         i + 1,
                         &position.mint[..8],
                         balance,
-                        position.value_usd.unwrap_or(0.0),
+                        position.value_sol.unwrap_or(0.0),
                         pnl_color,
                         position.pnl_percentage.unwrap_or(0.0)
                     )

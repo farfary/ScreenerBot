@@ -9,7 +9,6 @@ use chrono::Utc;
 use futures::FutureExt;
 use solana_sdk::{ pubkey::Pubkey, signature::{ Keypair, Signer }, program_pack::Pack };
 use solana_account_decoder::UiAccountData;
-use serde_json;
 use spl_token_2022::state::{ Account, Mint };
 use spl_token;
 use std::collections::HashMap;
@@ -167,9 +166,9 @@ impl WalletTracker {
             mint,
             transaction_type: TransactionType::Transfer,
             amount: 1000000, // 0.001 SOL as placeholder
-            price_usd: Some(100.0), // Placeholder price
-            value_usd: Some(0.1), // Placeholder value
-            sol_amount: None,
+            price_sol: Some(1.0), // 1 SOL = 1 SOL (base currency)
+            value_sol: Some(0.001), // 0.001 SOL value
+            sol_amount: Some(1000000), // Same as amount for SOL
             fee: Some(5000), // 0.000005 SOL fee
             block_time,
             slot: transaction.slot,
@@ -259,7 +258,7 @@ impl WalletTracker {
             .context("Failed to get token accounts after retries")?;
 
         let mut new_positions = HashMap::new();
-        let mut total_value_usd = 0.0;
+        let mut total_value_sol = 0.0;
 
         if token_accounts.is_empty() {
             Logger::wallet("No SPL token accounts found - wallet contains only SOL");
@@ -318,51 +317,53 @@ impl WalletTracker {
                                     let actual_balance =
                                         (balance as f64) / (10_f64).powi(decimals as i32);
 
-                                    // Try to get price (placeholder implementation)
-                                    let current_price = self
-                                        .get_token_price(&mint).await
+                                    // Try to get price in SOL (placeholder implementation)
+                                    let current_price_sol = self
+                                        .get_token_price_in_sol(&mint).await
                                         .unwrap_or(0.0);
-                                    let value_usd = actual_balance * current_price;
-                                    total_value_usd += value_usd;
+                                    let value_sol = actual_balance * current_price_sol;
+                                    total_value_sol += value_sol;
 
-                                    Logger::print_balance(&mint, actual_balance, Some(value_usd));
-                                    Logger::pricing(&format!("Price: ${:.6}", current_price));
+                                    Logger::print_balance(&mint, actual_balance, Some(value_sol));
+                                    Logger::pricing(&format!("Price: {} SOL", current_price_sol));
 
                                     // Get profit/loss calculation from transactions with current price
                                     let pnl_calc = self.database
-                                        .calculate_profit_loss_with_current_price(
+                                        .calculate_profit_loss_with_current_price_sol(
                                             &mint,
-                                            current_price
+                                            current_price_sol
                                         )
                                         .unwrap_or(ProfitLossCalculation {
                                             mint: mint.clone(),
                                             total_bought: 0,
                                             total_sold: 0,
                                             current_balance: balance,
-                                            average_buy_price: current_price,
-                                            average_sell_price: 0.0,
-                                            total_invested: 0.0,
-                                            total_received: 0.0,
-                                            realized_pnl: 0.0,
-                                            unrealized_pnl: 0.0,
-                                            total_pnl: 0.0,
+                                            average_buy_price_sol: current_price_sol,
+                                            average_sell_price_sol: 0.0,
+                                            total_invested_sol: 0.0,
+                                            total_received_sol: 0.0,
+                                            realized_pnl_sol: 0.0,
+                                            unrealized_pnl_sol: 0.0,
+                                            total_pnl_sol: 0.0,
                                             roi_percentage: 0.0,
-                                            current_value: value_usd,
+                                            current_value_sol: value_sol,
                                         });
 
                                     let position = WalletPosition {
                                         mint: mint.clone(),
                                         balance,
                                         decimals,
-                                        value_usd: Some(value_usd),
-                                        entry_price: Some(pnl_calc.average_buy_price),
-                                        current_price: Some(current_price),
-                                        pnl: Some(pnl_calc.total_pnl),
+                                        value_sol: Some(value_sol),
+                                        entry_price_sol: Some(pnl_calc.average_buy_price_sol),
+                                        current_price_sol: Some(current_price_sol),
+                                        pnl_sol: Some(pnl_calc.total_pnl_sol),
                                         pnl_percentage: Some(pnl_calc.roi_percentage),
-                                        realized_pnl: Some(pnl_calc.realized_pnl),
-                                        unrealized_pnl: Some(pnl_calc.unrealized_pnl),
-                                        total_invested: Some(pnl_calc.total_invested),
-                                        average_entry_price: Some(pnl_calc.average_buy_price),
+                                        realized_pnl_sol: Some(pnl_calc.realized_pnl_sol),
+                                        unrealized_pnl_sol: Some(pnl_calc.unrealized_pnl_sol),
+                                        total_invested_sol: Some(pnl_calc.total_invested_sol),
+                                        average_entry_price_sol: Some(
+                                            pnl_calc.average_buy_price_sol
+                                        ),
                                         last_updated: Utc::now(),
                                     };
 
@@ -430,55 +431,59 @@ impl WalletTracker {
                                         let actual_balance =
                                             (amount as f64) / (10_f64).powi(decimals as i32);
 
-                                        // Try to get price (placeholder implementation)
-                                        let current_price = self
-                                            .get_token_price(&mint).await
+                                        // Try to get price in SOL (placeholder implementation)
+                                        let current_price_sol = self
+                                            .get_token_price_in_sol(&mint).await
                                             .unwrap_or(0.0);
-                                        let value_usd = actual_balance * current_price;
-                                        total_value_usd += value_usd;
+                                        let value_sol = actual_balance * current_price_sol;
+                                        total_value_sol += value_sol;
 
                                         Logger::print_balance(
                                             &mint,
                                             actual_balance,
-                                            Some(value_usd)
+                                            Some(value_sol)
                                         );
-                                        Logger::pricing(&format!("Price: ${:.6}", current_price));
+                                        Logger::pricing(
+                                            &format!("Price: {} SOL", current_price_sol)
+                                        );
 
                                         // Get profit/loss calculation from transactions with current price
                                         let pnl_calc = self.database
-                                            .calculate_profit_loss_with_current_price(
+                                            .calculate_profit_loss_with_current_price_sol(
                                                 &mint,
-                                                current_price
+                                                current_price_sol
                                             )
                                             .unwrap_or(ProfitLossCalculation {
                                                 mint: mint.clone(),
                                                 total_bought: 0,
                                                 total_sold: 0,
                                                 current_balance: amount,
-                                                average_buy_price: current_price,
-                                                average_sell_price: 0.0,
-                                                total_invested: 0.0,
-                                                total_received: 0.0,
-                                                realized_pnl: 0.0,
-                                                unrealized_pnl: 0.0,
-                                                total_pnl: 0.0,
+                                                average_buy_price_sol: current_price_sol,
+                                                average_sell_price_sol: 0.0,
+                                                total_invested_sol: 0.0,
+                                                total_received_sol: 0.0,
+                                                realized_pnl_sol: 0.0,
+                                                unrealized_pnl_sol: 0.0,
+                                                total_pnl_sol: 0.0,
                                                 roi_percentage: 0.0,
-                                                current_value: value_usd,
+                                                current_value_sol: value_sol,
                                             });
 
                                         let position = WalletPosition {
                                             mint: mint.clone(),
                                             balance: amount,
                                             decimals,
-                                            value_usd: Some(value_usd),
-                                            entry_price: Some(pnl_calc.average_buy_price),
-                                            current_price: Some(current_price),
-                                            pnl: Some(pnl_calc.total_pnl),
+                                            value_sol: Some(value_sol),
+                                            entry_price_sol: Some(pnl_calc.average_buy_price_sol),
+                                            current_price_sol: Some(current_price_sol),
+                                            pnl_sol: Some(pnl_calc.total_pnl_sol),
                                             pnl_percentage: Some(pnl_calc.roi_percentage),
-                                            realized_pnl: Some(pnl_calc.realized_pnl),
-                                            unrealized_pnl: Some(pnl_calc.unrealized_pnl),
-                                            total_invested: Some(pnl_calc.total_invested),
-                                            average_entry_price: Some(pnl_calc.average_buy_price),
+                                            realized_pnl_sol: Some(pnl_calc.realized_pnl_sol),
+                                            unrealized_pnl_sol: Some(pnl_calc.unrealized_pnl_sol),
+                                            total_invested_sol: Some(pnl_calc.total_invested_sol),
+                                            average_entry_price_sol: Some(
+                                                pnl_calc.average_buy_price_sol
+                                            ),
                                             last_updated: Utc::now(),
                                         };
 
@@ -530,16 +535,16 @@ impl WalletTracker {
 
         Logger::success(
             &format!(
-                "Portfolio updated: {} positions, Total value: ${:.2}",
+                "Portfolio updated: {} positions, Total value: {:.6} SOL",
                 new_positions.len(),
-                total_value_usd
+                total_value_sol
             )
         );
 
         // Log top positions with enhanced formatting
         let mut sorted_positions: Vec<_> = new_positions.values().collect();
         sorted_positions.sort_by(|a, b| {
-            b.value_usd.unwrap_or(0.0).partial_cmp(&a.value_usd.unwrap_or(0.0)).unwrap()
+            b.value_sol.unwrap_or(0.0).partial_cmp(&a.value_sol.unwrap_or(0.0)).unwrap()
         });
 
         if !sorted_positions.is_empty() {
@@ -550,9 +555,9 @@ impl WalletTracker {
                 Logger::print_balance(
                     &format!("{}. {}", i + 1, position.mint),
                     balance,
-                    position.value_usd
+                    position.value_sol
                 );
-                if let (Some(pnl), Some(pnl_pct)) = (position.pnl, position.pnl_percentage) {
+                if let (Some(pnl), Some(pnl_pct)) = (position.pnl_sol, position.pnl_percentage) {
                     Logger::print_pnl(pnl, pnl_pct);
                 }
             }
@@ -664,10 +669,14 @@ impl WalletTracker {
         Ok(mint_info.decimals)
     }
 
-    async fn get_token_price(&self, mint: &str) -> Result<f64> {
+    async fn get_token_price_in_sol(&self, mint: &str) -> Result<f64> {
         if let Some(pricing_manager) = &self.pricing_manager {
             if let Some(price_info) = pricing_manager.get_token_price(mint).await {
-                return Ok(price_info.price_usd);
+                // Convert USD price to SOL by getting SOL/USD rate
+                // For now, we'll use a placeholder conversion rate
+                // In a real implementation, you would get the current SOL/USD rate
+                let sol_usd_rate = 100.0; // Placeholder: 1 SOL = $100
+                return Ok(price_info.price_usd / sol_usd_rate);
             }
         }
 
