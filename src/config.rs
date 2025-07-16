@@ -3,9 +3,6 @@ use serde::{ Deserialize, Serialize };
 use std::fs;
 use std::path::Path;
 
-// Import swap types
-use crate::swap::types::{ SwapConfig, JupiterConfig, RaydiumConfig, GmgnConfig };
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub main_wallet_private: String,
@@ -20,10 +17,6 @@ pub struct Config {
     pub pricing: Option<PricingConfig>,
     #[serde(default)]
     pub wallet: WalletConfig,
-    #[serde(default)]
-    pub trading: TradingConfig,
-    #[serde(default)]
-    pub swap: SwapConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,23 +88,6 @@ pub struct WalletConfig {
     pub refresh_interval_secs: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TradingConfig {
-    pub enabled: bool,
-    pub max_slippage: f64,
-    pub min_liquidity_usd: f64,
-    pub max_position_size_sol: f64,
-    pub transaction_manager: TransactionManagerConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TransactionManagerConfig {
-    pub cache_transactions: bool,
-    pub cache_duration_hours: u64,
-    pub track_pnl: bool,
-    pub auto_calculate_profits: bool,
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -171,51 +147,6 @@ impl Default for Config {
                 enabled: true,
                 track_portfolio: true,
                 refresh_interval_secs: 30,
-            },
-            trading: TradingConfig {
-                enabled: false, // Disabled by default for safety
-                max_slippage: 0.05, // 5%
-                min_liquidity_usd: 50000.0, // $50k minimum liquidity
-                max_position_size_sol: 0.001, // 0.001 SOL max position
-                transaction_manager: TransactionManagerConfig {
-                    cache_transactions: true,
-                    cache_duration_hours: 720, // 30 days
-                    track_pnl: true,
-                    auto_calculate_profits: true,
-                },
-            },
-            swap: SwapConfig {
-                enabled: true,
-                default_dex: "jupiter".to_string(),
-                is_anti_mev: false,
-                max_slippage: 0.01, // 1%
-                timeout_seconds: 30,
-                retry_attempts: 3,
-                dex_preferences: vec![
-                    "jupiter".to_string(),
-                    "raydium".to_string(),
-                    "gmgn".to_string()
-                ],
-                jupiter: JupiterConfig {
-                    enabled: true,
-                    base_url: "https://quote-api.jup.ag/v6".to_string(),
-                    timeout_seconds: 15,
-                    max_accounts: 64,
-                    only_direct_routes: false,
-                    as_legacy_transaction: false,
-                },
-                raydium: RaydiumConfig {
-                    enabled: true,
-                    base_url: "https://api.raydium.io/v2".to_string(),
-                    timeout_seconds: 15,
-                    pool_type: "all".to_string(),
-                },
-                gmgn: GmgnConfig {
-                    enabled: false, // Disabled by default since it requires API key
-                    base_url: "https://gmgn.ai/defi/quoterv1".to_string(),
-                    timeout_seconds: 15,
-                    referral_fee_bps: 0,
-                },
             },
         }
     }

@@ -1,5 +1,4 @@
 use serde::{ Deserialize, Serialize };
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenInfo {
@@ -97,79 +96,3 @@ impl LogLevel {
 }
 
 pub const RESET_COLOR: &str = "\x1b[0m]";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradingPosition {
-    pub id: String,
-    pub token_mint: String,
-    pub entry_price: f64,
-    pub entry_amount_sol: f64,
-    pub entry_amount_tokens: f64,
-    pub current_price: f64,
-    pub current_value_sol: f64,
-    pub pnl_sol: f64,
-    pub pnl_percentage: f64,
-    pub opened_at: chrono::DateTime<chrono::Utc>,
-    pub last_updated: chrono::DateTime<chrono::Utc>,
-    pub status: PositionStatus,
-    pub profit_target: f64,
-    pub time_category: TimeCategory,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PositionStatus {
-    Open,
-    Closed,
-    PendingClose,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TimeCategory {
-    Quick, // < 5 minutes
-    Medium, // < 1 hour
-    Long, // < 24 hours
-    Extended, // > 24 hours
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Transaction {
-    pub id: String,
-    pub signature: String,
-    pub transaction_type: TransactionType,
-    pub token_mint: String,
-    pub amount_sol: f64,
-    pub amount_tokens: f64,
-    pub price: f64,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub block_height: u64,
-    pub fee_sol: f64,
-    pub position_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TransactionType {
-    Buy,
-    Sell,
-    Transfer,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortfolioMetrics {
-    pub total_value_sol: f64,
-    pub total_pnl_sol: f64,
-    pub total_pnl_percentage: f64,
-    pub open_positions: u32,
-    pub profitable_positions: u32,
-    pub losing_positions: u32,
-    pub best_performer: Option<String>,
-    pub worst_performer: Option<String>,
-    pub win_rate: f64,
-    pub last_updated: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProfitStrategy {
-    pub time_threshold: chrono::Duration,
-    pub profit_target: f64,
-    pub category: TimeCategory,
-}

@@ -89,23 +89,6 @@ async fn main() -> Result<()> {
         )
     );
 
-    // New Advanced Trading Engine
-    let trading_engine = Arc::new(
-        screenerbot::TradingEngine::new(
-            config.trader.clone(),
-            config.trading.clone(),
-            Arc::clone(&database),
-            Arc::clone(&discovery),
-            Arc::clone(&wallet_tracker)
-        )
-    );
-
-    if config.trading.enabled {
-        Logger::success("Advanced Trading Engine initialized");
-    } else {
-        Logger::warn("Trading module is disabled in configuration");
-    }
-
     // Start modules
     Logger::separator();
     Logger::info("Starting modules...");
@@ -123,16 +106,12 @@ async fn main() -> Result<()> {
     Logger::success("Wallet tracker started");
 
     // Start trader if enabled
-    if config.trading.enabled {
+    if config.trader.enabled {
         // Start legacy trader
         trader.start().await;
         Logger::success("Legacy trader started");
-
-        // Start advanced trading engine
-        trading_engine.start().await?;
-        Logger::success("Advanced Trading Engine started");
     } else {
-        Logger::warn("Trading modules are disabled in configuration");
+        Logger::warn("Trading module is disabled in configuration");
     }
 
     Logger::separator();
@@ -144,7 +123,6 @@ async fn main() -> Result<()> {
     let status_discovery = Arc::clone(&discovery);
     let status_wallet = Arc::clone(&wallet_tracker);
     let status_trader = Arc::clone(&trader);
-    let status_trading_engine = Arc::clone(&trading_engine);
     let status_pricing = Arc::clone(&pricing_manager);
 
     tokio::spawn(async move {
@@ -158,7 +136,6 @@ async fn main() -> Result<()> {
                 &status_discovery,
                 &status_wallet,
                 &status_trader,
-                &status_trading_engine,
                 &status_pricing
             ).await;
         }
@@ -181,7 +158,6 @@ async fn main() -> Result<()> {
     discovery.stop().await;
     wallet_tracker.stop().await;
     trader.stop().await;
-    trading_engine.stop().await;
     // Note: pricing_manager doesn't need explicit stop - background tasks will be dropped
 
     Logger::success("ScreenerBot shutdown complete");
@@ -193,7 +169,6 @@ async fn display_status(
     discovery: &Arc<Discovery>,
     wallet_tracker: &Arc<WalletTracker>,
     trader: &Arc<Trader>,
-    trading_engine: &Arc<screenerbot::TradingEngine>,
     pricing_manager: &Arc<PricingManager>
 ) {
     // Clear screen and move cursor to top
@@ -306,50 +281,6 @@ async fn display_status(
         }
     } else {
         Logger::trader("DISABLED (for safety)");
-    }
-
-    Logger::separator();
-
-    // Advanced Trading Engine status
-    if trading_engine.is_running().await {
-        if let Ok(metrics) = trading_engine.get_portfolio_metrics().await {
-            Logger::trader(
-                &format!(
-                    "🚀 TRADING ENGINE: {} positions | P&L: {:.2}% ({:.6} SOL) | Win Rate: {:.1}%",
-                    metrics.open_positions,
-                    metrics.total_pnl_percentage,
-                    metrics.total_pnl_sol,
-                    metrics.win_rate
-                )
-            );
-
-            // Show top positions
-            if let Ok(positions) = trading_engine.get_open_positions().await {
-                for (i, position) in positions.iter().take(3).enumerate() {
-                    let pnl_color = if position.pnl_percentage >= 0.0 { "🟢" } else { "🔴" };
-                    let age_hours = chrono::Utc
-                        ::now()
-                        .signed_duration_since(position.opened_at)
-                        .num_hours();
-
-                    Logger::trader(
-                        &format!(
-                            "  {}. {} | {:.2}% {} | Age: {}h | Target: {:.1}%",
-                            i + 1,
-                            &position.token_mint[..8],
-                            position.pnl_percentage,
-                            pnl_color,
-                            age_hours,
-                            position.profit_target
-                        )
-                    );
-                }
-            }
-        } else {
-            Logger::trader("🚀 TRADING ENGINE: ACTIVE");
-        }
-    } else {
-        Logger::trader("🚀 TRADING ENGINE: DISABLED");
     }
 
     Logger::separator();
