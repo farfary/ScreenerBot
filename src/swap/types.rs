@@ -3,11 +3,10 @@ use serde::{ Deserialize, Serialize };
 use solana_sdk::{ pubkey::Pubkey, signature::Signature };
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SwapProvider {
     Jupiter,
     Gmgn,
-    Raydium,
 }
 
 impl std::fmt::Display for SwapProvider {
@@ -15,7 +14,6 @@ impl std::fmt::Display for SwapProvider {
         match self {
             SwapProvider::Jupiter => write!(f, "Jupiter"),
             SwapProvider::Gmgn => write!(f, "GMGN"),
-            SwapProvider::Raydium => write!(f, "Raydium"),
         }
     }
 }
@@ -272,71 +270,6 @@ pub struct GmgnRawTransaction {
     pub prioritization_fee_lamports: u64,
     #[serde(rename = "recentBlockhash")]
     pub recent_blockhash: String,
-}
-
-// Raydium types
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RaydiumSwapCompute {
-    pub id: String,
-    pub success: bool,
-    pub version: String,
-    pub msg: Option<String>,
-    pub data: RaydiumSwapData,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RaydiumSwapData {
-    #[serde(rename = "swapType")]
-    pub swap_type: String,
-    #[serde(rename = "inputMint")]
-    pub input_mint: String,
-    #[serde(rename = "inputAmount")]
-    pub input_amount: String,
-    #[serde(rename = "outputMint")]
-    pub output_mint: String,
-    #[serde(rename = "outputAmount")]
-    pub output_amount: String,
-    #[serde(rename = "otherAmountThreshold")]
-    pub other_amount_threshold: String,
-    #[serde(rename = "slippageBps")]
-    pub slippage_bps: u32,
-    #[serde(rename = "priceImpactPct")]
-    pub price_impact_pct: f64,
-    #[serde(rename = "routePlan")]
-    pub route_plan: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RaydiumTransactionRequest {
-    #[serde(rename = "computeUnitPriceMicroLamports")]
-    pub compute_unit_price_micro_lamports: String,
-    #[serde(rename = "swapResponse")]
-    pub swap_response: RaydiumSwapCompute,
-    #[serde(rename = "txVersion")]
-    pub tx_version: String,
-    #[serde(rename = "wallet")]
-    pub wallet: String,
-    #[serde(rename = "wrapSol")]
-    pub wrap_sol: bool,
-    #[serde(rename = "unwrapSol")]
-    pub unwrap_sol: bool,
-    #[serde(rename = "inputAccount")]
-    pub input_account: Option<String>,
-    #[serde(rename = "outputAccount")]
-    pub output_account: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RaydiumTransactionResponse {
-    pub id: String,
-    pub version: String,
-    pub success: bool,
-    pub data: Vec<RaydiumTransactionData>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RaydiumTransactionData {
-    pub transaction: String,
 }
 
 // Statistics and monitoring

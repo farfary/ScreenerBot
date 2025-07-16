@@ -1,4 +1,4 @@
-use super::{ gmgn::GmgnProvider, jupiter::JupiterProvider, raydium::RaydiumProvider, types::* };
+use super::{ gmgn::GmgnProvider, jupiter::JupiterProvider, types::* };
 use crate::config::SwapConfig;
 use crate::rpc::RpcManager;
 use anyhow::Result;
@@ -19,7 +19,6 @@ pub struct SwapManager {
     config: SwapConfig,
     jupiter: JupiterProvider,
     gmgn: GmgnProvider,
-    raydium: RaydiumProvider,
     rpc_manager: Arc<RpcManager>,
     stats: Arc<RwLock<SwapStats>>,
 }
@@ -28,13 +27,11 @@ impl SwapManager {
     pub fn new(config: SwapConfig, rpc_manager: Arc<RpcManager>) -> Self {
         let jupiter = JupiterProvider::new(config.jupiter.clone());
         let gmgn = GmgnProvider::new(config.gmgn.clone());
-        let raydium = RaydiumProvider::new(config.raydium.clone());
 
         Self {
             config,
             jupiter,
             gmgn,
-            raydium,
             rpc_manager,
             stats: Arc::new(RwLock::new(SwapStats::default())),
         }
@@ -72,16 +69,6 @@ impl SwapManager {
                 request.slippage_bps
             ).await;
             quotes.insert(SwapProvider::Gmgn, result);
-        }
-
-        if self.raydium.is_available() {
-            let result = self.raydium.get_quote(
-                &request.input_mint,
-                &request.output_mint,
-                request.amount,
-                request.slippage_bps
-            ).await;
-            quotes.insert(SwapProvider::Raydium, result);
         }
 
         quotes
@@ -156,15 +143,6 @@ impl SwapManager {
                     request.wrap_unwrap_sol,
                     request.wrap_unwrap_sol,
                     request.priority_fee
-                ).await?
-            }
-            SwapProvider::Raydium => {
-                self.raydium.get_swap_transaction(
-                    &request.user_public_key,
-                    quote,
-                    request.wrap_unwrap_sol,
-                    request.wrap_unwrap_sol,
-                    request.compute_unit_price
                 ).await?
             }
         };
@@ -266,14 +244,6 @@ impl SwapManager {
                     request.slippage_bps
                 ).await?
             }
-            SwapProvider::Raydium => {
-                self.raydium.get_quote(
-                    &request.input_mint,
-                    &request.output_mint,
-                    request.amount,
-                    request.slippage_bps
-                ).await?
-            }
         };
 
         log::info!(
@@ -299,20 +269,6 @@ impl SwapManager {
         transaction: &SwapTransaction,
         keypair: &Keypair
     ) -> SwapResult<Signature> {
-        // For Raydium, use specialized execution method that handles V0 transactions properly
-        if transaction.provider == SwapProvider::Raydium {
-            let rpc_client = self.rpc_manager
-                .get_rpc_client()
-                .map_err(|e|
-                    SwapError::TransactionFailed(
-                        SwapProvider::Raydium,
-                        format!("Failed to get RPC client: {}", e)
-                    )
-                )?;
-
-            return self.raydium.execute_swap(transaction, keypair, &rpc_client).await;
-        }
-
         // For GMGN, use specialized execution method
         if transaction.provider == SwapProvider::Gmgn {
             let rpc_client = self.rpc_manager
@@ -479,7 +435,6 @@ impl SwapManager {
         let provider_bonus = match quote.provider {
             SwapProvider::Jupiter => 1.1, // Slight preference for Jupiter
             SwapProvider::Gmgn => 1.0,
-            SwapProvider::Raydium => 1.05,
         };
 
         output_score * impact_penalty * provider_bonus
@@ -549,9 +504,6 @@ impl SwapManager {
         let gmgn_health = self.gmgn.health_check().await.unwrap_or(false);
         health_status.insert(SwapProvider::Gmgn, gmgn_health);
 
-        let raydium_health = self.raydium.health_check().await.unwrap_or(false);
-        health_status.insert(SwapProvider::Raydium, raydium_health);
-
         health_status
     }
 
@@ -564,9 +516,6 @@ impl SwapManager {
         }
         if self.gmgn.is_available() {
             providers.push(SwapProvider::Gmgn);
-        }
-        if self.raydium.is_available() {
-            providers.push(SwapProvider::Raydium);
         }
 
         providers
