@@ -20,6 +20,8 @@ pub struct TokenInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletPosition {
     pub mint: String,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
     pub balance: u64,
     pub decimals: u8,
     pub value_sol: Option<f64>,

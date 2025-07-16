@@ -57,7 +57,7 @@ impl PriceCache {
     pub async fn get_token_info(&self, token_address: &str) -> Option<TokenInfo> {
         if let Some(cached) = self.tokens.get(token_address) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-            if now - cached.cached_at < self.cache_ttl.as_secs() {
+            if now >= cached.cached_at && now - cached.cached_at < self.cache_ttl.as_secs() {
                 // Update access statistics (would need interior mutability in real impl)
                 return Some(cached.token_info.clone());
             }
@@ -68,7 +68,7 @@ impl PriceCache {
     pub async fn get_token_price(&self, token_address: &str) -> Option<TokenPrice> {
         if let Some(cached) = self.prices.get(token_address) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-            if now - cached.cached_at < self.cache_ttl.as_secs() {
+            if now >= cached.cached_at && now - cached.cached_at < self.cache_ttl.as_secs() {
                 return Some(cached.price.clone());
             }
         }
@@ -78,7 +78,7 @@ impl PriceCache {
     pub async fn get_pool_info(&self, pool_address: &str) -> Option<PoolInfo> {
         if let Some(cached) = self.pools.get(pool_address) {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-            if now - cached.cached_at < self.cache_ttl.as_secs() {
+            if now >= cached.cached_at && now - cached.cached_at < self.cache_ttl.as_secs() {
                 return Some(cached.pool_info.clone());
             }
         }
@@ -195,9 +195,15 @@ impl PriceCache {
     pub async fn clear_expired(&mut self) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        self.tokens.retain(|_, cached| now - cached.cached_at < self.cache_ttl.as_secs());
-        self.prices.retain(|_, cached| now - cached.cached_at < self.cache_ttl.as_secs());
-        self.pools.retain(|_, cached| now - cached.cached_at < self.cache_ttl.as_secs());
+        self.tokens.retain(
+            |_, cached| now >= cached.cached_at && now - cached.cached_at < self.cache_ttl.as_secs()
+        );
+        self.prices.retain(
+            |_, cached| now >= cached.cached_at && now - cached.cached_at < self.cache_ttl.as_secs()
+        );
+        self.pools.retain(
+            |_, cached| now >= cached.cached_at && now - cached.cached_at < self.cache_ttl.as_secs()
+        );
     }
 
     pub async fn get_cache_stats(&self) -> CacheStats {

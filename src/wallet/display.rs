@@ -60,7 +60,17 @@ impl ConsoleDisplay {
             let pnl_color = if pnl_percentage >= 0.0 { "🟢" } else { "🔴" };
             let pnl_sign = if pnl_percentage >= 0.0 { "+" } else { "" };
 
-            let token_display = if position.mint.len() > 15 {
+            let token_display = if let Some(symbol) = &position.symbol {
+                if let Some(name) = &position.name {
+                    if name.len() > 12 {
+                        format!("{} ({})", symbol, &name[..8])
+                    } else {
+                        format!("{} ({})", symbol, name)
+                    }
+                } else {
+                    symbol.clone()
+                }
+            } else if position.mint.len() > 15 {
                 format!("{}...", &position.mint[..12])
             } else {
                 position.mint.clone()

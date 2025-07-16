@@ -44,20 +44,26 @@ async fn main() -> Result<()> {
     Logger::info("Initializing modules...");
 
     // Pricing manager
-    let pricing_manager = Arc::new(
-        PricingManager::new(
-            Arc::clone(&database),
-            Arc::new(Logger::new()),
-            config.pricing
-                .as_ref()
-                .map(|p| p.update_interval_secs)
-                .unwrap_or(300), // 5 minutes default
-            config.pricing
-                .as_ref()
-                .map(|p| p.top_tokens_count)
-                .unwrap_or(100) // Top 100 tokens default
-        )
+    let mut pricing_manager = PricingManager::new(
+        Arc::clone(&database),
+        Arc::new(Logger::new()),
+        config.pricing
+            .as_ref()
+            .map(|p| p.update_interval_secs)
+            .unwrap_or(300), // 5 minutes default
+        config.pricing
+            .as_ref()
+            .map(|p| p.top_tokens_count)
+            .unwrap_or(100) // Top 100 tokens default
     );
+
+    // Enable the sophisticated tiered pricing system
+    if let Err(e) = pricing_manager.enable_tiered_pricing().await {
+        Logger::warn(&format!("Failed to enable tiered pricing: {}", e));
+        Logger::info("Continuing with basic pricing system...");
+    }
+
+    let pricing_manager = Arc::new(pricing_manager);
     Logger::pricing("Pricing manager initialized");
 
     // Discovery module
@@ -89,8 +95,15 @@ async fn main() -> Result<()> {
     Logger::discovery("Discovery module started");
 
     // Start wallet tracker
-    let _ = wallet_tracker.start().await;
-    Logger::wallet("Wallet tracker started");
+    match wallet_tracker.start().await {
+        Ok(()) => {
+            Logger::success("✅ Wallet tracker started successfully");
+        }
+        Err(e) => {
+            Logger::error(&format!("❌ Failed to start wallet tracker: {}", e));
+            return Err(e);
+        }
+    }
 
     Logger::success("All modules started SUCCESSFULLY!");
     Logger::info("Press Ctrl+C to stop the bot");

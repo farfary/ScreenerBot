@@ -84,18 +84,20 @@ impl WalletTracker {
         self.load_existing_positions().await?;
 
         // Start tracking loop
+        Logger::wallet("🎯 WALLET TRACKING: Spawning tracking loop task...");
         let tracker = self.clone();
         tokio::spawn(async move {
+            Logger::wallet("🚀 WALLET TRACKING: Task spawned successfully, starting loop...");
             let result = std::panic
                 ::AssertUnwindSafe(tracker.run_tracking_loop())
                 .catch_unwind().await;
 
             match result {
                 Ok(()) => {
-                    Logger::success("Wallet tracking loop COMPLETED normally");
+                    Logger::success("✅ WALLET TRACKING: Loop COMPLETED normally");
                 }
                 Err(panic_info) => {
-                    Logger::error(&format!("💥 Wallet tracking loop panicked: {:?}", panic_info));
+                    Logger::error(&format!("💥 WALLET TRACKING: Loop panicked: {:?}", panic_info));
                 }
             }
         });
@@ -128,7 +130,7 @@ impl WalletTracker {
     }
 
     pub async fn refresh_positions(&self) -> Result<()> {
-        Logger::wallet("🔄 Refreshing current token positions...");
+        Logger::wallet("🔄 POSITION REFRESH: Starting position refresh cycle...");
 
         // Get current token holdings from blockchain
         let current_holdings = self.position_manager.get_current_token_holdings(
@@ -136,18 +138,64 @@ impl WalletTracker {
         ).await?;
 
         if current_holdings.is_empty() {
-            Logger::wallet("📝 No SPL token holdings found - wallet contains only SOL");
+            Logger::wallet(
+                "📝 POSITION REFRESH: No SPL token holdings found - wallet contains only SOL"
+            );
             *self.positions.write().await = HashMap::new();
+
+            // Clear pricing priorities since no positions
+            if let Some(ref pricing_manager) = self.pricing_manager {
+                pricing_manager.update_position_priorities(&[]).await;
+            }
+
             return Ok(());
         }
 
-        Logger::wallet(&format!("💎 Found {} token holdings", current_holdings.len()));
+        Logger::wallet(
+            &format!(
+                "💎 POSITION REFRESH: Found {} token holdings on-chain",
+                current_holdings.len()
+            )
+        );
+
+        // Log each holding detected
+        for (i, holding) in current_holdings.iter().enumerate() {
+            let balance = (holding.balance as f64) / (10_f64).powi(holding.decimals as i32);
+            Logger::wallet(
+                &format!(
+                    "  {}. Token: {}... | Balance: {:.4} | Decimals: {}",
+                    i + 1,
+                    &holding.mint[..8],
+                    balance,
+                    holding.decimals
+                )
+            );
+        }
 
         // Calculate positions with P&L
+        Logger::wallet("🧮 POSITION REFRESH: Calculating positions with P&L...");
         let positions = self.position_manager.calculate_positions_with_pnl(current_holdings).await?;
+
+        Logger::wallet(&format!("📊 POSITION REFRESH: Calculated {} positions", positions.len()));
 
         // Update positions in memory
         *self.positions.write().await = positions.clone();
+
+        // Update pricing priorities for these open positions
+        if let Some(ref pricing_manager) = self.pricing_manager {
+            let position_list: Vec<_> = positions.values().cloned().collect();
+            Logger::wallet(
+                &format!(
+                    "🎯 POSITION REFRESH: Updating pricing priorities for {} positions",
+                    position_list.len()
+                )
+            );
+            pricing_manager.update_position_priorities(&position_list).await;
+        } else {
+            Logger::wallet(
+                "⚠️ POSITION REFRESH: No pricing manager available for priority updates"
+            );
+        }
 
         // Display current positions in console
         self.console_display.show_current_positions(&positions).await?;
@@ -183,40 +231,54 @@ impl WalletTracker {
     }
 
     async fn run_tracking_loop(&self) {
-        Logger::wallet("🚀 Starting enhanced wallet tracking loop...");
-        let mut interval = time::interval(Duration::from_secs(30)); // Update every 30 seconds
+        Logger::wallet("🚀 WALLET TRACKING: Starting enhanced wallet tracking loop...");
+        let mut interval = time::interval(Duration::from_secs(10)); // Update every 10 seconds for debugging
         let mut summary_counter = 0;
+        let mut cycle_count = 0;
 
         loop {
             interval.tick().await;
+            cycle_count += 1;
 
             let is_running = self.is_running.read().await;
             if !*is_running {
-                Logger::wallet("🛑 Wallet tracking loop stopping (is_running = false)");
+                Logger::wallet("🛑 WALLET TRACKING: Loop stopping (is_running = false)");
                 break;
             }
             drop(is_running);
+
+            Logger::wallet(&format!("🔄 WALLET TRACKING LOOP: Starting cycle #{}", cycle_count));
 
             // Refresh positions and display current holdings
             match self.refresh_positions().await {
                 Ok(()) => {
                     summary_counter += 1;
+                    Logger::wallet(
+                        &format!("✅ WALLET TRACKING: Cycle #{} completed successfully", cycle_count)
+                    );
 
-                    // Every 5 cycles (2.5 minutes), show detailed analytics
+                    // Every 5 cycles (50 seconds), show detailed analytics
                     if summary_counter >= 5 {
                         summary_counter = 0;
+                        Logger::wallet("📊 WALLET TRACKING: Running detailed analytics...");
                         self.show_detailed_analytics().await;
                     }
                 }
                 Err(e) => {
-                    Logger::error(&format!("❌ FAILED to refresh positions: {}", e));
+                    Logger::error(
+                        &format!(
+                            "❌ WALLET TRACKING: Cycle #{} FAILED to refresh positions: {}",
+                            cycle_count,
+                            e
+                        )
+                    );
                 }
             }
 
-            Logger::wallet("⏱️  Next update in 30 seconds...");
+            Logger::wallet("⏱️  WALLET TRACKING: Next update in 10 seconds...");
         }
 
-        Logger::wallet("🏁 Wallet tracking loop ended");
+        Logger::wallet("🏁 WALLET TRACKING: Loop ended");
     }
 
     async fn show_detailed_analytics(&self) {

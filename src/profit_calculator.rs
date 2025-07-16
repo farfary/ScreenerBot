@@ -236,6 +236,8 @@ impl ProfitLossCalculator {
 
         let position = WalletPosition {
             mint: mint.to_string(),
+            name: None, // Will be set by position manager
+            symbol: None, // Will be set by position manager
             balance,
             decimals,
             value_sol: Some(pnl.current_value_sol),

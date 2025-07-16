@@ -51,13 +51,19 @@ impl Database {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS wallet_positions (
                 mint TEXT PRIMARY KEY,
+                name TEXT,
+                symbol TEXT,
                 balance INTEGER NOT NULL,
                 decimals INTEGER NOT NULL,
-                value_usd REAL,
-                entry_price REAL,
-                current_price REAL,
-                pnl REAL,
+                value_sol REAL,
+                entry_price_sol REAL,
+                current_price_sol REAL,
+                pnl_sol REAL,
                 pnl_percentage REAL,
+                realized_pnl_sol REAL,
+                unrealized_pnl_sol REAL,
+                total_invested_sol REAL,
+                average_entry_price_sol REAL,
                 last_updated TEXT NOT NULL
             )",
             []
@@ -282,12 +288,14 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO wallet_positions 
-            (mint, balance, decimals, value_sol, entry_price_sol, current_price_sol, 
+            (mint, name, symbol, balance, decimals, value_sol, entry_price_sol, current_price_sol, 
              pnl_sol, pnl_percentage, realized_pnl_sol, unrealized_pnl_sol, 
              total_invested_sol, average_entry_price_sol, last_updated)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 position.mint,
+                position.name,
+                position.symbol,
                 position.balance,
                 position.decimals,
                 position.value_sol,
@@ -308,7 +316,7 @@ impl Database {
     pub fn get_wallet_positions(&self) -> Result<Vec<WalletPosition>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT mint, balance, decimals, value_sol, entry_price_sol, current_price_sol, 
+            "SELECT mint, name, symbol, balance, decimals, value_sol, entry_price_sol, current_price_sol, 
              pnl_sol, pnl_percentage, realized_pnl_sol, unrealized_pnl_sol, 
              total_invested_sol, average_entry_price_sol, last_updated 
              FROM wallet_positions ORDER BY value_sol DESC"
@@ -605,18 +613,20 @@ impl Database {
     fn row_to_wallet_position(&self, row: &Row) -> Result<WalletPosition, rusqlite::Error> {
         Ok(WalletPosition {
             mint: row.get(0)?,
-            balance: row.get(1)?,
-            decimals: row.get(2)?,
-            value_sol: row.get(3)?,
-            entry_price_sol: row.get(4)?,
-            current_price_sol: row.get(5)?,
-            pnl_sol: row.get(6)?,
-            pnl_percentage: row.get(7)?,
-            realized_pnl_sol: row.get(8)?,
-            unrealized_pnl_sol: row.get(9)?,
-            total_invested_sol: row.get(10)?,
-            average_entry_price_sol: row.get(11)?,
-            last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(12)?)
+            name: row.get(1)?,
+            symbol: row.get(2)?,
+            balance: row.get(3)?,
+            decimals: row.get(4)?,
+            value_sol: row.get(5)?,
+            entry_price_sol: row.get(6)?,
+            current_price_sol: row.get(7)?,
+            pnl_sol: row.get(8)?,
+            pnl_percentage: row.get(9)?,
+            realized_pnl_sol: row.get(10)?,
+            unrealized_pnl_sol: row.get(11)?,
+            total_invested_sol: row.get(12)?,
+            average_entry_price_sol: row.get(13)?,
+            last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(14)?)
                 .unwrap()
                 .with_timezone(&Utc),
         })

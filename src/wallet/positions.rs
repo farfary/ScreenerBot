@@ -159,16 +159,30 @@ impl PositionManager {
         for holding in holdings {
             Logger::wallet(&format!("📊 Calculating P&L for {}", &holding.mint[..8]));
 
+            // Get token information from database or use well-known tokens
+            let token_info = self.database.get_token(&holding.mint).ok().flatten();
+            let (token_name, token_symbol) = if let Some(ref info) = token_info {
+                (Some(info.name.clone()), Some(info.symbol.clone()))
+            } else if let Some((symbol, name)) = self.get_well_known_token_info(&holding.mint) {
+                (Some(name), Some(symbol))
+            } else {
+                (None, None)
+            };
+
             // Get current price in SOL
             let current_price_sol = self.get_token_price_in_sol(&holding.mint).await.unwrap_or(0.0);
 
             // Calculate position with P&L using profit calculator
-            let position = self.profit_calculator.update_position_with_pnl(
+            let mut position = self.profit_calculator.update_position_with_pnl(
                 &holding.mint,
                 holding.balance,
                 holding.decimals,
                 current_price_sol
             ).await?;
+
+            // Add token name and symbol to position
+            position.name = token_name;
+            position.symbol = token_symbol;
 
             // Save to database
             if let Err(e) = self.database.save_wallet_position(&position) {
@@ -296,8 +310,26 @@ impl PositionManager {
     }
 
     async fn get_token_price_in_sol(&self, mint: &str) -> Result<f64> {
+        // Handle well-known tokens with approximate pricing
+        match mint {
+            // USDC is approximately 1 USD = current SOL price in SOL
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => {
+                // Approximate USDC price (1 USD worth of SOL)
+                Logger::wallet("🔍 Using hardcoded USDC pricing");
+                return Ok(0.0045); // Approximately 1 USD at ~$220 SOL
+            }
+            // Native SOL
+            "So11111111111111111111111111111111111111112" => {
+                return Ok(1.0);
+            }
+            _ => {}
+        }
+
+        Logger::wallet(&format!("🔍 Fetching price for token: {}", &mint[..8]));
+
         if let Some(ref pricing_manager) = self.pricing_manager {
             if let Some(price_info) = pricing_manager.get_token_price(mint).await {
+                Logger::wallet(&format!("📊 Found price: ${:.6}", price_info.price_usd));
                 // Get SOL/USD rate to convert USD price to SOL price
                 if
                     let Some(sol_price_info) = pricing_manager.get_token_price(
@@ -306,13 +338,45 @@ impl PositionManager {
                 {
                     let sol_usd_rate = sol_price_info.price_usd;
                     if sol_usd_rate > 0.0 {
-                        return Ok(price_info.price_usd / sol_usd_rate);
+                        let sol_price = price_info.price_usd / sol_usd_rate;
+                        Logger::wallet(&format!("📊 Converted to SOL price: {:.8}", sol_price));
+                        return Ok(sol_price);
                     }
                 }
+            } else {
+                Logger::wallet("📊 No price found in pricing manager");
             }
+        } else {
+            Logger::wallet("📊 No pricing manager available");
         }
 
         // Fallback to 0.0 if no pricing manager or price not found
+        Logger::wallet("📊 Using fallback price: 0.0");
         Ok(0.0)
+    }
+
+    /// Get well-known token info for better display
+    fn get_well_known_token_info(&self, mint: &str) -> Option<(String, String)> {
+        match mint {
+            // Native SOL (wrapped)
+            "So11111111111111111111111111111111111111112" =>
+                Some(("SOL".to_string(), "Solana".to_string())),
+            // USDC
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" =>
+                Some(("USDC".to_string(), "USD Coin".to_string())),
+            // USDT
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" =>
+                Some(("USDT".to_string(), "Tether USD".to_string())),
+            // Bonk
+            "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" =>
+                Some(("BONK".to_string(), "Bonk".to_string())),
+            // RAY
+            "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" =>
+                Some(("RAY".to_string(), "Raydium".to_string())),
+            // MSOL
+            "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" =>
+                Some(("MSOL".to_string(), "Marinade SOL".to_string())),
+            _ => None,
+        }
     }
 }
