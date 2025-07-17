@@ -7,7 +7,7 @@ use crate::config::DynamicPricingConfig;
 use crate::database::Database;
 use crate::logger::Logger;
 use crate::pricing::gecko_terminal::GeckoTerminalClient;
-use crate::pricing::{ TokenPrice, PriceSource as PricingPriceSource };
+use crate::pricing::TokenPrice;
 
 /// Dynamic pricing manager that continuously updates token prices based on liquidity
 pub struct DynamicPricingManager {
