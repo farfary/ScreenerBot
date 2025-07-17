@@ -4,7 +4,6 @@ pub mod gecko_api;
 pub use database::{ MarketDatabase, TokenData, PoolData, MarketStats };
 pub use gecko_api::GeckoTerminalClient;
 
-// use crate::logger::Logger;
 use crate::discovery::DiscoveryDatabase;
 use anyhow::{ Context, Result };
 use reqwest::Client;
@@ -185,15 +184,13 @@ impl MarketData {
                                         0.0
                                     };
 
-                                    let market_cap_usd = token_data.market_cap;
-                                    let liquidity_usd = token_data.liquidity_usd;
                                     let market_cap_sol = if sol_price > 0.0 {
-                                        market_cap_usd / sol_price
+                                        token_data.market_cap / sol_price
                                     } else {
                                         0.0
                                     };
                                     let liquidity_sol = if sol_price > 0.0 {
-                                        liquidity_usd / sol_price
+                                        token_data.liquidity_usd / sol_price
                                     } else {
                                         0.0
                                     };
@@ -204,27 +201,17 @@ impl MarketData {
                                         .bright_white()
                                         .bold();
                                     let mint = format!("{}", token_data.mint).bright_cyan();
-                                    let price_line = format!(
-                                        "Price: {} → {} | {}",
-                                        format!("${:.6}", old_price).yellow(),
-                                        format!("${:.6}", new_price).green(),
-                                        if pct >= 0.0 {
-                                            format!("+{:.2}%", pct).green().bold()
-                                        } else {
-                                            format!("{:.2}%", pct).red().bold()
-                                        }
-                                    );
+                                    let price_line = format!("Price Change: {}", if pct >= 0.0 {
+                                        format!("+{:.2}%", pct).green().bold()
+                                    } else {
+                                        format!("{:.2}%", pct).red().bold()
+                                    });
                                     let age_line = format!("{}", age_str.dimmed());
                                     let mcap_line = format!(
-                                        "Market Cap: {} ({:.2} SOL)",
-                                        format!("${:.0}", market_cap_usd).bright_yellow().bold(),
+                                        "Market Cap: {:.2} SOL",
                                         market_cap_sol
                                     );
-                                    let liq_line = format!(
-                                        "Liquidity : {} ({:.2} SOL)",
-                                        format!("${:.0}", liquidity_usd).bright_blue().bold(),
-                                        liquidity_sol
-                                    );
+                                    let liq_line = format!("Liquidity : {:.2} SOL", liquidity_sol);
 
                                     // Print styled price change directly to console (not using Logger)
                                     println!(
