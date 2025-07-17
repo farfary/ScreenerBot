@@ -6,7 +6,7 @@ use chrono::{ DateTime, Utc };
 use rusqlite::{ params, Row };
 
 impl Database {
-    /// Save a token to the database
+    /// Save full token information to the database (for tokens with complete data)
     pub fn save_token(&self, token: &TokenInfo) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(

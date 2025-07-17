@@ -27,6 +27,7 @@
 
 pub mod models;
 pub mod connection;
+pub mod mints;
 pub mod tokens;
 pub mod prices;
 pub mod pools;

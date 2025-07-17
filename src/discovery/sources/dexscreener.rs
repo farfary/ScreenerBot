@@ -1,9 +1,6 @@
 use super::SourceTrait;
-use crate::types::TokenInfo;
-use crate::Logger;
 use anyhow::{ Context, Result };
 use async_trait::async_trait;
-use chrono::Utc;
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -57,7 +54,7 @@ impl DexScreenerSource {
         }
     }
 
-    async fn fetch_latest_profiles(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_latest_profiles(&self) -> Result<Vec<String>> {
         let url = "https://api.dexscreener.com/token-profiles/latest/v1";
 
         let response = self.client
@@ -73,20 +70,18 @@ impl DexScreenerSource {
             .json().await
             .context("Failed to parse DexScreener token profiles")?;
 
-        let mut tokens = Vec::new();
+        let mut mints = Vec::new();
         for profile in profiles {
-            // Only process Solana tokens
-            if profile.chain_id == "solana" {
-                if let Some(token) = self.convert_profile_to_token(profile) {
-                    tokens.push(token);
-                }
+            // Only process Solana tokens with valid mint addresses
+            if profile.chain_id == "solana" && profile.token_address.len() == 44 {
+                mints.push(profile.token_address);
             }
         }
 
-        Ok(tokens)
+        Ok(mints)
     }
 
-    async fn fetch_latest_boosts(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_latest_boosts(&self) -> Result<Vec<String>> {
         time::sleep(self.rate_limit_delay).await;
 
         let url = "https://api.dexscreener.com/token-boosts/latest/v1";
@@ -106,32 +101,18 @@ impl DexScreenerSource {
             .json().await
             .context("Failed to parse DexScreener token boosts")?;
 
-        // For boosts, we only have token addresses, so we need to fetch additional data
-        // For now, we'll create minimal token info
-        let mut tokens = Vec::new();
+        let mut mints = Vec::new();
         for boost in boosts {
-            let token = TokenInfo {
-                mint: boost.token_address,
-                symbol: "UNKNOWN".to_string(),
-                name: boost.description.unwrap_or_else(|| "Boosted Token".to_string()),
-                decimals: 9, // Default for Solana
-                supply: 0,
-                market_cap: None,
-                price: None,
-                volume_24h: None,
-                liquidity: boost.total_amount,
-                pool_address: None,
-                discovered_at: Utc::now(),
-                last_updated: Utc::now(),
-                is_active: true,
-            };
-            tokens.push(token);
+            // Only process valid Solana token addresses
+            if boost.token_address.len() == 44 {
+                mints.push(boost.token_address);
+            }
         }
 
-        Ok(tokens)
+        Ok(mints)
     }
 
-    async fn fetch_top_boosts(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_top_boosts(&self) -> Result<Vec<String>> {
         time::sleep(self.rate_limit_delay).await;
 
         let url = "https://api.dexscreener.com/token-boosts/top/v1";
@@ -151,55 +132,15 @@ impl DexScreenerSource {
             .json().await
             .context("Failed to parse DexScreener top boosts")?;
 
-        let mut tokens = Vec::new();
+        let mut mints = Vec::new();
         for boost in boosts {
-            let token = TokenInfo {
-                mint: boost.token_address,
-                symbol: "UNKNOWN".to_string(),
-                name: boost.description.unwrap_or_else(|| "Top Boosted Token".to_string()),
-                decimals: 9,
-                supply: 0,
-                market_cap: None,
-                price: None,
-                volume_24h: None,
-                liquidity: boost.total_amount,
-                pool_address: None,
-                discovered_at: Utc::now(),
-                last_updated: Utc::now(),
-                is_active: true,
-            };
-            tokens.push(token);
+            // Only process valid Solana token addresses
+            if boost.token_address.len() == 44 {
+                mints.push(boost.token_address);
+            }
         }
 
-        Ok(tokens)
-    }
-
-    fn convert_profile_to_token(&self, profile: DexScreenerTokenProfile) -> Option<TokenInfo> {
-        // Skip if not a proper Solana token address
-        if profile.token_address.len() != 44 {
-            return None;
-        }
-
-        // Only process Solana tokens
-        if profile.chain_id != "solana" {
-            return None;
-        }
-
-        Some(TokenInfo {
-            mint: profile.token_address,
-            symbol: "UNKNOWN".to_string(), // Profile API doesn't include symbol
-            name: profile.description.unwrap_or_else(|| "Token Profile".to_string()),
-            decimals: 9, // Default for Solana tokens
-            supply: 0, // Not provided in this API
-            market_cap: None,
-            price: None,
-            volume_24h: None,
-            liquidity: None,
-            pool_address: None,
-            discovered_at: Utc::now(),
-            last_updated: Utc::now(),
-            is_active: true,
-        })
+        Ok(mints)
     }
 }
 
@@ -209,41 +150,41 @@ impl SourceTrait for DexScreenerSource {
         "DexScreener"
     }
 
-    async fn discover(&self) -> Result<Vec<TokenInfo>> {
-        let mut all_tokens = Vec::new();
+    async fn discover_mints(&self) -> Result<Vec<String>> {
+        let mut all_mints = Vec::new();
 
         // Fetch from all DexScreener endpoints
         match self.fetch_latest_profiles().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                Logger::warn(&format!("Failed to fetch DexScreener profiles: {e}"));
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
         match self.fetch_latest_boosts().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                Logger::warn(&format!("Failed to fetch DexScreener latest boosts: {e}"));
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
         match self.fetch_top_boosts().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                Logger::warn(&format!("Failed to fetch DexScreener top boosts: {e}"));
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
-        // Remove duplicates by mint address
-        all_tokens.sort_by(|a, b| a.mint.cmp(&b.mint));
-        all_tokens.dedup_by(|a, b| a.mint == b.mint);
+        // Remove duplicates
+        all_mints.sort();
+        all_mints.dedup();
 
-        Ok(all_tokens)
+        Ok(all_mints)
     }
 }

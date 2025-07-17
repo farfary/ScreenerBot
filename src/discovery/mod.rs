@@ -3,11 +3,11 @@ pub mod sources;
 use crate::config::DiscoveryConfig;
 use crate::database::Database;
 use crate::logger::Logger;
-use crate::types::{ TokenInfo, DiscoveryStats };
+use crate::types::DiscoveryStats;
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use reqwest::Client;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -19,7 +19,7 @@ pub struct Discovery {
     config: DiscoveryConfig,
     database: Arc<Database>,
     client: Client,
-    token_cache: Arc<RwLock<HashMap<String, TokenInfo>>>,
+    known_mints: Arc<RwLock<HashSet<String>>>,
     is_running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<DiscoveryStats>>,
     sources: Vec<Box<dyn SourceTrait>>,
@@ -50,7 +50,7 @@ impl Discovery {
             config,
             database,
             client,
-            token_cache: Arc::new(RwLock::new(HashMap::new())),
+            known_mints: Arc::new(RwLock::new(HashSet::new())),
             is_running: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(stats)),
             sources,
@@ -73,8 +73,8 @@ impl Discovery {
 
         Logger::discovery("Discovery module started");
 
-        // Load existing tokens from database
-        self.load_existing_tokens().await?;
+        // Load existing mints from database
+        self.load_existing_mints().await?;
 
         // Start discovery loop
         let discovery = self.clone();
@@ -99,36 +99,21 @@ impl Discovery {
         self.stats.read().await.clone()
     }
 
-    pub async fn get_cached_tokens(&self) -> HashMap<String, TokenInfo> {
-        self.token_cache.read().await.clone()
-    }
+    async fn load_existing_mints(&self) -> Result<()> {
+        let mints = self.database.get_all_mints().context("Failed to load mints from database")?;
 
-    pub async fn get_token(&self, mint: &str) -> Option<TokenInfo> {
-        self.token_cache.read().await.get(mint).cloned()
-    }
-
-    async fn load_existing_tokens(&self) -> Result<()> {
-        Logger::discovery("Loading existing tokens from database...");
-
-        let tokens = self.database
-            .get_active_tokens(None)
-            .context("Failed to load tokens from database")?;
-
-        let mut cache = self.token_cache.write().await;
-        for token in tokens {
-            cache.insert(token.mint.clone(), token);
+        let mut known_mints = self.known_mints.write().await;
+        for mint in mints {
+            known_mints.insert(mint);
         }
 
-        Logger::discovery(&format!("Loaded {} tokens from database", cache.len()));
         Ok(())
     }
 
     async fn run_discovery_loop(&self) {
-        Logger::discovery("Starting discovery loop...");
-
         let mut interval = time::interval(Duration::from_secs(self.config.interval_seconds));
         let start_time = Utc::now();
-        let mut tokens_discovered_this_session = 0u64;
+        let mut mints_discovered_this_session = 0u64;
 
         loop {
             interval.tick().await;
@@ -139,27 +124,23 @@ impl Discovery {
             }
             drop(is_running);
 
-            Logger::discovery("Running token discovery...");
-
-            match self.discover_tokens().await {
-                Ok(new_tokens) => {
-                    tokens_discovered_this_session += new_tokens;
+            match self.discover_mints().await {
+                Ok(new_mints) => {
+                    mints_discovered_this_session += new_mints;
 
                     // Update stats
                     let elapsed_hours = ((Utc::now() - start_time).num_minutes() as f64) / 60.0;
                     let rate = if elapsed_hours > 0.0 {
-                        (tokens_discovered_this_session as f64) / elapsed_hours
+                        (mints_discovered_this_session as f64) / elapsed_hours
                     } else {
                         0.0
                     };
 
-                    let (total_tokens, active_tokens) = self.database
-                        .get_token_count()
-                        .unwrap_or((0, 0));
+                    let (total_mints, _) = (self.database.get_mint_count().unwrap_or(0), 0);
 
                     let stats = DiscoveryStats {
-                        total_tokens_discovered: total_tokens,
-                        active_tokens,
+                        total_tokens_discovered: total_mints,
+                        active_tokens: total_mints,
                         last_discovery_run: Utc::now(),
                         discovery_rate_per_hour: rate,
                     };
@@ -170,63 +151,29 @@ impl Discovery {
                         Logger::error(&format!("Failed to save discovery stats: {}", e));
                     }
 
-                    if new_tokens > 0 {
-                        Logger::discovery(
-                            &format!(
-                                "🎯 Discovery complete! Found {} NEW tokens this run! Total: {}, Active: {}, Rate: {:.2}/hour",
-                                new_tokens,
-                                total_tokens,
-                                active_tokens,
-                                rate
-                            )
-                        );
-                    }
+                    // Only print count of new tokens and total
+                    println!("New tokens: {}, Total: {}", new_mints, total_mints);
                 }
                 Err(e) => {
                     Logger::error(&format!("Discovery failed: {}", e));
                 }
             }
         }
-
-        Logger::discovery("Discovery loop stopped");
     }
 
-    async fn discover_tokens(&self) -> Result<u64> {
-        let mut new_tokens_count = 0u64;
+    async fn discover_mints(&self) -> Result<u64> {
+        let mut new_mints_count = 0u64;
 
         // Run discovery from all enabled sources
         for source_name in &self.config.sources {
             if let Some(source) = self.find_source_by_name(source_name) {
-                Logger::discovery(&format!("🔍 Discovering from {}...", source.name()));
-
-                match source.discover().await {
-                    Ok(tokens) => {
-                        let processed = self.process_discovered_tokens(tokens, source_name).await?;
-                        new_tokens_count += processed;
-
-                        if processed > 0 {
-                            Logger::discovery(
-                                &format!(
-                                    "✅ {} found {} new tokens from {}",
-                                    "DISCOVERY",
-                                    processed,
-                                    source.name()
-                                )
-                            );
-                        } else {
-                            Logger::discovery(
-                                &format!(
-                                    "📊 {} checked {} - no new tokens",
-                                    "DISCOVERY",
-                                    source.name()
-                                )
-                            );
-                        }
+                match source.discover_mints().await {
+                    Ok(mints) => {
+                        let processed = self.process_discovered_mints(mints).await?;
+                        new_mints_count += processed;
                     }
                     Err(e) => {
-                        Logger::error(
-                            &format!("❌ Failed to discover from {}: {}", source.name(), e)
-                        );
+                        Logger::error(&format!("Failed to discover from {}: {}", source.name(), e));
                     }
                 }
             } else {
@@ -234,7 +181,7 @@ impl Discovery {
             }
         }
 
-        Ok(new_tokens_count)
+        Ok(new_mints_count)
     }
 
     fn find_source_by_name(&self, name: &str) -> Option<&Box<dyn SourceTrait>> {
@@ -246,93 +193,26 @@ impl Discovery {
             })
     }
 
-    fn meets_criteria(&self, token: &TokenInfo) -> bool {
-        // Check against blacklist
-        if self.config.blacklisted_tokens.contains(&token.mint) {
-            return false;
-        }
+    async fn process_discovered_mints(&self, mints: Vec<String>) -> Result<u64> {
+        let mut new_mints_count = 0u64;
+        let mut known_mints = self.known_mints.write().await;
 
-        // Check liquidity
-        if let Some(liquidity) = token.liquidity {
-            if liquidity < self.config.min_liquidity {
-                return false;
-            }
-        }
-
-        // Check volume
-        if let Some(volume) = token.volume_24h {
-            if volume < self.config.min_volume_24h {
-                return false;
-            }
-        }
-
-        // Check market cap bounds
-        if let Some(market_cap) = token.market_cap {
-            if let Some(min_cap) = self.config.min_market_cap {
-                if market_cap < min_cap {
-                    return false;
-                }
-            }
-            if let Some(max_cap) = self.config.max_market_cap {
-                if market_cap > max_cap {
-                    return false;
-                }
-            }
-        }
-
-        true
-    }
-
-    async fn process_discovered_tokens(&self, tokens: Vec<TokenInfo>, source: &str) -> Result<u64> {
-        let mut new_tokens_count = 0u64;
-        let mut cache = self.token_cache.write().await;
-
-        for token in tokens {
-            // Apply filtering criteria
-            if !self.meets_criteria(&token) {
-                continue;
-            }
-
-            // Check if we already have this token
-            if !cache.contains_key(&token.mint) {
+        for mint in mints {
+            // Skip if we already have this mint
+            if !known_mints.contains(&mint) {
                 // Save to database
-                if let Err(e) = self.database.save_token(&token) {
-                    Logger::error(&format!("Failed to save token {}: {}", token.symbol, e));
+                if let Err(e) = self.database.save_mint(&mint) {
+                    Logger::error(&format!("Failed to save mint {}: {}", mint, e));
                     continue;
                 }
 
-                // Add to cache
-                cache.insert(token.mint.clone(), token.clone());
-                new_tokens_count += 1;
-
-                // Show new token discovery with detailed info
-                Logger::discovery(
-                    &format!(
-                        "🆕 NEW TOKEN FOUND via {}: {} ({}) | 💰 MC: ${:.0} | 💧 Liq: ${:.0} | 📊 Vol: ${:.0} | 🔗 {}",
-                        source.to_uppercase(),
-                        token.symbol,
-                        token.name,
-                        token.market_cap.unwrap_or(0.0),
-                        token.liquidity.unwrap_or(0.0),
-                        token.volume_24h.unwrap_or(0.0),
-                        &token.mint[..8]
-                    )
-                );
-            } else {
-                // Update existing token data
-                let mut existing_token = token.clone();
-                existing_token.last_updated = Utc::now();
-
-                if let Err(e) = self.database.save_token(&existing_token) {
-                    Logger::error(&format!("Failed to update token {}: {}", token.symbol, e));
-                    continue;
-                }
-
-                cache.insert(token.mint.clone(), existing_token);
+                // Add to known mints
+                known_mints.insert(mint);
+                new_mints_count += 1;
             }
         }
 
-        Ok(new_tokens_count)
+        Ok(new_mints_count)
     }
 }
 
@@ -349,7 +229,7 @@ impl Clone for Discovery {
             config: self.config.clone(),
             database: Arc::clone(&self.database),
             client: self.client.clone(),
-            token_cache: Arc::clone(&self.token_cache),
+            known_mints: Arc::clone(&self.known_mints),
             is_running: Arc::clone(&self.is_running),
             stats: Arc::clone(&self.stats),
             sources,

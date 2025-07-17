@@ -37,6 +37,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
 
         // Create tables in order of dependencies
+        self.create_mints_table(&conn)?;
         self.create_tokens_table(&conn)?;
         self.create_discovery_stats_table(&conn)?;
         self.create_token_prices_table(&conn)?;
@@ -51,7 +52,20 @@ impl Database {
         Ok(())
     }
 
-    /// Create tokens table
+    /// Create mints table - simplified to only store mint addresses
+    fn create_mints_table(&self, conn: &Connection) -> Result<()> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mints (
+                mint TEXT PRIMARY KEY,
+                discovered_at TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )",
+            []
+        )?;
+        Ok(())
+    }
+
+    /// Create tokens table - for full token information with market data
     fn create_tokens_table(&self, conn: &Connection) -> Result<()> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS tokens (
@@ -179,6 +193,13 @@ impl Database {
 
     /// Create database indexes for performance
     fn create_indexes(&self, conn: &Connection) -> Result<()> {
+        // Mints indexes
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mints_discovered_at ON mints(discovered_at)",
+            []
+        )?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mints_is_active ON mints(is_active)", [])?;
+
         // Token prices indexes
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_token_prices_timestamp ON token_prices(timestamp)",

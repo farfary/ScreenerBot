@@ -1,8 +1,6 @@
 use super::SourceTrait;
-use crate::types::TokenInfo;
 use anyhow::{ Context, Result };
 use async_trait::async_trait;
-use chrono::Utc;
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -41,7 +39,7 @@ impl RugCheckSource {
         }
     }
 
-    async fn fetch_new_tokens(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_new_tokens(&self) -> Result<Vec<String>> {
         let url = "https://api.rugcheck.xyz/v1/stats/new_tokens";
 
         let response = self.client
@@ -60,15 +58,18 @@ impl RugCheckSource {
             .json().await
             .context("Failed to parse RugCheck new tokens response")?;
 
-        let converted_tokens = tokens
-            .into_iter()
-            .filter_map(|token| self.convert_rugcheck_to_token(token))
-            .collect();
+        let mut mints = Vec::new();
+        for token in tokens {
+            // Only process valid Solana token addresses
+            if token.mint.len() == 44 {
+                mints.push(token.mint);
+            }
+        }
 
-        Ok(converted_tokens)
+        Ok(mints)
     }
 
-    async fn fetch_recent_tokens(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_recent_tokens(&self) -> Result<Vec<String>> {
         time::sleep(self.rate_limit_delay).await;
 
         let url = "https://api.rugcheck.xyz/v1/stats/recent";
@@ -89,15 +90,18 @@ impl RugCheckSource {
             .json().await
             .context("Failed to parse RugCheck recent tokens response")?;
 
-        let converted_tokens = tokens
-            .into_iter()
-            .filter_map(|token| self.convert_rugcheck_to_token(token))
-            .collect();
+        let mut mints = Vec::new();
+        for token in tokens {
+            // Only process valid Solana token addresses
+            if token.mint.len() == 44 {
+                mints.push(token.mint);
+            }
+        }
 
-        Ok(converted_tokens)
+        Ok(mints)
     }
 
-    async fn fetch_trending_tokens(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_trending_tokens(&self) -> Result<Vec<String>> {
         time::sleep(self.rate_limit_delay).await;
 
         let url = "https://api.rugcheck.xyz/v1/stats/trending";
@@ -121,15 +125,18 @@ impl RugCheckSource {
             .json().await
             .context("Failed to parse RugCheck trending tokens response")?;
 
-        let converted_tokens = tokens
-            .into_iter()
-            .filter_map(|token| self.convert_rugcheck_to_token(token))
-            .collect();
+        let mut mints = Vec::new();
+        for token in tokens {
+            // Only process valid Solana token addresses
+            if token.mint.len() == 44 {
+                mints.push(token.mint);
+            }
+        }
 
-        Ok(converted_tokens)
+        Ok(mints)
     }
 
-    async fn fetch_verified_tokens(&self) -> Result<Vec<TokenInfo>> {
+    async fn fetch_verified_tokens(&self) -> Result<Vec<String>> {
         time::sleep(self.rate_limit_delay).await;
 
         let url = "https://api.rugcheck.xyz/v1/stats/verified";
@@ -153,37 +160,15 @@ impl RugCheckSource {
             .json().await
             .context("Failed to parse RugCheck verified tokens response")?;
 
-        let converted_tokens = tokens
-            .into_iter()
-            .filter_map(|token| self.convert_rugcheck_to_token(token))
-            .collect();
-
-        Ok(converted_tokens)
-    }
-
-    fn convert_rugcheck_to_token(&self, token: RugCheckToken) -> Option<TokenInfo> {
-        // Skip if not a proper Solana token address
-        if token.mint.len() != 44 {
-            return None;
+        let mut mints = Vec::new();
+        for token in tokens {
+            // Only process valid Solana token addresses
+            if token.mint.len() == 44 {
+                mints.push(token.mint);
+            }
         }
 
-        let mint_short = token.mint[..8].to_string();
-
-        Some(TokenInfo {
-            mint: token.mint,
-            symbol: token.symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
-            name: format!("Token {}", mint_short),
-            decimals: token.decimals.unwrap_or(9),
-            supply: 0, // Not provided in this API format
-            market_cap: None,
-            price: None,
-            volume_24h: None,
-            liquidity: None,
-            pool_address: None,
-            discovered_at: Utc::now(),
-            last_updated: Utc::now(),
-            is_active: true,
-        })
+        Ok(mints)
     }
 }
 
@@ -193,50 +178,50 @@ impl SourceTrait for RugCheckSource {
         "RugCheck"
     }
 
-    async fn discover(&self) -> Result<Vec<TokenInfo>> {
-        let mut all_tokens = Vec::new();
+    async fn discover_mints(&self) -> Result<Vec<String>> {
+        let mut all_mints = Vec::new();
 
         // Fetch from all RugCheck endpoints
         match self.fetch_new_tokens().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                eprintln!("Failed to fetch RugCheck new tokens: {}", e);
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
         match self.fetch_recent_tokens().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                eprintln!("Failed to fetch RugCheck recent tokens: {}", e);
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
         match self.fetch_trending_tokens().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                eprintln!("Failed to fetch RugCheck trending tokens: {}", e);
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
         match self.fetch_verified_tokens().await {
-            Ok(mut tokens) => {
-                all_tokens.append(&mut tokens);
+            Ok(mut mints) => {
+                all_mints.append(&mut mints);
             }
-            Err(e) => {
-                eprintln!("Failed to fetch RugCheck verified tokens: {}", e);
+            Err(_) => {
+                // Silently continue on error
             }
         }
 
-        // Remove duplicates by mint address
-        all_tokens.sort_by(|a, b| a.mint.cmp(&b.mint));
-        all_tokens.dedup_by(|a, b| a.mint == b.mint);
+        // Remove duplicates
+        all_mints.sort();
+        all_mints.dedup();
 
-        Ok(all_tokens)
+        Ok(all_mints)
     }
 }

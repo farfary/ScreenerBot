@@ -85,21 +85,6 @@ async fn main() -> Result<()> {
     Logger::info("Press Ctrl+C to stop the bot");
     Logger::separator();
 
-    // Start status display loop
-    let status_discovery = Arc::clone(&discovery);
-    let status_pricing = Arc::clone(&pricing_manager);
-
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(5000)); // Update every 5 seconds
-
-        loop {
-            interval.tick().await;
-
-            // Display status
-            display_status(&status_discovery, &status_pricing).await;
-        }
-    });
-
     // Wait for shutdown signal
     match signal::ctrl_c().await {
         Ok(()) => {
@@ -122,29 +107,3 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn display_status(discovery: &Arc<Discovery>, pricing_manager: &Arc<PricingManager>) {
-    // Discovery status
-    if discovery.is_running().await {
-        let stats = discovery.get_stats().await;
-        let cached_tokens = discovery.get_cached_tokens().await;
-
-        Logger::discovery(
-            &format!(
-                "Active | {} tokens | {:.1}/hr discovery rate",
-                cached_tokens.len(),
-                stats.discovery_rate_per_hour
-            )
-        );
-    }
-
-    // Pricing status
-    let cache_stats = pricing_manager.get_cache_stats().await;
-    Logger::info(
-        &format!(
-            "Pricing: {} tokens | {} pools | {:.0}% hit rate",
-            cache_stats.valid_tokens,
-            cache_stats.valid_pools,
-            cache_stats.hit_rate_tokens() * 100.0
-        )
-    );
-}
