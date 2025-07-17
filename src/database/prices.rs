@@ -1,6 +1,6 @@
 use crate::database::models::DatabaseResult;
 use crate::database::connection::Database;
-use crate::pricing::{ TokenPrice, PriceSource };
+use crate::market_data::{ TokenPrice, PriceSource };
 use anyhow::Result;
 use chrono::Utc;
 use rusqlite::{ params, Row };

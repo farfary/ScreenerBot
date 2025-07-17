@@ -1,6 +1,6 @@
 use crate::database::models::DatabaseResult;
 use crate::database::connection::Database;
-use crate::pricing::{ PoolInfo, PoolType, TokenInfo as PricingTokenInfo };
+use crate::market_data::{ PoolInfo, PoolType, TokenInfo as PricingTokenInfo };
 use anyhow::Result;
 use rusqlite::{ params, Row };
 
