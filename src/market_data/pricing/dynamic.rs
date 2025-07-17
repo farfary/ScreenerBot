@@ -3,6 +3,7 @@ use std::time::{ Duration, Instant };
 use std::collections::{ HashMap, BTreeMap };
 use tokio::sync::{ RwLock, Mutex };
 use serde::{ Deserialize, Serialize };
+use chrono::Utc;
 use crate::config::DynamicPricingConfig;
 use crate::database::Database;
 use crate::logger::Logger;
@@ -163,6 +164,12 @@ impl DynamicPricingManager {
             manager.stats_reporting_task().await;
         });
 
+        // Start token reloading task
+        let manager = self.clone();
+        tokio::spawn(async move {
+            manager.token_reloading_task().await;
+        });
+
         Ok(())
     }
 
@@ -233,6 +240,12 @@ impl DynamicPricingManager {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let start_time = Instant::now();
 
+        // Get previous price for comparison
+        let previous_price = match self.database.get_token_price(token_address).await {
+            Ok(Some(price)) => Some(price),
+            _ => None,
+        };
+
         // Consume rate limit
         self.consume_rate_limit().await?;
 
@@ -251,21 +264,59 @@ impl DynamicPricingManager {
                     // Store price in database
                     self.store_token_price(token_address, &price).await?;
 
-                    Logger::debug(
-                        &format!(
-                            "Updated price for token {} - Liquidity: ${:.2}, Price: ${:.8}",
-                            token_address,
-                            price.liquidity_usd,
-                            price.price_usd
-                        )
-                    );
+                    // Enhanced logging with price change detection
+                    if let Some(prev_price) = previous_price {
+                        let price_change = price.price_usd - prev_price.price_usd;
+                        let price_change_percent = if prev_price.price_usd > 0.0 {
+                            (price_change / prev_price.price_usd) * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        // Log significant price changes
+                        if price_change_percent.abs() > 0.5 {
+                            let change_symbol = if price_change > 0.0 { "🚀" } else { "📉" };
+                            let urgency = if price_change_percent.abs() > 10.0 { "🔥" } else { "💫" };
+                            
+                            Logger::info(
+                                &format!(
+                                    "{} {} DYNAMIC PRICE UPDATE: {} | ${:.8} → ${:.8} ({:+.2}%) | Liquidity: ${:.0}",
+                                    change_symbol,
+                                    urgency,
+                                    token_address,
+                                    prev_price.price_usd,
+                                    price.price_usd,
+                                    price_change_percent,
+                                    price.liquidity_usd
+                                )
+                            );
+                        } else {
+                            Logger::debug(
+                                &format!(
+                                    "⚡ Dynamic update for {} - ${:.8} | Liquidity: ${:.0}",
+                                    token_address,
+                                    price.price_usd,
+                                    price.liquidity_usd
+                                )
+                            );
+                        }
+                    } else {
+                        Logger::info(
+                            &format!(
+                                "🎯 NEW DYNAMIC TRACKING: {} | ${:.8} | Liquidity: ${:.0}",
+                                token_address,
+                                price.price_usd,
+                                price.liquidity_usd
+                            )
+                        );
+                    }
                 } else {
-                    Logger::warn(&format!("No price data available for token {}", token_address));
+                    Logger::warn(&format!("⚠️  No price data available for token {}", token_address));
                 }
             }
             Err(e) => {
                 self.handle_update_failure(token_address, &format!("{}", e)).await?;
-                Logger::warn(&format!("Failed to update price for token {}: {}", token_address, e));
+                Logger::warn(&format!("❌ Failed to update price for token {}: {}", token_address, e));
             }
         }
 
@@ -482,11 +533,13 @@ impl DynamicPricingManager {
 
     /// Load token priorities from database
     async fn load_token_priorities(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Load from database (implementation depends on your database schema)
-        // For now, this is a placeholder
+        Logger::info("🔄 Loading token priorities from database...");
+        
+        // Load from existing price data (tokens with pricing history)
         match self.database.get_tracked_tokens().await {
             Ok(tokens) => {
                 let mut priorities = self.token_priorities.write().await;
+                Logger::info(&format!("📊 Found {} tokens with existing price data", tokens.len()));
 
                 for token in tokens {
                     let update_interval = self.calculate_update_interval(token.liquidity_usd);
@@ -510,7 +563,45 @@ impl DynamicPricingManager {
                 }
             }
             Err(e) => {
-                Logger::warn(&format!("Failed to load token priorities from database: {}", e));
+                Logger::warn(&format!("Failed to load tokens with price data: {}", e));
+            }
+        }
+
+        // Load newly discovered tokens from mints table (tokens without price data yet)
+        match self.database.get_all_mints() {
+            Ok(mints) => {
+                let mut priorities = self.token_priorities.write().await;
+                let mut new_tokens_added = 0;
+
+                Logger::info(&format!("🔍 Found {} total mint addresses", mints.len()));
+
+                for mint in mints {
+                    // Skip if we already have this token in priorities
+                    if !priorities.contains_key(&mint) {
+                        // Add new token with default values (will be updated on first price fetch)
+                        let update_interval = self.calculate_update_interval(0.0); // Start with minimum priority
+                        let priority_score = self.calculate_priority_score(0.0, 0.0);
+
+                        let token_priority = TokenPriority {
+                            address: mint.clone(),
+                            liquidity_usd: 0.0, // Will be updated on first price fetch
+                            last_updated: Instant::now() - update_interval, // Schedule immediate update
+                            update_interval,
+                            consecutive_failures: 0,
+                            priority_score,
+                            dead_since: None,
+                        };
+
+                        priorities.insert(mint, token_priority);
+                        new_tokens_added += 1;
+                    }
+                }
+
+                Logger::info(&format!("🆕 Added {} new tokens for tracking", new_tokens_added));
+                Logger::info(&format!("📈 Total tokens being tracked: {}", priorities.len()));
+            }
+            Err(e) => {
+                Logger::warn(&format!("Failed to load mint addresses: {}", e));
             }
         }
 
@@ -587,18 +678,116 @@ impl DynamicPricingManager {
             interval.tick().await;
 
             let stats = self.stats.read().await;
+            let priorities = self.token_priorities.read().await;
+            let _blacklisted = self.blacklisted_tokens.read().await;
+            let rate_limiter = self.rate_limiter.lock().await;
 
+            // Count tokens by priority levels
+            let mut high_priority = 0;
+            let mut medium_priority = 0;
+            let mut low_priority = 0;
+            let mut total_liquidity = 0.0;
+
+            for priority in priorities.values() {
+                total_liquidity += priority.liquidity_usd;
+                if priority.liquidity_usd >= self.config.high_liquidity_threshold {
+                    high_priority += 1;
+                } else if priority.liquidity_usd >= self.config.low_liquidity_threshold {
+                    medium_priority += 1;
+                } else {
+                    low_priority += 1;
+                }
+            }
+
+            let rate_usage = rate_limiter.get_usage_percentage();
+            
             Logger::info(
                 &format!(
-                    "Dynamic Pricing Stats - Total: {}, High Priority: {}, Medium: {}, Low: {}, Blacklisted: {}, Rate Limit Usage: {:.1}%",
+                    "🔥 DYNAMIC PRICING STATS | Total: {} tokens | High Priority: {} ({}s) | Medium: {} | Low: {} ({}s) | Blacklisted: {} | Rate Limit: {:.1}% | Total Liquidity: ${:.0}M",
                     stats.total_tokens_tracked,
-                    stats.high_priority_tokens,
-                    stats.medium_priority_tokens,
-                    stats.low_priority_tokens,
+                    high_priority,
+                    self.config.fastest_interval_secs,
+                    medium_priority,
+                    low_priority,
+                    self.config.slowest_interval_secs,
                     stats.blacklisted_tokens,
-                    stats.rate_limit_usage_percentage * 100.0
+                    rate_usage * 100.0,
+                    total_liquidity / 1_000_000.0
                 )
             );
+
+            // Additional detailed stats every 5 minutes
+            if chrono::Utc::now().timestamp() % 300 == 0 {
+                let top_tokens: Vec<_> = priorities
+                    .iter()
+                    .filter(|(_, p)| p.liquidity_usd > 100_000.0)
+                    .take(5)
+                    .collect();
+
+                if !top_tokens.is_empty() {
+                    Logger::info("🏆 TOP TRACKED TOKENS:");
+                    for (addr, priority) in top_tokens {
+                        Logger::info(
+                            &format!(
+                                "   {} | Liquidity: ${:.0}K | Update: {}s | Score: {:.1}",
+                                &addr[..8],
+                                priority.liquidity_usd / 1000.0,
+                                priority.update_interval.as_secs(),
+                                priority.priority_score
+                            )
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Token reloading task - periodically checks for new tokens from discovery
+    async fn token_reloading_task(&self) {
+        let mut interval = tokio::time::interval(Duration::from_secs(300)); // Check every 5 minutes
+
+        loop {
+            interval.tick().await;
+
+            Logger::debug("🔄 Checking for new tokens from discovery module...");
+
+            // Load new tokens from mints table
+            match self.database.get_all_mints() {
+                Ok(mints) => {
+                    let mut priorities = self.token_priorities.write().await;
+                    let mut new_tokens_added = 0;
+
+                    for mint in mints {
+                        // Skip if we already have this token in priorities
+                        if !priorities.contains_key(&mint) {
+                            // Add new token with default values (will be updated on first price fetch)
+                            let update_interval = self.calculate_update_interval(0.0); // Start with minimum priority
+                            let priority_score = self.calculate_priority_score(0.0, 0.0);
+
+                            let token_priority = TokenPriority {
+                                address: mint.clone(),
+                                liquidity_usd: 0.0, // Will be updated on first price fetch
+                                last_updated: Instant::now() - update_interval, // Schedule immediate update
+                                update_interval,
+                                consecutive_failures: 0,
+                                priority_score,
+                                dead_since: None,
+                            };
+
+                            priorities.insert(mint, token_priority);
+                            new_tokens_added += 1;
+                        }
+                    }
+
+                    if new_tokens_added > 0 {
+                        Logger::info(&format!("🆕 Added {} new tokens for tracking", new_tokens_added));
+                        Logger::info(&format!("📈 Total tokens being tracked: {}", priorities.len()));
+                    }
+                }
+                Err(e) => {
+                    Logger::warn(&format!("Failed to reload mint addresses: {}", e));
+                }
+            }
         }
     }
 

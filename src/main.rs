@@ -1,5 +1,6 @@
 use anyhow::Result;
 use screenerbot::{ Config, Database, Discovery, Logger };
+use screenerbot::config::DynamicPricingConfig;
 use screenerbot::market_data::MarketDataManager;
 use std::sync::Arc;
 use tokio::signal;
@@ -54,19 +55,44 @@ async fn main() -> Result<()> {
             .as_ref()
             .map(|p| p.top_tokens_count)
             .unwrap_or(1000),
-        cache_ttl_secs: 300,
-        max_cache_size: 10000,
+        cache_ttl_secs: config.pricing
+            .as_ref()
+            .map(|p| p.cache_ttl_secs)
+            .unwrap_or(300),
+        max_cache_size: config.pricing
+            .as_ref()
+            .map(|p| p.max_cache_size)
+            .unwrap_or(10000),
         enable_dynamic_pricing: config.pricing
             .as_ref()
             .map(|p| p.enable_dynamic_pricing)
             .unwrap_or(false),
     };
 
-    let mut market_data_manager = MarketDataManager::new(
-        Arc::clone(&database),
-        Arc::new(Logger::new()),
-        pricing_config
-    );
+    let mut market_data_manager = if config.pricing
+        .as_ref()
+        .map(|p| p.enable_dynamic_pricing)
+        .unwrap_or(false) {
+        // Use dynamic pricing if enabled
+        let dynamic_config = config.pricing
+            .as_ref()
+            .map(|p| p.dynamic_pricing.clone())
+            .unwrap_or_else(|| DynamicPricingConfig::default());
+        
+        MarketDataManager::with_dynamic_pricing(
+            Arc::clone(&database),
+            Arc::new(Logger::new()),
+            pricing_config,
+            dynamic_config
+        )
+    } else {
+        // Use traditional pricing
+        MarketDataManager::new(
+            Arc::clone(&database),
+            Arc::new(Logger::new()),
+            pricing_config
+        )
+    };
 
     // Enable the sophisticated tiered pricing system
     if let Err(e) = market_data_manager.enable_tiered_pricing().await {

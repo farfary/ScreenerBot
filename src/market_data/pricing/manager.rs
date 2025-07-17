@@ -91,16 +91,21 @@ impl MarketDataManager {
 
     /// Start the pricing manager
     pub async fn start(&self) {
-        Logger::info("Starting pricing manager...");
+        Logger::info("🚀 Starting pricing manager...");
 
         // Start dynamic pricing manager if enabled
         if let Some(dynamic_manager) = &self.dynamic_manager {
+            Logger::info("🎯 Dynamic pricing is enabled - starting advanced pricing system");
             if let Err(e) = dynamic_manager.start().await {
-                Logger::error(&format!("Failed to start dynamic pricing manager: {}", e));
+                Logger::error(&format!("❌ Failed to start dynamic pricing manager: {}", e));
+                Logger::info("⚠️  Falling back to traditional pricing system...");
             } else {
-                Logger::info("Dynamic pricing manager started successfully");
+                Logger::success("✅ Dynamic pricing manager started successfully");
+                Logger::info("🔥 Advanced pricing system is now active with liquidity-based intervals");
                 return; // Use dynamic pricing instead of traditional pricing
             }
+        } else {
+            Logger::info("📊 Dynamic pricing is disabled - using traditional pricing system");
         }
 
         // Fallback to traditional pricing if dynamic pricing is not available
@@ -117,12 +122,22 @@ impl MarketDataManager {
         let priority_tokens = self.priority_tokens.clone();
         let metrics = self.metrics.clone();
 
+        Logger::info(
+            &format!(
+                "🔄 Starting traditional pricing updates - Interval: {}s, Top tokens: {}",
+                config.update_interval_secs,
+                config.top_tokens_count
+            )
+        );
+
         // Start background price update task
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(config.update_interval());
 
             loop {
                 interval.tick().await;
+
+                Logger::debug("🔍 Starting price update cycle...");
 
                 if
                     let Err(e) = Self::update_token_prices(
@@ -135,12 +150,14 @@ impl MarketDataManager {
                         &metrics
                     ).await
                 {
-                    Logger::error(&format!("Failed to update prices: {}", e));
+                    Logger::error(&format!("❌ Failed to update prices: {}", e));
+                } else {
+                    Logger::debug("✅ Price update cycle completed successfully");
                 }
             }
         });
 
-        Logger::info("Traditional pricing started");
+        Logger::info("✅ Traditional pricing started successfully");
     }
 
     /// Update token prices from various sources
@@ -159,16 +176,20 @@ impl MarketDataManager {
         // Add priority tokens
         {
             let priority = priority_tokens.read().await;
-            tokens_to_update.extend(priority.clone());
+            if !priority.is_empty() {
+                Logger::debug(&format!("📌 Adding {} priority tokens to update queue", priority.len()));
+                tokens_to_update.extend(priority.clone());
+            }
         }
 
         // Add top tokens from database
         match database.get_top_tokens_by_liquidity(config.top_tokens_count).await {
             Ok(top_tokens) => {
+                Logger::debug(&format!("📊 Adding {} top tokens by liquidity to update queue", top_tokens.len()));
                 tokens_to_update.extend(top_tokens);
             }
             Err(e) => {
-                Logger::error(&format!("Failed to get top tokens: {}", e));
+                Logger::error(&format!("❌ Failed to get top tokens: {}", e));
             }
         }
 
@@ -176,9 +197,20 @@ impl MarketDataManager {
         tokens_to_update.sort();
         tokens_to_update.dedup();
 
+        if tokens_to_update.is_empty() {
+            Logger::warn("⚠️  No tokens to update");
+            return Ok(());
+        }
+
+        Logger::info(&format!("🔄 Updating prices for {} tokens", tokens_to_update.len()));
+
         // Update in batches to avoid rate limiting
         const BATCH_SIZE: usize = 30;
-        for batch in tokens_to_update.chunks(BATCH_SIZE) {
+        let total_batches = (tokens_to_update.len() + BATCH_SIZE - 1) / BATCH_SIZE;
+        
+        for (batch_idx, batch) in tokens_to_update.chunks(BATCH_SIZE).enumerate() {
+            Logger::debug(&format!("📦 Processing batch {}/{} ({} tokens)", batch_idx + 1, total_batches, batch.len()));
+            
             if
                 let Err(e) = Self::update_token_batch(
                     gecko_client,
@@ -189,7 +221,9 @@ impl MarketDataManager {
                     metrics
                 ).await
             {
-                Logger::error(&format!("Failed to update batch: {}", e));
+                Logger::error(&format!("❌ Failed to update batch {}: {}", batch_idx + 1, e));
+            } else {
+                Logger::debug(&format!("✅ Batch {} completed successfully", batch_idx + 1));
             }
 
             // Rate limiting pause
@@ -206,6 +240,8 @@ impl MarketDataManager {
                 .unwrap()
                 .as_secs();
         }
+
+        Logger::info(&format!("✅ Completed price updates for {} tokens", tokens_to_update.len()));
 
         Ok(())
     }
@@ -229,6 +265,12 @@ impl MarketDataManager {
         }
 
         for token_info in token_infos {
+            // Get previous price for comparison
+            let previous_price = {
+                let cache_lock = cache.read().await;
+                cache_lock.get_token_price(&token_info.address).await
+            };
+
             // Update cache
             {
                 let mut cache_lock = cache.write().await;
@@ -238,20 +280,76 @@ impl MarketDataManager {
             // Update database
             database.update_token_info(&token_info).await?;
 
-            Logger::debug(
-                &format!(
-                    "Updated pricing for {} - ${:.6} | Liquidity: ${:.0}",
-                    token_info.symbol,
-                    token_info.price
-                        .as_ref()
-                        .map(|p| p.price_usd)
-                        .unwrap_or(0.0),
-                    token_info.pools
-                        .iter()
-                        .map(|p| p.liquidity_usd)
-                        .sum::<f64>()
-                )
-            );
+            // Log price changes with detailed information
+            if let Some(current_price) = &token_info.price {
+                let total_liquidity = token_info.pools
+                    .iter()
+                    .map(|p| p.liquidity_usd)
+                    .sum::<f64>();
+
+                let total_volume = token_info.pools
+                    .iter()
+                    .map(|p| p.volume_24h)
+                    .sum::<f64>();
+
+                if let Some(prev_price) = previous_price {
+                    let price_change = current_price.price_usd - prev_price.price_usd;
+                    let price_change_percent = if prev_price.price_usd > 0.0 {
+                        (price_change / prev_price.price_usd) * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    // Only log if there's a significant price change (>0.1%)
+                    if price_change_percent.abs() > 0.1 {
+                        let change_symbol = if price_change > 0.0 { "📈" } else { "📉" };
+                        let change_color = if price_change > 0.0 { "🟢" } else { "🔴" };
+                        
+                        Logger::info(
+                            &format!(
+                                "{} {} PRICE CHANGE: {} | ${:.8} → ${:.8} ({:+.2}%) | Liquidity: ${:.0} | Volume: ${:.0}",
+                                change_symbol,
+                                change_color,
+                                token_info.symbol,
+                                prev_price.price_usd,
+                                current_price.price_usd,
+                                price_change_percent,
+                                total_liquidity,
+                                total_volume
+                            )
+                        );
+                    } else {
+                        Logger::debug(
+                            &format!(
+                                "💰 Updated pricing for {} - ${:.8} | Liquidity: ${:.0} | Volume: ${:.0}",
+                                token_info.symbol,
+                                current_price.price_usd,
+                                total_liquidity,
+                                total_volume
+                            )
+                        );
+                    }
+                } else {
+                    // First time seeing this token
+                    Logger::info(
+                        &format!(
+                            "🆕 NEW TOKEN TRACKED: {} | ${:.8} | Liquidity: ${:.0} | Volume: ${:.0}",
+                            token_info.symbol,
+                            current_price.price_usd,
+                            total_liquidity,
+                            total_volume
+                        )
+                    );
+                }
+            } else {
+                Logger::warn(
+                    &format!(
+                        "⚠️  No price data available for token: {} ({})",
+                        token_info.symbol,
+                        token_info.address
+                    )
+                );
+            }
         }
 
         Ok(())

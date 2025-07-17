@@ -28,13 +28,6 @@ impl Database {
                     1
                 } else {
                     0
-                },
-                format!("{:?}", price.source),
-                price.timestamp,
-                if price.is_cached {
-                    1
-                } else {
-                    0
                 }
             ]
         )?;
@@ -207,6 +200,32 @@ impl Database {
         )?;
 
         Ok(rows_affected as u64)
+    }
+
+    /// Get current token price
+    pub async fn get_token_price(&self, token_address: &str) -> Result<Option<TokenPrice>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT token_address, price_usd, price_sol, market_cap, volume_24h, 
+                    liquidity_usd, timestamp, source, is_cache
+             FROM token_prices 
+             WHERE token_address = ?1 
+             ORDER BY timestamp DESC 
+             LIMIT 1"
+        )?;
+
+        let mut price_iter = stmt.query_map([token_address], |row| {
+            match self.row_to_token_price(row) {
+                Ok(price) => Ok(price),
+                Err(_) => Err(rusqlite::Error::InvalidQuery),
+            }
+        })?;
+
+        if let Some(price) = price_iter.next() {
+            return Ok(Some(price.map_err(|_| anyhow::anyhow!("Failed to parse price row"))?));
+        }
+
+        Ok(None)
     }
 
     /// Helper method to convert database row to TokenPrice
