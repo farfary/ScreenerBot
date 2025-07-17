@@ -1,5 +1,5 @@
 use anyhow::Result;
-use screenerbot::{ Config, Database, Discovery, Logger, PricingManager, WalletTracker };
+use screenerbot::{ Config, Database, Discovery, Logger, PricingManager };
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::Duration;
@@ -70,19 +70,6 @@ async fn main() -> Result<()> {
     let discovery = Arc::new(Discovery::new(config.discovery.clone(), Arc::clone(&database)));
     Logger::discovery("Discovery module initialized");
 
-    // Wallet tracker (with pricing manager integration)
-    let wallet_tracker = match WalletTracker::new(config.clone(), Arc::clone(&database)) {
-        Ok(mut tracker) => {
-            tracker.set_pricing_manager(Arc::clone(&pricing_manager));
-            Logger::wallet("Wallet tracker initialized");
-            Arc::new(tracker)
-        }
-        Err(e) => {
-            Logger::error(&format!("FAILED to initialize wallet tracker: {}", e));
-            return Err(e);
-        }
-    };
-
     // Start modules
     Logger::info("Starting modules...");
 
@@ -94,24 +81,12 @@ async fn main() -> Result<()> {
     let _ = discovery.start().await;
     Logger::discovery("Discovery module started");
 
-    // Start wallet tracker
-    match wallet_tracker.start().await {
-        Ok(()) => {
-            Logger::success("✅ Wallet tracker started successfully");
-        }
-        Err(e) => {
-            Logger::error(&format!("❌ Failed to start wallet tracker: {}", e));
-            return Err(e);
-        }
-    }
-
     Logger::success("All modules started SUCCESSFULLY!");
     Logger::info("Press Ctrl+C to stop the bot");
     Logger::separator();
 
     // Start status display loop
     let status_discovery = Arc::clone(&discovery);
-    let status_wallet = Arc::clone(&wallet_tracker);
     let status_pricing = Arc::clone(&pricing_manager);
 
     tokio::spawn(async move {
@@ -121,7 +96,7 @@ async fn main() -> Result<()> {
             interval.tick().await;
 
             // Display status
-            display_status(&status_discovery, &status_wallet, &status_pricing).await;
+            display_status(&status_discovery, &status_pricing).await;
         }
     });
 
@@ -140,7 +115,6 @@ async fn main() -> Result<()> {
     Logger::info("Shutting down modules...");
 
     discovery.stop().await;
-    wallet_tracker.stop().await;
     // Note: pricing_manager doesn't need explicit stop - background tasks will be dropped
 
     Logger::success("ScreenerBot shutdown complete");
@@ -148,11 +122,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn display_status(
-    discovery: &Arc<Discovery>,
-    wallet_tracker: &Arc<WalletTracker>,
-    pricing_manager: &Arc<PricingManager>
-) {
+async fn display_status(discovery: &Arc<Discovery>, pricing_manager: &Arc<PricingManager>) {
     // Discovery status
     if discovery.is_running().await {
         let stats = discovery.get_stats().await;
@@ -165,52 +135,6 @@ async fn display_status(
                 stats.discovery_rate_per_hour
             )
         );
-    }
-
-    // Wallet status
-    if wallet_tracker.is_running().await {
-        let positions = wallet_tracker.get_positions().await;
-
-        if let Ok(sol_balance) = wallet_tracker.get_sol_balance().await {
-            Logger::wallet(&format!("SOL: {:.4} | Positions: {}", sol_balance, positions.len()));
-        }
-
-        // Show portfolio value
-        let mut total_value = 0.0;
-        for position in positions.values() {
-            total_value += position.value_sol.unwrap_or(0.0);
-        }
-
-        if total_value > 0.0 {
-            Logger::wallet(&format!("Portfolio Value: {:.6} SOL", total_value));
-
-            // Show top 3 positions
-            let mut sorted_positions: Vec<_> = positions.values().collect();
-            sorted_positions.sort_by(|a, b| {
-                b.value_sol.unwrap_or(0.0).partial_cmp(&a.value_sol.unwrap_or(0.0)).unwrap()
-            });
-
-            for (i, position) in sorted_positions.iter().take(3).enumerate() {
-                let balance = (position.balance as f64) / (10_f64).powi(position.decimals as i32);
-                let pnl_color = if position.pnl_percentage.unwrap_or(0.0) >= 0.0 {
-                    "+"
-                } else {
-                    ""
-                };
-
-                Logger::wallet(
-                    &format!(
-                        "  {}. {}... | {:.4} | {:.6} SOL | {}{}%",
-                        i + 1,
-                        &position.mint[..8],
-                        balance,
-                        position.value_sol.unwrap_or(0.0),
-                        pnl_color,
-                        position.pnl_percentage.unwrap_or(0.0)
-                    )
-                );
-            }
-        }
     }
 
     // Pricing status

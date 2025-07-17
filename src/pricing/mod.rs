@@ -483,68 +483,6 @@ impl PricingManager {
         Ok(())
     }
 
-    /// Update token priorities for open positions
-    pub async fn update_position_priorities(&self, positions: &[crate::types::WalletPosition]) {
-        Logger::pricing(
-            &format!(
-                "🎯 PRIORITY UPDATE: Received {} positions for priority update",
-                positions.len()
-            )
-        );
-
-        if let Some(ref tiered_manager) = self.tiered_manager {
-            let position_tokens: Vec<String> = positions
-                .iter()
-                .map(|p| p.mint.clone())
-                .collect();
-
-            Logger::pricing(
-                &format!(
-                    "🎯 PRIORITY UPDATE: Converting to {} token addresses for tiered manager",
-                    position_tokens.len()
-                )
-            );
-            for (i, token) in position_tokens.iter().enumerate() {
-                Logger::pricing(&format!("  {}. {}...", i + 1, &token[..8]));
-            }
-
-            tiered_manager.set_open_positions(position_tokens).await;
-
-            Logger::pricing(
-                &format!(
-                    "✅ PRIORITY UPDATE: Updated tiered pricing priorities for {} position tokens",
-                    positions.len()
-                )
-            );
-        } else {
-            Logger::pricing(
-                "⚠️ PRIORITY UPDATE: No tiered manager available, using basic priority system"
-            );
-            // Fallback: add to priority tokens for the basic system
-            let mut priority_tokens = self.priority_tokens.write().await;
-            for position in positions {
-                if !priority_tokens.contains(&position.mint) {
-                    priority_tokens.push(position.mint.clone());
-                    Logger::pricing(
-                        &format!(
-                            "📌 PRIORITY UPDATE: Added {}... to basic priority list",
-                            &position.mint[..8]
-                        )
-                    );
-                }
-            }
-
-            if !positions.is_empty() {
-                Logger::pricing(
-                    &format!(
-                        "� PRIORITY UPDATE: Added {} position tokens to basic priority list",
-                        positions.len()
-                    )
-                );
-            }
-        }
-    }
-
     /// Add a token to dynamic pricing tracking
     pub async fn add_token_to_dynamic_pricing(
         &self,

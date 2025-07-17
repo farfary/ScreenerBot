@@ -1,19 +1,15 @@
 pub mod config;
 pub mod database;
 pub mod discovery;
-pub mod wallet;
 pub mod logger;
 pub mod types;
 pub mod rpc;
 pub mod pricing;
 pub mod swap;
-pub mod transaction_cache;
-pub mod profit_calculator;
 
 pub use config::Config;
 pub use database::Database;
 pub use discovery::Discovery;
-pub use wallet::WalletTracker;
 pub use logger::Logger;
 pub use rpc::RpcManager;
 pub use pricing::PricingManager;
