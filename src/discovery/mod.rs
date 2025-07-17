@@ -4,7 +4,7 @@ pub mod database;
 pub use database::{ DiscoveryDatabase, DiscoveredToken, DiscoveryStats };
 
 use crate::config::DiscoveryConfig;
-use crate::logger::Logger;
+// use crate::logger::Logger;
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use reqwest::Client;
@@ -62,19 +62,19 @@ impl Discovery {
 
     pub async fn start(&self) -> Result<()> {
         if !self.config.enabled {
-            Logger::warn("Discovery module is disabled in config");
+            println!("⚠️  Discovery module is disabled in config");
             return Ok(());
         }
 
         let mut is_running = self.is_running.write().await;
         if *is_running {
-            Logger::warn("Discovery is already running");
+            println!("⚠️  Discovery is already running");
             return Ok(());
         }
         *is_running = true;
         drop(is_running);
 
-        Logger::discovery("Discovery module started");
+        println!("🔎 Discovery module started");
 
         // Load existing mints from database
         self.load_existing_mints().await?;
@@ -91,7 +91,7 @@ impl Discovery {
     pub async fn stop(&self) {
         let mut is_running = self.is_running.write().await;
         *is_running = false;
-        Logger::info("Discovery module stopped");
+        println!("🔻 Discovery module stopped");
     }
 
     pub async fn is_running(&self) -> bool {
@@ -158,15 +158,13 @@ impl Discovery {
                     *self.stats.write().await = stats.clone();
 
                     if new_mints > 0 {
-                        Logger::discovery(
-                            &format!("{} new tokens discovered. Total: {}", new_mints, total_mints)
-                        );
+                        println!("✨ {} new tokens discovered. Total: {}", new_mints, total_mints);
                     } else {
-                        Logger::discovery(&format!("No new tokens. Total: {}", total_mints));
+                        println!("No new tokens. Total: {}", total_mints);
                     }
                 }
                 Err(e) => {
-                    Logger::error(&format!("Discovery failed: {}", e));
+                    eprintln!("❌ Discovery failed: {}", e);
                 }
             }
         }
@@ -184,11 +182,11 @@ impl Discovery {
                         new_mints_count += processed;
                     }
                     Err(e) => {
-                        Logger::error(&format!("Failed to discover from {}: {}", source.name(), e));
+                        eprintln!("❌ Failed to discover from {}: {}", source.name(), e);
                     }
                 }
             } else {
-                Logger::warn(&format!("Unknown discovery source: {}", source_name));
+                println!("⚠️  Unknown discovery source: {}", source_name);
             }
         }
 
@@ -213,7 +211,7 @@ impl Discovery {
             if !known_mints.contains(&mint) {
                 // Save to database
                 if let Err(e) = self.database.save_token(&mint) {
-                    Logger::error(&format!("Failed to save token {}: {}", mint, e));
+                    eprintln!("❌ Failed to save token {}: {}", mint, e);
                     continue;
                 }
 

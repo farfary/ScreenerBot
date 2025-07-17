@@ -1,78 +1,78 @@
 use anyhow::Result;
-use screenerbot::{ Config, Discovery, MarketData, Logger };
+use screenerbot::{ Config, Discovery, MarketData };
 use std::sync::Arc;
 use tokio::signal;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logger
-    env_logger::init();
-
-    Logger::header("Solana DEX Trader Bot");
-    Logger::info("ScreenerBot is starting up");
+    // Print header
+    println!("\n==============================");
+    println!("      Solana DEX Trader Bot     ");
+    println!("==============================\n");
+    println!("ScreenerBot is starting up...\n");
 
     // Load configuration
     let config = match Config::load("configs.json") {
         Ok(config) => {
-            Logger::success("Loaded configuration");
+            println!("✅ Loaded configuration");
             config
         }
         Err(e) => {
-            Logger::error(&format!("Could not load config: {}", e));
-            Logger::info("Generating default configuration");
+            eprintln!("❌ Could not load config: {}", e);
+            println!("Generating default configuration...");
             let config = Config::default();
             config.save("configs.json")?;
-            Logger::success(
-                "Default configuration created. Please update configs.json with your settings."
+            println!(
+                "✅ Default configuration created. Please update configs.json with your settings."
             );
             return Ok(());
         }
     };
 
     // Initialize modules
-    Logger::info("Initializing modules");
+    println!("\nInitializing modules...");
 
     // Discovery module
     let discovery = Arc::new(Discovery::new(config.discovery.clone())?);
-    Logger::discovery("Discovery module ready");
+    println!("🔎 Discovery module ready");
 
     // Market data module
     let market_data = Arc::new(MarketData::new(discovery.get_database())?);
-    Logger::info("Market data module ready");
+    println!("💹 Market data module ready");
 
     // Start modules
-    Logger::info("Starting modules");
+    println!("\nStarting modules...");
 
     // Start discovery module
     let _ = discovery.start().await;
-    Logger::discovery("Discovery module running");
+    println!("🔎 Discovery module running");
 
     // Start market data module
     let _ = market_data.start().await;
-    Logger::info("Market data module running");
+    println!("💹 Market data module running");
 
-    Logger::success("All modules started successfully");
-    Logger::info("Press Ctrl+C to exit");
-    Logger::separator();
+    println!("\n✅ All modules started successfully");
+    println!("Press Ctrl+C to exit");
+    println!("--------------------------------");
 
     // Wait for shutdown signal
     match signal::ctrl_c().await {
         Ok(()) => {
-            Logger::info("Shutdown signal received");
+            println!("\n🛑 Shutdown signal received");
         }
         Err(err) => {
-            Logger::error(&format!("Failed to listen for shutdown signal: {}", err));
+            eprintln!("❌ Failed to listen for shutdown signal: {}", err);
         }
     }
 
     // Shutdown modules
-    Logger::separator();
-    Logger::info("Shutting down modules");
+    println!("--------------------------------");
+    println!("Shutting down modules...");
 
     discovery.stop().await;
     market_data.stop().await;
 
-    Logger::success("ScreenerBot shutdown complete");
+    println!("✅ ScreenerBot shutdown complete\n");
 
     Ok(())
 }

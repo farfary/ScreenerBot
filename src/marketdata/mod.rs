@@ -4,7 +4,7 @@ pub mod gecko_api;
 pub use database::{ MarketDatabase, TokenData, PoolData, MarketStats };
 pub use gecko_api::GeckoTerminalClient;
 
-use crate::logger::Logger;
+// use crate::logger::Logger;
 use crate::discovery::DiscoveryDatabase;
 use anyhow::{ Context, Result };
 use reqwest::Client;
@@ -53,13 +53,13 @@ impl MarketData {
     pub async fn start(&self) -> Result<()> {
         let mut is_running = self.is_running.write().await;
         if *is_running {
-            Logger::warn("Market data module is already running");
+            println!("⚠️  Market data module is already running");
             return Ok(());
         }
         *is_running = true;
         drop(is_running);
 
-        Logger::info("Market data module started");
+        println!("💹 Market data module started");
 
         // Start background update loop
         let market_data = self.clone();
@@ -73,7 +73,7 @@ impl MarketData {
     pub async fn stop(&self) {
         let mut is_running = self.is_running.write().await;
         *is_running = false;
-        Logger::info("Market data module stopped");
+        println!("🔻 Market data module stopped");
     }
 
     pub async fn is_running(&self) -> bool {
@@ -103,14 +103,14 @@ impl MarketData {
                     tokens_updated_this_session += updated_count;
 
                     if updated_count > 0 {
-                        Logger::info(&format!("Updated {} tokens with market data", updated_count));
+                        println!("✅ Updated {} tokens with market data", updated_count);
                     }
 
                     // Update stats
                     let stats = match self.database.get_stats() {
                         Ok(stats) => stats,
                         Err(e) => {
-                            Logger::error(&format!("Failed to get market stats: {}", e));
+                            eprintln!("❌ Failed to get market stats: {}", e);
                             continue;
                         }
                     };
@@ -118,7 +118,7 @@ impl MarketData {
                     *self.stats.write().await = stats;
                 }
                 Err(e) => {
-                    Logger::error(&format!("Market data update failed: {}", e));
+                    eprintln!("❌ Market data update failed: {}", e);
                 }
             }
         }
@@ -243,8 +243,10 @@ impl MarketData {
 
                         // Save token data
                         if let Err(e) = self.database.save_token(&token_data) {
-                            Logger::error(
-                                &format!("Failed to save token data for {}: {}", token_data.mint, e)
+                            eprintln!(
+                                "❌ Failed to save token data for {}: {}",
+                                token_data.mint,
+                                e
                             );
                             continue;
                         }
@@ -252,12 +254,10 @@ impl MarketData {
                         // Save pool data
                         for pool in pools {
                             if let Err(e) = self.database.save_pool(&pool) {
-                                Logger::error(
-                                    &format!(
-                                        "Failed to save pool data for {}: {}",
-                                        pool.pool_address,
-                                        e
-                                    )
+                                eprintln!(
+                                    "❌ Failed to save pool data for {}: {}",
+                                    pool.pool_address,
+                                    e
                                 );
                             }
                         }
@@ -266,7 +266,7 @@ impl MarketData {
                     }
                 }
                 Err(e) => {
-                    Logger::error(&format!("Failed to fetch market data batch: {}", e));
+                    eprintln!("❌ Failed to fetch market data batch: {}", e);
                 }
             }
 
