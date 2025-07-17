@@ -10,8 +10,8 @@ use crate::market_data::sources::*;
 use crate::market_data::pricing::*;
 use crate::market_data::PoolDecoderManager;
 
-/// Main pricing manager that coordinates all pricing operations
-pub struct PricingManager {
+/// Main market data manager that coordinates all pricing operations
+pub struct MarketDataManager {
     gecko_client: GeckoTerminalClient,
     pool_decoder: PoolDecoderManager,
     price_calculator: PoolPriceCalculator,
@@ -25,7 +25,7 @@ pub struct PricingManager {
     metrics: Arc<RwLock<PricingMetrics>>,
 }
 
-impl PricingManager {
+impl MarketDataManager {
     /// Create a new pricing manager with basic configuration
     pub fn new(database: Arc<Database>, logger: Arc<Logger>, config: PricingConfig) -> Self {
         let client = Client::new();
@@ -47,7 +47,7 @@ impl PricingManager {
         }
     }
 
-    /// Create a new PricingManager with dynamic pricing enabled
+    /// Create a new MarketDataManager with dynamic pricing enabled
     pub fn with_dynamic_pricing(
         database: Arc<Database>,
         logger: Arc<Logger>,

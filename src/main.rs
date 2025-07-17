@@ -1,6 +1,6 @@
 use anyhow::Result;
 use screenerbot::{ Config, Database, Discovery, Logger };
-use screenerbot::market_data::PricingManager;
+use screenerbot::market_data::MarketDataManager;
 use std::sync::Arc;
 use tokio::signal;
 use screenerbot::market_data;
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
     // Initialize modules
     Logger::info("Initializing modules...");
 
-    // Pricing manager
+    // Market data manager
     let pricing_config = market_data::PricingConfig {
         update_interval_secs: config.pricing
             .as_ref()
@@ -62,20 +62,20 @@ async fn main() -> Result<()> {
             .unwrap_or(false),
     };
 
-    let mut pricing_manager = PricingManager::new(
+    let mut market_data_manager = MarketDataManager::new(
         Arc::clone(&database),
         Arc::new(Logger::new()),
         pricing_config
     );
 
     // Enable the sophisticated tiered pricing system
-    if let Err(e) = pricing_manager.enable_tiered_pricing().await {
+    if let Err(e) = market_data_manager.enable_tiered_pricing().await {
         Logger::warn(&format!("Failed to enable tiered pricing: {}", e));
         Logger::info("Continuing with basic pricing system...");
     }
 
-    let pricing_manager = Arc::new(pricing_manager);
-    Logger::pricing("Pricing manager initialized");
+    let market_data_manager = Arc::new(market_data_manager);
+    Logger::pricing("Market data manager initialized");
 
     // Discovery module
     let discovery = Arc::new(Discovery::new(config.discovery.clone(), Arc::clone(&database)));
@@ -85,8 +85,8 @@ async fn main() -> Result<()> {
     Logger::info("Starting modules...");
 
     // Start pricing manager first
-    pricing_manager.start().await;
-    Logger::pricing("Pricing manager started");
+    market_data_manager.start().await;
+    Logger::pricing("Market data manager started");
 
     // Start discovery module
     let _ = discovery.start().await;
@@ -111,7 +111,7 @@ async fn main() -> Result<()> {
     Logger::info("Shutting down modules...");
 
     discovery.stop().await;
-    // Note: pricing_manager doesn't need explicit stop - background tasks will be dropped
+    // Note: market_data_manager doesn't need explicit stop - background tasks will be dropped
 
     Logger::success("ScreenerBot shutdown complete");
 

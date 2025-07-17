@@ -13,10 +13,10 @@
 //! ## Usage
 //!
 //! ```rust
-//! use crate::market_data::{PricingManager, PricingConfig};
+//! use crate::market_data::{MarketDataManager, PricingConfig};
 //!
 //! let config = PricingConfig::default();
-//! let manager = PricingManager::new(database, logger, config);
+//! let manager = MarketDataManager::new(database, logger, config);
 //! manager.start().await;
 //!
 //! // Get token price
@@ -38,7 +38,7 @@ pub use pool_decoders::PoolDecoderManager;
 
 // Legacy compatibility - these will be deprecated
 pub use models::{ TokenPrice, TokenInfo, PoolInfo, PoolType, PriceSource };
-pub use pricing::{ PricingManager, PriceCache };
+pub use pricing::{ MarketDataManager, PriceCache };
 pub use sources::{ GeckoTerminalClient, PoolPriceCalculator };
 
 /// Market data module version
@@ -52,12 +52,12 @@ pub fn default_config() -> PricingConfig {
     PricingConfig::default()
 }
 
-/// Create a new pricing manager with default configuration
-pub fn create_pricing_manager(
+/// Create a new market data manager with default configuration
+pub fn create_market_data_manager(
     database: std::sync::Arc<crate::database::Database>,
     logger: std::sync::Arc<crate::logger::Logger>
-) -> PricingManager {
-    PricingManager::new(database, logger, default_config())
+) -> MarketDataManager {
+    MarketDataManager::new(database, logger, default_config())
 }
 
 /// Utility function to validate token address format
