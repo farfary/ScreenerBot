@@ -48,6 +48,14 @@ impl RpcEndpoint {
         }
     }
 
+    pub fn record_failure(&mut self, response_time_ms: u64) {
+        self.error_count += 1;
+        self.response_time_ms = response_time_ms;
+        if self.error_count > 5 {
+            self.healthy = false;
+        }
+    }
+
     pub fn update_health_check(&mut self) {
         self.last_health_check = std::time::Instant::now();
     }
@@ -111,7 +119,7 @@ impl EndpointUsageStats {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MethodStats {
     pub call_count: u64,
     pub total_response_time_ms: u64,
@@ -213,6 +221,7 @@ pub enum RpcError {
     AllEndpointsFailed,
     ConfigurationError(String),
     RequestFailed(String),
+    SolanaRpcError(solana_client::client_error::ClientError),
 }
 
 impl std::fmt::Display for RpcError {
@@ -224,6 +233,7 @@ impl std::fmt::Display for RpcError {
             RpcError::AllEndpointsFailed => write!(f, "All RPC endpoints failed"),
             RpcError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
             RpcError::RequestFailed(msg) => write!(f, "Request failed: {}", msg),
+            RpcError::SolanaRpcError(err) => write!(f, "Solana RPC error: {}", err),
         }
     }
 }

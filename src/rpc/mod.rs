@@ -730,4 +730,130 @@ impl RpcManager {
 
         Err(RpcError::AllEndpointsFailed)
     }
+
+    /// Get account data for a specific pubkey
+    pub async fn get_account_data(&self, pubkey: &Pubkey) -> RpcResult<Vec<u8>> {
+        let (client, endpoint_idx) = self.get_healthy_client().await?;
+        let start_time = Instant::now();
+
+        match client.get_account_data(pubkey) {
+            Ok(data) => {
+                self.record_success(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_account_data"
+                ).await;
+                Ok(data)
+            }
+            Err(e) => {
+                self.record_failure(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_account_data"
+                ).await;
+                Err(RpcError::SolanaRpcError(e))
+            }
+        }
+    }
+
+    /// Get current slot
+    pub async fn get_slot(&self) -> RpcResult<u64> {
+        let (client, endpoint_idx) = self.get_healthy_client().await?;
+        let start_time = Instant::now();
+
+        match client.get_slot() {
+            Ok(slot) => {
+                self.record_success(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_slot"
+                ).await;
+                Ok(slot)
+            }
+            Err(e) => {
+                self.record_failure(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_slot"
+                ).await;
+                Err(RpcError::SolanaRpcError(e))
+            }
+        }
+    }
+
+    /// Get account info for a specific pubkey
+    pub async fn get_account_info(
+        &self,
+        pubkey: &Pubkey
+    ) -> RpcResult<Option<solana_sdk::account::Account>> {
+        let (client, endpoint_idx) = self.get_healthy_client().await?;
+        let start_time = Instant::now();
+
+        match client.get_account(pubkey) {
+            Ok(account) => {
+                self.record_success(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_account_info"
+                ).await;
+                Ok(Some(account))
+            }
+            Err(e) => {
+                self.record_failure(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_account_info"
+                ).await;
+                // Return None for account not found, otherwise return error
+                if e.to_string().contains("AccountNotFound") {
+                    Ok(None)
+                } else {
+                    Err(RpcError::SolanaRpcError(e))
+                }
+            }
+        }
+    }
+
+    /// Get multiple account data in a single call
+    pub async fn get_multiple_accounts(
+        &self,
+        pubkeys: &[Pubkey]
+    ) -> RpcResult<Vec<Option<solana_sdk::account::Account>>> {
+        let (client, endpoint_idx) = self.get_healthy_client().await?;
+        let start_time = Instant::now();
+
+        match client.get_multiple_accounts(pubkeys) {
+            Ok(accounts) => {
+                self.record_success(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_multiple_accounts"
+                ).await;
+                Ok(accounts)
+            }
+            Err(e) => {
+                self.record_failure(
+                    endpoint_idx,
+                    start_time.elapsed().as_millis() as u64,
+                    "get_multiple_accounts"
+                ).await;
+                Err(RpcError::SolanaRpcError(e))
+            }
+        }
+    }
+
+    /// Record a failure for an endpoint
+    async fn record_failure(&self, endpoint_idx: usize, response_time_ms: u64, method_name: &str) {
+        let mut endpoints = self.endpoints.write().await;
+        if let Some(endpoint) = endpoints.get_mut(endpoint_idx) {
+            endpoint.record_failure(response_time_ms);
+        }
+
+        // Update method stats
+        let mut stats = self.stats.write().await;
+        let method_stats = stats.method_stats.entry(method_name.to_string()).or_default();
+        method_stats.call_count += 1;
+        method_stats.error_count += 1;
+        method_stats.total_response_time_ms += response_time_ms;
+    }
 }

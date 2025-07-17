@@ -28,6 +28,10 @@ path = "examples/table_display_demo.rs"
 name = "table_test"
 path = "examples/table_test.rs"
 
+[[example]]
+name = "pool_demo"
+path = "examples/pool_demo.rs"
+
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }
