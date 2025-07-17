@@ -170,16 +170,72 @@ impl MarketData {
                                     } else {
                                         "age: unknown".to_string()
                                     };
-                                    Logger::info(
-                                        &format!(
-                                            "PRICE CHANGE: {} ({}) | ${:.6} → ${:.6} | {:+.2}% | {}",
-                                            token_data.symbol,
-                                            token_data.mint,
-                                            old_price,
-                                            new_price,
-                                            pct,
-                                            age_str
-                                        )
+
+                                    // Get SOL price for conversion
+                                    let sol_price = if
+                                        let Some(sol_token) = self.database
+                                            .get_token(
+                                                "So11111111111111111111111111111111111111112"
+                                            )
+                                            .ok()
+                                            .flatten()
+                                    {
+                                        sol_token.price_usd
+                                    } else {
+                                        0.0
+                                    };
+
+                                    let market_cap_usd = token_data.market_cap;
+                                    let liquidity_usd = token_data.liquidity_usd;
+                                    let market_cap_sol = if sol_price > 0.0 {
+                                        market_cap_usd / sol_price
+                                    } else {
+                                        0.0
+                                    };
+                                    let liquidity_sol = if sol_price > 0.0 {
+                                        liquidity_usd / sol_price
+                                    } else {
+                                        0.0
+                                    };
+
+                                    // Colorize and align output using ANSI escape codes
+                                    use colored::*;
+                                    let symbol = format!("{:<10}", token_data.symbol)
+                                        .bright_white()
+                                        .bold();
+                                    let mint = format!("{}", token_data.mint).bright_cyan();
+                                    let price_line = format!(
+                                        "Price: {} → {} | {}",
+                                        format!("${:.6}", old_price).yellow(),
+                                        format!("${:.6}", new_price).green(),
+                                        if pct >= 0.0 {
+                                            format!("+{:.2}%", pct).green().bold()
+                                        } else {
+                                            format!("{:.2}%", pct).red().bold()
+                                        }
+                                    );
+                                    let age_line = format!("{}", age_str.dimmed());
+                                    let mcap_line = format!(
+                                        "Market Cap: {} ({:.2} SOL)",
+                                        format!("${:.0}", market_cap_usd).bright_yellow().bold(),
+                                        market_cap_sol
+                                    );
+                                    let liq_line = format!(
+                                        "Liquidity : {} ({:.2} SOL)",
+                                        format!("${:.0}", liquidity_usd).bright_blue().bold(),
+                                        liquidity_sol
+                                    );
+
+                                    // Print styled price change directly to console (not using Logger)
+                                    println!(
+                                        "\n{} {}\n  {}\n  {}\n  {}\n  {}\n  {}\n",
+                                        "PRICE CHANGE:".on_bright_black().bold().white(),
+                                        symbol,
+                                        format!("Mint: {}", mint),
+                                        price_line,
+                                        mcap_line,
+                                        liq_line,
+                                        age_line
                                     );
                                 }
                             }
