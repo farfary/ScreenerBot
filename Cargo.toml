@@ -20,6 +20,14 @@ path = "src/lib.rs"
 name = "screenerbot"
 path = "src/main.rs"
 
+[[example]]
+name = "table_display_demo"
+path = "examples/table_display_demo.rs"
+
+[[example]]
+name = "table_test"
+path = "examples/table_test.rs"
+
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }
@@ -39,6 +47,8 @@ thiserror = "1.0"
 # Added for date/time usage (in e.g. holder_finder code)
 chrono = "0.4"
 chrono-tz = "0.6"
+
+# Table formatting for console display
 
 # Solana dependencies (matching your current SDK)
 solana-sdk = "2.3.1"
