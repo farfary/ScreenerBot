@@ -17,6 +17,8 @@ pub struct Config {
     pub swap: SwapConfig,
     #[serde(default)]
     pub rpc: RpcConfig,
+    #[serde(default)]
+    pub trader: TraderConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,6 +201,45 @@ impl Default for RpcConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraderConfig {
+    pub enabled: bool,
+    pub dry_run: bool,
+    pub trade_size_sol: f64,
+    pub buy_trigger_percent: f64,
+    pub sell_trigger_percent: f64,
+    pub stop_loss_percent: f64,
+    pub dca_enabled: bool,
+    pub dca_min_loss_percent: f64,
+    pub dca_max_loss_percent: f64,
+    pub dca_levels: u32,
+    pub max_positions: u32,
+    pub position_check_interval_seconds: u64,
+    pub price_check_interval_seconds: u64,
+    pub database_path: String,
+}
+
+impl Default for TraderConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            dry_run: true,
+            trade_size_sol: 0.001,
+            buy_trigger_percent: -5.0,
+            sell_trigger_percent: 5.0,
+            stop_loss_percent: -50.0,
+            dca_enabled: true,
+            dca_min_loss_percent: -20.0,
+            dca_max_loss_percent: -50.0,
+            dca_levels: 3,
+            max_positions: 20,
+            position_check_interval_seconds: 30,
+            price_check_interval_seconds: 10,
+            database_path: "trader.db".to_string(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -249,6 +290,7 @@ impl Default for Config {
             }),
             swap: SwapConfig::default(),
             rpc: RpcConfig::default(),
+            trader: TraderConfig::default(),
         }
     }
 }

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use screenerbot::{ Config, Discovery, MarketData };
+use screenerbot::{ Config, Discovery, MarketData, SwapManager, TraderManager };
 use std::sync::Arc;
 use tokio::signal;
 
@@ -40,6 +40,37 @@ async fn main() -> Result<()> {
     let market_data = Arc::new(MarketData::new(discovery.get_database())?);
     println!("💹 Market data module ready");
 
+    // RPC manager
+    let rpc_manager = Arc::new(
+        screenerbot::RpcManager::new(
+            config.rpc_url.clone(),
+            config.rpc_fallbacks.clone(),
+            config.rpc.clone()
+        )?
+    );
+    println!("🌐 RPC manager ready");
+
+    // Swap manager
+    let swap_manager = Arc::new(SwapManager::new(config.swap.clone(), Arc::clone(&rpc_manager)));
+    println!("💱 Swap manager ready");
+
+    // Trader module
+    let trader = if config.trader.enabled {
+        let trader_manager = Arc::new(
+            TraderManager::new(
+                config.trader.clone(),
+                Arc::clone(&swap_manager),
+                Arc::clone(&market_data),
+                Arc::clone(&discovery)
+            )?
+        );
+        println!("🎯 Trader module ready");
+        Some(trader_manager)
+    } else {
+        println!("⚠️  Trader module disabled");
+        None
+    };
+
     // Start modules
     println!("\nStarting modules...");
 
@@ -50,6 +81,12 @@ async fn main() -> Result<()> {
     // Start market data module
     let _ = market_data.start().await;
     println!("💹 Market data module running");
+
+    // Start trader module
+    if let Some(ref trader_manager) = trader {
+        let _ = trader_manager.start().await;
+        println!("🎯 Trader module running");
+    }
 
     println!("\n✅ All modules started successfully");
     println!("Press Ctrl+C to exit");
@@ -71,6 +108,10 @@ async fn main() -> Result<()> {
 
     discovery.stop().await;
     market_data.stop().await;
+
+    if let Some(trader_manager) = trader {
+        trader_manager.stop().await;
+    }
 
     println!("✅ ScreenerBot shutdown complete\n");
 
