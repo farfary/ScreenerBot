@@ -16,11 +16,3 @@ pub struct TokenInfo {
     pub last_updated: chrono::DateTime<chrono::Utc>,
     pub is_active: bool,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscoveryStats {
-    pub total_tokens_discovered: u64,
-    pub active_tokens: u64,
-    pub last_discovery_run: chrono::DateTime<chrono::Utc>,
-    pub discovery_rate_per_hour: f64,
-}

@@ -1,9 +1,10 @@
 pub mod sources;
+pub mod database;
+
+pub use database::{ DiscoveryDatabase, DiscoveredToken, DiscoveryStats };
 
 use crate::config::DiscoveryConfig;
-use crate::database::Database;
 use crate::logger::Logger;
-use crate::types::DiscoveryStats;
 use anyhow::{ Context, Result };
 use chrono::Utc;
 use reqwest::Client;
@@ -17,23 +18,25 @@ use sources::{ dexscreener::DexScreenerSource, rugcheck::RugCheckSource, SourceT
 
 pub struct Discovery {
     config: DiscoveryConfig,
-    database: Arc<Database>,
+    database: Arc<database::DiscoveryDatabase>,
     client: Client,
     known_mints: Arc<RwLock<HashSet<String>>>,
     is_running: Arc<RwLock<bool>>,
-    stats: Arc<RwLock<DiscoveryStats>>,
+    stats: Arc<RwLock<database::DiscoveryStats>>,
     sources: Vec<Box<dyn SourceTrait>>,
 }
 
 impl Discovery {
-    pub fn new(config: DiscoveryConfig, database: Arc<Database>) -> Self {
+    pub fn new(config: DiscoveryConfig) -> Result<Self> {
+        let database = Arc::new(database::DiscoveryDatabase::new()?);
+
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent("ScreenerBot/1.0")
             .build()
             .expect("Failed to create HTTP client");
 
-        let stats = DiscoveryStats {
+        let stats = database::DiscoveryStats {
             total_tokens_discovered: 0,
             active_tokens: 0,
             last_discovery_run: Utc::now(),
@@ -46,7 +49,7 @@ impl Discovery {
             Box::new(RugCheckSource::new(client.clone()))
         ];
 
-        Self {
+        Ok(Self {
             config,
             database,
             client,
@@ -54,7 +57,7 @@ impl Discovery {
             is_running: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(stats)),
             sources,
-        }
+        })
     }
 
     pub async fn start(&self) -> Result<()> {
@@ -95,16 +98,16 @@ impl Discovery {
         *self.is_running.read().await
     }
 
-    pub async fn get_stats(&self) -> DiscoveryStats {
+    pub async fn get_stats(&self) -> database::DiscoveryStats {
         self.stats.read().await.clone()
     }
 
     async fn load_existing_mints(&self) -> Result<()> {
-        let mints = self.database.get_all_mints().context("Failed to load mints from database")?;
+        let tokens = self.database.get_all_tokens().context("Failed to load tokens from database")?;
 
         let mut known_mints = self.known_mints.write().await;
-        for mint in mints {
-            known_mints.insert(mint);
+        for token in tokens {
+            known_mints.insert(token.mint);
         }
 
         Ok(())
@@ -136,9 +139,9 @@ impl Discovery {
                         0.0
                     };
 
-                    let (total_mints, _) = (self.database.get_mint_count().unwrap_or(0), 0);
+                    let (total_mints, _) = (self.database.get_token_count().unwrap_or(0), 0);
 
-                    let stats = DiscoveryStats {
+                    let stats = database::DiscoveryStats {
                         total_tokens_discovered: total_mints,
                         active_tokens: total_mints,
                         last_discovery_run: Utc::now(),
@@ -146,10 +149,6 @@ impl Discovery {
                     };
 
                     *self.stats.write().await = stats.clone();
-
-                    if let Err(e) = self.database.save_discovery_stats(&stats) {
-                        Logger::error(&format!("Failed to save discovery stats: {}", e));
-                    }
 
                     // Only print count of new tokens and total
                     println!("New tokens: {}, Total: {}", new_mints, total_mints);
@@ -201,8 +200,8 @@ impl Discovery {
             // Skip if we already have this mint
             if !known_mints.contains(&mint) {
                 // Save to database
-                if let Err(e) = self.database.save_mint(&mint) {
-                    Logger::error(&format!("Failed to save mint {}: {}", mint, e));
+                if let Err(e) = self.database.save_token(&mint) {
+                    Logger::error(&format!("Failed to save token {}: {}", mint, e));
                     continue;
                 }
 

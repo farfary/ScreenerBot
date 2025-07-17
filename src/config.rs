@@ -10,7 +10,6 @@ pub struct Config {
     #[serde(default)]
     pub rpc_fallbacks: Vec<String>,
     pub discovery: DiscoveryConfig,
-    pub database: DatabaseConfig,
     pub general: GeneralConfig,
     #[serde(default)]
     pub pricing: Option<PricingConfig>,
@@ -30,13 +29,6 @@ pub struct DiscoveryConfig {
     pub min_market_cap: Option<f64>,
     pub blacklisted_tokens: Vec<String>,
     pub sources: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatabaseConfig {
-    pub path: String,
-    pub cleanup_interval_hours: u64,
-    pub max_token_age_days: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,38 +67,11 @@ pub struct DynamicPricingConfig {
     pub blacklist_cleanup_interval_hours: u64,
 }
 
-impl Default for DynamicPricingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            fastest_interval_secs: 5,
-            slowest_interval_secs: 300,
-            high_liquidity_threshold: 1_000_000.0,
-            low_liquidity_threshold: 100.0,
-            dead_token_threshold: 0.0,
-            dead_token_timeout_hours: 6,
-            rate_limit_usage_threshold: 0.9,
-            gecko_terminal_rate_limit: GeckoRateLimitConfig::default(),
-            blacklist_cleanup_interval_hours: 24,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeckoRateLimitConfig {
     pub requests_per_minute: u32,
     pub requests_per_hour: u32,
     pub burst_limit: u32,
-}
-
-impl Default for GeckoRateLimitConfig {
-    fn default() -> Self {
-        Self {
-            requests_per_minute: 60,
-            requests_per_hour: 3600,
-            burst_limit: 10,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,11 +214,6 @@ impl Default for Config {
                 min_market_cap: Some(10000.0), // 10K
                 blacklisted_tokens: vec![],
                 sources: vec!["raydium".to_string(), "jupiter".to_string(), "orca".to_string()],
-            },
-            database: DatabaseConfig {
-                path: "cache.db".to_string(),
-                cleanup_interval_hours: 24,
-                max_token_age_days: 30,
             },
             general: GeneralConfig {
                 log_level: "info".to_string(),

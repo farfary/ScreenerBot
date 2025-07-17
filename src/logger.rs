@@ -9,37 +9,51 @@ impl Logger {
         Self
     }
 
-    // Basic log levels with proper formatting
+    // Basic log levels with expressive emojis
     pub fn info(message: &str) {
         let timestamp = Self::get_timestamp();
-        println!("{} {} {}", "ℹ".blue().bold(), format!("[{}]", timestamp).dimmed(), message);
+        println!(
+            "{} {:<10} {} {}",
+            format!("[{}]", timestamp).dimmed(),
+            "INFO".blue().bold(),
+            "|".dimmed(),
+            message.bright_white()
+        );
         io::stdout().flush().unwrap();
     }
 
     pub fn warn(message: &str) {
         let timestamp = Self::get_timestamp();
         println!(
-            "{} {} {}",
-            "⚠".yellow().bold(),
+            "{} {:<10} {} {}",
             format!("[{}]", timestamp).dimmed(),
-            message.yellow()
+            "WARN".yellow().bold(),
+            "|".dimmed(),
+            message.bright_white()
         );
         io::stdout().flush().unwrap();
     }
 
     pub fn error(message: &str) {
         let timestamp = Self::get_timestamp();
-        println!("{} {} {}", "❌".red().bold(), format!("[{}]", timestamp).dimmed(), message.red());
+        println!(
+            "{} {:<10} {} {}",
+            format!("[{}]", timestamp).dimmed(),
+            "ERROR".red().bold(),
+            "|".dimmed(),
+            message.bright_white()
+        );
         io::stdout().flush().unwrap();
     }
 
     pub fn debug(message: &str) {
         let timestamp = Self::get_timestamp();
         println!(
-            "{} {} {}",
-            "🐛".purple().bold(),
+            "{} {:<10} {} {}",
             format!("[{}]", timestamp).dimmed(),
-            message.dimmed()
+            "DEBUG".purple().bold(),
+            "|".dimmed(),
+            message.bright_white()
         );
         io::stdout().flush().unwrap();
     }
@@ -47,83 +61,24 @@ impl Logger {
     pub fn success(message: &str) {
         let timestamp = Self::get_timestamp();
         println!(
-            "{} {} {}",
-            "✅".green().bold(),
+            "{} {:<10} {} {}",
             format!("[{}]", timestamp).dimmed(),
-            message.green()
+            "SUCCESS".green().bold(),
+            "|".dimmed(),
+            message.bright_white()
         );
         io::stdout().flush().unwrap();
     }
 
-    // Specialized category loggers with enhanced formatting
+    // Specialized category loggers
     pub fn discovery(message: &str) {
         let timestamp = Self::get_timestamp();
         println!(
-            "{} {} {} {}",
-            "🔎".magenta().bold(),
+            "{} {:<10} {} {}",
+            format!("[{}]", timestamp).dimmed(),
             "DISCOVERY".magenta().bold(),
-            format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
-        );
-        io::stdout().flush().unwrap();
-    }
-
-    pub fn wallet(message: &str) {
-        let timestamp = Self::get_timestamp();
-        println!(
-            "{} {} {} {}",
-            "💼".blue().bold(),
-            "WALLET".blue().bold(),
-            format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
-        );
-        io::stdout().flush().unwrap();
-    }
-
-    pub fn trader(message: &str) {
-        let timestamp = Self::get_timestamp();
-        println!(
-            "{} {} {} {}",
-            "📈".yellow().bold(),
-            "TRADER".yellow().bold(),
-            format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
-        );
-        io::stdout().flush().unwrap();
-    }
-
-    pub fn pricing(message: &str) {
-        let timestamp = Self::get_timestamp();
-        println!(
-            "{} {} {} {}",
-            "💰".cyan().bold(),
-            "PRICING".cyan().bold(),
-            format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
-        );
-        io::stdout().flush().unwrap();
-    }
-
-    pub fn rpc(message: &str) {
-        let timestamp = Self::get_timestamp();
-        println!(
-            "{} {} {} {}",
-            "🌐".bright_green().bold(),
-            "RPC".bright_green().bold(),
-            format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
-        );
-        io::stdout().flush().unwrap();
-    }
-
-    pub fn swap(message: &str) {
-        let timestamp = Self::get_timestamp();
-        println!(
-            "{} {} {} {}",
-            "🔄".bright_yellow().bold(),
-            "SWAP".bright_yellow().bold(),
-            format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
+            "|".dimmed(),
+            Self::format_message(message).bright_white()
         );
         io::stdout().flush().unwrap();
     }
@@ -131,11 +86,11 @@ impl Logger {
     pub fn database(message: &str) {
         let timestamp = Self::get_timestamp();
         println!(
-            "{} {} {} {}",
-            "🗄️".bright_blue().bold(),
-            "DATABASE".bright_blue().bold(),
+            "{} {:<10} {} {}",
             format!("[{}]", timestamp).dimmed(),
-            Self::format_message(message)
+            "DATABASE".bright_blue().bold(),
+            "|".dimmed(),
+            Self::format_message(message).bright_white()
         );
         io::stdout().flush().unwrap();
     }
@@ -143,12 +98,11 @@ impl Logger {
     pub fn header(title: &str) {
         println!();
         println!(
-            "{} {} {}",
-            "🤖".green().bold(),
+            "{} {}",
             "ScreenerBot".green().bold(),
             format!("- {}", title).bright_white().bold()
         );
-        println!("{}", "─".repeat(50).dimmed());
+        println!("{}", "=".repeat(50).dimmed());
         io::stdout().flush().unwrap();
     }
 
@@ -227,16 +181,14 @@ impl Logger {
     pub fn print_balance(token: &str, amount: f64, sol_value: Option<f64>) {
         if let Some(sol) = sol_value {
             println!(
-                "  {} {} {} {}",
-                "💎".bright_green(),
+                "  {} {} {}",
                 token.bright_white().bold(),
                 format!("{:.4}", amount).bright_white().bold(),
                 format!("({:.6} SOL)", sol).green().bold()
             );
         } else {
             println!(
-                "  {} {} {}",
-                "💎".bright_green(),
+                "  {} {}",
                 token.bright_white().bold(),
                 format!("{:.4}", amount).bright_white().bold()
             );
@@ -244,24 +196,18 @@ impl Logger {
     }
 
     pub fn print_pnl(pnl: f64, percentage: f64) {
-        let (color, symbol) = if pnl >= 0.0 { ("green", "↗") } else { ("red", "↘") };
-
-        match color {
-            "green" =>
-                println!(
-                    "  {} PnL: {} ({}%)",
-                    symbol.green().bold(),
-                    format!("{:.6} SOL", pnl).green().bold(),
-                    format!("{:.2}", percentage).green().bold()
-                ),
-            "red" =>
-                println!(
-                    "  {} PnL: {} ({}%)",
-                    symbol.red().bold(),
-                    format!("{:.6} SOL", pnl).red().bold(),
-                    format!("{:.2}", percentage).red().bold()
-                ),
-            _ => {}
+        if pnl >= 0.0 {
+            println!(
+                "  PnL: {} ({}%)",
+                format!("{:.6} SOL", pnl).green().bold(),
+                format!("{:.2}", percentage).green().bold()
+            );
+        } else {
+            println!(
+                "  PnL: {} ({}%)",
+                format!("{:.6} SOL", pnl).red().bold(),
+                format!("{:.2}", percentage).red().bold()
+            );
         }
     }
 }
