@@ -11,11 +11,13 @@ pub mod decoders;
 pub mod pool_decoders;
 pub mod price_calculator;
 pub mod cache;
+pub mod dynamic_pricing;
 
 use gecko_terminal::GeckoTerminalClient;
 use pool_decoders::PoolDecoderManager;
 use price_calculator::PriceCalculator;
 use cache::PriceCache;
+use dynamic_pricing::DynamicPricingManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenPrice {
@@ -85,6 +87,7 @@ pub struct PricingManager {
     top_tokens_count: usize,
     priority_tokens: Arc<RwLock<Vec<String>>>,
     tiered_manager: Option<TieredPricingManager>,
+    dynamic_manager: Option<Arc<DynamicPricingManager>>,
 }
 
 impl PricingManager {
@@ -107,12 +110,65 @@ impl PricingManager {
             top_tokens_count,
             priority_tokens: Arc::new(RwLock::new(Vec::new())),
             tiered_manager: None,
+            dynamic_manager: None,
+        }
+    }
+
+    /// Create a new PricingManager with dynamic pricing enabled
+    pub fn with_dynamic_pricing(
+        database: Arc<Database>,
+        logger: Arc<Logger>,
+        update_interval_secs: u64,
+        top_tokens_count: usize,
+        dynamic_config: crate::config::DynamicPricingConfig
+    ) -> Self {
+        let client = Client::new();
+        let gecko_client = Arc::new(GeckoTerminalClient::new(client.clone()));
+
+        let dynamic_manager = if dynamic_config.enabled {
+            Some(
+                Arc::new(
+                    DynamicPricingManager::new(
+                        dynamic_config,
+                        gecko_client.clone(),
+                        database.clone(),
+                        logger.clone()
+                    )
+                )
+            )
+        } else {
+            None
+        };
+
+        Self {
+            gecko_client: (*gecko_client).clone(),
+            pool_decoder: PoolDecoderManager::new(),
+            price_calculator: PriceCalculator::new(),
+            cache: Arc::new(RwLock::new(PriceCache::new())),
+            database,
+            logger,
+            update_interval: Duration::from_secs(update_interval_secs),
+            top_tokens_count,
+            priority_tokens: Arc::new(RwLock::new(Vec::new())),
+            tiered_manager: None,
+            dynamic_manager,
         }
     }
 
     pub async fn start(&self) {
         Logger::pricing("Starting pricing manager...");
 
+        // Start dynamic pricing manager if enabled
+        if let Some(dynamic_manager) = &self.dynamic_manager {
+            if let Err(e) = dynamic_manager.start().await {
+                Logger::error(&format!("Failed to start dynamic pricing manager: {}", e));
+            } else {
+                Logger::pricing("Dynamic pricing manager started successfully");
+                return; // Use dynamic pricing instead of traditional pricing
+            }
+        }
+
+        // Fallback to traditional pricing if dynamic pricing is not available
         let gecko_client = self.gecko_client.clone();
         let cache = self.cache.clone();
         let database = self.database.clone();
@@ -285,57 +341,75 @@ impl PricingManager {
         let token_info = match token_info {
             Some(info) => info,
             None => {
-                // Try to fetch from API
-                match self.gecko_client.get_token_info(token_address).await {
-                    Ok(info) => info,
-                    Err(_) => {
-                        return None;
-                    }
-                }
+                Logger::error(&format!("Token info not found in cache for {}", token_address));
+                return None;
             }
         };
 
-        // Calculate price from top pools
+        // Check if price is already available
+        if let Some(price) = token_info.price {
+            return Some(price);
+        }
+
+        // If no price, try to calculate from pools
         if !token_info.pools.is_empty() {
-            match self.price_calculator.calculate_from_pools(&token_info.pools).await {
-                Ok(calculated_price) => {
-                    Logger::debug(
+            // Use the first available pool to calculate the price
+            let pool_info = &token_info.pools[0];
+
+            // Get reserves
+            let reserve_0 = pool_info.reserve_0 as f64;
+            let reserve_1 = pool_info.reserve_1 as f64;
+
+            // Calculate price based on pool type
+            let calculated_price = match pool_info.pool_type {
+                PoolType::Raydium | PoolType::Orca => {
+                    // For AMM pools, price is determined by the ratio of reserves
+                    reserve_1 / reserve_0
+                }
+                PoolType::Serum => {
+                    // For Serum, use calculated price from reserves
+                    // (oracle_price functionality would need to be added separately)
+                    reserve_1 / reserve_0
+                }
+                _ => {
+                    Logger::error(
                         &format!(
-                            "🏷️  PRICING: Calculated real price for {}: ${:.6}",
-                            token_info.symbol,
-                            calculated_price
+                            "Unsupported pool type for price calculation: {:?}",
+                            pool_info.pool_type
                         )
                     );
+                    return None;
+                }
+            };
 
-                    Some(TokenPrice {
-                        address: token_address.to_string(),
-                        price_usd: calculated_price,
-                        price_sol: None, // TODO: Calculate SOL price
-                        market_cap: None,
-                        volume_24h: token_info.pools
-                            .iter()
-                            .map(|p| p.volume_24h)
-                            .sum(),
-                        liquidity_usd: token_info.pools
-                            .iter()
-                            .map(|p| p.liquidity_usd)
-                            .sum(),
-                        timestamp: std::time::SystemTime
-                            ::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                        source: PriceSource::PoolCalculation,
-                        is_cache: false,
-                    })
-                }
-                Err(e) => {
-                    Logger::error(
-                        &format!("🏷️  PRICING: Failed to calculate price from pools: {}", e)
-                    );
-                    None
-                }
+            // Create a new TokenPrice instance
+            let price = TokenPrice {
+                address: token_info.address.clone(),
+                price_usd: calculated_price,
+                price_sol: None,
+                market_cap: None,
+                volume_24h: 0.0,
+                liquidity_usd: 0.0,
+                timestamp: std::time::SystemTime
+                    ::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                source: PriceSource::PoolCalculation,
+                is_cache: false,
+            };
+
+            // Update the token info with the new price
+            let mut updated_info = token_info.clone();
+            updated_info.price = Some(price.clone());
+
+            // Update cache
+            {
+                let mut cache_lock = self.cache.write().await;
+                cache_lock.update_token_info(updated_info).await;
             }
+
+            Some(price)
         } else {
             None
         }
@@ -469,6 +543,45 @@ impl PricingManager {
                 );
             }
         }
+    }
+
+    /// Add a token to dynamic pricing tracking
+    pub async fn add_token_to_dynamic_pricing(
+        &self,
+        token_address: String,
+        initial_liquidity: f64
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(dynamic_manager) = &self.dynamic_manager {
+            dynamic_manager.add_token(token_address, initial_liquidity).await?;
+        }
+        Ok(())
+    }
+
+    /// Remove a token from dynamic pricing tracking
+    pub async fn remove_token_from_dynamic_pricing(
+        &self,
+        token_address: &str
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(dynamic_manager) = &self.dynamic_manager {
+            dynamic_manager.remove_token(token_address).await?;
+        }
+        Ok(())
+    }
+
+    /// Get dynamic pricing statistics
+    pub async fn get_dynamic_pricing_stats(
+        &self
+    ) -> Option<crate::pricing::dynamic_pricing::DynamicPricingStats> {
+        if let Some(dynamic_manager) = &self.dynamic_manager {
+            Some(dynamic_manager.get_stats().await)
+        } else {
+            None
+        }
+    }
+
+    /// Check if dynamic pricing is enabled
+    pub fn is_dynamic_pricing_enabled(&self) -> bool {
+        self.dynamic_manager.is_some()
     }
 }
 

@@ -5,6 +5,15 @@ use chrono::{ DateTime, Utc };
 use rusqlite::{ params, Connection, Row };
 use std::sync::Mutex;
 
+#[derive(Debug, Clone)]
+pub struct TrackedToken {
+    pub address: String,
+    pub liquidity_usd: f64,
+    pub volume_24h: f64,
+    pub price_usd: f64,
+    pub last_updated: u64,
+}
+
 pub struct Database {
     conn: Mutex<Connection>,
 }
@@ -86,33 +95,61 @@ impl Database {
         // Token prices table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS token_prices (
-                address TEXT PRIMARY KEY,
+                token_address TEXT NOT NULL,
                 price_usd REAL NOT NULL,
                 price_sol REAL,
                 market_cap REAL,
                 volume_24h REAL NOT NULL,
                 liquidity_usd REAL NOT NULL,
-                source TEXT NOT NULL,
                 timestamp INTEGER NOT NULL,
-                last_updated TEXT NOT NULL
+                source TEXT NOT NULL,
+                is_cache INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (token_address, timestamp)
             )",
             []
         )?;
 
-        // Pool information table
+        // Blacklisted tokens table
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS pools (
-                address TEXT PRIMARY KEY,
-                pool_type TEXT NOT NULL,
-                token_0 TEXT NOT NULL,
-                token_1 TEXT NOT NULL,
-                reserve_0 INTEGER NOT NULL,
-                reserve_1 INTEGER NOT NULL,
+            "CREATE TABLE IF NOT EXISTS blacklisted_tokens (
+                token_address TEXT PRIMARY KEY,
+                reason TEXT NOT NULL,
+                blacklisted_at TEXT NOT NULL,
+                last_liquidity REAL NOT NULL
+            )",
+            []
+        )?;
+
+        // Token priority tracking table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS token_priorities (
+                token_address TEXT PRIMARY KEY,
                 liquidity_usd REAL NOT NULL,
                 volume_24h REAL NOT NULL,
-                fee_tier REAL,
-                last_updated TEXT NOT NULL
+                priority_score REAL NOT NULL,
+                update_interval_secs INTEGER NOT NULL,
+                last_updated TEXT NOT NULL,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0
             )",
+            []
+        )?;
+
+        // Create indexes for better performance
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_token_prices_timestamp 
+             ON token_prices(timestamp)",
+            []
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_token_prices_liquidity 
+             ON token_prices(liquidity_usd)",
+            []
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_token_priorities_score 
+             ON token_priorities(priority_score)",
             []
         )?;
 
@@ -809,5 +846,152 @@ impl Database {
                 .unwrap()
                 .with_timezone(&Utc),
         })
+    }
+
+    /// Store token price in database
+    pub async fn store_token_price(&self, token_address: &str, price: &TokenPrice) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO token_prices (
+                address, price_usd, price_sol, market_cap, volume_24h, 
+                liquidity_usd, source, timestamp, last_updated
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                token_address,
+                price.price_usd,
+                price.price_sol,
+                price.market_cap,
+                price.volume_24h,
+                price.liquidity_usd,
+                format!("{:?}", price.source),
+                price.timestamp,
+                chrono::Utc::now().to_rfc3339()
+            ]
+        )?;
+
+        Ok(())
+    }
+
+    /// Get tracked tokens with their latest liquidity and volume data
+    pub async fn get_tracked_tokens(&self) -> Result<Vec<TrackedToken>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT tp.address, tp.liquidity_usd, tp.volume_24h, tp.price_usd, tp.timestamp
+             FROM token_prices tp
+             INNER JOIN (
+                 SELECT address, MAX(timestamp) as latest_timestamp
+                 FROM token_prices
+                 GROUP BY address
+             ) latest ON tp.address = latest.address AND tp.timestamp = latest.latest_timestamp
+             WHERE tp.liquidity_usd > 0"
+        )?;
+
+        let token_iter = stmt.query_map([], |row| {
+            Ok(TrackedToken {
+                address: row.get(0)?,
+                liquidity_usd: row.get(1)?,
+                volume_24h: row.get(2)?,
+                price_usd: row.get(3)?,
+                last_updated: row.get(4)?,
+            })
+        })?;
+
+        let mut tokens = Vec::new();
+        for token in token_iter {
+            tokens.push(token?);
+        }
+
+        Ok(tokens)
+    }
+
+    /// Store blacklisted token information
+    pub async fn store_blacklisted_token(
+        &self,
+        token_address: &str,
+        reason: &str,
+        liquidity: f64
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO blacklisted_tokens (
+                token_address, reason, blacklisted_at, last_liquidity
+            ) VALUES (?1, ?2, ?3, ?4)",
+            params![token_address, reason, Utc::now().to_rfc3339(), liquidity]
+        )?;
+
+        Ok(())
+    }
+
+    /// Get blacklisted tokens
+    pub async fn get_blacklisted_tokens(&self) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare("SELECT token_address FROM blacklisted_tokens")?;
+        let token_iter = stmt.query_map([], |row| { Ok(row.get::<_, String>(0)?) })?;
+
+        let mut tokens = Vec::new();
+        for token in token_iter {
+            tokens.push(token?);
+        }
+
+        Ok(tokens)
+    }
+
+    /// Remove token from blacklist
+    pub async fn remove_from_blacklist(&self, token_address: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "DELETE FROM blacklisted_tokens WHERE token_address = ?1",
+            params![token_address]
+        )?;
+
+        Ok(())
+    }
+
+    /// Get token price history
+    pub async fn get_token_price_history(
+        &self,
+        token_address: &str,
+        limit: u32
+    ) -> Result<Vec<TokenPrice>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT token_address, price_usd, price_sol, market_cap, volume_24h, 
+                    liquidity_usd, timestamp, source, is_cache
+             FROM token_prices 
+             WHERE token_address = ?1 
+             ORDER BY timestamp DESC 
+             LIMIT ?2"
+        )?;
+
+        let price_iter = stmt.query_map(params![token_address, limit], |row| {
+            Ok(TokenPrice {
+                address: row.get(0)?,
+                price_usd: row.get(1)?,
+                price_sol: row.get(2)?,
+                market_cap: row.get(3)?,
+                volume_24h: row.get(4)?,
+                liquidity_usd: row.get(5)?,
+                timestamp: row.get(6)?,
+                source: match row.get::<_, String>(7)?.as_str() {
+                    "GeckoTerminal" => crate::pricing::PriceSource::GeckoTerminal,
+                    "PoolCalculation" => crate::pricing::PriceSource::PoolCalculation,
+                    _ => crate::pricing::PriceSource::Cache,
+                },
+                is_cache: row.get(8)?,
+            })
+        })?;
+
+        let mut prices = Vec::new();
+        for price in price_iter {
+            prices.push(price?);
+        }
+
+        Ok(prices)
     }
 }

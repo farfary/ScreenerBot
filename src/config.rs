@@ -58,6 +58,29 @@ pub struct PricingConfig {
     pub gecko_terminal_enabled: bool,
     pub pool_calculation_enabled: bool,
     pub priority_update_interval_secs: u64,
+    // Dynamic pricing configuration
+    pub dynamic_pricing: DynamicPricingConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicPricingConfig {
+    pub enabled: bool,
+    pub fastest_interval_secs: u64, // 5 seconds
+    pub slowest_interval_secs: u64, // 5 minutes (300 seconds)
+    pub high_liquidity_threshold: f64, // 1 million USD
+    pub low_liquidity_threshold: f64, // 100 USD
+    pub dead_token_threshold: f64, // Near zero liquidity
+    pub dead_token_timeout_hours: u64, // 6 hours
+    pub rate_limit_usage_threshold: f64, // 90% of available rate limit
+    pub gecko_terminal_rate_limit: GeckoRateLimitConfig,
+    pub blacklist_cleanup_interval_hours: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeckoRateLimitConfig {
+    pub requests_per_minute: u32,
+    pub requests_per_hour: u32,
+    pub burst_limit: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -230,6 +253,22 @@ impl Default for Config {
                 gecko_terminal_enabled: true,
                 pool_calculation_enabled: true,
                 priority_update_interval_secs: 30, // 30 seconds for priority tokens
+                dynamic_pricing: DynamicPricingConfig {
+                    enabled: true,
+                    fastest_interval_secs: 5,
+                    slowest_interval_secs: 300,
+                    high_liquidity_threshold: 1_000_000.0,
+                    low_liquidity_threshold: 100.0,
+                    dead_token_threshold: 0.0,
+                    dead_token_timeout_hours: 6,
+                    rate_limit_usage_threshold: 0.9,
+                    gecko_terminal_rate_limit: GeckoRateLimitConfig {
+                        requests_per_minute: 60,
+                        requests_per_hour: 3600,
+                        burst_limit: 10,
+                    },
+                    blacklist_cleanup_interval_hours: 24,
+                },
             }),
             wallet: WalletConfig {
                 enabled: true,
