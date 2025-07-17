@@ -102,6 +102,10 @@ impl Discovery {
         self.stats.read().await.clone()
     }
 
+    pub fn get_database(&self) -> Arc<database::DiscoveryDatabase> {
+        Arc::clone(&self.database)
+    }
+
     async fn load_existing_mints(&self) -> Result<()> {
         let tokens = self.database.get_all_tokens().context("Failed to load tokens from database")?;
 
@@ -132,7 +136,10 @@ impl Discovery {
                     mints_discovered_this_session += new_mints;
 
                     // Update stats
-                    let elapsed_hours = ((Utc::now() - start_time).num_minutes() as f64) / 60.0;
+                    let elapsed_secs = (Utc::now() - start_time).num_seconds() as f64;
+                    // Clamp to minimum 1 minute to avoid huge rates at startup
+                    let min_secs = 60.0;
+                    let elapsed_hours = elapsed_secs.max(min_secs) / 3600.0;
                     let rate = if elapsed_hours > 0.0 {
                         (mints_discovered_this_session as f64) / elapsed_hours
                     } else {
@@ -150,8 +157,13 @@ impl Discovery {
 
                     *self.stats.write().await = stats.clone();
 
-                    // Only print count of new tokens and total
-                    println!("New tokens: {}, Total: {}", new_mints, total_mints);
+                    if new_mints > 0 {
+                        Logger::discovery(
+                            &format!("{} new tokens discovered. Total: {}", new_mints, total_mints)
+                        );
+                    } else {
+                        Logger::discovery(&format!("No new tokens. Total: {}", total_mints));
+                    }
                 }
                 Err(e) => {
                     Logger::error(&format!("Discovery failed: {}", e));
