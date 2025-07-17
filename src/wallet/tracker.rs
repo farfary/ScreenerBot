@@ -110,6 +110,12 @@ impl WalletTracker {
             }
         });
 
+        // Start RPC usage monitor
+        Logger::wallet("📊 Starting RPC usage monitor...");
+        let rpc_manager_for_monitor = Arc::clone(&self.rpc_manager);
+        let _usage_monitor_handle = rpc_manager_for_monitor.start_usage_monitor();
+        Logger::wallet("📊 RPC usage monitor started - will display stats every 30 seconds");
+
         Ok(())
     }
 
