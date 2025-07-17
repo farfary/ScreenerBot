@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
-use crate::market_data::PoolType;
+use crate::market_data::models::PoolType;
 use super::types::{ DecodedPoolData, PoolDecoder, PoolDecoderError };
 
 /// Orca Whirlpool decoder for concentrated liquidity pools

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{ Duration, SystemTime, UNIX_EPOCH };
 use serde::{ Deserialize, Serialize };
-use crate::market_data::{ TokenInfo, TokenPrice, PoolInfo };
+use crate::market_data::models::{ TokenInfo, TokenPrice, PoolInfo };
 
 #[derive(Debug, Clone)]
 pub struct PriceCache {

@@ -56,6 +56,7 @@ pub struct PricingConfig {
     pub gecko_terminal_enabled: bool,
     pub pool_calculation_enabled: bool,
     pub priority_update_interval_secs: u64,
+    pub enable_dynamic_pricing: bool,
     // Dynamic pricing configuration
     pub dynamic_pricing: DynamicPricingConfig,
 }
@@ -241,6 +242,7 @@ impl Default for Config {
                 gecko_terminal_enabled: true,
                 pool_calculation_enabled: true,
                 priority_update_interval_secs: 30, // 30 seconds for priority tokens
+                enable_dynamic_pricing: true,
                 dynamic_pricing: DynamicPricingConfig {
                     enabled: true,
                     fastest_interval_secs: 5,

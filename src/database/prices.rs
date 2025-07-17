@@ -1,4 +1,4 @@
-use crate::database::models::DatabaseResult;
+use crate::database::DatabaseResult;
 use crate::database::connection::Database;
 use crate::market_data::{ TokenPrice, PriceSource };
 use anyhow::Result;
@@ -24,7 +24,14 @@ impl Database {
                 price.liquidity_usd,
                 format!("{:?}", price.source),
                 price.timestamp,
-                if price.is_cache {
+                if price.is_cached {
+                    1
+                } else {
+                    0
+                },
+                format!("{:?}", price.source),
+                price.timestamp,
+                if price.is_cached {
                     1
                 } else {
                     0
@@ -144,7 +151,7 @@ impl Database {
                 price.liquidity_usd,
                 format!("{:?}", price.source),
                 price.timestamp,
-                if price.is_cache {
+                if price.is_cached {
                     1
                 } else {
                     0
@@ -221,7 +228,7 @@ impl Database {
             liquidity_usd: row.get("liquidity_usd")?,
             timestamp: row.get("timestamp")?,
             source,
-            is_cache: row.get::<_, i32>("is_cache")? == 1,
+            is_cached: row.get::<_, i32>("is_cache")? == 1,
         })
     }
 }

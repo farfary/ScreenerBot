@@ -1,11 +1,11 @@
 use std::time::{ SystemTime, UNIX_EPOCH };
-use crate::market_data::{ PoolInfo, PoolType };
+use crate::market_data::models::{ PoolInfo, PoolType };
 
-pub struct PriceCalculator {
+pub struct PoolPriceCalculator {
     sol_price_cache: Option<(f64, u64)>, // (price, timestamp)
 }
 
-impl PriceCalculator {
+impl PoolPriceCalculator {
     pub fn new() -> Self {
         Self {
             sol_price_cache: None,

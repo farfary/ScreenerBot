@@ -1,1135 +1,146 @@
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
-use serde::{ Deserialize, Serialize };
-use reqwest::Client;
-use crate::database::Database;
-use crate::logger::Logger;
+//! Market Data Module
+//!
+//! This module provides comprehensive market data functionality for cryptocurrency tokens,
+//! including price tracking, caching, and various data sources integration.
+//!
+//! ## Structure
+//!
+//! - `models/` - Data structures and types
+//! - `sources/` - Price data sources (GeckoTerminal, Pool calculations)
+//! - `pricing/` - Pricing logic, caching, and management
+//! - `decoders/` - Pool data decoders for different DEX protocols
+//!
+//! ## Usage
+//!
+//! ```rust
+//! use crate::market_data::{PricingManager, PricingConfig};
+//!
+//! let config = PricingConfig::default();
+//! let manager = PricingManager::new(database, logger, config);
+//! manager.start().await;
+//!
+//! // Get token price
+//! let price = manager.get_token_price("token_address").await;
+//! ```
 
-pub mod gecko_terminal;
+pub mod models;
+pub mod sources;
+pub mod pricing;
 pub mod decoders;
 pub mod pool_decoders;
-pub mod price_calculator;
-pub mod cache;
-pub mod dynamic_pricing;
 
-use gecko_terminal::GeckoTerminalClient;
-use pool_decoders::PoolDecoderManager;
-use price_calculator::PriceCalculator;
-use cache::PriceCache;
-use dynamic_pricing::DynamicPricingManager;
+// Re-export commonly used types and functions
+pub use models::*;
+pub use sources::*;
+pub use pricing::*;
+pub use decoders::{ PoolDecoder, PoolDecoderError, DecodedPoolData };
+pub use pool_decoders::PoolDecoderManager;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenPrice {
-    pub address: String,
-    pub price_usd: f64,
-    pub price_sol: Option<f64>,
-    pub market_cap: Option<f64>,
-    pub volume_24h: f64,
-    pub liquidity_usd: f64,
-    pub timestamp: u64, // Unix timestamp in seconds
-    pub source: PriceSource,
-    pub is_cache: bool,
+// Legacy compatibility - these will be deprecated
+pub use models::{ TokenPrice, TokenInfo, PoolInfo, PoolType, PriceSource };
+pub use pricing::{ PricingManager, PriceCache };
+pub use sources::{ GeckoTerminalClient, PoolPriceCalculator };
+
+/// Market data module version
+pub const VERSION: &str = "2.0.0";
+
+/// Supported DEX protocols
+pub const SUPPORTED_DEXES: &[&str] = &["Raydium", "PumpFun", "Meteora", "Orca", "Serum"];
+
+/// Default configuration for market data operations
+pub fn default_config() -> PricingConfig {
+    PricingConfig::default()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PriceSource {
-    GeckoTerminal,
-    PoolCalculation,
-    Cache,
+/// Create a new pricing manager with default configuration
+pub fn create_pricing_manager(
+    database: std::sync::Arc<crate::database::Database>,
+    logger: std::sync::Arc<crate::logger::Logger>
+) -> PricingManager {
+    PricingManager::new(database, logger, default_config())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenInfo {
-    pub address: String,
-    pub name: String,
-    pub symbol: String,
-    pub decimals: u8,
-    pub total_supply: Option<u64>,
-    pub pools: Vec<PoolInfo>,
-    pub price: Option<TokenPrice>,
-    pub last_updated: u64, // Unix timestamp in seconds
+/// Utility function to validate token address format
+pub fn is_valid_token_address(address: &str) -> bool {
+    address.len() >= 32 && address.len() <= 44 && address.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PoolInfo {
-    pub address: String,
-    pub pool_type: PoolType,
-    pub reserve_0: u64,
-    pub reserve_1: u64,
-    pub token_0: String,
-    pub token_1: String,
-    pub liquidity_usd: f64,
-    pub volume_24h: f64,
-    pub fee_tier: Option<f64>,
-    pub last_updated: u64, // Unix timestamp
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum PoolType {
-    Raydium,
-    PumpFun,
-    Meteora,
-    Orca,
-    Serum,
-    Unknown(String),
-}
-
-pub struct PricingManager {
-    gecko_client: GeckoTerminalClient,
-    #[allow(dead_code)]
-    pool_decoder: PoolDecoderManager,
-    price_calculator: PriceCalculator,
-    cache: Arc<RwLock<PriceCache>>,
-    database: Arc<Database>,
-    logger: Arc<Logger>,
-    update_interval: Duration,
-    top_tokens_count: usize,
-    priority_tokens: Arc<RwLock<Vec<String>>>,
-    tiered_manager: Option<TieredPricingManager>,
-    dynamic_manager: Option<Arc<DynamicPricingManager>>,
-}
-
-impl PricingManager {
-    pub fn new(
-        database: Arc<Database>,
-        logger: Arc<Logger>,
-        update_interval_secs: u64,
-        top_tokens_count: usize
-    ) -> Self {
-        let client = Client::new();
-
-        Self {
-            gecko_client: GeckoTerminalClient::new(client.clone()),
-            pool_decoder: PoolDecoderManager::new(),
-            price_calculator: PriceCalculator::new(),
-            cache: Arc::new(RwLock::new(PriceCache::new())),
-            database,
-            logger,
-            update_interval: Duration::from_secs(update_interval_secs),
-            top_tokens_count,
-            priority_tokens: Arc::new(RwLock::new(Vec::new())),
-            tiered_manager: None,
-            dynamic_manager: None,
-        }
-    }
-
-    /// Create a new PricingManager with dynamic pricing enabled
-    pub fn with_dynamic_pricing(
-        database: Arc<Database>,
-        logger: Arc<Logger>,
-        update_interval_secs: u64,
-        top_tokens_count: usize,
-        dynamic_config: crate::config::DynamicPricingConfig
-    ) -> Self {
-        let client = Client::new();
-        let gecko_client = Arc::new(GeckoTerminalClient::new(client.clone()));
-
-        let dynamic_manager = if dynamic_config.enabled {
-            Some(
-                Arc::new(
-                    DynamicPricingManager::new(
-                        dynamic_config,
-                        gecko_client.clone(),
-                        database.clone(),
-                        logger.clone()
-                    )
-                )
-            )
-        } else {
-            None
-        };
-
-        Self {
-            gecko_client: (*gecko_client).clone(),
-            pool_decoder: PoolDecoderManager::new(),
-            price_calculator: PriceCalculator::new(),
-            cache: Arc::new(RwLock::new(PriceCache::new())),
-            database,
-            logger,
-            update_interval: Duration::from_secs(update_interval_secs),
-            top_tokens_count,
-            priority_tokens: Arc::new(RwLock::new(Vec::new())),
-            tiered_manager: None,
-            dynamic_manager,
-        }
-    }
-
-    pub async fn start(&self) {
-        Logger::pricing("Starting pricing manager...");
-
-        // Start dynamic pricing manager if enabled
-        if let Some(dynamic_manager) = &self.dynamic_manager {
-            if let Err(e) = dynamic_manager.start().await {
-                Logger::error(&format!("Failed to start dynamic pricing manager: {}", e));
-            } else {
-                Logger::pricing("Dynamic pricing manager started successfully");
-                return; // Use dynamic pricing instead of traditional pricing
-            }
-        }
-
-        // Fallback to traditional pricing if dynamic pricing is not available
-        let gecko_client = self.gecko_client.clone();
-        let cache = self.cache.clone();
-        let database = self.database.clone();
-        let logger = self.logger.clone();
-        let update_interval = self.update_interval;
-        let top_tokens_count = self.top_tokens_count;
-        let priority_tokens = self.priority_tokens.clone();
-
-        // Start background price update task
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(update_interval);
-
-            loop {
-                interval.tick().await;
-
-                if
-                    let Err(e) = Self::update_token_prices(
-                        &gecko_client,
-                        &cache,
-                        &database,
-                        &logger,
-                        top_tokens_count,
-                        &priority_tokens
-                    ).await
-                {
-                    Logger::error(&format!("FAILED to update prices: {}", e));
-                }
-            }
-        });
-    }
-
-    async fn update_token_prices(
-        gecko_client: &GeckoTerminalClient,
-        cache: &Arc<RwLock<PriceCache>>,
-        database: &Arc<Database>,
-        logger: &Arc<Logger>,
-        top_tokens_count: usize,
-        priority_tokens: &Arc<RwLock<Vec<String>>>
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get top tokens by liquidity from database
-        let top_tokens = database.get_top_tokens_by_liquidity(top_tokens_count).await?;
-
-        // Get priority tokens (positions, watch list, etc.)
-        let priority_list = priority_tokens.read().await.clone();
-
-        // Combine and deduplicate tokens
-        let mut tokens_to_update: Vec<String> = top_tokens;
-        tokens_to_update.extend(priority_list);
-        tokens_to_update.sort();
-        tokens_to_update.dedup();
-
-        if tokens_to_update.is_empty() {
-            return Ok(());
-        }
-
-        Logger::pricing(&format!("Updating {} token prices...", tokens_to_update.len()));
-
-        // Update tokens in batches of 30 (API limit)
-        const BATCH_SIZE: usize = 30;
-        for chunk in tokens_to_update.chunks(BATCH_SIZE) {
-            if
-                let Err(e) = Self::update_token_batch(
-                    gecko_client,
-                    cache,
-                    database,
-                    logger,
-                    chunk
-                ).await
-            {
-                Logger::error(&format!("FAILED to update batch: {}", e));
-            }
-
-            // Rate limiting - wait between batches
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-
-        Ok(())
-    }
-
-    async fn update_token_batch(
-        gecko_client: &GeckoTerminalClient,
-        cache: &Arc<RwLock<PriceCache>>,
-        database: &Arc<Database>,
-        _logger: &Arc<Logger>,
-        token_addresses: &[String]
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Fetch token info from GeckoTerminal API
-        let token_infos = gecko_client.get_multiple_tokens(token_addresses).await?;
-
-        for token_info in token_infos {
-            // Update cache
-            {
-                let mut cache_lock = cache.write().await;
-                cache_lock.update_token_info(token_info.clone()).await;
-            }
-
-            // Update database
-            database.update_token_info(&token_info).await?;
-
-            Logger::debug(
-                &format!(
-                    "🏷️  PRICING: Updated {} - ${:.6} | Liq: ${:.0}",
-                    token_info.symbol,
-                    token_info.price
-                        .as_ref()
-                        .map(|p| p.price_usd)
-                        .unwrap_or(0.0),
-                    token_info.pools
-                        .iter()
-                        .map(|p| p.liquidity_usd)
-                        .sum::<f64>()
-                )
-            );
-        }
-
-        Ok(())
-    }
-
-    pub async fn get_token_price(&self, token_address: &str) -> Option<TokenPrice> {
-        // Use tiered pricing if available
-        if let Some(ref tiered_manager) = self.tiered_manager {
-            if let Some(token_price) = tiered_manager.get_token_price(token_address).await {
-                return Some(token_price);
-            }
-        }
-
-        // Fallback to basic pricing
-        // Check cache first
-        {
-            let cache_lock = self.cache.read().await;
-            if let Some(mut price) = cache_lock.get_token_price(token_address).await {
-                price.is_cache = true;
-                return Some(price);
-            }
-        }
-
-        // If not in cache, try to fetch from API
-        match self.gecko_client.get_token_info(token_address).await {
-            Ok(token_info) => {
-                if let Some(price) = token_info.price.clone() {
-                    // Update cache
-                    {
-                        let mut cache_lock = self.cache.write().await;
-                        cache_lock.update_token_info(token_info).await;
-                    }
-
-                    let mut result = price;
-                    result.is_cache = false;
-                    Some(result)
-                } else {
-                    None
-                }
-            }
-            Err(e) => {
-                Logger::error(
-                    &format!("🏷️  PRICING: Failed to fetch price for {}: {}", token_address, e)
-                );
-                None
-            }
-        }
-    }
-
-    pub async fn calculate_real_price(&self, token_address: &str) -> Option<TokenPrice> {
-        // Get token info from cache or API
-        let token_info = {
-            let cache_lock = self.cache.read().await;
-            cache_lock.get_token_info(token_address).await
-        };
-
-        let token_info = match token_info {
-            Some(info) => info,
-            None => {
-                Logger::error(&format!("Token info not found in cache for {}", token_address));
-                return None;
-            }
-        };
-
-        // Check if price is already available
-        if let Some(price) = token_info.price {
-            return Some(price);
-        }
-
-        // If no price, try to calculate from pools
-        if !token_info.pools.is_empty() {
-            // Use the first available pool to calculate the price
-            let pool_info = &token_info.pools[0];
-
-            // Get reserves
-            let reserve_0 = pool_info.reserve_0 as f64;
-            let reserve_1 = pool_info.reserve_1 as f64;
-
-            // Calculate price based on pool type
-            let calculated_price = match pool_info.pool_type {
-                PoolType::Raydium | PoolType::Orca => {
-                    // For AMM pools, price is determined by the ratio of reserves
-                    reserve_1 / reserve_0
-                }
-                PoolType::Serum => {
-                    // For Serum, use calculated price from reserves
-                    // (oracle_price functionality would need to be added separately)
-                    reserve_1 / reserve_0
-                }
-                _ => {
-                    Logger::error(
-                        &format!(
-                            "Unsupported pool type for price calculation: {:?}",
-                            pool_info.pool_type
-                        )
-                    );
-                    return None;
-                }
-            };
-
-            // Create a new TokenPrice instance
-            let price = TokenPrice {
-                address: token_info.address.clone(),
-                price_usd: calculated_price,
-                price_sol: None,
-                market_cap: None,
-                volume_24h: 0.0,
-                liquidity_usd: 0.0,
-                timestamp: std::time::SystemTime
-                    ::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                source: PriceSource::PoolCalculation,
-                is_cache: false,
-            };
-
-            // Update the token info with the new price
-            let mut updated_info = token_info.clone();
-            updated_info.price = Some(price.clone());
-
-            // Update cache
-            {
-                let mut cache_lock = self.cache.write().await;
-                cache_lock.update_token_info(updated_info).await;
-            }
-
-            Some(price)
-        } else {
-            None
-        }
-    }
-
-    pub async fn get_cache_stats(&self) -> cache::CacheStats {
-        self.cache.read().await.get_cache_stats().await
-    }
-
-    pub async fn add_priority_token(&self, token_address: String) {
-        self.priority_tokens.write().await.push(token_address);
-        Logger::pricing("Added priority token for frequent updates");
-    }
-
-    pub async fn remove_priority_token(&self, token_address: &str) {
-        let mut priority_tokens = self.priority_tokens.write().await;
-        priority_tokens.retain(|addr| addr != token_address);
-    }
-
-    pub async fn get_token_info(&self, token_address: &str) -> Option<TokenInfo> {
-        // Check cache first
-        {
-            let cache_lock = self.cache.read().await;
-            if let Some(info) = cache_lock.get_token_info(token_address).await {
-                return Some(info);
-            }
-        }
-
-        // If not in cache, fetch from API
-        match self.gecko_client.get_token_info(token_address).await {
-            Ok(token_info) => {
-                // Update cache
-                {
-                    let mut cache_lock = self.cache.write().await;
-                    cache_lock.update_token_info(token_info.clone()).await;
-                }
-
-                Some(token_info)
-            }
-            Err(e) => {
-                Logger::error(
-                    &format!("🏷️  PRICING: Failed to fetch token info for {}: {}", token_address, e)
-                );
-                None
-            }
-        }
-    }
-
-    pub async fn get_portfolio_value(&self, positions: &[(String, f64)]) -> f64 {
-        let mut total_value = 0.0;
-
-        for (token_address, amount) in positions {
-            if let Some(price) = self.calculate_real_price(token_address).await {
-                total_value += amount * price.price_usd;
-            }
-        }
-
-        total_value
-    }
-
-    /// Initialize and start the tiered pricing system
-    pub async fn enable_tiered_pricing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let tiered_manager = TieredPricingManager::new(Arc::clone(&self.database));
-
-        // Start the background update tasks
-        tiered_manager.start_tiered_updates().await;
-
-        self.tiered_manager = Some(tiered_manager);
-        Logger::pricing("✅ Tiered pricing system enabled");
-
-        Ok(())
-    }
-
-    /// Add a token to dynamic pricing tracking
-    pub async fn add_token_to_dynamic_pricing(
-        &self,
-        token_address: String,
-        initial_liquidity: f64
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(dynamic_manager) = &self.dynamic_manager {
-            dynamic_manager.add_token(token_address, initial_liquidity).await?;
-        }
-        Ok(())
-    }
-
-    /// Remove a token from dynamic pricing tracking
-    pub async fn remove_token_from_dynamic_pricing(
-        &self,
-        token_address: &str
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(dynamic_manager) = &self.dynamic_manager {
-            dynamic_manager.remove_token(token_address).await?;
-        }
-        Ok(())
-    }
-
-    /// Get dynamic pricing statistics
-    pub async fn get_dynamic_pricing_stats(
-        &self
-    ) -> Option<crate::market_data::dynamic_pricing::DynamicPricingStats> {
-        if let Some(dynamic_manager) = &self.dynamic_manager {
-            Some(dynamic_manager.get_stats().await)
-        } else {
-            None
-        }
-    }
-
-    /// Check if dynamic pricing is enabled
-    pub fn is_dynamic_pricing_enabled(&self) -> bool {
-        self.dynamic_manager.is_some()
+/// Utility function to format price for display
+pub fn format_price(price: f64) -> String {
+    if price >= 1000.0 {
+        format!("${:.2}", price)
+    } else if price >= 1.0 {
+        format!("${:.4}", price)
+    } else if price >= 0.01 {
+        format!("${:.6}", price)
+    } else {
+        format!("${:.8}", price)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum PricingTier {
-    Critical, // Open positions - 5 seconds
-    High, // High volume tokens - 30 seconds
-    Medium, // Medium volume tokens - 1-2 minutes
-    Low, // Low volume - 3+ minutes
-}
-
-#[derive(Debug, Clone)]
-pub struct TokenPriority {
-    pub address: String,
-    pub tier: PricingTier,
-    pub volume_24h: f64,
-    pub last_updated: u64,
-    pub is_open_position: bool,
-    pub update_interval: Duration,
-}
-
-pub struct TieredPricingManager {
-    gecko_client: GeckoTerminalClient,
-    pool_decoder: PoolDecoderManager,
-    price_calculator: PriceCalculator,
-    cache: Arc<RwLock<PriceCache>>,
-    database: Arc<Database>,
-
-    // Tiered update system
-    critical_tokens: Arc<RwLock<Vec<TokenPriority>>>, // Open positions
-    high_priority_tokens: Arc<RwLock<Vec<TokenPriority>>>, // Top volume
-    medium_priority_tokens: Arc<RwLock<Vec<TokenPriority>>>, // Medium volume
-    low_priority_tokens: Arc<RwLock<Vec<TokenPriority>>>, // Low volume
-
-    // Update intervals
-    critical_interval: Duration, // 5 seconds
-    high_interval: Duration, // 30 seconds
-    medium_interval: Duration, // 90 seconds
-    low_interval: Duration, // 180 seconds
-
-    // Rate limiting
-    max_requests_per_minute: u32,
-    current_requests: Arc<RwLock<u32>>,
-    last_reset: Arc<RwLock<u64>>,
-}
-
-impl TieredPricingManager {
-    pub fn new(database: Arc<Database>) -> Self {
-        let client = Client::new();
-
-        Self {
-            gecko_client: GeckoTerminalClient::new(client.clone()),
-            pool_decoder: PoolDecoderManager::new(),
-            price_calculator: PriceCalculator::new(),
-            cache: Arc::new(RwLock::new(PriceCache::new())),
-            database: Arc::clone(&database),
-
-            critical_tokens: Arc::new(RwLock::new(Vec::new())),
-            high_priority_tokens: Arc::new(RwLock::new(Vec::new())),
-            medium_priority_tokens: Arc::new(RwLock::new(Vec::new())),
-            low_priority_tokens: Arc::new(RwLock::new(Vec::new())),
-
-            critical_interval: Duration::from_secs(5),
-            high_interval: Duration::from_secs(30),
-            medium_interval: Duration::from_secs(90),
-            low_interval: Duration::from_secs(180),
-
-            max_requests_per_minute: 200, // Safe rate limit
-            current_requests: Arc::new(RwLock::new(0)),
-            last_reset: Arc::new(
-                RwLock::new(
-                    std::time::SystemTime
-                        ::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                )
-            ),
-        }
-    }
-
-    /// Add or update open position tokens (highest priority)
-    pub async fn set_open_positions(&self, token_addresses: Vec<String>) {
-        Logger::pricing(
-            &format!("🎯 POSITIONS: Received {} open position tokens", token_addresses.len())
-        );
-
-        let mut critical = self.critical_tokens.write().await;
-        critical.clear();
-
-        for (i, address) in token_addresses.iter().enumerate() {
-            Logger::pricing(
-                &format!("🎯 POSITIONS: Adding critical token {}: {}...", i + 1, &address[..8])
-            );
-            critical.push(TokenPriority {
-                address: address.clone(),
-                tier: PricingTier::Critical,
-                volume_24h: 0.0, // Will be updated when price is fetched
-                last_updated: 0,
-                is_open_position: true,
-                update_interval: self.critical_interval,
-            });
-        }
-
-        Logger::pricing(
-            &format!(
-                "🎯 POSITIONS: Set {} critical tokens for real-time pricing (5-second updates)",
-                critical.len()
-            )
-        );
-    }
-
-    /// Categorize tokens by volume and assign pricing tiers
-    pub async fn categorize_tokens_by_volume(&self, all_tokens: Vec<String>) {
-        let mut tokens_with_volume = Vec::new();
-
-        // Get volume data for all tokens
-        for token in all_tokens.clone() {
-            if let Some(cached_price) = self.get_cached_price(&token).await {
-                tokens_with_volume.push((token, cached_price.volume_24h));
-            } else {
-                // For new tokens, start with low priority
-                tokens_with_volume.push((token, 0.0));
-            }
-        }
-
-        // Sort by volume descending
-        tokens_with_volume.sort_by(|a, b|
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        );
-
-        let total_tokens = tokens_with_volume.len();
-        let high_threshold = total_tokens / 20; // Top 5% - high priority
-        let medium_threshold = total_tokens / 5; // Top 20% - medium priority
-
-        let mut high_priority = self.high_priority_tokens.write().await;
-        let mut medium_priority = self.medium_priority_tokens.write().await;
-        let mut low_priority = self.low_priority_tokens.write().await;
-
-        high_priority.clear();
-        medium_priority.clear();
-        low_priority.clear();
-
-        for (i, (address, volume)) in tokens_with_volume.into_iter().enumerate() {
-            // Skip if it's already a critical token (open position)
-            let critical = self.critical_tokens.read().await;
-            if critical.iter().any(|t| t.address == address) {
-                continue;
-            }
-            drop(critical);
-
-            let (tier, interval, priority_list) = if i < high_threshold {
-                (PricingTier::High, self.high_interval, &mut *high_priority)
-            } else if i < medium_threshold {
-                (PricingTier::Medium, self.medium_interval, &mut *medium_priority)
-            } else {
-                (PricingTier::Low, self.low_interval, &mut *low_priority)
-            };
-
-            priority_list.push(TokenPriority {
-                address,
-                tier,
-                volume_24h: volume,
-                last_updated: 0,
-                is_open_position: false,
-                update_interval: interval,
-            });
-        }
-
-        Logger::pricing(
-            &format!(
-                "📊 Categorized tokens: {} high, {} medium, {} low priority",
-                high_priority.len(),
-                medium_priority.len(),
-                low_priority.len()
-            )
-        );
-    }
-
-    /// Start the tiered pricing update system
-    pub async fn start_tiered_updates(&self) {
-        let critical_tokens = Arc::clone(&self.critical_tokens);
-        let high_tokens = Arc::clone(&self.high_priority_tokens);
-        let medium_tokens = Arc::clone(&self.medium_priority_tokens);
-        let low_tokens = Arc::clone(&self.low_priority_tokens);
-
-        let gecko_client = self.gecko_client.clone();
-        let cache = Arc::clone(&self.cache);
-        let database = Arc::clone(&self.database);
-        let current_requests = Arc::clone(&self.current_requests);
-        let last_reset = Arc::clone(&self.last_reset);
-        let max_requests = self.max_requests_per_minute;
-
-        // Critical tokens updater (5 seconds)
-        let critical_task = {
-            let tokens = Arc::clone(&critical_tokens);
-            let client = gecko_client.clone();
-            let cache = Arc::clone(&cache);
-            let db = Arc::clone(&database);
-            let requests = Arc::clone(&current_requests);
-            let reset = Arc::clone(&last_reset);
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(5));
-                loop {
-                    interval.tick().await;
-                    Self::update_token_tier(
-                        &tokens,
-                        &client,
-                        &cache,
-                        &db,
-                        &requests,
-                        &reset,
-                        max_requests,
-                        "CRITICAL"
-                    ).await;
-                }
-            })
-        };
-
-        // High priority tokens updater (30 seconds)
-        let high_task = {
-            let tokens = Arc::clone(&high_tokens);
-            let client = gecko_client.clone();
-            let cache = Arc::clone(&cache);
-            let db = Arc::clone(&database);
-            let requests = Arc::clone(&current_requests);
-            let reset = Arc::clone(&last_reset);
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(30));
-                loop {
-                    interval.tick().await;
-                    Self::update_token_tier(
-                        &tokens,
-                        &client,
-                        &cache,
-                        &db,
-                        &requests,
-                        &reset,
-                        max_requests,
-                        "HIGH"
-                    ).await;
-                }
-            })
-        };
-
-        // Medium priority tokens updater (90 seconds)
-        let medium_task = {
-            let tokens = Arc::clone(&medium_tokens);
-            let client = gecko_client.clone();
-            let cache = Arc::clone(&cache);
-            let db = Arc::clone(&database);
-            let requests = Arc::clone(&current_requests);
-            let reset = Arc::clone(&last_reset);
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(90));
-                loop {
-                    interval.tick().await;
-                    Self::update_token_tier(
-                        &tokens,
-                        &client,
-                        &cache,
-                        &db,
-                        &requests,
-                        &reset,
-                        max_requests,
-                        "MEDIUM"
-                    ).await;
-                }
-            })
-        };
-
-        // Low priority tokens updater (180 seconds)
-        let low_task = {
-            let tokens = Arc::clone(&low_tokens);
-            let client = gecko_client.clone();
-            let cache = Arc::clone(&cache);
-            let db = Arc::clone(&database);
-            let requests = Arc::clone(&current_requests);
-            let reset = Arc::clone(&last_reset);
-
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(180));
-                loop {
-                    interval.tick().await;
-                    Self::update_token_tier(
-                        &tokens,
-                        &client,
-                        &cache,
-                        &db,
-                        &requests,
-                        &reset,
-                        max_requests,
-                        "LOW"
-                    ).await;
-                }
-            })
-        };
-
-        Logger::pricing("🚀 Started tiered pricing update system");
-
-        // All tasks are now running in the background
-        // Don't wait for them since they run indefinitely
-    }
-
-    /// Update a specific tier of tokens with rate limiting
-    async fn update_token_tier(
-        tokens: &Arc<RwLock<Vec<TokenPriority>>>,
-        gecko_client: &GeckoTerminalClient,
-        cache: &Arc<RwLock<PriceCache>>,
-        database: &Arc<Database>,
-        current_requests: &Arc<RwLock<u32>>,
-        last_reset: &Arc<RwLock<u64>>,
-        max_requests: u32,
-        tier_name: &str
-    ) {
-        let mut tokens_lock = tokens.write().await;
-        if tokens_lock.is_empty() {
-            Logger::pricing(&format!("⚪ {} tier: No tokens to update", tier_name));
-            return;
-        }
-
-        Logger::pricing(
-            &format!("🔄 {} tier: Starting update for {} tokens", tier_name, tokens_lock.len())
-        );
-
-        // Rate limiting check
-        let now = std::time::SystemTime
-            ::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        {
-            let mut reset_time = last_reset.write().await;
-            if now - *reset_time >= 60 {
-                // Reset counter every minute
-                *reset_time = now;
-                *current_requests.write().await = 0;
-            }
-        }
-
-        let current_count = *current_requests.read().await;
-        if current_count >= max_requests {
-            Logger::pricing(
-                &format!(
-                    "⚠️ {} tier: Rate limit reached ({}/{}), skipping update",
-                    tier_name,
-                    current_count,
-                    max_requests
-                )
-            );
-            return;
-        }
-
-        Logger::pricing(
-            &format!("📊 {} tier: Rate limit OK ({}/{})", tier_name, current_count, max_requests)
-        );
-
-        // Determine how many tokens to update based on tier and remaining quota
-        let remaining_quota = max_requests - current_count;
-        let batch_size = match tier_name {
-            "CRITICAL" => std::cmp::min(tokens_lock.len(), remaining_quota as usize),
-            "HIGH" =>
-                std::cmp::min(10, std::cmp::min(tokens_lock.len(), (remaining_quota as usize) / 4)),
-            "MEDIUM" =>
-                std::cmp::min(5, std::cmp::min(tokens_lock.len(), (remaining_quota as usize) / 8)),
-            "LOW" =>
-                std::cmp::min(3, std::cmp::min(tokens_lock.len(), (remaining_quota as usize) / 16)),
-            _ => 1,
-        };
-
-        if batch_size == 0 {
-            Logger::pricing(
-                &format!("⚠️ {} tier: No tokens to update after rate limiting", tier_name)
-            );
-            return;
-        }
-
-        Logger::pricing(
-            &format!("🎯 {} tier: Selected {} tokens for update", tier_name, batch_size)
-        );
-
-        // Sort by last_updated to prioritize stale prices
-        tokens_lock.sort_by_key(|t| t.last_updated);
-
-        let tokens_to_update: Vec<String> = tokens_lock
-            .iter()
-            .take(batch_size)
-            .map(|t| t.address.clone())
-            .collect();
-
-        drop(tokens_lock);
-
-        Logger::pricing(&format!("🔄 {} tier: Updating {} tokens", tier_name, batch_size));
-
-        // Update prices for selected tokens
-        let mut updated_count = 0;
-        let mut failed_count = 0;
-
-        for token_address in tokens_to_update {
-            Logger::pricing(
-                &format!("🌐 {} tier: Fetching price for {}...", tier_name, &token_address[..8])
-            );
-
-            if let Ok(token_info) = gecko_client.get_token_info(&token_address).await {
-                if let Some(price_info) = token_info.price {
-                    Logger::pricing(
-                        &format!(
-                            "💰 {} tier: Got price for {}: ${:.6} | {:.9} SOL",
-                            tier_name,
-                            &token_address[..8],
-                            price_info.price_usd,
-                            price_info.price_sol.unwrap_or(0.0)
-                        )
-                    );
-
-                    // Check for significant price changes (>5%)
-                    let mut show_big_change = false;
-                    {
-                        let cache_lock = cache.read().await;
-                        if let Some(old_price) = cache_lock.get_token_price(&token_address).await {
-                            let price_change =
-                                ((price_info.price_usd - old_price.price_usd) /
-                                    old_price.price_usd) *
-                                100.0;
-                            if price_change.abs() > 5.0 {
-                                show_big_change = true;
-                                Logger::pricing(
-                                    &format!(
-                                        "🚨 BIG PRICE CHANGE: {} | {:.2}% | ${:.6} -> ${:.6}",
-                                        &token_address[..8],
-                                        price_change,
-                                        old_price.price_usd,
-                                        price_info.price_usd
-                                    )
-                                );
-                            }
-                        }
-                    }
-
-                    // Update cache
-                    {
-                        let mut cache_lock = cache.write().await;
-                        cache_lock.update_token_price(price_info.clone()).await;
-                    }
-
-                    // Update database
-                    // Note: Database doesn't have a cache_token_price method, skipping DB cache
-
-                    // Update last_updated time for this token
-                    let mut tokens_lock = tokens.write().await;
-                    if
-                        let Some(token) = tokens_lock
-                            .iter_mut()
-                            .find(|t| t.address == token_address)
-                    {
-                        token.last_updated = now;
-                        token.volume_24h = price_info.volume_24h;
-                        Logger::pricing(
-                            &format!(
-                                "✅ {} tier: Updated {} volume: ${:.0}",
-                                tier_name,
-                                &token_address[..8],
-                                price_info.volume_24h
-                            )
-                        );
-                    }
-
-                    updated_count += 1;
-                } else {
-                    Logger::pricing(
-                        &format!("⚠️ {} tier: No price data for {}", tier_name, &token_address[..8])
-                    );
-                    failed_count += 1;
-                }
-            } else {
-                Logger::pricing(
-                    &format!(
-                        "❌ {} tier: Failed to fetch data for {}",
-                        tier_name,
-                        &token_address[..8]
-                    )
-                );
-                failed_count += 1;
-            }
-
-            // Increment request counter
-            *current_requests.write().await += 1;
-
-            // Small delay to avoid overwhelming the API
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-
-        Logger::pricing(
-            &format!(
-                "✅ {} tier: Update complete - {} updated, {} failed",
-                tier_name,
-                updated_count,
-                failed_count
-            )
-        );
-    }
-
-    /// Get current price with tier-aware caching
-    pub async fn get_token_price(&self, token_address: &str) -> Option<TokenPrice> {
-        // Check cache first
-        if let Some(cached_price) = self.get_cached_price(token_address).await {
-            // Determine if cache is still valid based on token tier
-            let cache_age =
-                std::time::SystemTime
-                    ::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() - cached_price.timestamp;
-
-            let tier = self.get_token_tier(token_address).await;
-            let max_age = match tier {
-                PricingTier::Critical => 10, // 10 seconds max age for critical
-                PricingTier::High => 60, // 1 minute for high priority
-                PricingTier::Medium => 180, // 3 minutes for medium
-                PricingTier::Low => 300, // 5 minutes for low
-            };
-
-            if cache_age <= max_age {
-                return Some(cached_price);
-            }
-        }
-
-        // If not in cache or stale, try to fetch fresh data
-        // But only if we're not rate limited
-        let current_count = *self.current_requests.read().await;
-        if current_count < self.max_requests_per_minute {
-            if let Ok(token_info) = self.gecko_client.get_token_info(token_address).await {
-                if let Some(fresh_price) = token_info.price {
-                    // Update cache
-                    {
-                        let mut cache_lock = self.cache.write().await;
-                        cache_lock.update_token_price(fresh_price.clone()).await;
-                    }
-
-                    *self.current_requests.write().await += 1;
-                    return Some(fresh_price);
-                }
-            }
-        }
-
-        // Fall back to stale cache if available
-        self.get_cached_price(token_address).await
-    }
-
-    async fn get_cached_price(&self, token_address: &str) -> Option<TokenPrice> {
-        let cache_lock = self.cache.read().await;
-        cache_lock.get_token_price(token_address).await
-    }
-
-    async fn get_token_tier(&self, token_address: &str) -> PricingTier {
-        // Check critical tokens first
-        let critical = self.critical_tokens.read().await;
-        if critical.iter().any(|t| t.address == token_address) {
-            return PricingTier::Critical;
-        }
-        drop(critical);
-
-        // Check high priority
-        let high = self.high_priority_tokens.read().await;
-        if high.iter().any(|t| t.address == token_address) {
-            return PricingTier::High;
-        }
-        drop(high);
-
-        // Check medium priority
-        let medium = self.medium_priority_tokens.read().await;
-        if medium.iter().any(|t| t.address == token_address) {
-            return PricingTier::Medium;
-        }
-
-        // Default to low priority
-        PricingTier::Low
-    }
-
-    /// Get pricing statistics
-    pub async fn get_pricing_stats(&self) -> PricingStats {
-        let critical_count = self.critical_tokens.read().await.len();
-        let high_count = self.high_priority_tokens.read().await.len();
-        let medium_count = self.medium_priority_tokens.read().await.len();
-        let low_count = self.low_priority_tokens.read().await.len();
-        let current_requests = *self.current_requests.read().await;
-
-        PricingStats {
-            critical_tokens: critical_count,
-            high_priority_tokens: high_count,
-            medium_priority_tokens: medium_count,
-            low_priority_tokens: low_count,
-            total_tokens: critical_count + high_count + medium_count + low_count,
-            requests_per_minute: current_requests,
-            max_requests_per_minute: self.max_requests_per_minute,
-        }
+/// Utility function to format volume for display
+pub fn format_volume(volume: f64) -> String {
+    if volume >= 1_000_000.0 {
+        format!("${:.1}M", volume / 1_000_000.0)
+    } else if volume >= 1_000.0 {
+        format!("${:.1}K", volume / 1_000.0)
+    } else {
+        format!("${:.0}", volume)
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PricingStats {
-    pub critical_tokens: usize,
-    pub high_priority_tokens: usize,
-    pub medium_priority_tokens: usize,
-    pub low_priority_tokens: usize,
-    pub total_tokens: usize,
-    pub requests_per_minute: u32,
-    pub max_requests_per_minute: u32,
+/// Utility function to format liquidity for display
+pub fn format_liquidity(liquidity: f64) -> String {
+    if liquidity >= 1_000_000.0 {
+        format!("${:.1}M", liquidity / 1_000_000.0)
+    } else if liquidity >= 1_000.0 {
+        format!("${:.1}K", liquidity / 1_000.0)
+    } else {
+        format!("${:.0}", liquidity)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_token_address() {
+        assert!(is_valid_token_address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"));
+        assert!(is_valid_token_address("So11111111111111111111111111111111111111112"));
+        assert!(!is_valid_token_address("invalid"));
+        assert!(!is_valid_token_address(""));
+    }
+
+    #[test]
+    fn test_format_price() {
+        assert_eq!(format_price(1234.56), "$1234.56");
+        assert_eq!(format_price(12.3456), "$12.3456");
+        assert_eq!(format_price(0.123456), "$0.123456");
+        assert_eq!(format_price(0.00123456), "$0.00123456");
+    }
+
+    #[test]
+    fn test_format_volume() {
+        assert_eq!(format_volume(1_234_567.0), "$1.2M");
+        assert_eq!(format_volume(12_345.0), "$12.3K");
+        assert_eq!(format_volume(123.0), "$123");
+    }
+
+    #[test]
+    fn test_format_liquidity() {
+        assert_eq!(format_liquidity(1_234_567.0), "$1.2M");
+        assert_eq!(format_liquidity(12_345.0), "$12.3K");
+        assert_eq!(format_liquidity(123.0), "$123");
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = default_config();
+        assert_eq!(config.update_interval_secs, 60);
+        assert_eq!(config.top_tokens_count, 1000);
+        assert_eq!(config.cache_ttl_secs, 300);
+        assert_eq!(config.max_cache_size, 10000);
+        assert!(!config.enable_dynamic_pricing);
+    }
 }

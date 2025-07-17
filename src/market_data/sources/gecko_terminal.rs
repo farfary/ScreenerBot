@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::{ SystemTime, UNIX_EPOCH };
 use reqwest::Client;
 use serde::Deserialize;
-use crate::market_data::{ TokenInfo, TokenPrice, PoolInfo, PoolType, PriceSource };
+use crate::market_data::models::{ TokenInfo, TokenPrice, PoolInfo, PoolType, PriceSource };
 
 const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 const SOLANA_NETWORK: &str = "solana";
@@ -183,7 +183,7 @@ impl GeckoTerminalClient {
                     .unwrap_or(0.0),
                 timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 source: PriceSource::GeckoTerminal,
-                is_cache: false,
+                is_cached: false,
             })
         } else {
             None

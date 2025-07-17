@@ -4,7 +4,7 @@
 //! DEX protocols on Solana, including auto-detection capabilities.
 
 use std::collections::HashMap;
-use crate::market_data::{ PoolInfo, PoolType };
+use crate::market_data::models::{ PoolInfo, PoolType };
 
 // Import decoder modules
 use super::decoders::{

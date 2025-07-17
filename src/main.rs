@@ -1,8 +1,9 @@
 use anyhow::Result;
-use screenerbot::{ Config, Database, Discovery, Logger, PricingManager };
+use screenerbot::{ Config, Database, Discovery, Logger };
+use screenerbot::market_data::PricingManager;
 use std::sync::Arc;
 use tokio::signal;
-use tokio::time::Duration;
+use screenerbot::market_data;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -44,17 +45,27 @@ async fn main() -> Result<()> {
     Logger::info("Initializing modules...");
 
     // Pricing manager
+    let pricing_config = market_data::PricingConfig {
+        update_interval_secs: config.pricing
+            .as_ref()
+            .map(|p| p.update_interval_secs)
+            .unwrap_or(60),
+        top_tokens_count: config.pricing
+            .as_ref()
+            .map(|p| p.top_tokens_count)
+            .unwrap_or(1000),
+        cache_ttl_secs: 300,
+        max_cache_size: 10000,
+        enable_dynamic_pricing: config.pricing
+            .as_ref()
+            .map(|p| p.enable_dynamic_pricing)
+            .unwrap_or(false),
+    };
+
     let mut pricing_manager = PricingManager::new(
         Arc::clone(&database),
         Arc::new(Logger::new()),
-        config.pricing
-            .as_ref()
-            .map(|p| p.update_interval_secs)
-            .unwrap_or(300), // 5 minutes default
-        config.pricing
-            .as_ref()
-            .map(|p| p.top_tokens_count)
-            .unwrap_or(100) // Top 100 tokens default
+        pricing_config
     );
 
     // Enable the sophisticated tiered pricing system
@@ -106,4 +117,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

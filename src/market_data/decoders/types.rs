@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use serde::{ Deserialize, Serialize };
-use crate::market_data::PoolType;
+use crate::market_data::models::PoolType;
 
 /// Common interface for all pool decoders
 #[async_trait::async_trait]

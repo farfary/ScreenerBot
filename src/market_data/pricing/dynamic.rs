@@ -6,8 +6,8 @@ use serde::{ Deserialize, Serialize };
 use crate::config::DynamicPricingConfig;
 use crate::database::Database;
 use crate::logger::Logger;
-use crate::market_data::gecko_terminal::GeckoTerminalClient;
-use crate::market_data::TokenPrice;
+use crate::market_data::sources::GeckoTerminalClient;
+use crate::market_data::models::TokenPrice;
 
 /// Dynamic pricing manager that continuously updates token prices based on liquidity
 pub struct DynamicPricingManager {
