@@ -356,6 +356,8 @@ impl TraderDatabase {
 
     pub fn get_trader_stats(&self) -> Result<TraderStats> {
         let conn = self.conn.lock().unwrap();
+
+        // Get trade execution stats (successful/failed executions)
         let mut stmt = conn.prepare(
             "SELECT 
                 COUNT(*) as total_trades,
@@ -374,25 +376,33 @@ impl TraderDatabase {
             ))
         })?;
 
+        // Get position stats including actual win/loss calculation
         let mut position_stmt = conn.prepare(
             "SELECT 
                 COALESCE(SUM(total_invested_sol), 0.0) as total_invested,
                 COALESCE(SUM(realized_pnl_sol), 0.0) as total_realized_pnl,
                 COALESCE(SUM(unrealized_pnl_sol), 0.0) as total_unrealized_pnl,
                 COUNT(CASE WHEN status = 'Active' THEN 1 END) as active_positions,
-                COUNT(CASE WHEN status != 'Active' THEN 1 END) as closed_positions
+                COUNT(CASE WHEN status != 'Active' THEN 1 END) as closed_positions,
+                COUNT(CASE WHEN status != 'Active' AND realized_pnl_sol > 0 THEN 1 END) as winning_positions,
+                COUNT(CASE WHEN status != 'Active' AND realized_pnl_sol <= 0 THEN 1 END) as losing_positions
              FROM positions"
         )?;
 
-        let position_stats: (f64, f64, f64, u32, u32) = position_stmt.query_row([], |row| {
-            Ok((
-                row.get::<_, f64>(0)?,
-                row.get::<_, f64>(1)?,
-                row.get::<_, f64>(2)?,
-                row.get::<_, u32>(3)?,
-                row.get::<_, u32>(4)?,
-            ))
-        })?;
+        let position_stats: (f64, f64, f64, u32, u32, u32, u32) = position_stmt.query_row(
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, f64>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, u32>(3)?,
+                    row.get::<_, u32>(4)?,
+                    row.get::<_, u32>(5)?,
+                    row.get::<_, u32>(6)?,
+                ))
+            }
+        )?;
 
         // Get largest win/loss
         let mut pnl_stmt = conn.prepare(
@@ -405,6 +415,15 @@ impl TraderDatabase {
             Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?))
         })?;
 
+        // Calculate actual win rate based on profitable vs losing positions
+        let total_closed_positions = position_stats.4;
+        let winning_positions = position_stats.5;
+        let actual_win_rate = if total_closed_positions > 0 {
+            ((winning_positions as f64) / (total_closed_positions as f64)) * 100.0
+        } else {
+            0.0
+        };
+
         Ok(TraderStats {
             total_trades: trade_stats.0,
             successful_trades: trade_stats.1,
@@ -412,11 +431,7 @@ impl TraderDatabase {
             total_invested_sol: position_stats.0,
             total_realized_pnl_sol: position_stats.1,
             total_unrealized_pnl_sol: position_stats.2,
-            win_rate: if trade_stats.0 > 0 {
-                ((trade_stats.1 as f64) / (trade_stats.0 as f64)) * 100.0
-            } else {
-                0.0
-            },
+            win_rate: actual_win_rate, // Fixed: now based on profitable positions, not trade execution success
             average_trade_size_sol: trade_stats.3,
             largest_win_sol: largest_win,
             largest_loss_sol: largest_loss,

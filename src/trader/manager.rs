@@ -372,44 +372,136 @@ impl TraderManager {
                     let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
                     println!(
                         "🎯 {} {}",
-                        "ScreenerBot Position Status".bold().bright_cyan(),
+                        "ScreenerBot Trading Dashboard".bold().bright_cyan(),
                         format!("({})", timestamp).dimmed()
                     );
                     println!();
 
-                    // Create stats table
+                    // Calculate additional metrics
+                    let total_pnl =
+                        stats_read.total_realized_pnl_sol + stats_read.total_unrealized_pnl_sol;
+                    let roi_percentage = if stats_read.total_invested_sol > 0.0 {
+                        (total_pnl / stats_read.total_invested_sol) * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    let avg_win = if stats_read.largest_win_sol > 0.0 {
+                        stats_read.largest_win_sol
+                    } else {
+                        0.0
+                    };
+                    let avg_loss = if stats_read.largest_loss_sol < 0.0 {
+                        stats_read.largest_loss_sol.abs()
+                    } else {
+                        0.0
+                    };
+                    let profit_factor = if avg_loss > 0.0 { avg_win / avg_loss } else { 0.0 };
+
+                    let execution_success_rate = if stats_read.total_trades > 0 {
+                        ((stats_read.successful_trades as f64) / (stats_read.total_trades as f64)) *
+                            100.0
+                    } else {
+                        0.0
+                    };
+
+                    // Create comprehensive stats table
                     let stats_data = vec![
                         StatsRow {
                             metric: "Total Trades".to_string(),
                             value: format!("{}", stats_read.total_trades),
                         },
                         StatsRow {
-                            metric: "Win Rate".to_string(),
-                            value: format!("{:.1}%", stats_read.win_rate),
+                            metric: "Win Rate (P&L)".to_string(),
+                            value: if stats_read.win_rate >= 50.0 {
+                                format!("{:.1}%", stats_read.win_rate)
+                            } else if stats_read.win_rate >= 30.0 {
+                                format!("{:.1}%", stats_read.win_rate)
+                            } else {
+                                format!("{:.1}%", stats_read.win_rate)
+                            },
+                        },
+                        StatsRow {
+                            metric: "Execution Rate".to_string(),
+                            value: format!("{:.1}%", execution_success_rate),
                         },
                         StatsRow {
                             metric: "Total Invested".to_string(),
-                            value: format!("{:.10} SOL", stats_read.total_invested_sol),
+                            value: format!("{:.4} SOL", stats_read.total_invested_sol),
                         },
                         StatsRow {
                             metric: "Realized P&L".to_string(),
-                            value: format!("{:.10} SOL", stats_read.total_realized_pnl_sol),
+                            value: format!("{:.4} SOL", stats_read.total_realized_pnl_sol),
                         },
                         StatsRow {
                             metric: "Unrealized P&L".to_string(),
-                            value: format!("{:.10} SOL", stats_read.total_unrealized_pnl_sol),
+                            value: format!("{:.4} SOL", stats_read.total_unrealized_pnl_sol),
+                        },
+                        StatsRow {
+                            metric: "Total P&L".to_string(),
+                            value: format!("{:.4} SOL", total_pnl),
+                        },
+                        StatsRow {
+                            metric: "ROI".to_string(),
+                            value: format!("{:.1}%", roi_percentage),
+                        },
+                        StatsRow {
+                            metric: "Largest Win".to_string(),
+                            value: format!("{:.4} SOL", stats_read.largest_win_sol),
+                        },
+                        StatsRow {
+                            metric: "Largest Loss".to_string(),
+                            value: format!("{:.4} SOL", stats_read.largest_loss_sol),
+                        },
+                        StatsRow {
+                            metric: "Profit Factor".to_string(),
+                            value: format!("{:.2}x", profit_factor),
                         },
                         StatsRow {
                             metric: "Active Positions".to_string(),
                             value: format!("{}", positions_read.len()),
+                        },
+                        StatsRow {
+                            metric: "Closed Positions".to_string(),
+                            value: format!("{}", stats_read.closed_positions),
+                        },
+                        StatsRow {
+                            metric: "Avg Trade Size".to_string(),
+                            value: format!("{:.4} SOL", stats_read.average_trade_size_sol),
                         }
                     ];
 
                     let mut stats_table = Table::new(stats_data);
                     let styled_stats_table = stats_table.with(Style::modern());
-                    println!("📊 {}", "Overall Statistics".bold().bright_yellow());
+                    println!("📊 {}", "Trading Performance Analytics".bold().bright_yellow());
                     println!("{}", styled_stats_table);
                     println!();
+
+                    // Add performance summary
+                    if stats_read.closed_positions > 0 {
+                        let winning_positions = ((stats_read.win_rate / 100.0) *
+                            (stats_read.closed_positions as f64)) as u32;
+                        let losing_positions = stats_read.closed_positions - winning_positions;
+
+                        println!("🏆 {}", "Performance Summary".bold().bright_green());
+                        println!(
+                            "   └─ {} winning trades • {} losing trades • {} active",
+                            winning_positions,
+                            losing_positions,
+                            positions_read.len()
+                        );
+                        if roi_percentage >= 10.0 {
+                            println!("   └─ 🚀 Strong performance with {:.1}% ROI", roi_percentage);
+                        } else if roi_percentage >= 0.0 {
+                            println!(
+                                "   └─ 📈 Positive performance with {:.1}% ROI",
+                                roi_percentage
+                            );
+                        } else {
+                            println!("   └─ 📉 Needs improvement: {:.1}% ROI", roi_percentage);
+                        }
+                        println!();
+                    }
 
                     if positions_read.is_empty() {
                         println!("📝 {}", "No active positions".italic().dimmed());
