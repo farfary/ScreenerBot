@@ -49,6 +49,10 @@ pub struct PositionSummary {
     pub status: PositionStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub peak_price: f64,
+    pub lowest_price: f64,
+    pub total_opens: u32,
+    pub total_closes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

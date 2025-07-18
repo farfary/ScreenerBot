@@ -326,6 +326,7 @@ impl TraderManager {
             let stats = Arc::clone(&self.stats);
             let running = Arc::clone(&self.running);
             let market_data = Arc::clone(&self.market_data);
+            let database = Arc::clone(&self.database);
 
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(15));
@@ -427,19 +428,19 @@ impl TraderManager {
                         },
                         StatsRow {
                             metric: "Total Invested".to_string(),
-                            value: format!("{:.4} SOL", stats_read.total_invested_sol),
+                            value: format!("{:.5}", stats_read.total_invested_sol),
                         },
                         StatsRow {
                             metric: "Realized P&L".to_string(),
-                            value: format!("{:.4} SOL", stats_read.total_realized_pnl_sol),
+                            value: format!("{:.5}", stats_read.total_realized_pnl_sol),
                         },
                         StatsRow {
                             metric: "Unrealized P&L".to_string(),
-                            value: format!("{:.4} SOL", stats_read.total_unrealized_pnl_sol),
+                            value: format!("{:.5}", stats_read.total_unrealized_pnl_sol),
                         },
                         StatsRow {
                             metric: "Total P&L".to_string(),
-                            value: format!("{:.4} SOL", total_pnl),
+                            value: format!("{:.5}", total_pnl),
                         },
                         StatsRow {
                             metric: "ROI".to_string(),
@@ -447,11 +448,11 @@ impl TraderManager {
                         },
                         StatsRow {
                             metric: "Largest Win".to_string(),
-                            value: format!("{:.4} SOL", stats_read.largest_win_sol),
+                            value: format!("{:.5}", stats_read.largest_win_sol),
                         },
                         StatsRow {
                             metric: "Largest Loss".to_string(),
-                            value: format!("{:.4} SOL", stats_read.largest_loss_sol),
+                            value: format!("{:.5}", stats_read.largest_loss_sol),
                         },
                         StatsRow {
                             metric: "Profit Factor".to_string(),
@@ -467,7 +468,7 @@ impl TraderManager {
                         },
                         StatsRow {
                             metric: "Avg Trade Size".to_string(),
-                            value: format!("{:.4} SOL", stats_read.average_trade_size_sol),
+                            value: format!("{:.5}", stats_read.average_trade_size_sol),
                         }
                     ];
 
@@ -510,18 +511,25 @@ impl TraderManager {
                         let mut position_data: Vec<PositionRow> = positions_read
                             .values()
                             .map(|pos| PositionRow {
-                                symbol: pos.token_symbol.clone(),
-                                address: format!(
-                                    "{}...{}",
-                                    &pos.token_address[..8],
-                                    &pos.token_address[pos.token_address.len() - 4..]
-                                ),
-                                invested: format!("{:.10}", pos.total_invested_sol),
+                                address: pos.token_address.clone(), // Full address instead of truncated
+                                invested: format!("{:.5}", pos.total_invested_sol),
                                 tokens: format!("{:.2}", pos.total_tokens),
                                 current_price: format!("{:.8}", pos.current_price),
-                                pnl_sol: format!("{:.10}", pos.unrealized_pnl_sol),
+                                peak_price: if pos.peak_price > 0.0 {
+                                    format!("{:.8}", pos.peak_price)
+                                } else {
+                                    "-".to_string()
+                                },
+                                low_price: if pos.lowest_price > 0.0 {
+                                    format!("{:.8}", pos.lowest_price)
+                                } else {
+                                    "-".to_string()
+                                },
+                                pnl_sol: format!("{:.5}", pos.unrealized_pnl_sol),
                                 pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
-                                trades: pos.total_trades.to_string(),
+                                opens: pos.total_opens.to_string(),
+                                closes: pos.total_closes.to_string(),
+                                dca_count: pos.dca_level.to_string(),
                                 status: format!("{:?}", pos.status),
                                 age: {
                                     let duration = Utc::now().signed_duration_since(pos.created_at);
@@ -547,6 +555,65 @@ impl TraderManager {
                         let styled_positions_table = positions_table.with(Style::modern());
                         println!("🔥 {}", "Active Positions".bold().bright_green());
                         println!("{}", styled_positions_table);
+
+                        // Show last 10 closed positions
+                        match database.get_closed_positions(10) {
+                            Ok(closed_positions) if !closed_positions.is_empty() => {
+                                println!();
+                                println!("📋 {}", "Recent Closed Positions".bold().bright_blue());
+
+                                let closed_data: Vec<PositionRow> = closed_positions
+                                    .iter()
+                                    .map(|(_, pos)| PositionRow {
+                                        address: pos.token_address.clone(),
+                                        invested: format!("{:.5}", pos.total_invested_sol),
+                                        tokens: format!("{:.2}", pos.total_tokens),
+                                        current_price: format!("{:.8}", pos.current_price),
+                                        peak_price: if pos.peak_price > 0.0 {
+                                            format!("{:.8}", pos.peak_price)
+                                        } else {
+                                            "-".to_string()
+                                        },
+                                        low_price: if pos.lowest_price > 0.0 {
+                                            format!("{:.8}", pos.lowest_price)
+                                        } else {
+                                            "-".to_string()
+                                        },
+                                        pnl_sol: format!("{:.5}", pos.realized_pnl_sol),
+                                        pnl_percent: if pos.total_invested_sol > 0.0 {
+                                            format!(
+                                                "{:.2}%",
+                                                (pos.realized_pnl_sol / pos.total_invested_sol) *
+                                                    100.0
+                                            )
+                                        } else {
+                                            "0.00%".to_string()
+                                        },
+                                        opens: pos.total_opens.to_string(),
+                                        closes: pos.total_closes.to_string(),
+                                        dca_count: pos.dca_level.to_string(),
+                                        status: format!("{:?}", pos.status),
+                                        age: {
+                                            let duration = Utc::now().signed_duration_since(
+                                                pos.updated_at
+                                            );
+                                            if duration.num_days() > 0 {
+                                                format!("{}d", duration.num_days())
+                                            } else if duration.num_hours() > 0 {
+                                                format!("{}h", duration.num_hours())
+                                            } else {
+                                                format!("{}m", duration.num_minutes())
+                                            }
+                                        },
+                                    })
+                                    .collect();
+
+                                let mut closed_table = Table::new(closed_data);
+                                let styled_closed_table = closed_table.with(Style::modern());
+                                println!("{}", styled_closed_table);
+                            }
+                            _ => {}
+                        }
                     }
 
                     println!();
@@ -1789,22 +1856,28 @@ struct StatsRow {
 
 #[derive(Tabled)]
 struct PositionRow {
-    #[tabled(rename = "Symbol")]
-    symbol: String,
     #[tabled(rename = "Address")]
     address: String,
-    #[tabled(rename = "Invested (SOL)")]
+    #[tabled(rename = "Invested")]
     invested: String,
     #[tabled(rename = "Tokens")]
     tokens: String,
     #[tabled(rename = "Price")]
     current_price: String,
-    #[tabled(rename = "P&L (SOL)")]
+    #[tabled(rename = "Peak")]
+    peak_price: String,
+    #[tabled(rename = "Low")]
+    low_price: String,
+    #[tabled(rename = "P&L")]
     pnl_sol: String,
     #[tabled(rename = "P&L (%)")]
     pnl_percent: String,
-    #[tabled(rename = "Trades")]
-    trades: String,
+    #[tabled(rename = "Opens")]
+    opens: String,
+    #[tabled(rename = "Closes")]
+    closes: String,
+    #[tabled(rename = "DCA")]
+    dca_count: String,
     #[tabled(rename = "Status")]
     status: String,
     #[tabled(rename = "Age")]

@@ -39,7 +39,11 @@ impl TraderDatabase {
                 dca_level INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'Active',
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                peak_price REAL NOT NULL DEFAULT 0.0,
+                lowest_price REAL NOT NULL DEFAULT 0.0,
+                total_opens INTEGER NOT NULL DEFAULT 0,
+                total_closes INTEGER NOT NULL DEFAULT 0
             )",
             []
         )?;
@@ -112,6 +116,12 @@ impl TraderDatabase {
             []
         )?;
 
+        // Add new columns if they don't exist (migration)
+        let _ = conn.execute("ALTER TABLE positions ADD COLUMN peak_price REAL DEFAULT 0.0", []);
+        let _ = conn.execute("ALTER TABLE positions ADD COLUMN lowest_price REAL DEFAULT 0.0", []);
+        let _ = conn.execute("ALTER TABLE positions ADD COLUMN total_opens INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE positions ADD COLUMN total_closes INTEGER DEFAULT 0", []);
+
         Ok(())
     }
 
@@ -139,8 +149,12 @@ impl TraderDatabase {
                 total_trades = ?8,
                 dca_level = ?9,
                 status = ?10,
+                peak_price = ?11,
+                lowest_price = ?12,
+                total_opens = ?13,
+                total_closes = ?14,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?11",
+            WHERE id = ?15",
             params![
                 summary.total_invested_sol,
                 summary.average_buy_price,
@@ -152,6 +166,10 @@ impl TraderDatabase {
                 summary.total_trades,
                 summary.dca_level,
                 format!("{:?}", summary.status),
+                summary.peak_price,
+                summary.lowest_price,
+                summary.total_opens,
+                summary.total_closes,
                 position_id
             ]
         )?;
@@ -163,7 +181,9 @@ impl TraderDatabase {
         let mut stmt = conn.prepare(
             "SELECT id, token_address, token_symbol, total_invested_sol, average_buy_price, 
                     current_price, total_tokens, unrealized_pnl_sol, unrealized_pnl_percent,
-                    realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at
+                    realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at,
+                    COALESCE(peak_price, 0.0), COALESCE(lowest_price, 0.0), 
+                    COALESCE(total_opens, 0), COALESCE(total_closes, 0)
              FROM positions WHERE token_address = ?1"
         )?;
 
@@ -195,6 +215,10 @@ impl TraderDatabase {
                     updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(14)?)
                         .unwrap_or_else(|_| Utc::now().into())
                         .with_timezone(&Utc),
+                    peak_price: row.get::<_, f64>(15)?,
+                    lowest_price: row.get::<_, f64>(16)?,
+                    total_opens: row.get::<_, u32>(17)?,
+                    total_closes: row.get::<_, u32>(18)?,
                 },
             ))
         })?;
@@ -210,7 +234,9 @@ impl TraderDatabase {
         let mut stmt = conn.prepare(
             "SELECT id, token_address, token_symbol, total_invested_sol, average_buy_price, 
                     current_price, total_tokens, unrealized_pnl_sol, unrealized_pnl_percent,
-                    realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at
+                    realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at,
+                    COALESCE(peak_price, 0.0), COALESCE(lowest_price, 0.0), 
+                    COALESCE(total_opens, 0), COALESCE(total_closes, 0)
              FROM positions WHERE status = 'Active'"
         )?;
 
@@ -242,6 +268,10 @@ impl TraderDatabase {
                     updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(14)?)
                         .unwrap_or_else(|_| Utc::now().into())
                         .with_timezone(&Utc),
+                    peak_price: row.get::<_, f64>(15)?,
+                    lowest_price: row.get::<_, f64>(16)?,
+                    total_opens: row.get::<_, u32>(17)?,
+                    total_closes: row.get::<_, u32>(18)?,
                 },
             ))
         })?;
@@ -438,5 +468,62 @@ impl TraderDatabase {
             active_positions: position_stats.3,
             closed_positions: position_stats.4,
         })
+    }
+
+    pub fn get_closed_positions(&self, limit: u32) -> Result<Vec<(i64, PositionSummary)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, token_address, token_symbol, total_invested_sol, average_buy_price, 
+                    current_price, total_tokens, unrealized_pnl_sol, unrealized_pnl_percent,
+                    realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at,
+                    COALESCE(peak_price, 0.0), COALESCE(lowest_price, 0.0), 
+                    COALESCE(total_opens, 0), COALESCE(total_closes, 0)
+             FROM positions 
+             WHERE status != 'Active' 
+             ORDER BY updated_at DESC 
+             LIMIT ?1"
+        )?;
+
+        let rows = stmt.query_map(params![limit], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                PositionSummary {
+                    token_address: row.get(1)?,
+                    token_symbol: row.get(2)?,
+                    total_invested_sol: row.get(3)?,
+                    average_buy_price: row.get(4)?,
+                    current_price: row.get(5)?,
+                    total_tokens: row.get(6)?,
+                    unrealized_pnl_sol: row.get(7)?,
+                    unrealized_pnl_percent: row.get(8)?,
+                    realized_pnl_sol: row.get(9)?,
+                    total_trades: row.get::<_, u32>(10)?,
+                    dca_level: row.get::<_, u32>(11)?,
+                    status: match row.get::<_, String>(12)?.as_str() {
+                        "Active" => PositionStatus::Active,
+                        "Closed" => PositionStatus::Closed,
+                        "StopLoss" => PositionStatus::StopLoss,
+                        "TakeProfit" => PositionStatus::TakeProfit,
+                        _ => PositionStatus::Closed,
+                    },
+                    created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(13)?)
+                        .unwrap_or_else(|_| Utc::now().into())
+                        .with_timezone(&Utc),
+                    updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(14)?)
+                        .unwrap_or_else(|_| Utc::now().into())
+                        .with_timezone(&Utc),
+                    peak_price: row.get::<_, f64>(15)?,
+                    lowest_price: row.get::<_, f64>(16)?,
+                    total_opens: row.get::<_, u32>(17)?,
+                    total_closes: row.get::<_, u32>(18)?,
+                },
+            ))
+        })?;
+
+        let mut positions = Vec::new();
+        for row in rows {
+            positions.push(row?);
+        }
+        Ok(positions)
     }
 }

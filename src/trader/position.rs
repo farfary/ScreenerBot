@@ -21,6 +21,10 @@ pub struct Position {
     pub status: PositionStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub peak_price: f64,
+    pub lowest_price: f64,
+    pub total_opens: u32,
+    pub total_closes: u32,
     pub dca_levels: Vec<DCALevel>,
 }
 
@@ -43,6 +47,10 @@ impl Position {
             status: PositionStatus::Active,
             created_at: now,
             updated_at: now,
+            peak_price: 0.0,
+            lowest_price: 0.0,
+            total_opens: 0,
+            total_closes: 0,
             dca_levels: Vec::new(),
         }
     }
@@ -64,6 +72,10 @@ impl Position {
             status: summary.status,
             created_at: summary.created_at,
             updated_at: summary.updated_at,
+            peak_price: summary.peak_price,
+            lowest_price: summary.lowest_price,
+            total_opens: summary.total_opens,
+            total_closes: summary.total_closes,
             dca_levels: Vec::new(),
         }
     }
@@ -84,10 +96,14 @@ impl Position {
             status: self.status.clone(),
             created_at: self.created_at,
             updated_at: self.updated_at,
+            peak_price: self.peak_price,
+            lowest_price: self.lowest_price,
+            total_opens: self.total_opens,
+            total_closes: self.total_closes,
         }
     }
 
-    pub fn add_buy_trade(&mut self, amount_sol: f64, amount_tokens: f64, _price_per_token: f64) {
+    pub fn add_buy_trade(&mut self, amount_sol: f64, amount_tokens: f64, price_per_token: f64) {
         // Update average buy price using weighted average
         let new_total_invested = self.total_invested_sol + amount_sol;
         let new_total_tokens = self.total_tokens + amount_tokens;
@@ -99,7 +115,14 @@ impl Position {
         self.total_invested_sol = new_total_invested;
         self.total_tokens = new_total_tokens;
         self.total_trades += 1;
+        self.total_opens += 1;
         self.updated_at = Utc::now();
+
+        // Initialize peak and lowest prices on first trade
+        if self.total_opens == 1 {
+            self.peak_price = price_per_token;
+            self.lowest_price = price_per_token;
+        }
 
         // Update unrealized PnL
         self.update_unrealized_pnl(self.current_price);
@@ -113,14 +136,14 @@ impl Position {
         self.realized_pnl_sol += realized_pnl;
         self.total_tokens -= amount_tokens;
         self.total_trades += 1;
+        self.total_closes += 1;
         self.updated_at = Utc::now();
 
-        // If we sold all tokens, close the position
-        if self.total_tokens <= 0.0001 {
-            self.status = PositionStatus::Closed;
+        // If all tokens sold, mark position as closed
+        if self.total_tokens <= 0.01 {
+            // Using small threshold for floating point comparison
             self.total_tokens = 0.0;
-            self.unrealized_pnl_sol = 0.0;
-            self.unrealized_pnl_percent = 0.0;
+            self.status = PositionStatus::Closed;
         } else {
             // Update unrealized PnL for remaining tokens
             self.update_unrealized_pnl(self.current_price);
@@ -130,6 +153,18 @@ impl Position {
     pub fn update_price(&mut self, new_price: f64) {
         self.current_price = new_price;
         self.updated_at = Utc::now();
+
+        // Update peak and lowest prices after entry
+        if self.total_trades > 0 {
+            // Only track after first trade
+            if self.peak_price == 0.0 || new_price > self.peak_price {
+                self.peak_price = new_price;
+            }
+            if self.lowest_price == 0.0 || new_price < self.lowest_price {
+                self.lowest_price = new_price;
+            }
+        }
+
         self.update_unrealized_pnl(new_price);
     }
 
