@@ -209,7 +209,7 @@ impl RugDetectionMonitor {
         }
 
         // Perform rug detection analysis
-        let result = self.rug_engine.analyze_token(token_address, token_data.liquidity_sol).await?;
+        let result = self.rug_engine.analyze_token(token_address, token_data.liquidity_quote).await?;
 
         match result.recommended_action {
             RugAction::Blacklist | RugAction::SellImmediately => {
@@ -229,7 +229,7 @@ impl RugDetectionMonitor {
                         reason: format!("Auto-detected rug: {:?}", result.reasons),
                         blacklisted_at: chrono::Utc::now(),
                         peak_liquidity: None, // Could be enhanced to track peak
-                        final_liquidity: Some(token_data.liquidity_sol),
+                        final_liquidity: Some(token_data.liquidity_quote),
                         drop_percentage: None, // Could be calculated if we have peak
                     };
 

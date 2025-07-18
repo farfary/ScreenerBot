@@ -231,7 +231,7 @@ impl RugDetectionEngine {
         // Find maximum historical liquidity
         let max_historical = history
             .iter()
-            .map(|h| h.liquidity_sol)
+            .map(|h| h.liquidity_usd)
             .fold(0.0, f64::max);
 
         // If it was never significant, not a rug
@@ -312,7 +312,7 @@ impl RugDetectionEngine {
 
             // Get current token data for final liquidity
             let token_data = self.database.get_token(token_address)?;
-            let final_liquidity = token_data.map(|t| t.liquidity_sol);
+            let final_liquidity = token_data.map(|t| t.liquidity_usd);
 
             let drop_percentage = if
                 let (Some(peak), Some(final_liq)) = (peak_liquidity, final_liquidity)

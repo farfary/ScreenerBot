@@ -1,5 +1,4 @@
 pub mod database;
-pub mod gecko_api;
 
 pub use database::{
     MarketDatabase,
@@ -10,19 +9,19 @@ pub use database::{
     TokenBlacklist,
     RugDetectionEvent,
 };
-pub use gecko_api::GeckoTerminalClient;
 
 use crate::discovery::DiscoveryDatabase;
+use crate::pairs::{ PairsClient, TokenPair };
 use anyhow::{ Context, Result };
-use reqwest::Client;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time;
+use chrono::Utc;
 
 pub struct MarketData {
     database: Arc<MarketDatabase>,
-    gecko_client: GeckoTerminalClient,
+    pairs_client: Arc<PairsClient>,
     discovery_db: Arc<DiscoveryDatabase>,
     is_running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<MarketStats>>,
@@ -31,14 +30,7 @@ pub struct MarketData {
 impl MarketData {
     pub fn new(discovery_db: Arc<DiscoveryDatabase>) -> Result<Self> {
         let database = Arc::new(MarketDatabase::new()?);
-
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("ScreenerBot/1.0")
-            .build()
-            .context("Failed to create HTTP client")?;
-
-        let gecko_client = GeckoTerminalClient::new(client);
+        let pairs_client = Arc::new(PairsClient::new().context("Failed to create pairs client")?);
 
         let stats = MarketStats {
             total_tokens_tracked: 0,
@@ -50,10 +42,63 @@ impl MarketData {
 
         Ok(Self {
             database,
-            gecko_client,
+            pairs_client,
             discovery_db,
             is_running: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(stats)),
+        })
+    }
+
+    /// Convert TokenPair from DexScreener API to our TokenData model
+    fn token_pair_to_token_data(pair: &TokenPair) -> Result<TokenData> {
+        // Determine which token is the base (not SOL)
+        let (token_address, token_symbol, token_name) = if
+            pair.base_token.address != "So11111111111111111111111111111111111111112"
+        {
+            (
+                pair.base_token.address.clone(),
+                pair.base_token.symbol.clone(),
+                pair.base_token.name.clone(),
+            )
+        } else {
+            (
+                pair.quote_token.address.clone(),
+                pair.quote_token.symbol.clone(),
+                pair.quote_token.name.clone(),
+            )
+        };
+
+        let price_native = pair.price_native_float().context("Failed to parse native price")?;
+        let price_usd = pair.price_usd_float().context("Failed to parse USD price")?;
+
+        // Get liquidity metrics if available
+        let (liquidity_usd, liquidity_base, liquidity_quote) = if
+            let Some(ref liq) = pair.liquidity
+        {
+            (liq.usd, liq.base, liq.quote)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
+
+        Ok(TokenData {
+            mint: token_address,
+            symbol: token_symbol,
+            name: token_name,
+            decimals: 6, // Default for most Solana tokens, could be improved
+            price_native,
+            price_usd,
+            price_change_24h: pair.price_change.h24,
+            volume_24h: pair.volume.h24,
+            market_cap: pair.market_cap,
+            fdv: pair.fdv,
+            liquidity_usd,
+            liquidity_base,
+            liquidity_quote,
+            top_pool_address: Some(pair.pair_address.clone()),
+            dex_id: pair.dex_id.clone(),
+            pair_created_at: Some(pair.pair_created_at),
+            source: "dexscreener".to_string(),
+            last_updated: Utc::now(),
         })
     }
 
@@ -148,7 +193,7 @@ impl MarketData {
 
         let mut updated_count = 0u64;
 
-        // Process tokens in batches of 30 per API call
+        // Process tokens in batches to respect API limits
         let batch_size = 30;
         for batch in discovered_tokens.chunks(batch_size) {
             let mints: Vec<String> = batch
@@ -177,74 +222,109 @@ impl MarketData {
                 continue; // Skip this batch if all tokens are blacklisted
             }
 
-            match self.gecko_client.fetch_token_data_batch(&non_blacklisted_mints).await {
-                Ok(results) => {
-                    for (token_data, pools) in results {
-                        // Check price change before saving
-                        let prev_token = self.database.get_token(&token_data.mint).ok().flatten();
-                        if let Some(prev) = &prev_token {
-                            let old_price = prev.price_sol;
-                            let new_price = token_data.price_sol;
-                            if old_price > 0.0 {
-                                let diff = ((new_price - old_price) / old_price).abs();
-                                if diff > 0.01 {
-                                    let pct = ((new_price - old_price) / old_price) * 100.0;
-                                    // Find the earliest pool created_at as token age proxy
-                                    let token_age = pools
-                                        .iter()
-                                        .map(|p| p.created_at)
-                                        .min();
-                                    let now = chrono::Utc::now();
-                                    let age_str = if let Some(created_at) = token_age {
-                                        let duration = now.signed_duration_since(created_at);
-                                        let days = duration.num_days();
-                                        let hours = duration.num_hours() % 24;
-                                        let mins = duration.num_minutes() % 60;
-                                        format!("age: {}d {}h {}m", days, hours, mins)
-                                    } else {
-                                        "age: unknown".to_string()
-                                    };
+            // Convert Vec<String> to Vec<&str> for the API
+            let mint_refs: Vec<&str> = non_blacklisted_mints
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
 
-                                    // Now we store prices directly in SOL terms, no conversion needed
-                                    let market_cap_sol = token_data.market_cap;
-                                    let liquidity_sol = token_data.liquidity_sol;
+            // Fetch token pairs from DexScreener
+            match self.pairs_client.get_multiple_token_pairs(&mint_refs).await {
+                Ok(all_pairs) => {
+                    // Group pairs by token and convert to TokenData
+                    for mint in &non_blacklisted_mints {
+                        // Filter pairs for this specific token (as base token, not quote)
+                        let token_pairs: Vec<&TokenPair> = all_pairs
+                            .iter()
+                            .filter(|pair| {
+                                pair.base_token.address == *mint &&
+                                    pair.quote_token.address ==
+                                        "So11111111111111111111111111111111111111112" // Only SOL pairs
+                            })
+                            .collect();
 
-                                    // Price change detection - data saved to database for trader module to display
+                        if
+                            let Some(best_pair) = self.pairs_client.get_best_pair(
+                                token_pairs.into_iter().cloned().collect()
+                            )
+                        {
+                            // Convert TokenPair to TokenData
+                            match Self::token_pair_to_token_data(&best_pair) {
+                                Ok(token_data) => {
+                                    // Check for significant price changes
+                                    if
+                                        let Ok(Some(prev_token)) = self.database.get_token(
+                                            &token_data.mint
+                                        )
+                                    {
+                                        let old_price = prev_token.price_native;
+                                        let new_price = token_data.price_native;
+                                        if old_price > 0.0 {
+                                            let diff = ((new_price - old_price) / old_price).abs();
+                                            if diff > 0.01 {
+                                                let pct =
+                                                    ((new_price - old_price) / old_price) * 100.0;
+
+                                                // Calculate token age
+                                                let age_str = if
+                                                    let Some(created_at) =
+                                                        token_data.pair_created_at
+                                                {
+                                                    let created_time = chrono::DateTime
+                                                        ::from_timestamp_millis(created_at as i64)
+                                                        .unwrap_or(Utc::now());
+                                                    let duration =
+                                                        Utc::now().signed_duration_since(
+                                                            created_time
+                                                        );
+                                                    let days = duration.num_days();
+                                                    let hours = duration.num_hours() % 24;
+                                                    let mins = duration.num_minutes() % 60;
+                                                    format!("age: {}d {}h {}m", days, hours, mins)
+                                                } else {
+                                                    "age: unknown".to_string()
+                                                };
+
+                                                println!(
+                                                    "📈 {} ({}) {:.2}% → {:.8} SOL (${:.6}) [{}] [source: {}]",
+                                                    token_data.symbol,
+                                                    &token_data.mint[..8],
+                                                    pct,
+                                                    new_price,
+                                                    token_data.price_usd,
+                                                    age_str,
+                                                    token_data.source
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // Save token data
+                                    if let Err(e) = self.database.save_token(&token_data) {
+                                        eprintln!(
+                                            "❌ Failed to save token data for {}: {}",
+                                            token_data.mint,
+                                            e
+                                        );
+                                        continue;
+                                    }
+
+                                    updated_count += 1;
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ Failed to convert pair data for {}: {}", mint, e);
                                 }
                             }
                         }
-
-                        // Save token data
-                        if let Err(e) = self.database.save_token(&token_data) {
-                            eprintln!(
-                                "❌ Failed to save token data for {}: {}",
-                                token_data.mint,
-                                e
-                            );
-                            continue;
-                        }
-
-                        // Save pool data
-                        for pool in pools {
-                            if let Err(e) = self.database.save_pool(&pool) {
-                                eprintln!(
-                                    "❌ Failed to save pool data for {}: {}",
-                                    pool.pool_address,
-                                    e
-                                );
-                            }
-                        }
-
-                        updated_count += 1;
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to fetch market data batch: {}", e);
+                    eprintln!("❌ Failed to fetch token pairs from DexScreener: {}", e);
                 }
             }
 
-            // Small delay to respect API rate limits
-            tokio::time::sleep(Duration::from_millis(10000)).await;
+            // Respect API rate limits
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         Ok(updated_count)
@@ -292,15 +372,9 @@ impl MarketData {
 // Implement Clone for MarketData (needed for tokio::spawn)
 impl Clone for MarketData {
     fn clone(&self) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("ScreenerBot/1.0")
-            .build()
-            .expect("Failed to create HTTP client");
-
         Self {
             database: Arc::clone(&self.database),
-            gecko_client: GeckoTerminalClient::new(client),
+            pairs_client: Arc::clone(&self.pairs_client),
             discovery_db: Arc::clone(&self.discovery_db),
             is_running: Arc::clone(&self.is_running),
             stats: Arc::clone(&self.stats),

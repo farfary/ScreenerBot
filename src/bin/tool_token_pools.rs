@@ -30,7 +30,7 @@ struct DexScreenerToken {
     #[serde(rename = "priceNative")]
     price_native: String,
     #[serde(rename = "priceUsd")]
-    price_sol: String,
+    price_usd: String,
     liquidity: DexScreenerLiquidity,
     volume: DexScreenerVolume,
     #[serde(rename = "priceChange")]
@@ -226,7 +226,7 @@ async fn search_via_dexscreener_tokens_api(client: &Client, token_address: &str)
     // Show all pools with details
     println!("\n🏊 Pool Details:");
     for (i, pool) in pools.iter().enumerate() {
-        let price = pool.price_sol.parse::<f64>().unwrap_or(0.0);
+        let price = pool.price_native.parse::<f64>().unwrap_or(0.0);
         let price_change_24h = pool.price_change.h24.unwrap_or(0.0);
         let labels = pool.labels
             .as_ref()
@@ -275,8 +275,10 @@ async fn search_via_gecko_terminal(market_data: &MarketData, token_address: &str
             println!("✅ Token found in Gecko Terminal:");
             println!("   Name: {}", token_data.name);
             println!("   Symbol: {}", token_data.symbol);
-            println!("   Price: ${:.8}", token_data.price_sol);
-            println!("   Market Cap: ${:.2}", token_data.market_cap);
+            println!("   Price: ${:.8}", token_data.price_native);
+            if let Some(market_cap) = token_data.market_cap {
+                println!("   Market Cap: ${:.2}", market_cap);
+            }
             println!("   24h Volume: ${:.2}", token_data.volume_24h);
 
             // Get pools for this token
@@ -293,7 +295,7 @@ async fn search_via_gecko_terminal(market_data: &MarketData, token_address: &str
                     "   {}. {} - ${:.2} liquidity, ${:.2} 24h volume",
                     i + 1,
                     pool.pool_address,
-                    pool.liquidity_sol,
+                    pool.liquidity_usd,
                     pool.volume_24h
                 );
             }

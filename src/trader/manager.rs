@@ -181,7 +181,7 @@ impl TraderManager {
 
         // Fallback to market data if available
         if let Ok(Some(token_data)) = self.market_data.get_token_data(token_address).await {
-            return Ok(token_data.liquidity_sol);
+            return Ok(token_data.liquidity_quote);
         }
 
         Ok(0.0)
@@ -206,9 +206,9 @@ impl TraderManager {
         // Fallback to market data API
         match self.market_data.get_token_data(token_address).await {
             Ok(Some(token_data)) => {
-                let price = token_data.price_sol;
+                let price = token_data.price_native;
                 log::debug!(
-                    "Got fallback price from market data for {}: ${}",
+                    "Got fallback price from market data for {}: {} SOL",
                     token_address,
                     price
                 );
@@ -519,9 +519,9 @@ impl TraderManager {
                             log::debug!(
                                 "Using market data price for {}: {} SOL",
                                 token.mint,
-                                token.price_sol
+                                token.price_native
                             );
-                            token.price_sol
+                            token.price_native
                         }
                     };
 
@@ -577,8 +577,10 @@ impl TraderManager {
                                     .color(if change_percent > 0.0 { "green" } else { "red" })
                                     .bold()
                             );
-                            println!("   🏦 Market Cap: {:.2} SOL", token.market_cap);
-                            println!("   💧 Liquidity: {:.2} SOL", token.liquidity_sol);
+                            if let Some(market_cap) = token.market_cap {
+                                println!("   🏦 Market Cap: ${:.2}", market_cap);
+                            }
+                            println!("   💧 Liquidity: {:.2} SOL", token.liquidity_quote);
                             println!("   📊 Volume 24h: {:.2}K", token.volume_24h / 1000.0);
                             println!("   🕒 Token Age: {}", token_age_str.bright_white().bold());
                             println!("{}\n", "━".repeat(60).bright_cyan());
@@ -631,7 +633,7 @@ impl TraderManager {
                 for (token_address, _position) in &positions_clone {
                     // Use market data for position price updates
                     if let Ok(Some(token_data)) = market_data.get_token_data(token_address).await {
-                        let current_price = token_data.price_sol;
+                        let current_price = token_data.price_native;
                         strategy.write().await.update_price(token_address, current_price);
 
                         let mut positions_write = positions.write().await;
@@ -725,7 +727,7 @@ impl TraderManager {
                                 &discovered_token.mint
                             ).await
                         {
-                            let current_price = token_data.price_sol;
+                            let current_price = token_data.price_native;
 
                             if current_price > 0.0 {
                                 // Convert TokenData to TokenInfo
@@ -1307,11 +1309,11 @@ impl TraderManager {
             symbol: token_data.symbol.clone(),
             name: token_data.name.clone(),
             decimals: token_data.decimals,
-            supply: token_data.total_supply as u64,
-            market_cap: Some(token_data.market_cap),
-            price: Some(token_data.price_sol),
+            supply: 0, // We don't have supply in new TokenData, would need to fetch separately
+            market_cap: token_data.market_cap,
+            price: Some(token_data.price_native),
             volume_24h: Some(token_data.volume_24h),
-            liquidity: Some(token_data.liquidity_sol),
+            liquidity: Some(token_data.liquidity_quote),
             pool_address: token_data.top_pool_address.clone(),
             discovered_at: token_data.last_updated,
             last_updated: token_data.last_updated,
@@ -1357,13 +1359,33 @@ impl TraderManager {
 
         // Basic info
         println!("   📍 Mint: {}", token_data.mint.bright_blue());
-        println!("   💰 Price: {:.8} SOL", token_data.price_sol.to_string().bright_green().bold());
+        println!(
+            "   💰 Price: {:.8} SOL (${:.6}) [source: {}]",
+            token_data.price_native.to_string().bright_green().bold(),
+            token_data.price_usd,
+            token_data.source.bright_cyan()
+        );
 
-        println!("   🏦 Market Cap: {:.2} SOL", token_data.market_cap);
+        if let Some(market_cap) = token_data.market_cap {
+            println!("   🏦 Market Cap: ${:.2}", market_cap);
+        }
 
-        println!("   📊 Total Supply: {}", format_large_number(token_data.total_supply));
+        if let Some(fdv) = token_data.fdv {
+            println!("   💎 FDV: ${:.2}", fdv);
+        }
 
-        println!("   💧 Liquidity: {:.2} SOL", token_data.liquidity_sol);
+        println!(
+            "   💧 Liquidity: ${:.2} USD ({:.2} SOL)",
+            token_data.liquidity_usd,
+            token_data.liquidity_quote
+        );
+
+        println!("   🔄 Volume 24h: ${:.2}", token_data.volume_24h);
+        println!(
+            "   🏪 DEX: {} | Pool: {}",
+            token_data.dex_id.bright_magenta(),
+            token_data.top_pool_address.as_ref().unwrap_or(&"N/A".to_string()).bright_blue()
+        );
 
         // Price change information
         if show_price_change {
@@ -1380,9 +1402,9 @@ impl TraderManager {
 
         // Get historical data for price change calculation
         if let Ok(Some(historical)) = self.market_data.get_database().get_token(&token_data.mint) {
-            let old_price = historical.price_sol;
+            let old_price = historical.price_native;
             if old_price > 0.0 {
-                let price_change = ((token_data.price_sol - old_price) / old_price) * 100.0;
+                let price_change = ((token_data.price_native - old_price) / old_price) * 100.0;
 
                 let (change_color, change_emoji) = if price_change > 0.0 {
                     ("green", "📈")
@@ -1406,7 +1428,7 @@ impl TraderManager {
                 println!(
                     "   📊 Previous: {:.8} SOL → Current: {:.8} SOL",
                     old_price.to_string().dimmed(),
-                    token_data.price_sol.to_string().bright_white().bold()
+                    token_data.price_native.to_string().bright_white().bold()
                 );
             }
         }
@@ -1435,7 +1457,7 @@ impl TraderManager {
         for (mint, position) in positions.iter() {
             // Get current market data
             if let Ok(Some(token_data)) = self.market_data.get_database().get_token(mint) {
-                let current_value = position.total_tokens * token_data.price_sol;
+                let current_value = position.total_tokens * token_data.price_native;
                 let pnl = position.unrealized_pnl_sol;
                 let pnl_percent = position.unrealized_pnl_percent;
 
@@ -1476,7 +1498,7 @@ impl TraderManager {
                 println!(
                     "      🕒 Created: {} | Current: {:.8} SOL",
                     position.created_at.format("%H:%M:%S").to_string().dimmed(),
-                    token_data.price_sol.to_string().bright_green()
+                    token_data.price_native.to_string().bright_green()
                 );
                 println!();
             }

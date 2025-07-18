@@ -20,18 +20,6 @@ path = "src/lib.rs"
 name = "screenerbot"
 path = "src/main.rs"
 
-[[bin]]
-name = "pool_debug"
-path = "src/bin/pool_debug.rs"
-
-[[bin]]
-name = "rug_scanner"
-path = "src/bin/rug_scanner.rs"
-
-[[bin]]
-name = "liquidity_monitor"
-path = "src/bin/liquidity_monitor.rs"
-
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }

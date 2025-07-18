@@ -50,7 +50,6 @@ pub struct PricingConfig {
     pub top_tokens_count: usize,
     pub cache_ttl_secs: u64,
     pub max_cache_size: usize,
-    pub gecko_terminal_enabled: bool,
     pub pool_calculation_enabled: bool,
     pub priority_update_interval_secs: u64,
     pub enable_dynamic_pricing: bool,
@@ -68,15 +67,7 @@ pub struct DynamicPricingConfig {
     pub dead_token_threshold: f64, // Near zero liquidity
     pub dead_token_timeout_hours: u64, // 6 hours
     pub rate_limit_usage_threshold: f64, // 90% of available rate limit
-    pub gecko_terminal_rate_limit: GeckoRateLimitConfig,
     pub blacklist_cleanup_interval_hours: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeckoRateLimitConfig {
-    pub requests_per_minute: u32,
-    pub requests_per_hour: u32,
-    pub burst_limit: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,7 +264,6 @@ impl Default for Config {
                 top_tokens_count: 100,
                 cache_ttl_secs: 300, // 5 minutes
                 max_cache_size: 10000,
-                gecko_terminal_enabled: true,
                 pool_calculation_enabled: true,
                 priority_update_interval_secs: 30, // 30 seconds for priority tokens
                 enable_dynamic_pricing: true,
@@ -286,11 +276,6 @@ impl Default for Config {
                     dead_token_threshold: 0.0,
                     dead_token_timeout_hours: 6,
                     rate_limit_usage_threshold: 0.9,
-                    gecko_terminal_rate_limit: GeckoRateLimitConfig {
-                        requests_per_minute: 60,
-                        requests_per_hour: 3600,
-                        burst_limit: 10,
-                    },
                     blacklist_cleanup_interval_hours: 24,
                 },
             }),

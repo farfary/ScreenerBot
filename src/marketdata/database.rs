@@ -4,24 +4,26 @@ use rusqlite::{ Connection, params, OptionalExtension };
 use serde::{ Deserialize, Serialize };
 use std::sync::Mutex;
 
-/// Full token data with market information
+/// Full token data from DexScreener API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenData {
     pub mint: String,
     pub symbol: String,
     pub name: String,
     pub decimals: u8,
-    pub price_sol: f64,
-    pub price_change_24h: f64,
-    pub volume_24h: f64,
-    pub market_cap: f64,
-    pub fdv: f64,
-    pub total_supply: f64,
-    pub circulating_supply: f64,
-    pub liquidity_sol: f64,
+    pub price_native: f64, // Price in SOL (from priceNative)
+    pub price_usd: f64, // Price in USD (from priceUsd)
+    pub price_change_24h: Option<f64>, // From priceChange.h24
+    pub volume_24h: f64, // From volume.h24
+    pub market_cap: Option<f64>, // From marketCap
+    pub fdv: Option<f64>, // From fdv
+    pub liquidity_usd: f64, // From liquidity.usd
+    pub liquidity_base: f64, // From liquidity.base (token amount)
+    pub liquidity_quote: f64, // From liquidity.quote (SOL amount)
     pub top_pool_address: Option<String>,
-    pub top_pool_base_reserve: Option<f64>,
-    pub top_pool_quote_reserve: Option<f64>,
+    pub dex_id: String, // Which DEX this data comes from
+    pub pair_created_at: Option<u64>, // Pool creation timestamp
+    pub source: String, // "dexscreener" for tracking
     pub last_updated: DateTime<Utc>,
 }
 
@@ -55,9 +57,10 @@ pub struct MarketStats {
 pub struct LiquidityHistory {
     pub id: i64,
     pub token_address: String,
-    pub liquidity_sol: f64,
+    pub liquidity_usd: f64,
+    pub liquidity_quote: f64, // SOL amount from DexScreener
     pub timestamp: DateTime<Utc>,
-    pub source: String, // 'dexscreener', 'gecko', etc.
+    pub source: String, // 'dexscreener' only now
 }
 
 /// Token blacklist entry for rugged/dead tokens
@@ -105,25 +108,26 @@ impl MarketDatabase {
     fn initialize_tables(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        // Create tokens table with full market data
-        // Create tokens table
+        // Create tokens table with DexScreener-compatible schema
         conn.execute(
             "CREATE TABLE IF NOT EXISTS tokens (
                 mint TEXT PRIMARY KEY,
                 symbol TEXT NOT NULL,
                 name TEXT NOT NULL,
                 decimals INTEGER NOT NULL,
-                price_sol REAL NOT NULL,
-                price_change_24h REAL NOT NULL,
+                price_native REAL NOT NULL,
+                price_usd REAL NOT NULL,
+                price_change_24h REAL,
                 volume_24h REAL NOT NULL,
-                market_cap REAL NOT NULL,
-                fdv REAL NOT NULL,
-                total_supply REAL NOT NULL,
-                circulating_supply REAL NOT NULL,
-                liquidity_sol REAL NOT NULL,
+                market_cap REAL,
+                fdv REAL,
+                liquidity_usd REAL NOT NULL,
+                liquidity_base REAL NOT NULL,
+                liquidity_quote REAL NOT NULL,
                 top_pool_address TEXT,
-                top_pool_base_reserve REAL,
-                top_pool_quote_reserve REAL,
+                dex_id TEXT NOT NULL,
+                pair_created_at INTEGER,
+                source TEXT NOT NULL DEFAULT 'dexscreener',
                 last_updated TEXT NOT NULL
             )",
             []
@@ -165,9 +169,10 @@ impl MarketDatabase {
             "CREATE TABLE IF NOT EXISTS liquidity_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 token_address TEXT NOT NULL,
-                liquidity_sol REAL NOT NULL,
+                liquidity_usd REAL NOT NULL,
+                liquidity_quote REAL NOT NULL,
                 timestamp TEXT NOT NULL,
-                source TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'dexscreener',
                 FOREIGN KEY (token_address) REFERENCES tokens(mint)
             )",
             []
@@ -253,7 +258,7 @@ impl MarketDatabase {
         let cutoff_time = Utc::now() - chrono::Duration::hours(hours_back);
 
         let mut stmt = conn.prepare(
-            "SELECT id, token_address, liquidity_sol, timestamp, source
+            "SELECT id, token_address, liquidity_usd, liquidity_quote, timestamp, source
              FROM liquidity_history
              WHERE token_address = ?1 AND timestamp >= ?2
              ORDER BY timestamp DESC"
@@ -263,11 +268,12 @@ impl MarketDatabase {
             Ok(LiquidityHistory {
                 id: row.get(0)?,
                 token_address: row.get(1)?,
-                liquidity_sol: row.get(2)?,
-                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                liquidity_usd: row.get(2)?,
+                liquidity_quote: row.get(3)?,
+                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
                     .unwrap()
                     .with_timezone(&Utc),
-                source: row.get(4)?,
+                source: row.get(5)?,
             })
         })?;
 
@@ -287,7 +293,7 @@ impl MarketDatabase {
 
         let peak: Option<f64> = conn
             .query_row(
-                "SELECT MAX(liquidity_sol) FROM liquidity_history
+                "SELECT MAX(liquidity_usd) FROM liquidity_history
              WHERE token_address = ?1 AND timestamp >= ?2",
                 params![token_address, cutoff_time.to_rfc3339()],
                 |row| row.get(0)
@@ -452,40 +458,43 @@ impl MarketDatabase {
 
         conn.execute(
             "INSERT OR REPLACE INTO tokens (
-                mint, symbol, name, decimals, price_sol, price_change_24h, volume_24h,
-                market_cap, fdv, total_supply, circulating_supply, liquidity_sol,
-                top_pool_address, top_pool_base_reserve, top_pool_quote_reserve, last_updated
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                mint, symbol, name, decimals, price_native, price_usd, price_change_24h, volume_24h,
+                market_cap, fdv, liquidity_usd, liquidity_base, liquidity_quote,
+                top_pool_address, dex_id, pair_created_at, source, last_updated
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 token.mint,
                 token.symbol,
                 token.name,
                 token.decimals,
-                token.price_sol,
+                token.price_native,
+                token.price_usd,
                 token.price_change_24h,
                 token.volume_24h,
                 token.market_cap,
                 token.fdv,
-                token.total_supply,
-                token.circulating_supply,
-                token.liquidity_sol,
+                token.liquidity_usd,
+                token.liquidity_base,
+                token.liquidity_quote,
                 token.top_pool_address,
-                token.top_pool_base_reserve,
-                token.top_pool_quote_reserve,
+                token.dex_id,
+                token.pair_created_at,
+                token.source,
                 token.last_updated.to_rfc3339()
             ]
         )?;
 
         // Record liquidity history for rug detection
-        if token.liquidity_sol > 0.0 {
+        if token.liquidity_usd > 0.0 {
             conn.execute(
-                "INSERT INTO liquidity_history (token_address, liquidity_sol, timestamp, source)
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO liquidity_history (token_address, liquidity_usd, liquidity_quote, timestamp, source)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
                     token.mint,
-                    token.liquidity_sol,
+                    token.liquidity_usd,
+                    token.liquidity_quote,
                     token.last_updated.to_rfc3339(),
-                    "token_save"
+                    token.source
                 ]
             )?;
         }
@@ -525,9 +534,9 @@ impl MarketDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT mint, symbol, name, decimals, price_sol, price_change_24h, volume_24h,
-                    market_cap, fdv, total_supply, circulating_supply, liquidity_sol,
-                    top_pool_address, top_pool_base_reserve, top_pool_quote_reserve, last_updated
+            "SELECT mint, symbol, name, decimals, price_native, price_usd, price_change_24h, volume_24h,
+                    market_cap, fdv, liquidity_usd, liquidity_base, liquidity_quote,
+                    top_pool_address, dex_id, pair_created_at, source, last_updated
              FROM tokens WHERE mint = ?1"
         )?;
 
@@ -537,18 +546,20 @@ impl MarketDatabase {
                 symbol: row.get(1)?,
                 name: row.get(2)?,
                 decimals: row.get(3)?,
-                price_sol: row.get(4)?,
-                price_change_24h: row.get(5)?,
-                volume_24h: row.get(6)?,
-                market_cap: row.get(7)?,
-                fdv: row.get(8)?,
-                total_supply: row.get(9)?,
-                circulating_supply: row.get(10)?,
-                liquidity_sol: row.get(11)?,
-                top_pool_address: row.get(12)?,
-                top_pool_base_reserve: row.get(13)?,
-                top_pool_quote_reserve: row.get(14)?,
-                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(15)?)
+                price_native: row.get(4)?,
+                price_usd: row.get(5)?,
+                price_change_24h: row.get(6)?,
+                volume_24h: row.get(7)?,
+                market_cap: row.get(8)?,
+                fdv: row.get(9)?,
+                liquidity_usd: row.get(10)?,
+                liquidity_base: row.get(11)?,
+                liquidity_quote: row.get(12)?,
+                top_pool_address: row.get(13)?,
+                dex_id: row.get(14)?,
+                pair_created_at: row.get(15)?,
+                source: row.get(16)?,
+                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(17)?)
                     .unwrap()
                     .with_timezone(&Utc),
             })
@@ -566,9 +577,9 @@ impl MarketDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT mint, symbol, name, decimals, price_sol, price_change_24h, volume_24h,
-                    market_cap, fdv, total_supply, circulating_supply, liquidity_sol,
-                    top_pool_address, top_pool_base_reserve, top_pool_quote_reserve, last_updated
+            "SELECT mint, symbol, name, decimals, price_native, price_usd, price_change_24h, volume_24h,
+                    market_cap, fdv, liquidity_usd, liquidity_base, liquidity_quote,
+                    top_pool_address, dex_id, pair_created_at, source, last_updated
              FROM tokens ORDER BY last_updated DESC"
         )?;
 
@@ -578,18 +589,20 @@ impl MarketDatabase {
                 symbol: row.get(1)?,
                 name: row.get(2)?,
                 decimals: row.get(3)?,
-                price_sol: row.get(4)?,
-                price_change_24h: row.get(5)?,
-                volume_24h: row.get(6)?,
-                market_cap: row.get(7)?,
-                fdv: row.get(8)?,
-                total_supply: row.get(9)?,
-                circulating_supply: row.get(10)?,
-                liquidity_sol: row.get(11)?,
-                top_pool_address: row.get(12)?,
-                top_pool_base_reserve: row.get(13)?,
-                top_pool_quote_reserve: row.get(14)?,
-                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(15)?)
+                price_native: row.get(4)?,
+                price_usd: row.get(5)?,
+                price_change_24h: row.get(6)?,
+                volume_24h: row.get(7)?,
+                market_cap: row.get(8)?,
+                fdv: row.get(9)?,
+                liquidity_usd: row.get(10)?,
+                liquidity_base: row.get(11)?,
+                liquidity_quote: row.get(12)?,
+                top_pool_address: row.get(13)?,
+                dex_id: row.get(14)?,
+                pair_created_at: row.get(15)?,
+                source: row.get(16)?,
+                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(17)?)
                     .unwrap()
                     .with_timezone(&Utc),
             })
@@ -608,9 +621,9 @@ impl MarketDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT mint, symbol, name, decimals, price_sol, price_change_24h, volume_24h,
-                    market_cap, fdv, total_supply, circulating_supply, liquidity_sol,
-                    top_pool_address, top_pool_base_reserve, top_pool_quote_reserve, last_updated
+            "SELECT mint, symbol, name, decimals, price_native, price_usd, price_change_24h, volume_24h,
+                    market_cap, fdv, liquidity_usd, liquidity_base, liquidity_quote,
+                    top_pool_address, dex_id, pair_created_at, source, last_updated
              FROM tokens WHERE volume_24h > 0 ORDER BY volume_24h DESC LIMIT ?1"
         )?;
 
@@ -620,18 +633,20 @@ impl MarketDatabase {
                 symbol: row.get(1)?,
                 name: row.get(2)?,
                 decimals: row.get(3)?,
-                price_sol: row.get(4)?,
-                price_change_24h: row.get(5)?,
-                volume_24h: row.get(6)?,
-                market_cap: row.get(7)?,
-                fdv: row.get(8)?,
-                total_supply: row.get(9)?,
-                circulating_supply: row.get(10)?,
-                liquidity_sol: row.get(11)?,
-                top_pool_address: row.get(12)?,
-                top_pool_base_reserve: row.get(13)?,
-                top_pool_quote_reserve: row.get(14)?,
-                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(15)?)
+                price_native: row.get(4)?,
+                price_usd: row.get(5)?,
+                price_change_24h: row.get(6)?,
+                volume_24h: row.get(7)?,
+                market_cap: row.get(8)?,
+                fdv: row.get(9)?,
+                liquidity_usd: row.get(10)?,
+                liquidity_base: row.get(11)?,
+                liquidity_quote: row.get(12)?,
+                top_pool_address: row.get(13)?,
+                dex_id: row.get(14)?,
+                pair_created_at: row.get(15)?,
+                source: row.get(16)?,
+                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(17)?)
                     .unwrap()
                     .with_timezone(&Utc),
             })
