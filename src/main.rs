@@ -50,12 +50,6 @@ async fn main() -> Result<()> {
     );
     println!("🌐 RPC manager ready");
 
-    // Pool module
-    let pool_module = Arc::new(
-        screenerbot::PoolModule::new(Arc::clone(&market_data), Arc::clone(&rpc_manager))?
-    );
-    println!("🏊 Pool module ready");
-
     // Swap manager
     let swap_manager = Arc::new(SwapManager::new(config.swap.clone(), Arc::clone(&rpc_manager)));
     println!("💱 Swap manager ready");
@@ -67,8 +61,7 @@ async fn main() -> Result<()> {
                 config.trader.clone(),
                 Arc::clone(&swap_manager),
                 Arc::clone(&market_data),
-                Arc::clone(&discovery),
-                Arc::clone(&pool_module)
+                Arc::clone(&discovery)
             )?
         );
         println!("🎯 Trader module ready");
@@ -88,10 +81,6 @@ async fn main() -> Result<()> {
     // Start market data module
     let _ = market_data.start().await;
     println!("💹 Market data module running");
-
-    // Start pool module
-    let _ = pool_module.start().await;
-    println!("🏊 Pool module running");
 
     // Start trader module
     if let Some(ref trader_manager) = trader {
@@ -119,7 +108,6 @@ async fn main() -> Result<()> {
 
     discovery.stop().await;
     market_data.stop().await;
-    pool_module.stop().await;
 
     if let Some(trader_manager) = trader {
         trader_manager.stop().await;

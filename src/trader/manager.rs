@@ -15,7 +15,6 @@ use crate::marketdata::TokenData;
 use crate::swap::SwapManager;
 use crate::marketdata::MarketData;
 use crate::discovery::Discovery;
-use crate::pool::PoolModule;
 
 pub struct TraderManager {
     config: TraderConfig,
@@ -24,7 +23,6 @@ pub struct TraderManager {
     swap_manager: Arc<SwapManager>,
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
-    pool_module: Arc<PoolModule>,
     positions: Arc<RwLock<HashMap<String, Position>>>,
     running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<TraderStats>>,
@@ -35,8 +33,7 @@ impl TraderManager {
         config: TraderConfig,
         swap_manager: Arc<SwapManager>,
         market_data: Arc<MarketData>,
-        discovery: Arc<Discovery>,
-        pool_module: Arc<PoolModule>
+        discovery: Arc<Discovery>
     ) -> Result<Self> {
         let database = Arc::new(TraderDatabase::new(&config.database_path)?);
         let strategy = Arc::new(RwLock::new(TradingStrategy::new(config.clone())));
@@ -66,7 +63,6 @@ impl TraderManager {
             swap_manager,
             market_data,
             discovery,
-            pool_module,
             positions,
             running,
             stats,
@@ -126,7 +122,6 @@ impl TraderManager {
         let positions = Arc::clone(&self.positions);
         let running = Arc::clone(&self.running);
         let market_data = Arc::clone(&self.market_data);
-        let pool_module = Arc::clone(&self.pool_module);
 
         tokio::spawn(async move {
             // Check price every 5 seconds as requested
@@ -161,143 +156,69 @@ impl TraderManager {
                     }
                 }
 
-                // Monitor prices for top tokens using pool module
+                // Monitor prices for top tokens using market data
                 for token in &top_tokens {
                     // Get previous price from strategy for comparison
                     let previous_price = strategy.read().await.get_current_price(&token.mint);
 
-                    // Get real-time price from pool module
-                    match pool_module.get_real_time_price(&token.mint).await {
-                        Ok(Some(pool_price)) => {
-                            // Update strategy with new price from pool
-                            strategy.write().await.update_price(&token.mint, pool_price);
+                    // Use market data price directly
+                    let market_price = token.price_usd;
 
-                            // Calculate price change if we have a previous price
-                            if let Some(prev_price) = previous_price {
-                                if (pool_price - prev_price).abs() > prev_price * 0.001 {
-                                    // Show changes > 0.1%
-                                    let change_percent =
-                                        ((pool_price - prev_price) / prev_price) * 100.0;
-                                    let change_indicator = if change_percent > 0.0 {
-                                        "📈"
-                                    } else {
-                                        "📉"
-                                    };
-                                    println!(
-                                        "{} {} ({}): ${:.8} → ${:.8} ({:+.2}%)",
-                                        change_indicator,
-                                        token.symbol,
-                                        &token.mint[..8],
-                                        prev_price,
-                                        pool_price,
-                                        change_percent
-                                    );
-                                }
-                            } else {
-                                // First time getting price for this token
-                                println!(
-                                    "🎯 {} ({}): Initial Price=${:.8} | Volume=${:.2}K",
-                                    token.symbol,
-                                    &token.mint[..8],
-                                    pool_price,
-                                    token.volume_24h / 1000.0
-                                );
-                            }
-                        }
-                        Ok(None) => {
-                            // Fallback to market data price if pool price not available
-                            if token.price_usd > 0.0 {
-                                let previous_price = strategy
-                                    .read().await
-                                    .get_current_price(&token.mint);
-                                strategy.write().await.update_price(&token.mint, token.price_usd);
+                    // Update strategy with new price from market data
+                    strategy.write().await.update_price(&token.mint, market_price);
 
-                                if previous_price.is_none() {
-                                    println!(
-                                        "⚠️  {} ({}): Using Market Price=${:.8} (Pool N/A)",
-                                        token.symbol,
-                                        &token.mint[..8],
-                                        token.price_usd
-                                    );
-                                }
-                            }
+                    // Calculate price change if we have a previous price
+                    if let Some(prev_price) = previous_price {
+                        if (market_price - prev_price).abs() > prev_price * 0.001 {
+                            // Show changes > 0.1%
+                            let change_percent = ((market_price - prev_price) / prev_price) * 100.0;
+                            let change_indicator = if change_percent > 0.0 { "📈" } else { "📉" };
+                            println!(
+                                "{} {} ({}): ${:.8} → ${:.8} ({:+.2}%)",
+                                change_indicator,
+                                token.symbol,
+                                &token.mint[..8],
+                                prev_price,
+                                market_price,
+                                change_percent
+                            );
                         }
-                        Err(e) => {
-                            println!("❌ Error getting pool price for {}: {}", token.symbol, e);
-                            // Fallback to market data price
-                            if token.price_usd > 0.0 {
-                                strategy.write().await.update_price(&token.mint, token.price_usd);
-                            }
-                        }
+                    } else {
+                        // First time getting price for this token
+                        println!(
+                            "🎯 {} ({}): Initial Price=${:.8} | Volume=${:.2}K",
+                            token.symbol,
+                            &token.mint[..8],
+                            market_price,
+                            token.volume_24h / 1000.0
+                        );
                     }
                 }
 
                 // Print monitoring summary every 30 seconds
                 if last_top_tokens_update.elapsed() > Duration::from_secs(30) {
-                    let mut pool_prices = 0;
-                    let mut market_prices = 0;
-
-                    for token in &top_tokens {
-                        match pool_module.get_real_time_price(&token.mint).await {
-                            Ok(Some(_)) => {
-                                pool_prices += 1;
-                            }
-                            _ => {
-                                market_prices += 1;
-                            }
-                        }
-                    }
-
                     println!(
-                        "📊 Monitoring Summary: {} tokens | {} pool prices | {} market fallbacks",
-                        top_tokens.len(),
-                        pool_prices,
-                        market_prices
+                        "📊 Monitoring Summary: {} tokens using market data prices",
+                        top_tokens.len()
                     );
                     last_top_tokens_update = std::time::Instant::now();
                 }
 
-                // Update prices for active positions using pool module
+                // Update prices for active positions using market data
                 let positions_clone = {
                     let positions_read = positions.read().await;
                     positions_read.clone()
                 };
 
                 for (token_address, _position) in &positions_clone {
-                    match pool_module.get_real_time_price(token_address).await {
-                        Ok(Some(pool_price)) => {
-                            // Update strategy with new price from pool
-                            strategy.write().await.update_price(token_address, pool_price);
+                    // Use market data for position price updates
+                    if let Ok(Some(token_data)) = market_data.get_token_data(token_address).await {
+                        let current_price = token_data.price_usd;
+                        strategy.write().await.update_price(token_address, current_price);
 
-                            // Update position price
-                            {
-                                let mut positions_write = positions.write().await;
-                                if let Some(pos) = positions_write.get_mut(token_address) {
-                                    pos.update_price(pool_price);
-                                }
-                            }
-                        }
-                        Ok(None) => {
-                            // Fallback to market data if pool price not available
-                            if
-                                let Ok(Some(token_data)) =
-                                    market_data.get_token_data(token_address).await
-                            {
-                                let current_price = token_data.price_usd;
-                                strategy.write().await.update_price(token_address, current_price);
-
-                                let mut positions_write = positions.write().await;
-                                if let Some(pos) = positions_write.get_mut(token_address) {
-                                    pos.update_price(current_price);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            println!(
-                                "❌ Error getting pool price for position {}: {}",
-                                token_address,
-                                e
-                            );
+                        let mut positions_write = positions.write().await;
+                        if let Some(pos) = positions_write.get_mut(token_address) {
+                            pos.update_price(current_price);
                         }
                     }
                 }
@@ -870,7 +791,6 @@ impl TraderManager {
             swap_manager: Arc::clone(&self.swap_manager),
             market_data: Arc::clone(&self.market_data),
             discovery: Arc::clone(&self.discovery),
-            pool_module: Arc::clone(&self.pool_module),
             positions: Arc::clone(&self.positions),
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),
@@ -887,7 +807,6 @@ struct TraderManagerAsync {
     swap_manager: Arc<SwapManager>,
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
-    pool_module: Arc<PoolModule>,
     positions: Arc<RwLock<HashMap<String, Position>>>,
     running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<TraderStats>>,
@@ -903,7 +822,6 @@ impl TraderManagerAsync {
             swap_manager: Arc::clone(&self.swap_manager),
             market_data: Arc::clone(&self.market_data),
             discovery: Arc::clone(&self.discovery),
-            pool_module: Arc::clone(&self.pool_module),
             positions: Arc::clone(&self.positions),
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),
