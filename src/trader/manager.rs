@@ -1,10 +1,11 @@
-use anyhow::{ Context, Result };
+use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 use colored::Colorize;
+use tabled::{ Table, Tabled, settings::Style };
 
 use crate::config::TraderConfig;
 use crate::trader::database::TraderDatabase;
@@ -15,7 +16,7 @@ use crate::types::TokenInfo;
 use crate::marketdata::{ TokenData, MarketData };
 use crate::swap::SwapManager;
 use crate::discovery::Discovery;
-use crate::pairs::{ PairsClient, PairsTrait };
+use crate::pairs::PairsClient;
 use crate::rug_detection::{ RugDetectionEngine, RugAction };
 
 pub struct TraderManager {
@@ -319,6 +320,123 @@ impl TraderManager {
         self.start_discovery_monitoring().await;
         self.start_position_price_updates().await;
 
+        // Start status display task
+        {
+            let positions = Arc::clone(&self.positions);
+            let stats = Arc::clone(&self.stats);
+            let running = Arc::clone(&self.running);
+
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(15));
+
+                loop {
+                    interval.tick().await;
+
+                    if !*running.read().await {
+                        break;
+                    }
+
+                    // Display status using table format
+                    let positions_read = positions.read().await;
+                    let stats_read = stats.read().await;
+
+                    // Clear screen and display status
+                    print!("\x1B[2J\x1B[1;1H");
+
+                    let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+                    println!(
+                        "🎯 {} {}",
+                        "ScreenerBot Position Status".bold().bright_cyan(),
+                        format!("({})", timestamp).dimmed()
+                    );
+                    println!();
+
+                    // Create stats table
+                    let stats_data = vec![
+                        StatsRow {
+                            metric: "Total Trades".to_string(),
+                            value: format!("{}", stats_read.total_trades),
+                        },
+                        StatsRow {
+                            metric: "Win Rate".to_string(),
+                            value: format!("{:.1}%", stats_read.win_rate),
+                        },
+                        StatsRow {
+                            metric: "Total Invested".to_string(),
+                            value: format!("{:.4} SOL", stats_read.total_invested_sol),
+                        },
+                        StatsRow {
+                            metric: "Realized P&L".to_string(),
+                            value: format!("{:.4} SOL", stats_read.total_realized_pnl_sol),
+                        },
+                        StatsRow {
+                            metric: "Unrealized P&L".to_string(),
+                            value: format!("{:.4} SOL", stats_read.total_unrealized_pnl_sol),
+                        },
+                        StatsRow {
+                            metric: "Active Positions".to_string(),
+                            value: format!("{}", positions_read.len()),
+                        }
+                    ];
+
+                    let mut stats_table = Table::new(stats_data);
+                    let styled_stats_table = stats_table.with(Style::modern());
+                    println!("📊 {}", "Overall Statistics".bold().bright_yellow());
+                    println!("{}", styled_stats_table);
+                    println!();
+
+                    if positions_read.is_empty() {
+                        println!("📝 {}", "No active positions".italic().dimmed());
+                    } else {
+                        // Create positions table
+                        let mut position_data: Vec<PositionRow> = positions_read
+                            .values()
+                            .map(|pos| PositionRow {
+                                symbol: pos.token_symbol.clone(),
+                                address: format!(
+                                    "{}...{}",
+                                    &pos.token_address[..8],
+                                    &pos.token_address[pos.token_address.len() - 4..]
+                                ),
+                                invested: format!("{:.4}", pos.total_invested_sol),
+                                tokens: format!("{:.2}", pos.total_tokens),
+                                current_price: format!("{:.8}", pos.current_price),
+                                pnl_sol: format!("{:.4}", pos.unrealized_pnl_sol),
+                                pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
+                                trades: pos.total_trades.to_string(),
+                                status: format!("{:?}", pos.status),
+                                age: {
+                                    let duration = Utc::now().signed_duration_since(pos.created_at);
+                                    if duration.num_days() > 0 {
+                                        format!("{}d", duration.num_days())
+                                    } else if duration.num_hours() > 0 {
+                                        format!("{}h", duration.num_hours())
+                                    } else {
+                                        format!("{}m", duration.num_minutes())
+                                    }
+                                },
+                            })
+                            .collect();
+
+                        // Sort by unrealized P&L descending
+                        position_data.sort_by(|a, b| {
+                            let a_pnl: f64 = a.pnl_sol.parse().unwrap_or(0.0);
+                            let b_pnl: f64 = b.pnl_sol.parse().unwrap_or(0.0);
+                            b_pnl.partial_cmp(&a_pnl).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+
+                        let mut positions_table = Table::new(position_data);
+                        let styled_positions_table = positions_table.with(Style::modern());
+                        println!("🔥 {}", "Active Positions".bold().bright_green());
+                        println!("{}", styled_positions_table);
+                    }
+
+                    println!();
+                    println!("{}", "═".repeat(80).dimmed());
+                }
+            });
+        }
+
         println!("🎯 Trader module started successfully");
         Ok(())
     }
@@ -369,10 +487,10 @@ impl TraderManager {
 
                 // Update top 20 tokens every 60 seconds to avoid overloading
                 if
-                    last_top_tokens_update.elapsed() > Duration::from_secs(60) ||
+                    last_top_tokens_update.elapsed() > Duration::from_secs(20) ||
                     top_tokens.is_empty()
                 {
-                    match market_data.get_top_tokens_by_volume(20).await {
+                    match market_data.get_top_tokens_by_volume(120).await {
                         Ok(tokens) => {
                             top_tokens = tokens;
                             println!("📊 Updated top 20 tokens list ({} tokens)", top_tokens.len());
@@ -412,10 +530,33 @@ impl TraderManager {
 
                     // Calculate price change if we have a previous price
                     if let Some(prev_price) = previous_price {
-                        if (market_price - prev_price).abs() > prev_price * 0.001 {
+                        if (market_price - prev_price).abs() > prev_price * 0.02 {
                             // Show changes > 0.1% with enhanced display
                             let change_percent = ((market_price - prev_price) / prev_price) * 100.0;
                             let change_indicator = if change_percent > 0.0 { "📈" } else { "📉" };
+
+                            // Get token age from pool data
+                            let token_age_str = match
+                                market_data.get_database().get_token_pools(&token.mint)
+                            {
+                                Ok(pools) => {
+                                    let token_age = pools
+                                        .iter()
+                                        .map(|p| p.created_at)
+                                        .min();
+                                    let now = chrono::Utc::now();
+                                    if let Some(created_at) = token_age {
+                                        let duration = now.signed_duration_since(created_at);
+                                        let days = duration.num_days();
+                                        let hours = duration.num_hours() % 24;
+                                        let mins = duration.num_minutes() % 60;
+                                        format!("{}d {}h {}m", days, hours, mins)
+                                    } else {
+                                        "unknown".to_string()
+                                    }
+                                }
+                                Err(_) => "unknown".to_string(),
+                            };
 
                             // Enhanced display with token details
                             println!("\n{}", "━".repeat(60).bright_cyan());
@@ -439,7 +580,8 @@ impl TraderManager {
                             println!("   🏦 Market Cap: {:.2} SOL", token.market_cap);
                             println!("   💧 Liquidity: {:.2} SOL", token.liquidity_sol);
                             println!("   📊 Volume 24h: {:.2}K", token.volume_24h / 1000.0);
-                            println!("{}", "━".repeat(60).bright_cyan());
+                            println!("   🕒 Token Age: {}", token_age_str.bright_white().bold());
+                            println!("{}\n", "━".repeat(60).bright_cyan());
                         }
                     } else {
                         // First time getting price for this token - show basic info
@@ -1461,4 +1603,37 @@ impl TraderManagerAsync {
 
         temp_manager.execute_trade_signal(signal).await
     }
+}
+
+// Structs for table display
+#[derive(Tabled)]
+struct StatsRow {
+    #[tabled(rename = "Metric")]
+    metric: String,
+    #[tabled(rename = "Value")]
+    value: String,
+}
+
+#[derive(Tabled)]
+struct PositionRow {
+    #[tabled(rename = "Symbol")]
+    symbol: String,
+    #[tabled(rename = "Address")]
+    address: String,
+    #[tabled(rename = "Invested (SOL)")]
+    invested: String,
+    #[tabled(rename = "Tokens")]
+    tokens: String,
+    #[tabled(rename = "Price")]
+    current_price: String,
+    #[tabled(rename = "P&L (SOL)")]
+    pnl_sol: String,
+    #[tabled(rename = "P&L (%)")]
+    pnl_percent: String,
+    #[tabled(rename = "Trades")]
+    trades: String,
+    #[tabled(rename = "Status")]
+    status: String,
+    #[tabled(rename = "Age")]
+    age: String,
 }
