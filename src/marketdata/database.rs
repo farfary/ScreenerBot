@@ -272,6 +272,48 @@ impl MarketDatabase {
         Ok(tokens)
     }
 
+    /// Get top tokens by volume (24h) - used for trader monitoring
+    pub fn get_top_tokens_by_volume(&self, limit: usize) -> Result<Vec<TokenData>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT mint, symbol, name, decimals, price_usd, price_change_24h, volume_24h,
+                    market_cap, fdv, total_supply, circulating_supply, liquidity_usd,
+                    top_pool_address, top_pool_base_reserve, top_pool_quote_reserve, last_updated
+             FROM tokens WHERE volume_24h > 0 ORDER BY volume_24h DESC LIMIT ?1"
+        )?;
+
+        let token_iter = stmt.query_map(params![limit], |row| {
+            Ok(TokenData {
+                mint: row.get(0)?,
+                symbol: row.get(1)?,
+                name: row.get(2)?,
+                decimals: row.get(3)?,
+                price_usd: row.get(4)?,
+                price_change_24h: row.get(5)?,
+                volume_24h: row.get(6)?,
+                market_cap: row.get(7)?,
+                fdv: row.get(8)?,
+                total_supply: row.get(9)?,
+                circulating_supply: row.get(10)?,
+                liquidity_usd: row.get(11)?,
+                top_pool_address: row.get(12)?,
+                top_pool_base_reserve: row.get(13)?,
+                top_pool_quote_reserve: row.get(14)?,
+                last_updated: DateTime::parse_from_rfc3339(&row.get::<_, String>(15)?)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+        })?;
+
+        let mut tokens = Vec::new();
+        for token in token_iter {
+            tokens.push(token?);
+        }
+
+        Ok(tokens)
+    }
+
     /// Get pools for a token
     pub fn get_token_pools(&self, mint: &str) -> Result<Vec<PoolData>> {
         let conn = self.conn.lock().unwrap();

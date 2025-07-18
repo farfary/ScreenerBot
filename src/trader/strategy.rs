@@ -185,7 +185,7 @@ impl TradingStrategy {
 
         // Find the price entry closest to the target time
         let mut closest_entry = None;
-        let mut closest_diff = chrono::Duration::seconds(i64::MAX);
+        let mut closest_diff = chrono::Duration::seconds(86400); // 24 hours as max diff
 
         for (timestamp, price) in price_history {
             let diff = if *timestamp > target_time {

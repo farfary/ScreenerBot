@@ -5,24 +5,28 @@ use std::collections::HashMap;
 /// Pool type enumeration for different DEX protocols
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum PoolType {
-    Raydium,
-    Orca,
-    Meteora,
-    PumpFun,
-    Jupiter,
-    Serum,
+    MeteoraDynamic,
+    PumpFunAmm,
+    RaydiumAmmV4,
+    RaydiumAmmV5,
+    RaydiumClmm,
+    RaydiumCpmm,
+    RaydiumStableSwap,
+    OrcaWhirlpool,
     Unknown,
 }
 
 impl From<&str> for PoolType {
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "raydium" => PoolType::Raydium,
-            "orca" => PoolType::Orca,
-            "meteora" => PoolType::Meteora,
-            "pumpfun" | "pump_fun" => PoolType::PumpFun,
-            "jupiter" => PoolType::Jupiter,
-            "serum" => PoolType::Serum,
+            "meteora_dynamic" | "meteoradynamic" => PoolType::MeteoraDynamic,
+            "pumpfun_amm" | "pump_fun_amm" => PoolType::PumpFunAmm,
+            "raydium_amm_v4" | "raydiumammv4" => PoolType::RaydiumAmmV4,
+            "raydium_amm_v5" | "raydiumammv5" => PoolType::RaydiumAmmV5,
+            "raydium_clmm" | "raydiumclmm" => PoolType::RaydiumClmm,
+            "raydium_cpmm" | "raydiumcpmm" => PoolType::RaydiumCpmm,
+            "raydium_stable_swap" | "raydiumstableswap" => PoolType::RaydiumStableSwap,
+            "orca_whirlpool" | "orcawhirlpool" => PoolType::OrcaWhirlpool,
             _ => PoolType::Unknown,
         }
     }
@@ -31,12 +35,14 @@ impl From<&str> for PoolType {
 impl std::fmt::Display for PoolType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PoolType::Raydium => write!(f, "Raydium"),
-            PoolType::Orca => write!(f, "Orca"),
-            PoolType::Meteora => write!(f, "Meteora"),
-            PoolType::PumpFun => write!(f, "PumpFun"),
-            PoolType::Jupiter => write!(f, "Jupiter"),
-            PoolType::Serum => write!(f, "Serum"),
+            PoolType::MeteoraDynamic => write!(f, "MeteoraDynamic"),
+            PoolType::PumpFunAmm => write!(f, "PumpFunAmm"),
+            PoolType::RaydiumAmmV4 => write!(f, "RaydiumAmmV4"),
+            PoolType::RaydiumAmmV5 => write!(f, "RaydiumAmmV5"),
+            PoolType::RaydiumClmm => write!(f, "RaydiumClmm"),
+            PoolType::RaydiumCpmm => write!(f, "RaydiumCpmm"),
+            PoolType::RaydiumStableSwap => write!(f, "RaydiumStableSwap"),
+            PoolType::OrcaWhirlpool => write!(f, "OrcaWhirlpool"),
             PoolType::Unknown => write!(f, "Unknown"),
         }
     }

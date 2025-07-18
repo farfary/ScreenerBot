@@ -293,6 +293,59 @@ impl RpcManager {
         }).await.map_err(|_| RpcError::AllEndpointsFailed)
     }
 
+    pub async fn get_token_account_balance(&self, account: &Pubkey) -> Result<u64> {
+        let account_info = self
+            .get_account(account).await
+            .map_err(|_| anyhow::anyhow!("Failed to get account info for {}", account))?;
+
+        // Parse token account data
+        if account_info.data.len() < 72 {
+            return Err(anyhow::anyhow!("Invalid token account data length"));
+        }
+
+        // Token account balance is at offset 64 (u64, little endian)
+        let balance_bytes = &account_info.data[64..72];
+        let balance = u64::from_le_bytes([
+            balance_bytes[0],
+            balance_bytes[1],
+            balance_bytes[2],
+            balance_bytes[3],
+            balance_bytes[4],
+            balance_bytes[5],
+            balance_bytes[6],
+            balance_bytes[7],
+        ]);
+
+        Ok(balance)
+    }
+
+    pub fn get_token_account_balance_sync(&self, account: &Pubkey) -> Result<u64> {
+        let client = self.get_rpc_client()?;
+        let account_info = client
+            .get_account(account)
+            .map_err(|_| anyhow::anyhow!("Failed to get account info for {}", account))?;
+
+        // Parse token account data
+        if account_info.data.len() < 72 {
+            return Err(anyhow::anyhow!("Invalid token account data length"));
+        }
+
+        // Token account balance is at offset 64 (u64, little endian)
+        let balance_bytes = &account_info.data[64..72];
+        let balance = u64::from_le_bytes([
+            balance_bytes[0],
+            balance_bytes[1],
+            balance_bytes[2],
+            balance_bytes[3],
+            balance_bytes[4],
+            balance_bytes[5],
+            balance_bytes[6],
+            balance_bytes[7],
+        ]);
+
+        Ok(balance)
+    }
+
     pub async fn send_transaction(
         &self,
         transaction: &VersionedTransaction,
@@ -855,5 +908,38 @@ impl RpcManager {
         method_stats.call_count += 1;
         method_stats.error_count += 1;
         method_stats.total_response_time_ms += response_time_ms;
+    }
+
+    pub async fn get_token_decimals(&self, mint: &Pubkey) -> Result<u8> {
+        let account_info = self
+            .get_account(mint).await
+            .map_err(|_| anyhow::anyhow!("Failed to get mint account info for {}", mint))?;
+
+        // Parse mint account data
+        if account_info.data.len() < 44 {
+            return Err(anyhow::anyhow!("Invalid mint account data length"));
+        }
+
+        // Mint decimals is at offset 44 (u8)
+        let decimals = account_info.data[44];
+
+        Ok(decimals)
+    }
+
+    pub fn get_token_decimals_sync(&self, mint: &Pubkey) -> Result<u8> {
+        let client = self.get_rpc_client()?;
+        let account_info = client
+            .get_account(mint)
+            .map_err(|_| anyhow::anyhow!("Failed to get mint account info for {}", mint))?;
+
+        // Parse mint account data
+        if account_info.data.len() < 44 {
+            return Err(anyhow::anyhow!("Invalid mint account data length"));
+        }
+
+        // Mint decimals is at offset 44 (u8)
+        let decimals = account_info.data[44];
+
+        Ok(decimals)
     }
 }

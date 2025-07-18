@@ -276,6 +276,11 @@ impl MarketData {
     pub async fn get_token_pools(&self, mint: &str) -> Result<Vec<PoolData>> {
         self.database.get_token_pools(mint)
     }
+
+    /// Get top tokens by volume for trader monitoring
+    pub async fn get_top_tokens_by_volume(&self, limit: usize) -> Result<Vec<TokenData>> {
+        self.database.get_top_tokens_by_volume(limit)
+    }
 }
 
 // Implement Clone for MarketData (needed for tokio::spawn)

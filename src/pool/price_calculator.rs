@@ -19,24 +19,68 @@ impl PriceCalculator {
         quote_token: &str
     ) -> Result<f64> {
         match pool_type {
-            PoolType::Raydium =>
-                self.calculate_raydium_price(reserves, target_token, base_token, quote_token).await,
-            PoolType::Orca =>
-                self.calculate_orca_price(reserves, target_token, base_token, quote_token).await,
-            PoolType::Meteora =>
-                self.calculate_meteora_price(reserves, target_token, base_token, quote_token).await,
-            PoolType::PumpFun =>
-                self.calculate_pumpfun_price(reserves, target_token, base_token, quote_token).await,
-            PoolType::Serum =>
-                self.calculate_serum_price(reserves, target_token, base_token, quote_token).await,
-            PoolType::Jupiter =>
-                Err(anyhow::anyhow!("Jupiter is an aggregator, not a pool protocol")),
+            PoolType::MeteoraDynamic =>
+                self.calculate_meteora_dynamic_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::PumpFunAmm =>
+                self.calculate_pumpfun_amm_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::RaydiumAmmV4 =>
+                self.calculate_raydium_amm_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::RaydiumAmmV5 =>
+                self.calculate_raydium_amm_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::RaydiumClmm =>
+                self.calculate_raydium_clmm_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::RaydiumCpmm =>
+                self.calculate_raydium_cpmm_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::RaydiumStableSwap =>
+                self.calculate_raydium_stable_swap_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
+            PoolType::OrcaWhirlpool =>
+                self.calculate_orca_whirlpool_price(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token
+                ).await,
             PoolType::Unknown => Err(anyhow::anyhow!("Unknown pool type")),
         }
     }
 
-    /// Calculate price for Raydium AMM pools
-    async fn calculate_raydium_price(
+    /// Calculate price for Meteora Dynamic pools
+    async fn calculate_meteora_dynamic_price(
         &self,
         reserves: &PoolReserve,
         target_token: &str,
@@ -61,77 +105,57 @@ impl PriceCalculator {
         Ok(price)
     }
 
-    /// Calculate price for Orca whirlpool
-    async fn calculate_orca_price(
+    /// Calculate price for Pump.fun AMM pools
+    async fn calculate_pumpfun_amm_price(
         &self,
         reserves: &PoolReserve,
         target_token: &str,
         base_token: &str,
         quote_token: &str
     ) -> Result<f64> {
-        // Orca uses concentrated liquidity, but for simplicity we'll use the same formula
-        // In reality, you'd need to calculate based on current tick and liquidity
-        self.calculate_raydium_price(reserves, target_token, base_token, quote_token).await
-    }
-
-    /// Calculate price for Meteora DLMM
-    async fn calculate_meteora_price(
-        &self,
-        reserves: &PoolReserve,
-        target_token: &str,
-        base_token: &str,
-        quote_token: &str
-    ) -> Result<f64> {
-        // Meteora uses dynamic liquidity market maker
-        // This is a simplified calculation
-        self.calculate_raydium_price(reserves, target_token, base_token, quote_token).await
-    }
-
-    /// Calculate price for Pump.fun bonding curve
-    async fn calculate_pumpfun_price(
-        &self,
-        reserves: &PoolReserve,
-        target_token: &str,
-        base_token: &str,
-        quote_token: &str
-    ) -> Result<f64> {
-        // Pump.fun uses a bonding curve formula
-        // Price increases as more tokens are bought
+        // Standard AMM formula: price = quote_reserve / base_reserve
         if reserves.base_token_amount == 0 {
-            return Err(anyhow::anyhow!("Token reserve is zero"));
+            return Err(anyhow::anyhow!("Base token reserve is zero"));
         }
 
-        // Simplified bonding curve calculation
-        let virtual_sol_reserves = 30_000_000_000u64; // 30 SOL virtual reserves
-        let virtual_token_reserves = 1_073_000_000_000_000u64; // 1.073M token virtual reserves
+        let price = if target_token == base_token {
+            // Price of base token in terms of quote token
+            (reserves.quote_token_amount as f64) / (reserves.base_token_amount as f64)
+        } else if target_token == quote_token {
+            // Price of quote token in terms of base token
+            (reserves.base_token_amount as f64) / (reserves.quote_token_amount as f64)
+        } else {
+            return Err(anyhow::anyhow!("Target token not found in pool"));
+        };
 
-        let total_sol_reserves = virtual_sol_reserves + reserves.quote_token_amount;
-        let total_token_reserves = virtual_token_reserves - reserves.base_token_amount;
-
-        if total_token_reserves == 0 {
-            return Err(anyhow::anyhow!("Total token reserves is zero"));
-        }
-
-        let price = (total_sol_reserves as f64) / (total_token_reserves as f64);
-
-        // Adjust for decimals (SOL: 9, Token: 6)
-        let adjusted_price = price * 1000.0; // 10^(9-6)
-
-        Ok(adjusted_price)
+        Ok(price)
     }
 
-    /// Calculate price for Serum orderbook
-    async fn calculate_serum_price(
+    /// Calculate price for Orca Whirlpool pools
+    async fn calculate_orca_whirlpool_price(
         &self,
         reserves: &PoolReserve,
         target_token: &str,
         base_token: &str,
         quote_token: &str
     ) -> Result<f64> {
-        // Serum is an orderbook, not an AMM
-        // Price would come from the best bid/ask
-        // This is a placeholder implementation
-        self.calculate_raydium_price(reserves, target_token, base_token, quote_token).await
+        // Orca Whirlpool uses concentrated liquidity like Raydium CLMM
+        // For now, use basic AMM formula as fallback
+        let base_amount = reserves.base_token_amount as f64;
+        let quote_amount = reserves.quote_token_amount as f64;
+
+        if base_amount == 0.0 || quote_amount == 0.0 {
+            return Err(anyhow::anyhow!("Pool has no liquidity"));
+        }
+
+        // Simple price calculation - in production, this would need proper concentrated liquidity math
+        let price = if target_token == base_token {
+            quote_amount / base_amount
+        } else {
+            base_amount / quote_amount
+        };
+
+        Ok(price)
     }
 
     /// Calculate price with slippage consideration
@@ -145,8 +169,8 @@ impl PriceCalculator {
         trade_amount: u64
     ) -> Result<f64> {
         match pool_type {
-            PoolType::Raydium => {
-                self.calculate_raydium_price_with_slippage(
+            PoolType::MeteoraDynamic => {
+                self.calculate_meteora_dynamic_price_with_slippage(
                     reserves,
                     target_token,
                     base_token,
@@ -154,8 +178,8 @@ impl PriceCalculator {
                     trade_amount
                 ).await
             }
-            PoolType::PumpFun => {
-                self.calculate_pumpfun_price_with_slippage(
+            PoolType::PumpFunAmm => {
+                self.calculate_pumpfun_amm_price_with_slippage(
                     reserves,
                     target_token,
                     base_token,
@@ -163,21 +187,72 @@ impl PriceCalculator {
                     trade_amount
                 ).await
             }
-            _ => {
-                // For other pool types, use basic calculation
-                self.calculate_price(
-                    pool_type,
+            PoolType::RaydiumAmmV4 => {
+                // Use basic AMM formula for Raydium pools
+                self.calculate_raydium_amm_price_with_slippage(
                     reserves,
                     target_token,
                     base_token,
-                    quote_token
+                    quote_token,
+                    trade_amount
                 ).await
             }
+            PoolType::RaydiumAmmV5 => {
+                // Use basic AMM formula for Raydium pools
+                self.calculate_raydium_amm_price_with_slippage(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token,
+                    trade_amount
+                ).await
+            }
+            PoolType::RaydiumClmm => {
+                // Use concentrated liquidity formula for CLMM
+                self.calculate_raydium_clmm_price_with_slippage(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token,
+                    trade_amount
+                ).await
+            }
+            PoolType::RaydiumCpmm => {
+                // Use constant product formula for CPMM
+                self.calculate_raydium_cpmm_price_with_slippage(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token,
+                    trade_amount
+                ).await
+            }
+            PoolType::RaydiumStableSwap => {
+                // Use stable swap formula
+                self.calculate_raydium_stable_swap_price_with_slippage(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token,
+                    trade_amount
+                ).await
+            }
+            PoolType::OrcaWhirlpool => {
+                // Use Orca Whirlpool formula
+                self.calculate_orca_whirlpool_price_with_slippage(
+                    reserves,
+                    target_token,
+                    base_token,
+                    quote_token,
+                    trade_amount
+                ).await
+            }
+            PoolType::Unknown => Err(anyhow::anyhow!("Unknown pool type")),
         }
     }
 
-    /// Calculate Raydium price with slippage
-    async fn calculate_raydium_price_with_slippage(
+    /// Calculate Meteora Dynamic price with slippage
+    async fn calculate_meteora_dynamic_price_with_slippage(
         &self,
         reserves: &PoolReserve,
         target_token: &str,
@@ -207,8 +282,8 @@ impl PriceCalculator {
         }
     }
 
-    /// Calculate Pump.fun price with slippage
-    async fn calculate_pumpfun_price_with_slippage(
+    /// Calculate Pump.fun AMM price with slippage
+    async fn calculate_pumpfun_amm_price_with_slippage(
         &self,
         reserves: &PoolReserve,
         target_token: &str,
@@ -216,9 +291,8 @@ impl PriceCalculator {
         quote_token: &str,
         trade_amount: u64
     ) -> Result<f64> {
-        // Bonding curve with slippage
-        // This is a simplified implementation
-        let base_price = self.calculate_pumpfun_price(
+        // AMM formula with slippage
+        let base_price = self.calculate_pumpfun_amm_price(
             reserves,
             target_token,
             base_token,
@@ -252,6 +326,193 @@ impl PriceCalculator {
         let impact = (trade_amount_adjusted / total_liquidity) * 100.0;
 
         Ok(impact)
+    }
+
+    /// Calculate Raydium AMM price (V4/V5)
+    async fn calculate_raydium_amm_price(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str
+    ) -> Result<f64> {
+        // Standard AMM formula: price = quote_reserve / base_reserve
+        if target_token == base_token {
+            Ok((reserves.quote_token_amount as f64) / (reserves.base_token_amount as f64))
+        } else if target_token == quote_token {
+            Ok((reserves.base_token_amount as f64) / (reserves.quote_token_amount as f64))
+        } else {
+            Err(anyhow::anyhow!("Target token not found in pool"))
+        }
+    }
+
+    /// Calculate Raydium CLMM price
+    async fn calculate_raydium_clmm_price(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str
+    ) -> Result<f64> {
+        // For CLMM, we use the reserve ratio as an approximation
+        if target_token == base_token {
+            Ok((reserves.quote_token_amount as f64) / (reserves.base_token_amount as f64))
+        } else if target_token == quote_token {
+            Ok((reserves.base_token_amount as f64) / (reserves.quote_token_amount as f64))
+        } else {
+            Err(anyhow::anyhow!("Target token not found in pool"))
+        }
+    }
+
+    /// Calculate Raydium CPMM price
+    async fn calculate_raydium_cpmm_price(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str
+    ) -> Result<f64> {
+        // Constant product formula: price = quote_reserve / base_reserve
+        if target_token == base_token {
+            Ok((reserves.quote_token_amount as f64) / (reserves.base_token_amount as f64))
+        } else if target_token == quote_token {
+            Ok((reserves.base_token_amount as f64) / (reserves.quote_token_amount as f64))
+        } else {
+            Err(anyhow::anyhow!("Target token not found in pool"))
+        }
+    }
+
+    /// Calculate Raydium Stable Swap price
+    async fn calculate_raydium_stable_swap_price(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str
+    ) -> Result<f64> {
+        // Stable swap pools should have price close to 1:1
+        if target_token == base_token {
+            Ok((reserves.quote_token_amount as f64) / (reserves.base_token_amount as f64))
+        } else if target_token == quote_token {
+            Ok((reserves.base_token_amount as f64) / (reserves.quote_token_amount as f64))
+        } else {
+            Err(anyhow::anyhow!("Target token not found in pool"))
+        }
+    }
+
+    /// Calculate Raydium AMM price with slippage
+    async fn calculate_raydium_amm_price_with_slippage(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str,
+        trade_amount: u64
+    ) -> Result<f64> {
+        let base_price = self.calculate_raydium_amm_price(
+            reserves,
+            target_token,
+            base_token,
+            quote_token
+        ).await?;
+        let slippage_factor =
+            1.0 + ((trade_amount as f64) / (reserves.base_token_amount as f64)) * 0.01;
+        Ok(base_price * slippage_factor)
+    }
+
+    /// Calculate Raydium CLMM price with slippage
+    async fn calculate_raydium_clmm_price_with_slippage(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str,
+        trade_amount: u64
+    ) -> Result<f64> {
+        let base_price = self.calculate_raydium_clmm_price(
+            reserves,
+            target_token,
+            base_token,
+            quote_token
+        ).await?;
+        let slippage_factor =
+            1.0 + ((trade_amount as f64) / (reserves.base_token_amount as f64)) * 0.005; // Lower slippage for CLMM
+        Ok(base_price * slippage_factor)
+    }
+
+    /// Calculate Raydium CPMM price with slippage
+    async fn calculate_raydium_cpmm_price_with_slippage(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str,
+        trade_amount: u64
+    ) -> Result<f64> {
+        let base_price = self.calculate_raydium_cpmm_price(
+            reserves,
+            target_token,
+            base_token,
+            quote_token
+        ).await?;
+        let slippage_factor =
+            1.0 + ((trade_amount as f64) / (reserves.base_token_amount as f64)) * 0.01;
+        Ok(base_price * slippage_factor)
+    }
+
+    /// Calculate Raydium Stable Swap price with slippage
+    async fn calculate_raydium_stable_swap_price_with_slippage(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str,
+        trade_amount: u64
+    ) -> Result<f64> {
+        let base_price = self.calculate_raydium_stable_swap_price(
+            reserves,
+            target_token,
+            base_token,
+            quote_token
+        ).await?;
+        let slippage_factor =
+            1.0 + ((trade_amount as f64) / (reserves.base_token_amount as f64)) * 0.001; // Very low slippage for stable swaps
+        Ok(base_price * slippage_factor)
+    }
+
+    /// Calculate Orca Whirlpool price with slippage
+    async fn calculate_orca_whirlpool_price_with_slippage(
+        &self,
+        reserves: &PoolReserve,
+        target_token: &str,
+        base_token: &str,
+        quote_token: &str,
+        trade_amount: u64
+    ) -> Result<f64> {
+        // For now, use basic AMM formula with slippage
+        let base_amount = reserves.base_token_amount as f64;
+        let quote_amount = reserves.quote_token_amount as f64;
+
+        if base_amount == 0.0 || quote_amount == 0.0 {
+            return Err(anyhow::anyhow!("Pool has no liquidity"));
+        }
+
+        let trade_amount_f = trade_amount as f64;
+
+        // Simple constant product formula with slippage
+        let price_with_slippage = if target_token == base_token {
+            let new_base_amount = base_amount + trade_amount_f;
+            let new_quote_amount = (base_amount * quote_amount) / new_base_amount;
+            let quote_out = quote_amount - new_quote_amount;
+            quote_out / trade_amount_f
+        } else {
+            let new_quote_amount = quote_amount + trade_amount_f;
+            let new_base_amount = (base_amount * quote_amount) / new_quote_amount;
+            let base_out = base_amount - new_base_amount;
+            base_out / trade_amount_f
+        };
+
+        Ok(price_with_slippage)
     }
 }
 

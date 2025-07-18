@@ -8,17 +8,17 @@ use crate::pool::decoders::utils;
 use crate::pool::types::{ PoolType, PoolInfo, PoolReserve };
 use crate::pool::decoders::PoolDecoder;
 
-/// PumpFun v1 pool decoder
-pub struct PumpFunDecoder {
+/// Orca Whirlpool decoder
+pub struct OrcaWhirlpoolDecoder {
     rpc_manager: Arc<RpcManager>,
     program_id: Pubkey,
 }
 
-impl PumpFunDecoder {
+impl OrcaWhirlpoolDecoder {
     pub fn new(rpc_manager: Arc<RpcManager>) -> Self {
         Self {
             rpc_manager,
-            program_id: Pubkey::from_str("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA").unwrap(),
+            program_id: Pubkey::from_str("whirLb9FtDwZ2Bi4FXe65aaPaJqmCj7QSfUeCrpuHgx").unwrap(),
         }
     }
 
@@ -27,40 +27,30 @@ impl PumpFunDecoder {
         _pool_pk: &Pubkey,
         account_data: &[u8]
     ) -> Result<(u64, u64, Pubkey, Pubkey)> {
-        if account_data.len() < 211 {
-            return Err(anyhow!("PumpFun account only {} B (<211)", account_data.len()));
+        if account_data.len() < 653 {
+            return Err(anyhow!("Orca Whirlpool account too short"));
         }
 
-        // Skip discriminator (8 bytes) and decode the pool structure
-        let pool_data = &account_data[8..211];
+        // Extract mint addresses from Whirlpool
+        let mint_a = utils::bytes_to_pubkey(&account_data[8..40]);
+        let mint_b = utils::bytes_to_pubkey(&account_data[40..72]);
 
-        // Extract the pool structure fields
-        let _pool_bump = pool_data[0];
-        let _index = u16::from_le_bytes([pool_data[1], pool_data[2]]);
-        let _creator = utils::bytes_to_pubkey(&pool_data[3..35]);
-        let base_mint = utils::bytes_to_pubkey(&pool_data[35..67]);
-        let quote_mint = utils::bytes_to_pubkey(&pool_data[67..99]);
-        let _lp_mint = utils::bytes_to_pubkey(&pool_data[99..131]);
-        let _pool_base_token_account = utils::bytes_to_pubkey(&pool_data[131..163]);
-        let _pool_quote_token_account = utils::bytes_to_pubkey(&pool_data[163..195]);
-        let _lp_supply = utils::bytes_to_u64(&pool_data[195..203]);
+        // Extract reserves from account data directly
+        let balance_a = utils::bytes_to_u64(&account_data[136..144]);
+        let balance_b = utils::bytes_to_u64(&account_data[144..152]);
 
-        // Extract reserves directly from account data
-        let base_balance = utils::bytes_to_u64(&pool_data[203..211]);
-        let quote_balance = utils::bytes_to_u64(&pool_data[195..203]);
-
-        Ok((base_balance, quote_balance, base_mint, quote_mint))
+        Ok((balance_a, balance_b, mint_a, mint_b))
     }
 }
 
 #[async_trait]
-impl PoolDecoder for PumpFunDecoder {
+impl PoolDecoder for OrcaWhirlpoolDecoder {
     fn program_id(&self) -> Pubkey {
         self.program_id
     }
 
     fn can_decode(&self, account_data: &[u8]) -> bool {
-        account_data.len() >= 211
+        account_data.len() >= 653
     }
 
     async fn decode_pool_info(&self, pool_address: &str, account_data: &[u8]) -> Result<PoolInfo> {
@@ -72,13 +62,13 @@ impl PoolDecoder for PumpFunDecoder {
 
         Ok(PoolInfo {
             pool_address: pool_address.to_string(),
-            pool_type: PoolType::PumpFunAmm,
+            pool_type: PoolType::OrcaWhirlpool,
             base_token_mint: base_mint.to_string(),
             quote_token_mint: quote_mint.to_string(),
             base_token_decimals: 0,
             quote_token_decimals: 0,
             liquidity_usd: (base_reserves + quote_reserves) as f64,
-            fee_rate: 0.0,
+            fee_rate: 0.003,
             created_at: chrono::Utc::now(),
             last_updated: chrono::Utc::now(),
             is_active: true,

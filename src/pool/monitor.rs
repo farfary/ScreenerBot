@@ -33,19 +33,16 @@ impl PoolMonitor {
 
         // Initialize decoders for each pool type
         decoders.insert(
-            PoolType::Raydium,
-            DecoderFactory::create_for_type(PoolType::Raydium).unwrap()
-        );
-        decoders.insert(PoolType::Orca, DecoderFactory::create_for_type(PoolType::Orca).unwrap());
-        decoders.insert(
-            PoolType::Meteora,
-            DecoderFactory::create_for_type(PoolType::Meteora).unwrap()
+            PoolType::MeteoraDynamic,
+            DecoderFactory::create_for_type(
+                PoolType::MeteoraDynamic,
+                Arc::clone(&rpc_manager)
+            ).unwrap()
         );
         decoders.insert(
-            PoolType::PumpFun,
-            DecoderFactory::create_for_type(PoolType::PumpFun).unwrap()
+            PoolType::PumpFunAmm,
+            DecoderFactory::create_for_type(PoolType::PumpFunAmm, Arc::clone(&rpc_manager)).unwrap()
         );
-        decoders.insert(PoolType::Serum, DecoderFactory::create_for_type(PoolType::Serum).unwrap());
 
         let config = PoolMonitorConfig::default();
         let stats = Arc::new(
@@ -179,7 +176,7 @@ impl PoolMonitor {
 
         // Decode reserves
         let reserves = decoder
-            .decode_reserves(pool_address, &account_data, slot).await
+            .decode_pool_reserves(pool_address, &account_data, slot).await
             .context("Failed to decode reserves")?;
 
         // Save reserves to database
@@ -210,23 +207,43 @@ impl PoolMonitor {
     async fn discover_and_add_pool(&self, pool_address: &str) -> Result<()> {
         let pool_pubkey = Pubkey::from_str(pool_address).context("Invalid pool address")?;
 
-        // Get account data
-        let account_data = self.rpc_manager
-            .get_account_data(&pool_pubkey).await
-            .context("Failed to get account data")?;
+        // Get account info (includes owner/program ID)
+        let account_info = self.rpc_manager
+            .get_account_info(&pool_pubkey).await
+            .context("Failed to get account info")?;
 
-        if account_data.is_empty() {
+        let account = account_info.ok_or_else(|| {
+            anyhow::anyhow!("Account not found for pool: {}", pool_address)
+        })?;
+
+        if account.data.is_empty() {
             return Err(anyhow::anyhow!("Empty account data for pool: {}", pool_address));
         }
 
         // Try to find a decoder that can handle this data
-        let decoder = DecoderFactory::find_decoder(&account_data).ok_or_else(||
-            anyhow::anyhow!("No decoder found for pool: {}", pool_address)
+        let decoder = DecoderFactory::find_decoder(&account.data, Arc::clone(&self.rpc_manager));
+
+        // If not found, try to find by program ID
+        let decoder = if decoder.is_none() {
+            DecoderFactory::find_decoder_by_program_id(
+                &account.owner,
+                Arc::clone(&self.rpc_manager)
+            )
+        } else {
+            decoder
+        };
+
+        let decoder = decoder.ok_or_else(||
+            anyhow::anyhow!(
+                "No decoder found for pool {} (Program ID: {})",
+                pool_address,
+                account.owner
+            )
         )?;
 
         // Decode pool info
         let pool_info = decoder
-            .decode_pool_info(pool_address, &account_data).await
+            .decode_pool_info(pool_address, &account.data).await
             .context("Failed to decode pool info")?;
 
         // Check if pool meets minimum liquidity requirement
@@ -243,7 +260,7 @@ impl PoolMonitor {
         let slot = self.rpc_manager.get_slot().await.context("Failed to get current slot")?;
 
         let reserves = decoder
-            .decode_reserves(pool_address, &account_data, slot).await
+            .decode_pool_reserves(pool_address, &account.data, slot).await
             .context("Failed to decode reserves")?;
 
         // Save initial reserves
@@ -386,19 +403,19 @@ impl Clone for PoolMonitor {
         // Create new decoders for the clone
         let mut decoders = HashMap::new();
         decoders.insert(
-            PoolType::Raydium,
-            DecoderFactory::create_for_type(PoolType::Raydium).unwrap()
-        );
-        decoders.insert(PoolType::Orca, DecoderFactory::create_for_type(PoolType::Orca).unwrap());
-        decoders.insert(
-            PoolType::Meteora,
-            DecoderFactory::create_for_type(PoolType::Meteora).unwrap()
+            PoolType::MeteoraDynamic,
+            DecoderFactory::create_for_type(
+                PoolType::MeteoraDynamic,
+                Arc::clone(&self.rpc_manager)
+            ).unwrap()
         );
         decoders.insert(
-            PoolType::PumpFun,
-            DecoderFactory::create_for_type(PoolType::PumpFun).unwrap()
+            PoolType::PumpFunAmm,
+            DecoderFactory::create_for_type(
+                PoolType::PumpFunAmm,
+                Arc::clone(&self.rpc_manager)
+            ).unwrap()
         );
-        decoders.insert(PoolType::Serum, DecoderFactory::create_for_type(PoolType::Serum).unwrap());
 
         Self {
             database: Arc::clone(&self.database),

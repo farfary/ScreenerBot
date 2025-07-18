@@ -359,9 +359,9 @@ impl TraderDatabase {
         let mut stmt = conn.prepare(
             "SELECT 
                 COUNT(*) as total_trades,
-                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful_trades,
-                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed_trades,
-                AVG(amount_sol) as avg_trade_size
+                COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) as successful_trades,
+                COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) as failed_trades,
+                COALESCE(AVG(amount_sol), 0.0) as avg_trade_size
              FROM trades"
         )?;
 
@@ -376,9 +376,9 @@ impl TraderDatabase {
 
         let mut position_stmt = conn.prepare(
             "SELECT 
-                SUM(total_invested_sol) as total_invested,
-                SUM(realized_pnl_sol) as total_realized_pnl,
-                SUM(unrealized_pnl_sol) as total_unrealized_pnl,
+                COALESCE(SUM(total_invested_sol), 0.0) as total_invested,
+                COALESCE(SUM(realized_pnl_sol), 0.0) as total_realized_pnl,
+                COALESCE(SUM(unrealized_pnl_sol), 0.0) as total_unrealized_pnl,
                 COUNT(CASE WHEN status = 'Active' THEN 1 END) as active_positions,
                 COUNT(CASE WHEN status != 'Active' THEN 1 END) as closed_positions
              FROM positions"
@@ -396,12 +396,13 @@ impl TraderDatabase {
 
         // Get largest win/loss
         let mut pnl_stmt = conn.prepare(
-            "SELECT MAX(realized_pnl_sol) as largest_win, MIN(realized_pnl_sol) as largest_loss
+            "SELECT COALESCE(MAX(realized_pnl_sol), 0.0) as largest_win, 
+                    COALESCE(MIN(realized_pnl_sol), 0.0) as largest_loss
              FROM positions WHERE status != 'Active'"
         )?;
 
         let (largest_win, largest_loss): (f64, f64) = pnl_stmt.query_row([], |row| {
-            Ok((row.get::<_, f64>(0).unwrap_or(0.0), row.get::<_, f64>(1).unwrap_or(0.0)))
+            Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?))
         })?;
 
         Ok(TraderStats {

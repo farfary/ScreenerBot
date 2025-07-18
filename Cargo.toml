@@ -29,6 +29,14 @@ name = "table_test"
 path = "examples/table_test.rs"
 
 [[example]]
+name = "test_pump_fun_price"
+path = "examples/test_pump_fun_price.rs"
+
+[[example]]
+name = "trader_pool_demo"
+path = "examples/trader_pool_demo.rs"
+
+[[example]]
 name = "pool_demo"
 path = "examples/pool_demo.rs"
 

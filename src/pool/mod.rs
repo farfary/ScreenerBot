@@ -60,6 +60,12 @@ impl PoolModule {
 
         println!("🏊 Pool module started");
 
+        // Initial sync of pools from market data
+        println!("🔄 Syncing pools from market data...");
+        if let Err(e) = self.monitor.sync_pools_from_market_data(&self.market_data).await {
+            println!("⚠️  Failed to sync pools from market data: {}", e);
+        }
+
         // Start background monitoring
         let monitor = Arc::clone(&self.monitor);
         let is_running = Arc::clone(&self.is_running);
