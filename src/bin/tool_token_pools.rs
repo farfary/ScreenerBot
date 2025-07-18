@@ -295,7 +295,7 @@ async fn search_via_gecko_terminal(market_data: &MarketData, token_address: &str
                     "   {}. {} - ${:.2} liquidity, ${:.2} 24h volume",
                     i + 1,
                     pool.pool_address,
-                    pool.liquidity_usd,
+                    pool.liquidity_sol,
                     pool.volume_24h
                 );
             }

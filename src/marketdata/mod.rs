@@ -284,17 +284,6 @@ impl MarketData {
                                                 } else {
                                                     "age: unknown".to_string()
                                                 };
-
-                                                println!(
-                                                    "📈 {} ({}) {:.2}% → {:.8} SOL (${:.6}) [{}] [source: {}]",
-                                                    token_data.symbol,
-                                                    &token_data.mint[..8],
-                                                    pct,
-                                                    new_price,
-                                                    token_data.price_usd,
-                                                    age_str,
-                                                    token_data.source
-                                                );
                                             }
                                         }
                                     }

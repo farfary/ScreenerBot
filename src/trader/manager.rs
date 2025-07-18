@@ -192,7 +192,7 @@ impl TraderManager {
         // Try to get price from pairs client (DEX pools) first for accuracy
         match self.pairs_client.get_best_price(token_address).await {
             Ok(Some(price)) => {
-                log::debug!("Got price from DEX pools for {}: ${}", token_address, price);
+                log::debug!("Got price from DEX pools for {}: {:.10} SOL", token_address, price);
                 return Ok(Some(price));
             }
             Ok(None) => {
@@ -208,7 +208,7 @@ impl TraderManager {
             Ok(Some(token_data)) => {
                 let price = token_data.price_native;
                 log::debug!(
-                    "Got fallback price from market data for {}: {} SOL",
+                    "Got fallback price from market data for {}: {:.10} SOL",
                     token_address,
                     price
                 );
@@ -363,15 +363,15 @@ impl TraderManager {
                         },
                         StatsRow {
                             metric: "Total Invested".to_string(),
-                            value: format!("{:.4} SOL", stats_read.total_invested_sol),
+                            value: format!("{:.10} SOL", stats_read.total_invested_sol),
                         },
                         StatsRow {
                             metric: "Realized P&L".to_string(),
-                            value: format!("{:.4} SOL", stats_read.total_realized_pnl_sol),
+                            value: format!("{:.10} SOL", stats_read.total_realized_pnl_sol),
                         },
                         StatsRow {
                             metric: "Unrealized P&L".to_string(),
-                            value: format!("{:.4} SOL", stats_read.total_unrealized_pnl_sol),
+                            value: format!("{:.10} SOL", stats_read.total_unrealized_pnl_sol),
                         },
                         StatsRow {
                             metric: "Active Positions".to_string(),
@@ -398,10 +398,10 @@ impl TraderManager {
                                     &pos.token_address[..8],
                                     &pos.token_address[pos.token_address.len() - 4..]
                                 ),
-                                invested: format!("{:.4}", pos.total_invested_sol),
+                                invested: format!("{:.10}", pos.total_invested_sol),
                                 tokens: format!("{:.2}", pos.total_tokens),
                                 current_price: format!("{:.8}", pos.current_price),
-                                pnl_sol: format!("{:.4}", pos.unrealized_pnl_sol),
+                                pnl_sol: format!("{:.10}", pos.unrealized_pnl_sol),
                                 pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
                                 trades: pos.total_trades.to_string(),
                                 status: format!("{:?}", pos.status),
@@ -517,7 +517,7 @@ impl TraderManager {
                         Ok(None) | Err(_) => {
                             // Fallback to market data price
                             log::debug!(
-                                "Using market data price for {}: {} SOL",
+                                "Using market data price for {}: {:.10} SOL",
                                 token.mint,
                                 token.price_native
                             );
@@ -530,7 +530,7 @@ impl TraderManager {
 
                     // Calculate price change if we have a previous price
                     if let Some(prev_price) = previous_price {
-                        if (market_price - prev_price).abs() > prev_price * 0.02 {
+                        if (market_price - prev_price).abs() > prev_price * 0.001 {
                             // Show changes > 0.1% with enhanced display
                             let change_percent = ((market_price - prev_price) / prev_price) * 100.0;
                             let change_indicator = if change_percent > 0.0 { "📈" } else { "📉" };
@@ -568,7 +568,7 @@ impl TraderManager {
                             );
                             println!("   📍 Mint: {}", &token.mint[..8].bright_blue());
                             println!(
-                                "   {} Price: {:.8} SOL → {:.8} SOL ({:+.2}%)",
+                                "   {} Price: {:.10} SOL → {:.10} SOL ({:+.2}%)",
                                 change_indicator,
                                 prev_price.to_string().dimmed(),
                                 market_price.to_string().bright_green().bold(),
@@ -588,7 +588,7 @@ impl TraderManager {
                     } else {
                         // First time getting price for this token - show basic info
                         println!(
-                            "🎯 {} ({}): Initial Price={:.8} SOL | Volume={:.2}K",
+                            "🎯 {} ({}): Initial Price={:.10} SOL | Volume={:.2}K",
                             token.symbol,
                             &token.mint[..8],
                             market_price,
@@ -610,7 +610,7 @@ impl TraderManager {
                         println!("\n{}", "📊 ACTIVE POSITIONS".bright_cyan().bold());
                         for (mint, position) in positions_read.iter() {
                             println!(
-                                "   🪙 {} | Invested: {:.4} SOL | Tokens: {:.4} | PnL: {:.4} SOL",
+                                "   🪙 {} | Invested: {:.10} SOL | Tokens: {:.4} | PnL: {:.10} SOL",
                                 position.token_symbol,
                                 position.total_invested_sol,
                                 position.total_tokens,
@@ -745,7 +745,7 @@ impl TraderManager {
                                         .analyze_token(&token_info, current_price)
                                 {
                                     println!(
-                                        "📡 New buy signal: {} at ${:.6}",
+                                        "📡 New buy signal: {} at {:.10} SOL",
                                         token_info.symbol,
                                         current_price
                                     );
@@ -865,19 +865,36 @@ impl TraderManager {
             .unwrap_or(signal.current_price);
 
         // Check if price hasn't moved too much since signal generation
-        let price_deviation = ((current_price - signal.current_price) / signal.current_price).abs();
-        if price_deviation > 0.05 {
-            // 5% max deviation
-            println!(
-                "⚠️  Skipping BUY for {} - price moved too much: {:.2}%",
+        // Handle very small prices by using a minimum threshold
+        let min_price_threshold = 1e-10; // Minimum price to consider for percentage calculation
+
+        if signal.current_price > min_price_threshold && current_price > min_price_threshold {
+            let price_deviation = (
+                (current_price - signal.current_price) /
+                signal.current_price
+            ).abs();
+            if price_deviation > 0.05 {
+                // 5% max deviation
+                println!(
+                    "⚠️  Skipping BUY for {} - price moved too much: {:.2}% (signal: {:.10} SOL → current: {:.10} SOL)",
+                    signal.token_address,
+                    price_deviation * 100.0,
+                    signal.current_price,
+                    current_price
+                );
+                return Ok(());
+            }
+        } else {
+            log::warn!(
+                "Skipping price deviation check for {} due to very small prices (signal: {:.10} SOL, current: {:.10} SOL)",
                 signal.token_address,
-                price_deviation * 100.0
+                signal.current_price,
+                current_price
             );
-            return Ok(());
         }
 
         println!(
-            "🟢 Executing BUY: {} - ${:.6} (${:.4} SOL) - Pool validated",
+            "🟢 Executing BUY: {} - {:.10} SOL (${:.4} SOL) - Pool validated",
             signal.token_address,
             current_price,
             trade_size
@@ -961,7 +978,7 @@ impl TraderManager {
             .unwrap_or(signal.current_price);
 
         println!(
-            "🔴 Executing SELL: {} - ${:.6} ({:.4} tokens) - Using best pool price",
+            "🔴 Executing SELL: {} - {:.10} SOL ({:.4} tokens) - Using best pool price",
             signal.token_address,
             current_price,
             trade_size
@@ -1008,7 +1025,7 @@ impl TraderManager {
         let trade_size = self.strategy.read().await.calculate_trade_size(signal, Some(&position));
 
         println!(
-            "🟡 Executing DCA: {} - ${:.6} (${:.4} SOL, Level {})",
+            "🟡 Executing DCA: {} - {:.10} SOL (${:.4} SOL, Level {})",
             signal.token_address,
             signal.current_price,
             trade_size,
@@ -1360,7 +1377,7 @@ impl TraderManager {
         // Basic info
         println!("   📍 Mint: {}", token_data.mint.bright_blue());
         println!(
-            "   💰 Price: {:.8} SOL (${:.6}) [source: {}]",
+            "   💰 Price: {:.10} SOL (${:.10}) [source: {}]",
             token_data.price_native.to_string().bright_green().bold(),
             token_data.price_usd,
             token_data.source.bright_cyan()
@@ -1426,7 +1443,7 @@ impl TraderManager {
                 );
 
                 println!(
-                    "   📊 Previous: {:.8} SOL → Current: {:.8} SOL",
+                    "   📊 Previous: {:.10} SOL → Current: {:.10} SOL",
                     old_price.to_string().dimmed(),
                     token_data.price_native.to_string().bright_white().bold()
                 );
