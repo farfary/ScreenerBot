@@ -22,6 +22,8 @@ pub struct Config {
     pub trader: TraderConfig,
     #[serde(default)]
     pub rug_detection: RugDetectionConfig,
+    #[serde(default)]
+    pub dexscreener: DexScreenerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -237,6 +239,37 @@ impl Default for TraderConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexScreenerConfig {
+    pub enabled: bool,
+    pub base_url: String,
+    pub timeout_seconds: u64,
+    pub rate_limit_requests_per_minute: u32,
+    pub rate_limit_burst_size: u32,
+    pub retry_attempts: u32,
+    pub retry_delay_ms: u64,
+    pub retry_exponential_backoff: bool,
+    pub max_retry_delay_ms: u64,
+    pub user_agent: String,
+}
+
+impl Default for DexScreenerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            base_url: "https://api.dexscreener.com".to_string(),
+            timeout_seconds: 10,
+            rate_limit_requests_per_minute: 280, // Conservative, below 300 limit
+            rate_limit_burst_size: 5, // Allow small burst for urgent requests
+            retry_attempts: 3,
+            retry_delay_ms: 1000,
+            retry_exponential_backoff: true,
+            max_retry_delay_ms: 10000, // 10 seconds max
+            user_agent: "ScreenerBot/1.0".to_string(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -283,6 +316,7 @@ impl Default for Config {
             rpc: RpcConfig::default(),
             trader: TraderConfig::default(),
             rug_detection: RugDetectionConfig::default(),
+            dexscreener: DexScreenerConfig::default(),
         }
     }
 }

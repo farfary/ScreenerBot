@@ -1,15 +1,13 @@
 use super::SourceTrait;
+use crate::api::wait_for_dexscreener_rate_limit;
 use anyhow::{ Context, Result };
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
-use std::time::Duration;
-use tokio::time;
 
 #[derive(Debug, Clone)]
 pub struct DexScreenerSource {
     client: Client,
-    rate_limit_delay: Duration,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,11 +48,12 @@ impl DexScreenerSource {
     pub fn new(client: Client) -> Self {
         Self {
             client,
-            rate_limit_delay: Duration::from_millis(1000), // 60 requests per minute = 1 per second
         }
     }
 
     async fn fetch_latest_profiles(&self) -> Result<Vec<String>> {
+        wait_for_dexscreener_rate_limit().await?;
+
         let url = "https://api.dexscreener.com/token-profiles/latest/v1";
 
         let response = self.client
@@ -82,7 +81,7 @@ impl DexScreenerSource {
     }
 
     async fn fetch_latest_boosts(&self) -> Result<Vec<String>> {
-        time::sleep(self.rate_limit_delay).await;
+        wait_for_dexscreener_rate_limit().await?;
 
         let url = "https://api.dexscreener.com/token-boosts/latest/v1";
 
@@ -113,7 +112,7 @@ impl DexScreenerSource {
     }
 
     async fn fetch_top_boosts(&self) -> Result<Vec<String>> {
-        time::sleep(self.rate_limit_delay).await;
+        wait_for_dexscreener_rate_limit().await?;
 
         let url = "https://api.dexscreener.com/token-boosts/top/v1";
 

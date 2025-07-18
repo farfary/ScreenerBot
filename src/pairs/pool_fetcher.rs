@@ -1,5 +1,6 @@
 use super::decoders::{ DecoderRegistry, PoolInfo, PriceInfo };
 use super::types::TokenPair;
+use crate::api::wait_for_dexscreener_rate_limit;
 use crate::rpc::RpcManager;
 use anyhow::{ Context, Result };
 use reqwest::Client;
@@ -247,8 +248,8 @@ impl PoolDataFetcher {
 
         debug!("Fetching pools from DEX Screener: {}", url);
 
-        // Rate limiting
-        time::sleep(self.rate_limit_delay).await;
+        // Use centralized rate limiting
+        wait_for_dexscreener_rate_limit().await?;
 
         let response = self.http_client
             .get(&url)

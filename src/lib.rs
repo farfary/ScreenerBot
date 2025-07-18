@@ -7,6 +7,7 @@ pub mod rpc;
 pub mod swap;
 pub mod trader;
 pub mod rug_detection;
+pub mod api;
 
 pub use config::Config;
 pub use discovery::Discovery;

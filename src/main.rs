@@ -1,5 +1,6 @@
 use anyhow::Result;
 use screenerbot::{ Config, Discovery, MarketData, SwapManager, TraderManager };
+use screenerbot::api::init_dexscreener_rate_limiter;
 use std::sync::Arc;
 use tokio::signal;
 
@@ -31,6 +32,10 @@ async fn main() -> Result<()> {
 
     // Initialize modules
     println!("\nInitializing modules...");
+
+    // Initialize DexScreener rate limiter
+    init_dexscreener_rate_limiter(config.dexscreener.clone()).await?;
+    println!("⏱️  DexScreener rate limiter initialized");
 
     // Discovery module
     let discovery = Arc::new(Discovery::new(config.discovery.clone())?);

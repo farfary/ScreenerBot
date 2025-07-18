@@ -1,22 +1,20 @@
 use crate::pairs::{ PairsTrait, TokenPair, PairsError, PairsDatabase };
+use crate::api::wait_for_dexscreener_rate_limit;
 use anyhow::{ Context, Result };
 use async_trait::async_trait;
 use reqwest::Client;
-use std::time::{ Duration, Instant };
+use std::time::Duration;
 use log::{ debug, error, info, warn };
-use tokio::{ time::sleep, sync::Mutex };
 
 const BASE_URL: &str = "https://api.dexscreener.com";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_CACHE_HOURS: i64 = 1; // Cache for 1 hour by default
-const RATE_LIMIT_DELAY: Duration = Duration::from_millis(200); // 5 requests per second
 
 pub struct PairsClient {
     client: Client,
     base_url: String,
     database: PairsDatabase,
     cache_duration_hours: i64,
-    last_request_time: Mutex<Option<Instant>>,
 }
 
 impl PairsClient {
@@ -35,7 +33,6 @@ impl PairsClient {
             base_url: BASE_URL.to_string(),
             database,
             cache_duration_hours: DEFAULT_CACHE_HOURS,
-            last_request_time: Mutex::new(None),
         })
     }
 
@@ -54,7 +51,6 @@ impl PairsClient {
             base_url: BASE_URL.to_string(),
             database,
             cache_duration_hours: DEFAULT_CACHE_HOURS,
-            last_request_time: Mutex::new(None),
         })
     }
 
@@ -73,21 +69,7 @@ impl PairsClient {
             base_url,
             database,
             cache_duration_hours: DEFAULT_CACHE_HOURS,
-            last_request_time: Mutex::new(None),
         })
-    }
-
-    /// Ensure rate limiting between API requests
-    async fn ensure_rate_limit(&self) {
-        let last_request = self.last_request_time.lock().await;
-        if let Some(last_time) = *last_request {
-            let elapsed = last_time.elapsed();
-            if elapsed < RATE_LIMIT_DELAY {
-                let sleep_duration = RATE_LIMIT_DELAY - elapsed;
-                drop(last_request); // Release the lock before sleeping
-                sleep(sleep_duration).await;
-            }
-        }
     }
 
     /// Get token pairs for Solana by default
@@ -101,8 +83,8 @@ impl PairsClient {
         chain_id: &str,
         token_addresses: &str
     ) -> Result<Vec<TokenPair>> {
-        // Ensure rate limiting
-        self.ensure_rate_limit().await;
+        // Use centralized rate limiting
+        wait_for_dexscreener_rate_limit().await?;
 
         // Use the correct DEX Screener API format: /tokens/v1/{chain}/{addresses}
         let url = format!("{}/tokens/v1/{}/{}", self.base_url, chain_id, token_addresses);
@@ -113,9 +95,6 @@ impl PairsClient {
             .get(&url)
             .send().await
             .context("Failed to send request to DexScreener API")?;
-
-        // Update the last request time after successful request
-        *self.last_request_time.lock().await = Some(std::time::Instant::now());
 
         let status = response.status();
         let text = response.text().await;

@@ -311,9 +311,6 @@ impl MarketData {
                     eprintln!("❌ Failed to fetch token pairs from DexScreener: {}", e);
                 }
             }
-
-            // Respect API rate limits
-            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         Ok(updated_count)

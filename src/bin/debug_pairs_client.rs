@@ -1,6 +1,8 @@
 use anyhow::Result;
 use screenerbot::pairs::PairsClient;
 use screenerbot::trader::database::TraderDatabase;
+use screenerbot::config::Config;
+use screenerbot::api::dexscreener_rate_limiter::init_dexscreener_rate_limiter;
 use tokio;
 
 #[tokio::main]
@@ -9,6 +11,11 @@ async fn main() -> Result<()> {
 
     println!("🔍 ScreenerBot Pairs Client Debug Tool");
     println!("═══════════════════════════════════════");
+
+    // Load config and initialize rate limiter
+    let config = Config::load("configs.json")?;
+    init_dexscreener_rate_limiter(config.dexscreener).await?;
+    println!("✅ DexScreener rate limiter initialized");
 
     // Create pairs client
     let pairs_client = PairsClient::new()?;
