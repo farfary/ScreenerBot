@@ -1,10 +1,16 @@
 pub mod types;
 pub mod client;
 pub mod database;
+pub mod decoders;
+pub mod pool_fetcher;
+pub mod analyzer;
 
 pub use types::*;
 pub use client::PairsClient;
 pub use database::*;
+pub use decoders::*;
+pub use pool_fetcher::*;
+pub use analyzer::*;
 
 use anyhow::Result;
 use async_trait::async_trait;
