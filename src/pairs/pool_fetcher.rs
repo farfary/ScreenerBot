@@ -79,21 +79,91 @@ impl PoolDataFetcher {
         Ok(pool_info)
     }
 
-    /// Fetch multiple pools in batch
+    /// Fetch multiple pools in batch using get_multiple_accounts for efficiency
     pub async fn fetch_multiple_pools(&self, pool_addresses: &[Pubkey]) -> Result<Vec<PoolInfo>> {
-        let mut pool_infos = Vec::new();
-
-        // For now, fetch sequentially. In the future, we could implement batch fetching
-        for pool_address in pool_addresses {
-            match self.fetch_pool_data(pool_address).await {
-                Ok(pool_info) => pool_infos.push(pool_info),
-                Err(e) => {
-                    warn!("Failed to fetch pool data for {}: {}", pool_address, e);
-                }
-            }
+        if pool_addresses.is_empty() {
+            return Ok(Vec::new());
         }
 
-        Ok(pool_infos)
+        let batch_size = 100; // Solana RPC supports up to 100 accounts per call
+        let mut all_pool_infos = Vec::new();
+
+        // Process in batches to respect RPC limits
+        for chunk in pool_addresses.chunks(batch_size) {
+            debug!("Fetching batch of {} pool accounts", chunk.len());
+
+            // Fetch all account data in one RPC call
+            match self.rpc_manager.get_multiple_accounts(chunk).await {
+                Ok(accounts) => {
+                    // Process each account with its corresponding address
+                    for (pool_address, account_opt) in chunk.iter().zip(accounts.iter()) {
+                        if let Some(account) = account_opt {
+                            // Decode the pool data
+                            match self.decoder_registry.decode_pool(&account.owner, &account.data) {
+                                Ok(mut pool_info) => {
+                                    pool_info.pool_address = *pool_address;
+
+                                    // Fetch token vault balances and decimals if needed
+                                    if
+                                        let Err(e) = self.fetch_and_update_reserves(
+                                            &mut pool_info
+                                        ).await
+                                    {
+                                        warn!(
+                                            "Failed to update reserves for {}: {}",
+                                            pool_address,
+                                            e
+                                        );
+                                    }
+
+                                    if
+                                        let Err(e) = self.fetch_and_update_token_decimals(
+                                            &mut pool_info
+                                        ).await
+                                    {
+                                        warn!(
+                                            "Failed to update decimals for {}: {}",
+                                            pool_address,
+                                            e
+                                        );
+                                    }
+
+                                    all_pool_infos.push(pool_info);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to decode pool data for {}: {}", pool_address, e);
+                                }
+                            }
+                        } else {
+                            warn!("No account data found for pool {}", pool_address);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to fetch batch of pool accounts: {}", e);
+                    // Fallback to individual fetching for this batch
+                    for pool_address in chunk {
+                        match self.fetch_pool_data(pool_address).await {
+                            Ok(pool_info) => all_pool_infos.push(pool_info),
+                            Err(e) => {
+                                warn!("Failed to fetch pool data for {}: {}", pool_address, e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Rate limiting between batches
+            time::sleep(self.rate_limit_delay).await;
+        }
+
+        debug!(
+            "Successfully fetched {} pools out of {} requested",
+            all_pool_infos.len(),
+            pool_addresses.len()
+        );
+
+        Ok(all_pool_infos)
     }
 
     /// Calculate price for a pool
