@@ -1,5 +1,6 @@
 pub mod raydium_clmm;
 pub mod raydium_cpmm;
+pub mod raydium_v4;
 pub mod meteora_dlmm;
 pub mod whirlpool;
 pub mod pump_fun_amm;
@@ -22,6 +23,7 @@ pub use types::{
 };
 pub use raydium_clmm::RaydiumClmmDecoder;
 pub use raydium_cpmm::RaydiumCpmmDecoder;
+pub use raydium_v4::RaydiumV4Decoder;
 pub use meteora_dlmm::MeteoraDlmmDecoder;
 pub use whirlpool::WhirlpoolDecoder;
 pub use pump_fun_amm::PumpFunAmmDecoder;
@@ -59,6 +61,10 @@ impl DecoderRegistry {
         // Register Raydium CPMM decoder
         let raydium_cpmm_decoder = Box::new(RaydiumCpmmDecoder::new());
         decoders.insert(raydium_cpmm_decoder.program_id(), raydium_cpmm_decoder);
+
+        // Register Raydium V4 decoder
+        let raydium_v4_decoder = Box::new(RaydiumV4Decoder::new());
+        decoders.insert(raydium_v4_decoder.program_id(), raydium_v4_decoder);
 
         // Register Meteora DLMM decoder
         let meteora_decoder = Box::new(MeteoraDlmmDecoder::new());

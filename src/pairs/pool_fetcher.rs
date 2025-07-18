@@ -1,22 +1,56 @@
 use super::decoders::{ DecoderRegistry, PoolInfo, PriceInfo };
+use super::types::TokenPair;
 use crate::rpc::RpcManager;
 use anyhow::{ Context, Result };
+use reqwest::Client;
+use serde::Deserialize;
 use solana_sdk::{ account::Account, pubkey::Pubkey };
 use std::sync::Arc;
-use log::warn;
+use std::time::Duration;
+use log::{ warn, debug, error };
+use tokio::time;
 
 /// Pool data fetcher that uses RPC to get account data and decode pools
 pub struct PoolDataFetcher {
     rpc_manager: Arc<RpcManager>,
     decoder_registry: DecoderRegistry,
+    http_client: Client,
+    rate_limit_delay: Duration,
+}
+
+#[derive(Debug, Deserialize)]
+struct DexScreenerResponse {
+    pairs: Option<Vec<TokenPair>>,
 }
 
 impl PoolDataFetcher {
     /// Create a new pool data fetcher
     pub fn new(rpc_manager: Arc<RpcManager>) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .user_agent("ScreenerBot/1.0")
+            .build()
+            .expect("Failed to create HTTP client");
+
         Self {
             rpc_manager,
             decoder_registry: DecoderRegistry::new(),
+            http_client: client,
+            rate_limit_delay: Duration::from_millis(100), // Conservative rate limiting
+        }
+    }
+
+    /// Create a new pool data fetcher with custom HTTP client and rate limiting
+    pub fn new_with_client(
+        rpc_manager: Arc<RpcManager>,
+        client: Client,
+        rate_limit_delay: Duration
+    ) -> Self {
+        Self {
+            rpc_manager,
+            decoder_registry: DecoderRegistry::new(),
+            http_client: client,
+            rate_limit_delay,
         }
     }
 
@@ -92,6 +126,116 @@ impl PoolDataFetcher {
         self.decoder_registry.get_decoder(program_id).is_some()
     }
 
+    /// Fetch pools for a token from DEX Screener API
+    pub async fn fetch_pools_from_dexscreener(
+        &self,
+        token_mint: &Pubkey
+    ) -> Result<Vec<TokenPair>> {
+        let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", token_mint);
+
+        debug!("Fetching pools from DEX Screener: {}", url);
+
+        // Rate limiting
+        time::sleep(self.rate_limit_delay).await;
+
+        let response = self.http_client
+            .get(&url)
+            .timeout(Duration::from_secs(30))
+            .send().await
+            .context("Failed to send request to DEX Screener API")?;
+
+        if !response.status().is_success() {
+            return Err(
+                anyhow::anyhow!(
+                    "DEX Screener API returned error status: {} - {}",
+                    response.status(),
+                    response.text().await.unwrap_or_default()
+                )
+            );
+        }
+
+        let response_text = response
+            .text().await
+            .context("Failed to read response body from DEX Screener API")?;
+
+        debug!("DEX Screener response length: {} bytes", response_text.len());
+
+        // DEX Screener returns either a direct array of pairs or an object with pairs array
+        let pairs: Vec<TokenPair> = if response_text.trim_start().starts_with('[') {
+            // Direct array format
+            serde_json
+                ::from_str(&response_text)
+                .context("Failed to parse DEX Screener response as array")?
+        } else {
+            // Object format with pairs array
+            let wrapper: DexScreenerResponse = serde_json
+                ::from_str(&response_text)
+                .context("Failed to parse DEX Screener response as object")?;
+            wrapper.pairs.unwrap_or_default()
+        };
+
+        debug!("Found {} pairs for token {} from DEX Screener", pairs.len(), token_mint);
+
+        // Filter to only include Solana pairs and supported DEXes
+        let filtered_pairs: Vec<TokenPair> = pairs
+            .into_iter()
+            .filter(|pair| {
+                pair.chain_id == "solana" &&
+                    matches!(pair.dex_id.as_str(), "raydium" | "orca" | "meteora" | "pump")
+            })
+            .collect();
+
+        debug!("Filtered to {} supported DEX pairs", filtered_pairs.len());
+        Ok(filtered_pairs)
+    }
+
+    /// Find pools by multiple token mints in batch
+    pub async fn find_pools_by_tokens(&self, token_mints: &[Pubkey]) -> Result<Vec<PoolInfo>> {
+        let mut all_pools = Vec::new();
+
+        for token_mint in token_mints {
+            match pool_utils::find_pools_by_token(self, token_mint, &[]).await {
+                Ok(mut pools) => {
+                    all_pools.append(&mut pools);
+                }
+                Err(e) => {
+                    warn!("Failed to find pools for token {}: {}", token_mint, e);
+                }
+            }
+
+            // Rate limiting between token requests
+            time::sleep(self.rate_limit_delay).await;
+        }
+
+        Ok(all_pools)
+    }
+
+    /// Get pool data with DEX Screener metadata
+    pub async fn get_pool_with_metadata(
+        &self,
+        pool_address: &Pubkey
+    ) -> Result<(PoolInfo, Option<TokenPair>)> {
+        // First fetch the pool data
+        let pool_info = self.fetch_pool_data(pool_address).await?;
+
+        // Try to find corresponding DEX Screener data for additional metadata
+        let token_pairs_0 = self
+            .fetch_pools_from_dexscreener(&pool_info.token_mint_0).await
+            .unwrap_or_default();
+        let token_pairs_1 = self
+            .fetch_pools_from_dexscreener(&pool_info.token_mint_1).await
+            .unwrap_or_default();
+
+        // Find matching pair by address
+        let pool_address_str = pool_address.to_string();
+        let metadata = token_pairs_0
+            .into_iter()
+            .chain(token_pairs_1.into_iter())
+            .find(|pair| pair.pair_address == pool_address_str);
+
+        Ok((pool_info, metadata))
+    }
+
     /// Fetch account data using the RPC manager
     async fn fetch_account_data(&self, address: &Pubkey) -> Result<Account> {
         // Use the RPC manager to get account data
@@ -154,16 +298,171 @@ impl PoolDataFetcher {
 pub mod pool_utils {
     use super::*;
 
-    /// Find pools by token mint
+    /// Find pools by token mint using DEX Screener API
     pub async fn find_pools_by_token(
-        _fetcher: &PoolDataFetcher,
-        _token_mint: &Pubkey,
+        fetcher: &PoolDataFetcher,
+        token_mint: &Pubkey,
         _program_ids: &[Pubkey]
     ) -> Result<Vec<PoolInfo>> {
-        // This would require scanning for pools containing the token
-        // For now, this is a placeholder that would need to be implemented
-        // with program-specific logic or indexing
-        todo!("Implement pool scanning by token mint")
+        debug!("Finding pools for token: {}", token_mint);
+
+        // Fetch pools from DEX Screener API
+        let token_pairs = fetcher
+            .fetch_pools_from_dexscreener(token_mint).await
+            .context("Failed to fetch pools from DEX Screener")?;
+
+        let mut pool_infos = Vec::new();
+
+        // Convert TokenPair data to PoolInfo by fetching actual pool data
+        for pair in token_pairs {
+            // Parse the pair address
+            match pair.pair_address.parse::<Pubkey>() {
+                Ok(pool_address) => {
+                    match fetcher.fetch_pool_data(&pool_address).await {
+                        Ok(pool_info) => {
+                            debug!(
+                                "Successfully fetched pool data for {}: {} ({})",
+                                pool_address,
+                                pair.dex_id,
+                                pair.labels
+                                    .as_ref()
+                                    .map(|l| l.join(","))
+                                    .unwrap_or_default()
+                            );
+                            pool_infos.push(pool_info);
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to fetch pool data for {} ({}): {}",
+                                pool_address,
+                                pair.dex_id,
+                                e
+                            );
+                            // Continue processing other pools
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Invalid pool address format '{}': {}", pair.pair_address, e);
+                }
+            }
+        }
+
+        debug!("Found {} valid pools for token {}", pool_infos.len(), token_mint);
+        Ok(pool_infos)
+    }
+
+    /// Find pools by token with filtering options
+    pub async fn find_pools_by_token_filtered(
+        fetcher: &PoolDataFetcher,
+        token_mint: &Pubkey,
+        min_liquidity_usd: Option<f64>,
+        min_volume_24h: Option<f64>,
+        allowed_dexes: Option<&[&str]>
+    ) -> Result<Vec<PoolInfo>> {
+        debug!("Finding filtered pools for token: {}", token_mint);
+
+        // Fetch pools from DEX Screener API
+        let token_pairs = fetcher
+            .fetch_pools_from_dexscreener(token_mint).await
+            .context("Failed to fetch pools from DEX Screener")?;
+
+        let mut filtered_pairs = token_pairs;
+
+        // Apply filters
+        if let Some(min_liq) = min_liquidity_usd {
+            filtered_pairs.retain(|pair| pair.liquidity.usd >= min_liq);
+            debug!("After liquidity filter (>= ${:.2}): {} pairs", min_liq, filtered_pairs.len());
+        }
+
+        if let Some(min_vol) = min_volume_24h {
+            filtered_pairs.retain(|pair| pair.volume.h24 >= min_vol);
+            debug!("After volume filter (>= ${:.2}): {} pairs", min_vol, filtered_pairs.len());
+        }
+
+        if let Some(dexes) = allowed_dexes {
+            filtered_pairs.retain(|pair| dexes.contains(&pair.dex_id.as_str()));
+            debug!("After DEX filter ({:?}): {} pairs", dexes, filtered_pairs.len());
+        }
+
+        let mut pool_infos = Vec::new();
+
+        // Convert filtered TokenPair data to PoolInfo
+        for pair in filtered_pairs {
+            match pair.pair_address.parse::<Pubkey>() {
+                Ok(pool_address) => {
+                    match fetcher.fetch_pool_data(&pool_address).await {
+                        Ok(pool_info) => {
+                            debug!(
+                                "Successfully fetched filtered pool data for {}: {} ({})",
+                                pool_address,
+                                pair.dex_id,
+                                pair.labels
+                                    .as_ref()
+                                    .map(|l| l.join(","))
+                                    .unwrap_or_default()
+                            );
+                            pool_infos.push(pool_info);
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to fetch pool data for {} ({}): {}",
+                                pool_address,
+                                pair.dex_id,
+                                e
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Invalid pool address format '{}': {}", pair.pair_address, e);
+                }
+            }
+        }
+
+        debug!("Found {} valid filtered pools for token {}", pool_infos.len(), token_mint);
+        Ok(pool_infos)
+    }
+
+    /// Get the most liquid pools for a token
+    pub async fn get_top_liquid_pools(
+        fetcher: &PoolDataFetcher,
+        token_mint: &Pubkey,
+        limit: usize
+    ) -> Result<Vec<PoolInfo>> {
+        let token_pairs = fetcher
+            .fetch_pools_from_dexscreener(token_mint).await
+            .context("Failed to fetch pools from DEX Screener")?;
+
+        // Sort by liquidity descending
+        let mut sorted_pairs = token_pairs;
+        sorted_pairs.sort_by(|a, b|
+            b.liquidity.usd.partial_cmp(&a.liquidity.usd).unwrap_or(std::cmp::Ordering::Equal)
+        );
+
+        // Take top N pairs
+        sorted_pairs.truncate(limit);
+
+        let mut pool_infos = Vec::new();
+        for pair in sorted_pairs {
+            match pair.pair_address.parse::<Pubkey>() {
+                Ok(pool_address) => {
+                    match fetcher.fetch_pool_data(&pool_address).await {
+                        Ok(pool_info) => {
+                            pool_infos.push(pool_info);
+                        }
+                        Err(e) => {
+                            warn!("Failed to fetch pool data for {}: {}", pool_address, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Invalid pool address format '{}': {}", pair.pair_address, e);
+                }
+            }
+        }
+
+        Ok(pool_infos)
     }
 
     /// Calculate pool TVL in base token units

@@ -314,6 +314,39 @@ impl PairsDatabase {
             last_cleanup: now,
         })
     }
+
+    /// Get cached pairs for a specific token
+    pub fn get_cached_pairs_for_token(&self, token_address: &str) -> Result<Vec<TokenPair>> {
+        if let Some(cached) = self.get_cached_token_pairs(token_address)? {
+            Ok(cached.pairs)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Store individual pair in cache
+    pub fn store_pair(&self, pair: &TokenPair, cache_duration_hours: i64) -> Result<()> {
+        let conn = self.connection.lock().unwrap();
+        let now = Utc::now();
+        let expires_at = now + chrono::Duration::hours(cache_duration_hours);
+
+        let pair_json = serde_json::to_string(pair).context("Failed to serialize pair to JSON")?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO pair_info_cache 
+             (pair_address, dex_id, pair_json, cached_at, expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                pair.pair_address,
+                pair.dex_id,
+                pair_json,
+                now.to_rfc3339(),
+                expires_at.to_rfc3339()
+            ]
+        )?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

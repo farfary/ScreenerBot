@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{ Context, Result };
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use crate::marketdata::TokenData;
 use crate::swap::SwapManager;
 use crate::marketdata::MarketData;
 use crate::discovery::Discovery;
+use crate::pairs::{ PairsClient, PairsTrait };
 
 pub struct TraderManager {
     config: TraderConfig,
@@ -23,6 +24,7 @@ pub struct TraderManager {
     swap_manager: Arc<SwapManager>,
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
+    pairs_client: Arc<PairsClient>,
     positions: Arc<RwLock<HashMap<String, Position>>>,
     running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<TraderStats>>,
@@ -37,6 +39,7 @@ impl TraderManager {
     ) -> Result<Self> {
         let database = Arc::new(TraderDatabase::new(&config.database_path)?);
         let strategy = Arc::new(RwLock::new(TradingStrategy::new(config.clone())));
+        let pairs_client = Arc::new(PairsClient::new()?); // PairsClient::new() already returns Result
         let positions = Arc::new(RwLock::new(HashMap::new()));
         let running = Arc::new(RwLock::new(false));
         let stats = Arc::new(
@@ -63,10 +66,120 @@ impl TraderManager {
             swap_manager,
             market_data,
             discovery,
+            pairs_client,
             positions,
             running,
             stats,
         })
+    }
+
+    /// Get the best price for a token using smart pool selection
+    async fn get_best_token_price(&self, token_address: &str) -> Result<Option<f64>> {
+        // Try to get price from pairs client (DEX pools) first for accuracy
+        match self.pairs_client.get_best_price(token_address).await {
+            Ok(Some(price)) => {
+                log::debug!("Got price from DEX pools for {}: ${}", token_address, price);
+                return Ok(Some(price));
+            }
+            Ok(None) => {
+                log::debug!("No price from DEX pools for {}", token_address);
+            }
+            Err(e) => {
+                log::warn!("Failed to get price from DEX pools for {}: {}", token_address, e);
+            }
+        }
+
+        // Fallback to market data API
+        match self.market_data.get_token_data(token_address).await {
+            Ok(Some(token_data)) => {
+                let price = token_data.price_usd;
+                log::debug!(
+                    "Got fallback price from market data for {}: ${}",
+                    token_address,
+                    price
+                );
+                Ok(Some(price))
+            }
+            Ok(None) => {
+                log::debug!("No price from market data for {}", token_address);
+                Ok(None)
+            }
+            Err(e) => {
+                log::warn!("Failed to get price from market data for {}: {}", token_address, e);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Update position prices using best available price sources
+    async fn update_position_prices(&self) -> Result<()> {
+        let mut positions = self.positions.write().await;
+
+        for (token_address, position) in positions.iter_mut() {
+            if let Ok(Some(current_price)) = self.get_best_token_price(token_address).await {
+                position.update_price(current_price);
+                log::debug!("Updated price for {} to ${}", token_address, current_price);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate trade using pool quality metrics
+    async fn validate_trade_with_pool_quality(
+        &self,
+        token_address: &str,
+        trade_amount_sol: f64
+    ) -> Result<bool> {
+        // Get pairs for the token
+        let pairs = self.pairs_client.get_solana_token_pairs(token_address).await?;
+
+        if pairs.is_empty() {
+            log::warn!("No pairs found for token {}", token_address);
+            return Ok(false);
+        }
+
+        // Find the best pair for this trade
+        if let Some(best_pair) = self.pairs_client.get_best_pair(pairs) {
+            let quality_score = self.pairs_client.calculate_pool_quality_score(&best_pair);
+
+            // Require higher quality for larger trades
+            let min_quality_score = if trade_amount_sol > 1.0 { 70.0 } else { 50.0 };
+
+            if quality_score < min_quality_score {
+                log::warn!(
+                    "Pool quality too low for {} (score: {:.1}, required: {:.1})",
+                    token_address,
+                    quality_score,
+                    min_quality_score
+                );
+                return Ok(false);
+            }
+
+            // Check if liquidity is sufficient for the trade
+            let trade_value_usd = trade_amount_sol * 180.0; // Approximate SOL price
+            let min_liquidity = trade_value_usd * 10.0; // Require 10x liquidity vs trade size
+
+            if best_pair.liquidity.usd < min_liquidity {
+                log::warn!(
+                    "Insufficient liquidity for {} trade: ${:.2} < ${:.2}",
+                    token_address,
+                    best_pair.liquidity.usd,
+                    min_liquidity
+                );
+                return Ok(false);
+            }
+
+            log::info!(
+                "Trade validation passed for {} - Quality: {:.1}, Liquidity: ${:.2}",
+                token_address,
+                quality_score,
+                best_pair.liquidity.usd
+            );
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     pub async fn start(&self) -> Result<()> {
@@ -90,6 +203,7 @@ impl TraderManager {
         self.start_price_monitoring().await;
         self.start_position_monitoring().await;
         self.start_discovery_monitoring().await;
+        self.start_position_price_updates().await;
 
         println!("🎯 Trader module started successfully");
         Ok(())
@@ -122,6 +236,7 @@ impl TraderManager {
         let positions = Arc::clone(&self.positions);
         let running = Arc::clone(&self.running);
         let market_data = Arc::clone(&self.market_data);
+        let pairs_client = Arc::clone(&self.pairs_client);
 
         tokio::spawn(async move {
             // Check price every 5 seconds as requested
@@ -156,15 +271,29 @@ impl TraderManager {
                     }
                 }
 
-                // Monitor prices for top tokens using market data
+                // Monitor prices for top tokens using smart price discovery
                 for token in &top_tokens {
                     // Get previous price from strategy for comparison
                     let previous_price = strategy.read().await.get_current_price(&token.mint);
 
-                    // Use market data price directly
-                    let market_price = token.price_usd;
+                    // Use smart price discovery (DEX pools first, then fallback to market data)
+                    let market_price = match pairs_client.get_best_price(&token.mint).await {
+                        Ok(Some(price)) => {
+                            log::debug!("Got DEX pool price for {}: ${}", token.mint, price);
+                            price
+                        }
+                        Ok(None) | Err(_) => {
+                            // Fallback to market data price
+                            log::debug!(
+                                "Using market data price for {}: ${}",
+                                token.mint,
+                                token.price_usd
+                            );
+                            token.price_usd
+                        }
+                    };
 
-                    // Update strategy with new price from market data
+                    // Update strategy with new price
                     strategy.write().await.update_price(&token.mint, market_price);
 
                     // Calculate price change if we have a previous price
@@ -347,6 +476,44 @@ impl TraderManager {
         });
     }
 
+    async fn start_position_price_updates(&self) {
+        let positions = Arc::clone(&self.positions);
+        let running = Arc::clone(&self.running);
+        let pairs_client = Arc::clone(&self.pairs_client);
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30)); // Update every 30 seconds
+
+            loop {
+                interval.tick().await;
+
+                if !*running.read().await {
+                    break;
+                }
+
+                let position_addresses: Vec<String> = {
+                    let positions_read = positions.read().await;
+                    positions_read.keys().cloned().collect()
+                };
+
+                // Update prices for all active positions using smart price discovery
+                for token_address in position_addresses {
+                    if let Ok(Some(best_price)) = pairs_client.get_best_price(&token_address).await {
+                        let mut positions_write = positions.write().await;
+                        if let Some(position) = positions_write.get_mut(&token_address) {
+                            position.update_price(best_price);
+                            log::debug!(
+                                "Updated position price for {} to ${}",
+                                token_address,
+                                best_price
+                            );
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     pub async fn execute_trade_signal(&self, signal: &TradeSignal) -> Result<()> {
         let position = {
             let positions = self.positions.read().await;
@@ -386,24 +553,53 @@ impl TraderManager {
             .read().await
             .calculate_trade_size(signal, existing_position.as_ref());
 
+        // Validate trade using pool quality metrics
+        if !self.validate_trade_with_pool_quality(&signal.token_address, trade_size).await? {
+            println!("⚠️  Skipping BUY for {} - pool quality insufficient", signal.token_address);
+            return Ok(());
+        }
+
+        // Get updated price using smart price discovery
+        let current_price = self
+            .get_best_token_price(&signal.token_address).await?
+            .unwrap_or(signal.current_price);
+
+        // Check if price hasn't moved too much since signal generation
+        let price_deviation = ((current_price - signal.current_price) / signal.current_price).abs();
+        if price_deviation > 0.05 {
+            // 5% max deviation
+            println!(
+                "⚠️  Skipping BUY for {} - price moved too much: {:.2}%",
+                signal.token_address,
+                price_deviation * 100.0
+            );
+            return Ok(());
+        }
+
         println!(
-            "🟢 Executing BUY: {} - ${:.6} (${:.4} SOL)",
+            "🟢 Executing BUY: {} - ${:.6} (${:.4} SOL) - Pool validated",
             signal.token_address,
-            signal.current_price,
+            current_price,
             trade_size
         );
 
+        // Create updated signal with best price
+        let updated_signal = TradeSignal {
+            current_price,
+            ..signal.clone()
+        };
+
         // Execute swap (dry run or real based on config)
         let trade_result = if self.config.dry_run {
-            self.simulate_buy_trade(signal, trade_size).await
+            self.simulate_buy_trade(&updated_signal, trade_size).await
         } else {
-            self.execute_real_buy_trade(signal, trade_size).await
+            self.execute_real_buy_trade(&updated_signal, trade_size).await
         };
 
         match trade_result {
             Ok(result) => {
                 println!("✅ Buy trade executed successfully");
-                self.process_buy_trade_result(signal, result, existing_position).await?;
+                self.process_buy_trade_result(&updated_signal, result, existing_position).await?;
             }
             Err(e) => {
                 eprintln!("❌ Buy trade failed: {}", e);
@@ -412,7 +608,7 @@ impl TraderManager {
                     transaction_hash: None,
                     amount_sol: trade_size,
                     amount_tokens: 0.0,
-                    price_per_token: signal.current_price,
+                    price_per_token: current_price,
                     fees: 0.0,
                     slippage: 0.0,
                     timestamp: Utc::now(),
@@ -428,38 +624,49 @@ impl TraderManager {
     async fn execute_sell_trade(&self, signal: &TradeSignal, position: Position) -> Result<()> {
         let trade_size = position.total_tokens;
 
+        // Get updated price using smart price discovery
+        let current_price = self
+            .get_best_token_price(&signal.token_address).await?
+            .unwrap_or(signal.current_price);
+
         println!(
-            "🔴 Executing SELL: {} - ${:.6} ({:.4} tokens)",
+            "🔴 Executing SELL: {} - ${:.6} ({:.4} tokens) - Using best pool price",
             signal.token_address,
-            signal.current_price,
+            current_price,
             trade_size
         );
 
+        // Create updated signal with best price
+        let updated_signal = TradeSignal {
+            current_price,
+            ..signal.clone()
+        };
+
         let trade_result = if self.config.dry_run {
-            self.simulate_sell_trade(signal, trade_size).await
+            self.simulate_sell_trade(&updated_signal, trade_size).await
         } else {
-            self.execute_real_sell_trade(signal, trade_size).await
+            self.execute_real_sell_trade(&updated_signal, trade_size).await
         };
 
         match trade_result {
             Ok(result) => {
                 println!("✅ Sell trade executed successfully");
-                self.process_sell_trade_result(signal, result, position).await?;
+                self.process_sell_trade_result(&updated_signal, result, position).await?;
             }
             Err(e) => {
                 eprintln!("❌ Sell trade failed: {}", e);
                 let failed_result = TradeResult {
                     success: false,
                     transaction_hash: None,
-                    amount_sol: trade_size * signal.current_price,
+                    amount_sol: trade_size * current_price,
                     amount_tokens: trade_size,
-                    price_per_token: signal.current_price,
+                    price_per_token: current_price,
                     fees: 0.0,
                     slippage: 0.0,
                     timestamp: Utc::now(),
                     error: Some(e.to_string()),
                 };
-                self.process_sell_trade_result(signal, failed_result, position).await?;
+                self.process_sell_trade_result(&updated_signal, failed_result, position).await?;
             }
         }
 
@@ -791,6 +998,7 @@ impl TraderManager {
             swap_manager: Arc::clone(&self.swap_manager),
             market_data: Arc::clone(&self.market_data),
             discovery: Arc::clone(&self.discovery),
+            pairs_client: Arc::clone(&self.pairs_client),
             positions: Arc::clone(&self.positions),
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),
@@ -807,6 +1015,7 @@ struct TraderManagerAsync {
     swap_manager: Arc<SwapManager>,
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
+    pairs_client: Arc<PairsClient>,
     positions: Arc<RwLock<HashMap<String, Position>>>,
     running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<TraderStats>>,
@@ -822,6 +1031,7 @@ impl TraderManagerAsync {
             swap_manager: Arc::clone(&self.swap_manager),
             market_data: Arc::clone(&self.market_data),
             discovery: Arc::clone(&self.discovery),
+            pairs_client: Arc::clone(&self.pairs_client),
             positions: Arc::clone(&self.positions),
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),

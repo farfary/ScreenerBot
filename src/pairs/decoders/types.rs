@@ -93,6 +93,7 @@ pub struct PoolInfo {
 pub enum PoolType {
     RaydiumClmm,
     RaydiumCpmm,
+    RaydiumV4,
     MeteoraDlmm,
     Whirlpool,
     PumpFunAmm,
@@ -153,6 +154,9 @@ pub mod program_ids {
     /// Raydium Constant Product Market Maker
     pub const RAYDIUM_CPMM: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
 
+    /// Raydium V4 AMM Program
+    pub const RAYDIUM_V4: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+
     /// Meteora Dynamic Liquidity Market Maker
     pub const METEORA_DLMM: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 
@@ -168,6 +172,10 @@ pub mod program_ids {
 
     pub fn raydium_cpmm() -> Pubkey {
         Pubkey::from_str(RAYDIUM_CPMM).unwrap()
+    }
+
+    pub fn raydium_v4() -> Pubkey {
+        Pubkey::from_str(RAYDIUM_V4).unwrap()
     }
 
     pub fn meteora_dlmm() -> Pubkey {
