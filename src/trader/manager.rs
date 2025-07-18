@@ -557,33 +557,6 @@ impl TraderManager {
                                 }
                                 Err(_) => "unknown".to_string(),
                             };
-
-                            // Enhanced display with token details
-                            println!("\n{}", "━".repeat(60).bright_cyan());
-                            println!(
-                                "{} {} ({})",
-                                "🪙 PRICE CHANGE:".bright_cyan().bold(),
-                                token.name.bright_white().bold(),
-                                token.symbol.bright_yellow().bold()
-                            );
-                            println!("   📍 Mint: {}", &token.mint[..8].bright_blue());
-                            println!(
-                                "   {} Price: {:.10} SOL → {:.10} SOL ({:+.2}%)",
-                                change_indicator,
-                                prev_price.to_string().dimmed(),
-                                market_price.to_string().bright_green().bold(),
-                                change_percent
-                                    .to_string()
-                                    .color(if change_percent > 0.0 { "green" } else { "red" })
-                                    .bold()
-                            );
-                            if let Some(market_cap) = token.market_cap {
-                                println!("   🏦 Market Cap: ${:.2}", market_cap);
-                            }
-                            println!("   💧 Liquidity: {:.2} SOL", token.liquidity_quote);
-                            println!("   📊 Volume 24h: {:.2}K", token.volume_24h / 1000.0);
-                            println!("   🕒 Token Age: {}", token_age_str.bright_white().bold());
-                            println!("{}\n", "━".repeat(60).bright_cyan());
                         }
                     } else {
                         // First time getting price for this token - show basic info
