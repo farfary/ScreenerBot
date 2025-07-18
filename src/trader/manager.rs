@@ -325,6 +325,7 @@ impl TraderManager {
             let positions = Arc::clone(&self.positions);
             let stats = Arc::clone(&self.stats);
             let running = Arc::clone(&self.running);
+            let market_data = Arc::clone(&self.market_data);
 
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(15));
@@ -334,6 +335,31 @@ impl TraderManager {
 
                     if !*running.read().await {
                         break;
+                    }
+
+                    // Update position prices with latest market data before display
+                    {
+                        let position_addresses: Vec<String> = {
+                            let positions_read = positions.read().await;
+                            positions_read.keys().cloned().collect()
+                        };
+
+                        for token_address in position_addresses {
+                            if
+                                let Ok(Some(token_data)) = market_data.get_token_data(
+                                    &token_address
+                                ).await
+                            {
+                                let current_price = token_data.price_native;
+
+                                if current_price > 0.0 {
+                                    let mut positions_write = positions.write().await;
+                                    if let Some(position) = positions_write.get_mut(&token_address) {
+                                        position.update_price(current_price);
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // Display status using table format
@@ -604,15 +630,32 @@ impl TraderManager {
                 };
 
                 for (token_address, _position) in &positions_clone {
-                    // Use market data for position price updates
+                    // Use market data for position price updates - prioritize native price
                     if let Ok(Some(token_data)) = market_data.get_token_data(token_address).await {
                         let current_price = token_data.price_native;
-                        strategy.write().await.update_price(token_address, current_price);
 
-                        let mut positions_write = positions.write().await;
-                        if let Some(pos) = positions_write.get_mut(token_address) {
-                            pos.update_price(current_price);
+                        // Only update if we have a valid price
+                        if current_price > 0.0 {
+                            strategy.write().await.update_price(token_address, current_price);
+
+                            let mut positions_write = positions.write().await;
+                            if let Some(pos) = positions_write.get_mut(token_address) {
+                                pos.update_price(current_price);
+                                log::debug!(
+                                    "Updated position price for {} from market data: {:.10} SOL (native)",
+                                    token_address,
+                                    current_price
+                                );
+                            }
+                        } else {
+                            log::warn!(
+                                "Invalid price for {} from market data: {}",
+                                token_address,
+                                current_price
+                            );
                         }
+                    } else {
+                        log::warn!("No market data found for position: {}", token_address);
                     }
                 }
 
@@ -743,7 +786,7 @@ impl TraderManager {
     async fn start_position_price_updates(&self) {
         let positions = Arc::clone(&self.positions);
         let running = Arc::clone(&self.running);
-        let pairs_client = Arc::clone(&self.pairs_client);
+        let market_data = Arc::clone(&self.market_data);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30)); // Update every 30 seconds
@@ -760,17 +803,21 @@ impl TraderManager {
                     positions_read.keys().cloned().collect()
                 };
 
-                // Update prices for all active positions using smart price discovery
+                // Update prices for all active positions using market data native price
                 for token_address in position_addresses {
-                    if let Ok(Some(best_price)) = pairs_client.get_best_price(&token_address).await {
-                        let mut positions_write = positions.write().await;
-                        if let Some(position) = positions_write.get_mut(&token_address) {
-                            position.update_price(best_price);
-                            log::debug!(
-                                "Updated position price for {} to ${}",
-                                token_address,
-                                best_price
-                            );
+                    if let Ok(Some(token_data)) = market_data.get_token_data(&token_address).await {
+                        let current_price = token_data.price_native;
+
+                        if current_price > 0.0 {
+                            let mut positions_write = positions.write().await;
+                            if let Some(position) = positions_write.get_mut(&token_address) {
+                                position.update_price(current_price);
+                                log::debug!(
+                                    "Updated position price for {} to {:.10} SOL (native price)",
+                                    token_address,
+                                    current_price
+                                );
+                            }
                         }
                     }
                 }
@@ -832,22 +879,21 @@ impl TraderManager {
             return Ok(());
         }
 
-        // Get updated price using smart price discovery
-        let current_price = self
-            .get_best_token_price(&signal.token_address).await?
-            .unwrap_or(signal.current_price);
+        // DO NOT fetch updated price here!
+        // let current_price = self
+        //     .get_best_token_price(&signal.token_address).await?
+        //     .unwrap_or(signal.current_price);
+
+        let current_price = signal.current_price;
 
         // Check if price hasn't moved too much since signal generation
-        // Handle very small prices by using a minimum threshold
-        let min_price_threshold = 1e-10; // Minimum price to consider for percentage calculation
-
+        let min_price_threshold = 1e-10;
         if signal.current_price > min_price_threshold && current_price > min_price_threshold {
             let price_deviation = (
                 (current_price - signal.current_price) /
                 signal.current_price
             ).abs();
             if price_deviation > 0.05 {
-                // 5% max deviation
                 println!(
                     "⚠️  Skipping BUY for {} - price moved too much: {:.2}% (signal: {:.10} SOL → current: {:.10} SOL)",
                     signal.token_address,
@@ -873,13 +919,12 @@ impl TraderManager {
             trade_size
         );
 
-        // Create updated signal with best price
+        // Use signal.current_price for trade execution
         let updated_signal = TradeSignal {
             current_price,
             ..signal.clone()
         };
 
-        // Execute swap (dry run or real based on config)
         let trade_result = if self.config.dry_run {
             self.simulate_buy_trade(&updated_signal, trade_size).await
         } else {
@@ -1141,6 +1186,8 @@ impl TraderManager {
 
         if result.success {
             position.add_buy_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
+            // Update current price to signal price
+            position.update_price(signal.current_price);
         }
 
         // Save position to database
@@ -1204,6 +1251,8 @@ impl TraderManager {
     ) -> Result<()> {
         if result.success {
             position.add_buy_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
+            // Update current price to signal price
+            position.update_price(signal.current_price);
 
             // Mark DCA level as executed
             let next_level = position.dca_level + 1;
@@ -1430,6 +1479,27 @@ impl TraderManager {
     pub async fn display_position_summary(&self) -> Result<()> {
         use colored::*;
 
+        // First update all position prices with latest market data
+        {
+            let position_addresses: Vec<String> = {
+                let positions_read = self.positions.read().await;
+                positions_read.keys().cloned().collect()
+            };
+
+            for token_address in position_addresses {
+                if let Ok(Some(token_data)) = self.market_data.get_token_data(&token_address).await {
+                    let current_price = token_data.price_native;
+
+                    if current_price > 0.0 {
+                        let mut positions_write = self.positions.write().await;
+                        if let Some(position) = positions_write.get_mut(&token_address) {
+                            position.update_price(current_price);
+                        }
+                    }
+                }
+            }
+        }
+
         let positions = self.positions.read().await;
 
         if positions.is_empty() {
@@ -1562,7 +1632,6 @@ impl TraderManager {
     }
 }
 
-// Helper function to format large numbers
 // Helper function to format large numbers
 fn format_large_number(num: f64) -> String {
     if num >= 1_000_000_000.0 {

@@ -107,7 +107,7 @@ impl PairsClient {
         // Use the correct DEX Screener API format: /tokens/v1/{chain}/{addresses}
         let url = format!("{}/tokens/v1/{}/{}", self.base_url, chain_id, token_addresses);
 
-        debug!("Fetching token pairs from: {}", url);
+        debug!("[DexScreener] Fetching token pairs from: {}", url);
 
         let response = self.client
             .get(&url)
@@ -117,12 +117,25 @@ impl PairsClient {
         // Update the last request time after successful request
         *self.last_request_time.lock().await = Some(std::time::Instant::now());
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        let status = response.status();
+        let text = response.text().await;
 
+        match &text {
+            Ok(body) => {
+                debug!("[DexScreener] API response status: {}", status);
+                debug!(
+                    "[DexScreener] API response body: {}",
+                    &body.chars().take(1000).collect::<String>()
+                );
+            }
+            Err(e) => {
+                debug!("[DexScreener] Failed to read response body: {}", e);
+            }
+        }
+
+        if !status.is_success() {
+            let error_text = text.unwrap_or_else(|_| "Unknown error".to_string());
             error!("API request failed with status {}: {}", status, error_text);
-
             return Err(
                 anyhow::anyhow!(
                     "DexScreener API request failed with status {}: {}",
@@ -132,9 +145,9 @@ impl PairsClient {
             );
         }
 
-        // DEX Screener API returns a direct array of pairs for the tokens endpoint
-        let pairs: Vec<TokenPair> = response
-            .json().await
+        // Parse JSON from the response body
+        let pairs: Vec<TokenPair> = serde_json
+            ::from_str(text.as_ref().unwrap())
             .context("Failed to parse JSON response from DexScreener API")?;
 
         info!(
