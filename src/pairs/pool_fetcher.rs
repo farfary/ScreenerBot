@@ -88,69 +88,111 @@ impl PoolDataFetcher {
         let batch_size = 100; // Solana RPC supports up to 100 accounts per call
         let mut all_pool_infos = Vec::new();
 
-        // Process in batches to respect RPC limits
         for chunk in pool_addresses.chunks(batch_size) {
             debug!("Fetching batch of {} pool accounts", chunk.len());
 
-            // Fetch all account data in one RPC call
-            match self.rpc_manager.get_multiple_accounts(chunk).await {
-                Ok(accounts) => {
-                    // Process each account with its corresponding address
-                    for (pool_address, account_opt) in chunk.iter().zip(accounts.iter()) {
-                        if let Some(account) = account_opt {
-                            // Decode the pool data
-                            match self.decoder_registry.decode_pool(&account.owner, &account.data) {
-                                Ok(mut pool_info) => {
-                                    pool_info.pool_address = *pool_address;
-
-                                    // Fetch token vault balances and decimals if needed
-                                    if
-                                        let Err(e) = self.fetch_and_update_reserves(
-                                            &mut pool_info
-                                        ).await
-                                    {
-                                        warn!(
-                                            "Failed to update reserves for {}: {}",
-                                            pool_address,
-                                            e
-                                        );
-                                    }
-
-                                    if
-                                        let Err(e) = self.fetch_and_update_token_decimals(
-                                            &mut pool_info
-                                        ).await
-                                    {
-                                        warn!(
-                                            "Failed to update decimals for {}: {}",
-                                            pool_address,
-                                            e
-                                        );
-                                    }
-
-                                    all_pool_infos.push(pool_info);
-                                }
-                                Err(e) => {
-                                    warn!("Failed to decode pool data for {}: {}", pool_address, e);
-                                }
-                            }
-                        } else {
-                            warn!("No account data found for pool {}", pool_address);
-                        }
-                    }
-                }
+            // 1. Fetch all pool account data in one RPC call
+            let pool_accounts = match self.rpc_manager.get_multiple_accounts(chunk).await {
+                Ok(accounts) => accounts,
                 Err(e) => {
                     warn!("Failed to fetch batch of pool accounts: {}", e);
                     // Fallback to individual fetching for this batch
+                    let mut fallback_accounts = Vec::new();
                     for pool_address in chunk {
-                        match self.fetch_pool_data(pool_address).await {
-                            Ok(pool_info) => all_pool_infos.push(pool_info),
+                        match self.rpc_manager.get_account(pool_address).await {
+                            Ok(account) => fallback_accounts.push(Some(account)),
                             Err(e) => {
                                 warn!("Failed to fetch pool data for {}: {}", pool_address, e);
+                                fallback_accounts.push(None);
                             }
                         }
                     }
+                    fallback_accounts
                 }
+            };
+
+            // 2. Decode all pool accounts and collect all vault pubkeys for batch fetch
+            let mut decoded_pools = Vec::new();
+            let mut all_vault_pubkeys = Vec::new();
+            for (pool_address, account_opt) in chunk.iter().zip(pool_accounts.iter()) {
+                if let Some(account) = account_opt {
+                    match self.decoder_registry.decode_pool(&account.owner, &account.data) {
+                        Ok(mut pool_info) => {
+                            pool_info.pool_address = *pool_address;
+                            all_vault_pubkeys.push(pool_info.token_vault_0);
+                            all_vault_pubkeys.push(pool_info.token_vault_1);
+                            all_vault_pubkeys.push(pool_info.token_mint_0);
+                            all_vault_pubkeys.push(pool_info.token_mint_1);
+                            decoded_pools.push((pool_info, *pool_address));
+                        }
+                        Err(e) => {
+                            warn!("Failed to decode pool data for {}: {}", pool_address, e);
+                        }
+                    }
+                } else {
+                    warn!("No account data found for pool {}", pool_address);
+                }
+            }
+
+            // 3. Batch fetch all vault and mint accounts for this chunk
+            let mut vault_accounts_map = std::collections::HashMap::new();
+            for vault_chunk in all_vault_pubkeys.chunks(100) {
+                match self.rpc_manager.get_multiple_accounts(vault_chunk).await {
+                    Ok(accounts) => {
+                        for (vault_pubkey, account_opt) in vault_chunk.iter().zip(accounts.iter()) {
+                            if let Some(account) = account_opt {
+                                vault_accounts_map.insert(*vault_pubkey, account.clone());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch vault/mint accounts batch: {}", e);
+                    }
+                }
+            }
+
+            // 4. Fill reserves and decimals for all decoded pools using the batch-fetched accounts
+            for (mut pool_info, pool_address) in decoded_pools {
+                // Reserves
+                let vault_0 = vault_accounts_map.get(&pool_info.token_vault_0);
+                let vault_1 = vault_accounts_map.get(&pool_info.token_vault_1);
+                if let (Some(v0), Some(v1)) = (vault_0, vault_1) {
+                    match
+                        (
+                            self.parse_token_account_balance(&v0.data),
+                            self.parse_token_account_balance(&v1.data),
+                        )
+                    {
+                        (Ok(r0), Ok(r1)) => {
+                            pool_info.reserve_0 = r0;
+                            pool_info.reserve_1 = r1;
+                        }
+                        (Err(e0), Err(e1)) =>
+                            warn!("Failed to parse reserves for {}: {}, {}", pool_address, e0, e1),
+                        (Err(e), _) | (_, Err(e)) =>
+                            warn!("Failed to parse reserve for {}: {}", pool_address, e),
+                    }
+                } else {
+                    warn!("Missing vault account(s) for pool {}", pool_address);
+                }
+                // Decimals
+                let mint_0 = vault_accounts_map.get(&pool_info.token_mint_0);
+                let mint_1 = vault_accounts_map.get(&pool_info.token_mint_1);
+                if let (Some(m0), Some(m1)) = (mint_0, mint_1) {
+                    match (self.parse_mint_decimals(&m0.data), self.parse_mint_decimals(&m1.data)) {
+                        (Ok(d0), Ok(d1)) => {
+                            pool_info.decimals_0 = d0;
+                            pool_info.decimals_1 = d1;
+                        }
+                        (Err(e0), Err(e1)) =>
+                            warn!("Failed to parse decimals for {}: {}, {}", pool_address, e0, e1),
+                        (Err(e), _) | (_, Err(e)) =>
+                            warn!("Failed to parse decimals for {}: {}", pool_address, e),
+                    }
+                } else {
+                    warn!("Missing mint account(s) for pool {}", pool_address);
+                }
+                all_pool_infos.push(pool_info);
             }
 
             // Rate limiting between batches
@@ -441,7 +483,9 @@ pub mod pool_utils {
 
         // Apply filters
         if let Some(min_liq) = min_liquidity_usd {
-            filtered_pairs.retain(|pair| pair.liquidity.usd >= min_liq);
+            filtered_pairs.retain(|pair|
+                pair.liquidity.as_ref().map_or(false, |l| l.usd >= min_liq)
+            );
             debug!("After liquidity filter (>= ${:.2}): {} pairs", min_liq, filtered_pairs.len());
         }
 
@@ -506,9 +550,11 @@ pub mod pool_utils {
 
         // Sort by liquidity descending
         let mut sorted_pairs = token_pairs;
-        sorted_pairs.sort_by(|a, b|
-            b.liquidity.usd.partial_cmp(&a.liquidity.usd).unwrap_or(std::cmp::Ordering::Equal)
-        );
+        sorted_pairs.sort_by(|a, b| {
+            let a_liq = a.liquidity.as_ref().map_or(0.0, |l| l.usd);
+            let b_liq = b.liquidity.as_ref().map_or(0.0, |l| l.usd);
+            b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Take top N pairs
         sorted_pairs.truncate(limit);

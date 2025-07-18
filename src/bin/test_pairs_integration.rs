@@ -32,7 +32,8 @@ async fn main() -> Result<()> {
                     best_pair.dex_id,
                     quality_score
                 );
-                println!("   💰 Liquidity: ${:.2}", best_pair.liquidity.usd);
+                let liquidity_usd = best_pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
+                println!("   💰 Liquidity: ${:.2}", liquidity_usd);
                 println!("   📊 Volume 24h: ${:.2}", best_pair.volume.h24);
                 println!("   💵 Price: ${}", best_pair.price_usd);
             }

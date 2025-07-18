@@ -212,7 +212,7 @@ async fn search_via_dexscreener_tokens_api(client: &Client, token_address: &str)
     // Display statistics
     let total_liquidity: f64 = pools
         .iter()
-        .map(|p| p.liquidity.usd)
+        .map(|p| p.liquidity.as_ref().map_or(0.0, |l| l.usd))
         .sum();
     let total_volume_24h: f64 = pools
         .iter()
@@ -237,7 +237,8 @@ async fn search_via_dexscreener_tokens_api(client: &Client, token_address: &str)
         println!("      Pair: {}/{}", pool.base_token.symbol, pool.quote_token.symbol);
         println!("      Labels: {}", labels);
         println!("      Price: ${:.8} ({:+.2}% 24h)", price, price_change_24h);
-        println!("      Liquidity: ${:.2}", pool.liquidity.usd);
+        let liquidity_usd = pool.liquidity.as_ref().map_or(0.0, |l| l.usd);
+        println!("      Liquidity: ${:.2}", liquidity_usd);
         println!("      24h Volume: ${:.2}", pool.volume.h24);
         if let Some(market_cap) = pool.market_cap {
             println!("      Market Cap: ${:.2}", market_cap);

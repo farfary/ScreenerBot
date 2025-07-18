@@ -130,7 +130,7 @@ impl PairsClient {
     ) -> Vec<TokenPair> {
         let filtered: Vec<TokenPair> = pairs
             .into_iter()
-            .filter(|pair| pair.liquidity.usd >= min_liquidity_usd)
+            .filter(|pair| pair.liquidity.as_ref().map_or(false, |l| l.usd >= min_liquidity_usd))
             .collect();
 
         debug!(
@@ -176,9 +176,11 @@ impl PairsClient {
 
     /// Sort pairs by liquidity (highest first)
     pub fn sort_by_liquidity(&self, mut pairs: Vec<TokenPair>) -> Vec<TokenPair> {
-        pairs.sort_by(|a, b|
-            b.liquidity.usd.partial_cmp(&a.liquidity.usd).unwrap_or(std::cmp::Ordering::Equal)
-        );
+        pairs.sort_by(|a, b| {
+            let a_liq = a.liquidity.as_ref().map_or(0.0, |l| l.usd);
+            let b_liq = b.liquidity.as_ref().map_or(0.0, |l| l.usd);
+            b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+        });
         pairs
     }
 
@@ -201,12 +203,13 @@ impl PairsClient {
             .into_iter()
             .filter(|pair| {
                 // Filter out low-quality pairs
-                pair.liquidity.usd > 1000.0 && // Minimum $1k liquidity
+                let liquidity_usd = pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
+                liquidity_usd > 1000.0 && // Minimum $1k liquidity
                     pair.has_recent_activity() && // Recent trading activity
                     pair.total_transactions_24h() > 10 // Minimum transaction count
             })
             .map(|pair| {
-                let liquidity_score = pair.liquidity.usd;
+                let liquidity_score = pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
                 let volume_score = pair.volume.h24;
 
                 // Weight liquidity more heavily than volume for price accuracy
@@ -310,7 +313,8 @@ impl PairsClient {
         let mut score = 0.0;
 
         // Liquidity component (40% of score)
-        let liquidity_score = (pair.liquidity.usd / 1_000_000.0).min(1.0) * 40.0;
+        let liquidity_usd = pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
+        let liquidity_score = (liquidity_usd / 1_000_000.0).min(1.0) * 40.0;
         score += liquidity_score;
 
         // Volume component (30% of score)
@@ -335,13 +339,14 @@ impl PairsClient {
         info!("Total pairs found: {}", pairs.len());
 
         for (i, pair) in pairs.iter().enumerate() {
+            let liquidity_usd = pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
             info!(
                 "{}. {} - {}/{} | Liquidity: ${:.2} | Volume 24h: ${:.2} | Price: ${}",
                 i + 1,
                 pair.dex_id,
                 pair.base_token.symbol,
                 pair.quote_token.symbol,
-                pair.liquidity.usd,
+                liquidity_usd,
                 pair.volume.h24,
                 pair.price_usd
             );

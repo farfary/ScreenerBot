@@ -160,11 +160,12 @@ impl TraderManager {
             let trade_value_usd = trade_amount_sol * 180.0; // Approximate SOL price
             let min_liquidity = trade_value_usd * 10.0; // Require 10x liquidity vs trade size
 
-            if best_pair.liquidity.usd < min_liquidity {
+            let liquidity_usd = best_pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
+            if liquidity_usd < min_liquidity {
                 log::warn!(
                     "Insufficient liquidity for {} trade: ${:.2} < ${:.2}",
                     token_address,
-                    best_pair.liquidity.usd,
+                    liquidity_usd,
                     min_liquidity
                 );
                 return Ok(false);
@@ -174,7 +175,7 @@ impl TraderManager {
                 "Trade validation passed for {} - Quality: {:.1}, Liquidity: ${:.2}",
                 token_address,
                 quality_score,
-                best_pair.liquidity.usd
+                liquidity_usd
             );
             return Ok(true);
         }

@@ -125,7 +125,7 @@ impl PairsDatabase {
                     pair.dex_id,
                     pair_json,
                     pair.price_usd.parse::<f64>().ok(),
-                    Some(pair.liquidity.usd),
+                    pair.liquidity.as_ref().map(|l| l.usd),
                     Some(pair.volume.h24),
                     now.to_rfc3339(),
                     expires_at.to_rfc3339()

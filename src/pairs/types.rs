@@ -23,10 +23,11 @@ pub struct TokenPair {
     pub volume: VolumeMetrics,
     #[serde(rename = "priceChange")]
     pub price_change: PriceChangeMetrics,
-    pub liquidity: LiquidityMetrics,
-    pub fdv: Option<u64>,
+    #[serde(default)]
+    pub liquidity: Option<LiquidityMetrics>,
+    pub fdv: Option<f64>,
     #[serde(rename = "marketCap")]
-    pub market_cap: Option<u64>,
+    pub market_cap: Option<f64>,
     #[serde(rename = "pairCreatedAt")]
     pub pair_created_at: u64,
     pub info: Option<TokenInfo>,
@@ -74,6 +75,16 @@ pub struct LiquidityMetrics {
     pub usd: f64,
     pub base: f64,
     pub quote: f64,
+}
+
+impl Default for LiquidityMetrics {
+    fn default() -> Self {
+        Self {
+            usd: 0.0,
+            base: 0.0,
+            quote: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,7 +158,7 @@ impl TokenPair {
 
     /// Check if pair has high liquidity (>$100k USD)
     pub fn has_high_liquidity(&self) -> bool {
-        self.liquidity.usd > 100_000.0
+        self.liquidity.as_ref().map_or(false, |l| l.usd > 100_000.0)
     }
 
     /// Check if pair has recent activity (transactions in last 5 minutes)
