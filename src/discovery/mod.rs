@@ -207,6 +207,11 @@ impl Discovery {
         let mut known_mints = self.known_mints.write().await;
 
         for mint in mints {
+            // Skip if token is in config blacklist
+            if self.config.blacklisted_tokens.contains(&mint) {
+                continue;
+            }
+
             // Skip if we already have this mint
             if !known_mints.contains(&mint) {
                 // Save to database

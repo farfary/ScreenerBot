@@ -2,6 +2,7 @@ use anyhow::{ Context, Result };
 use serde::{ Deserialize, Serialize };
 use std::fs;
 use std::path::Path;
+use crate::rug_detection::RugDetectionConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -19,6 +20,8 @@ pub struct Config {
     pub rpc: RpcConfig,
     #[serde(default)]
     pub trader: TraderConfig,
+    #[serde(default)]
+    pub rug_detection: RugDetectionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,6 +220,8 @@ pub struct TraderConfig {
     pub position_check_interval_seconds: u64,
     pub price_check_interval_seconds: u64,
     pub database_path: String,
+    #[serde(default)]
+    pub rug_detection: RugDetectionConfig,
 }
 
 impl Default for TraderConfig {
@@ -236,6 +241,7 @@ impl Default for TraderConfig {
             position_check_interval_seconds: 30,
             price_check_interval_seconds: 10,
             database_path: "trader.db".to_string(),
+            rug_detection: RugDetectionConfig::default(),
         }
     }
 }
@@ -291,6 +297,7 @@ impl Default for Config {
             swap: SwapConfig::default(),
             rpc: RpcConfig::default(),
             trader: TraderConfig::default(),
+            rug_detection: RugDetectionConfig::default(),
         }
     }
 }

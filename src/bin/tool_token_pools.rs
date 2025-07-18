@@ -30,7 +30,7 @@ struct DexScreenerToken {
     #[serde(rename = "priceNative")]
     price_native: String,
     #[serde(rename = "priceUsd")]
-    price_usd: String,
+    price_sol: String,
     liquidity: DexScreenerLiquidity,
     volume: DexScreenerVolume,
     #[serde(rename = "priceChange")]
@@ -212,7 +212,7 @@ async fn search_via_dexscreener_tokens_api(client: &Client, token_address: &str)
     // Display statistics
     let total_liquidity: f64 = pools
         .iter()
-        .map(|p| p.liquidity.as_ref().map_or(0.0, |l| l.usd))
+        .map(|p| p.liquidity.usd)
         .sum();
     let total_volume_24h: f64 = pools
         .iter()
@@ -226,7 +226,7 @@ async fn search_via_dexscreener_tokens_api(client: &Client, token_address: &str)
     // Show all pools with details
     println!("\n🏊 Pool Details:");
     for (i, pool) in pools.iter().enumerate() {
-        let price = pool.price_usd.parse::<f64>().unwrap_or(0.0);
+        let price = pool.price_sol.parse::<f64>().unwrap_or(0.0);
         let price_change_24h = pool.price_change.h24.unwrap_or(0.0);
         let labels = pool.labels
             .as_ref()
@@ -237,8 +237,8 @@ async fn search_via_dexscreener_tokens_api(client: &Client, token_address: &str)
         println!("      Pair: {}/{}", pool.base_token.symbol, pool.quote_token.symbol);
         println!("      Labels: {}", labels);
         println!("      Price: ${:.8} ({:+.2}% 24h)", price, price_change_24h);
-        let liquidity_usd = pool.liquidity.as_ref().map_or(0.0, |l| l.usd);
-        println!("      Liquidity: ${:.2}", liquidity_usd);
+        let liquidity_sol = pool.liquidity.usd;
+        println!("      Liquidity: ${:.2}", liquidity_sol);
         println!("      24h Volume: ${:.2}", pool.volume.h24);
         if let Some(market_cap) = pool.market_cap {
             println!("      Market Cap: ${:.2}", market_cap);
@@ -275,7 +275,7 @@ async fn search_via_gecko_terminal(market_data: &MarketData, token_address: &str
             println!("✅ Token found in Gecko Terminal:");
             println!("   Name: {}", token_data.name);
             println!("   Symbol: {}", token_data.symbol);
-            println!("   Price: ${:.8}", token_data.price_usd);
+            println!("   Price: ${:.8}", token_data.price_sol);
             println!("   Market Cap: ${:.2}", token_data.market_cap);
             println!("   24h Volume: ${:.2}", token_data.volume_24h);
 
@@ -293,7 +293,7 @@ async fn search_via_gecko_terminal(market_data: &MarketData, token_address: &str
                     "   {}. {} - ${:.2} liquidity, ${:.2} 24h volume",
                     i + 1,
                     pool.pool_address,
-                    pool.liquidity_usd,
+                    pool.liquidity_sol,
                     pool.volume_24h
                 );
             }

@@ -177,4 +177,19 @@ impl TokenPair {
     pub fn is_major_pair(&self) -> bool {
         matches!(self.quote_token.symbol.as_str(), "SOL" | "USDC" | "USDT" | "ETH" | "BTC")
     }
+
+    /// Get price in SOL terms (approximation)
+    pub fn price_sol_approx(&self) -> Result<f64, std::num::ParseFloatError> {
+        let usd_price = self.price_usd.parse::<f64>()?;
+        let sol_price_usd = 180.0; // Approximate SOL price
+        Ok(usd_price / sol_price_usd)
+    }
+
+    /// Get liquidity in SOL terms (approximation)
+    pub fn liquidity_sol_approx(&self) -> Option<f64> {
+        self.liquidity.as_ref().map(|l| {
+            let sol_price_usd = 180.0; // Approximate SOL price
+            l.usd / sol_price_usd
+        })
+    }
 }

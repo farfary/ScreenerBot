@@ -71,6 +71,29 @@ async fn main() -> Result<()> {
         None
     };
 
+    // Rug detection monitor module
+    let rug_monitor = if config.trader.rug_detection.enabled {
+        use screenerbot::rug_detection::{ RugDetectionEngine, RugDetectionMonitor };
+
+        let rug_engine = Arc::new(
+            RugDetectionEngine::new(market_data.get_database(), config.trader.rug_detection.clone())
+        );
+
+        let monitor = Arc::new(
+            RugDetectionMonitor::new(
+                market_data.get_database(),
+                rug_engine,
+                config.trader.rug_detection.clone()
+            )
+        );
+
+        println!("🚨 Rug detection monitor ready");
+        Some(monitor)
+    } else {
+        println!("⚠️  Rug detection monitor disabled");
+        None
+    };
+
     // Start modules
     println!("\nStarting modules...");
 
@@ -86,6 +109,12 @@ async fn main() -> Result<()> {
     if let Some(ref trader_manager) = trader {
         let _ = trader_manager.start().await;
         println!("🎯 Trader module running");
+    }
+
+    // Start rug detection monitor
+    if let Some(ref monitor) = rug_monitor {
+        let _ = monitor.start().await;
+        println!("🚨 Rug detection monitor running");
     }
 
     println!("\n✅ All modules started successfully");
@@ -111,6 +140,10 @@ async fn main() -> Result<()> {
 
     if let Some(trader_manager) = trader {
         trader_manager.stop().await;
+    }
+
+    if let Some(monitor) = rug_monitor {
+        monitor.stop().await;
     }
 
     println!("✅ ScreenerBot shutdown complete\n");

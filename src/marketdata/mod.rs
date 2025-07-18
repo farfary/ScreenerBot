@@ -1,7 +1,15 @@
 pub mod database;
 pub mod gecko_api;
 
-pub use database::{ MarketDatabase, TokenData, PoolData, MarketStats };
+pub use database::{
+    MarketDatabase,
+    TokenData,
+    PoolData,
+    MarketStats,
+    LiquidityHistory,
+    TokenBlacklist,
+    RugDetectionEvent,
+};
 pub use gecko_api::GeckoTerminalClient;
 
 use crate::discovery::DiscoveryDatabase;
@@ -83,6 +91,11 @@ impl MarketData {
         self.stats.read().await.clone()
     }
 
+    /// Get reference to the market database
+    pub fn get_database(&self) -> Arc<MarketDatabase> {
+        self.database.clone()
+    }
+
     async fn run_update_loop(&self) {
         let mut interval = time::interval(Duration::from_secs(10)); // 10 second intervals
         let mut tokens_updated_this_session = 0u64;
@@ -142,14 +155,36 @@ impl MarketData {
                 .iter()
                 .map(|t| t.mint.clone())
                 .collect();
-            match self.gecko_client.fetch_token_data_batch(&mints).await {
+
+            // Filter out blacklisted tokens before processing
+            let mut non_blacklisted_mints = Vec::new();
+            for mint in &mints {
+                match self.database.is_blacklisted(mint) {
+                    Ok(false) => non_blacklisted_mints.push(mint.clone()),
+                    Ok(true) => {
+                        // Skip blacklisted tokens
+                        continue;
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to check blacklist for {}: {}", mint, e);
+                        // Include in batch if blacklist check fails
+                        non_blacklisted_mints.push(mint.clone());
+                    }
+                }
+            }
+
+            if non_blacklisted_mints.is_empty() {
+                continue; // Skip this batch if all tokens are blacklisted
+            }
+
+            match self.gecko_client.fetch_token_data_batch(&non_blacklisted_mints).await {
                 Ok(results) => {
                     for (token_data, pools) in results {
                         // Check price change before saving
                         let prev_token = self.database.get_token(&token_data.mint).ok().flatten();
                         if let Some(prev) = &prev_token {
-                            let old_price = prev.price_usd;
-                            let new_price = token_data.price_usd;
+                            let old_price = prev.price_sol;
+                            let new_price = token_data.price_sol;
                             if old_price > 0.0 {
                                 let diff = ((new_price - old_price) / old_price).abs();
                                 if diff > 0.01 {
@@ -170,60 +205,11 @@ impl MarketData {
                                         "age: unknown".to_string()
                                     };
 
-                                    // Get SOL price for conversion
-                                    let sol_price = if
-                                        let Some(sol_token) = self.database
-                                            .get_token(
-                                                "So11111111111111111111111111111111111111112"
-                                            )
-                                            .ok()
-                                            .flatten()
-                                    {
-                                        sol_token.price_usd
-                                    } else {
-                                        0.0
-                                    };
+                                    // Now we store prices directly in SOL terms, no conversion needed
+                                    let market_cap_sol = token_data.market_cap;
+                                    let liquidity_sol = token_data.liquidity_sol;
 
-                                    let market_cap_sol = if sol_price > 0.0 {
-                                        token_data.market_cap / sol_price
-                                    } else {
-                                        0.0
-                                    };
-                                    let liquidity_sol = if sol_price > 0.0 {
-                                        token_data.liquidity_usd / sol_price
-                                    } else {
-                                        0.0
-                                    };
-
-                                    // Colorize and align output using ANSI escape codes
-                                    use colored::*;
-                                    let symbol = format!("{:<10}", token_data.symbol)
-                                        .bright_white()
-                                        .bold();
-                                    let mint = format!("{}", token_data.mint).bright_cyan();
-                                    let price_line = format!("Price Change: {}", if pct >= 0.0 {
-                                        format!("+{:.2}%", pct).green().bold()
-                                    } else {
-                                        format!("{:.2}%", pct).red().bold()
-                                    });
-                                    let age_line = format!("{}", age_str.dimmed());
-                                    let mcap_line = format!(
-                                        "Market Cap: {:.2} SOL",
-                                        market_cap_sol
-                                    );
-                                    let liq_line = format!("Liquidity : {:.2} SOL", liquidity_sol);
-
-                                    // Print styled price change directly to console (not using Logger)
-                                    println!(
-                                        "\n{} {}\n  {}\n  {}\n  {}\n  {}\n  {}\n",
-                                        "PRICE CHANGE:".on_bright_black().bold().white(),
-                                        symbol,
-                                        format!("Mint: {}", mint),
-                                        price_line,
-                                        mcap_line,
-                                        liq_line,
-                                        age_line
-                                    );
+                                    // Price change detection - data saved to database for trader module to display
                                 }
                             }
                         }
@@ -280,6 +266,26 @@ impl MarketData {
     /// Get top tokens by volume for trader monitoring
     pub async fn get_top_tokens_by_volume(&self, limit: usize) -> Result<Vec<TokenData>> {
         self.database.get_top_tokens_by_volume(limit)
+    }
+
+    /// Check if a token is blacklisted
+    pub async fn is_token_blacklisted(&self, mint: &str) -> Result<bool> {
+        self.database.is_blacklisted(mint)
+    }
+
+    /// Add token to blacklist
+    pub async fn blacklist_token(&self, blacklist_entry: &TokenBlacklist) -> Result<()> {
+        self.database.add_to_blacklist(blacklist_entry)
+    }
+
+    /// Get blacklist entry for a token
+    pub async fn get_blacklist_entry(&self, mint: &str) -> Result<Option<TokenBlacklist>> {
+        self.database.get_blacklist_entry(mint)
+    }
+
+    /// Clean old liquidity history
+    pub async fn cleanup_old_data(&self) -> Result<()> {
+        self.database.cleanup_old_liquidity_history()
     }
 }
 

@@ -221,8 +221,8 @@ async fn main() -> Result<()> {
             println!("{}. Token: {}", index + 1, token.mint);
             println!("   Symbol: {}", token.symbol);
             println!("   Name: {}", token.name);
-            println!("   Current Price: ${:.8}", token.price_usd);
-            println!("   Liquidity: ${:.2}", token.liquidity_usd);
+            println!("   Current Price: ${:.8}", token.price_sol);
+            println!("   Liquidity: ${:.2}", token.liquidity_sol);
 
             // Get detailed pool information with batch optimization
             match get_detailed_pool_info_batch(token, &pairs_client, &pool_analyzer).await {
@@ -282,13 +282,13 @@ async fn validate_token_price_batch(
         match pairs_client.get_best_price(token_mint).await {
             Ok(Some(dex_price)) => {
                 // Compare with stored price (allow 10% variance)
-                if token.price_usd > 0.0 {
-                    let price_diff = (dex_price - token.price_usd).abs() / token.price_usd;
+                if token.price_sol > 0.0 {
+                    let price_diff = (dex_price - token.price_sol).abs() / token.price_sol;
                     if price_diff > 0.1 {
                         warn!(
                             "Large price difference for {}: stored=${:.8}, DEX=${:.8}",
                             token_mint,
-                            token.price_usd,
+                            token.price_sol,
                             dex_price
                         );
                         return Ok(false);
@@ -342,13 +342,13 @@ async fn validate_token_price_batch(
                 match pool_analyzer.analyze_pool(&pool_pubkey.to_string()).await {
                     Ok(analysis) => {
                         let pool_price = analysis.price_info.price;
-                        if token.price_usd > 0.0 {
-                            let price_diff = (pool_price - token.price_usd).abs() / token.price_usd;
+                        if token.price_sol > 0.0 {
+                            let price_diff = (pool_price - token.price_sol).abs() / token.price_sol;
                             if price_diff > 0.1 {
                                 warn!(
                                     "Large price difference for {} (on-chain): stored=${:.8}, pool=${:.8}",
                                     token_mint,
-                                    token.price_usd,
+                                    token.price_sol,
                                     pool_price
                                 );
                                 return Ok(false);
@@ -365,7 +365,7 @@ async fn validate_token_price_batch(
     }
 
     // Method 3: Check if token has valid liquidity/volume data
-    if token.liquidity_usd > 1000.0 && token.volume_24h > 100.0 {
+    if token.liquidity_sol > 1000.0 && token.volume_24h > 100.0 {
         // Has reasonable liquidity and volume, price might be valid
         return Ok(true);
     }
@@ -387,12 +387,12 @@ async fn validate_token_price(
     match pairs_client.get_best_price(token_mint).await {
         Ok(Some(dex_price)) => {
             // Compare with stored price (allow 10% variance)
-            let price_diff = (dex_price - token.price_usd).abs() / token.price_usd;
+            let price_diff = (dex_price - token.price_sol).abs() / token.price_sol;
             if price_diff > 0.1 {
                 warn!(
                     "Large price difference for {}: stored=${:.8}, DEX=${:.8}",
                     token_mint,
-                    token.price_usd,
+                    token.price_sol,
                     dex_price
                 );
                 return Ok(false);
@@ -414,12 +414,12 @@ async fn validate_token_price(
                 match pool_analyzer.analyze_pool(&pool_pubkey.to_string()).await {
                     Ok(analysis) => {
                         let pool_price = analysis.price_info.price;
-                        let price_diff = (pool_price - token.price_usd).abs() / token.price_usd;
+                        let price_diff = (pool_price - token.price_sol).abs() / token.price_sol;
                         if price_diff > 0.1 {
                             warn!(
                                 "Large price difference for {} (on-chain): stored=${:.8}, pool=${:.8}",
                                 token_mint,
-                                token.price_usd,
+                                token.price_sol,
                                 pool_price
                             );
                             return Ok(false);
@@ -438,7 +438,7 @@ async fn validate_token_price(
     }
 
     // Method 3: Check if token has valid liquidity/volume data
-    if token.liquidity_usd > 1000.0 && token.volume_24h > 100.0 {
+    if token.liquidity_sol > 1000.0 && token.volume_24h > 100.0 {
         // Has reasonable liquidity and volume, price might be valid
         return Ok(true);
     }
@@ -482,8 +482,8 @@ async fn get_detailed_pool_info_batch(
                         format!("Best Pool: {} ({})", best_pair.pair_address, best_pair.dex_id)
                     );
                     details.push(format!("  Quality Score: {:.1}/100", quality_score));
-                    let liquidity_usd = best_pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
-                    details.push(format!("  Liquidity: ${:.2}", liquidity_usd));
+                    let liquidity_sol = best_pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
+                    details.push(format!("  Liquidity: ${:.2}", liquidity_sol));
                     details.push(format!("  24h Volume: ${:.2}", best_pair.volume.h24));
                     details.push(format!("  DEX Price: ${:.8}", best_pair.price_usd));
 
@@ -614,8 +614,8 @@ async fn get_detailed_pool_info(
                     format!("Best Pool: {} ({})", best_pair.pair_address, best_pair.dex_id)
                 );
                 details.push(format!("  Quality Score: {:.1}/100", quality_score));
-                let liquidity_usd = best_pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
-                details.push(format!("  Liquidity: ${:.2}", liquidity_usd));
+                let liquidity_sol = best_pair.liquidity.as_ref().map_or(0.0, |l| l.usd);
+                details.push(format!("  Liquidity: ${:.2}", liquidity_sol));
                 details.push(format!("  24h Volume: ${:.2}", best_pair.volume.h24));
                 details.push(format!("  DEX Price: ${:.8}", best_pair.price_usd));
 

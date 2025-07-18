@@ -84,3 +84,22 @@ pub struct TraderStats {
     pub active_positions: u32,
     pub closed_positions: u32,
 }
+
+impl Default for TraderStats {
+    fn default() -> Self {
+        Self {
+            total_trades: 0,
+            successful_trades: 0,
+            failed_trades: 0,
+            total_invested_sol: 0.0,
+            total_realized_pnl_sol: 0.0,
+            total_unrealized_pnl_sol: 0.0,
+            win_rate: 0.0,
+            average_trade_size_sol: 0.0,
+            largest_win_sol: 0.0,
+            largest_loss_sol: 0.0,
+            active_positions: 0,
+            closed_positions: 0,
+        }
+    }
+}

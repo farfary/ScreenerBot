@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
+use colored::Colorize;
 
 use crate::config::TraderConfig;
 use crate::trader::database::TraderDatabase;
@@ -11,11 +12,11 @@ use crate::trader::position::Position;
 use crate::trader::strategy::TradingStrategy;
 use crate::trader::types::*;
 use crate::types::TokenInfo;
-use crate::marketdata::TokenData;
+use crate::marketdata::{ TokenData, MarketData };
 use crate::swap::SwapManager;
-use crate::marketdata::MarketData;
 use crate::discovery::Discovery;
 use crate::pairs::{ PairsClient, PairsTrait };
+use crate::rug_detection::{ RugDetectionEngine, RugAction };
 
 pub struct TraderManager {
     config: TraderConfig,
@@ -25,6 +26,7 @@ pub struct TraderManager {
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
     pairs_client: Arc<PairsClient>,
+    rug_detection: Arc<RugDetectionEngine>,
     positions: Arc<RwLock<HashMap<String, Position>>>,
     running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<TraderStats>>,
@@ -59,6 +61,11 @@ impl TraderManager {
             })
         );
 
+        // Create rug detection engine with shared market database
+        let rug_detection = Arc::new(
+            RugDetectionEngine::new(market_data.get_database(), config.rug_detection.clone())
+        );
+
         Ok(Self {
             config,
             database,
@@ -70,7 +77,113 @@ impl TraderManager {
             positions,
             running,
             stats,
+            rug_detection,
         })
+    }
+
+    /// Validate token safety before trading - checks blacklist and rug indicators
+    async fn validate_token_safety(
+        &self,
+        token_address: &str,
+        trade_amount_sol: f64
+    ) -> Result<bool> {
+        log::debug!(
+            "Validating token safety for {} (trade: {} SOL)",
+            token_address,
+            trade_amount_sol
+        );
+
+        // Get current liquidity for analysis (try multiple sources)
+        let current_liquidity = self.get_current_liquidity(token_address).await.unwrap_or(0.0);
+
+        // Run comprehensive rug detection analysis
+        match self.rug_detection.analyze_token(token_address, current_liquidity).await {
+            Ok(result) => {
+                match result.recommended_action {
+                    RugAction::Blacklist | RugAction::SellImmediately => {
+                        log::warn!(
+                            "Token {} blocked for trading: {:?} (confidence: {:.1}%)",
+                            token_address,
+                            result.reasons,
+                            result.confidence * 100.0
+                        );
+                        return Ok(false);
+                    }
+                    RugAction::Monitor => {
+                        log::warn!(
+                            "Token {} trading warning: {:?} (confidence: {:.1}%)",
+                            token_address,
+                            result.reasons,
+                            result.confidence * 100.0
+                        );
+                        // For warnings, allow small trades but block large ones
+                        if trade_amount_sol > 0.5 {
+                            log::warn!(
+                                "Large trade blocked due to monitoring status for {}",
+                                token_address
+                            );
+                            return Ok(false);
+                        }
+                    }
+                    RugAction::Continue => {
+                        log::debug!("Token {} passed rug detection checks", token_address);
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "Rug detection failed for {}: {}. Proceeding with caution.",
+                    token_address,
+                    e
+                );
+                // On detection failure, be conservative - block large trades
+                if trade_amount_sol > 0.1 {
+                    log::warn!(
+                        "Large trade blocked due to rug detection failure for {}",
+                        token_address
+                    );
+                    return Ok(false);
+                }
+            }
+        }
+
+        // Additional safety check - validate pool quality
+        match self.validate_trade_with_pool_quality(token_address, trade_amount_sol).await {
+            Ok(false) => {
+                log::warn!("Token {} failed pool quality validation", token_address);
+                return Ok(false);
+            }
+            Err(e) => {
+                log::warn!("Pool quality validation failed for {}: {}", token_address, e);
+                // Be conservative on validation errors
+                return Ok(false);
+            }
+            Ok(true) => {
+                log::debug!("Token {} passed pool quality validation", token_address);
+            }
+        }
+
+        log::info!("Token {} validated as safe for trading", token_address);
+        Ok(true)
+    }
+
+    /// Get current liquidity for a token from various sources
+    async fn get_current_liquidity(&self, token_address: &str) -> Result<f64> {
+        // Try to get liquidity from pairs client first
+        if let Ok(pairs) = self.pairs_client.get_solana_token_pairs(token_address).await {
+            if let Some(best_pair) = self.pairs_client.get_best_pair(pairs) {
+                if let Some(liquidity) = best_pair.liquidity {
+                    return Ok(liquidity.usd);
+                }
+            }
+        }
+
+        // Fallback to market data if available
+        if let Ok(Some(token_data)) = self.market_data.get_token_data(token_address).await {
+            return Ok(token_data.liquidity_sol);
+        }
+
+        Ok(0.0)
     }
 
     /// Get the best price for a token using smart pool selection
@@ -92,7 +205,7 @@ impl TraderManager {
         // Fallback to market data API
         match self.market_data.get_token_data(token_address).await {
             Ok(Some(token_data)) => {
-                let price = token_data.price_usd;
+                let price = token_data.price_sol;
                 log::debug!(
                     "Got fallback price from market data for {}: ${}",
                     token_address,
@@ -286,11 +399,11 @@ impl TraderManager {
                         Ok(None) | Err(_) => {
                             // Fallback to market data price
                             log::debug!(
-                                "Using market data price for {}: ${}",
+                                "Using market data price for {}: {} SOL",
                                 token.mint,
-                                token.price_usd
+                                token.price_sol
                             );
-                            token.price_usd
+                            token.price_sol
                         }
                     };
 
@@ -300,23 +413,38 @@ impl TraderManager {
                     // Calculate price change if we have a previous price
                     if let Some(prev_price) = previous_price {
                         if (market_price - prev_price).abs() > prev_price * 0.001 {
-                            // Show changes > 0.1%
+                            // Show changes > 0.1% with enhanced display
                             let change_percent = ((market_price - prev_price) / prev_price) * 100.0;
                             let change_indicator = if change_percent > 0.0 { "📈" } else { "📉" };
+
+                            // Enhanced display with token details
+                            println!("\n{}", "━".repeat(60).bright_cyan());
                             println!(
-                                "{} {} ({}): ${:.8} → ${:.8} ({:+.2}%)",
-                                change_indicator,
-                                token.symbol,
-                                &token.mint[..8],
-                                prev_price,
-                                market_price,
-                                change_percent
+                                "{} {} ({})",
+                                "🪙 PRICE CHANGE:".bright_cyan().bold(),
+                                token.name.bright_white().bold(),
+                                token.symbol.bright_yellow().bold()
                             );
+                            println!("   📍 Mint: {}", &token.mint[..8].bright_blue());
+                            println!(
+                                "   {} Price: {:.8} SOL → {:.8} SOL ({:+.2}%)",
+                                change_indicator,
+                                prev_price.to_string().dimmed(),
+                                market_price.to_string().bright_green().bold(),
+                                change_percent
+                                    .to_string()
+                                    .color(if change_percent > 0.0 { "green" } else { "red" })
+                                    .bold()
+                            );
+                            println!("   🏦 Market Cap: {:.2} SOL", token.market_cap);
+                            println!("   💧 Liquidity: {:.2} SOL", token.liquidity_sol);
+                            println!("   📊 Volume 24h: {:.2}K", token.volume_24h / 1000.0);
+                            println!("{}", "━".repeat(60).bright_cyan());
                         }
                     } else {
-                        // First time getting price for this token
+                        // First time getting price for this token - show basic info
                         println!(
-                            "🎯 {} ({}): Initial Price=${:.8} | Volume=${:.2}K",
+                            "🎯 {} ({}): Initial Price={:.8} SOL | Volume={:.2}K",
                             token.symbol,
                             &token.mint[..8],
                             market_price,
@@ -331,6 +459,24 @@ impl TraderManager {
                         "📊 Monitoring Summary: {} tokens using market data prices",
                         top_tokens.len()
                     );
+
+                    // Display enhanced position summary every 30 seconds
+                    let positions_read = positions.read().await;
+                    if !positions_read.is_empty() {
+                        println!("\n{}", "📊 ACTIVE POSITIONS".bright_cyan().bold());
+                        for (mint, position) in positions_read.iter() {
+                            println!(
+                                "   🪙 {} | Invested: {:.4} SOL | Tokens: {:.4} | PnL: {:.4} SOL",
+                                position.token_symbol,
+                                position.total_invested_sol,
+                                position.total_tokens,
+                                position.unrealized_pnl_sol
+                            );
+                        }
+                    } else {
+                        println!("\n📊 No active positions");
+                    }
+
                     last_top_tokens_update = std::time::Instant::now();
                 }
 
@@ -343,7 +489,7 @@ impl TraderManager {
                 for (token_address, _position) in &positions_clone {
                     // Use market data for position price updates
                     if let Ok(Some(token_data)) = market_data.get_token_data(token_address).await {
-                        let current_price = token_data.price_usd;
+                        let current_price = token_data.price_sol;
                         strategy.write().await.update_price(token_address, current_price);
 
                         let mut positions_write = positions.write().await;
@@ -437,7 +583,7 @@ impl TraderManager {
                                 &discovered_token.mint
                             ).await
                         {
-                            let current_price = token_data.price_usd;
+                            let current_price = token_data.price_sol;
 
                             if current_price > 0.0 {
                                 // Convert TokenData to TokenInfo
@@ -554,6 +700,15 @@ impl TraderManager {
             .read().await
             .calculate_trade_size(signal, existing_position.as_ref());
 
+        // First validate token safety (rug detection + blacklist)
+        if !self.validate_token_safety(&signal.token_address, trade_size).await? {
+            println!(
+                "⚠️  Skipping BUY for {} - failed rug detection/safety validation",
+                signal.token_address
+            );
+            return Ok(());
+        }
+
         // Validate trade using pool quality metrics
         if !self.validate_trade_with_pool_quality(&signal.token_address, trade_size).await? {
             println!("⚠️  Skipping BUY for {} - pool quality insufficient", signal.token_address);
@@ -624,6 +779,37 @@ impl TraderManager {
 
     async fn execute_sell_trade(&self, signal: &TradeSignal, position: Position) -> Result<()> {
         let trade_size = position.total_tokens;
+
+        // Check for rug indicators (but don't block sell trades - we want to exit bad positions)
+        let current_liquidity = self
+            .get_current_liquidity(&signal.token_address).await
+            .unwrap_or(0.0);
+        match self.rug_detection.analyze_token(&signal.token_address, current_liquidity).await {
+            Ok(result) => {
+                match result.recommended_action {
+                    RugAction::Blacklist | RugAction::SellImmediately => {
+                        println!(
+                            "🚨 URGENT SELL for rugged token {}: {:?}",
+                            signal.token_address,
+                            result.reasons
+                        );
+                    }
+                    RugAction::Monitor => {
+                        println!(
+                            "⚠️  Selling potentially risky token {}: {:?}",
+                            signal.token_address,
+                            result.reasons
+                        );
+                    }
+                    RugAction::Continue => {
+                        log::debug!("Selling safe token {}", signal.token_address);
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Rug detection failed for sell of {}: {}", signal.token_address, e);
+            }
+        }
 
         // Get updated price using smart price discovery
         let current_price = self
@@ -981,9 +1167,9 @@ impl TraderManager {
             decimals: token_data.decimals,
             supply: token_data.total_supply as u64,
             market_cap: Some(token_data.market_cap),
-            price: Some(token_data.price_usd),
+            price: Some(token_data.price_sol),
             volume_24h: Some(token_data.volume_24h),
-            liquidity: Some(token_data.liquidity_usd),
+            liquidity: Some(token_data.liquidity_sol),
             pool_address: token_data.top_pool_address.clone(),
             discovered_at: token_data.last_updated,
             last_updated: token_data.last_updated,
@@ -1004,6 +1190,235 @@ impl TraderManager {
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),
         }
+    }
+
+    /// Display comprehensive token information with market data
+    pub async fn display_token_info(
+        &self,
+        token_data: &TokenData,
+        show_price_change: bool
+    ) -> Result<()> {
+        use colored::*;
+
+        let symbol = &token_data.symbol;
+        let name = &token_data.name;
+
+        // Header
+        println!("\n{}", "━".repeat(80).bright_black());
+        println!(
+            "{} {} ({})",
+            "🪙 TOKEN INFO:".bright_cyan().bold(),
+            name.bright_white().bold(),
+            symbol.bright_yellow().bold()
+        );
+        println!("{}", "━".repeat(80).bright_black());
+
+        // Basic info
+        println!("   📍 Mint: {}", token_data.mint.bright_blue());
+        println!("   💰 Price: {:.8} SOL", token_data.price_sol.to_string().bright_green().bold());
+
+        println!("   🏦 Market Cap: {:.2} SOL", token_data.market_cap);
+
+        println!("   📊 Total Supply: {}", format_large_number(token_data.total_supply));
+
+        println!("   💧 Liquidity: {:.2} SOL", token_data.liquidity_sol);
+
+        // Price change information
+        if show_price_change {
+            self.display_price_change_info(token_data).await?;
+        }
+
+        println!("{}", "━".repeat(80).bright_black());
+        Ok(())
+    }
+
+    /// Display price change information with detailed analytics
+    async fn display_price_change_info(&self, token_data: &TokenData) -> Result<()> {
+        use colored::*;
+
+        // Get historical data for price change calculation
+        if let Ok(Some(historical)) = self.market_data.get_database().get_token(&token_data.mint) {
+            let old_price = historical.price_sol;
+            if old_price > 0.0 {
+                let price_change = ((token_data.price_sol - old_price) / old_price) * 100.0;
+
+                let (change_color, change_emoji) = if price_change > 0.0 {
+                    ("green", "📈")
+                } else if price_change < 0.0 {
+                    ("red", "📉")
+                } else {
+                    ("yellow", "➡️")
+                };
+
+                println!(
+                    "   {} Price Change: {}{:.2}%",
+                    change_emoji,
+                    if price_change > 0.0 {
+                        "+"
+                    } else {
+                        ""
+                    },
+                    price_change.to_string().color(change_color).bold()
+                );
+
+                println!(
+                    "   📊 Previous: {:.8} SOL → Current: {:.8} SOL",
+                    old_price.to_string().dimmed(),
+                    token_data.price_sol.to_string().bright_white().bold()
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Display current position summary
+    pub async fn display_position_summary(&self) -> Result<()> {
+        use colored::*;
+
+        let positions = self.positions.read().await;
+
+        if positions.is_empty() {
+            println!("\n{} No active positions", "📊 POSITIONS:".bright_cyan().bold());
+            return Ok(());
+        }
+
+        println!("\n{}", "━".repeat(80).bright_black());
+        println!("{}", "📊 ACTIVE POSITIONS".bright_cyan().bold());
+        println!("{}", "━".repeat(80).bright_black());
+
+        let mut total_value_sol = 0.0;
+        let mut total_pnl_sol = 0.0;
+
+        for (mint, position) in positions.iter() {
+            // Get current market data
+            if let Ok(Some(token_data)) = self.market_data.get_database().get_token(mint) {
+                let current_value = position.total_tokens * token_data.price_sol;
+                let pnl = position.unrealized_pnl_sol;
+                let pnl_percent = position.unrealized_pnl_percent;
+
+                total_value_sol += current_value;
+                total_pnl_sol += pnl;
+
+                let symbol = &position.token_symbol;
+
+                let pnl_color = if pnl > 0.0 {
+                    "green"
+                } else if pnl < 0.0 {
+                    "red"
+                } else {
+                    "yellow"
+                };
+
+                println!("   🪙 {} ({})", token_data.name.bright_white(), symbol.bright_yellow());
+                println!(
+                    "      💰 Tokens: {:.4} | Value: {:.4} SOL",
+                    position.total_tokens,
+                    current_value
+                );
+                println!(
+                    "      📈 P&L: {}{:.4} SOL ({}{:.2}%)",
+                    if pnl > 0.0 {
+                        "+"
+                    } else {
+                        ""
+                    },
+                    pnl.to_string().color(pnl_color).bold(),
+                    if pnl_percent > 0.0 {
+                        "+"
+                    } else {
+                        ""
+                    },
+                    pnl_percent.to_string().color(pnl_color).bold()
+                );
+                println!(
+                    "      🕒 Created: {} | Current: {:.8} SOL",
+                    position.created_at.format("%H:%M:%S").to_string().dimmed(),
+                    token_data.price_sol.to_string().bright_green()
+                );
+                println!();
+            }
+        }
+
+        // Summary
+        let total_pnl_percent = if total_value_sol > 0.0 {
+            (total_pnl_sol / (total_value_sol - total_pnl_sol)) * 100.0
+        } else {
+            0.0
+        };
+
+        let summary_color = if total_pnl_sol > 0.0 {
+            "green"
+        } else if total_pnl_sol < 0.0 {
+            "red"
+        } else {
+            "yellow"
+        };
+
+        println!("{}", "─".repeat(80).bright_black());
+        println!(
+            "   💼 Portfolio Value: {:.4} SOL",
+            total_value_sol.to_string().bright_white().bold()
+        );
+        println!(
+            "   📊 Total P&L: {}{:.4} SOL ({}{:.2}%)",
+            if total_pnl_sol > 0.0 {
+                "+"
+            } else {
+                ""
+            },
+            total_pnl_sol.to_string().color(summary_color).bold(),
+            if total_pnl_percent > 0.0 {
+                "+"
+            } else {
+                ""
+            },
+            total_pnl_percent.to_string().color(summary_color).bold()
+        );
+        println!("{}", "━".repeat(80).bright_black());
+
+        Ok(())
+    }
+
+    /// Display trading statistics
+    pub async fn display_trading_stats(&self) -> Result<()> {
+        use colored::*;
+
+        let stats = self.stats.read().await;
+        let success_rate = if stats.total_trades > 0 {
+            ((stats.successful_trades as f64) / (stats.total_trades as f64)) * 100.0
+        } else {
+            0.0
+        };
+
+        println!("\n{}", "📈 TRADING STATISTICS".bright_cyan().bold());
+        println!("   🎯 Total Trades: {}", stats.total_trades.to_string().bright_white().bold());
+        println!(
+            "   ✅ Successful: {} | ❌ Failed: {}",
+            stats.successful_trades.to_string().bright_green(),
+            stats.failed_trades.to_string().bright_red()
+        );
+        println!("   📊 Success Rate: {:.1}%", success_rate.to_string().bright_yellow().bold());
+        println!(
+            "   💰 Total Realized P&L: {:.4} SOL",
+            stats.total_realized_pnl_sol.to_string().bright_white().bold()
+        );
+
+        Ok(())
+    }
+}
+
+// Helper function to format large numbers
+// Helper function to format large numbers
+fn format_large_number(num: f64) -> String {
+    if num >= 1_000_000_000.0 {
+        format!("{:.1}B", num / 1_000_000_000.0)
+    } else if num >= 1_000_000.0 {
+        format!("{:.1}M", num / 1_000_000.0)
+    } else if num >= 1_000.0 {
+        format!("{:.1}K", num / 1_000.0)
+    } else {
+        format!("{:.0}", num)
     }
 }
 
@@ -1036,6 +1451,12 @@ impl TraderManagerAsync {
             positions: Arc::clone(&self.positions),
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),
+            rug_detection: Arc::new(
+                RugDetectionEngine::new(
+                    self.market_data.get_database(),
+                    self.config.rug_detection.clone()
+                )
+            ),
         };
 
         temp_manager.execute_trade_signal(signal).await

@@ -6,6 +6,7 @@ pub mod types;
 pub mod rpc;
 pub mod swap;
 pub mod trader;
+pub mod rug_detection;
 
 pub use config::Config;
 pub use discovery::Discovery;
@@ -14,3 +15,4 @@ pub use pairs::PairsClient;
 pub use rpc::RpcManager;
 pub use swap::SwapManager;
 pub use trader::TraderManager;
+pub use rug_detection::RugDetectionEngine;

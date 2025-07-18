@@ -210,10 +210,21 @@ impl GeckoTerminalClient {
             .and_then(|ts| ts.parse::<f64>().ok())
             .unwrap_or(0.0);
 
-        let liquidity_usd = attrs.total_reserve_in_usd
+        let liquidity_usd_raw = attrs.total_reserve_in_usd
             .as_ref()
             .and_then(|tr| tr.parse::<f64>().ok())
             .unwrap_or(0.0);
+
+        // Convert USD values to SOL using a reasonable approximation
+        // TODO: Get actual SOL price from a reliable source
+        let sol_price_usd = 180.0; // Approximate SOL price in USD
+
+        let price_sol = if sol_price_usd > 0.0 { price_usd / sol_price_usd } else { 0.0 };
+        let liquidity_sol = if sol_price_usd > 0.0 {
+            liquidity_usd_raw / sol_price_usd
+        } else {
+            0.0
+        };
 
         // Find the top pool
         let mut top_pool_address = None;
@@ -242,14 +253,14 @@ impl GeckoTerminalClient {
             symbol: attrs.symbol.clone(),
             name: attrs.name.clone(),
             decimals: attrs.decimals,
-            price_usd,
+            price_sol,
             price_change_24h,
             volume_24h,
             market_cap,
             fdv,
             total_supply,
             circulating_supply: total_supply, // GeckoTerminal doesn't distinguish
-            liquidity_usd,
+            liquidity_sol,
             top_pool_address,
             top_pool_base_reserve,
             top_pool_quote_reserve,
@@ -264,10 +275,18 @@ impl GeckoTerminalClient {
         for pool in pools {
             let attrs = &pool.attributes;
 
-            let liquidity_usd = attrs.reserve_in_usd
+            let liquidity_usd_raw = attrs.reserve_in_usd
                 .as_ref()
                 .and_then(|r| r.parse::<f64>().ok())
                 .unwrap_or(0.0);
+
+            // Convert USD to SOL
+            let sol_price_usd = 180.0; // Approximate SOL price in USD
+            let liquidity_sol = if sol_price_usd > 0.0 {
+                liquidity_usd_raw / sol_price_usd
+            } else {
+                0.0
+            };
 
             let volume_24h = attrs.volume_usd
                 .as_ref()
@@ -311,7 +330,7 @@ impl GeckoTerminalClient {
                 quote_token_address,
                 base_token_reserve,
                 quote_token_reserve,
-                liquidity_usd,
+                liquidity_sol,
                 volume_24h,
                 created_at,
                 last_updated: Utc::now(),
