@@ -25,6 +25,7 @@ pub struct Position {
     pub lowest_price: f64,
     pub total_opens: u32,
     pub total_closes: u32,
+    pub total_dca: u32,
     pub dca_levels: Vec<DCALevel>,
 }
 
@@ -51,6 +52,7 @@ impl Position {
             lowest_price: 0.0,
             total_opens: 0,
             total_closes: 0,
+            total_dca: 0,
             dca_levels: Vec::new(),
         }
     }
@@ -76,6 +78,7 @@ impl Position {
             lowest_price: summary.lowest_price,
             total_opens: summary.total_opens,
             total_closes: summary.total_closes,
+            total_dca: summary.total_dca,
             dca_levels: Vec::new(),
         }
     }
@@ -100,6 +103,7 @@ impl Position {
             lowest_price: self.lowest_price,
             total_opens: self.total_opens,
             total_closes: self.total_closes,
+            total_dca: self.total_dca,
         }
     }
 
@@ -126,6 +130,16 @@ impl Position {
 
         // Update unrealized PnL
         self.update_unrealized_pnl(self.current_price);
+    }
+
+    pub fn add_dca_trade(&mut self, amount_sol: f64, amount_tokens: f64, price_per_token: f64) {
+        // First do the regular buy trade logic
+        self.add_buy_trade(amount_sol, amount_tokens, price_per_token);
+        
+        // Then increment the DCA counter
+        self.total_dca += 1;
+        
+        // Note: total_opens is already incremented in add_buy_trade
     }
 
     pub fn add_sell_trade(&mut self, amount_sol: f64, amount_tokens: f64, _price_per_token: f64) {

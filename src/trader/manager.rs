@@ -529,7 +529,7 @@ impl TraderManager {
                                 pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
                                 opens: pos.total_opens.to_string(),
                                 closes: pos.total_closes.to_string(),
-                                dca_count: pos.dca_level.to_string(),
+                                dca_count: pos.total_dca.to_string(),
                                 status: format!("{:?}", pos.status),
                                 age: {
                                     let duration = Utc::now().signed_duration_since(pos.created_at);
@@ -591,7 +591,7 @@ impl TraderManager {
                                         },
                                         opens: pos.total_opens.to_string(),
                                         closes: pos.total_closes.to_string(),
-                                        dca_count: pos.dca_level.to_string(),
+                                        dca_count: pos.total_dca.to_string(),
                                         status: format!("{:?}", pos.status),
                                         age: {
                                             let duration = Utc::now().signed_duration_since(
@@ -1019,6 +1019,13 @@ impl TraderManager {
         signal: &TradeSignal,
         existing_position: Option<Position>
     ) -> Result<()> {
+        // Check if position exists in database if not in memory
+        let existing_position = if existing_position.is_some() {
+            existing_position
+        } else {
+            Position::load_from_database(&self.database, &signal.token_address)?
+        };
+
         let trade_size = self.strategy
             .read().await
             .calculate_trade_size(signal, existing_position.as_ref());
@@ -1349,18 +1356,21 @@ impl TraderManager {
             position.update_price(signal.current_price);
         }
 
-        // Save position to database
+        // Save position to database (this will update existing or create new)
         let position_id = position.save_to_database(&self.database)?;
         position.id = Some(position_id);
 
         // Record trade in database
         self.database.record_trade(position_id, &signal.token_address, "BUY", &result)?;
 
-        // Update positions map
+        // Update positions map (ensure synchronization)
         {
             let mut positions = self.positions.write().await;
             positions.insert(signal.token_address.clone(), position);
         }
+
+        // Update stats
+        self.update_stats().await?;
 
         // Update stats
         self.update_stats().await?;
@@ -1409,7 +1419,7 @@ impl TraderManager {
         mut position: Position
     ) -> Result<()> {
         if result.success {
-            position.add_buy_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
+            position.add_dca_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
             // Update current price to signal price
             position.update_price(signal.current_price);
 

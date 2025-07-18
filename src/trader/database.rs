@@ -121,6 +121,7 @@ impl TraderDatabase {
         let _ = conn.execute("ALTER TABLE positions ADD COLUMN lowest_price REAL DEFAULT 0.0", []);
         let _ = conn.execute("ALTER TABLE positions ADD COLUMN total_opens INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE positions ADD COLUMN total_closes INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE positions ADD COLUMN total_dca INTEGER DEFAULT 0", []);
 
         Ok(())
     }
@@ -153,8 +154,9 @@ impl TraderDatabase {
                 lowest_price = ?12,
                 total_opens = ?13,
                 total_closes = ?14,
+                total_dca = ?15,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?15",
+            WHERE id = ?16",
             params![
                 summary.total_invested_sol,
                 summary.average_buy_price,
@@ -170,6 +172,7 @@ impl TraderDatabase {
                 summary.lowest_price,
                 summary.total_opens,
                 summary.total_closes,
+                summary.total_dca,
                 position_id
             ]
         )?;
@@ -183,7 +186,7 @@ impl TraderDatabase {
                     current_price, total_tokens, unrealized_pnl_sol, unrealized_pnl_percent,
                     realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at,
                     COALESCE(peak_price, 0.0), COALESCE(lowest_price, 0.0), 
-                    COALESCE(total_opens, 0), COALESCE(total_closes, 0)
+                    COALESCE(total_opens, 0), COALESCE(total_closes, 0), COALESCE(total_dca, 0)
              FROM positions WHERE token_address = ?1"
         )?;
 
@@ -219,6 +222,7 @@ impl TraderDatabase {
                     lowest_price: row.get::<_, f64>(16)?,
                     total_opens: row.get::<_, u32>(17)?,
                     total_closes: row.get::<_, u32>(18)?,
+                    total_dca: row.get::<_, u32>(19)?,
                 },
             ))
         })?;
@@ -236,7 +240,7 @@ impl TraderDatabase {
                     current_price, total_tokens, unrealized_pnl_sol, unrealized_pnl_percent,
                     realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at,
                     COALESCE(peak_price, 0.0), COALESCE(lowest_price, 0.0), 
-                    COALESCE(total_opens, 0), COALESCE(total_closes, 0)
+                    COALESCE(total_opens, 0), COALESCE(total_closes, 0), COALESCE(total_dca, 0)
              FROM positions WHERE status = 'Active'"
         )?;
 
@@ -272,6 +276,7 @@ impl TraderDatabase {
                     lowest_price: row.get::<_, f64>(16)?,
                     total_opens: row.get::<_, u32>(17)?,
                     total_closes: row.get::<_, u32>(18)?,
+                    total_dca: row.get::<_, u32>(19)?,
                 },
             ))
         })?;
@@ -477,7 +482,7 @@ impl TraderDatabase {
                     current_price, total_tokens, unrealized_pnl_sol, unrealized_pnl_percent,
                     realized_pnl_sol, total_trades, dca_level, status, created_at, updated_at,
                     COALESCE(peak_price, 0.0), COALESCE(lowest_price, 0.0), 
-                    COALESCE(total_opens, 0), COALESCE(total_closes, 0)
+                    COALESCE(total_opens, 0), COALESCE(total_closes, 0), COALESCE(total_dca, 0)
              FROM positions 
              WHERE status != 'Active' 
              ORDER BY updated_at DESC 
@@ -516,6 +521,7 @@ impl TraderDatabase {
                     lowest_price: row.get::<_, f64>(16)?,
                     total_opens: row.get::<_, u32>(17)?,
                     total_closes: row.get::<_, u32>(18)?,
+                    total_dca: row.get::<_, u32>(19)?,
                 },
             ))
         })?;

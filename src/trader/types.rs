@@ -53,6 +53,7 @@ pub struct PositionSummary {
     pub lowest_price: f64,
     pub total_opens: u32,
     pub total_closes: u32,
+    pub total_dca: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
