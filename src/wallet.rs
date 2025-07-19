@@ -55,6 +55,30 @@ impl From<reqwest::Error> for SwapError {
     }
 }
 
+/// Select a random RPC endpoint from the fallbacks (avoiding main RPC for transactions)
+fn get_random_transaction_rpc(configs: &crate::global::Configs) -> String {
+    use rand::seq::SliceRandom;
+
+    if configs.rpc_fallbacks.is_empty() {
+        // If no fallbacks, use main RPC as last resort
+        log(LogTag::Trader, "WARN", "No RPC fallbacks configured, using main RPC for transaction");
+        return configs.rpc_url.clone();
+    }
+
+    // Randomly select from fallbacks only
+    let mut rng = rand::thread_rng();
+    match configs.rpc_fallbacks.choose(&mut rng) {
+        Some(rpc) => {
+            log(LogTag::Trader, "RPC", &format!("Selected random transaction RPC: {}", rpc));
+            rpc.clone()
+        }
+        None => {
+            log(LogTag::Trader, "WARN", "Failed to select random RPC, using main RPC");
+            configs.rpc_url.clone()
+        }
+    }
+}
+
 /// Quote information from the swap router
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SwapQuote {
@@ -484,7 +508,7 @@ async fn send_rpc_request(
 }
 
 /// Calculates effective price from actual balance changes
-async fn calculate_effective_price(
+pub async fn calculate_effective_price(
     client: &reqwest::Client,
     transaction_signature: &str,
     input_mint: &str,
@@ -722,7 +746,7 @@ fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
     Ok(())
 }
 
-/// Gets a swap quote from the GMGN router API
+/// Gets a swap quote from the GMGN router API with retry logic
 pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError> {
     validate_swap_request(request)?;
 
@@ -760,37 +784,163 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
     );
 
     let client = reqwest::Client::new();
-    let response = client.get(&url).send().await?;
+    let mut last_error = None;
 
-    if !response.status().is_success() {
-        return Err(SwapError::ApiError(format!("HTTP error: {}", response.status())));
-    }
+    // Retry up to 3 times with increasing delays
+    for attempt in 1..=3 {
+        match client.get(&url).send().await {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status_code = response.status().as_u16();
+                    let error_text = response
+                        .text().await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    let error = SwapError::ApiError(
+                        format!("HTTP error {}: {}", status_code, error_text)
+                    );
 
-    let api_response: SwapApiResponse = response.json().await?;
+                    if attempt < 3 && status_code >= 500 {
+                        log(
+                            LogTag::Trader,
+                            "WARNING",
+                            &format!("API error on attempt {}: {}, retrying...", attempt, error)
+                        );
+                        last_error = Some(error);
+                        tokio::time::sleep(
+                            tokio::time::Duration::from_millis(1000 * attempt)
+                        ).await;
+                        continue;
+                    } else {
+                        return Err(error);
+                    }
+                }
 
-    if api_response.code != 0 {
-        return Err(
-            SwapError::ApiError(format!("API error: {} - {}", api_response.code, api_response.msg))
-        );
-    }
+                // Get the raw response text first to handle parsing errors better
+                let response_text = match response.text().await {
+                    Ok(text) => text,
+                    Err(e) => {
+                        let error = SwapError::NetworkError(e);
+                        if attempt < 3 {
+                            log(
+                                LogTag::Trader,
+                                "WARNING",
+                                &format!(
+                                    "Network error on attempt {}: {}, retrying...",
+                                    attempt,
+                                    error
+                                )
+                            );
+                            last_error = Some(error);
+                            tokio::time::sleep(
+                                tokio::time::Duration::from_millis(1000 * attempt)
+                            ).await;
+                            continue;
+                        } else {
+                            return Err(error);
+                        }
+                    }
+                };
 
-    match api_response.data {
-        Some(data) => {
-            log(
-                LogTag::Trader,
-                "QUOTE",
-                &format!(
-                    "Quote received: {} -> {} (Impact: {}%, Time: {:.3}s)",
-                    lamports_to_sol(data.quote.in_amount.parse().unwrap_or(0)),
-                    lamports_to_sol(data.quote.out_amount.parse().unwrap_or(0)),
-                    data.quote.price_impact_pct,
-                    data.quote.time_taken
-                )
-            );
-            Ok(data)
+                // Log the raw response for debugging
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("Raw API response: {}", &response_text[..response_text.len().min(500)])
+                );
+
+                // Try to parse the JSON response with better error handling
+                let api_response: SwapApiResponse = match serde_json::from_str(&response_text) {
+                    Ok(response) => response,
+                    Err(e) => {
+                        let error = SwapError::InvalidResponse(
+                            format!("JSON parsing error: {} - Response: {}", e, response_text)
+                        );
+                        if attempt < 3 {
+                            log(
+                                LogTag::Trader,
+                                "WARNING",
+                                &format!(
+                                    "Parse error on attempt {}: {}, retrying...",
+                                    attempt,
+                                    error
+                                )
+                            );
+                            last_error = Some(error);
+                            tokio::time::sleep(
+                                tokio::time::Duration::from_millis(1000 * attempt)
+                            ).await;
+                            continue;
+                        } else {
+                            return Err(error);
+                        }
+                    }
+                };
+
+                // Add delay to prevent rate limiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                if api_response.code != 0 {
+                    return Err(
+                        SwapError::ApiError(
+                            format!("API error: {} - {}", api_response.code, api_response.msg)
+                        )
+                    );
+                }
+
+                match api_response.data {
+                    Some(data) => {
+                        log(
+                            LogTag::Trader,
+                            "QUOTE",
+                            &format!(
+                                "Quote received: {} -> {} (Impact: {}%, Time: {:.3}s)",
+                                lamports_to_sol(data.quote.in_amount.parse().unwrap_or(0)),
+                                lamports_to_sol(data.quote.out_amount.parse().unwrap_or(0)),
+                                data.quote.price_impact_pct,
+                                data.quote.time_taken
+                            )
+                        );
+                        return Ok(data);
+                    }
+                    None => {
+                        let error = SwapError::InvalidResponse("No data in response".to_string());
+                        if attempt < 3 {
+                            log(
+                                LogTag::Trader,
+                                "WARNING",
+                                &format!("No data on attempt {}, retrying...", attempt)
+                            );
+                            last_error = Some(error);
+                            tokio::time::sleep(
+                                tokio::time::Duration::from_millis(1000 * attempt)
+                            ).await;
+                            continue;
+                        } else {
+                            return Err(error);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let error = SwapError::NetworkError(e);
+                if attempt < 3 {
+                    log(
+                        LogTag::Trader,
+                        "WARNING",
+                        &format!("Network error on attempt {}: {}, retrying...", attempt, error)
+                    );
+                    last_error = Some(error);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(1000 * attempt)).await;
+                    continue;
+                } else {
+                    return Err(error);
+                }
+            }
         }
-        None => Err(SwapError::InvalidResponse("No data in response".to_string())),
     }
+
+    // If we get here, all retries failed
+    Err(last_error.unwrap_or_else(|| SwapError::ApiError("All retry attempts failed".to_string())))
 }
 
 /// Gets a swap quote using wallet address from configs
@@ -848,13 +998,48 @@ pub async fn execute_swap_with_quote(
     // Validate expected price if provided (using cached quote)
     if let Some(expected) = expected_price {
         let input_sol = amount_sol;
-        let output_tokens = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
+        let output_amount_str = &swap_data.quote.out_amount;
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("Final - Raw out_amount string: '{}'", output_amount_str)
+        );
+
+        let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Final - Failed to parse out_amount '{}': {}", output_amount_str, e)
+            );
+            0.0
+        });
+
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("Final - Parsed output_amount_raw: {}", output_amount_raw)
+        );
+
+        let token_decimals = token.decimals as u32;
+        let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
 
         let actual_price_per_token = if output_tokens > 0.0 {
             input_sol / output_tokens
         } else {
             0.0
         };
+
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "Final price calc debug: raw_amount={}, decimals={}, output_tokens={:.12}, actual_price={:.12}",
+                output_amount_raw,
+                token_decimals,
+                output_tokens,
+                actual_price_per_token
+            )
+        );
 
         let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
 
@@ -882,20 +1067,21 @@ pub async fn execute_swap_with_quote(
         }
     }
 
-    // Sign and send the transaction
+    // Sign and send the transaction using random fallback RPC
+    let selected_rpc = get_random_transaction_rpc(&configs);
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
-        &configs.rpc_url
+        &selected_rpc
     ).await?;
 
     log(
         LogTag::Trader,
-        "SUCCESS",
-        &format!("Swap executed successfully! TX: {}", transaction_signature)
+        "SIGN",
+        &format!("Transaction submitted successfully! TX: {}", transaction_signature)
     );
 
-    // Calculate effective price from actual balance changes
-    let (effective_price, actual_input_change, actual_output_change, quote_vs_actual_diff) =
+    // Calculate effective price from actual balance changes and verify transaction success
+    let (effective_price, actual_input_change, actual_output_change, quote_vs_actual_diff) = match
         calculate_effective_price(
             &reqwest::Client::new(),
             &transaction_signature,
@@ -904,10 +1090,43 @@ pub async fn execute_swap_with_quote(
             &wallet_address,
             &configs.rpc_url,
             &configs
-        ).await.unwrap_or_else(|e| {
-            log(LogTag::Trader, "WARNING", &format!("Failed to calculate effective price: {}", e));
-            (0.0, 0, 0, 0.0)
-        });
+        ).await
+    {
+        Ok((effective_price, input_change, output_change, diff)) => {
+            log(
+                LogTag::Trader,
+                "SUCCESS",
+                &format!(
+                    "Transaction verified successful on-chain. Effective price: {:.12} SOL",
+                    effective_price
+                )
+            );
+            (effective_price, input_change, output_change, diff)
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Transaction failed on-chain or verification failed: {}", e)
+            );
+
+            // Return failed swap result for failed transactions
+            return Ok(SwapResult {
+                success: false,
+                transaction_signature: Some(transaction_signature),
+                input_amount: swap_data.quote.in_amount,
+                output_amount: swap_data.quote.out_amount,
+                price_impact: swap_data.quote.price_impact_pct,
+                fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+                execution_time: swap_data.quote.time_taken,
+                error: Some(format!("Transaction failed on-chain: {}", e)),
+                effective_price: None,
+                actual_input_change: None,
+                actual_output_change: None,
+                quote_vs_actual_difference: None,
+            });
+        }
+    };
 
     Ok(SwapResult {
         success: true,
@@ -973,7 +1192,9 @@ pub async fn execute_swap(
     if let Some(expected) = expected_price {
         // Calculate the actual price per token from the quote
         let input_sol = request.amount_sol;
-        let output_tokens = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
+        let output_amount_raw = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
+        let token_decimals = token.decimals as u32;
+        let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
 
         let actual_price_per_token = if output_tokens > 0.0 {
             input_sol / output_tokens
@@ -1007,10 +1228,11 @@ pub async fn execute_swap(
         }
     }
 
-    // Sign and send the transaction
+    // Sign and send the transaction using random fallback RPC (buy_token)
+    let selected_rpc = get_random_transaction_rpc(&configs);
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
-        &configs.rpc_url
+        &selected_rpc
     ).await?;
 
     log(
@@ -1104,9 +1326,36 @@ pub async fn buy_token(
     if let Some(expected) = expected_price {
         log(LogTag::Trader, "PRICE", "Validating current token price...");
 
-        // Calculate current price from quote
-        let output_tokens = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
+        // Calculate current price from quote, accounting for token decimals
+        let output_amount_str = &swap_data.quote.out_amount;
+        log(LogTag::Trader, "DEBUG", &format!("Raw out_amount string: '{}'", output_amount_str));
+
+        let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Failed to parse out_amount '{}': {}", output_amount_str, e)
+            );
+            0.0
+        });
+
+        log(LogTag::Trader, "DEBUG", &format!("Parsed output_amount_raw: {}", output_amount_raw));
+
+        let token_decimals = token.decimals as u32;
+        let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
         let current_price = if output_tokens > 0.0 { amount_sol / output_tokens } else { 0.0 };
+
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "Price calc debug: raw_amount={}, decimals={}, output_tokens={:.12}, current_price={:.12}",
+                output_amount_raw,
+                token_decimals,
+                output_tokens,
+                current_price
+            )
+        );
 
         log(
             LogTag::Trader,
@@ -1156,6 +1405,15 @@ pub async fn sell_token(
 ) -> Result<SwapResult, SwapError> {
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
     let wallet_address = get_wallet_address()?;
+
+    // Check if trying to sell 0 tokens
+    if token_amount == 0 {
+        return Err(
+            SwapError::InvalidAmount(
+                "Cannot sell 0 tokens. Token amount must be greater than 0.".to_string()
+            )
+        );
+    }
 
     // Check token balance before swap
     log(LogTag::Trader, "BALANCE", &format!("Checking {} balance...", token.symbol));
@@ -1263,7 +1521,20 @@ pub async fn sell_token(
         return Err(SwapError::ApiError(format!("HTTP error: {}", response.status())));
     }
 
-    let api_response: SwapApiResponse = response.json().await?;
+    // Get response text first for better error reporting
+    let response_text = response.text().await?;
+
+    // Try to parse the JSON response with better error handling
+    let api_response: SwapApiResponse = match serde_json::from_str(&response_text) {
+        Ok(response) => response,
+        Err(e) => {
+            return Err(
+                SwapError::InvalidResponse(
+                    format!("JSON parsing error: {} - Response: {}", e, response_text)
+                )
+            );
+        }
+    };
 
     if api_response.code != 0 {
         return Err(
@@ -1308,10 +1579,11 @@ pub async fn sell_token(
         }
     }
 
-    // Sign and send the transaction
+    // Sign and send the transaction using random fallback RPC (sell_token)
+    let selected_rpc = get_random_transaction_rpc(&configs);
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
-        &configs.rpc_url
+        &selected_rpc
     ).await?;
 
     log(

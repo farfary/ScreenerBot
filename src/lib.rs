@@ -5,3 +5,4 @@ pub mod trader;
 pub mod logger;
 pub mod discovery;
 pub mod wallet;
+pub mod decimal_cache;

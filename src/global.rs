@@ -9,7 +9,6 @@ pub static LIST_MINTS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(
 
 pub static LIST_TOKENS: Lazy<RwLock<Vec<Token>>> = Lazy::new(|| RwLock::new(vec![]));
 
-
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {
@@ -40,6 +39,78 @@ pub struct Pool {
     pub price_usd: Option<f64>,
 }
 
+/// Represents transaction data for different time periods
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TxnPeriod {
+    pub buys: Option<i64>,
+    pub sells: Option<i64>,
+}
+
+/// Represents transaction statistics
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TxnStats {
+    pub m5: Option<TxnPeriod>,
+    pub h1: Option<TxnPeriod>,
+    pub h6: Option<TxnPeriod>,
+    pub h24: Option<TxnPeriod>,
+}
+
+/// Represents volume data for different time periods
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VolumeStats {
+    pub m5: Option<f64>,
+    pub h1: Option<f64>,
+    pub h6: Option<f64>,
+    pub h24: Option<f64>,
+}
+
+/// Represents price change data for different time periods
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PriceChangeStats {
+    pub m5: Option<f64>,
+    pub h1: Option<f64>,
+    pub h6: Option<f64>,
+    pub h24: Option<f64>,
+}
+
+/// Represents liquidity information
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LiquidityInfo {
+    pub usd: Option<f64>,
+    pub base: Option<f64>,
+    pub quote: Option<f64>,
+}
+
+/// Represents social media links
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SocialLink {
+    pub link_type: String, // "twitter", "telegram", etc.
+    pub url: String,
+}
+
+/// Represents website links
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WebsiteLink {
+    pub label: Option<String>,
+    pub url: String,
+}
+
+/// Represents token info from DexScreener
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TokenInfo {
+    pub image_url: Option<String>,
+    pub header: Option<String>,
+    pub open_graph: Option<String>,
+    pub websites: Vec<WebsiteLink>,
+    pub socials: Vec<SocialLink>,
+}
+
+/// Represents boost information
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BoostInfo {
+    pub active: Option<i64>,
+}
+
 /// Represents a cryptocurrency token with full details.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Token {
@@ -48,6 +119,8 @@ pub struct Token {
     pub name: String,
     pub decimals: u8,
     pub chain: String,
+
+    // Existing fields we need to keep
     pub logo_url: Option<String>,
     pub coingecko_id: Option<String>,
     pub website: Option<String>,
@@ -55,6 +128,8 @@ pub struct Token {
     pub tags: Vec<String>,
     pub is_verified: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+
+    // Price data from various sources
     pub price_dexscreener_sol: Option<f64>,
     pub price_dexscreener_usd: Option<f64>,
     pub price_geckoterminal_sol: Option<f64>,
@@ -64,4 +139,18 @@ pub struct Token {
     pub price_pool_sol: Option<f64>,
     pub price_pool_usd: Option<f64>,
     pub pools: Vec<Pool>,
+
+    // New fields from DexScreener API
+    pub dex_id: Option<String>,
+    pub pair_address: Option<String>,
+    pub pair_url: Option<String>,
+    pub labels: Vec<String>,
+    pub fdv: Option<f64>, // Fully Diluted Valuation
+    pub market_cap: Option<f64>,
+    pub txns: Option<TxnStats>,
+    pub volume: Option<VolumeStats>,
+    pub price_change: Option<PriceChangeStats>,
+    pub liquidity: Option<LiquidityInfo>,
+    pub info: Option<TokenInfo>,
+    pub boosts: Option<BoostInfo>,
 }

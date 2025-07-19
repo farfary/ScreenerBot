@@ -2,8 +2,8 @@
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 pub const DEFAULT_FEE: f64 = 0.00005;
-pub const TRADE_SIZE_SOL: f64 = 0.001;
-pub const STOP_LOSS_PERCENT: f64 = -20.0;
+pub const TRADE_SIZE_SOL: f64 = 0.0005;
+pub const STOP_LOSS_PERCENT: f64 = -30.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
@@ -164,8 +164,36 @@ async fn open_position(token: &Token, price: f64, percent_change: f64) {
     // Execute real buy transaction
     match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
         Ok(swap_result) => {
+            // Check if the transaction was actually successful on-chain
+            if !swap_result.success {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!(
+                        "Transaction failed on-chain for {}: {}",
+                        token.symbol,
+                        swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
+                    )
+                );
+                return;
+            }
+
             let effective_entry_price = swap_result.effective_price.unwrap_or(price);
             let token_amount = swap_result.actual_output_change.unwrap_or(0);
+
+            // Validate that we actually received tokens
+            if token_amount == 0 {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!(
+                        "Transaction successful but no tokens received for {}. TX: {}",
+                        token.symbol,
+                        swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string())
+                    )
+                );
+                return;
+            }
 
             log(
                 LogTag::Trader,
@@ -226,6 +254,27 @@ async fn close_position(
 ) -> bool {
     // Only attempt to sell if we have tokens from the buy transaction
     if let Some(token_amount) = position.token_amount {
+        // Check if we actually have tokens to sell
+        if token_amount == 0 {
+            log(
+                LogTag::Trader,
+                "WARNING",
+                &format!(
+                    "Cannot close position for {} ({}) - No tokens to sell (amount: 0)",
+                    position.symbol,
+                    position.mint
+                )
+            );
+
+            // Mark position as closed with zero values
+            position.exit_time = Some(exit_time);
+            position.exit_price = Some(exit_price);
+            position.effective_exit_price = Some(0.0);
+            position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
+            position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
+            return true;
+        }
+
         log(
             LogTag::Trader,
             "SELL",
@@ -241,9 +290,37 @@ async fn close_position(
         // Execute real sell transaction
         match sell_token(token, token_amount, None).await {
             Ok(swap_result) => {
+                // Check if the sell transaction was actually successful on-chain
+                if !swap_result.success {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!(
+                            "Sell transaction failed on-chain for {}: {}",
+                            position.symbol,
+                            swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
+                        )
+                    );
+                    return false; // Failed to close
+                }
+
                 let effective_exit_price = swap_result.effective_price.unwrap_or(exit_price);
                 let sol_received = swap_result.actual_output_change.unwrap_or(0);
                 let transaction_signature = swap_result.transaction_signature.clone();
+
+                // Validate that we actually received SOL
+                if sol_received == 0 {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!(
+                            "Sell transaction successful but no SOL received for {}. TX: {}",
+                            position.symbol,
+                            transaction_signature.as_ref().unwrap_or(&"None".to_string())
+                        )
+                    );
+                    return false; // Failed to close properly
+                }
 
                 // Calculate actual P&L based on real transaction amounts
                 let actual_sol_received = crate::wallet::lamports_to_sol(sol_received);
@@ -327,7 +404,7 @@ fn update_position_tracking(position: &mut Position, current_price: f64) {
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     loop {
-        let tokens: Vec<_> = {
+        let mut tokens: Vec<_> = {
             if let Ok(tokens_guard) = LIST_TOKENS.read() {
                 tokens_guard.iter().cloned().collect()
             } else {
@@ -335,58 +412,121 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             }
         };
 
-        let mut handles = Vec::with_capacity(tokens.len());
+        // Sort tokens by liquidity in descending order (highest liquidity first)
+        tokens.sort_by(|a, b| {
+            let liquidity_a = a.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+            let liquidity_b = b.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
 
-        for token in tokens {
-            handles.push(
-                tokio::spawn(async move {
-                    if let Some(current_price) = token.price_dexscreener_sol {
-                        if current_price <= 0.0 || !validate_token(&token) {
-                            return;
-                        }
+            liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
-                        // Update price history
-                        let now = Utc::now();
-                        {
-                            let mut hist = PRICE_HISTORY_24H.lock().unwrap();
-                            let entry = hist.entry(token.mint.clone()).or_insert_with(Vec::new);
-                            entry.push((now, current_price));
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!(
+                "Checking {} tokens for entry opportunities (sorted by liquidity)",
+                tokens.len()
+            )
+        );
 
-                            // Retain only last 24h
-                            let cutoff = now - ChronoDuration::hours(PRICE_HISTORY_HOURS);
-                            entry.retain(|(ts, _)| *ts >= cutoff);
-                        }
+        // Process tokens one by one instead of in parallel
+        for (index, token) in tokens.iter().enumerate() {
+            // Check for shutdown between each token
+            if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
+                log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
+                return;
+            }
 
-                        // Check for entry opportunity
-                        let mut should_open_position = false;
-                        let mut percent_change = 0.0;
+            if let Some(current_price) = token.price_dexscreener_sol {
+                if current_price <= 0.0 || !validate_token(&token) {
+                    continue;
+                }
 
-                        {
-                            let mut last_prices = LAST_PRICES.lock().unwrap();
-                            if let Some(&prev_price) = last_prices.get(&token.mint) {
-                                if prev_price > 0.0 {
-                                    let change = (current_price - prev_price) / prev_price;
-                                    percent_change = change * 100.0;
+                let liquidity_usd = token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
 
-                                    if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
-                                        should_open_position = true;
-                                    }
-                                }
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "Checking token {}/{}: {} ({}) - Price: {:.12} SOL, Liquidity: ${:.2}",
+                        index + 1,
+                        tokens.len(),
+                        token.symbol,
+                        token.mint,
+                        current_price,
+                        liquidity_usd
+                    )
+                );
+
+                // Update price history
+                let now = Utc::now();
+                {
+                    let mut hist = PRICE_HISTORY_24H.lock().unwrap();
+                    let entry = hist.entry(token.mint.clone()).or_insert_with(Vec::new);
+                    entry.push((now, current_price));
+
+                    // Retain only last 24h
+                    let cutoff = now - ChronoDuration::hours(PRICE_HISTORY_HOURS);
+                    entry.retain(|(ts, _)| *ts >= cutoff);
+                }
+
+                // Check for entry opportunity
+                let mut should_open_position = false;
+                let mut percent_change = 0.0;
+
+                {
+                    let mut last_prices = LAST_PRICES.lock().unwrap();
+                    if let Some(&prev_price) = last_prices.get(&token.mint) {
+                        if prev_price > 0.0 {
+                            let change = (current_price - prev_price) / prev_price;
+                            percent_change = change * 100.0;
+
+                            if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
+                                should_open_position = true;
+                                log(
+                                    LogTag::Trader,
+                                    "OPPORTUNITY",
+                                    &format!(
+                                        "Entry opportunity detected for {} ({}): {:.2}% price drop, Liquidity: ${:.2}",
+                                        token.symbol,
+                                        token.mint,
+                                        percent_change,
+                                        liquidity_usd
+                                    )
+                                );
                             }
-                            last_prices.insert(token.mint.clone(), current_price);
-                        }
-
-                        if should_open_position {
-                            open_position(&token, current_price, percent_change).await;
                         }
                     }
-                })
-            );
-        }
+                    last_prices.insert(token.mint.clone(), current_price);
+                }
 
-        // Wait for all token processing to complete
-        for handle in handles {
-            let _ = handle.await;
+                if should_open_position {
+                    open_position(&token, current_price, percent_change).await;
+
+                    // If we've reached max positions, we can break early to avoid unnecessary processing
+                    if get_open_positions_count() >= MAX_OPEN_POSITIONS {
+                        log(
+                            LogTag::Trader,
+                            "LIMIT",
+                            &format!(
+                                "Maximum open positions reached ({}/{}). Stopping token scanning.",
+                                get_open_positions_count(),
+                                MAX_OPEN_POSITIONS
+                            )
+                        );
+                        break;
+                    }
+                }
+            }
         }
 
         if
@@ -512,9 +652,22 @@ pub async fn trader(shutdown: Arc<Notify>) {
     // Wait for shutdown signal
     shutdown.notified().await;
 
-    // Cancel both tasks
-    entries_task.abort();
-    positions_task.abort();
-
     log(LogTag::Trader, "INFO", "Trader shutting down...");
+
+    // Give tasks a chance to shutdown gracefully
+    let graceful_timeout = tokio::time::timeout(Duration::from_secs(5), async {
+        let _ = tokio::try_join!(entries_task, positions_task);
+    });
+
+    match graceful_timeout.await {
+        Ok(_) => {
+            log(LogTag::Trader, "INFO", "Trader tasks finished gracefully");
+        }
+        Err(_) => {
+            log(LogTag::Trader, "WARN", "Trader tasks did not finish gracefully, aborting");
+            // Force abort if graceful shutdown fails
+            // entries_task.abort(); // These might already be finished
+            // positions_task.abort();
+        }
+    }
 }

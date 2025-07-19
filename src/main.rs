@@ -27,7 +27,20 @@ async fn main() {
     log(LogTag::System, "INFO", "Shutdown signal received, notifying tasks");
     shutdown.notify_waiters();
 
-    // Wait for background tasks to finish
-    let _ = tokio::try_join!(monitor_handle, trader_handle);
-    log(LogTag::System, "INFO", "All background tasks finished. Exiting.");
+    // Wait for background tasks to finish with timeout
+    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let _ = tokio::try_join!(monitor_handle, trader_handle);
+    });
+
+    match shutdown_timeout.await {
+        Ok(_) => {
+            log(LogTag::System, "INFO", "All background tasks finished gracefully. Exiting.");
+        }
+        Err(_) => {
+            log(LogTag::System, "WARN", "Tasks did not finish within timeout, forcing exit.");
+        }
+    }
+
+    // Force exit to ensure clean shutdown
+    std::process::exit(0);
 }

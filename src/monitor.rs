@@ -11,20 +11,72 @@ use crate::logger::{ log, LogTag };
 /// Monitor background task loop
 pub async fn monitor(shutdown: Arc<Notify>) {
     loop {
-        // Call all mint-fetching functions
-        if let Err(e) = discovery_dexscreener_fetch_token_profiles().await {
-            log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token profiles: {}", e));
-        }
-        if let Err(e) = discovery_dexscreener_fetch_token_boosts().await {
-            log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token boosts: {}", e));
-        }
-        if let Err(e) = discovery_dexscreener_fetch_token_boosts_top().await {
-            log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token boosts top: {}", e));
+        // Check for shutdown before each API call
+        if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
+            log(LogTag::Monitor, "INFO", "monitor task shutting down...");
+            break;
         }
 
-        // Update token info for all mints
-        if let Err(e) = update_tokens_from_mints(shutdown.clone()).await {
-            log(LogTag::Monitor, "ERROR", &format!("Failed to update tokens from mints: {}", e));
+        // Call all mint-fetching functions with timeout handling
+        let discovery_tasks = async {
+            if let Err(e) = discovery_dexscreener_fetch_token_profiles().await {
+                log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token profiles: {}", e));
+            }
+
+            if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
+                return;
+            }
+
+            if let Err(e) = discovery_dexscreener_fetch_token_boosts().await {
+                log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token boosts: {}", e));
+            }
+
+            if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
+                return;
+            }
+
+            if let Err(e) = discovery_dexscreener_fetch_token_boosts_top().await {
+                log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token boosts top: {}", e));
+            }
+        };
+
+        // Run discovery tasks with timeout
+        let discovery_timeout = tokio::time::timeout(Duration::from_secs(30), discovery_tasks);
+
+        match discovery_timeout.await {
+            Ok(_) => {
+                // Discovery completed successfully
+            }
+            Err(_) => {
+                log(LogTag::Monitor, "WARN", "Discovery tasks timed out");
+            }
+        }
+
+        // Check shutdown again before token update
+        if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
+            log(LogTag::Monitor, "INFO", "monitor task shutting down...");
+            break;
+        }
+
+        // Update token info for all mints with timeout
+        let token_update_timeout = tokio::time::timeout(
+            Duration::from_secs(60),
+            update_tokens_from_mints(shutdown.clone())
+        );
+
+        match token_update_timeout.await {
+            Ok(result) => {
+                if let Err(e) = result {
+                    log(
+                        LogTag::Monitor,
+                        "ERROR",
+                        &format!("Failed to update tokens from mints: {}", e)
+                    );
+                }
+            }
+            Err(_) => {
+                log(LogTag::Monitor, "WARN", "Token update timed out");
+            }
         }
 
         if check_shutdown_or_delay(&shutdown, Duration::from_secs(10)).await {

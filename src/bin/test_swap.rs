@@ -56,6 +56,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         price_pool_sol: None,
         price_pool_usd: None,
         pools: vec![],
+
+        // New DexScreener fields
+        dex_id: None,
+        pair_address: None,
+        pair_url: None,
+        labels: vec![],
+        fdv: None,
+        market_cap: None,
+        txns: None,
+        volume: None,
+        price_change: None,
+        liquidity: None,
+        info: None,
+        boosts: None,
     };
 
     match get_token_balance(&wallet_address, &test_token.mint).await {
