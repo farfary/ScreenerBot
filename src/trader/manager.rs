@@ -581,11 +581,14 @@ impl TraderManager {
                                         },
                                         pnl_sol: format!("{:.5}", pos.realized_pnl_sol),
                                         pnl_percent: if pos.total_invested_sol > 0.0 {
-                                            format!(
-                                                "{:.2}%",
-                                                (pos.realized_pnl_sol / pos.total_invested_sol) *
-                                                    100.0
-                                            )
+                                            // Calculate percentage based on actual profit/loss
+                                            let profit_loss_percent = (pos.realized_pnl_sol / pos.total_invested_sol) * 100.0;
+                                            // Cap unrealistic percentages that might be from old data
+                                            if profit_loss_percent.abs() > 1000.0 {
+                                                "DATA_ERROR".to_string()
+                                            } else {
+                                                format!("{:.2}%", profit_loss_percent)
+                                            }
                                         } else {
                                             "0.00%".to_string()
                                         },
@@ -1308,7 +1311,7 @@ impl TraderManager {
         Ok(TradeResult {
             success: true,
             transaction_hash: Some(format!("SIMULATED_SELL_{}", Utc::now().timestamp())),
-            amount_sol: net_sol,
+            amount_sol: sol_received, // Use gross proceeds for P&L calculation
             amount_tokens,
             price_per_token: effective_price,
             fees,
