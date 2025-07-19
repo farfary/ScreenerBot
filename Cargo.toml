@@ -36,12 +36,13 @@ async-trait = "0.1"
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 thiserror = "1.0"
 clap = { version = "4.0", features = ["derive"] }
+once_cell = "1.19"
+rand = "0.8"
+colored = "2.0"
 
 # Added for date/time usage (in e.g. holder_finder code)
 chrono = "0.4"
 chrono-tz = "0.6"
-
-# Table formatting for console display
 
 # Solana dependencies (matching your current SDK)
 solana-sdk = "2.3.1"
@@ -61,7 +62,6 @@ solana-transaction-status = "2.3.3"
 
 # UI / Other dependencies
 calamine = "0.18"
-once_cell = "1.21.1"
 
 # Web server dependencies
 axum = { version = "0.7", features = ["ws"] }
@@ -72,8 +72,6 @@ futures = "0.3"
 uuid = { version = "1.0", features = ["v4"] }
 parking_lot = "0.12"
 rfd = "0.12"
-rand = "0.8"
-colored = "2.0"
 regex = "1.10"
 jup-ag = "0.8.0"
 
