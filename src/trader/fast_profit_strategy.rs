@@ -1,4 +1,3 @@
-use anyhow::Result;
 use chrono::{ DateTime, Utc };
 use std::collections::HashMap;
 
@@ -291,6 +290,9 @@ mod tests {
             fast_profit_enabled: true,
             profit_targets: vec![],
             momentum_check_seconds: 5,
+            trading_fee: 0.00003,
+            max_watch_tokens: 50,
+            token_cooldown_minutes: 5,
         }
     }
 

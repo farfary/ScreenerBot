@@ -92,7 +92,13 @@ impl Position {
         }
     }
 
-    pub fn add_buy_trade(&mut self, amount_sol: f64, amount_tokens: f64, price_per_token: f64) {
+    pub fn add_buy_trade(
+        &mut self,
+        amount_sol: f64,
+        amount_tokens: f64,
+        price_per_token: f64,
+        trading_fee: Option<f64>
+    ) {
         // Set original entry price on first trade
         if self.original_entry_price == 0.0 {
             self.original_entry_price = price_per_token;
@@ -100,8 +106,12 @@ impl Position {
             self.lowest_price = price_per_token;
         }
 
+        // Subtract trading fee from the invested amount
+        let fee = trading_fee.unwrap_or(0.0);
+        let net_investment = amount_sol + fee; // Total cost including fee
+
         // Update average buy price using weighted average
-        let new_total_invested = self.total_invested_sol + amount_sol;
+        let new_total_invested = self.total_invested_sol + net_investment;
         let new_total_tokens = self.total_tokens + amount_tokens;
 
         if new_total_tokens > 0.0 {
@@ -116,20 +126,84 @@ impl Position {
         self.update_unrealized_pnl(self.current_price);
     }
 
-    pub fn add_dca_trade(&mut self, amount_sol: f64, amount_tokens: f64, price_per_token: f64) {
+    pub fn add_dca_trade(
+        &mut self,
+        amount_sol: f64,
+        amount_tokens: f64,
+        price_per_token: f64,
+        trading_fee: Option<f64>
+    ) {
         // First do the regular buy trade logic
-        self.add_buy_trade(amount_sol, amount_tokens, price_per_token);
+        self.add_buy_trade(amount_sol, amount_tokens, price_per_token, trading_fee);
 
         // Then increment the DCA counter
         self.dca_count += 1;
     }
 
-    pub fn add_sell_trade(&mut self, amount_sol: f64, amount_tokens: f64, _price_per_token: f64) {
+    pub fn add_sell_trade(
+        &mut self,
+        amount_sol: f64,
+        amount_tokens: f64,
+        _price_per_token: f64,
+        trading_fee: Option<f64>
+    ) {
+        // Validate inputs
+        if !amount_sol.is_finite() || amount_sol < 0.0 {
+            log::error!("Invalid amount_sol in sell trade: {}", amount_sol);
+            return;
+        }
+
+        if !amount_tokens.is_finite() || amount_tokens <= 0.0 {
+            log::error!("Invalid amount_tokens in sell trade: {}", amount_tokens);
+            return;
+        }
+
+        if !self.average_buy_price.is_finite() || self.average_buy_price <= 0.0 {
+            log::error!("Invalid average_buy_price in sell trade: {}", self.average_buy_price);
+            return;
+        }
+
         // Calculate realized PnL for this trade
         let cost_basis = amount_tokens * self.average_buy_price;
-        let realized_pnl = amount_sol - cost_basis;
+        let fee = trading_fee.unwrap_or(0.0);
 
-        self.realized_pnl_sol += realized_pnl;
+        // Validate fee
+        if !fee.is_finite() || fee < 0.0 {
+            log::warn!("Invalid trading fee: {}, using 0.0", fee);
+        }
+
+        let net_proceeds = amount_sol - fee.max(0.0); // Ensure fee is non-negative
+        let realized_pnl = net_proceeds - cost_basis;
+
+        // Validate calculated PnL
+        if !realized_pnl.is_finite() {
+            log::error!(
+                "Invalid realized PnL calculated: {}, cost_basis: {}, net_proceeds: {}",
+                realized_pnl,
+                cost_basis,
+                net_proceeds
+            );
+            return;
+        }
+
+        // Sanity check for unrealistic PnL (likely indicates data corruption or extreme price movements)
+        if realized_pnl.abs() > cost_basis * 100.0 {
+            log::warn!(
+                "Unrealistic realized PnL detected: {:.6} SOL (cost basis: {:.6} SOL). Capping to reasonable range.",
+                realized_pnl,
+                cost_basis
+            );
+            // Cap to +/- 100x cost basis (10,000% gain/loss max)
+            let capped_pnl = if realized_pnl > 0.0 {
+                cost_basis * 100.0
+            } else {
+                -cost_basis * 100.0
+            };
+            self.realized_pnl_sol += capped_pnl;
+        } else {
+            self.realized_pnl_sol += realized_pnl;
+        }
+
         self.total_tokens -= amount_tokens;
         self.updated_at = Utc::now();
 
@@ -163,26 +237,76 @@ impl Position {
     }
 
     pub fn update_unrealized_pnl(&mut self, current_price: f64) {
-        if self.total_tokens > 0.0 && self.average_buy_price > 0.0 {
-            let current_value = self.total_tokens * current_price;
-            let cost_basis = self.total_tokens * self.average_buy_price;
-
-            self.unrealized_pnl_sol = current_value - cost_basis;
-            self.unrealized_pnl_percent = (self.unrealized_pnl_sol / cost_basis) * 100.0;
-        } else {
+        // Validate inputs before calculation
+        if !current_price.is_finite() || current_price <= 0.0 {
+            log::warn!("Invalid current price for PnL calculation: {}", current_price);
             self.unrealized_pnl_sol = 0.0;
+            self.unrealized_pnl_percent = 0.0;
+            return;
+        }
+
+        if !self.average_buy_price.is_finite() || self.average_buy_price <= 0.0 {
+            log::warn!("Invalid average buy price for PnL calculation: {}", self.average_buy_price);
+            self.unrealized_pnl_sol = 0.0;
+            self.unrealized_pnl_percent = 0.0;
+            return;
+        }
+
+        if !self.total_tokens.is_finite() || self.total_tokens <= 0.0 {
+            self.unrealized_pnl_sol = 0.0;
+            self.unrealized_pnl_percent = 0.0;
+            return;
+        }
+
+        let current_value = self.total_tokens * current_price;
+        let cost_basis = self.total_tokens * self.average_buy_price;
+
+        // Validate calculated values
+        if !current_value.is_finite() || !cost_basis.is_finite() || cost_basis <= 0.0 {
+            log::warn!(
+                "Invalid calculated values - current_value: {}, cost_basis: {}",
+                current_value,
+                cost_basis
+            );
+            self.unrealized_pnl_sol = 0.0;
+            self.unrealized_pnl_percent = 0.0;
+            return;
+        }
+
+        self.unrealized_pnl_sol = current_value - cost_basis;
+        let pnl_percent = (self.unrealized_pnl_sol / cost_basis) * 100.0;
+
+        // Sanity check for unrealistic percentages (likely data corruption)
+        if pnl_percent.is_finite() && pnl_percent.abs() <= 10000.0 {
+            self.unrealized_pnl_percent = pnl_percent;
+        } else {
+            log::warn!("Unrealistic PnL percentage calculated: {:.2}%, setting to 0", pnl_percent);
             self.unrealized_pnl_percent = 0.0;
         }
     }
 
     pub fn get_total_pnl(&self) -> f64 {
-        self.realized_pnl_sol + self.unrealized_pnl_sol
+        let total = self.realized_pnl_sol + self.unrealized_pnl_sol;
+        if total.is_finite() {
+            total
+        } else {
+            log::warn!("Invalid total PnL calculated, returning 0.0");
+            0.0
+        }
     }
 
     pub fn get_total_pnl_percent(&self) -> f64 {
-        if self.total_invested_sol > 0.0 {
-            (self.get_total_pnl() / self.total_invested_sol) * 100.0
+        if !self.total_invested_sol.is_finite() || self.total_invested_sol <= 0.0 {
+            return 0.0;
+        }
+
+        let total_pnl = self.get_total_pnl();
+        let percent = (total_pnl / self.total_invested_sol) * 100.0;
+
+        if percent.is_finite() && percent.abs() <= 10000.0 {
+            percent
         } else {
+            log::warn!("Unrealistic total PnL percentage: {:.2}%, returning 0.0", percent);
             0.0
         }
     }

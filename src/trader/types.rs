@@ -1,5 +1,6 @@
 use chrono::{ DateTime, Utc };
 use serde::{ Deserialize, Serialize };
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeSignal {
@@ -37,6 +38,72 @@ pub struct TradeResult {
     pub slippage: f64,
     pub timestamp: DateTime<Utc>,
     pub error: Option<String>,
+    // New fields for effective price tracking
+    pub effective_price_per_token: f64, // Actual price after fees and slippage
+    pub trading_fee: f64, // Fixed trading fee in SOL
+    pub net_sol_received: f64, // For sells: actual SOL received after all fees
+    pub net_tokens_received: f64, // For buys: actual tokens received
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenCooldown {
+    pub token_address: String,
+    pub sell_timestamp: DateTime<Utc>,
+    pub cooldown_until: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenCooldownManager {
+    cooldowns: HashMap<String, TokenCooldown>,
+    cooldown_duration_minutes: u64,
+}
+
+impl TokenCooldownManager {
+    pub fn new(cooldown_duration_minutes: u64) -> Self {
+        Self {
+            cooldowns: HashMap::new(),
+            cooldown_duration_minutes,
+        }
+    }
+
+    pub fn add_cooldown(&mut self, token_address: &str) {
+        let now = Utc::now();
+        let cooldown_until = now + chrono::Duration::minutes(self.cooldown_duration_minutes as i64);
+
+        let cooldown = TokenCooldown {
+            token_address: token_address.to_string(),
+            sell_timestamp: now,
+            cooldown_until,
+        };
+
+        self.cooldowns.insert(token_address.to_string(), cooldown);
+    }
+
+    pub fn is_token_in_cooldown(&self, token_address: &str) -> bool {
+        if let Some(cooldown) = self.cooldowns.get(token_address) {
+            Utc::now() < cooldown.cooldown_until
+        } else {
+            false
+        }
+    }
+
+    pub fn get_cooldown_remaining(&self, token_address: &str) -> Option<chrono::Duration> {
+        if let Some(cooldown) = self.cooldowns.get(token_address) {
+            let remaining = cooldown.cooldown_until - Utc::now();
+            if remaining > chrono::Duration::zero() {
+                Some(remaining)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn cleanup_expired(&mut self) {
+        let now = Utc::now();
+        self.cooldowns.retain(|_, cooldown| now < cooldown.cooldown_until);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

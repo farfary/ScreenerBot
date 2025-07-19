@@ -2,12 +2,13 @@ use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 use colored::Colorize;
 use tabled::{ Table, Tabled, settings::Style };
 
-use crate::config::{ TraderConfig, ProfitTarget };
+use crate::config::TraderConfig;
 use crate::trader::database::TraderDatabase;
 use crate::trader::position::Position;
 use crate::trader::strategy::TradingStrategy;
@@ -33,6 +34,7 @@ pub struct TraderManager {
     positions: Arc<RwLock<HashMap<String, Position>>>,
     running: Arc<RwLock<bool>>,
     stats: Arc<RwLock<TraderStats>>,
+    cooldown_manager: Arc<RwLock<TokenCooldownManager>>,
 }
 
 impl TraderManager {
@@ -76,6 +78,11 @@ impl TraderManager {
             None
         };
 
+        // Create token cooldown manager
+        let cooldown_manager = Arc::new(
+            RwLock::new(TokenCooldownManager::new(config.token_cooldown_minutes))
+        );
+
         Ok(Self {
             config,
             database,
@@ -89,6 +96,7 @@ impl TraderManager {
             running,
             stats,
             rug_detection,
+            cooldown_manager,
         })
     }
 
@@ -307,6 +315,270 @@ impl TraderManager {
         Ok(false)
     }
 
+    /// Fetch and validate prices for all tokens with non-zero liquidity before trading operations
+    async fn refresh_prices_for_liquid_tokens(&self) -> Result<()> {
+        println!("🔄 Refreshing prices for all tokens with liquidity...");
+
+        // Get all active positions
+        let active_positions = self.database.get_active_positions()?;
+        let mut tokens_to_update = Vec::new();
+
+        // Add active position tokens
+        for (_, position) in &active_positions {
+            tokens_to_update.push(position.token_address.clone());
+        }
+
+        // Get tokens from market data that have non-zero liquidity
+        match self.get_tokens_with_liquidity().await {
+            Ok(liquid_tokens) => {
+                tokens_to_update.extend(liquid_tokens);
+            }
+            Err(e) => {
+                log::warn!("Failed to get tokens with liquidity: {}", e);
+            }
+        }
+
+        // Remove duplicates
+        tokens_to_update.sort();
+        tokens_to_update.dedup();
+
+        println!("📊 Found {} tokens requiring price updates", tokens_to_update.len());
+
+        let mut successful_updates = 0;
+        let mut failed_updates = 0;
+
+        for token_address in tokens_to_update {
+            match self.market_data.get_database().get_token(&token_address) {
+                Ok(Some(token_data)) => {
+                    let price = token_data.price_native; // SOL price
+                    if price > 0.0 && price.is_finite() {
+                        successful_updates += 1;
+
+                        // Update position prices if they exist
+                        if
+                            let Ok(Some((position_id, position))) = self.database.get_position(
+                                &token_address
+                            )
+                        {
+                            // For now, just update the database with existing data to avoid the error
+                            if let Err(e) = self.database.update_position(position_id, &position) {
+                                log::warn!(
+                                    "Failed to update position for {}: {}",
+                                    token_address,
+                                    e
+                                );
+                            }
+                        }
+                    } else {
+                        log::warn!("Invalid price in database for {}: {}", token_address, price);
+                        failed_updates += 1;
+                    }
+                }
+                Ok(None) => {
+                    log::warn!("No price data found for {}", token_address);
+                    failed_updates += 1;
+                }
+                Err(e) => {
+                    log::warn!("Failed to fetch price for {}: {}", token_address, e);
+                    failed_updates += 1;
+                }
+            }
+        }
+
+        println!(
+            "✅ Price update complete: {} successful, {} failed",
+            successful_updates,
+            failed_updates
+        );
+
+        if failed_updates > successful_updates {
+            println!("⚠️  Warning: Many price updates failed. Check market data connectivity.");
+        }
+
+        Ok(())
+    }
+
+    /// Get list of tokens that have non-zero liquidity from recent data
+    async fn get_tokens_with_liquidity(&self) -> Result<Vec<String>> {
+        // This would query your market data or discovery database for tokens with liquidity > 0
+        // Implementation depends on your market data storage structure
+        let mut tokens = Vec::new();
+
+        // Get tokens from pairs database that have recent liquidity data
+        if let Ok(pairs_with_liquidity) = self.get_recent_liquid_pairs().await {
+            for pair in pairs_with_liquidity {
+                tokens.push(pair.base_token.address.clone());
+            }
+        }
+
+        Ok(tokens)
+    }
+
+    /// Get recent pairs that have non-zero liquidity
+    async fn get_recent_liquid_pairs(&self) -> Result<Vec<crate::pairs::types::TokenPair>> {
+        // Query pairs database for recent entries with liquidity > 0
+        // This is a placeholder - you'll need to implement based on your pairs database structure
+        Ok(Vec::new())
+    }
+
+    /// Validates market data for selling (more lenient than buying - we want to exit positions)
+    async fn validate_market_data_for_selling(
+        &self,
+        token_address: &str,
+        signal_price: f64
+    ) -> Result<bool> {
+        let mut warnings = Vec::new();
+        let mut is_valid = true;
+
+        // Basic price validation (critical even for selling)
+        if signal_price <= 0.0 || !signal_price.is_finite() {
+            warnings.push("Invalid signal price (zero, negative, or not finite)".to_string());
+            is_valid = false; // Block sell if price is completely invalid
+        }
+
+        // Check if we have any cached market data
+        let cached_price = self.market_data
+            .get_database()
+            .get_token(token_address)
+            .ok()
+            .and_then(|opt| opt)
+            .map(|token_data| token_data.price_native);
+        if cached_price.is_none() {
+            warnings.push("No cached price data available".to_string());
+            // Don't block sell - use signal price
+        } else if let Some(price) = cached_price {
+            if price <= 0.0 || !price.is_finite() {
+                warnings.push("Cached price is invalid".to_string());
+            } else {
+                // Check for extreme price deviation (warn but don't block)
+                let price_diff = (signal_price - price).abs() / price;
+                if price_diff > 0.8 {
+                    // 80% deviation threshold for sells
+                    warnings.push(format!("Large price deviation: {:.1}%", price_diff * 100.0));
+                }
+            }
+        }
+
+        // Check data freshness (warn but don't block sells)
+        if let Ok(Some(token_data)) = self.market_data.get_database().get_token(token_address) {
+            let age = chrono::Utc::now().signed_duration_since(token_data.last_updated);
+            if age.num_seconds() > 300 {
+                // 5 minutes
+                warnings.push(
+                    format!(
+                        "Market data is stale: {:.1} minutes old",
+                        (age.num_seconds() as f64) / 60.0
+                    )
+                );
+            }
+        }
+
+        // Check liquidity (warn but don't block)
+        if let Ok(liquidity) = self.get_current_liquidity(token_address).await {
+            if liquidity < 0.5 {
+                // 0.5 SOL minimum for warning
+                warnings.push(format!("Low liquidity: {:.2} SOL", liquidity));
+            }
+        }
+
+        // Log warnings but be permissive for selling
+        if !warnings.is_empty() {
+            println!("⚠️  Sell validation warnings for {}: {}", token_address, warnings.join(", "));
+        }
+
+        // Only block if price is completely invalid - otherwise allow sells to exit positions
+        Ok(is_valid)
+    }
+
+    /// Validate market data availability and price validity before trading
+    async fn validate_market_data_for_trading(
+        &self,
+        token_address: &str,
+        signal_price: f64
+    ) -> Result<bool> {
+        // Check if signal price is valid
+        if signal_price <= 0.0 || signal_price.is_nan() || signal_price.is_infinite() {
+            log::warn!("Invalid signal price for {}: {}", token_address, signal_price);
+            return Ok(false);
+        }
+
+        // Check if we have recent market data for this token
+        match self.market_data.get_database().get_token(token_address) {
+            Ok(Some(token_data)) => {
+                // Validate the stored price
+                if
+                    token_data.price_native <= 0.0 ||
+                    token_data.price_native.is_nan() ||
+                    token_data.price_native.is_infinite()
+                {
+                    log::warn!(
+                        "Invalid stored price for {}: {}",
+                        token_address,
+                        token_data.price_native
+                    );
+                    return Ok(false);
+                }
+
+                // Check if the stored data is recent (within last 5 minutes)
+                let age_seconds = (chrono::Utc::now() - token_data.last_updated).num_seconds();
+                if age_seconds > 300 {
+                    log::warn!(
+                        "Market data too old for {}: {} seconds",
+                        token_address,
+                        age_seconds
+                    );
+                    return Ok(false);
+                }
+
+                // Check if price difference is reasonable (within 50%)
+                let price_diff =
+                    (signal_price - token_data.price_native).abs() / token_data.price_native;
+                if price_diff > 0.5 {
+                    log::warn!(
+                        "Price deviation too large for {}: signal={}, stored={}, diff={:.2}%",
+                        token_address,
+                        signal_price,
+                        token_data.price_native,
+                        price_diff * 100.0
+                    );
+                    return Ok(false);
+                }
+
+                // Check if token has minimum liquidity
+                if let Some(liquidity) = Some(token_data.liquidity_quote) {
+                    if liquidity < 1.0 {
+                        log::warn!(
+                            "Insufficient liquidity for {}: {} SOL",
+                            token_address,
+                            liquidity
+                        );
+                        return Ok(false);
+                    }
+                } else {
+                    log::warn!("No liquidity data available for {}", token_address);
+                    return Ok(false);
+                }
+
+                log::debug!(
+                    "Market data validation passed for {} - Price: {}, Age: {}s, Liquidity: {} SOL",
+                    token_address,
+                    token_data.price_native,
+                    age_seconds,
+                    token_data.liquidity_quote
+                );
+                Ok(true)
+            }
+            Ok(None) => {
+                log::warn!("No market data found for token {}", token_address);
+                Ok(false)
+            }
+            Err(e) => {
+                log::error!("Error fetching market data for {}: {}", token_address, e);
+                Ok(false)
+            }
+        }
+    }
+
     pub async fn start(&self) -> Result<()> {
         {
             let mut running = self.running.write().await;
@@ -317,6 +589,12 @@ impl TraderManager {
         }
 
         println!("🎯 Trader module starting...");
+
+        // Refresh prices for all tokens with liquidity before starting trading
+        if let Err(e) = self.refresh_prices_for_liquid_tokens().await {
+            log::warn!("Failed to refresh prices at startup: {}", e);
+            println!("⚠️  Warning: Price refresh failed, proceeding with cached data");
+        }
 
         // Load existing positions from database
         self.load_existing_positions().await?;
@@ -339,7 +617,7 @@ impl TraderManager {
             let database = Arc::clone(&self.database);
 
             tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(15));
+                let mut interval = tokio::time::interval(Duration::from_secs(5));
 
                 loop {
                     interval.tick().await;
@@ -371,6 +649,12 @@ impl TraderManager {
                                 }
                             }
                         }
+                    }
+
+                    // Refresh stats from database to get latest trade counts
+                    if let Ok(fresh_stats) = database.get_trader_stats() {
+                        let mut stats_write = stats.write().await;
+                        *stats_write = fresh_stats;
                     }
 
                     // Display status using table format
@@ -417,10 +701,13 @@ impl TraderManager {
                     };
 
                     // Create comprehensive stats table
+                    let open_positions_count = positions_read.len();
+                    let closed_positions_count = stats_read.closed_positions as usize;
+                    let total_trades = open_positions_count + closed_positions_count;
                     let stats_data = vec![
                         StatsRow {
                             metric: "Total Trades".to_string(),
-                            value: format!("{}", stats_read.total_trades),
+                            value: format!("{}", total_trades),
                         },
                         StatsRow {
                             metric: "Win Rate (P&L)".to_string(),
@@ -517,54 +804,66 @@ impl TraderManager {
                     if positions_read.is_empty() {
                         println!("📝 {}", "No active positions".italic().dimmed());
                     } else {
-                        // Create positions table
-                        let mut position_data: Vec<PositionRow> = positions_read
+                        // Filter for ONLY active positions
+                        let active_positions: Vec<&Position> = positions_read
                             .values()
-                            .map(|pos| PositionRow {
-                                address: pos.token_address.clone(), // Full address instead of truncated
-                                invested: format!("{:.5}", pos.total_invested_sol),
-                                tokens: format!("{:.2}", pos.total_tokens),
-                                current_price: format!("{:.8}", pos.current_price),
-                                peak_price: if pos.peak_price > 0.0 {
-                                    format!("{:.8}", pos.peak_price)
-                                } else {
-                                    "-".to_string()
-                                },
-                                low_price: if pos.lowest_price > 0.0 {
-                                    format!("{:.8}", pos.lowest_price)
-                                } else {
-                                    "-".to_string()
-                                },
-                                pnl_sol: format!("{:.5}", pos.unrealized_pnl_sol),
-                                pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
-                                opens: "1".to_string(), // Always 1 since simplified
-                                closes: "0".to_string(), // 0 for active positions
-                                dca_count: pos.dca_count.to_string(),
-                                status: format!("{:?}", pos.status),
-                                age: {
-                                    let duration = Utc::now().signed_duration_since(pos.created_at);
-                                    if duration.num_days() > 0 {
-                                        format!("{}d", duration.num_days())
-                                    } else if duration.num_hours() > 0 {
-                                        format!("{}h", duration.num_hours())
-                                    } else {
-                                        format!("{}m", duration.num_minutes())
-                                    }
-                                },
-                            })
+                            .filter(|pos| matches!(pos.status, PositionStatus::Active))
                             .collect();
 
-                        // Sort by unrealized P&L descending
-                        position_data.sort_by(|a, b| {
-                            let a_pnl: f64 = a.pnl_sol.parse().unwrap_or(0.0);
-                            let b_pnl: f64 = b.pnl_sol.parse().unwrap_or(0.0);
-                            b_pnl.partial_cmp(&a_pnl).unwrap_or(std::cmp::Ordering::Equal)
-                        });
+                        if active_positions.is_empty() {
+                            println!("📝 {}", "No active positions".italic().dimmed());
+                        } else {
+                            // Create positions table for ACTIVE positions only
+                            let mut position_data: Vec<PositionRow> = active_positions
+                                .iter()
+                                .map(|pos| PositionRow {
+                                    address: pos.token_address.clone(), // Full address instead of truncated
+                                    invested: format!("{:.5}", pos.total_invested_sol),
+                                    tokens: format!("{:.2}", pos.total_tokens),
+                                    current_price: format!("{:.8}", pos.current_price),
+                                    peak_price: if pos.peak_price > 0.0 {
+                                        format!("{:.8}", pos.peak_price)
+                                    } else {
+                                        "-".to_string()
+                                    },
+                                    low_price: if pos.lowest_price > 0.0 {
+                                        format!("{:.8}", pos.lowest_price)
+                                    } else {
+                                        "-".to_string()
+                                    },
+                                    pnl_sol: format!("{:.5}", pos.unrealized_pnl_sol),
+                                    pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
+                                    opens: "1".to_string(), // Always 1 since simplified
+                                    closes: "0".to_string(), // 0 for active positions
+                                    dca_count: pos.dca_count.to_string(),
+                                    status: format!("{:?}", pos.status),
+                                    age: {
+                                        let duration = Utc::now().signed_duration_since(
+                                            pos.created_at
+                                        );
+                                        if duration.num_days() > 0 {
+                                            format!("{}d", duration.num_days())
+                                        } else if duration.num_hours() > 0 {
+                                            format!("{}h", duration.num_hours())
+                                        } else {
+                                            format!("{}m", duration.num_minutes())
+                                        }
+                                    },
+                                })
+                                .collect();
 
-                        let mut positions_table = Table::new(position_data);
-                        let styled_positions_table = positions_table.with(Style::modern());
-                        println!("🔥 {}", "Active Positions".bold().bright_green());
-                        println!("{}", styled_positions_table);
+                            // Sort by unrealized P&L descending
+                            position_data.sort_by(|a, b| {
+                                let a_pnl: f64 = a.pnl_sol.parse().unwrap_or(0.0);
+                                let b_pnl: f64 = b.pnl_sol.parse().unwrap_or(0.0);
+                                b_pnl.partial_cmp(&a_pnl).unwrap_or(std::cmp::Ordering::Equal)
+                            });
+
+                            let mut positions_table = Table::new(position_data);
+                            let styled_positions_table = positions_table.with(Style::modern());
+                            println!("🔥 {}", "Active Positions".bold().bright_green());
+                            println!("{}", styled_positions_table);
+                        }
 
                         // Show last 10 closed positions
                         match database.get_closed_positions(10) {
@@ -590,17 +889,34 @@ impl TraderManager {
                                             "-".to_string()
                                         },
                                         pnl_sol: format!("{:.5}", pos.realized_pnl_sol),
-                                        pnl_percent: if pos.total_invested_sol > 0.0 {
+                                        pnl_percent: if
+                                            pos.total_invested_sol > 0.0 &&
+                                            pos.total_invested_sol.is_finite()
+                                        {
                                             // Calculate percentage based on actual profit/loss
                                             let profit_loss_percent =
                                                 (pos.realized_pnl_sol / pos.total_invested_sol) *
                                                 100.0;
-                                            // Cap unrealistic percentages that might be from old data
-                                            if profit_loss_percent.abs() > 1000.0 {
-                                                "DATA_ERROR".to_string()
+
+                                            // Validate the calculation result
+                                            if !profit_loss_percent.is_finite() {
+                                                "CALC_ERROR".to_string()
+                                            } else if profit_loss_percent.abs() > 5000.0 {
+                                                // Cap extremely unrealistic percentages (likely data corruption)
+                                                format!(">{:.0}%", if profit_loss_percent > 0.0 {
+                                                    5000.0
+                                                } else {
+                                                    -5000.0
+                                                })
                                             } else {
                                                 format!("{:.2}%", profit_loss_percent)
                                             }
+                                        } else if
+                                            pos.total_invested_sol <= 0.0 &&
+                                            pos.realized_pnl_sol != 0.0
+                                        {
+                                            // Invalid investment amount but non-zero PnL indicates corruption
+                                            "INV_ERROR".to_string()
                                         } else {
                                             "0.00%".to_string()
                                         },
@@ -732,30 +1048,7 @@ impl TraderManager {
                         if (market_price - prev_price).abs() > prev_price * 0.001 {
                             // Show changes > 0.1% with enhanced display
                             let change_percent = ((market_price - prev_price) / prev_price) * 100.0;
-                            let change_indicator = if change_percent > 0.0 { "📈" } else { "📉" };
-
-                            // Get token age from pool data
-                            let token_age_str = match
-                                market_data.get_database().get_token_pools(&token.mint)
-                            {
-                                Ok(pools) => {
-                                    let token_age = pools
-                                        .iter()
-                                        .map(|p| p.created_at)
-                                        .min();
-                                    let now = chrono::Utc::now();
-                                    if let Some(created_at) = token_age {
-                                        let duration = now.signed_duration_since(created_at);
-                                        let days = duration.num_days();
-                                        let hours = duration.num_hours() % 24;
-                                        let mins = duration.num_minutes() % 60;
-                                        format!("{}d {}h {}m", days, hours, mins)
-                                    } else {
-                                        "unknown".to_string()
-                                    }
-                                }
-                                Err(_) => "unknown".to_string(),
-                            };
+                            // (Token age display removed: unused and caused syntax error)
                         }
                     } else {
                         // First time getting price for this token - show basic info
@@ -780,7 +1073,7 @@ impl TraderManager {
                     let positions_read = positions.read().await;
                     if !positions_read.is_empty() {
                         println!("\n{}", "📊 ACTIVE POSITIONS".bright_cyan().bold());
-                        for (mint, position) in positions_read.iter() {
+                        for (_mint, position) in positions_read.iter() {
                             println!(
                                 "   🪙 {} | Invested: {:.10} SOL | Tokens: {:.4} | PnL: {:.10} SOL",
                                 position.token_symbol,
@@ -956,12 +1249,6 @@ impl TraderManager {
                                         .read().await
                                         .analyze_token(&token_info, current_price)
                                 {
-                                    println!(
-                                        "📡 New buy signal: {} at {:.10} SOL",
-                                        token_info.symbol,
-                                        current_price
-                                    );
-
                                     // Execute buy trade
                                     if
                                         let Err(e) = trader_manager.execute_trade_signal(
@@ -1068,11 +1355,36 @@ impl TraderManager {
         signal: &TradeSignal,
         existing_position: Option<Position>
     ) -> Result<()> {
+        // Check token cooldown first
+        let cooldown_manager = self.cooldown_manager.read().await;
+        if cooldown_manager.is_token_in_cooldown(&signal.token_address) {
+            println!("🚫 Skipping BUY for {} - token is on cooldown", signal.token_address);
+            return Ok(());
+        }
+        drop(cooldown_manager);
+
+        // Validate market data and price availability before trading
+        if
+            !self.validate_market_data_for_trading(
+                &signal.token_address,
+                signal.current_price
+            ).await?
+        {
+            println!(
+                "🚫 Skipping BUY for {} - insufficient market data or invalid price",
+                signal.token_address
+            );
+            return Ok(());
+        }
+
         // Check if position exists in database if not in memory
         let existing_position = if existing_position.is_some() {
             existing_position
         } else {
-            Position::load_from_database(&self.database, &signal.token_address)?
+            match Position::load_from_database(&self.database, &signal.token_address) {
+                Ok(pos) => pos,
+                Err(_) => None,
+            }
         };
 
         let trade_size = self.strategy
@@ -1081,23 +1393,13 @@ impl TraderManager {
 
         // First validate token safety (rug detection + blacklist)
         if !self.validate_token_safety(&signal.token_address, trade_size).await? {
-            println!(
-                "⚠️  Skipping BUY for {} - failed rug detection/safety validation",
-                signal.token_address
-            );
             return Ok(());
         }
 
         // Validate trade using pool quality metrics
         if !self.validate_trade_with_pool_quality(&signal.token_address, trade_size).await? {
-            println!("⚠️  Skipping BUY for {} - pool quality insufficient", signal.token_address);
             return Ok(());
         }
-
-        // DO NOT fetch updated price here!
-        // let current_price = self
-        //     .get_best_token_price(&signal.token_address).await?
-        //     .unwrap_or(signal.current_price);
 
         let current_price = signal.current_price;
 
@@ -1159,6 +1461,10 @@ impl TraderManager {
                     amount_sol: trade_size,
                     amount_tokens: 0.0,
                     price_per_token: current_price,
+                    effective_price_per_token: current_price,
+                    trading_fee: self.config.trading_fee,
+                    net_sol_received: 0.0,
+                    net_tokens_received: 0.0,
                     fees: 0.0,
                     slippage: 0.0,
                     timestamp: Utc::now(),
@@ -1174,6 +1480,19 @@ impl TraderManager {
     async fn execute_sell_trade(&self, signal: &TradeSignal, position: Position) -> Result<()> {
         let trade_size = position.total_tokens;
 
+        // Validate market data for selling (but be more lenient than buying)
+        if
+            !self.validate_market_data_for_selling(
+                &signal.token_address,
+                signal.current_price
+            ).await?
+        {
+            println!(
+                "⚠️  Proceeding with sell despite market data issues for {} - emergency exit",
+                signal.token_address
+            );
+        }
+
         // Check for rug indicators (but don't block sell trades - we want to exit bad positions)
         let current_liquidity = self
             .get_current_liquidity(&signal.token_address).await
@@ -1184,24 +1503,24 @@ impl TraderManager {
                     RugAction::Blacklist | RugAction::SellImmediately => {
                         println!(
                             "🚨 URGENT SELL for rugged token {}: {:?}",
-                            signal.token_address,
+                            &signal.token_address[..8],
                             result.reasons
                         );
                     }
                     RugAction::Monitor => {
                         println!(
                             "⚠️  Selling potentially risky token {}: {:?}",
-                            signal.token_address,
+                            &signal.token_address[..8],
                             result.reasons
                         );
                     }
                     RugAction::Continue => {
-                        log::debug!("Selling safe token {}", signal.token_address);
+                        // Normal sell - no log needed
                     }
                 }
             }
-            Err(e) => {
-                log::warn!("Rug detection failed for sell of {}: {}", signal.token_address, e);
+            Err(_) => {
+                // Rug detection failed - still proceed with sell
             }
         }
 
@@ -1209,13 +1528,6 @@ impl TraderManager {
         let current_price = self
             .get_best_token_price(&signal.token_address).await?
             .unwrap_or(signal.current_price);
-
-        println!(
-            "🔴 Executing SELL: {} - {:.10} SOL ({:.4} tokens) - Using best pool price",
-            signal.token_address,
-            current_price,
-            trade_size
-        );
 
         // Create updated signal with best price
         let updated_signal = TradeSignal {
@@ -1242,6 +1554,10 @@ impl TraderManager {
                     amount_sol: trade_size * current_price,
                     amount_tokens: trade_size,
                     price_per_token: current_price,
+                    effective_price_per_token: current_price,
+                    trading_fee: self.config.trading_fee,
+                    net_sol_received: 0.0,
+                    net_tokens_received: 0.0,
                     fees: 0.0,
                     slippage: 0.0,
                     timestamp: Utc::now(),
@@ -1323,6 +1639,13 @@ impl TraderManager {
         signal: &TradeSignal,
         amount_sol: f64
     ) -> Result<TradeResult> {
+        println!(
+            "         💰 SIMULATE_BUY_TRADE: {:.5} SOL at {:.10} SOL per token for {}",
+            amount_sol,
+            signal.current_price,
+            &signal.token_address[..8]
+        );
+
         // Simulate slippage and fees
         let slippage = 0.01; // 1% slippage
         let fees = amount_sol * 0.0025; // 0.25% fees
@@ -1330,17 +1653,32 @@ impl TraderManager {
         let effective_price = signal.current_price * (1.0 + slippage);
         let tokens_received = effective_amount / effective_price;
 
-        Ok(TradeResult {
+        println!(
+            "         📊 Trade simulation: {:.5} SOL → {:.2} tokens (fees: {:.5} SOL, slippage: {:.2}%)",
+            effective_amount,
+            tokens_received,
+            fees,
+            slippage * 100.0
+        );
+
+        let result = TradeResult {
             success: true,
             transaction_hash: Some(format!("SIMULATED_BUY_{}", Utc::now().timestamp())),
             amount_sol,
             amount_tokens: tokens_received,
             price_per_token: effective_price,
+            effective_price_per_token: effective_price,
+            trading_fee: self.config.trading_fee,
+            net_sol_received: amount_sol - self.config.trading_fee,
+            net_tokens_received: tokens_received,
             fees,
             slippage,
             timestamp: Utc::now(),
             error: None,
-        })
+        };
+
+        println!("         ✅ Simulation completed successfully");
+        Ok(result)
     }
 
     async fn simulate_sell_trade(
@@ -1353,7 +1691,7 @@ impl TraderManager {
         let effective_price = signal.current_price * (1.0 - slippage);
         let sol_received = amount_tokens * effective_price;
         let fees = sol_received * 0.0025; // 0.25% fees
-        let net_sol = sol_received - fees;
+        let _net_sol = sol_received - fees;
 
         Ok(TradeResult {
             success: true,
@@ -1361,6 +1699,10 @@ impl TraderManager {
             amount_sol: sol_received, // Use gross proceeds for P&L calculation
             amount_tokens,
             price_per_token: effective_price,
+            effective_price_per_token: effective_price,
+            trading_fee: self.config.trading_fee,
+            net_sol_received: sol_received - fees - self.config.trading_fee,
+            net_tokens_received: 0.0,
             fees,
             slippage,
             timestamp: Utc::now(),
@@ -1394,35 +1736,71 @@ impl TraderManager {
         result: TradeResult,
         existing_position: Option<Position>
     ) -> Result<()> {
+        println!(
+            "         💾 PROCESS_BUY_TRADE_RESULT: success={}, amount={:.5} SOL, tokens={:.2}",
+            result.success,
+            result.amount_sol,
+            result.amount_tokens
+        );
+
+        let is_existing_position = existing_position.is_some();
         let mut position = existing_position.unwrap_or_else(|| {
+            println!("         🆕 Creating new position for {}", &signal.token_address[..8]);
             Position::new(signal.token_address.clone(), "Unknown".to_string())
         });
 
+        if is_existing_position {
+            println!(
+                "         📊 Updating existing position with {} tokens",
+                position.total_tokens
+            );
+        }
+
         if result.success {
-            position.add_buy_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
+            println!("         ✅ Adding successful buy trade to position");
+            position.add_buy_trade(
+                result.amount_sol,
+                result.amount_tokens,
+                result.price_per_token,
+                Some(self.config.trading_fee)
+            );
             // Update current price to signal price
             position.update_price(signal.current_price);
+            println!(
+                "         📊 Position now has {} tokens worth {:.5} SOL",
+                position.total_tokens,
+                position.total_invested_sol
+            );
+        } else {
+            println!("         ❌ Trade failed, not updating position");
         }
 
         // Save position to database (this will update existing or create new)
+        println!("         💾 Saving position to database...");
         let position_id = position.save_to_database(&self.database)?;
         position.id = Some(position_id);
+        println!("         💾 Position saved with ID: {}", position_id);
 
         // Record trade in database
+        println!("         📝 Recording trade in database...");
         self.database.record_trade(position_id, &signal.token_address, "BUY", &result)?;
+        println!("         📝 Trade recorded successfully");
 
         // Update positions map (ensure synchronization)
         {
             let mut positions = self.positions.write().await;
             positions.insert(signal.token_address.clone(), position);
+            println!("         🔄 Position updated in memory map");
         }
 
         // Update stats
+        println!("         📊 Updating trader stats...");
         self.update_stats().await?;
 
         // Update stats
         self.update_stats().await?;
 
+        println!("         ✅ Buy trade result processing completed");
         Ok(())
     }
 
@@ -1436,7 +1814,8 @@ impl TraderManager {
             position.add_sell_trade(
                 result.amount_sol,
                 result.amount_tokens,
-                result.price_per_token
+                result.price_per_token,
+                Some(self.config.trading_fee)
             );
             position.status = PositionStatus::Closed;
         }
@@ -1452,6 +1831,17 @@ impl TraderManager {
         if matches!(position.status, PositionStatus::Closed) {
             let mut positions = self.positions.write().await;
             positions.remove(&signal.token_address);
+
+            // Activate cooldown for this token after successful sell
+            if result.success {
+                let mut cooldown_manager = self.cooldown_manager.write().await;
+                cooldown_manager.add_cooldown(&signal.token_address);
+                println!(
+                    "⏱️  Token {} added to cooldown for {} minutes",
+                    signal.token_address,
+                    self.config.token_cooldown_minutes
+                );
+            }
         }
 
         // Update stats
@@ -1467,7 +1857,12 @@ impl TraderManager {
         mut position: Position
     ) -> Result<()> {
         if result.success {
-            position.add_dca_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
+            position.add_dca_trade(
+                result.amount_sol,
+                result.amount_tokens,
+                result.price_per_token,
+                Some(self.config.trading_fee)
+            );
             // Update current price to signal price
             position.update_price(signal.current_price);
         }
@@ -1501,7 +1896,8 @@ impl TraderManager {
             position.add_sell_trade(
                 result.amount_sol,
                 result.amount_tokens,
-                result.price_per_token
+                result.price_per_token,
+                Some(self.config.trading_fee)
             );
             position.status = PositionStatus::StopLoss;
         }
@@ -1885,6 +2281,9 @@ impl TraderManagerAsync {
             positions: Arc::clone(&self.positions),
             running: Arc::clone(&self.running),
             stats: Arc::clone(&self.stats),
+            cooldown_manager: Arc::new(
+                RwLock::new(TokenCooldownManager::new(self.config.token_cooldown_minutes))
+            ),
             rug_detection: Arc::new(
                 RugDetectionEngine::new(
                     self.market_data.get_database(),

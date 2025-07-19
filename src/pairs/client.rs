@@ -1,4 +1,4 @@
-use crate::pairs::{ PairsTrait, TokenPair, PairsError, PairsDatabase };
+use crate::pairs::{ PairsTrait, TokenPair, PairsDatabase };
 use crate::api::wait_for_dexscreener_rate_limit;
 use anyhow::{ Context, Result };
 use async_trait::async_trait;
@@ -465,6 +465,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_jupiter_pairs() {
+        // Initialize rate limiter for testing
+        let config = crate::config::DexScreenerConfig::default();
+        crate::api::init_dexscreener_rate_limiter(config).await.unwrap();
+
         let client = PairsClient::new().unwrap();
         let pairs = client
             .get_solana_token_pairs("JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN").await

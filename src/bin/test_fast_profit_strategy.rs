@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         let mut position = Position::new("test_token_address".to_string(), "TEST".to_string());
 
         // Set up position as if it just bought
-        position.add_buy_trade(0.01, 1000.0, 0.00001); // Bought 1000 tokens for 0.01 SOL
+        position.add_buy_trade(0.01, 1000.0, 0.00001, None); // Bought 1000 tokens for 0.01 SOL
         position.status = PositionStatus::Active;
 
         // Calculate current price for the desired profit

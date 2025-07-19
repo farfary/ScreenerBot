@@ -11,9 +11,6 @@ pub struct Config {
     #[serde(default)]
     pub rpc_fallbacks: Vec<String>,
     pub discovery: DiscoveryConfig,
-    pub general: GeneralConfig,
-    #[serde(default)]
-    pub pricing: Option<PricingConfig>,
     #[serde(default)]
     pub swap: SwapConfig,
     #[serde(default)]
@@ -36,40 +33,6 @@ pub struct DiscoveryConfig {
     pub min_market_cap: Option<f64>,
     pub blacklisted_tokens: Vec<String>,
     pub sources: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeneralConfig {
-    pub log_level: String,
-    pub update_interval_seconds: u64,
-    pub ui_refresh_rate_ms: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PricingConfig {
-    pub enabled: bool,
-    pub update_interval_secs: u64,
-    pub top_tokens_count: usize,
-    pub cache_ttl_secs: u64,
-    pub max_cache_size: usize,
-    pub pool_calculation_enabled: bool,
-    pub priority_update_interval_secs: u64,
-    pub enable_dynamic_pricing: bool,
-    // Dynamic pricing configuration
-    pub dynamic_pricing: DynamicPricingConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DynamicPricingConfig {
-    pub enabled: bool,
-    pub fastest_interval_secs: u64, // 5 seconds
-    pub slowest_interval_secs: u64, // 5 minutes (300 seconds)
-    pub high_liquidity_threshold: f64, // 1 million USD
-    pub low_liquidity_threshold: f64, // 100 USD
-    pub dead_token_threshold: f64, // Near zero liquidity
-    pub dead_token_timeout_hours: u64, // 6 hours
-    pub rate_limit_usage_threshold: f64, // 90% of available rate limit
-    pub blacklist_cleanup_interval_hours: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +184,13 @@ pub struct TraderConfig {
     pub profit_targets: Vec<ProfitTarget>,
     #[serde(default = "default_momentum_check_seconds")]
     pub momentum_check_seconds: u64,
+    // New fields for enhanced trading
+    #[serde(default = "default_trading_fee")]
+    pub trading_fee: f64, // Default 0.00003 SOL per trade
+    #[serde(default = "default_max_watch_tokens")]
+    pub max_watch_tokens: u32, // Max tokens to watch
+    #[serde(default = "default_token_cooldown_minutes")]
+    pub token_cooldown_minutes: u64, // Cooldown time after selling
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +202,18 @@ pub struct ProfitTarget {
 
 fn default_momentum_check_seconds() -> u64 {
     5
+}
+
+fn default_trading_fee() -> f64 {
+    0.00003 // 0.00003 SOL per trade
+}
+
+fn default_max_watch_tokens() -> u32 {
+    100 // Maximum tokens to monitor
+}
+
+fn default_token_cooldown_minutes() -> u64 {
+    5 // 5 minutes cooldown after selling
 }
 
 impl Default for TraderConfig {
@@ -259,6 +241,9 @@ impl Default for TraderConfig {
                 ProfitTarget { target_percent: 50.0, sell_portion: 0.25, time_window_minutes: 10 }
             ],
             momentum_check_seconds: 5,
+            trading_fee: 0.00003,
+            max_watch_tokens: 100,
+            token_cooldown_minutes: 5,
         }
     }
 }
@@ -310,32 +295,6 @@ impl Default for Config {
                 blacklisted_tokens: vec![],
                 sources: vec!["raydium".to_string(), "jupiter".to_string(), "orca".to_string()],
             },
-            general: GeneralConfig {
-                log_level: "info".to_string(),
-                update_interval_seconds: 30,
-                ui_refresh_rate_ms: 1000,
-            },
-            pricing: Some(PricingConfig {
-                enabled: true,
-                update_interval_secs: 300, // 5 minutes
-                top_tokens_count: 100,
-                cache_ttl_secs: 300, // 5 minutes
-                max_cache_size: 10000,
-                pool_calculation_enabled: true,
-                priority_update_interval_secs: 30, // 30 seconds for priority tokens
-                enable_dynamic_pricing: true,
-                dynamic_pricing: DynamicPricingConfig {
-                    enabled: true,
-                    fastest_interval_secs: 5,
-                    slowest_interval_secs: 300,
-                    high_liquidity_threshold: 1_000_000.0,
-                    low_liquidity_threshold: 100.0,
-                    dead_token_threshold: 0.0,
-                    dead_token_timeout_hours: 6,
-                    rate_limit_usage_threshold: 0.9,
-                    blacklist_cleanup_interval_hours: 24,
-                },
-            }),
             swap: SwapConfig::default(),
             rpc: RpcConfig::default(),
             trader: TraderConfig::default(),
