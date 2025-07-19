@@ -1,180 +1,67 @@
-use std::sync::{ Arc, Mutex };
-use std::sync::atomic::{ AtomicBool, Ordering };
+use serde::{ Deserialize, Serialize };
+use std::fs;
+use std::path::Path;
+use std::collections::HashSet;
 use once_cell::sync::Lazy;
-use crate::configs::{ SharedConfig };
-use crate::trader::TradingStats;
-use crate::pools::PoolStats;
+use std::sync::RwLock;
 
-// Global shutdown signal
-pub static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+pub static LIST_MINTS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
-// Global bot state
-pub static BOT_STATE: Lazy<Arc<Mutex<BotState>>> = Lazy::new(|| {
-    Arc::new(Mutex::new(BotState::new()))
-});
+pub static LIST_TOKENS: Lazy<RwLock<Vec<Token>>> = Lazy::new(|| RwLock::new(vec![]));
 
-#[derive(Debug)]
-pub struct BotState {
-    pub config: Option<SharedConfig>,
-    pub rpc_stats: RpcStats,
-    pub wallet_balance: f64,
-    pub task_delays: TaskDelays,
-    pub trading_stats: TradingStats,
-    pub pool_stats: PoolStats,
+
+/// Represents the runtime configuration loaded from configs.json
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Configs {
+    pub main_wallet_private: String,
+    pub rpc_url: String,
+    pub rpc_fallbacks: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
-pub struct RpcStats {
-    pub main_rpc_calls: u64,
-    pub fallback_rpc_calls: u64,
-    pub failed_calls: u64,
-    pub total_calls: u64,
-    pub rate_limited_calls: u64,
+/// Reads the configs.json file from the project root and returns a Configs object
+pub fn read_configs<P: AsRef<Path>>(path: P) -> Result<Configs, Box<dyn std::error::Error>> {
+    let data = fs::read_to_string(path)?;
+    let configs: Configs = serde_json::from_str(&data)?;
+    Ok(configs)
 }
 
-#[derive(Debug, Clone)]
-pub struct TaskDelays {
-    pub monitor_delay: u64,
-    pub wallet_delay: u64,
-    pub trader_delay: u64,
-    pub pools_delay: u64,
-    pub logger_delay: u64,
-    pub rpc_delay: u64,
+/// Represents a liquidity pool for a token.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Pool {
+    pub address: String,
+    pub dex: String,
+    pub base_token: String,
+    pub quote_token: String,
+    pub liquidity_usd: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub fee: Option<f64>,
+    pub url: Option<String>,
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
 }
 
-impl Default for RpcStats {
-    fn default() -> Self {
-        Self {
-            main_rpc_calls: 0,
-            fallback_rpc_calls: 0,
-            failed_calls: 0,
-            total_calls: 0,
-            rate_limited_calls: 0,
-        }
-    }
-}
-
-impl Default for TaskDelays {
-    fn default() -> Self {
-        Self {
-            monitor_delay: 5,
-            wallet_delay: 10,
-            trader_delay: 3,
-            pools_delay: 15,
-            logger_delay: 1,
-            rpc_delay: 1,
-        }
-    }
-}
-
-impl BotState {
-    pub fn new() -> Self {
-        Self {
-            config: None,
-            rpc_stats: RpcStats::default(),
-            wallet_balance: 0.0,
-            task_delays: TaskDelays::default(),
-            trading_stats: TradingStats::default(),
-            pool_stats: PoolStats::default(),
-        }
-    }
-
-    pub fn set_config(&mut self, config: SharedConfig) {
-        self.config = Some(config);
-    }
-
-    pub fn get_config(&self) -> Option<SharedConfig> {
-        self.config.clone()
-    }
-
-    pub fn update_rpc_stats<F>(&mut self, update_fn: F) where F: FnOnce(&mut RpcStats) {
-        update_fn(&mut self.rpc_stats);
-    }
-
-    pub fn set_wallet_balance(&mut self, balance: f64) {
-        self.wallet_balance = balance;
-    }
-
-    pub fn get_wallet_balance(&self) -> f64 {
-        self.wallet_balance
-    }
-}
-
-// Helper functions for global state access
-pub fn is_shutdown() -> bool {
-    SHUTDOWN.load(Ordering::Relaxed)
-}
-
-pub fn trigger_shutdown() {
-    SHUTDOWN.store(true, Ordering::Relaxed);
-}
-
-pub fn get_bot_state() -> Arc<Mutex<BotState>> {
-    BOT_STATE.clone()
-}
-
-pub fn update_config(config: SharedConfig) {
-    if let Ok(mut state) = BOT_STATE.lock() {
-        state.set_config(config);
-    }
-}
-
-pub fn get_config() -> Option<SharedConfig> {
-    BOT_STATE.lock()
-        .ok()
-        .and_then(|state| state.get_config())
-}
-
-pub fn update_wallet_balance(balance: f64) {
-    if let Ok(mut state) = BOT_STATE.lock() {
-        state.set_wallet_balance(balance);
-    }
-}
-
-pub fn get_wallet_balance() -> f64 {
-    BOT_STATE.lock()
-        .map(|state| state.get_wallet_balance())
-        .unwrap_or(0.0)
-}
-
-pub fn update_rpc_stats<F>(update_fn: F) where F: FnOnce(&mut RpcStats) {
-    if let Ok(mut state) = BOT_STATE.lock() {
-        state.update_rpc_stats(update_fn);
-    }
-}
-
-pub fn get_rpc_stats() -> RpcStats {
-    BOT_STATE.lock()
-        .map(|state| state.rpc_stats.clone())
-        .unwrap_or_default()
-}
-
-pub fn get_task_delays() -> TaskDelays {
-    BOT_STATE.lock()
-        .map(|state| state.task_delays.clone())
-        .unwrap_or_default()
-}
-
-pub fn get_trading_stats() -> TradingStats {
-    BOT_STATE.lock()
-        .map(|state| state.trading_stats.clone())
-        .unwrap_or_default()
-}
-
-pub fn update_trading_stats(trading_stats: TradingStats) {
-    if let Ok(mut state) = BOT_STATE.lock() {
-        state.trading_stats = trading_stats;
-    }
-}
-
-pub fn get_pool_stats() -> PoolStats {
-    BOT_STATE.lock()
-        .map(|state| state.pool_stats.clone())
-        .unwrap_or_default()
-}
-
-pub fn update_pool_stats(pool_stats: PoolStats) {
-    if let Ok(mut state) = BOT_STATE.lock() {
-        state.pool_stats = pool_stats;
-    }
+/// Represents a cryptocurrency token with full details.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Token {
+    pub mint: String,
+    pub symbol: String,
+    pub name: String,
+    pub decimals: u8,
+    pub chain: String,
+    pub logo_url: Option<String>,
+    pub coingecko_id: Option<String>,
+    pub website: Option<String>,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub is_verified: bool,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub price_dexscreener_sol: Option<f64>,
+    pub price_dexscreener_usd: Option<f64>,
+    pub price_geckoterminal_sol: Option<f64>,
+    pub price_geckoterminal_usd: Option<f64>,
+    pub price_raydium_sol: Option<f64>,
+    pub price_raydium_usd: Option<f64>,
+    pub price_pool_sol: Option<f64>,
+    pub price_pool_usd: Option<f64>,
+    pub pools: Vec<Pool>,
 }

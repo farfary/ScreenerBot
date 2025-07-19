@@ -1,57 +1,33 @@
+use screenerbot::{ monitor::monitor, trader::trader };
+use screenerbot::logger::{ log, LogTag };
+
+use std::sync::Arc;
+use tokio::sync::Notify;
+
 #[tokio::main]
 async fn main() {
-    use screenerbot::logger::{ log, LogLevel };
+    log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
+    let shutdown = Arc::new(Notify::new());
+    let shutdown_monitor = shutdown.clone();
+    let shutdown_trader = shutdown.clone();
 
-    log("MAIN", LogLevel::Info, "ScreenerBot starting...");
+    let monitor_handle = tokio::spawn(async move {
+        log(LogTag::Monitor, "INFO", "Monitor task started");
+        monitor(shutdown_monitor).await;
+        log(LogTag::Monitor, "INFO", "Monitor task ended");
+    });
+    let trader_handle = tokio::spawn(async move {
+        log(LogTag::Trader, "INFO", "Trader task started");
+        trader(shutdown_trader).await;
+        log(LogTag::Trader, "INFO", "Trader task ended");
+    });
 
-    // Initialize all background tasks
-    log("MAIN", LogLevel::Info, "Starting configuration manager...");
-    screenerbot::configs::start_config_manager();
+    log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
+    tokio::signal::ctrl_c().await.expect("failed to listen for event");
+    log(LogTag::System, "INFO", "Shutdown signal received, notifying tasks");
+    shutdown.notify_waiters();
 
-    log("MAIN", LogLevel::Info, "Starting logger manager...");
-    screenerbot::logger::start_logger_manager();
-
-    log("MAIN", LogLevel::Info, "Starting RPC manager...");
-    screenerbot::rpc::start_rpc_manager();
-
-    log("MAIN", LogLevel::Info, "Starting wallet manager...");
-    screenerbot::wallet::start_wallet_manager();
-
-    log("MAIN", LogLevel::Info, "Starting pools manager...");
-    screenerbot::pools::start_pools_manager();
-
-    log("MAIN", LogLevel::Info, "Starting trader manager...");
-    screenerbot::trader::start_trader();
-
-    log("MAIN", LogLevel::Info, "Starting monitor manager...");
-    screenerbot::monitor::start_monitoring();
-
-    log("MAIN", LogLevel::Info, "All background tasks started successfully");
-    log("MAIN", LogLevel::Info, "ScreenerBot is now running. Press Ctrl+C to shutdown.");
-
-    // Setup graceful shutdown
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            log("MAIN", LogLevel::Info, "Shutdown signal received");
-            screenerbot::global::trigger_shutdown();
-            
-            // Give tasks time to shut down gracefully
-            log("MAIN", LogLevel::Info, "Waiting for tasks to shutdown...");
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            
-            log("MAIN", LogLevel::Info, "ScreenerBot shutdown complete");
-        }
-        _ = keep_alive() => {
-            log("MAIN", LogLevel::Error, "Keep alive loop ended unexpectedly");
-        }
-    }
-}
-
-async fn keep_alive() {
-    loop {
-        if screenerbot::global::is_shutdown() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-    }
+    // Wait for background tasks to finish
+    let _ = tokio::try_join!(monitor_handle, trader_handle);
+    log(LogTag::System, "INFO", "All background tasks finished. Exiting.");
 }

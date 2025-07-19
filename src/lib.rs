@@ -1,8 +1,7 @@
 pub mod global;
-pub mod logger;
+pub mod utils;
 pub mod monitor;
-pub mod configs;
-pub mod rpc;
-pub mod wallet;
-pub mod pools;
 pub mod trader;
+pub mod logger;
+pub mod discovery;
+pub mod wallet;

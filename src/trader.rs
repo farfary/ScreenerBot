@@ -1,350 +1,405 @@
-use std::time::Duration;
+/// Trading configuration constants
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
+pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
+pub const DEFAULT_FEE: f64 = 0.00005;
+pub const TRADE_SIZE_SOL: f64 = 0.001;
+pub const STOP_LOSS_PERCENT: f64 = -20.0;
+pub const PRICE_HISTORY_HOURS: i64 = 24;
+pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
+pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
+pub const MAX_OPEN_POSITIONS: usize = 10;
+
+use crate::utils::check_shutdown_or_delay;
+use crate::logger::{ log, LogTag };
+use crate::global::*;
+use crate::utils::*;
+
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use serde::{ Deserialize, Serialize };
-use crate::global::{ is_shutdown, get_wallet_balance };
-use crate::logger::{ log, LogLevel };
-use crate::pools::{ Pool };
+use std::sync::{ Arc as StdArc, Mutex as StdMutex };
+use chrono::{ Utc, Duration as ChronoDuration, DateTime };
+use std::sync::Arc;
+use tokio::sync::Notify;
+use std::time::Duration;
+use serde::{ Serialize, Deserialize };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeSignal {
-    pub token: String,
-    pub action: TradeAction,
-    pub amount: f64,
-    pub price: f64,
-    pub confidence: f64,
-    pub timestamp: u64,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TradeAction {
-    Buy,
-    Sell,
-    Hold,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Position {
-    pub token: String,
-    pub amount: f64,
-    pub entry_price: f64,
-    pub current_price: f64,
-    pub pnl: f64,
-    pub entry_time: u64,
+    mint: String,
+    symbol: String,
+    name: String,
+    entry_price: f64,
+    entry_time: DateTime<Utc>,
+    exit_price: Option<f64>,
+    exit_time: Option<DateTime<Utc>>,
+    pnl_sol: Option<f64>,
+    pnl_percent: Option<f64>,
+    position_type: String, // "buy" or "sell"
+    entry_size_sol: f64,
+    total_size_sol: f64,
+    drawdown_percent: f64,
+    price_highest: f64,
+    price_lowest: f64,
 }
 
-#[derive(Debug)]
-pub struct TradingStrategy {
-    pub name: String,
-    pub max_position_size: f64,
-    pub stop_loss_percent: f64,
-    pub take_profit_percent: f64,
-    pub enabled: bool,
+/// Static global: saved positions
+pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(|| {
+    let positions = load_positions_from_file();
+    StdArc::new(StdMutex::new(positions))
+});
+
+/// Static global: price history for each token (mint), stores Vec<(timestamp, price)>
+pub static PRICE_HISTORY_24H: Lazy<
+    StdArc<StdMutex<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>
+> = Lazy::new(|| StdArc::new(StdMutex::new(HashMap::new())));
+
+/// Static global: last known prices for each token
+pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new(|| {
+    StdArc::new(StdMutex::new(HashMap::new()))
+});
+
+/// Gets the current count of open positions
+fn get_open_positions_count() -> usize {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        positions
+            .iter()
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .count()
+    } else {
+        0
+    }
 }
 
-#[derive(Debug)]
-pub struct TraderManager {
-    positions: HashMap<String, Position>,
-    strategies: Vec<TradingStrategy>,
-    trade_signals: Vec<TradeSignal>,
-    total_pnl: f64,
-    total_trades: u64,
-    successful_trades: u64,
+/// Validates if a token has all required metadata for trading
+fn validate_token(token: &Token) -> bool {
+    if token.symbol.is_empty() || token.name.is_empty() {
+        return false;
+    }
+
+    let has_url = token.logo_url
+        .as_ref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    let has_website = token.website
+        .as_ref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+
+    // Require either logo_url or website
+    has_url || has_website
 }
 
-impl TraderManager {
-    pub fn new() -> Self {
-        let strategies = vec![
-            TradingStrategy {
-                name: "Momentum".to_string(),
-                max_position_size: 0.1, // 10% of portfolio
-                stop_loss_percent: 0.05, // 5% stop loss
-                take_profit_percent: 0.15, // 15% take profit
-                enabled: true,
-            },
-            TradingStrategy {
-                name: "Mean Reversion".to_string(),
-                max_position_size: 0.05, // 5% of portfolio
-                stop_loss_percent: 0.03, // 3% stop loss
-                take_profit_percent: 0.08, // 8% take profit
-                enabled: false,
-            }
-        ];
+/// Calculates if position is in profit considering fees and trade size
+fn is_position_profitable(
+    entry_price: f64,
+    current_price: f64,
+    trade_size_sol: f64
+) -> (bool, f64, f64, f64) {
+    let gross_pnl_sol = (current_price - entry_price) * (trade_size_sol / entry_price);
+    let net_pnl_sol = gross_pnl_sol - 2.0 * DEFAULT_FEE; // Entry and exit fees
+    let net_pnl_percent = (net_pnl_sol / trade_size_sol) * 100.0;
+    let total_value = trade_size_sol + net_pnl_sol;
 
-        Self {
-            positions: HashMap::new(),
-            strategies,
-            trade_signals: Vec::new(),
-            total_pnl: 0.0,
-            total_trades: 0,
-            successful_trades: 0,
-        }
-    }
+    (net_pnl_sol > 0.0, net_pnl_sol, net_pnl_percent, total_value)
+}
 
-    pub async fn analyze_market(&mut self) -> anyhow::Result<()> {
-        // Get current pool data
-        let pools = {
-            use crate::pools::POOL_MANAGER;
-            let pool_manager_guard = POOL_MANAGER.lock().unwrap();
-            if let Some(pool_manager) = pool_manager_guard.as_ref() {
-                pool_manager.get_all_pools().clone()
-            } else {
-                HashMap::new()
-            }
-        };
-
-        for pool in pools.values() {
-            // Simple momentum strategy
-            if let Some(signal) = self.generate_momentum_signal(pool).await {
-                self.trade_signals.push(signal);
-            }
-
-            // Update existing positions
-            self.update_position_pnl(pool).await;
+/// Opens a new buy position for a token
+fn open_position(token: &Token, price: f64, percent_change: f64) {
+    // Check if we already have an open position for this token and count open positions
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        if
+            positions
+                .iter()
+                .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none())
+        {
+            return; // Already have an open position for this token
         }
 
-        // Clean old signals (keep only last 100)
-        if self.trade_signals.len() > 100 {
-            self.trade_signals.drain(0..self.trade_signals.len() - 100);
-        }
+        // Check if we've reached the maximum open positions limit
+        let open_positions_count = positions
+            .iter()
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .count();
 
-        Ok(())
-    }
-
-    async fn generate_momentum_signal(&self, pool: &Pool) -> Option<TradeSignal> {
-        // Simple momentum strategy based on volume and price change
-        if pool.volume_24h > 100000.0 && pool.price > 0.0 {
-            let confidence = (pool.volume_24h / 1000000.0).min(1.0);
-
-            if confidence > 0.7 {
-                return Some(TradeSignal {
-                    token: pool.token_b.clone(),
-                    action: TradeAction::Buy,
-                    amount: 0.01, // Small position size
-                    price: pool.price,
-                    confidence,
-                    timestamp: chrono::Utc::now().timestamp() as u64,
-                    reason: format!("High volume momentum: {:.0}", pool.volume_24h),
-                });
-            }
-        }
-        None
-    }
-
-    async fn update_position_pnl(&mut self, pool: &Pool) {
-        // Update P&L for positions in this pool's tokens
-        if let Some(position) = self.positions.get_mut(&pool.token_b) {
-            position.current_price = pool.price;
-            position.pnl = (position.current_price - position.entry_price) * position.amount;
-        }
-    }
-
-    pub async fn execute_trades(&mut self) -> anyhow::Result<()> {
-        let wallet_balance = get_wallet_balance();
-
-        // Clone signals to avoid borrowing issues
-        let signals = self.trade_signals.clone();
-        for signal in &signals {
-            if signal.confidence > 0.8 && wallet_balance > 0.1 {
-                match signal.action {
-                    TradeAction::Buy => {
-                        if let Err(e) = self.execute_buy_order(signal).await {
-                            log(
-                                "TRADER",
-                                LogLevel::Error,
-                                &format!("Failed to execute buy order: {}", e)
-                            );
-                        }
-                    }
-                    TradeAction::Sell => {
-                        if let Err(e) = self.execute_sell_order(signal).await {
-                            log(
-                                "TRADER",
-                                LogLevel::Error,
-                                &format!("Failed to execute sell order: {}", e)
-                            );
-                        }
-                    }
-                    TradeAction::Hold => {
-                        // Do nothing
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn execute_buy_order(&mut self, signal: &TradeSignal) -> anyhow::Result<()> {
-        log(
-            "TRADER",
-            LogLevel::Info,
-            &format!(
-                "Executing BUY order for {} at price {:.6} (confidence: {:.2})",
-                signal.token,
-                signal.price,
-                signal.confidence
-            )
-        );
-
-        // In a real implementation, you would:
-        // 1. Create a transaction
-        // 2. Sign it with the wallet
-        // 3. Send it via RPC
-        // 4. Monitor for confirmation
-
-        // For now, simulate the trade
-        let position = Position {
-            token: signal.token.clone(),
-            amount: signal.amount,
-            entry_price: signal.price,
-            current_price: signal.price,
-            pnl: 0.0,
-            entry_time: signal.timestamp,
-        };
-
-        self.positions.insert(signal.token.clone(), position);
-        self.total_trades += 1;
-
-        log("TRADER", LogLevel::Info, &format!("Buy order executed for {}", signal.token));
-        Ok(())
-    }
-
-    async fn execute_sell_order(&mut self, signal: &TradeSignal) -> anyhow::Result<()> {
-        log(
-            "TRADER",
-            LogLevel::Info,
-            &format!("Executing SELL order for {} at price {:.6}", signal.token, signal.price)
-        );
-
-        if let Some(position) = self.positions.remove(&signal.token) {
-            let realized_pnl = (signal.price - position.entry_price) * position.amount;
-            self.total_pnl += realized_pnl;
-
-            if realized_pnl > 0.0 {
-                self.successful_trades += 1;
-            }
-
+        if open_positions_count >= MAX_OPEN_POSITIONS {
             log(
-                "TRADER",
-                LogLevel::Info,
-                &format!("Position closed for {} with P&L: {:.6}", signal.token, realized_pnl)
+                LogTag::Trader,
+                "LIMIT",
+                &format!(
+                    "Maximum open positions reached ({}/{}). Skipping new position for {} ({})",
+                    open_positions_count,
+                    MAX_OPEN_POSITIONS,
+                    token.symbol,
+                    token.mint
+                )
+            );
+            return;
+        }
+    }
+
+    let colored_percent = format!("\x1b[31m{:.2}%\x1b[0m", percent_change);
+    let current_open_count = get_open_positions_count();
+    log(
+        LogTag::Trader,
+        "BUY",
+        &format!(
+            "Opening position for {} ({}) at {:.6} SOL ({}) - Size: {:.6} SOL [{}/{}]",
+            token.symbol,
+            token.mint,
+            price,
+            colored_percent,
+            TRADE_SIZE_SOL,
+            current_open_count + 1,
+            MAX_OPEN_POSITIONS
+        )
+    );
+
+    let position = Position {
+        mint: token.mint.clone(),
+        symbol: token.symbol.clone(),
+        name: token.name.clone(),
+        entry_price: price,
+        entry_time: Utc::now(),
+        exit_price: None,
+        exit_time: None,
+        pnl_sol: None,
+        pnl_percent: None,
+        position_type: "buy".to_string(),
+        entry_size_sol: TRADE_SIZE_SOL,
+        total_size_sol: TRADE_SIZE_SOL,
+        drawdown_percent: 0.0,
+        price_highest: price,
+        price_lowest: price,
+    };
+
+    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+        positions.push(position);
+        save_positions_to_file(&positions);
+    }
+}
+
+/// Closes an existing position
+fn close_position(position: &mut Position, exit_price: f64, exit_time: DateTime<Utc>) {
+    let (is_profitable, net_pnl_sol, net_pnl_percent, total_value) = is_position_profitable(
+        position.entry_price,
+        exit_price,
+        position.entry_size_sol
+    );
+
+    position.exit_price = Some(exit_price);
+    position.exit_time = Some(exit_time);
+    position.pnl_sol = Some(net_pnl_sol);
+    position.pnl_percent = Some(net_pnl_percent);
+    position.total_size_sol = total_value;
+
+    let status_color = if is_profitable { "\x1b[32m" } else { "\x1b[31m" };
+    let status_text = if is_profitable { "PROFIT" } else { "LOSS" };
+    let remaining_open_count = get_open_positions_count() - 1; // -1 because we're about to close this one
+
+    log(
+        LogTag::Trader,
+        status_text,
+        &format!(
+            "Closed position for {} ({}) at {:.6} SOL - Entry: {:.6} SOL, Exit Value: {:.6} SOL, Net P&L: {}{:.6} SOL ({:.2}%), Drawdown: {:.2}% [{}/{}]\x1b[0m",
+            position.symbol,
+            position.mint,
+            exit_price,
+            position.entry_size_sol,
+            total_value,
+            status_color,
+            net_pnl_sol,
+            net_pnl_percent,
+            position.drawdown_percent,
+            remaining_open_count,
+            MAX_OPEN_POSITIONS
+        )
+    );
+}
+
+/// Updates position with current price to track extremes and drawdown
+fn update_position_tracking(position: &mut Position, current_price: f64) {
+    // Update price extremes
+    if current_price > position.price_highest {
+        position.price_highest = current_price;
+    }
+    if current_price < position.price_lowest {
+        position.price_lowest = current_price;
+    }
+
+    // Calculate drawdown from highest price
+    let drawdown = ((position.price_highest - current_price) / position.price_highest) * 100.0;
+    if drawdown > position.drawdown_percent {
+        position.drawdown_percent = drawdown;
+    }
+}
+
+/// Background task to monitor new tokens for entry opportunities
+async fn monitor_new_entries(shutdown: Arc<Notify>) {
+    loop {
+        let tokens: Vec<_> = {
+            if let Ok(tokens_guard) = LIST_TOKENS.read() {
+                tokens_guard.iter().cloned().collect()
+            } else {
+                Vec::new()
+            }
+        };
+
+        let mut handles = Vec::with_capacity(tokens.len());
+
+        for token in tokens {
+            handles.push(
+                tokio::spawn(async move {
+                    if let Some(current_price) = token.price_dexscreener_sol {
+                        if current_price <= 0.0 || !validate_token(&token) {
+                            return;
+                        }
+
+                        // Update price history
+                        let now = Utc::now();
+                        {
+                            let mut hist = PRICE_HISTORY_24H.lock().unwrap();
+                            let entry = hist.entry(token.mint.clone()).or_insert_with(Vec::new);
+                            entry.push((now, current_price));
+
+                            // Retain only last 24h
+                            let cutoff = now - ChronoDuration::hours(PRICE_HISTORY_HOURS);
+                            entry.retain(|(ts, _)| *ts >= cutoff);
+                        }
+
+                        // Check for entry opportunity
+                        let mut last_prices = LAST_PRICES.lock().unwrap();
+                        if let Some(&prev_price) = last_prices.get(&token.mint) {
+                            if prev_price > 0.0 {
+                                let change = (current_price - prev_price) / prev_price;
+                                let percent_change = change * 100.0;
+
+                                if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
+                                    open_position(&token, current_price, percent_change);
+                                }
+                            }
+                        }
+                        last_prices.insert(token.mint.clone(), current_price);
+                    }
+                })
             );
         }
 
-        Ok(())
-    }
-
-    pub fn get_trading_stats(&self) -> TradingStats {
-        let win_rate = if self.total_trades > 0 {
-            ((self.successful_trades as f64) / (self.total_trades as f64)) * 100.0
-        } else {
-            0.0
-        };
-
-        TradingStats {
-            total_trades: self.total_trades,
-            successful_trades: self.successful_trades,
-            win_rate,
-            total_pnl: self.total_pnl,
-            active_positions: self.positions.len(),
-            pending_signals: self.trade_signals.len(),
-            signals_generated: 0, // This would be tracked separately
+        // Wait for all token processing to complete
+        for handle in handles {
+            let _ = handle.await;
         }
-    }
 
-    pub fn get_positions(&self) -> &HashMap<String, Position> {
-        &self.positions
-    }
-
-    pub fn get_recent_signals(&self, limit: usize) -> Vec<&TradeSignal> {
-        self.trade_signals.iter().rev().take(limit).collect()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TradingStats {
-    pub total_trades: u64,
-    pub successful_trades: u64,
-    pub win_rate: f64,
-    pub total_pnl: f64,
-    pub active_positions: usize,
-    pub pending_signals: usize,
-    pub signals_generated: u64,
-}
-
-impl Default for TradingStats {
-    fn default() -> Self {
-        Self {
-            total_trades: 0,
-            successful_trades: 0,
-            win_rate: 0.0,
-            total_pnl: 0.0,
-            active_positions: 0,
-            pending_signals: 0,
-            signals_generated: 0,
+        if
+            check_shutdown_or_delay(
+                &shutdown,
+                Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS)
+            ).await
+        {
+            log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
+            break;
         }
     }
 }
 
-// Global trader manager instance
-use std::sync::{ Arc, Mutex };
-use once_cell::sync::Lazy;
+/// Background task to monitor open positions for exit opportunities
+async fn monitor_open_positions(shutdown: Arc<Notify>) {
+    loop {
+        let mut positions_to_update = Vec::new();
 
-pub static TRADER_MANAGER: Lazy<Arc<Mutex<Option<TraderManager>>>> = Lazy::new(|| {
-    Arc::new(Mutex::new(None))
-});
+        // Find open positions and check if they should be closed
+        {
+            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                for (index, position) in positions.iter_mut().enumerate() {
+                    if position.position_type == "buy" && position.exit_price.is_none() {
+                        // Find current price for this token
+                        if let Ok(tokens_guard) = LIST_TOKENS.read() {
+                            if
+                                let Some(token) = tokens_guard
+                                    .iter()
+                                    .find(|t| t.mint == position.mint)
+                            {
+                                if let Some(current_price) = token.price_dexscreener_sol {
+                                    if current_price > 0.0 {
+                                        // Update position tracking (extremes and drawdown)
+                                        update_position_tracking(position, current_price);
 
-pub async fn initialize_trader_manager() -> anyhow::Result<()> {
-    let manager = TraderManager::new();
-    let mut global_manager = TRADER_MANAGER.lock().unwrap();
-    *global_manager = Some(manager);
-    Ok(())
-}
+                                        let (
+                                            _is_profitable,
+                                            _net_pnl_sol,
+                                            net_pnl_percent,
+                                            _total_value,
+                                        ) = is_position_profitable(
+                                            position.entry_price,
+                                            current_price,
+                                            position.entry_size_sol
+                                        );
 
-pub async fn get_trader_manager() -> anyhow::Result<Arc<Mutex<Option<TraderManager>>>> {
-    Ok(TRADER_MANAGER.clone())
-}
-
-pub fn start_trader() {
-    tokio::task::spawn(async move {
-        log("TRADER", LogLevel::Info, "Trader Manager starting...");
-
-        let delays = crate::global::get_task_delays();
-
-        loop {
-            if is_shutdown() {
-                log("TRADER", LogLevel::Info, "Trader Manager shutting down...");
-                break;
+                                        // Close position if profitable enough or stop loss
+                                        if
+                                            net_pnl_percent >= PROFIT_THRESHOLD_PERCENT ||
+                                            net_pnl_percent <= STOP_LOSS_PERCENT
+                                        {
+                                            positions_to_update.push((
+                                                index,
+                                                current_price,
+                                                Utc::now(),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Save updated positions with tracking data
+                save_positions_to_file(&positions);
             }
-
-            // Simple signal generation without complex async operations
-            let signal_generated = generate_simple_signal();
-
-            if signal_generated {
-                log("TRADER", LogLevel::Info, "Signal generated");
-            }
-
-            tokio::time::sleep(Duration::from_secs(delays.trader_delay)).await;
         }
+
+        // Update positions that need to be closed
+        if !positions_to_update.is_empty() {
+            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                for (index, exit_price, exit_time) in positions_to_update {
+                    if let Some(position) = positions.get_mut(index) {
+                        close_position(position, exit_price, exit_time);
+                    }
+                }
+                save_positions_to_file(&positions);
+            }
+        }
+
+        if
+            check_shutdown_or_delay(
+                &shutdown,
+                Duration::from_secs(OPEN_POSITIONS_CHECK_INTERVAL_SECS)
+            ).await
+        {
+            log(LogTag::Trader, "INFO", "open positions monitor shutting down...");
+            break;
+        }
+    }
+}
+
+/// Main trader function that spawns both monitoring tasks
+pub async fn trader(shutdown: Arc<Notify>) {
+    log(LogTag::Trader, "INFO", "Starting trader with two background tasks...");
+
+    let shutdown_clone = shutdown.clone();
+    let entries_task = tokio::spawn(async move {
+        monitor_new_entries(shutdown_clone).await;
     });
-}
 
-fn generate_simple_signal() -> bool {
-    use rand::Rng;
+    let shutdown_clone = shutdown.clone();
+    let positions_task = tokio::spawn(async move {
+        monitor_open_positions(shutdown_clone).await;
+    });
 
-    // Simple momentum calculation without async operations
-    let mut rng = rand::thread_rng();
-    let should_generate = rng.gen_bool(0.1); // 10% chance to generate signal
+    // Wait for shutdown signal
+    shutdown.notified().await;
 
-    if should_generate {
-        // Update global stats
-        let mut trading_stats = crate::global::get_trading_stats();
-        trading_stats.signals_generated += 1;
-        crate::global::update_trading_stats(trading_stats);
+    // Cancel both tasks
+    entries_task.abort();
+    positions_task.abort();
 
-        true
-    } else {
-        false
-    }
+    log(LogTag::Trader, "INFO", "Trader shutting down...");
 }
