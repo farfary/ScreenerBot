@@ -18,6 +18,12 @@ pub enum TradeSignalType {
     Sell,
     DCA,
     StopLoss,
+    FastProfit {
+        profit_percentage: f64,
+        sell_portion: f64,
+        reason: String,
+    },
+    EmergencyStopLoss,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +59,7 @@ pub struct PositionSummary {
     pub lowest_price: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PositionStatus {
     Active,
     Closed,
@@ -75,6 +81,19 @@ pub struct TraderStats {
     pub largest_loss_sol: f64,
     pub active_positions: u32,
     pub closed_positions: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeExecution {
+    pub trade_type: String,
+    pub amount_sol: f64,
+    pub amount_tokens: f64,
+    pub price_per_token: f64,
+    pub fees: f64,
+    pub slippage: f64,
+    pub transaction_hash: Option<String>,
+    pub success: bool,
+    pub error: Option<String>,
 }
 
 impl Default for TraderStats {

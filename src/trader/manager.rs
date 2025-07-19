@@ -7,10 +7,11 @@ use tokio::time::Duration;
 use colored::Colorize;
 use tabled::{ Table, Tabled, settings::Style };
 
-use crate::config::TraderConfig;
+use crate::config::{ TraderConfig, ProfitTarget };
 use crate::trader::database::TraderDatabase;
 use crate::trader::position::Position;
 use crate::trader::strategy::TradingStrategy;
+use crate::trader::fast_profit_strategy::FastProfitStrategy;
 use crate::trader::types::*;
 use crate::types::TokenInfo;
 use crate::marketdata::{ TokenData, MarketData };
@@ -23,6 +24,7 @@ pub struct TraderManager {
     config: TraderConfig,
     database: Arc<TraderDatabase>,
     strategy: Arc<RwLock<TradingStrategy>>,
+    fast_profit_strategy: Option<Arc<FastProfitStrategy>>,
     swap_manager: Arc<SwapManager>,
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
@@ -67,10 +69,18 @@ impl TraderManager {
             RugDetectionEngine::new(market_data.get_database(), config.rug_detection.clone())
         );
 
+        // Create fast profit strategy if enabled
+        let fast_profit_strategy = if config.fast_profit_enabled {
+            Some(Arc::new(FastProfitStrategy::new(config.clone())))
+        } else {
+            None
+        };
+
         Ok(Self {
             config,
             database,
             strategy,
+            fast_profit_strategy,
             swap_manager,
             market_data,
             discovery,
@@ -582,7 +592,9 @@ impl TraderManager {
                                         pnl_sol: format!("{:.5}", pos.realized_pnl_sol),
                                         pnl_percent: if pos.total_invested_sol > 0.0 {
                                             // Calculate percentage based on actual profit/loss
-                                            let profit_loss_percent = (pos.realized_pnl_sol / pos.total_invested_sol) * 100.0;
+                                            let profit_loss_percent =
+                                                (pos.realized_pnl_sol / pos.total_invested_sol) *
+                                                100.0;
                                             // Cap unrealistic percentages that might be from old data
                                             if profit_loss_percent.abs() > 1000.0 {
                                                 "DATA_ERROR".to_string()
@@ -829,9 +841,11 @@ impl TraderManager {
 
     async fn start_position_monitoring(&self) {
         let strategy = Arc::clone(&self.strategy);
+        let fast_profit_strategy = self.fast_profit_strategy.clone();
         let positions = Arc::clone(&self.positions);
         let running = Arc::clone(&self.running);
         let database = Arc::clone(&self.database);
+        let market_data = Arc::clone(&self.market_data);
         let trader_manager = self.clone_for_async();
         let config = self.config.clone();
 
@@ -852,11 +866,32 @@ impl TraderManager {
                     positions_read.clone()
                 };
 
-                for (_token_address, position) in positions_clone {
-                    let current_price = position.current_price;
+                for (token_address, mut position) in positions_clone {
+                    // Get CURRENT price from market data, not old position.current_price
+                    let current_price = match market_data.get_token_data(&token_address).await {
+                        Ok(Some(token_data)) => token_data.price_native,
+                        _ => position.current_price, // Fallback to position price if market data fails
+                    };
 
-                    // Analyze position for signals
-                    let signals = strategy.read().await.analyze_position(&position, current_price);
+                    // Update position with current price for accurate P&L calculation
+                    position.update_price(current_price);
+
+                    // Analyze position for signals with regular strategy
+                    let mut signals = strategy
+                        .read().await
+                        .analyze_position(&position, current_price);
+
+                    // If fast profit strategy is enabled, also check for fast profit opportunities
+                    if let Some(ref fast_strategy) = fast_profit_strategy {
+                        if
+                            let Some(fast_signal) = fast_strategy.check_profit_targets(
+                                &position,
+                                current_price
+                            )
+                        {
+                            signals.push(fast_signal);
+                        }
+                    }
 
                     for signal in signals {
                         // Record signal in database
@@ -1007,6 +1042,18 @@ impl TraderManager {
                 }
             }
             TradeSignalType::StopLoss => {
+                if let Some(pos) = position {
+                    self.execute_stop_loss_trade(signal, pos).await?;
+                }
+            }
+            TradeSignalType::FastProfit { .. } => {
+                // Fast profit handling - for now treat as regular sell
+                if let Some(pos) = position {
+                    self.execute_sell_trade(signal, pos).await?;
+                }
+            }
+            TradeSignalType::EmergencyStopLoss => {
+                // Emergency stop loss - treat as regular stop loss
                 if let Some(pos) = position {
                     self.execute_stop_loss_trade(signal, pos).await?;
                 }
@@ -1526,6 +1573,7 @@ impl TraderManager {
             config: self.config.clone(),
             database: Arc::clone(&self.database),
             strategy: Arc::clone(&self.strategy),
+            fast_profit_strategy: self.fast_profit_strategy.clone(),
             swap_manager: Arc::clone(&self.swap_manager),
             market_data: Arc::clone(&self.market_data),
             discovery: Arc::clone(&self.discovery),
@@ -1812,6 +1860,7 @@ struct TraderManagerAsync {
     config: TraderConfig,
     database: Arc<TraderDatabase>,
     strategy: Arc<RwLock<TradingStrategy>>,
+    fast_profit_strategy: Option<Arc<FastProfitStrategy>>,
     swap_manager: Arc<SwapManager>,
     market_data: Arc<MarketData>,
     discovery: Arc<Discovery>,
@@ -1828,6 +1877,7 @@ impl TraderManagerAsync {
             config: self.config.clone(),
             database: Arc::clone(&self.database),
             strategy: Arc::clone(&self.strategy),
+            fast_profit_strategy: self.fast_profit_strategy.clone(),
             swap_manager: Arc::clone(&self.swap_manager),
             market_data: Arc::clone(&self.market_data),
             discovery: Arc::clone(&self.discovery),

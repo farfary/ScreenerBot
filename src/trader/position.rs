@@ -119,7 +119,7 @@ impl Position {
     pub fn add_dca_trade(&mut self, amount_sol: f64, amount_tokens: f64, price_per_token: f64) {
         // First do the regular buy trade logic
         self.add_buy_trade(amount_sol, amount_tokens, price_per_token);
-        
+
         // Then increment the DCA counter
         self.dca_count += 1;
     }
@@ -204,11 +204,13 @@ impl Position {
 
         // Only DCA if we haven't exceeded max DCA count and price is below trigger
         let max_dca_count = config.dca_levels;
-        let dca_trigger_percent = config.dca_min_loss_percent + 
-            (self.dca_count as f64) * (config.dca_max_loss_percent - config.dca_min_loss_percent) / (max_dca_count as f64);
+        let dca_trigger_percent =
+            config.dca_min_loss_percent +
+            ((self.dca_count as f64) *
+                (config.dca_max_loss_percent - config.dca_min_loss_percent)) /
+                (max_dca_count as f64);
 
-        self.dca_count < max_dca_count && 
-        self.unrealized_pnl_percent <= dca_trigger_percent
+        self.dca_count < max_dca_count && self.unrealized_pnl_percent <= dca_trigger_percent
     }
 
     pub fn get_dca_amount_sol(&self, config: &crate::config::TraderConfig) -> f64 {

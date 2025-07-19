@@ -215,6 +215,23 @@ pub struct TraderConfig {
     pub database_path: String,
     #[serde(default)]
     pub rug_detection: RugDetectionConfig,
+    #[serde(default)]
+    pub fast_profit_enabled: bool,
+    #[serde(default)]
+    pub profit_targets: Vec<ProfitTarget>,
+    #[serde(default = "default_momentum_check_seconds")]
+    pub momentum_check_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfitTarget {
+    pub target_percent: f64,
+    pub sell_portion: f64,
+    pub time_window_minutes: u64,
+}
+
+fn default_momentum_check_seconds() -> u64 {
+    5
 }
 
 impl Default for TraderConfig {
@@ -235,6 +252,13 @@ impl Default for TraderConfig {
             price_check_interval_seconds: 10,
             database_path: "trader.db".to_string(),
             rug_detection: RugDetectionConfig::default(),
+            fast_profit_enabled: false,
+            profit_targets: vec![
+                ProfitTarget { target_percent: 10.0, sell_portion: 0.25, time_window_minutes: 2 },
+                ProfitTarget { target_percent: 25.0, sell_portion: 0.3, time_window_minutes: 5 },
+                ProfitTarget { target_percent: 50.0, sell_portion: 0.25, time_window_minutes: 10 }
+            ],
+            momentum_check_seconds: 5,
         }
     }
 }

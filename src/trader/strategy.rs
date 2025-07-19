@@ -110,13 +110,13 @@ impl TradingStrategy {
             });
         }
 
-        // Check for DCA opportunities  
+        // Check for DCA opportunities
         if self.config.dca_enabled && position.should_dca(&self.config) {
             signals.push(TradeSignal {
                 token_address: position.token_address.clone(),
                 signal_type: TradeSignalType::DCA,
                 current_price,
-                trigger_price: position.average_buy_price * 
+                trigger_price: position.average_buy_price *
                 (1.0 + self.config.dca_min_loss_percent / 100.0),
                 timestamp: Utc::now(),
                 volume_24h: 0.0,
@@ -159,10 +159,20 @@ impl TradingStrategy {
                     self.config.trade_size_sol
                 }
             }
-            TradeSignalType::Sell | TradeSignalType::StopLoss => {
+            | TradeSignalType::Sell
+            | TradeSignalType::StopLoss
+            | TradeSignalType::EmergencyStopLoss => {
                 // Sell all tokens
                 if let Some(pos) = position {
                     pos.total_tokens * signal.current_price
+                } else {
+                    0.0
+                }
+            }
+            TradeSignalType::FastProfit { sell_portion, .. } => {
+                // Sell partial position
+                if let Some(pos) = position {
+                    pos.total_tokens * sell_portion * signal.current_price
                 } else {
                     0.0
                 }
