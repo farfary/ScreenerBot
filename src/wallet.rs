@@ -812,6 +812,119 @@ pub async fn get_swap_quote_with_config(
     get_swap_quote(&request).await
 }
 
+/// Executes a swap operation with a pre-fetched quote to avoid duplicate API calls
+pub async fn execute_swap_with_quote(
+    token: &Token,
+    input_mint: &str,
+    output_mint: &str,
+    amount_sol: f64,
+    expected_price: Option<f64>,
+    swap_data: SwapData
+) -> Result<SwapResult, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let wallet_address = get_wallet_address()?;
+
+    log(
+        LogTag::Trader,
+        "SWAP",
+        &format!(
+            "Executing swap for {} ({}) - {} SOL {} -> {} (using cached quote)",
+            token.symbol,
+            token.name,
+            amount_sol,
+            if input_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &input_mint[..8]
+            },
+            if output_mint == SOL_MINT {
+                "SOL"
+            } else {
+                &output_mint[..8]
+            }
+        )
+    );
+
+    // Validate expected price if provided (using cached quote)
+    if let Some(expected) = expected_price {
+        let input_sol = amount_sol;
+        let output_tokens = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
+
+        let actual_price_per_token = if output_tokens > 0.0 {
+            input_sol / output_tokens
+        } else {
+            0.0
+        };
+
+        let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
+
+        log(
+            LogTag::Trader,
+            "PRICE",
+            &format!(
+                "Final price validation: Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
+                expected,
+                actual_price_per_token,
+                price_difference
+            )
+        );
+
+        if price_difference > DEFAULT_SLIPPAGE {
+            return Err(
+                SwapError::SlippageExceeded(
+                    format!(
+                        "Price difference {:.2}% exceeds slippage tolerance {:.2}%",
+                        price_difference,
+                        DEFAULT_SLIPPAGE
+                    )
+                )
+            );
+        }
+    }
+
+    // Sign and send the transaction
+    let transaction_signature = sign_and_send_transaction(
+        &swap_data.raw_tx.swap_transaction,
+        &configs.rpc_url
+    ).await?;
+
+    log(
+        LogTag::Trader,
+        "SUCCESS",
+        &format!("Swap executed successfully! TX: {}", transaction_signature)
+    );
+
+    // Calculate effective price from actual balance changes
+    let (effective_price, actual_input_change, actual_output_change, quote_vs_actual_diff) =
+        calculate_effective_price(
+            &reqwest::Client::new(),
+            &transaction_signature,
+            input_mint,
+            output_mint,
+            &wallet_address,
+            &configs.rpc_url,
+            &configs
+        ).await.unwrap_or_else(|e| {
+            log(LogTag::Trader, "WARNING", &format!("Failed to calculate effective price: {}", e));
+            (0.0, 0, 0, 0.0)
+        });
+
+    Ok(SwapResult {
+        success: true,
+        transaction_signature: Some(transaction_signature),
+        input_amount: swap_data.quote.in_amount,
+        output_amount: swap_data.quote.out_amount,
+        price_impact: swap_data.quote.price_impact_pct,
+        fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+        execution_time: swap_data.quote.time_taken,
+        error: None,
+        effective_price: Some(effective_price),
+        actual_input_change: Some(actual_input_change),
+        actual_output_change: Some(actual_output_change),
+        quote_vs_actual_difference: Some(quote_vs_actual_diff),
+    })
+}
+
 /// Executes a swap operation with real transaction signing and sending
 pub async fn execute_swap(
     token: &Token,
@@ -962,44 +1075,77 @@ pub async fn buy_token(
         );
     }
 
+    // Get quote once and use it for both price validation and execution
+    let request = SwapRequest {
+        input_mint: SOL_MINT.to_string(),
+        output_mint: token.mint.clone(),
+        amount_sol,
+        from_address: wallet_address.clone(),
+        expected_price,
+        ..Default::default()
+    };
+
+    log(
+        LogTag::Trader,
+        "SWAP",
+        &format!(
+            "Getting quote for {} ({}) - {} SOL -> {}",
+            token.symbol,
+            token.name,
+            amount_sol,
+            &token.mint[..8]
+        )
+    );
+
+    // Get quote once
+    let swap_data = get_swap_quote(&request).await?;
+
     // Check current price if expected price is provided
     if let Some(expected) = expected_price {
         log(LogTag::Trader, "PRICE", "Validating current token price...");
-        match get_token_price_sol(&token.mint).await {
-            Ok(current_price) => {
-                log(
-                    LogTag::Trader,
-                    "PRICE",
-                    &format!(
-                        "Current price: {:.12} SOL, Expected: {:.12} SOL",
-                        current_price,
-                        expected
-                    )
-                );
 
-                // Use 5% tolerance for price validation
-                if !validate_price_near_expected(current_price, expected, 5.0) {
-                    let price_diff = ((current_price - expected) / expected) * 100.0;
-                    return Err(
-                        SwapError::SlippageExceeded(
-                            format!(
-                                "Current price {:.12} SOL differs from expected {:.12} SOL by {:.2}% (tolerance: 5%)",
-                                current_price,
-                                expected,
-                                price_diff
-                            )
-                        )
-                    );
-                }
-                log(LogTag::Trader, "PRICE", "✅ Price validation passed");
-            }
-            Err(e) => {
-                log(LogTag::Trader, "WARNING", &format!("Could not validate price: {}", e));
-            }
+        // Calculate current price from quote
+        let output_tokens = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
+        let current_price = if output_tokens > 0.0 { amount_sol / output_tokens } else { 0.0 };
+
+        log(
+            LogTag::Trader,
+            "PRICE",
+            &format!("Current price: {:.12} SOL, Expected: {:.12} SOL", current_price, expected)
+        );
+
+        // Use 5% tolerance for price validation
+        if current_price > 0.0 && !validate_price_near_expected(current_price, expected, 5.0) {
+            let price_diff = ((current_price - expected) / expected) * 100.0;
+            return Err(
+                SwapError::SlippageExceeded(
+                    format!(
+                        "Current price {:.12} SOL differs from expected {:.12} SOL by {:.2}% (tolerance: 5%)",
+                        current_price,
+                        expected,
+                        price_diff
+                    )
+                )
+            );
+        } else if current_price <= 0.0 {
+            log(
+                LogTag::Trader,
+                "WARNING",
+                "Could not calculate current price from quote, proceeding without validation"
+            );
+        } else {
+            log(LogTag::Trader, "PRICE", "✅ Price validation passed");
         }
     }
 
-    execute_swap(token, SOL_MINT, &token.mint, amount_sol, expected_price).await
+    execute_swap_with_quote(
+        token,
+        SOL_MINT,
+        &token.mint,
+        amount_sol,
+        expected_price,
+        swap_data
+    ).await
 }
 
 /// Helper function to sell a token for SOL

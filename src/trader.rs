@@ -7,12 +7,13 @@ pub const STOP_LOSS_PERCENT: f64 = -20.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 10;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::global::*;
 use crate::utils::*;
+use crate::wallet::{ buy_token, sell_token };
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -25,21 +26,27 @@ use serde::{ Serialize, Deserialize };
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Position {
-    mint: String,
-    symbol: String,
-    name: String,
-    entry_price: f64,
-    entry_time: DateTime<Utc>,
-    exit_price: Option<f64>,
-    exit_time: Option<DateTime<Utc>>,
-    pnl_sol: Option<f64>,
-    pnl_percent: Option<f64>,
-    position_type: String, // "buy" or "sell"
-    entry_size_sol: f64,
-    total_size_sol: f64,
-    drawdown_percent: f64,
-    price_highest: f64,
-    price_lowest: f64,
+    pub mint: String,
+    pub symbol: String,
+    pub name: String,
+    pub entry_price: f64,
+    pub entry_time: DateTime<Utc>,
+    pub exit_price: Option<f64>,
+    pub exit_time: Option<DateTime<Utc>>,
+    pub pnl_sol: Option<f64>,
+    pub pnl_percent: Option<f64>,
+    pub position_type: String, // "buy" or "sell"
+    pub entry_size_sol: f64,
+    pub total_size_sol: f64,
+    pub drawdown_percent: f64,
+    pub price_highest: f64,
+    pub price_lowest: f64,
+    // Real swap tracking
+    pub entry_transaction_signature: Option<String>,
+    pub exit_transaction_signature: Option<String>,
+    pub token_amount: Option<u64>, // Amount of tokens bought/sold
+    pub effective_entry_price: Option<f64>, // Actual price from on-chain transaction
+    pub effective_exit_price: Option<f64>, // Actual exit price from on-chain transaction
 }
 
 /// Static global: saved positions
@@ -103,8 +110,8 @@ fn is_position_profitable(
     (net_pnl_sol > 0.0, net_pnl_sol, net_pnl_percent, total_value)
 }
 
-/// Opens a new buy position for a token
-fn open_position(token: &Token, price: f64, percent_change: f64) {
+/// Opens a new buy position for a token with real swap execution
+async fn open_position(token: &Token, price: f64, percent_change: f64) {
     // Check if we already have an open position for this token and count open positions
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         if
@@ -154,66 +161,150 @@ fn open_position(token: &Token, price: f64, percent_change: f64) {
         )
     );
 
-    let position = Position {
-        mint: token.mint.clone(),
-        symbol: token.symbol.clone(),
-        name: token.name.clone(),
-        entry_price: price,
-        entry_time: Utc::now(),
-        exit_price: None,
-        exit_time: None,
-        pnl_sol: None,
-        pnl_percent: None,
-        position_type: "buy".to_string(),
-        entry_size_sol: TRADE_SIZE_SOL,
-        total_size_sol: TRADE_SIZE_SOL,
-        drawdown_percent: 0.0,
-        price_highest: price,
-        price_lowest: price,
-    };
+    // Execute real buy transaction
+    match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
+        Ok(swap_result) => {
+            let effective_entry_price = swap_result.effective_price.unwrap_or(price);
+            let token_amount = swap_result.actual_output_change.unwrap_or(0);
 
-    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-        positions.push(position);
-        save_positions_to_file(&positions);
+            log(
+                LogTag::Trader,
+                "SUCCESS",
+                &format!(
+                    "Real swap executed for {}: TX: {}, Tokens: {}, Effective Price: {:.12} SOL",
+                    token.symbol,
+                    swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string()),
+                    token_amount,
+                    effective_entry_price
+                )
+            );
+
+            let position = Position {
+                mint: token.mint.clone(),
+                symbol: token.symbol.clone(),
+                name: token.name.clone(),
+                entry_price: price,
+                entry_time: Utc::now(),
+                exit_price: None,
+                exit_time: None,
+                pnl_sol: None,
+                pnl_percent: None,
+                position_type: "buy".to_string(),
+                entry_size_sol: TRADE_SIZE_SOL,
+                total_size_sol: TRADE_SIZE_SOL,
+                drawdown_percent: 0.0,
+                price_highest: price,
+                price_lowest: price,
+                entry_transaction_signature: swap_result.transaction_signature,
+                exit_transaction_signature: None,
+                token_amount: Some(token_amount),
+                effective_entry_price: Some(effective_entry_price),
+                effective_exit_price: None,
+            };
+
+            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                positions.push(position);
+                save_positions_to_file(&positions);
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Failed to execute buy swap for {} ({}): {}", token.symbol, token.mint, e)
+            );
+        }
     }
 }
 
-/// Closes an existing position
-fn close_position(position: &mut Position, exit_price: f64, exit_time: DateTime<Utc>) {
-    let (is_profitable, net_pnl_sol, net_pnl_percent, total_value) = is_position_profitable(
-        position.entry_price,
-        exit_price,
-        position.entry_size_sol
-    );
+/// Closes an existing position with real sell transaction
+async fn close_position(
+    position: &mut Position,
+    token: &Token,
+    exit_price: f64,
+    exit_time: DateTime<Utc>
+) -> bool {
+    // Only attempt to sell if we have tokens from the buy transaction
+    if let Some(token_amount) = position.token_amount {
+        log(
+            LogTag::Trader,
+            "SELL",
+            &format!(
+                "Closing position for {} ({}) - Selling {} tokens at {:.6} SOL",
+                position.symbol,
+                position.mint,
+                token_amount,
+                exit_price
+            )
+        );
 
-    position.exit_price = Some(exit_price);
-    position.exit_time = Some(exit_time);
-    position.pnl_sol = Some(net_pnl_sol);
-    position.pnl_percent = Some(net_pnl_percent);
-    position.total_size_sol = total_value;
+        // Execute real sell transaction
+        match sell_token(token, token_amount, None).await {
+            Ok(swap_result) => {
+                let effective_exit_price = swap_result.effective_price.unwrap_or(exit_price);
+                let sol_received = swap_result.actual_output_change.unwrap_or(0);
+                let transaction_signature = swap_result.transaction_signature.clone();
 
-    let status_color = if is_profitable { "\x1b[32m" } else { "\x1b[31m" };
-    let status_text = if is_profitable { "PROFIT" } else { "LOSS" };
-    let remaining_open_count = get_open_positions_count() - 1; // -1 because we're about to close this one
+                // Calculate actual P&L based on real transaction amounts
+                let actual_sol_received = crate::wallet::lamports_to_sol(sol_received);
+                let net_pnl_sol = actual_sol_received - position.entry_size_sol;
+                let net_pnl_percent = (net_pnl_sol / position.entry_size_sol) * 100.0;
+                let is_profitable = net_pnl_sol > 0.0;
 
-    log(
-        LogTag::Trader,
-        status_text,
-        &format!(
-            "Closed position for {} ({}) at {:.6} SOL - Entry: {:.6} SOL, Exit Value: {:.6} SOL, Net P&L: {}{:.6} SOL ({:.2}%), Drawdown: {:.2}% [{}/{}]\x1b[0m",
-            position.symbol,
-            position.mint,
-            exit_price,
-            position.entry_size_sol,
-            total_value,
-            status_color,
-            net_pnl_sol,
-            net_pnl_percent,
-            position.drawdown_percent,
-            remaining_open_count,
-            MAX_OPEN_POSITIONS
-        )
-    );
+                position.exit_price = Some(exit_price);
+                position.exit_time = Some(exit_time);
+                position.pnl_sol = Some(net_pnl_sol);
+                position.pnl_percent = Some(net_pnl_percent);
+                position.total_size_sol = actual_sol_received;
+                position.exit_transaction_signature = transaction_signature.clone();
+                position.effective_exit_price = Some(effective_exit_price);
+
+                let status_color = if is_profitable { "\x1b[32m" } else { "\x1b[31m" };
+                let status_text = if is_profitable { "PROFIT" } else { "LOSS" };
+                let remaining_open_count = get_open_positions_count() - 1;
+
+                log(
+                    LogTag::Trader,
+                    status_text,
+                    &format!(
+                        "Closed position for {} ({}) - TX: {}, SOL Received: {:.6}, Net P&L: {}{:.6} SOL ({:.2}%), Drawdown: {:.2}% [{}/{}]\x1b[0m",
+                        position.symbol,
+                        position.mint,
+                        transaction_signature.as_ref().unwrap_or(&"None".to_string()),
+                        actual_sol_received,
+                        status_color,
+                        net_pnl_sol,
+                        net_pnl_percent,
+                        position.drawdown_percent,
+                        remaining_open_count,
+                        MAX_OPEN_POSITIONS
+                    )
+                );
+
+                return true; // Successfully closed
+            }
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!(
+                        "Failed to execute sell swap for {} ({}): {}",
+                        position.symbol,
+                        position.mint,
+                        e
+                    )
+                );
+                return false; // Failed to close
+            }
+        }
+    } else {
+        log(
+            LogTag::Trader,
+            "ERROR",
+            &format!("Cannot close position for {} - no token amount recorded", position.symbol)
+        );
+        return false;
+    }
 }
 
 /// Updates position with current price to track extremes and drawdown
@@ -234,7 +325,7 @@ fn update_position_tracking(position: &mut Position, current_price: f64) {
 }
 
 /// Background task to monitor new tokens for entry opportunities
-async fn monitor_new_entries(shutdown: Arc<Notify>) {
+pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     loop {
         let tokens: Vec<_> = {
             if let Ok(tokens_guard) = LIST_TOKENS.read() {
@@ -267,18 +358,27 @@ async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Check for entry opportunity
-                        let mut last_prices = LAST_PRICES.lock().unwrap();
-                        if let Some(&prev_price) = last_prices.get(&token.mint) {
-                            if prev_price > 0.0 {
-                                let change = (current_price - prev_price) / prev_price;
-                                let percent_change = change * 100.0;
+                        let mut should_open_position = false;
+                        let mut percent_change = 0.0;
 
-                                if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
-                                    open_position(&token, current_price, percent_change);
+                        {
+                            let mut last_prices = LAST_PRICES.lock().unwrap();
+                            if let Some(&prev_price) = last_prices.get(&token.mint) {
+                                if prev_price > 0.0 {
+                                    let change = (current_price - prev_price) / prev_price;
+                                    percent_change = change * 100.0;
+
+                                    if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
+                                        should_open_position = true;
+                                    }
                                 }
                             }
+                            last_prices.insert(token.mint.clone(), current_price);
                         }
-                        last_prices.insert(token.mint.clone(), current_price);
+
+                        if should_open_position {
+                            open_position(&token, current_price, percent_change).await;
+                        }
                     }
                 })
             );
@@ -302,9 +402,9 @@ async fn monitor_new_entries(shutdown: Arc<Notify>) {
 }
 
 /// Background task to monitor open positions for exit opportunities
-async fn monitor_open_positions(shutdown: Arc<Notify>) {
+pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     loop {
-        let mut positions_to_update = Vec::new();
+        let mut positions_to_close = Vec::new();
 
         // Find open positions and check if they should be closed
         {
@@ -339,8 +439,9 @@ async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                             net_pnl_percent >= PROFIT_THRESHOLD_PERCENT ||
                                             net_pnl_percent <= STOP_LOSS_PERCENT
                                         {
-                                            positions_to_update.push((
+                                            positions_to_close.push((
                                                 index,
+                                                token.clone(),
                                                 current_price,
                                                 Utc::now(),
                                             ));
@@ -356,15 +457,29 @@ async fn monitor_open_positions(shutdown: Arc<Notify>) {
             }
         }
 
-        // Update positions that need to be closed
-        if !positions_to_update.is_empty() {
-            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                for (index, exit_price, exit_time) in positions_to_update {
-                    if let Some(position) = positions.get_mut(index) {
-                        close_position(position, exit_price, exit_time);
+        // Close positions that need to be closed (outside of lock to avoid deadlock)
+        for (index, token, exit_price, exit_time) in positions_to_close {
+            let mut position_clone = None;
+
+            // Get a clone of the position to work with
+            {
+                if let Ok(positions) = SAVED_POSITIONS.lock() {
+                    if let Some(position) = positions.get(index) {
+                        position_clone = Some(position.clone());
                     }
                 }
-                save_positions_to_file(&positions);
+            }
+
+            if let Some(mut position) = position_clone {
+                if close_position(&mut position, &token, exit_price, exit_time).await {
+                    // Update the position in the saved positions
+                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                        if let Some(saved_position) = positions.get_mut(index) {
+                            *saved_position = position;
+                        }
+                        save_positions_to_file(&positions);
+                    }
+                }
             }
         }
 
