@@ -10,23 +10,19 @@ pub struct Position {
     pub token_address: String,
     pub token_symbol: String,
     pub total_invested_sol: f64,
+    pub original_entry_price: f64,
     pub average_buy_price: f64,
     pub current_price: f64,
     pub total_tokens: f64,
     pub unrealized_pnl_sol: f64,
     pub unrealized_pnl_percent: f64,
     pub realized_pnl_sol: f64,
-    pub total_trades: u32,
-    pub dca_level: u32,
+    pub dca_count: u32,
     pub status: PositionStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub peak_price: f64,
     pub lowest_price: f64,
-    pub total_opens: u32,
-    pub total_closes: u32,
-    pub total_dca: u32,
-    pub dca_levels: Vec<DCALevel>,
 }
 
 impl Position {
@@ -37,23 +33,19 @@ impl Position {
             token_address,
             token_symbol,
             total_invested_sol: 0.0,
+            original_entry_price: 0.0,
             average_buy_price: 0.0,
             current_price: 0.0,
             total_tokens: 0.0,
             unrealized_pnl_sol: 0.0,
             unrealized_pnl_percent: 0.0,
             realized_pnl_sol: 0.0,
-            total_trades: 0,
-            dca_level: 0,
+            dca_count: 0,
             status: PositionStatus::Active,
             created_at: now,
             updated_at: now,
             peak_price: 0.0,
             lowest_price: 0.0,
-            total_opens: 0,
-            total_closes: 0,
-            total_dca: 0,
-            dca_levels: Vec::new(),
         }
     }
 
@@ -63,23 +55,19 @@ impl Position {
             token_address: summary.token_address,
             token_symbol: summary.token_symbol,
             total_invested_sol: summary.total_invested_sol,
+            original_entry_price: summary.original_entry_price,
             average_buy_price: summary.average_buy_price,
             current_price: summary.current_price,
             total_tokens: summary.total_tokens,
             unrealized_pnl_sol: summary.unrealized_pnl_sol,
             unrealized_pnl_percent: summary.unrealized_pnl_percent,
             realized_pnl_sol: summary.realized_pnl_sol,
-            total_trades: summary.total_trades,
-            dca_level: summary.dca_level,
+            dca_count: summary.dca_count,
             status: summary.status,
             created_at: summary.created_at,
             updated_at: summary.updated_at,
             peak_price: summary.peak_price,
             lowest_price: summary.lowest_price,
-            total_opens: summary.total_opens,
-            total_closes: summary.total_closes,
-            total_dca: summary.total_dca,
-            dca_levels: Vec::new(),
         }
     }
 
@@ -88,26 +76,30 @@ impl Position {
             token_address: self.token_address.clone(),
             token_symbol: self.token_symbol.clone(),
             total_invested_sol: self.total_invested_sol,
+            original_entry_price: self.original_entry_price,
             average_buy_price: self.average_buy_price,
             current_price: self.current_price,
             total_tokens: self.total_tokens,
             unrealized_pnl_sol: self.unrealized_pnl_sol,
             unrealized_pnl_percent: self.unrealized_pnl_percent,
             realized_pnl_sol: self.realized_pnl_sol,
-            total_trades: self.total_trades,
-            dca_level: self.dca_level,
+            dca_count: self.dca_count,
             status: self.status.clone(),
             created_at: self.created_at,
             updated_at: self.updated_at,
             peak_price: self.peak_price,
             lowest_price: self.lowest_price,
-            total_opens: self.total_opens,
-            total_closes: self.total_closes,
-            total_dca: self.total_dca,
         }
     }
 
     pub fn add_buy_trade(&mut self, amount_sol: f64, amount_tokens: f64, price_per_token: f64) {
+        // Set original entry price on first trade
+        if self.original_entry_price == 0.0 {
+            self.original_entry_price = price_per_token;
+            self.peak_price = price_per_token;
+            self.lowest_price = price_per_token;
+        }
+
         // Update average buy price using weighted average
         let new_total_invested = self.total_invested_sol + amount_sol;
         let new_total_tokens = self.total_tokens + amount_tokens;
@@ -118,15 +110,7 @@ impl Position {
 
         self.total_invested_sol = new_total_invested;
         self.total_tokens = new_total_tokens;
-        self.total_trades += 1;
-        self.total_opens += 1;
         self.updated_at = Utc::now();
-
-        // Initialize peak and lowest prices on first trade
-        if self.total_opens == 1 {
-            self.peak_price = price_per_token;
-            self.lowest_price = price_per_token;
-        }
 
         // Update unrealized PnL
         self.update_unrealized_pnl(self.current_price);
@@ -137,9 +121,7 @@ impl Position {
         self.add_buy_trade(amount_sol, amount_tokens, price_per_token);
         
         // Then increment the DCA counter
-        self.total_dca += 1;
-        
-        // Note: total_opens is already incremented in add_buy_trade
+        self.dca_count += 1;
     }
 
     pub fn add_sell_trade(&mut self, amount_sol: f64, amount_tokens: f64, _price_per_token: f64) {
@@ -149,8 +131,6 @@ impl Position {
 
         self.realized_pnl_sol += realized_pnl;
         self.total_tokens -= amount_tokens;
-        self.total_trades += 1;
-        self.total_closes += 1;
         self.updated_at = Utc::now();
 
         // If all tokens sold, mark position as closed
@@ -168,8 +148,8 @@ impl Position {
         self.current_price = new_price;
         self.updated_at = Utc::now();
 
-        // Update peak and lowest prices after entry
-        if self.total_trades > 0 {
+        // Update peak and lowest prices after initial entry
+        if self.original_entry_price > 0.0 {
             // Only track after first trade
             if self.peak_price == 0.0 || new_price > self.peak_price {
                 self.peak_price = new_price;
@@ -217,45 +197,24 @@ impl Position {
             self.unrealized_pnl_percent >= take_profit_percent
     }
 
-    pub fn get_next_dca_level(&self) -> Option<&DCALevel> {
-        self.dca_levels
-            .iter()
-            .find(|level| !level.executed && self.unrealized_pnl_percent <= level.trigger_percent)
-    }
-
-    pub fn initialize_dca_levels(&mut self, config: &crate::config::TraderConfig) {
+    pub fn should_dca(&self, config: &crate::config::TraderConfig) -> bool {
         if !config.dca_enabled {
-            return;
+            return false;
         }
 
-        let mut levels = Vec::new();
-        let step =
-            (config.dca_max_loss_percent - config.dca_min_loss_percent) /
-            (config.dca_levels as f64);
+        // Only DCA if we haven't exceeded max DCA count and price is below trigger
+        let max_dca_count = config.dca_levels;
+        let dca_trigger_percent = config.dca_min_loss_percent + 
+            (self.dca_count as f64) * (config.dca_max_loss_percent - config.dca_min_loss_percent) / (max_dca_count as f64);
 
-        for i in 0..config.dca_levels {
-            let trigger_percent = config.dca_min_loss_percent + (i as f64) * step;
-            levels.push(DCALevel {
-                level: i + 1,
-                trigger_percent,
-                amount_sol: config.trade_size_sol * (1.0 + (i as f64) * 0.5), // Increase DCA size
-                executed: false,
-                executed_at: None,
-                price: None,
-            });
-        }
-
-        self.dca_levels = levels;
+        self.dca_count < max_dca_count && 
+        self.unrealized_pnl_percent <= dca_trigger_percent
     }
 
-    pub fn execute_dca_level(&mut self, level: u32, price: f64) -> Result<()> {
-        if let Some(dca_level) = self.dca_levels.iter_mut().find(|l| l.level == level) {
-            dca_level.executed = true;
-            dca_level.executed_at = Some(Utc::now());
-            dca_level.price = Some(price);
-            self.dca_level = level;
-        }
-        Ok(())
+    pub fn get_dca_amount_sol(&self, config: &crate::config::TraderConfig) -> f64 {
+        // Increase DCA size progressively: 1x, 1.5x, 2x, 2.5x...
+        let multiplier = 1.0 + (self.dca_count as f64) * 0.5;
+        config.trade_size_sol * multiplier
     }
 
     pub fn save_to_database(&self, db: &TraderDatabase) -> Result<i64> {
@@ -265,12 +224,6 @@ impl Position {
         } else {
             let id = db.create_position(&self.token_address, &self.token_symbol)?;
             db.update_position(id, &self.to_summary())?;
-
-            // Create DCA levels if they exist
-            if !self.dca_levels.is_empty() {
-                db.create_dca_levels(id, &self.dca_levels)?;
-            }
-
             id
         };
 
@@ -279,8 +232,7 @@ impl Position {
 
     pub fn load_from_database(db: &TraderDatabase, token_address: &str) -> Result<Option<Self>> {
         if let Some((id, summary)) = db.get_position(token_address)? {
-            let mut position = Self::from_summary(id, summary);
-            position.dca_levels = db.get_dca_levels(id)?;
+            let position = Self::from_summary(id, summary);
             Ok(Some(position))
         } else {
             Ok(None)

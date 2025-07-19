@@ -110,20 +110,18 @@ impl TradingStrategy {
             });
         }
 
-        // Check for DCA opportunities
-        if self.config.dca_enabled {
-            if let Some(dca_level) = position.get_next_dca_level() {
-                signals.push(TradeSignal {
-                    token_address: position.token_address.clone(),
-                    signal_type: TradeSignalType::DCA,
-                    current_price,
-                    trigger_price: position.average_buy_price *
-                    (1.0 + dca_level.trigger_percent / 100.0),
-                    timestamp: Utc::now(),
-                    volume_24h: 0.0,
-                    liquidity: 0.0,
-                });
-            }
+        // Check for DCA opportunities  
+        if self.config.dca_enabled && position.should_dca(&self.config) {
+            signals.push(TradeSignal {
+                token_address: position.token_address.clone(),
+                signal_type: TradeSignalType::DCA,
+                current_price,
+                trigger_price: position.average_buy_price * 
+                (1.0 + self.config.dca_min_loss_percent / 100.0),
+                timestamp: Utc::now(),
+                volume_24h: 0.0,
+                liquidity: 0.0,
+            });
         }
 
         signals
@@ -156,11 +154,7 @@ impl TradingStrategy {
             TradeSignalType::Buy => self.config.trade_size_sol,
             TradeSignalType::DCA => {
                 if let Some(pos) = position {
-                    if let Some(dca_level) = pos.get_next_dca_level() {
-                        dca_level.amount_sol
-                    } else {
-                        self.config.trade_size_sol
-                    }
+                    pos.get_dca_amount_sol(&self.config)
                 } else {
                     self.config.trade_size_sol
                 }
@@ -212,34 +206,6 @@ impl TradingStrategy {
 
     pub fn record_signal(&mut self, token_address: &str) {
         self.last_signals.insert(token_address.to_string(), Utc::now());
-    }
-
-    pub fn calculate_dca_trigger_levels(&self, _base_price: f64) -> Vec<DCALevel> {
-        let mut levels = Vec::new();
-
-        if !self.config.dca_enabled {
-            return levels;
-        }
-
-        let step =
-            (self.config.dca_max_loss_percent - self.config.dca_min_loss_percent) /
-            (self.config.dca_levels as f64);
-
-        for i in 0..self.config.dca_levels {
-            let trigger_percent = self.config.dca_min_loss_percent + (i as f64) * step;
-            let amount_multiplier = 1.0 + (i as f64) * 0.5; // Increase DCA size progressively
-
-            levels.push(DCALevel {
-                level: i + 1,
-                trigger_percent,
-                amount_sol: self.config.trade_size_sol * amount_multiplier,
-                executed: false,
-                executed_at: None,
-                price: None,
-            });
-        }
-
-        levels
     }
 
     pub fn validate_trade_conditions(
@@ -314,7 +280,7 @@ impl TradingStrategy {
 
         // Position risk
         if let Some(pos) = position {
-            if pos.dca_level >= 2 {
+            if pos.dca_count >= 2 {
                 risk_score += 1;
             }
             if pos.unrealized_pnl_percent < -30.0 {

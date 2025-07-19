@@ -527,9 +527,9 @@ impl TraderManager {
                                 },
                                 pnl_sol: format!("{:.5}", pos.unrealized_pnl_sol),
                                 pnl_percent: format!("{:.2}%", pos.unrealized_pnl_percent),
-                                opens: pos.total_opens.to_string(),
-                                closes: pos.total_closes.to_string(),
-                                dca_count: pos.total_dca.to_string(),
+                                opens: "1".to_string(), // Always 1 since simplified
+                                closes: "0".to_string(), // 0 for active positions
+                                dca_count: pos.dca_count.to_string(),
                                 status: format!("{:?}", pos.status),
                                 age: {
                                     let duration = Utc::now().signed_duration_since(pos.created_at);
@@ -589,9 +589,9 @@ impl TraderManager {
                                         } else {
                                             "0.00%".to_string()
                                         },
-                                        opens: pos.total_opens.to_string(),
-                                        closes: pos.total_closes.to_string(),
-                                        dca_count: pos.total_dca.to_string(),
+                                        opens: "1".to_string(), // Always 1 since simplified
+                                        closes: "1".to_string(), // 1 for closed positions
+                                        dca_count: pos.dca_count.to_string(),
                                         status: format!("{:?}", pos.status),
                                         age: {
                                             let duration = Utc::now().signed_duration_since(
@@ -639,8 +639,7 @@ impl TraderManager {
         let mut positions = self.positions.write().await;
 
         for (id, summary) in active_positions {
-            let mut position = Position::from_summary(id, summary);
-            position.dca_levels = self.database.get_dca_levels(id)?;
+            let position = Position::from_summary(id, summary);
             positions.insert(position.token_address.clone(), position);
         }
 
@@ -1209,11 +1208,12 @@ impl TraderManager {
         let trade_size = self.strategy.read().await.calculate_trade_size(signal, Some(&position));
 
         println!(
-            "🟡 Executing DCA: {} - {:.10} SOL (${:.4} SOL, Level {})",
+            "🟡 Executing DCA: {} - {:.10} SOL (${:.4} SOL, DCA #{}/{})",
             signal.token_address,
             signal.current_price,
             trade_size,
-            position.dca_level + 1
+            position.dca_count + 1,
+            self.config.dca_levels
         );
 
         let trade_result = if self.config.dry_run {
@@ -1345,9 +1345,7 @@ impl TraderManager {
         existing_position: Option<Position>
     ) -> Result<()> {
         let mut position = existing_position.unwrap_or_else(|| {
-            let mut pos = Position::new(signal.token_address.clone(), "Unknown".to_string());
-            pos.initialize_dca_levels(&self.config);
-            pos
+            Position::new(signal.token_address.clone(), "Unknown".to_string())
         });
 
         if result.success {
@@ -1422,15 +1420,6 @@ impl TraderManager {
             position.add_dca_trade(result.amount_sol, result.amount_tokens, result.price_per_token);
             // Update current price to signal price
             position.update_price(signal.current_price);
-
-            // Mark DCA level as executed
-            let next_level = position.dca_level + 1;
-            position.execute_dca_level(next_level, result.price_per_token)?;
-
-            // Update DCA level in database
-            if let Some(position_id) = position.id {
-                self.database.update_dca_level(position_id, next_level, result.price_per_token)?;
-            }
         }
 
         // Save position to database

@@ -38,22 +38,19 @@ pub struct PositionSummary {
     pub token_address: String,
     pub token_symbol: String,
     pub total_invested_sol: f64,
+    pub original_entry_price: f64,
     pub average_buy_price: f64,
     pub current_price: f64,
     pub total_tokens: f64,
     pub unrealized_pnl_sol: f64,
     pub unrealized_pnl_percent: f64,
     pub realized_pnl_sol: f64,
-    pub total_trades: u32,
-    pub dca_level: u32,
+    pub dca_count: u32,
     pub status: PositionStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub peak_price: f64,
     pub lowest_price: f64,
-    pub total_opens: u32,
-    pub total_closes: u32,
-    pub total_dca: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,16 +59,6 @@ pub enum PositionStatus {
     Closed,
     StopLoss,
     TakeProfit,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DCALevel {
-    pub level: u32,
-    pub trigger_percent: f64,
-    pub amount_sol: f64,
-    pub executed: bool,
-    pub executed_at: Option<DateTime<Utc>>,
-    pub price: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
