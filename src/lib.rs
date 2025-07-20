@@ -6,3 +6,4 @@ pub mod logger;
 pub mod discovery;
 pub mod wallet;
 pub mod decimal_cache;
+pub mod transactions;
