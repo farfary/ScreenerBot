@@ -480,6 +480,16 @@ impl TransactionDatabase {
 
         Ok(rows_affected)
     }
+
+    /// Get all signature strings from database (for populating in-memory cache)
+    pub fn get_all_signatures(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        let mut stmt = self.conn.prepare("SELECT signature FROM transactions")?;
+        let signatures = stmt
+            .query_map([], |row| { Ok(row.get::<_, String>(0)?) })?
+            .collect::<Result<Vec<String>, _>>()?;
+
+        Ok(signatures)
+    }
 }
 
 /// Legacy JSON cache compatibility layer

@@ -120,6 +120,9 @@ impl ContinuousTransactionCache {
     pub async fn start_continuous_caching(&self) -> Result<(), Box<dyn std::error::Error>> {
         log(LogTag::System, "INFO", "🚀 Starting continuous transaction caching...");
 
+        // Load existing signatures from database into memory cache
+        self.load_existing_signatures().await?;
+
         // Initial cache population
         self.populate_initial_cache().await?;
 
@@ -129,6 +132,35 @@ impl ContinuousTransactionCache {
         // Run cache update indefinitely
         self.start_cache_update_task().await?;
 
+        Ok(())
+    }
+
+    /// Load existing signatures from database into in-memory cache
+    async fn load_existing_signatures(&self) -> Result<(), Box<dyn std::error::Error>> {
+        log(LogTag::System, "INFO", "📋 Loading existing signatures from database...");
+
+        let signatures = {
+            let db = self.db.lock().await;
+            db.get_all_signatures()?
+        };
+
+        {
+            let mut cached_sigs = self.cached_signatures.lock().await;
+            for signature in signatures.iter() {
+                cached_sigs.insert(signature.clone());
+            }
+        }
+
+        {
+            let mut stats = self.stats.lock().await;
+            stats.total_cached = signatures.len();
+        }
+
+        log(
+            LogTag::System,
+            "SUCCESS",
+            &format!("✅ Loaded {} existing signatures into memory cache", signatures.len())
+        );
         Ok(())
     }
 
