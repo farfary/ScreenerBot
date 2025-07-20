@@ -181,12 +181,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("{}", "=".repeat(60));
     println!("{}", "🏁 Enhanced Swap Detection Test Complete!".bright_green().bold());
-    println!("This test demonstrates the enhanced analyzer's ability to:");
-    println!("• 🔍 Detect unknown tokens in transactions");
-    println!("• 📥 Fetch token information from DexScreener");
+    println!("This test demonstrates the enhanced analyzer's improvements:");
+    println!("• 🔍 Detect swaps with DEX program ID + meaningful SOL changes");
+    println!("• 📊 Filter micro-transactions (< 0.000001 SOL)");
+    println!("• � Require actual SOL ↔ token exchanges for swap validation");
+    println!("• �📥 Fetch token information from DexScreener");
     println!("• 💾 Cache tokens to the database");
-    println!("• 🔄 Re-evaluate swap detection with new token data");
-    println!("• ✨ Identify swaps that were previously missed");
+    println!("• ✨ Enhanced accuracy with improved swap detection logic");
 
     Ok(())
 }

@@ -188,10 +188,13 @@ impl TransactionAnalyzer {
         // Calculate SOL balance change
         analysis.sol_balance_change = self.calculate_sol_balance_change(transaction);
 
-        // Determine transaction type based on analysis
+        // Improved swap detection logic
         if
-            !dex_interactions.is_empty() &&
-            self.has_bidirectional_transfers(&analysis.token_transfers)
+            self.is_valid_swap(
+                &dex_interactions,
+                &analysis.token_transfers,
+                analysis.sol_balance_change
+            )
         {
             analysis.transaction_type = TransactionType::Swap;
             analysis.is_swap = true;
@@ -253,7 +256,13 @@ impl TransactionAnalyzer {
                     self.enrich_token_transfers(&mut analysis.token_transfers);
 
                     // Re-evaluate swap detection with the new token information
-                    if self.has_bidirectional_transfers(&analysis.token_transfers) {
+                    if
+                        self.is_valid_swap(
+                            &dex_interactions,
+                            &analysis.token_transfers,
+                            analysis.sol_balance_change
+                        )
+                    {
                         analysis.transaction_type = TransactionType::Swap;
                         analysis.is_swap = true;
                         analysis.swap_info = self.extract_swap_info(
@@ -409,6 +418,64 @@ impl TransactionAnalyzer {
         let has_incoming = transfers.iter().any(|t| t.is_incoming);
         let has_outgoing = transfers.iter().any(|t| !t.is_incoming);
         has_incoming && has_outgoing && transfers.len() >= 2
+    }
+
+    /// Enhanced swap validation - checks for DEX interaction, meaningful SOL change, and token exchange
+    fn is_valid_swap(
+        &self,
+        dex_interactions: &[&ProgramInteraction],
+        transfers: &[TokenTransfer],
+        sol_change: i64
+    ) -> bool {
+        // Minimum SOL threshold (0.000001 SOL = 1,000 lamports)
+        const MIN_SWAP_SOL_THRESHOLD: i64 = 1_000;
+
+        // Must have DEX program interaction
+        if dex_interactions.is_empty() {
+            return false;
+        }
+
+        // Must have meaningful SOL balance change (excluding just fees)
+        let abs_sol_change = sol_change.abs();
+        if abs_sol_change < MIN_SWAP_SOL_THRESHOLD {
+            return false;
+        }
+
+        // Must have bidirectional token transfers
+        if !self.has_bidirectional_transfers(transfers) {
+            return false;
+        }
+
+        // Check for actual SOL ↔ token exchange patterns
+        self.has_sol_token_exchange(transfers, sol_change)
+    }
+
+    /// Check if transaction involves SOL ↔ token exchange (essential for swaps)
+    fn has_sol_token_exchange(&self, transfers: &[TokenTransfer], sol_change: i64) -> bool {
+        const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+        // Check for wrapped SOL (WSOL) transfers
+        let has_wsol_transfer = transfers.iter().any(|t| t.mint == WSOL_MINT);
+
+        // Check for significant SOL balance change (indicating SOL side of swap)
+        let significant_sol_change = sol_change.abs() >= 1_000; // > 0.000001 SOL
+
+        // Valid swap patterns:
+        // 1. WSOL transfers + other token transfers (wrapped SOL swaps)
+        // 2. Significant SOL balance change + token transfers (native SOL swaps)
+        // 3. Both WSOL and significant SOL change (complex swaps)
+
+        if has_wsol_transfer {
+            // WSOL transfer pattern - should have other non-WSOL tokens
+            let non_wsol_tokens = transfers.iter().any(|t| t.mint != WSOL_MINT);
+            non_wsol_tokens
+        } else if significant_sol_change {
+            // Native SOL pattern - should have token transfers
+            !transfers.is_empty()
+        } else {
+            // No clear SOL involvement - likely not a SOL-token swap
+            false
+        }
     }
 
     /// Determine if transaction is likely an airdrop
