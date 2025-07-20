@@ -1,7 +1,10 @@
 // transactions/analyzer.rs - Transaction analysis and swap detection
 use super::types::*;
 use crate::logger::{ log, LogTag };
+use crate::discovery::get_single_token_info;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Notify;
 use colored::Colorize;
 
 /// Transaction analyzer for categorization and swap detection
@@ -39,7 +42,7 @@ impl TransactionAnalyzer {
         analyzer
     }
 
-    /// Enrich token transfer data with database information
+    /// Enrich token transfers with database information
     fn enrich_token_transfers(&self, transfers: &mut Vec<TokenTransfer>) {
         if !self.use_token_db {
             return;
@@ -60,6 +63,82 @@ impl TransactionAnalyzer {
                 );
             }
         }
+    }
+
+    /// Fetch and cache unknown tokens encountered in transfers
+    async fn fetch_and_cache_unknown_tokens(&self, transfers: &[TokenTransfer]) -> Vec<String> {
+        if !self.use_token_db {
+            return Vec::new();
+        }
+
+        let mut unknown_mints = Vec::new();
+        let mut newly_cached_mints = Vec::new();
+
+        // Identify unknown tokens
+        for transfer in transfers {
+            if crate::global::get_token_from_db(&transfer.mint).is_none() {
+                unknown_mints.push(transfer.mint.clone());
+            }
+        }
+
+        if unknown_mints.is_empty() {
+            return newly_cached_mints;
+        }
+
+        log(
+            LogTag::System,
+            "FETCH",
+            &format!(
+                "Found {} unknown tokens in transaction, fetching info...",
+                unknown_mints.len()
+            )
+                .bright_yellow()
+                .to_string()
+        );
+
+        // Create shutdown signal for API calls
+        let shutdown = Arc::new(Notify::new());
+
+        // Fetch information for each unknown token
+        for mint in unknown_mints {
+            match get_single_token_info(&mint, shutdown.clone()).await {
+                Ok(Some(token)) => {
+                    log(
+                        LogTag::System,
+                        "CACHE",
+                        &format!(
+                            "Successfully fetched and cached token: {} ({})",
+                            token.symbol,
+                            token.mint
+                        )
+                            .bright_green()
+                            .to_string()
+                    );
+                    newly_cached_mints.push(mint);
+                }
+                Ok(None) => {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        &format!("Token not found on DexScreener: {}", mint)
+                            .bright_yellow()
+                            .to_string()
+                    );
+                }
+                Err(e) => {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Failed to fetch token {}: {}", mint, e).bright_red().to_string()
+                    );
+                }
+            }
+
+            // Small delay to respect rate limits
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
+
+        newly_cached_mints
     }
 
     /// Get token symbol from database for better logging
@@ -127,6 +206,75 @@ impl TransactionAnalyzer {
         } else if !analysis.token_transfers.is_empty() || analysis.sol_balance_change != 0 {
             analysis.transaction_type = TransactionType::Transfer;
             analysis.is_transfer = true;
+        }
+
+        analysis
+    }
+
+    /// Enhanced analyze transaction that fetches unknown tokens and re-evaluates swap detection
+    pub async fn analyze_transaction_with_token_fetch(
+        &self,
+        transaction: &TransactionResult
+    ) -> TransactionAnalysis {
+        // First, do the basic analysis
+        let mut analysis = self.analyze_transaction(transaction);
+
+        // If this doesn't look like a swap but has DEX interactions and token transfers,
+        // try fetching unknown tokens and re-evaluate
+        if
+            !analysis.is_swap &&
+            !analysis.program_interactions.is_empty() &&
+            !analysis.token_transfers.is_empty()
+        {
+            let dex_interactions = self.find_dex_interactions(&analysis.program_interactions);
+
+            if !dex_interactions.is_empty() {
+                // Fetch and cache unknown tokens
+                let newly_cached = self.fetch_and_cache_unknown_tokens(
+                    &analysis.token_transfers
+                ).await;
+
+                if !newly_cached.is_empty() {
+                    log(
+                        LogTag::System,
+                        "REEVAL",
+                        &format!(
+                            "Re-evaluating transaction after caching {} new tokens",
+                            newly_cached.len()
+                        )
+                            .bright_cyan()
+                            .to_string()
+                    );
+
+                    // Re-extract token transfers to get updated information
+                    analysis.token_transfers = self.extract_token_transfers(transaction);
+
+                    // Re-enrich with the newly cached token information
+                    self.enrich_token_transfers(&mut analysis.token_transfers);
+
+                    // Re-evaluate swap detection with the new token information
+                    if self.has_bidirectional_transfers(&analysis.token_transfers) {
+                        analysis.transaction_type = TransactionType::Swap;
+                        analysis.is_swap = true;
+                        analysis.swap_info = self.extract_swap_info(
+                            transaction,
+                            &dex_interactions,
+                            &analysis.token_transfers
+                        );
+
+                        log(
+                            LogTag::System,
+                            "SWAP",
+                            &format!(
+                                "✅ Detected swap after token fetch for transaction: {}",
+                                analysis.signature[..8].to_string()
+                            )
+                                .bright_green()
+                                .to_string()
+                        );
+                    }
+                }
+            }
         }
 
         analysis
@@ -483,6 +631,36 @@ impl TransactionAnalyzer {
         // Method 1: Traditional DEX + bidirectional token analysis
         if self.is_swap_transaction(transaction) {
             if let Some(swap_info) = self.analyze_transaction(transaction).swap_info {
+                detected_swaps.push(self.create_swap_transaction(transaction, &swap_info));
+            }
+        }
+
+        // Method 2: Log message analysis for additional patterns
+        let log_based_swaps = self.detect_swaps_from_logs(transaction);
+        detected_swaps.extend(log_based_swaps);
+
+        // Method 3: Inner instruction analysis for complex swaps
+        let inner_instruction_swaps = self.detect_swaps_from_inner_instructions(transaction);
+        detected_swaps.extend(inner_instruction_swaps);
+
+        // Remove duplicates based on signature
+        detected_swaps.sort_by(|a, b| a.signature.cmp(&b.signature));
+        detected_swaps.dedup_by(|a, b| a.signature == b.signature);
+
+        detected_swaps
+    }
+
+    /// Enhanced swap detection that fetches unknown tokens and re-evaluates
+    pub async fn detect_swaps_with_token_fetch(
+        &self,
+        transaction: &TransactionResult
+    ) -> Vec<SwapTransaction> {
+        let mut detected_swaps = Vec::new();
+
+        // Method 1: Enhanced analysis with token fetching
+        let analysis = self.analyze_transaction_with_token_fetch(transaction).await;
+        if analysis.is_swap {
+            if let Some(swap_info) = analysis.swap_info {
                 detected_swaps.push(self.create_swap_transaction(transaction, &swap_info));
             }
         }

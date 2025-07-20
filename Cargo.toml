@@ -153,3 +153,7 @@ path = "src/bin/test_token_discovery_caching.rs"
 [[bin]]
 name = "test_single_token_info"
 path = "src/bin/test_single_token_info.rs"
+
+[[bin]]
+name = "test_enhanced_swap_detection"
+path = "src/bin/test_enhanced_swap_detection.rs"

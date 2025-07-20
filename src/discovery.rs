@@ -756,11 +756,7 @@ pub async fn get_single_token_info(
     let permit = match INFO_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
         Err(e) => {
-            log(
-                LogTag::Monitor,
-                "ERROR",
-                &format!("Failed to acquire info rate limiter: {}", e)
-            );
+            log(LogTag::Monitor, "ERROR", &format!("Failed to acquire info rate limiter: {}", e));
             return Err(Box::new(e));
         }
     };
@@ -769,7 +765,8 @@ pub async fn get_single_token_info(
     let url = format!("https://api.dexscreener.com/tokens/v1/{}/{}", chain_id, mint);
 
     // Create HTTP client with timeout
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client
+        ::builder()
         .timeout(Duration::from_secs(5))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
@@ -785,7 +782,11 @@ pub async fn get_single_token_info(
     drop(permit); // Release permit immediately after request
 
     if resp.status() != StatusCode::OK {
-        log(LogTag::Monitor, "WARN", &format!("Token {} not found or API error: {}", mint, resp.status()));
+        log(
+            LogTag::Monitor,
+            "WARN",
+            &format!("Token {} not found or API error: {}", mint, resp.status())
+        );
         return Ok(None);
     }
 
@@ -805,9 +806,13 @@ pub async fn get_single_token_info(
                     .get("address")
                     .and_then(|a| a.as_str())
                     .unwrap_or("");
-                
+
                 if token_mint != mint {
-                    log(LogTag::Monitor, "WARN", &format!("Requested mint {} but got {}", mint, token_mint));
+                    log(
+                        LogTag::Monitor,
+                        "WARN",
+                        &format!("Requested mint {} but got {}", mint, token_mint)
+                    );
                     return Ok(None);
                 }
 
@@ -899,9 +904,7 @@ pub async fn get_single_token_info(
                             arr.iter()
                                 .filter_map(|social| {
                                     let url = social.get("url").and_then(|u| u.as_str())?;
-                                    let link_type = social
-                                        .get("type")
-                                        .and_then(|t| t.as_str())?;
+                                    let link_type = social.get("type").and_then(|t| t.as_str())?;
                                     Some(crate::global::SocialLink {
                                         link_type: link_type.to_string(),
                                         url: url.to_string(),
@@ -1039,8 +1042,11 @@ pub async fn get_single_token_info(
                         log(
                             LogTag::Monitor,
                             "CACHE",
-                            &format!("Cached single token {} to DB ({})", token.symbol, 
-                                if is_new { "new" } else { "updated" })
+                            &format!("Cached single token {} to DB ({})", token.symbol, if is_new {
+                                "new"
+                            } else {
+                                "updated"
+                            })
                                 .dimmed()
                                 .to_string()
                         );

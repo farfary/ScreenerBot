@@ -6,6 +6,8 @@ use once_cell::sync::Lazy;
 use std::sync::{ RwLock, Mutex };
 use chrono::{ DateTime, Utc };
 use crate::token_cache::TokenDatabase;
+use solana_sdk::signature::Keypair;
+use std::str::FromStr;
 
 pub static LIST_MINTS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
@@ -32,6 +34,57 @@ pub fn read_configs<P: AsRef<Path>>(path: P) -> Result<Configs, Box<dyn std::err
     let data = fs::read_to_string(path)?;
     let configs: Configs = serde_json::from_str(&data)?;
     Ok(configs)
+}
+
+/// Load the main wallet keypair from the configs
+pub fn load_wallet_from_config(configs: &Configs) -> Result<Keypair, Box<dyn std::error::Error>> {
+    // Parse the private key from base58 string
+    let keypair = if
+        configs.main_wallet_private.starts_with('[') &&
+        configs.main_wallet_private.ends_with(']')
+    {
+        // Handle array format like [1,2,3,4,...]
+        let private_key_str = configs.main_wallet_private
+            .trim_start_matches('[')
+            .trim_end_matches(']');
+        let private_key_bytes: Result<Vec<u8>, _> = private_key_str
+            .split(',')
+            .map(|s| s.trim().parse::<u8>())
+            .collect();
+
+        match private_key_bytes {
+            Ok(bytes) => {
+                if bytes.len() != 64 {
+                    return Err(
+                        format!(
+                            "Invalid private key length: expected 64 bytes, got {}",
+                            bytes.len()
+                        ).into()
+                    );
+                }
+                Keypair::try_from(&bytes[..]).map_err(|e|
+                    format!("Failed to create keypair: {}", e)
+                )?
+            }
+            Err(e) => {
+                return Err(format!("Failed to parse private key array: {}", e).into());
+            }
+        }
+    } else {
+        // Handle base58 format
+        let decoded = bs58::decode(&configs.main_wallet_private).into_vec()?;
+        if decoded.len() != 64 {
+            return Err(
+                format!(
+                    "Invalid private key length: expected 64 bytes, got {}",
+                    decoded.len()
+                ).into()
+            );
+        }
+        Keypair::try_from(&decoded[..]).map_err(|e| format!("Failed to create keypair: {}", e))?
+    };
+
+    Ok(keypair)
 }
 
 /// Initialize the global token database
