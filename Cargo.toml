@@ -149,3 +149,7 @@ path = "src/bin/test_continuous_transaction_cache.rs"
 [[bin]]
 name = "test_token_discovery_caching"
 path = "src/bin/test_token_discovery_caching.rs"
+
+[[bin]]
+name = "test_single_token_info"
+path = "src/bin/test_single_token_info.rs"

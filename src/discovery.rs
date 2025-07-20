@@ -716,3 +716,359 @@ pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<
     sleep(Duration::from_millis(2100)).await;
     Ok(())
 }
+
+/// Fetch token info for a single mint address from DexScreener API
+pub async fn get_single_token_info(
+    mint: &str,
+    shutdown: Arc<Notify>
+) -> Result<Option<Token>, Box<dyn std::error::Error>> {
+    if check_shutdown_or_delay(&shutdown, Duration::from_millis(0)).await {
+        return Ok(None);
+    }
+
+    // Load configuration and create RPC client for decimal fetching
+    let configs = crate::global::read_configs("configs.json")?;
+    let rpc_client = RpcClient::new(&configs.rpc_url);
+
+    // Load decimal cache
+    let cache_path = Path::new("decimal_cache.json");
+    let mut decimal_cache = match DecimalCache::load_from_file(cache_path) {
+        Ok(cache) => cache,
+        Err(e) => {
+            log(
+                LogTag::Monitor,
+                "WARN",
+                &format!("Failed to load decimal cache: {}, using new cache", e)
+            );
+            DecimalCache::new()
+        }
+    };
+
+    // Fetch decimals for the mint
+    let decimals_map = fetch_or_cache_decimals(
+        &rpc_client,
+        &vec![mint.to_string()],
+        &mut decimal_cache,
+        cache_path
+    ).await?;
+
+    // Acquire permit for info rate limit (200 per minute)
+    let permit = match INFO_RATE_LIMITER.clone().acquire_owned().await {
+        Ok(p) => p,
+        Err(e) => {
+            log(
+                LogTag::Monitor,
+                "ERROR",
+                &format!("Failed to acquire info rate limiter: {}", e)
+            );
+            return Err(Box::new(e));
+        }
+    };
+
+    let chain_id = "solana";
+    let url = format!("https://api.dexscreener.com/tokens/v1/{}/{}", chain_id, mint);
+
+    // Create HTTP client with timeout
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            log(LogTag::Monitor, "ERROR", &format!("Failed to send single token request: {}", e));
+            drop(permit);
+            return Err(Box::new(e));
+        }
+    };
+    drop(permit); // Release permit immediately after request
+
+    if resp.status() != StatusCode::OK {
+        log(LogTag::Monitor, "WARN", &format!("Token {} not found or API error: {}", mint, resp.status()));
+        return Ok(None);
+    }
+
+    let arr: serde_json::Value = resp.json().await.unwrap_or_else(|e| {
+        log(
+            LogTag::Monitor,
+            "ERROR",
+            &format!("Failed to parse single token response JSON: {}", e)
+        );
+        serde_json::json!([])
+    });
+
+    if let Some(arr) = arr.as_array() {
+        if let Some(pair) = arr.first() {
+            if let Some(base_token) = pair.get("baseToken") {
+                let token_mint = base_token
+                    .get("address")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("");
+                
+                if token_mint != mint {
+                    log(LogTag::Monitor, "WARN", &format!("Requested mint {} but got {}", mint, token_mint));
+                    return Ok(None);
+                }
+
+                let created_at = pair
+                    .get("pairCreatedAt")
+                    .and_then(|v| v.as_i64())
+                    .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts));
+
+                // Parse transaction stats
+                let txns = pair.get("txns").map(|txns_obj| {
+                    crate::global::TxnStats {
+                        m5: txns_obj.get("m5").map(|m5| crate::global::TxnPeriod {
+                            buys: m5.get("buys").and_then(|v| v.as_i64()),
+                            sells: m5.get("sells").and_then(|v| v.as_i64()),
+                        }),
+                        h1: txns_obj.get("h1").map(|h1| crate::global::TxnPeriod {
+                            buys: h1.get("buys").and_then(|v| v.as_i64()),
+                            sells: h1.get("sells").and_then(|v| v.as_i64()),
+                        }),
+                        h6: txns_obj.get("h6").map(|h6| crate::global::TxnPeriod {
+                            buys: h6.get("buys").and_then(|v| v.as_i64()),
+                            sells: h6.get("sells").and_then(|v| v.as_i64()),
+                        }),
+                        h24: txns_obj.get("h24").map(|h24| crate::global::TxnPeriod {
+                            buys: h24.get("buys").and_then(|v| v.as_i64()),
+                            sells: h24.get("sells").and_then(|v| v.as_i64()),
+                        }),
+                    }
+                });
+
+                // Parse volume stats
+                let volume = pair.get("volume").map(|vol_obj| {
+                    crate::global::VolumeStats {
+                        m5: vol_obj.get("m5").and_then(|v| v.as_f64()),
+                        h1: vol_obj.get("h1").and_then(|v| v.as_f64()),
+                        h6: vol_obj.get("h6").and_then(|v| v.as_f64()),
+                        h24: vol_obj.get("h24").and_then(|v| v.as_f64()),
+                    }
+                });
+
+                // Parse price change stats
+                let price_change = pair.get("priceChange").map(|pc_obj| {
+                    crate::global::PriceChangeStats {
+                        m5: pc_obj.get("m5").and_then(|v| v.as_f64()),
+                        h1: pc_obj.get("h1").and_then(|v| v.as_f64()),
+                        h6: pc_obj.get("h6").and_then(|v| v.as_f64()),
+                        h24: pc_obj.get("h24").and_then(|v| v.as_f64()),
+                    }
+                });
+
+                // Parse liquidity info
+                let liquidity = pair.get("liquidity").map(|liq_obj| {
+                    crate::global::LiquidityInfo {
+                        usd: liq_obj.get("usd").and_then(|v| v.as_f64()),
+                        base: liq_obj.get("base").and_then(|v| v.as_f64()),
+                        quote: liq_obj.get("quote").and_then(|v| v.as_f64()),
+                    }
+                });
+
+                // Parse token info
+                let info = pair.get("info").map(|info_obj| {
+                    let websites = info_obj
+                        .get("websites")
+                        .and_then(|w| w.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|website| {
+                                    website
+                                        .get("url")
+                                        .and_then(|url| url.as_str())
+                                        .map(|url| {
+                                            crate::global::WebsiteLink {
+                                                label: website
+                                                    .get("label")
+                                                    .and_then(|l| l.as_str())
+                                                    .map(|s| s.to_string()),
+                                                url: url.to_string(),
+                                            }
+                                        })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    let socials = info_obj
+                        .get("socials")
+                        .and_then(|s| s.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|social| {
+                                    let url = social.get("url").and_then(|u| u.as_str())?;
+                                    let link_type = social
+                                        .get("type")
+                                        .and_then(|t| t.as_str())?;
+                                    Some(crate::global::SocialLink {
+                                        link_type: link_type.to_string(),
+                                        url: url.to_string(),
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    crate::global::TokenInfo {
+                        image_url: info_obj
+                            .get("imageUrl")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        header: info_obj
+                            .get("header")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        open_graph: info_obj
+                            .get("openGraph")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        websites,
+                        socials,
+                    }
+                });
+
+                // Parse boost info
+                let boosts = pair.get("boosts").map(|boost_obj| {
+                    crate::global::BoostInfo {
+                        active: boost_obj.get("active").and_then(|v| v.as_i64()),
+                    }
+                });
+
+                // Parse labels
+                let labels = pair
+                    .get("labels")
+                    .and_then(|l| l.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let token = Token {
+                    mint: token_mint.to_string(),
+                    symbol: base_token
+                        .get("symbol")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    name: base_token
+                        .get("name")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    decimals: decimals_map.get(token_mint).copied().unwrap_or(9),
+                    chain: "solana".to_string(),
+
+                    // Existing fields - keeping original logic but using info.image_url as primary
+                    logo_url: info
+                        .as_ref()
+                        .and_then(|i| i.image_url.clone())
+                        .or_else(|| {
+                            pair.get("info")
+                                .and_then(|i| i.get("imageUrl"))
+                                .and_then(|s| s.as_str())
+                                .map(|s| s.to_string())
+                        }),
+                    coingecko_id: None,
+                    website: info
+                        .as_ref()
+                        .and_then(|i| i.websites.first())
+                        .map(|w| w.url.clone())
+                        .or_else(|| {
+                            pair.get("info")
+                                .and_then(|i| i.get("websites"))
+                                .and_then(|w| w.as_array())
+                                .and_then(|arr| arr.get(0))
+                                .and_then(|w| w.get("url"))
+                                .and_then(|s| s.as_str())
+                                .map(|s| s.to_string())
+                        }),
+                    description: None,
+                    tags: vec![],
+                    is_verified: false,
+                    created_at,
+
+                    // Price data
+                    price_dexscreener_sol: pair
+                        .get("priceNative")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse().ok()),
+                    price_dexscreener_usd: pair
+                        .get("priceUsd")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse().ok()),
+                    price_geckoterminal_sol: None,
+                    price_geckoterminal_usd: None,
+                    price_raydium_sol: None,
+                    price_raydium_usd: None,
+                    price_pool_sol: None,
+                    price_pool_usd: None,
+                    pools: vec![],
+
+                    // New DexScreener fields
+                    dex_id: pair
+                        .get("dexId")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    pair_address: pair
+                        .get("pairAddress")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    pair_url: pair
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    labels,
+                    fdv: pair.get("fdv").and_then(|v| v.as_f64()),
+                    market_cap: pair.get("marketCap").and_then(|v| v.as_f64()),
+                    txns,
+                    volume,
+                    price_change,
+                    liquidity,
+                    info,
+                    boosts,
+                };
+
+                // Cache the token to database
+                match crate::global::cache_token_to_db(&token, "dexscreener") {
+                    Ok(is_new) => {
+                        log(
+                            LogTag::Monitor,
+                            "CACHE",
+                            &format!("Cached single token {} to DB ({})", token.symbol, 
+                                if is_new { "new" } else { "updated" })
+                                .dimmed()
+                                .to_string()
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Monitor,
+                            "WARN",
+                            &format!("Failed to cache single token {} to DB: {}", token.symbol, e)
+                                .dimmed()
+                                .to_string()
+                        );
+                    }
+                }
+
+                log(
+                    LogTag::Monitor,
+                    "INFO",
+                    &format!("Fetched single token info: {} ({})", token.symbol, token.mint)
+                        .dimmed()
+                        .to_string()
+                );
+
+                return Ok(Some(token));
+            }
+        }
+    }
+
+    log(LogTag::Monitor, "WARN", &format!("No token data found for mint: {}", mint));
+    Ok(None)
+}
