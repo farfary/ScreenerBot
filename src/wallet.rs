@@ -356,23 +356,36 @@ pub async fn sign_and_send_transaction(
         ]
     });
 
-    // Try main RPC first, then fallbacks
+    // Try fallback RPCs first, main RPC as last resort
     let mut _last_error: Option<SwapError> = None;
 
-    // Try main RPC
-    match send_rpc_request(&client, &configs.rpc_url, &rpc_payload).await {
-        Ok(tx_sig) => {
-            log(LogTag::Trader, "SUCCESS", &format!("Transaction sent successfully: {}", tx_sig));
-            return Ok(tx_sig);
-        }
-        Err(e) => {
-            log(LogTag::Trader, "ERROR", &format!("Main RPC failed: {}, trying fallbacks...", e));
-            _last_error = Some(e);
+    // Try the randomly selected RPC first if it's provided and not the main RPC
+    if !rpc_url.eq(&configs.rpc_url) {
+        match send_rpc_request(&client, rpc_url, &rpc_payload).await {
+            Ok(tx_sig) => {
+                log(
+                    LogTag::Trader,
+                    "SUCCESS",
+                    &format!("Transaction sent successfully via selected RPC: {}", tx_sig)
+                );
+                return Ok(tx_sig);
+            }
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!("Selected RPC {} failed: {}, trying other fallbacks...", rpc_url, e)
+                );
+                _last_error = Some(e);
+            }
         }
     }
 
-    // Try fallback RPCs
+    // Try fallback RPCs (skip the one we already tried)
     for fallback_rpc in &configs.rpc_fallbacks {
+        if fallback_rpc == rpc_url {
+            continue; // Skip if we already tried this RPC
+        }
         match send_rpc_request(&client, fallback_rpc, &rpc_payload).await {
             Ok(tx_sig) => {
                 log(
@@ -388,6 +401,25 @@ pub async fn sign_and_send_transaction(
                     "ERROR",
                     &format!("Fallback RPC {} failed: {}", fallback_rpc, e)
                 );
+                _last_error = Some(e);
+            }
+        }
+    }
+
+    // Try main RPC as a last resort, only if all fallbacks failed and it's not the same as our rpc_url
+    if rpc_url != &configs.rpc_url {
+        log(LogTag::Trader, "WARN", "All fallbacks failed, trying main RPC as last resort");
+        match send_rpc_request(&client, &configs.rpc_url, &rpc_payload).await {
+            Ok(tx_sig) => {
+                log(
+                    LogTag::Trader,
+                    "SUCCESS",
+                    &format!("Transaction sent via main RPC: {}", tx_sig)
+                );
+                return Ok(tx_sig);
+            }
+            Err(e) => {
+                log(LogTag::Trader, "ERROR", &format!("Main RPC failed: {}", e));
                 _last_error = Some(e);
             }
         }
@@ -514,7 +546,7 @@ pub async fn calculate_effective_price(
     input_mint: &str,
     output_mint: &str,
     wallet_address: &str,
-    _rpc_url: &str,
+    _rpc_url: &str, // Unused parameter - kept for backwards compatibility
     configs: &crate::global::Configs
 ) -> Result<(f64, u64, u64, f64), SwapError> {
     log(
@@ -526,11 +558,12 @@ pub async fn calculate_effective_price(
     // Wait a moment for transaction to be confirmed
     tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
 
-    // Try all available RPC endpoints with retries
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
+    // Try all available RPC endpoints with retries - prioritize fallbacks
+    let mut rpc_endpoints = configs.rpc_fallbacks.iter().collect::<Vec<_>>();
+    // Only add main RPC as a last resort if we have no fallbacks
+    if rpc_endpoints.is_empty() {
+        rpc_endpoints.push(&configs.rpc_url);
+    }
 
     let mut transaction_details = None;
 
@@ -1162,7 +1195,7 @@ pub async fn execute_swap_with_quote(
             input_mint,
             output_mint,
             &wallet_address,
-            &configs.rpc_url,
+            &selected_rpc, // Use the same randomly selected RPC endpoint
             &configs
         ).await
     {
@@ -1323,7 +1356,7 @@ pub async fn execute_swap(
             input_mint,
             output_mint,
             &wallet_address,
-            &configs.rpc_url,
+            &selected_rpc, // Use the same randomly selected RPC endpoint
             &configs
         ).await.unwrap_or_else(|e| {
             log(LogTag::Trader, "WARNING", &format!("Failed to calculate effective price: {}", e));

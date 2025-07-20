@@ -24,6 +24,7 @@ use tokio::sync::Notify;
 use std::time::Duration;
 use serde::{ Serialize, Deserialize };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
+use colored::Colorize;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Position {
@@ -241,20 +242,20 @@ fn get_open_positions_count() -> usize {
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
     // ===== TIME PARAMETERS =====
     let min_time_secs = 30.0; // Minimum holding time (30 sec)
-    let aggressive_profit_time_secs = 900.0; // Time for aggressive profit taking (15 min)
-    let _normal_profit_time_secs = 1800.0; // Normal profit taking window (30 min)
-    let max_time_secs = 7200.0; // Maximum holding time (2 hours)
+    let aggressive_profit_time_secs = 445.0; // Time for aggressive profit taking (9.5 min)
+    let _normal_profit_time_secs = 900.0; // Normal profit taking window (15 min)
+    let max_time_secs = 3600.0; // Maximum holding time (1 hours)
 
     // ===== PROFIT/LOSS PARAMETERS =====
-    let small_profit = 5.0; // Small profit threshold (%)
-    let good_profit = 20.0; // Good profit threshold (%)
+    let small_profit = 3.0; // Small profit threshold (%)
+    let good_profit = 25.0; // Good profit threshold (%)
     let great_profit = 50.0; // Great profit threshold (%)
     let excellent_profit = 100.0; // Excellent profit threshold (%)
 
     let _small_loss = -10.0; // Small loss threshold (%)
-    let _medium_loss = -20.0; // Medium loss threshold (%)
-    let large_loss = -30.0; // Large loss threshold (%)
-    let extreme_loss = -50.0; // Extreme loss threshold (%)
+    let _medium_loss = -30.0; // Medium loss threshold (%)
+    let large_loss = -40.0; // Large loss threshold (%)
+    let extreme_loss = -55.0; // Extreme loss threshold (%)
     let stop_loss = -70.0; // Stop loss threshold (%)
 
     // ===== DRAWDOWN PARAMETERS =====
@@ -663,6 +664,7 @@ async fn display_positions_table() {
             .with(Style::rounded())
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
         println!("{}", open_table);
+        println!("");
     }
 }
 
@@ -691,9 +693,22 @@ fn is_position_profitable(
     current_price: f64,
     trade_size_sol: f64
 ) -> (bool, f64, f64, f64) {
-    let gross_pnl_sol = (current_price - entry_price) * (trade_size_sol / entry_price);
+    // Calculate tokens received at entry (based on entry_price)
+    let tokens_received = trade_size_sol / entry_price;
+
+    // Calculate value of those tokens at current price
+    let current_value_sol = tokens_received * current_price;
+
+    // Calculate gross PnL (current value minus initial investment)
+    let gross_pnl_sol = current_value_sol - trade_size_sol;
+
+    // Account for fees
     let net_pnl_sol = gross_pnl_sol - 2.0 * DEFAULT_FEE; // Entry and exit fees
+
+    // Calculate percentage gain/loss relative to initial investment
     let net_pnl_percent = (net_pnl_sol / trade_size_sol) * 100.0;
+
+    // Total value (initial investment + profit/loss)
     let total_value = trade_size_sol + net_pnl_sol;
 
     (net_pnl_sol > 0.0, net_pnl_sol, net_pnl_percent, total_value)
@@ -1025,6 +1040,9 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     loop {
+        // Add a maximum processing time for the entire token checking cycle
+        let cycle_start = std::time::Instant::now();
+
         let mut tokens: Vec<_> = {
             if let Ok(tokens_guard) = LIST_TOKENS.read() {
                 tokens_guard.iter().cloned().collect()
@@ -1047,6 +1065,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        // Safety check - if processing is taking too long, log it
+        if cycle_start.elapsed() > Duration::from_secs(5) {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Token sorting took too long: {:?}", cycle_start.elapsed())
+            );
+        }
+
         log(
             LogTag::Trader,
             "INFO",
@@ -1054,108 +1081,389 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 "Checking {} tokens for entry opportunities (sorted by liquidity)",
                 tokens.len()
             )
+                .dimmed()
+                .to_string()
         );
 
-        // Process tokens one by one instead of in parallel
+        // Filter out zero-liquidity tokens first
+        tokens.retain(|token| {
+            let liquidity_usd = token.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+
+            liquidity_usd > 0.0
+        });
+
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!("Processing {} tokens with non-zero liquidity", tokens.len())
+                .dimmed()
+                .to_string()
+        );
+
+        // Early return if no tokens to process
+        if tokens.is_empty() {
+            log(LogTag::Trader, "INFO", "No tokens to process, skipping token checking cycle");
+
+            // Calculate how long we've spent in this cycle
+            let cycle_duration = cycle_start.elapsed();
+            let wait_time = if
+                cycle_duration >= Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS)
+            {
+                Duration::from_millis(100)
+            } else {
+                Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS) - cycle_duration
+            };
+
+            if check_shutdown_or_delay(&shutdown, wait_time).await {
+                log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
+                break;
+            }
+            continue;
+        }
+
+        // Use a semaphore to limit the number of concurrent token checks
+        // This balances between parallelism and not overwhelming external APIs
+        use tokio::sync::Semaphore;
+        let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
+
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!("Starting to spawn {} token checking tasks", tokens.len()).dimmed().to_string()
+        );
+
+        // Process all tokens in parallel with concurrent tasks
+        let mut handles = Vec::new();
+
+        // Get the total token count before starting the loop
+        let total_tokens = tokens.len();
+
+        // Note: tokens are still sorted by liquidity from highest to lowest
         for (index, token) in tokens.iter().enumerate() {
-            // Check for shutdown between each token
-            if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
+            // Check for shutdown before spawning tasks
+            if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
                 log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
                 return;
             }
 
-            if let Some(current_price) = token.price_dexscreener_sol {
-                if current_price <= 0.0 || !validate_token(&token) {
+            // Get permit from semaphore to limit concurrency with timeout
+            let permit = match
+                tokio::time::timeout(
+                    Duration::from_secs(10),
+                    semaphore.clone().acquire_owned()
+                ).await
+            {
+                Ok(Ok(permit)) => permit,
+                Ok(Err(e)) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!("Failed to acquire semaphore permit: {}", e)
+                    );
                     continue;
                 }
+                Err(_) => {
+                    log(LogTag::Trader, "WARN", "Semaphore acquire timed out after 10 seconds");
+                    continue;
+                }
+            };
 
-                let liquidity_usd = token.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .unwrap_or(0.0);
+            // Clone necessary variables for the task
+            let token = token.clone();
+            let index = index; // Capture the index
+            let total = total_tokens; // Capture the total
 
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!(
-                        "Checking token {}/{}: {} ({}) - Price: {:.12} SOL, Liquidity: ${:.2}",
-                        index + 1,
-                        tokens.len(),
-                        token.symbol,
-                        token.mint,
-                        current_price,
-                        liquidity_usd
-                    )
-                );
+            // Spawn a new task for this token with overall timeout
+            let handle = tokio::spawn(async move {
+                // Keep the permit alive for the duration of this task
+                let _permit = permit; // This will be automatically dropped when the task completes
 
-                // Update price history
-                let now = Utc::now();
+                // Clone the symbol for error logging before moving token into timeout
+                let token_symbol = token.symbol.clone();
+
+                // Wrap the entire task logic in a timeout to prevent hanging
+                match
+                    tokio::time::timeout(Duration::from_secs(10), async {
+                        if let Some(current_price) = token.price_dexscreener_sol {
+                            if current_price <= 0.0 || !validate_token(&token) {
+                                return None;
+                            }
+
+                            let liquidity_usd = token.liquidity
+                                .as_ref()
+                                .and_then(|l| l.usd)
+                                .unwrap_or(0.0);
+
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!(
+                                    "Checking token {}/{}: {} ({}) - Price: {:.12} SOL, Liquidity: ${:.2}",
+                                    index + 1,
+                                    total,
+                                    token.symbol,
+                                    token.mint,
+                                    current_price,
+                                    liquidity_usd
+                                )
+                                    .dimmed()
+                                    .to_string()
+                            );
+
+                            // Update price history with proper error handling and timeout
+                            let now = Utc::now();
+                            match
+                                tokio::time::timeout(Duration::from_millis(500), async {
+                                    PRICE_HISTORY_24H.try_lock()
+                                }).await
+                            {
+                                Ok(Ok(mut hist)) => {
+                                    let entry = hist
+                                        .entry(token.mint.clone())
+                                        .or_insert_with(Vec::new);
+                                    entry.push((now, current_price));
+
+                                    // Retain only last 24h
+                                    let cutoff = now - ChronoDuration::hours(PRICE_HISTORY_HOURS);
+                                    entry.retain(|(ts, _)| *ts >= cutoff);
+                                }
+                                Ok(Err(_)) | Err(_) => {
+                                    // If we can't get the lock within 500ms, just log and continue
+                                    log(
+                                        LogTag::Trader,
+                                        "WARN",
+                                        &format!(
+                                            "Could not acquire price history lock for {} within timeout",
+                                            token.symbol
+                                        )
+                                    );
+                                }
+                            }
+
+                            // Check for entry opportunity with timeout
+                            let mut should_open_position = false;
+                            let mut percent_change = 0.0;
+
+                            // Use timeout for last prices mutex as well
+                            match
+                                tokio::time::timeout(Duration::from_millis(500), async {
+                                    LAST_PRICES.try_lock()
+                                }).await
+                            {
+                                Ok(Ok(mut last_prices)) => {
+                                    if let Some(&prev_price) = last_prices.get(&token.mint) {
+                                        if prev_price > 0.0 {
+                                            let change = (current_price - prev_price) / prev_price;
+                                            percent_change = change * 100.0;
+
+                                            if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
+                                                should_open_position = true;
+                                                log(
+                                                    LogTag::Trader,
+                                                    "OPPORTUNITY",
+                                                    &format!(
+                                                        "Entry opportunity detected for {} ({}): {:.2}% price drop, Liquidity: ${:.2}",
+                                                        token.symbol,
+                                                        token.mint,
+                                                        percent_change,
+                                                        liquidity_usd
+                                                    )
+                                                );
+                                            }
+                                        }
+                                    }
+                                    last_prices.insert(token.mint.clone(), current_price);
+                                }
+                                Ok(Err(_)) | Err(_) => {
+                                    // If we can't get the lock within 500ms, just log and continue
+                                    log(
+                                        LogTag::Trader,
+                                        "WARN",
+                                        &format!(
+                                            "Could not acquire last_prices lock for {} within timeout",
+                                            token.symbol
+                                        )
+                                    );
+                                }
+                            }
+
+                            // Return the token, price, and percent change if it's an opportunity
+                            if should_open_position {
+                                return Some((token, current_price, percent_change));
+                            }
+                        }
+                        None
+                    }).await
                 {
-                    let mut hist = PRICE_HISTORY_24H.lock().unwrap();
-                    let entry = hist.entry(token.mint.clone()).or_insert_with(Vec::new);
-                    entry.push((now, current_price));
+                    Ok(result) => result,
+                    Err(_) => {
+                        // Task timed out
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!("Token check task for {} timed out after 10 seconds", token_symbol)
+                        );
+                        None
+                    }
+                }
+            });
 
-                    // Retain only last 24h
-                    let cutoff = now - ChronoDuration::hours(PRICE_HISTORY_HOURS);
-                    entry.retain(|(ts, _)| *ts >= cutoff);
+            handles.push(handle);
+        }
+
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!("Successfully spawned {} token checking tasks", handles.len())
+                .dimmed()
+                .to_string()
+        );
+
+        // Process the results of all tasks with overall timeout
+        let collection_result = tokio::time::timeout(Duration::from_secs(60), async {
+            // This maintains the priority of processing high-liquidity tokens first
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!("Waiting for {} token checks to complete", handles.len()).dimmed().to_string()
+            );
+
+            let mut opportunities = Vec::new();
+
+            // Collect all opportunities in the order they complete
+            let mut completed = 0;
+            let total_handles = handles.len();
+
+            for handle in handles {
+                // Skip any tasks that failed or if shutdown signal received
+                if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                    log(
+                        LogTag::Trader,
+                        "INFO",
+                        "new entries monitor shutting down during result collection..."
+                    );
+                    return opportunities; // Return what we have so far
                 }
 
-                // Check for entry opportunity
-                let mut should_open_position = false;
-                let mut percent_change = 0.0;
-
-                {
-                    let mut last_prices = LAST_PRICES.lock().unwrap();
-                    if let Some(&prev_price) = last_prices.get(&token.mint) {
-                        if prev_price > 0.0 {
-                            let change = (current_price - prev_price) / prev_price;
-                            percent_change = change * 100.0;
-
-                            if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
-                                should_open_position = true;
+                // Add timeout for each handle to prevent getting stuck on a single task
+                match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                    Ok(task_result) => {
+                        match task_result {
+                            Ok(Some((token, price, percent_change))) => {
+                                opportunities.push((token, price, percent_change));
+                            }
+                            Ok(None) => {
+                                // No opportunity found for this token, continue
+                            }
+                            Err(e) => {
                                 log(
                                     LogTag::Trader,
-                                    "OPPORTUNITY",
-                                    &format!(
-                                        "Entry opportunity detected for {} ({}): {:.2}% price drop, Liquidity: ${:.2}",
-                                        token.symbol,
-                                        token.mint,
-                                        percent_change,
-                                        liquidity_usd
-                                    )
+                                    "ERROR",
+                                    &format!("Token check task failed: {}", e)
                                 );
                             }
                         }
                     }
-                    last_prices.insert(token.mint.clone(), current_price);
-                }
-
-                if should_open_position {
-                    open_position(&token, current_price, percent_change).await;
-
-                    // If we've reached max positions, we can break early to avoid unnecessary processing
-                    if get_open_positions_count() >= MAX_OPEN_POSITIONS {
-                        log(
-                            LogTag::Trader,
-                            "LIMIT",
-                            &format!(
-                                "Maximum open positions reached ({}/{}). Stopping token scanning.",
-                                get_open_positions_count(),
-                                MAX_OPEN_POSITIONS
-                            )
-                        );
-                        break;
+                    Err(_) => {
+                        // Task timed out after 5 seconds
+                        log(LogTag::Trader, "WARN", "Token check task timed out after 5 seconds");
                     }
                 }
+
+                completed += 1;
+                if completed % 10 == 0 || completed == total_handles {
+                    log(
+                        LogTag::Trader,
+                        "INFO",
+                        &format!("Completed {}/{} token checks", completed, total_handles)
+                            .dimmed()
+                            .to_string()
+                    );
+                }
             }
+
+            opportunities
+        }).await;
+
+        let mut opportunities = match collection_result {
+            Ok(opportunities) => opportunities,
+            Err(_) => {
+                log(LogTag::Trader, "ERROR", "Token check collection timed out after 60 seconds");
+                Vec::new() // Return empty if timeout
+            }
+        };
+
+        // Sort opportunities by liquidity again to ensure priority
+        opportunities.sort_by(|(a, _, _), (b, _, _)| {
+            let liquidity_a = a.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+            let liquidity_b = b.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+
+            liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!("Found {} potential entry opportunities", opportunities.len())
+        );
+
+        // Log the total time taken for the token checking cycle
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!("Token checking cycle completed in {:?}", cycle_start.elapsed())
+                .dimmed()
+                .to_string()
+        );
+
+        // Process opportunities in order of liquidity
+        for (token, price, percent_change) in opportunities {
+            // Open position for this token
+            open_position(&token, price, percent_change).await;
+
+            // If we've reached max positions, stop processing
+            if get_open_positions_count() >= MAX_OPEN_POSITIONS {
+                log(
+                    LogTag::Trader,
+                    "LIMIT",
+                    &format!(
+                        "Maximum open positions reached ({}/{}). Stopping opportunity processing.",
+                        get_open_positions_count(),
+                        MAX_OPEN_POSITIONS
+                    )
+                );
+                break;
+            }
+
+            // Brief delay between position openings to avoid transaction collisions
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        if
-            check_shutdown_or_delay(
-                &shutdown,
-                Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS)
-            ).await
-        {
+        // Calculate how long we've spent in this cycle
+        let cycle_duration = cycle_start.elapsed();
+        let wait_time = if cycle_duration >= Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS) {
+            // If we've already spent more time than the interval, just wait a short time
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Token checking cycle took longer than interval: {:?}", cycle_duration)
+            );
+            Duration::from_millis(100)
+        } else {
+            // Otherwise wait for the remaining interval time
+            Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS) - cycle_duration
+        };
+
+        if check_shutdown_or_delay(&shutdown, wait_time).await {
             log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
             break;
         }

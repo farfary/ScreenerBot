@@ -9,7 +9,8 @@ use tokio::time::{ sleep, Duration };
 use crate::utils::check_shutdown_or_delay;
 use solana_client::rpc_client::RpcClient;
 use std::path::Path;
-use crate::trader::SAVED_POSITIONS;
+use colored::Colorize;
+
 
 static INFO_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell::sync::Lazy::new(||
     Arc::new(Semaphore::new(200))
@@ -122,7 +123,7 @@ pub async fn update_tokens_from_mints(
             log(
                 LogTag::Monitor,
                 "INFO",
-                &format!("Processing chunk with prioritized position tokens")
+                &format!("Processing chunk with prioritized position tokens").dimmed().to_string()
             );
         }
 
