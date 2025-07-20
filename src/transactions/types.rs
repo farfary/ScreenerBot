@@ -85,7 +85,9 @@ pub struct TransactionStats {
 }
 
 /// Maximum number of transactions to fetch in one request
-pub const MAX_TRANSACTIONS_PER_REQUEST: usize = 100;
+/// Solana RPC limits (conservative values for rate limiting)
+pub const MAX_SIGNATURES_PER_REQUEST: usize = 1000;
+pub const MAX_TRANSACTIONS_PER_REQUEST: usize = 1000;
 
 /// Known DEX Program IDs for identifying swap transactions
 pub mod dex_program_ids {

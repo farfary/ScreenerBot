@@ -81,8 +81,12 @@ pub struct SwapDetectionStats {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    log(LogTag::System, "INFO", "🚀 Starting Comprehensive Swap Detection Test");
-    log(LogTag::System, "INFO", "================================================");
+    log(
+        LogTag::System,
+        "INFO",
+        "🚀 Starting Comprehensive Swap Detection Test (1000 Transactions)"
+    );
+    log(LogTag::System, "INFO", "===============================================================");
 
     // Load configuration
     let configs = read_configs("configs.json")?;
@@ -105,8 +109,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", "=== Step 2: Fetch Recent Transactions ===");
     let start_time = Instant::now();
 
-    // Get signatures first
-    let signatures = match fetcher.get_recent_signatures(&wallet_address, 50).await {
+    // Get signatures first - checking last 1000 transactions
+    let signatures = match fetcher.get_recent_signatures(&wallet_address, 1000).await {
         Ok(sigs) => {
             log(LogTag::System, "SUCCESS", &format!("📥 Fetched {} signatures", sigs.len()));
             sigs
@@ -117,8 +121,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Batch fetch transaction details with caching
-    let transactions = match fetcher.batch_fetch_transactions(&signatures, Some(30)).await {
+    // Batch fetch transaction details with caching - process all fetched signatures
+    let transactions = match fetcher.batch_fetch_transactions(&signatures, None).await {
         Ok(txs) => {
             log(
                 LogTag::System,
