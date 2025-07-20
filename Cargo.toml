@@ -109,3 +109,7 @@ tabled = "0.20"  # Latest version for modern table formatting
 owo-colors = "4"
 
 
+
+[[bin]]
+name = "test_parallel_checking"
+path = "test_parallel_checking.rs"
