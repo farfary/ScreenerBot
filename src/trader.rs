@@ -7,7 +7,7 @@ pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 5;
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
@@ -1328,7 +1328,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             log(
                 LogTag::Trader,
                 "INFO",
-                &format!("Waiting for {} token checks to complete", handles.len()).dimmed().to_string()
+                &format!("Waiting for {} token checks to complete", handles.len())
+                    .dimmed()
+                    .to_string()
             );
 
             let mut opportunities = Vec::new();
@@ -1570,29 +1572,206 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             }
         }
 
-        // Close positions that need to be closed (outside of lock to avoid deadlock)
-        for (index, token, exit_price, exit_time) in positions_to_close {
-            let mut position_clone = None;
+        // Close positions that need to be closed concurrently (outside of lock to avoid deadlock)
+        if !positions_to_close.is_empty() {
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!("Processing {} positions for concurrent closing", positions_to_close.len())
+            );
 
-            // Get a clone of the position to work with
-            {
-                if let Ok(positions) = SAVED_POSITIONS.lock() {
-                    if let Some(position) = positions.get(index) {
-                        position_clone = Some(position.clone());
+            // Use a semaphore to limit concurrent sell transactions to avoid overwhelming the network
+            use tokio::sync::Semaphore;
+            let semaphore = Arc::new(Semaphore::new(3)); // Allow up to 3 concurrent sells
+
+            let mut handles = Vec::new();
+
+            // Process all sell orders concurrently
+            for (index, token, exit_price, exit_time) in positions_to_close {
+                // Check for shutdown before spawning tasks
+                if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                    log(
+                        LogTag::Trader,
+                        "INFO",
+                        "open positions monitor shutting down during sell processing..."
+                    );
+                    break;
+                }
+
+                // Get permit from semaphore to limit concurrency with timeout
+                let permit = match
+                    tokio::time::timeout(
+                        Duration::from_secs(5),
+                        semaphore.clone().acquire_owned()
+                    ).await
+                {
+                    Ok(Ok(permit)) => permit,
+                    Ok(Err(e)) => {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!("Failed to acquire semaphore permit for sell: {}", e)
+                        );
+                        continue;
                     }
+                    Err(_) => {
+                        log(
+                            LogTag::Trader,
+                            "WARN",
+                            "Semaphore acquire timed out for sell operation"
+                        );
+                        continue;
+                    }
+                };
+
+                // Get a clone of the position to work with before spawning the task
+                let mut position_clone = None;
+                {
+                    if let Ok(positions) = SAVED_POSITIONS.lock() {
+                        if let Some(position) = positions.get(index) {
+                            position_clone = Some(position.clone());
+                        }
+                    }
+                }
+
+                if let Some(position) = position_clone {
+                    let handle = tokio::spawn(async move {
+                        let _permit = permit; // Keep permit alive for duration of task
+
+                        let mut position = position;
+                        let token_symbol = token.symbol.clone();
+
+                        // Wrap the sell operation in a timeout
+                        match
+                            tokio::time::timeout(Duration::from_secs(15), async {
+                                close_position(&mut position, &token, exit_price, exit_time).await
+                            }).await
+                        {
+                            Ok(success) => {
+                                if success {
+                                    log(
+                                        LogTag::Trader,
+                                        "SUCCESS",
+                                        &format!("Successfully closed position for {} in concurrent task", token_symbol)
+                                    );
+                                    Some((index, position))
+                                } else {
+                                    log(
+                                        LogTag::Trader,
+                                        "ERROR",
+                                        &format!("Failed to close position for {} in concurrent task", token_symbol)
+                                    );
+                                    None
+                                }
+                            }
+                            Err(_) => {
+                                log(
+                                    LogTag::Trader,
+                                    "ERROR",
+                                    &format!("Sell operation for {} timed out after 15 seconds", token_symbol)
+                                );
+                                None
+                            }
+                        }
+                    });
+
+                    handles.push(handle);
                 }
             }
 
-            if let Some(mut position) = position_clone {
-                if close_position(&mut position, &token, exit_price, exit_time).await {
-                    // Update the position in the saved positions
-                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                        if let Some(saved_position) = positions.get_mut(index) {
-                            *saved_position = position;
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!("Spawned {} concurrent sell tasks", handles.len()).dimmed().to_string()
+            );
+
+            // Collect results from all concurrent sell operations with overall timeout
+            let collection_result = tokio::time::timeout(Duration::from_secs(30), async {
+                let mut completed_positions = Vec::new();
+                let mut completed = 0;
+                let total_handles = handles.len();
+
+                for handle in handles {
+                    // Skip if shutdown signal received
+                    if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                        log(
+                            LogTag::Trader,
+                            "INFO",
+                            "open positions monitor shutting down during sell result collection..."
+                        );
+                        break;
+                    }
+
+                    // Add timeout for each handle to prevent getting stuck
+                    match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                        Ok(task_result) => {
+                            match task_result {
+                                Ok(Some((index, updated_position))) => {
+                                    completed_positions.push((index, updated_position));
+                                }
+                                Ok(None) => {
+                                    // Position failed to close, continue
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Trader,
+                                        "ERROR",
+                                        &format!("Sell task failed: {}", e)
+                                    );
+                                }
+                            }
                         }
-                        save_positions_to_file(&positions);
+                        Err(_) => {
+                            log(LogTag::Trader, "WARN", "Sell task timed out after 5 seconds");
+                        }
+                    }
+
+                    completed += 1;
+                    if completed % 2 == 0 || completed == total_handles {
+                        log(
+                            LogTag::Trader,
+                            "INFO",
+                            &format!("Completed {}/{} sell operations", completed, total_handles)
+                                .dimmed()
+                                .to_string()
+                        );
                     }
                 }
+
+                completed_positions
+            }).await;
+
+            let completed_positions = match collection_result {
+                Ok(positions) => positions,
+                Err(_) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        "Sell operations collection timed out after 30 seconds"
+                    );
+                    Vec::new()
+                }
+            };
+
+            // Update all successfully closed positions in the saved positions
+            if !completed_positions.is_empty() {
+                if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                    for (index, updated_position) in &completed_positions {
+                        if let Some(saved_position) = positions.get_mut(*index) {
+                            *saved_position = updated_position.clone();
+                        }
+                    }
+                    save_positions_to_file(&positions);
+                }
+
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    &format!(
+                        "Updated {} positions after concurrent sell operations",
+                        completed_positions.len()
+                    )
+                );
             }
         }
 
