@@ -109,6 +109,8 @@ pub mod dex_program_ids {
     pub const JUPITER: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
     /// Phoenix
     pub const PHOENIX: &str = "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY";
+    /// Whirlpool (Orca)
+    pub const WHIRLPOOL: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 }
 
 /// DEX Program IDs as tuples for iteration
@@ -123,6 +125,7 @@ pub const DEX_PROGRAM_IDS: &[(&str, &str)] = &[
     (dex_program_ids::OPENOCEAN, "OpenOcean"),
     (dex_program_ids::JUPITER, "Jupiter"),
     (dex_program_ids::PHOENIX, "Phoenix"),
+    (dex_program_ids::WHIRLPOOL, "Whirlpool"),
 ];
 
 /// Get DEX name from program ID
@@ -138,6 +141,7 @@ pub fn get_dex_name(program_id: &str) -> Option<&'static str> {
         dex_program_ids::OPENOCEAN => Some("OpenOcean"),
         dex_program_ids::JUPITER => Some("Jupiter"),
         dex_program_ids::PHOENIX => Some("Phoenix"),
+        dex_program_ids::WHIRLPOOL => Some("Whirlpool"),
         _ => None,
     }
 }

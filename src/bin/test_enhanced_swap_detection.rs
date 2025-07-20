@@ -23,8 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🎯 Fetching recent transactions for main wallet: {}", wallet_address.bright_cyan());
 
-    // Get recent transaction signatures
-    let signatures = match fetcher.get_recent_signatures(&wallet_address, 20).await {
+    // Get recent transaction signatures - increase the search range
+    let signatures = match fetcher.get_recent_signatures(&wallet_address, 100).await {
         Ok(sigs) => sigs,
         Err(e) => {
             println!("❌ Failed to fetch signatures: {}", e);
@@ -39,13 +39,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📊 Found {} recent transactions, analyzing...\n", signatures.len());
 
+    // First, let's find transactions with any token transfers
+    println!("🔍 Searching for transactions with token transfers...");
+    let mut transactions_with_transfers = Vec::new();
+
     // Analyze each transaction with both methods
-    for (i, sig_info) in signatures.iter().enumerate().take(5) {
+    for (i, sig_info) in signatures.iter().enumerate().take(20) {
         println!(
             "{} Transaction {}/{}: {}",
             "🔸".bright_yellow(),
             i + 1,
-            signatures.len().min(5),
+            signatures.len().min(20),
             sig_info.signature[..16].bright_white()
         );
 
@@ -70,29 +74,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Method 1: Standard analysis
         let standard_analysis = analyzer.analyze_transaction(&transaction);
 
+        // Check if this transaction has any token transfers
+        if !standard_analysis.token_transfers.is_empty() {
+            transactions_with_transfers.push((
+                sig_info.clone(),
+                transaction.clone(),
+                standard_analysis.clone(),
+            ));
+            println!("   💰 Found {} token transfers!", standard_analysis.token_transfers.len());
+            for transfer in &standard_analysis.token_transfers {
+                let direction = if transfer.is_incoming { "📥 IN" } else { "📤 OUT" };
+                println!(
+                    "      {} {} {} (mint: {}...)",
+                    direction,
+                    transfer.ui_amount.unwrap_or(0.0),
+                    "TOKEN", // We don't have symbol in TokenTransfer struct
+                    &transfer.mint[..8]
+                );
+            }
+        }
+
         // Method 2: Enhanced analysis with token fetching
         let enhanced_analysis = analyzer.analyze_transaction_with_token_fetch(&transaction).await;
 
         // Compare results
-        println!("   📋 Standard Analysis:");
+        println!("   � Standard Analysis:");
         println!("      Is Swap: {}", if standard_analysis.is_swap {
             "✅ YES".bright_green()
         } else {
             "❌ NO".bright_red()
         });
-
-        if !standard_analysis.token_transfers.is_empty() {
-            println!("      Token Transfers: {}", standard_analysis.token_transfers.len());
-            for transfer in &standard_analysis.token_transfers {
-                let direction = if transfer.is_incoming { "→" } else { "←" };
-                println!(
-                    "         {} {} ({}...)",
-                    direction,
-                    transfer.ui_amount.unwrap_or(0.0),
-                    &transfer.mint[..8]
-                );
-            }
-        }
 
         println!("   🚀 Enhanced Analysis:");
         println!("      Is Swap: {}", if enhanced_analysis.is_swap {
@@ -100,19 +111,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             "❌ NO".bright_red()
         });
-
-        if !enhanced_analysis.token_transfers.is_empty() {
-            println!("      Token Transfers: {}", enhanced_analysis.token_transfers.len());
-            for transfer in &enhanced_analysis.token_transfers {
-                let direction = if transfer.is_incoming { "→" } else { "←" };
-                println!(
-                    "         {} {} ({}...)",
-                    direction,
-                    transfer.ui_amount.unwrap_or(0.0),
-                    &transfer.mint[..8]
-                );
-            }
-        }
 
         // Show improvement
         if !standard_analysis.is_swap && enhanced_analysis.is_swap {
@@ -134,6 +132,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         println!(); // Empty line for readability
+    }
+
+    // Now focus on transactions with transfers for detailed analysis
+    println!("{}", "=".repeat(60));
+    println!("🔍 Detailed Analysis of Transactions with Token Transfers");
+    println!("{}", "=".repeat(60));
+
+    for (sig_info, transaction, standard_analysis) in &transactions_with_transfers {
+        println!("📝 Transaction: {}", sig_info.signature[..16].bright_cyan());
+        println!("   📊 Token Transfers: {}", standard_analysis.token_transfers.len());
+
+        for (i, transfer) in standard_analysis.token_transfers.iter().enumerate() {
+            println!(
+                "   Transfer {}: {} {} {} (mint: {})",
+                i + 1,
+                if transfer.is_incoming {
+                    "📥"
+                } else {
+                    "📤"
+                },
+                transfer.ui_amount.unwrap_or(0.0),
+                "TOKEN", // We don't have symbol in TokenTransfer struct
+                transfer.mint
+            );
+        }
+
+        // Enhanced analysis
+        let enhanced_analysis = analyzer.analyze_transaction_with_token_fetch(&transaction).await;
+
+        println!("   🔄 Standard swap detection: {}", if standard_analysis.is_swap {
+            "✅"
+        } else {
+            "❌"
+        });
+        println!("   🚀 Enhanced swap detection: {}", if enhanced_analysis.is_swap {
+            "✅"
+        } else {
+            "❌"
+        });
+
+        if enhanced_analysis.is_swap && !standard_analysis.is_swap {
+            println!("   🎉 {} Enhancement improved detection!", "SUCCESS:".bright_green().bold());
+        }
+
+        println!();
     }
 
     println!("{}", "=".repeat(60));
