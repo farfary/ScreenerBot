@@ -1,11 +1,12 @@
 /// Trading configuration constants
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 7.0;
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 6.5;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
-pub const DEFAULT_FEE: f64 = 0.000002;
+pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
+
 pub const TRADE_SIZE_SOL: f64 = 0.00025;
 pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
-pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
+pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 pub const MAX_OPEN_POSITIONS: usize = 5;
 
@@ -115,13 +116,21 @@ impl PositionDisplay {
         let pnl_sol_str = if let Some(pnl) = position.pnl_sol {
             if pnl >= 0.0 { format!("+{:.6}", pnl) } else { format!("{:.6}", pnl) }
         } else if let Some(price) = current_price {
-            // Calculate current P&L if position is still open
-            let (_, _, net_pnl_percent, _) = is_position_profitable(
-                position.entry_price,
+            // Calculate current P&L if position is still open using accurate method
+            let token_decimals = {
+                let tokens = LIST_TOKENS.read().unwrap();
+                tokens
+                    .iter()
+                    .find(|t| t.mint == position.mint)
+                    .map(|t| t.decimals)
+            };
+
+            let (current_pnl, _) = calculate_position_pnl_from_swaps(
+                position,
                 price,
-                position.entry_size_sol
+                token_decimals
             );
-            let current_pnl = (net_pnl_percent / 100.0) * position.entry_size_sol;
+
             if current_pnl >= 0.0 {
                 format!("+{:.6}", current_pnl)
             } else {
@@ -134,16 +143,25 @@ impl PositionDisplay {
         let pnl_percent_str = if let Some(pnl_pct) = position.pnl_percent {
             if pnl_pct >= 0.0 { format!("+{:.2}%", pnl_pct) } else { format!("{:.2}%", pnl_pct) }
         } else if let Some(price) = current_price {
-            // Calculate current P&L percentage if position is still open
-            let (_, _, net_pnl_percent, _) = is_position_profitable(
-                position.entry_price,
+            // Calculate current P&L percentage if position is still open using accurate method
+            let token_decimals = {
+                let tokens = LIST_TOKENS.read().unwrap();
+                tokens
+                    .iter()
+                    .find(|t| t.mint == position.mint)
+                    .map(|t| t.decimals)
+            };
+
+            let (_, current_pnl_percent) = calculate_position_pnl_from_swaps(
+                position,
                 price,
-                position.entry_size_sol
+                token_decimals
             );
-            if net_pnl_percent >= 0.0 {
-                format!("+{:.2}%", net_pnl_percent)
+
+            if current_pnl_percent >= 0.0 {
+                format!("+{:.2}%", current_pnl_percent)
             } else {
-                format!("{:.2}%", net_pnl_percent)
+                format!("{:.2}%", current_pnl_percent)
             }
         } else {
             "N/A".to_string()
@@ -171,7 +189,11 @@ impl PositionDisplay {
         Self {
             symbol: position.symbol.clone(),
             mint: mint_display,
-            entry_price: format!("{:.8}", position.entry_price),
+            entry_price: if let Some(effective_price) = position.effective_entry_price {
+                format!("{:.8}", effective_price)
+            } else {
+                format!("{:.8}", position.entry_price)
+            },
             current_or_exit: current_or_exit,
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
@@ -367,10 +389,15 @@ async fn check_recent_transactions_for_position(position: &mut Position) -> bool
                     }
                 }
 
-                // Calculate P&L
+                // Calculate P&L using effective prices when available
                 if let Some(exit_price) = position.exit_price {
+                    // Use effective entry price if available, otherwise fallback to original entry price
+                    let entry_price_to_use = position.effective_entry_price.unwrap_or(
+                        position.entry_price
+                    );
+
                     let (is_profitable, net_pnl_sol, net_pnl_percent, _) = is_position_profitable(
-                        position.entry_price,
+                        entry_price_to_use,
                         exit_price,
                         position.entry_size_sol
                     );
@@ -650,30 +677,62 @@ fn validate_token(token: &Token) -> bool {
 }
 
 /// Calculates if position is in profit considering fees and trade size
+/// For open positions, uses actual token amounts and effective prices when available
 fn is_position_profitable(
     entry_price: f64,
     current_price: f64,
     trade_size_sol: f64
 ) -> (bool, f64, f64, f64) {
-    // Calculate tokens received at entry (based on entry_price)
-    let tokens_received = trade_size_sol / entry_price;
+    // Simple price-based calculation for general use (fallback only)
+    // This is used for display purposes when we don't have actual token amounts
+    let price_change_percent = ((current_price - entry_price) / entry_price) * 100.0;
 
-    // Calculate value of those tokens at current price
-    let current_value_sol = tokens_received * current_price;
-
-    // Calculate gross PnL (current value minus initial investment)
-    let gross_pnl_sol = current_value_sol - trade_size_sol;
-
-    // Account for fees
-    let net_pnl_sol = gross_pnl_sol - 2.0 * DEFAULT_FEE; // Entry and exit fees
-
-    // Calculate percentage gain/loss relative to initial investment
-    let net_pnl_percent = (net_pnl_sol / trade_size_sol) * 100.0;
+    // Account for fees (approximately 0.5% total for buy + sell)
+    let net_pnl_percent = price_change_percent - 0.5;
+    let net_pnl_sol = (net_pnl_percent / 100.0) * trade_size_sol;
 
     // Total value (initial investment + profit/loss)
     let total_value = trade_size_sol + net_pnl_sol;
 
     (net_pnl_sol > 0.0, net_pnl_sol, net_pnl_percent, total_value)
+}
+
+/// Calculates accurate P&L using actual swap transaction data
+pub fn calculate_position_pnl_from_swaps(
+    position: &Position,
+    current_price: f64,
+    token_decimals: Option<u8>
+) -> (f64, f64) {
+    // Use actual transaction data when available for maximum accuracy
+    if
+        let (Some(token_amount), Some(effective_entry_price)) = (
+            position.token_amount,
+            position.effective_entry_price,
+        )
+    {
+        if let Some(decimals) = token_decimals {
+            // Convert raw token amount to UI amount using correct decimals
+            let ui_token_amount = (token_amount as f64) / (10_f64).powi(decimals as i32);
+
+            // Current value of tokens at current price
+            let current_value_sol = ui_token_amount * current_price;
+
+            // Net P&L = current value - initial investment (entry_size_sol)
+            let net_pnl_sol = current_value_sol - position.entry_size_sol;
+            let net_pnl_percent = (net_pnl_sol / position.entry_size_sol) * 100.0;
+
+            return (net_pnl_sol, net_pnl_percent);
+        }
+    }
+
+    // Fallback to effective entry price if available, otherwise use original entry price
+    let price_to_use = position.effective_entry_price.unwrap_or(position.entry_price);
+    let (_, net_pnl_sol, net_pnl_percent, _) = is_position_profitable(
+        price_to_use,
+        current_price,
+        position.entry_size_sol
+    );
+    (net_pnl_sol, net_pnl_percent)
 }
 
 /// Opens a new buy position for a token with real swap execution
