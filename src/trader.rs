@@ -1,7 +1,7 @@
 /// Trading configuration constants
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
-pub const DEFAULT_FEE: f64 = 0.0000015;
+pub const DEFAULT_FEE: f64 = 0.000001;
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
@@ -607,16 +607,6 @@ async fn display_positions_table() {
         (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
     }; // Lock is released here
 
-    let now = Utc::now();
-    println!("\n📊 Positions Dashboard - {} UTC", now.format("%H:%M:%S"));
-    println!(
-        "📈 Open: {} | 📋 Closed: {} | 💰 Invested: {:.6} SOL | P&L: {:+.6} SOL",
-        open_count,
-        closed_count,
-        total_invested,
-        total_pnl
-    );
-
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();
     display_bot_summary(&closed_refs).await;
@@ -942,13 +932,12 @@ async fn close_position(
 
                 let status_color = if is_profitable { "\x1b[32m" } else { "\x1b[31m" };
                 let status_text = if is_profitable { "PROFIT" } else { "LOSS" };
-                let remaining_open_count = get_open_positions_count() - 1;
 
                 log(
                     LogTag::Trader,
                     status_text,
                     &format!(
-                        "Closed position for {} ({}) - TX: {}, SOL Received: {:.6}, Net P&L: {}{:.6} SOL ({:.2}%), Drawdown: {:.2}% [{}/{}]\x1b[0m",
+                        "Closed position for {} ({}) - TX: {}, SOL Received: {:.6}, Net P&L: {}{:.6} SOL ({:.2}%), Drawdown: {:.2}%\x1b[0m",
                         position.symbol,
                         position.mint,
                         transaction_signature.as_ref().unwrap_or(&"None".to_string()),
@@ -956,9 +945,7 @@ async fn close_position(
                         status_color,
                         net_pnl_sol,
                         net_pnl_percent,
-                        position.drawdown_percent,
-                        remaining_open_count,
-                        MAX_OPEN_POSITIONS
+                        position.drawdown_percent
                     )
                 );
 
@@ -1717,6 +1704,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                                             positions_to_close.push((
                                                 index,
+                                                position.clone(), // Include the full position data
                                                 token.clone(),
                                                 current_price,
                                                 now,
@@ -1760,7 +1748,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             let mut handles = Vec::new();
 
             // Process all sell orders concurrently
-            for (index, token, exit_price, exit_time) in positions_to_close {
+            for (index, position, token, exit_price, exit_time) in positions_to_close {
                 // Check for shutdown before spawning tasks
                 if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
                     log(
@@ -1797,59 +1785,48 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
                 };
 
-                // Get a clone of the position to work with before spawning the task
-                let mut position_clone = None;
-                {
-                    if let Ok(positions) = SAVED_POSITIONS.lock() {
-                        if let Some(position) = positions.get(index) {
-                            position_clone = Some(position.clone());
-                        }
-                    }
-                }
+                // We already have the position from the analysis phase, no need to look it up
+                let handle = tokio::spawn(async move {
+                    let _permit = permit; // Keep permit alive for duration of task
 
-                if let Some(position) = position_clone {
-                    let handle = tokio::spawn(async move {
-                        let _permit = permit; // Keep permit alive for duration of task
+                    let mut position = position;
+                    let token_symbol = token.symbol.clone();
 
-                        let mut position = position;
-                        let token_symbol = token.symbol.clone();
-
-                        // Wrap the sell operation in a timeout
-                        match
-                            tokio::time::timeout(Duration::from_secs(15), async {
-                                close_position(&mut position, &token, exit_price, exit_time).await
-                            }).await
-                        {
-                            Ok(success) => {
-                                if success {
-                                    log(
-                                        LogTag::Trader,
-                                        "SUCCESS",
-                                        &format!("Successfully closed position for {} in concurrent task", token_symbol)
-                                    );
-                                    Some((index, position))
-                                } else {
-                                    log(
-                                        LogTag::Trader,
-                                        "ERROR",
-                                        &format!("Failed to close position for {} in concurrent task", token_symbol)
-                                    );
-                                    None
-                                }
-                            }
-                            Err(_) => {
+                    // Wrap the sell operation in a timeout
+                    match
+                        tokio::time::timeout(Duration::from_secs(15), async {
+                            close_position(&mut position, &token, exit_price, exit_time).await
+                        }).await
+                    {
+                        Ok(success) => {
+                            if success {
+                                log(
+                                    LogTag::Trader,
+                                    "SUCCESS",
+                                    &format!("Successfully closed position for {} in concurrent task", token_symbol)
+                                );
+                                Some((index, position))
+                            } else {
                                 log(
                                     LogTag::Trader,
                                     "ERROR",
-                                    &format!("Sell operation for {} timed out after 15 seconds", token_symbol)
+                                    &format!("Failed to close position for {} in concurrent task", token_symbol)
                                 );
                                 None
                             }
                         }
-                    });
+                        Err(_) => {
+                            log(
+                                LogTag::Trader,
+                                "ERROR",
+                                &format!("Sell operation for {} timed out after 15 seconds", token_symbol)
+                            );
+                            None
+                        }
+                    }
+                });
 
-                    handles.push(handle);
-                }
+                handles.push(handle);
             }
 
             log(
