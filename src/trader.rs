@@ -1427,27 +1427,200 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 .to_string()
         );
 
-        // Process opportunities in order of liquidity
-        for (token, price, percent_change) in opportunities {
-            // Open position for this token
-            open_position(&token, price, percent_change).await;
+        // Process opportunities concurrently while respecting position limits
+        if !opportunities.is_empty() {
+            let current_open_count = get_open_positions_count();
+            let available_slots = MAX_OPEN_POSITIONS.saturating_sub(current_open_count);
 
-            // If we've reached max positions, stop processing
-            if get_open_positions_count() >= MAX_OPEN_POSITIONS {
+            if available_slots == 0 {
                 log(
                     LogTag::Trader,
                     "LIMIT",
                     &format!(
-                        "Maximum open positions reached ({}/{}). Stopping opportunity processing.",
-                        get_open_positions_count(),
+                        "Maximum open positions already reached ({}/{}). Skipping all opportunities.",
+                        current_open_count,
                         MAX_OPEN_POSITIONS
                     )
                 );
-                break;
-            }
+            } else {
+                // Limit opportunities to available slots
+                let opportunities_to_process = opportunities
+                    .into_iter()
+                    .take(available_slots)
+                    .collect::<Vec<_>>();
 
-            // Brief delay between position openings to avoid transaction collisions
-            tokio::time::sleep(Duration::from_millis(100)).await;
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    &format!(
+                        "Processing {} opportunities concurrently (available slots: {}, current open: {})",
+                        opportunities_to_process.len(),
+                        available_slots,
+                        current_open_count
+                    )
+                );
+
+                // Use a semaphore to limit concurrent buy transactions
+                use tokio::sync::Semaphore;
+                let semaphore = Arc::new(Semaphore::new(3)); // Allow up to 3 concurrent buys
+
+                let mut handles = Vec::new();
+
+                // Process all buy orders concurrently
+                for (token, price, percent_change) in opportunities_to_process {
+                    // Check for shutdown before spawning tasks
+                    if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                        log(
+                            LogTag::Trader,
+                            "INFO",
+                            "new entries monitor shutting down during buy processing..."
+                        );
+                        break;
+                    }
+
+                    // Get permit from semaphore to limit concurrency with timeout
+                    let permit = match
+                        tokio::time::timeout(
+                            Duration::from_secs(5),
+                            semaphore.clone().acquire_owned()
+                        ).await
+                    {
+                        Ok(Ok(permit)) => permit,
+                        Ok(Err(e)) => {
+                            log(
+                                LogTag::Trader,
+                                "ERROR",
+                                &format!("Failed to acquire semaphore permit for buy: {}", e)
+                            );
+                            continue;
+                        }
+                        Err(_) => {
+                            log(
+                                LogTag::Trader,
+                                "WARN",
+                                "Semaphore acquire timed out for buy operation"
+                            );
+                            continue;
+                        }
+                    };
+
+                    let handle = tokio::spawn(async move {
+                        let _permit = permit; // Keep permit alive for duration of task
+
+                        let token_symbol = token.symbol.clone();
+
+                        // Wrap the buy operation in a timeout
+                        match
+                            tokio::time::timeout(Duration::from_secs(20), async {
+                                open_position(&token, price, percent_change).await
+                            }).await
+                        {
+                            Ok(_) => {
+                                log(
+                                    LogTag::Trader,
+                                    "SUCCESS",
+                                    &format!("Completed buy operation for {} in concurrent task", token_symbol)
+                                );
+                                true
+                            }
+                            Err(_) => {
+                                log(
+                                    LogTag::Trader,
+                                    "ERROR",
+                                    &format!("Buy operation for {} timed out after 20 seconds", token_symbol)
+                                );
+                                false
+                            }
+                        }
+                    });
+
+                    handles.push(handle);
+                }
+
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    &format!("Spawned {} concurrent buy tasks", handles.len()).dimmed().to_string()
+                );
+
+                // Collect results from all concurrent buy operations with overall timeout
+                let collection_result = tokio::time::timeout(Duration::from_secs(30), async {
+                    let mut completed = 0;
+                    let mut successful = 0;
+                    let total_handles = handles.len();
+
+                    for handle in handles {
+                        // Skip if shutdown signal received
+                        if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                            log(
+                                LogTag::Trader,
+                                "INFO",
+                                "new entries monitor shutting down during buy result collection..."
+                            );
+                            break;
+                        }
+
+                        // Add timeout for each handle to prevent getting stuck
+                        match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                            Ok(task_result) => {
+                                match task_result {
+                                    Ok(success) => {
+                                        if success {
+                                            successful += 1;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log(
+                                            LogTag::Trader,
+                                            "ERROR",
+                                            &format!("Buy task failed: {}", e)
+                                        );
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                log(LogTag::Trader, "WARN", "Buy task timed out after 5 seconds");
+                            }
+                        }
+
+                        completed += 1;
+                        if completed % 2 == 0 || completed == total_handles {
+                            log(
+                                LogTag::Trader,
+                                "INFO",
+                                &format!("Completed {}/{} buy operations", completed, total_handles)
+                                    .dimmed()
+                                    .to_string()
+                            );
+                        }
+                    }
+
+                    (completed, successful)
+                }).await;
+
+                match collection_result {
+                    Ok((completed, successful)) => {
+                        let new_open_count = get_open_positions_count();
+                        log(
+                            LogTag::Trader,
+                            "INFO",
+                            &format!(
+                                "Concurrent buy operations completed: {}/{} successful, new open positions: {}",
+                                successful,
+                                completed,
+                                new_open_count
+                            )
+                        );
+                    }
+                    Err(_) => {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            "Buy operations collection timed out after 30 seconds"
+                        );
+                    }
+                }
+            }
         }
 
         // Calculate how long we've spent in this cycle
