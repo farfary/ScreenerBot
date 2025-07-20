@@ -117,3 +117,15 @@ path = "test_parallel_checking.rs"
 [[bin]]
 name = "sell_all_and_close_atas"
 path = "src/bin/sell_all_and_close_atas.rs"
+
+[[bin]]
+name = "migrate_transactions"
+path = "src/bin/migrate_transactions.rs"
+
+[[bin]]
+name = "test_modular_transactions"
+path = "src/bin/test_modular_transactions.rs"
+
+[[bin]]
+name = "test_modular_simple"
+path = "src/bin/test_modular_simple.rs"

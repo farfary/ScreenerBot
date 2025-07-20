@@ -2,13 +2,14 @@
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 6.5;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
+pub const DEFAULT_SLIPPAGE: f64 = 2.0; // 5% slippage
 
 pub const TRADE_SIZE_SOL: f64 = 0.00025;
 pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 5;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
@@ -431,6 +432,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
 }
 
 /// Checks recent transactions to see if position was already closed
+/// Enhanced version with strict validation to prevent phantom sells
 async fn check_recent_transactions_for_position(position: &mut Position) -> bool {
     // Get wallet address
     let wallet_address = match crate::wallet::get_wallet_address() {
@@ -441,134 +443,175 @@ async fn check_recent_transactions_for_position(position: &mut Position) -> bool
         }
     };
 
-    // Check if we can find a recent sell transaction for this token with the expected amount
-    // This would involve checking on-chain transaction history
-    // For now, we'll implement a simple approach that checks if token balance is 0
-    // and position was trying to sell, indicating transaction likely succeeded
+    // Don't auto-close positions that are too new - they need time for balance to settle
+    let min_age_for_auto_close = chrono::Duration::seconds(30);
+    let position_age = Utc::now() - position.entry_time;
 
-    match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
-        Ok(current_balance) => {
-            // If we have 0 tokens and position shows we should have tokens,
-            // it likely means the sell transaction succeeded but we missed the confirmation
-            if current_balance == 0 && position.token_amount.unwrap_or(0) > 0 {
+    if position_age < min_age_for_auto_close {
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "Position {} too new ({:.1}s) for auto-close detection - skipping",
+                position.symbol,
+                position_age.num_seconds()
+            )
+        );
+        return false;
+    }
+
+    // Perform multiple balance checks with delays to ensure consistency
+    let mut balance_checks = Vec::new();
+    let check_count = 3;
+
+    for attempt in 1..=check_count {
+        match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
+            Ok(balance) => {
+                balance_checks.push(balance);
                 log(
                     LogTag::Trader,
-                    "INFO",
+                    "DEBUG",
                     &format!(
-                        "Detected completed sell transaction for {} - Balance is 0, updating position as closed",
-                        position.symbol
+                        "Balance check {}/{} for {}: {} tokens",
+                        attempt,
+                        check_count,
+                        position.symbol,
+                        balance
                     )
                 );
-
-                // Mark position as closed with estimated exit price
-                let now = Utc::now();
-                position.exit_time = Some(now);
-
-                // Use the last known price as exit price if not set
-                if position.exit_price.is_none() {
-                    // Try to get current price from token list
-                    if let Ok(tokens_guard) = LIST_TOKENS.read() {
-                        if let Some(token) = tokens_guard.iter().find(|t| t.mint == position.mint) {
-                            if let Some(current_price) = token.price_dexscreener_sol {
-                                position.exit_price = Some(current_price);
-                                position.effective_exit_price = Some(current_price);
-                            }
-                        }
-                    }
-
-                    // Fallback to entry price if no current price available
-                    if position.exit_price.is_none() {
-                        position.exit_price = Some(position.entry_price);
-                        position.effective_exit_price = Some(position.entry_price);
-                    }
-                }
-
-                // Calculate P&L using effective prices when available
-                if let Some(exit_price) = position.exit_price {
-                    // Use effective entry price if available, otherwise fallback to original entry price
-                    let entry_price_to_use = position.effective_entry_price.unwrap_or(
-                        position.entry_price
-                    );
-
-                    let (is_profitable, net_pnl_sol, net_pnl_percent, _) = is_position_profitable(
-                        entry_price_to_use,
-                        exit_price,
-                        position.entry_size_sol
-                    );
-
-                    position.pnl_sol = Some(net_pnl_sol);
-                    position.pnl_percent = Some(net_pnl_percent);
-
-                    log(
-                        LogTag::Trader,
-                        if is_profitable {
-                            "PROFIT"
-                        } else {
-                            "LOSS"
-                        },
-                        &format!(
-                            "Auto-closed position for {} - P&L: {:.6} SOL ({:.2}%)",
-                            position.symbol,
-                            net_pnl_sol,
-                            net_pnl_percent
-                        )
-                    );
-
-                    // Attempt to close ATA since the position was auto-detected as sold
-                    if CLOSE_ATA_AFTER_SELL {
-                        // Get wallet address for ATA closing
-                        if let Ok(wallet_address) = crate::wallet::get_wallet_address() {
-                            log(
-                                LogTag::Trader,
-                                "ATA",
-                                &format!(
-                                    "Attempting to close ATA for auto-detected sold position: {}",
-                                    position.symbol
-                                )
-                            );
-
-                            match
-                                crate::wallet::close_token_account(
-                                    &position.mint,
-                                    &wallet_address
-                                ).await
-                            {
-                                Ok(close_tx) => {
-                                    log(
-                                        LogTag::Trader,
-                                        "SUCCESS",
-                                        &format!(
-                                            "Successfully closed ATA for auto-detected position {} - Rent reclaimed. TX: {}",
-                                            position.symbol,
-                                            close_tx
-                                        )
-                                    );
-                                }
-                                Err(e) => {
-                                    log(
-                                        LogTag::Trader,
-                                        "WARN",
-                                        &format!(
-                                            "Failed to close ATA for auto-detected position {} (not critical): {}",
-                                            position.symbol,
-                                            e
-                                        )
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-
-                return true;
+            }
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    &format!(
+                        "Balance check {}/{} failed for {}: {}",
+                        attempt,
+                        check_count,
+                        position.symbol,
+                        e
+                    )
+                );
             }
         }
-        Err(e) => {
+
+        // Add delay between checks (except for the last one)
+        if attempt < check_count {
+            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        }
+    }
+
+    // Require at least 2 successful balance checks
+    if balance_checks.len() < 2 {
+        log(
+            LogTag::Trader,
+            "WARN",
+            &format!(
+                "Insufficient balance checks for {} - cannot determine auto-close",
+                position.symbol
+            )
+        );
+        return false;
+    }
+
+    // Check if all balance checks consistently show 0 tokens
+    let all_zero = balance_checks.iter().all(|&balance| balance == 0);
+    let consistent = balance_checks.windows(2).all(|w| w[0] == w[1]);
+
+    if !consistent {
+        log(
+            LogTag::Trader,
+            "WARN",
+            &format!(
+                "Inconsistent balance checks for {} - results: {:?}",
+                position.symbol,
+                balance_checks
+            )
+        );
+        return false;
+    }
+
+    let stored_amount = position.token_amount.unwrap_or(0);
+
+    // Only proceed if we consistently have 0 tokens but position shows we should have tokens
+    if all_zero && stored_amount > 0 {
+        log(
+            LogTag::Trader,
+            "WARNING",
+            &format!(
+                "Consistent zero balance detected for {} (stored: {}) - investigating external sell",
+                position.symbol,
+                stored_amount
+            )
+        );
+
+        // TODO: In a more complete implementation, we would search recent transaction history
+        // to find the actual sell transaction signature. For now, we mark it as external sell.
+
+        // Mark position as closed but with proper exit transaction signature indicating external sell
+        let now = Utc::now();
+        position.exit_time = Some(now);
+        position.exit_transaction_signature = Some("EXTERNAL_SELL_DETECTED".to_string());
+
+        // Use the last known price as exit price if not set
+        if position.exit_price.is_none() {
+            // Try to get current price from token list
+            if let Ok(tokens_guard) = LIST_TOKENS.read() {
+                if let Some(token) = tokens_guard.iter().find(|t| t.mint == position.mint) {
+                    if let Some(current_price) = token.price_dexscreener_sol {
+                        position.exit_price = Some(current_price);
+                        position.effective_exit_price = Some(current_price);
+                    }
+                }
+            }
+
+            // Fallback to entry price if no current price available
+            if position.exit_price.is_none() {
+                position.exit_price = Some(position.entry_price);
+                position.effective_exit_price = Some(position.entry_price);
+            }
+        }
+
+        // Calculate P&L using effective prices when available
+        if let Some(exit_price) = position.exit_price {
+            // Use effective entry price if available, otherwise fallback to original entry price
+            let entry_price_to_use = position.effective_entry_price.unwrap_or(position.entry_price);
+
+            let (is_profitable, net_pnl_sol, net_pnl_percent, _) = is_position_profitable(
+                entry_price_to_use,
+                exit_price,
+                position.entry_size_sol
+            );
+
+            position.pnl_sol = Some(net_pnl_sol);
+            position.pnl_percent = Some(net_pnl_percent);
+
             log(
                 LogTag::Trader,
-                "ERROR",
-                &format!("Failed to check token balance for {}: {}", position.symbol, e)
+                if is_profitable {
+                    "PROFIT"
+                } else {
+                    "LOSS"
+                },
+                &format!(
+                    "External sell detected for {} - P&L: {:.6} SOL ({:.2}%)",
+                    position.symbol,
+                    net_pnl_sol,
+                    net_pnl_percent
+                )
             );
+
+            // Do NOT attempt to close ATA for external sells - we don't control the transaction
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!(
+                    "Skipping ATA close for external sell of {} - not our transaction",
+                    position.symbol
+                )
+            );
+
+            return true;
         }
     }
 
@@ -922,10 +965,11 @@ async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 LogTag::Trader,
                 "SUCCESS",
                 &format!(
-                    "Real swap executed for {}: TX: {}, Tokens: {}, Effective Price: {:.12} SOL",
+                    "Real swap executed for {}: TX: {}, Tokens: {}, Signal Price: {:.12} SOL, Effective Price: {:.12} SOL",
                     token.symbol,
                     swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string()),
                     token_amount,
+                    price,
                     effective_entry_price
                 )
             );
@@ -934,7 +978,7 @@ async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 mint: token.mint.clone(),
                 symbol: token.symbol.clone(),
                 name: token.name.clone(),
-                entry_price: effective_entry_price, // Use effective price as the main entry price
+                entry_price: price, // Keep original signal price
                 entry_time: Utc::now(),
                 exit_price: None,
                 exit_time: None,
@@ -949,7 +993,7 @@ async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 entry_transaction_signature: swap_result.transaction_signature,
                 exit_transaction_signature: None,
                 token_amount: Some(token_amount),
-                effective_entry_price: Some(effective_entry_price),
+                effective_entry_price: Some(effective_entry_price), // Actual transaction price
                 effective_exit_price: None,
             };
 
@@ -989,24 +1033,17 @@ async fn close_position(
                 )
             );
 
-            // Mark position as closed with calculated loss - first case
-            position.exit_time = Some(exit_time);
-            position.exit_price = Some(exit_price);
-            position.effective_exit_price = Some(0.0);
-            position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
-            position.pnl_percent = Some(-100.0); // Total loss
-            position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
-
+            // DO NOT mark position as sold when stored amount is 0
+            // This indicates the position was never properly opened or already closed
             log(
                 LogTag::Trader,
-                "NO_SELL",
+                "ERROR",
                 &format!(
-                    "Position {} marked as closed (stored amount 0) - Loss: {:.6} SOL (-100%)",
-                    position.symbol,
-                    position.entry_size_sol
+                    "Position {} has stored amount 0 - cannot execute sell. Position remains as-is",
+                    position.symbol
                 )
             );
-            return true;
+            return false; // Don't corrupt the position
         }
 
         // Check actual current wallet balance before attempting to sell
@@ -1056,24 +1093,30 @@ async fn close_position(
                 )
             );
 
-            // Mark position as closed with calculated loss - second case
-            position.exit_time = Some(exit_time);
-            position.exit_price = Some(exit_price);
-            position.effective_exit_price = Some(0.0);
-            position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
-            position.pnl_percent = Some(-100.0); // Total loss
-            position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
+            // Before marking as total loss, check if transaction might have already completed
+            if check_recent_transactions_for_position(position).await {
+                log(
+                    LogTag::Trader,
+                    "SUCCESS",
+                    &format!(
+                        "Successfully detected and updated completed transaction for {}",
+                        position.symbol
+                    )
+                );
+                return true;
+            }
 
+            // DO NOT mark position as sold if we can't actually execute a sell transaction
+            // This prevents phantom sells and P&L corruption
             log(
                 LogTag::Trader,
-                "NO_SELL",
+                "ERROR",
                 &format!(
-                    "Position {} marked as closed (no tokens in wallet) - Loss: {:.6} SOL (-100%)",
-                    position.symbol,
-                    position.entry_size_sol
+                    "Cannot close position for {} - insufficient tokens. Position remains OPEN",
+                    position.symbol
                 )
             );
-            return true;
+            return false; // Keep position open, don't corrupt it
         }
 
         if actual_balance < stored_token_amount {
@@ -1460,7 +1503,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Get permit from semaphore to limit concurrency with timeout
             let permit = match
                 tokio::time::timeout(
-                    Duration::from_secs(10),
+                    Duration::from_secs(120),
                     semaphore.clone().acquire_owned()
                 ).await
             {
@@ -1494,7 +1537,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                 // Wrap the entire task logic in a timeout to prevent hanging
                 match
-                    tokio::time::timeout(Duration::from_secs(10), async {
+                    tokio::time::timeout(Duration::from_secs(30), async {
                         if let Some(current_price) = token.price_dexscreener_sol {
                             if current_price <= 0.0 || !validate_token(&token) {
                                 return None;
@@ -1505,21 +1548,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 .and_then(|l| l.usd)
                                 .unwrap_or(0.0);
 
-                            log(
-                                LogTag::Trader,
-                                "DEBUG",
-                                &format!(
-                                    "Checking token {}/{}: {} ({}) - Price: {:.12} SOL, Liquidity: ${:.2}",
-                                    index + 1,
-                                    total,
-                                    token.symbol,
-                                    token.mint,
-                                    current_price,
-                                    liquidity_usd
-                                )
-                                    .dimmed()
-                                    .to_string()
-                            );
+                            // log(
+                            //     LogTag::Trader,
+                            //     "DEBUG",
+                            //     &format!(
+                            //         "Checking token {}/{}: {} ({}) - Price: {:.12} SOL, Liquidity: ${:.2}",
+                            //         index + 1,
+                            //         total,
+                            //         token.symbol,
+                            //         token.mint,
+                            //         current_price,
+                            //         liquidity_usd
+                            //     )
+                            //         .dimmed()
+                            //         .to_string()
+                            // );
 
                             // Update price history with proper error handling and timeout
                             let now = Utc::now();
@@ -1631,7 +1674,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         );
 
         // Process the results of all tasks with overall timeout
-        let collection_result = tokio::time::timeout(Duration::from_secs(60), async {
+        let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
             // This maintains the priority of processing high-liquidity tokens first
             log(
                 LogTag::Trader,
@@ -1659,7 +1702,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 }
 
                 // Add timeout for each handle to prevent getting stuck on a single task
-                match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                match tokio::time::timeout(Duration::from_secs(120), handle).await {
                     Ok(task_result) => {
                         match task_result {
                             Ok(Some((token, price, percent_change))) => {
@@ -1789,7 +1832,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     // Get permit from semaphore to limit concurrency with timeout
                     let permit = match
                         tokio::time::timeout(
-                            Duration::from_secs(5),
+                            Duration::from_secs(120),
                             semaphore.clone().acquire_owned()
                         ).await
                     {
@@ -1819,7 +1862,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Wrap the buy operation in a timeout
                         match
-                            tokio::time::timeout(Duration::from_secs(20), async {
+                            tokio::time::timeout(Duration::from_secs(120), async {
                                 open_position(&token, price, percent_change).await
                             }).await
                         {
@@ -1852,7 +1895,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 );
 
                 // Collect results from all concurrent buy operations with overall timeout
-                let collection_result = tokio::time::timeout(Duration::from_secs(30), async {
+                let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
                     let mut completed = 0;
                     let mut successful = 0;
                     let total_handles = handles.len();
@@ -1869,7 +1912,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
 
                         // Add timeout for each handle to prevent getting stuck
-                        match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                        match tokio::time::timeout(Duration::from_secs(120), handle).await {
                             Ok(task_result) => {
                                 match task_result {
                                     Ok(success) => {
@@ -2115,7 +2158,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     // Wrap the sell operation in a timeout
                     match
-                        tokio::time::timeout(Duration::from_secs(15), async {
+                        tokio::time::timeout(Duration::from_secs(120), async {
                             close_position(&mut position, &token, exit_price, exit_time).await
                         }).await
                     {
@@ -2157,7 +2200,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             );
 
             // Collect results from all concurrent sell operations with overall timeout
-            let collection_result = tokio::time::timeout(Duration::from_secs(30), async {
+            // Increased timeout to 60 seconds to accommodate multiple 15-second sell operations
+            let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
                 let mut completed_positions = Vec::new();
                 let mut completed = 0;
                 let total_handles = handles.len();
@@ -2174,7 +2218,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
 
                     // Add timeout for each handle to prevent getting stuck
-                    match tokio::time::timeout(Duration::from_secs(5), handle).await {
+                    // Increased timeout to 15 seconds to allow for transaction verification and ATA closing
+                    match tokio::time::timeout(Duration::from_secs(120), handle).await {
                         Ok(task_result) => {
                             match task_result {
                                 Ok(Some((index, updated_position))) => {
@@ -2193,7 +2238,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             }
                         }
                         Err(_) => {
-                            log(LogTag::Trader, "WARN", "Sell task timed out after 5 seconds");
+                            log(LogTag::Trader, "WARN", "Sell task timed out after 60 seconds");
                         }
                     }
 
@@ -2218,7 +2263,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        "Sell operations collection timed out after 30 seconds"
+                        "Sell operations collection timed out after 60 seconds"
                     );
                     Vec::new()
                 }
