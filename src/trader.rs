@@ -1,7 +1,7 @@
 /// Trading configuration constants
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
-pub const DEFAULT_FEE: f64 = 0.000001;
+pub const DEFAULT_FEE: f64 = 0.000002;
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
@@ -236,155 +236,139 @@ fn get_open_positions_count() -> usize {
     }
 }
 
-/// Calculates whether a position should be sold based on advanced mathematical model
-/// combining time, profit/loss, drawdown and other factors.
-/// Returns a normalized urgency score between 0.0 and 1.0, where values > 0.7 indicate a sell signal
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
     // ===== TIME PARAMETERS =====
-    let min_time_secs = 30.0; // Minimum holding time (30 sec)
-    let aggressive_profit_time_secs = 445.0; // Time for aggressive profit taking (9.5 min)
-    let _normal_profit_time_secs = 900.0; // Normal profit taking window (15 min)
-    let max_time_secs = 3600.0; // Maximum holding time (1 hours)
+    let min_time_secs = 30.0;
+    let aggressive_profit_time_secs = 445.0;
+    let _normal_profit_time_secs = 900.0;
+    let max_time_secs = 3600.0;
 
     // ===== PROFIT/LOSS PARAMETERS =====
-    let small_profit = 3.0; // Small profit threshold (%)
-    let good_profit = 25.0; // Good profit threshold (%)
-    let great_profit = 50.0; // Great profit threshold (%)
-    let excellent_profit = 100.0; // Excellent profit threshold (%)
+    let small_profit = 3.0;
+    let good_profit = 25.0;
+    let great_profit = 50.0;
+    let excellent_profit = 100.0;
 
-    let _small_loss = -10.0; // Small loss threshold (%)
-    let _medium_loss = -30.0; // Medium loss threshold (%)
-    let large_loss = -40.0; // Large loss threshold (%)
-    let extreme_loss = -55.0; // Extreme loss threshold (%)
-    let stop_loss = -70.0; // Stop loss threshold (%)
+    let _small_loss = -10.0;
+    let _medium_loss = -30.0;
+    let large_loss = -40.0;
+    let extreme_loss = -55.0;
+    let stop_loss = -70.0;
 
     // ===== DRAWDOWN PARAMETERS =====
-    let drawdown_threshold = 30.0; // Drawdown % that starts to matter
-    let max_drawdown = 50.0; // Maximum tolerable drawdown from peak
+    let drawdown_threshold = 30.0;
+    let max_drawdown = 50.0;
 
-    // Calculate position duration in seconds
+    // Calculate position duration
     let time_secs = (now - pos.entry_time).num_seconds().max(min_time_secs as i64) as f64;
 
-    // Calculate normalized time factors (different time scales for different scenarios)
+    // Normalized time factors
     let norm_time_standard = (time_secs / max_time_secs).clamp(0.0, 1.0);
     let norm_time_profit = (time_secs / aggressive_profit_time_secs).clamp(0.0, 1.0);
 
+    // USE EFFECTIVE ENTRY PRICE IF AVAILABLE
+    let entry_price = pos.effective_entry_price.unwrap_or(pos.entry_price);
+
     // Calculate current P&L percentage
-    let current_pnl_percent = if pos.entry_price > 0.0 {
-        ((current_price - pos.entry_price) / pos.entry_price) * 100.0
+    let current_pnl_percent = if entry_price > 0.0 {
+        ((current_price - entry_price) / entry_price) * 100.0
     } else {
         0.0
     };
 
-    // Calculate distance from all-time high price (drawdown)
+    // Calculate distance from all-time high price
     let peak_price = pos.price_highest;
     let current_drawdown = if peak_price > 0.0 {
         ((peak_price - current_price) / peak_price) * 100.0
     } else {
         0.0
     };
-    // Note: drawdown_percent is calculated but we don't modify the position parameter
-    // because it's a read-only reference
 
-    // ==== URGENCY CALCULATION COMPONENTS ====
+    // ==== URGENCY CALCULATION ====
+    let time_urgency = norm_time_standard * 0.3;
 
-    // 1. Time-based urgency (increases over time)
-    let time_urgency = norm_time_standard * 0.3; // Max 30% urgency from time alone
-
-    // 2. Loss-based urgency with time-dependent tolerance
-    // The longer we hold, the more we're willing to cut losses
+    // IMPROVED LOSS HANDLING
     let loss_urgency = if current_pnl_percent < 0.0 {
-        // Dynamic loss tolerance that decreases with time
-        // Fresh positions have more loss tolerance than older positions
-        let time_adjusted_loss_threshold = extreme_loss * (1.0 - norm_time_standard);
+        // More dynamic loss threshold curve
+        let time_adjusted_loss_threshold = if time_secs < 300.0 {
+            // First 5 minutes: higher tolerance
+            extreme_loss * 0.7
+        } else if time_secs < 900.0 {
+            // 5-15 minutes: normal tolerance
+            extreme_loss
+        } else {
+            // After 15 minutes: tightening tolerance
+            extreme_loss * 1.3
+        };
 
-        // Loss severity compared to our dynamic threshold
         let severity = if time_adjusted_loss_threshold != 0.0 {
             (current_pnl_percent / time_adjusted_loss_threshold).clamp(0.0, 1.0)
         } else {
             1.0
         };
 
-        // Special case: Early large losses
-        if time_secs < 900.0 && current_pnl_percent <= large_loss {
-            // Less than 15 minutes but large loss: scale urgency by time
-            let early_loss_factor = (time_secs / 900.0).clamp(0.0, 1.0);
-            severity * early_loss_factor * 0.8
+        // Early large losses trigger faster
+        if time_secs < 600.0 && current_pnl_percent <= large_loss {
+            severity * (1.0 - time_secs / 600.0).clamp(0.5, 1.0)
         } else {
-            // Normal case: Time-adjusted loss urgency
-            severity * norm_time_standard * 0.8
+            severity * norm_time_standard.powf(0.7) * 0.8
         }
     } else {
         0.0
     };
 
-    // 3. Profit-taking urgency (more aggressive for larger profits)
+    // DYNAMIC PROFIT URGENCY
     let profit_urgency = if current_pnl_percent > 0.0 {
+        // Scale thresholds based on time held
+        let scaled_great_profit = great_profit * (1.0 - norm_time_profit * 0.3);
+        let scaled_good_profit = good_profit * (1.0 - norm_time_profit * 0.5);
+
         let profit_factor = match current_pnl_percent {
-            p if p >= excellent_profit => 1.0, // 100%+ profit = take it
-            p if p >= great_profit => 0.8, // 50%+ profit = very likely take it
-            p if p >= good_profit => 0.6, // 20%+ profit = probably take it
-            p if p >= small_profit => 0.4, // 5%+ profit = consider taking it
-            _ => 0.2, // <5% profit = low urgency
+            p if p >= excellent_profit => 1.0,
+            p if p >= scaled_great_profit => 0.8,
+            p if p >= scaled_good_profit => 0.6,
+            p if p >= small_profit => 0.4,
+            _ => 0.2,
         };
 
-        // Quick profits are good, but with time we take smaller profits too
-        if current_pnl_percent >= great_profit {
-            // For great profits, we're more aggressive (even early)
-            profit_factor * 0.8 * (norm_time_profit * 0.5 + 0.5)
+        // Quick profit bonus
+        let time_bonus = if time_secs < 300.0 && current_pnl_percent > good_profit {
+            0.3 * (1.0 - time_secs / 300.0)
         } else {
-            // For smaller profits, we need more time to consider selling
-            profit_factor * 0.6 * norm_time_profit
-        }
+            0.0
+        };
+
+        (profit_factor * (0.6 * norm_time_profit + 0.4) + time_bonus).clamp(0.0, 1.0)
     } else {
         0.0
     };
 
-    // 4. Drawdown urgency (reacting to drops from peak price)
+    // DRAWDOWN URGENCY WITH P&L AWARENESS
     let drawdown_urgency = if current_drawdown > drawdown_threshold {
-        // Adjust drawdown tolerance based on current P&L
-        let drawdown_tolerance = if current_pnl_percent > 0.0 {
-            // If we're still in profit, react more to drawdown
-            drawdown_threshold * 0.8
-        } else {
-            // If we're in loss, be a bit more tolerant of drawdown
-            drawdown_threshold * 1.2
-        };
-
-        let drawdown_factor = (
-            (current_drawdown - drawdown_tolerance) /
-            (max_drawdown - drawdown_tolerance)
+        let tolerance_factor = if current_pnl_percent > 0.0 { 0.7 } else { 0.5 };
+        let severity = (
+            (current_drawdown - drawdown_threshold) /
+            (max_drawdown - drawdown_threshold)
         ).clamp(0.0, 1.0);
 
-        // Weight the drawdown more heavily if we're in profit
-        let drawdown_weight = if current_pnl_percent > 0.0 {
-            0.7 // More sensitive to drawdowns in profitable positions
-        } else {
-            0.5 // Less sensitive in losing positions (don't double-punish)
-        };
-
-        drawdown_factor * drawdown_weight
+        // Increase urgency if drawdown occurs while in profit
+        severity * tolerance_factor * (1.0 + 0.5 * ((current_pnl_percent > 0.0) as u8 as f64))
     } else {
         0.0
     };
 
-    // 5. Stop-loss urgency (always sell at stop loss regardless of time)
-    let stop_loss_urgency = if current_pnl_percent <= stop_loss {
-        1.0 // Always trigger at stop loss
-    } else {
-        0.0
-    };
+    // ABSOLUTE STOP-LOSS
+    let stop_loss_urgency = if current_pnl_percent <= stop_loss { 1.0 } else { 0.0 };
 
-    // Combine all urgency factors with weights
-    let urgency = (
+    // COMBINE FACTORS WITH SMART CAPS
+    let raw_urgency =
         time_urgency +
-        loss_urgency +
-        profit_urgency +
-        drawdown_urgency +
-        stop_loss_urgency
-    ).clamp(0.0, 1.0);
+        loss_urgency.min(0.6) + // Cap loss influence
+        profit_urgency.min(0.8) + // Cap profit influence
+        drawdown_urgency.min(0.7) +
+        stop_loss_urgency;
 
-    urgency
+    raw_urgency.clamp(0.0, 1.0)
 }
 
 /// Checks recent transactions to see if position was already closed
