@@ -428,6 +428,311 @@ impl TransactionAnalyzer {
         analysis.is_swap
     }
 
+    /// Advanced swap detection using multiple heuristics
+    pub fn detect_swaps_advanced(&self, transaction: &TransactionResult) -> Vec<SwapTransaction> {
+        let mut detected_swaps = Vec::new();
+
+        // Method 1: Traditional DEX + bidirectional token analysis
+        if self.is_swap_transaction(transaction) {
+            if let Some(swap_info) = self.analyze_transaction(transaction).swap_info {
+                detected_swaps.push(self.create_swap_transaction(transaction, &swap_info));
+            }
+        }
+
+        // Method 2: Log message analysis for additional patterns
+        let log_based_swaps = self.detect_swaps_from_logs(transaction);
+        detected_swaps.extend(log_based_swaps);
+
+        // Method 3: Inner instruction analysis for complex swaps
+        let inner_instruction_swaps = self.detect_swaps_from_inner_instructions(transaction);
+        detected_swaps.extend(inner_instruction_swaps);
+
+        // Remove duplicates based on signature
+        detected_swaps.sort_by(|a, b| a.signature.cmp(&b.signature));
+        detected_swaps.dedup_by(|a, b| a.signature == b.signature);
+
+        detected_swaps
+    }
+
+    /// Detect swaps by analyzing transaction log messages
+    fn detect_swaps_from_logs(&self, transaction: &TransactionResult) -> Vec<SwapTransaction> {
+        let mut swaps = Vec::new();
+
+        if let Some(meta) = &transaction.meta {
+            if let Some(log_messages) = &meta.log_messages {
+                // Look for common swap log patterns
+                let swap_patterns = [
+                    "Program log: Instruction: Swap",
+                    "Program log: SwapEvent",
+                    "Swap completed",
+                    "Token swap:",
+                    "swapped",
+                ];
+
+                for log in log_messages {
+                    if swap_patterns.iter().any(|pattern| log.contains(pattern)) {
+                        // Extract swap information from logs if possible
+                        if let Some(swap) = self.parse_swap_from_log(transaction, log) {
+                            swaps.push(swap);
+                        }
+                    }
+                }
+            }
+        }
+
+        swaps
+    }
+
+    /// Detect swaps from inner instructions (for complex routing)
+    fn detect_swaps_from_inner_instructions(
+        &self,
+        transaction: &TransactionResult
+    ) -> Vec<SwapTransaction> {
+        let mut swaps = Vec::new();
+
+        if let Some(meta) = &transaction.meta {
+            if let Some(inner_instructions) = &meta.inner_instructions {
+                for inner_group in inner_instructions {
+                    // Analyze each inner instruction group for swap patterns
+                    let dex_instructions: Vec<_> = inner_group.instructions
+                        .iter()
+                        .filter(|inst| {
+                            if let Some(program_id_index) = inst.program_id_index {
+                                if
+                                    let Some(program_key) =
+                                        transaction.transaction.message.account_keys.get(
+                                            program_id_index as usize
+                                        )
+                                {
+                                    return self.is_known_dex(program_key);
+                                }
+                            }
+                            false
+                        })
+                        .collect();
+
+                    if !dex_instructions.is_empty() {
+                        // This inner instruction group contains DEX operations
+                        if
+                            let Some(swap) = self.analyze_inner_instruction_swap(
+                                transaction,
+                                &inner_group
+                            )
+                        {
+                            swaps.push(swap);
+                        }
+                    }
+                }
+            }
+        }
+
+        swaps
+    }
+
+    /// Parse swap information from a log message
+    fn parse_swap_from_log(
+        &self,
+        transaction: &TransactionResult,
+        log_message: &str
+    ) -> Option<SwapTransaction> {
+        // Simple log parsing - can be enhanced with more sophisticated regex patterns
+        if log_message.contains("Swap") {
+            let signature = transaction.transaction.signatures.first()?.clone();
+
+            // Create a basic swap transaction from log analysis
+            Some(SwapTransaction {
+                signature,
+                block_time: transaction.block_time,
+                slot: transaction.slot,
+                is_success: transaction.meta.as_ref().map_or(false, |m| m.err.is_none()),
+                fee_sol: transaction.meta
+                    .as_ref()
+                    .map_or(0.0, |m| (m.fee as f64) / 1_000_000_000.0),
+                swap_type: SwapType::Unknown,
+                input_token: SwapTokenInfo {
+                    mint: "Unknown".to_string(),
+                    symbol: None,
+                    amount_raw: "0".to_string(),
+                    amount_ui: 0.0,
+                    decimals: 9,
+                },
+                output_token: SwapTokenInfo {
+                    mint: "Unknown".to_string(),
+                    symbol: None,
+                    amount_raw: "0".to_string(),
+                    amount_ui: 0.0,
+                    decimals: 9,
+                },
+                program_id: "Unknown".to_string(),
+                dex_name: Some("Log-detected".to_string()),
+                log_messages: vec![log_message.to_string()],
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Analyze inner instructions for swap patterns
+    fn analyze_inner_instruction_swap(
+        &self,
+        transaction: &TransactionResult,
+        inner_group: &InnerInstruction
+    ) -> Option<SwapTransaction> {
+        let signature = transaction.transaction.signatures.first()?.clone();
+
+        // Find DEX program in inner instructions
+        let dex_program = inner_group.instructions.iter().find_map(|inst| {
+            if let Some(program_id_index) = inst.program_id_index {
+                if
+                    let Some(program_key) = transaction.transaction.message.account_keys.get(
+                        program_id_index as usize
+                    )
+                {
+                    if self.is_known_dex(program_key) {
+                        return Some(program_key.clone());
+                    }
+                }
+            }
+            None
+        })?;
+
+        let dex_name = self.get_dex_name(&dex_program);
+
+        Some(SwapTransaction {
+            signature,
+            block_time: transaction.block_time,
+            slot: transaction.slot,
+            is_success: transaction.meta.as_ref().map_or(false, |m| m.err.is_none()),
+            fee_sol: transaction.meta.as_ref().map_or(0.0, |m| (m.fee as f64) / 1_000_000_000.0),
+            swap_type: SwapType::Unknown,
+            input_token: SwapTokenInfo {
+                mint: "Unknown".to_string(),
+                symbol: None,
+                amount_raw: "0".to_string(),
+                amount_ui: 0.0,
+                decimals: 9,
+            },
+            output_token: SwapTokenInfo {
+                mint: "Unknown".to_string(),
+                symbol: None,
+                amount_raw: "0".to_string(),
+                amount_ui: 0.0,
+                decimals: 9,
+            },
+            program_id: dex_program,
+            dex_name: dex_name.map(|s| s.to_string()),
+            log_messages: Vec::new(),
+        })
+    }
+
+    /// Create a SwapTransaction from SwapInfo
+    fn create_swap_transaction(
+        &self,
+        transaction: &TransactionResult,
+        swap_info: &SwapInfo
+    ) -> SwapTransaction {
+        let signature = transaction.transaction.signatures.first().cloned().unwrap_or_default();
+
+        SwapTransaction {
+            signature,
+            block_time: transaction.block_time,
+            slot: transaction.slot,
+            is_success: transaction.meta.as_ref().map_or(false, |m| m.err.is_none()),
+            fee_sol: transaction.meta.as_ref().map_or(0.0, |m| (m.fee as f64) / 1_000_000_000.0),
+            swap_type: swap_info.swap_type.clone(),
+            input_token: SwapTokenInfo {
+                mint: swap_info.input_mint.clone(),
+                symbol: None,
+                amount_raw: swap_info.input_amount.clone(),
+                amount_ui: swap_info.input_amount.parse().unwrap_or(0.0) /
+                (10_f64).powi(swap_info.input_decimals as i32),
+                decimals: swap_info.input_decimals,
+            },
+            output_token: SwapTokenInfo {
+                mint: swap_info.output_mint.clone(),
+                symbol: None,
+                amount_raw: swap_info.output_amount.clone(),
+                amount_ui: swap_info.output_amount.parse().unwrap_or(0.0) /
+                (10_f64).powi(swap_info.output_decimals as i32),
+                decimals: swap_info.output_decimals,
+            },
+            program_id: swap_info.program_id.clone(),
+            dex_name: Some(swap_info.dex_name.clone()),
+            log_messages: Vec::new(),
+        }
+    }
+
+    /// Comprehensive swap analysis with confidence scoring
+    pub fn analyze_swap_confidence(
+        &self,
+        transaction: &TransactionResult
+    ) -> (bool, f64, Vec<String>) {
+        let mut confidence_score = 0.0;
+        let mut reasons = Vec::new();
+
+        // Factor 1: Known DEX program interaction (+30 points)
+        let program_interactions = self.extract_program_interactions(transaction);
+        let dex_interactions = self.find_dex_interactions(&program_interactions);
+        if !dex_interactions.is_empty() {
+            confidence_score += 30.0;
+            reasons.push(
+                format!(
+                    "Known DEX program detected: {}",
+                    dex_interactions[0].dex_name.as_deref().unwrap_or("Unknown")
+                )
+            );
+        }
+
+        // Factor 2: Bidirectional token transfers (+25 points)
+        let token_transfers = self.extract_token_transfers(transaction);
+        if self.has_bidirectional_transfers(&token_transfers) {
+            confidence_score += 25.0;
+            reasons.push("Bidirectional token transfers detected".to_string());
+        }
+
+        // Factor 3: Log message analysis (+15 points)
+        if let Some(meta) = &transaction.meta {
+            if let Some(logs) = &meta.log_messages {
+                let swap_log_count = logs
+                    .iter()
+                    .filter(|log| log.to_lowercase().contains("swap"))
+                    .count();
+                if swap_log_count > 0 {
+                    confidence_score += 15.0;
+                    reasons.push(format!("Swap-related log messages found ({})", swap_log_count));
+                }
+            }
+        }
+
+        // Factor 4: Token balance changes consistency (+20 points)
+        if token_transfers.len() >= 2 {
+            let incoming_count = token_transfers
+                .iter()
+                .filter(|t| t.is_incoming)
+                .count();
+            let outgoing_count = token_transfers
+                .iter()
+                .filter(|t| !t.is_incoming)
+                .count();
+            if incoming_count >= 1 && outgoing_count >= 1 {
+                confidence_score += 20.0;
+                reasons.push(
+                    format!("Balanced token flow: {} in, {} out", incoming_count, outgoing_count)
+                );
+            }
+        }
+
+        // Factor 5: Transaction success (+10 points)
+        let is_success = transaction.meta.as_ref().map_or(false, |m| m.err.is_none());
+        if is_success {
+            confidence_score += 10.0;
+            reasons.push("Transaction executed successfully".to_string());
+        }
+
+        let is_swap = confidence_score >= 50.0; // 50% confidence threshold
+        (is_swap, confidence_score, reasons)
+    }
+
     /// Get detailed swap analysis for debugging
     pub fn debug_transaction_analysis(&self, transaction: &TransactionResult) -> String {
         let analysis = self.analyze_transaction(transaction);

@@ -307,6 +307,18 @@ pub enum SwapType {
     Unknown,
 }
 
+impl std::fmt::Display for SwapType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SwapType::Buy => write!(f, "Buy"),
+            SwapType::Sell => write!(f, "Sell"),
+            SwapType::SwapAtoB => write!(f, "A→B"),
+            SwapType::SwapBtoA => write!(f, "B→A"),
+            SwapType::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SwapTokenInfo {
     pub mint: String,
@@ -421,4 +433,111 @@ pub fn format_timestamp(timestamp: Option<u64>) -> String {
         }
         None => "Unknown time".to_string(),
     }
+}
+
+/// Enhanced swap detection functions for finding specific token pairs
+pub mod swap_detection {
+    use super::*;
+
+    /// Find swaps between two specific tokens
+    pub fn find_swaps_between_tokens(
+        transactions: &[(SignatureInfo, TransactionResult)],
+        token_a: &str,
+        token_b: &str
+    ) -> Vec<SwapTransaction> {
+        let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
+        let mut swaps = Vec::new();
+
+        for (_, transaction) in transactions {
+            let detected_swaps = analyzer.detect_swaps_advanced(transaction);
+
+            for swap in detected_swaps {
+                // Check if this swap involves the target token pair
+                let involves_pair =
+                    (swap.input_token.mint == token_a && swap.output_token.mint == token_b) ||
+                    (swap.input_token.mint == token_b && swap.output_token.mint == token_a);
+
+                if involves_pair {
+                    swaps.push(swap);
+                }
+            }
+        }
+
+        swaps
+    }
+
+    /// Find all swaps involving a specific token
+    pub fn find_swaps_with_token(
+        transactions: &[(SignatureInfo, TransactionResult)],
+        token_mint: &str
+    ) -> Vec<SwapTransaction> {
+        let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
+        let mut swaps = Vec::new();
+
+        for (_, transaction) in transactions {
+            let detected_swaps = analyzer.detect_swaps_advanced(transaction);
+
+            for swap in detected_swaps {
+                if swap.input_token.mint == token_mint || swap.output_token.mint == token_mint {
+                    swaps.push(swap);
+                }
+            }
+        }
+
+        swaps
+    }
+
+    /// Get swap statistics for a specific DEX
+    pub fn get_dex_swap_stats(
+        transactions: &[(SignatureInfo, TransactionResult)],
+        dex_name: &str
+    ) -> DexSwapStats {
+        let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
+        let mut stats = DexSwapStats {
+            dex_name: dex_name.to_string(),
+            total_swaps: 0,
+            successful_swaps: 0,
+            failed_swaps: 0,
+            total_volume_usd: 0.0,
+            unique_tokens: std::collections::HashSet::new(),
+            swap_types: std::collections::HashMap::new(),
+        };
+
+        for (_, transaction) in transactions {
+            let detected_swaps = analyzer.detect_swaps_advanced(transaction);
+
+            for swap in detected_swaps {
+                if let Some(swap_dex) = &swap.dex_name {
+                    if swap_dex == dex_name {
+                        stats.total_swaps += 1;
+
+                        if swap.is_success {
+                            stats.successful_swaps += 1;
+                        } else {
+                            stats.failed_swaps += 1;
+                        }
+
+                        stats.unique_tokens.insert(swap.input_token.mint.clone());
+                        stats.unique_tokens.insert(swap.output_token.mint.clone());
+
+                        *stats.swap_types.entry(format!("{}", swap.swap_type)).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+        stats
+    }
+}
+
+/// DEX-specific swap statistics
+#[derive(Debug, Clone)]
+pub struct DexSwapStats {
+    pub dex_name: String,
+    pub total_swaps: usize,
+    pub successful_swaps: usize,
+    pub failed_swaps: usize,
+    pub total_volume_usd: f64,
+    pub unique_tokens: std::collections::HashSet<String>,
+    pub swap_types: std::collections::HashMap<String, usize>,
 }
