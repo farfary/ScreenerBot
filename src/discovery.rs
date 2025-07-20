@@ -9,6 +9,7 @@ use tokio::time::{ sleep, Duration };
 use crate::utils::check_shutdown_or_delay;
 use solana_client::rpc_client::RpcClient;
 use std::path::Path;
+use crate::trader::SAVED_POSITIONS;
 
 static INFO_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell::sync::Lazy::new(||
     Arc::new(Semaphore::new(200))
@@ -21,13 +22,43 @@ static DISCOVERY_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell
 pub async fn update_tokens_from_mints(
     shutdown: Arc<Notify>
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mints: Vec<String> = match LIST_MINTS.read() {
+    // First, get all mint addresses from open positions to ensure we always update them
+    let position_mints = {
+        if let Ok(positions) = crate::trader::SAVED_POSITIONS.lock() {
+            positions
+                .iter()
+                .filter(|p| p.exit_time.is_none()) // Only consider open positions
+                .map(|p| p.mint.clone())
+                .collect::<Vec<String>>()
+        } else {
+            Vec::new()
+        }
+    };
+
+    // Log the position mints we're prioritizing
+    if !position_mints.is_empty() {
+        log(
+            LogTag::Monitor,
+            "INFO",
+            &format!("Prioritizing {} tokens from open positions", position_mints.len())
+        );
+    }
+
+    // Get all mints from the global list
+    let mut mints: Vec<String> = match LIST_MINTS.read() {
         Ok(set) => set.iter().cloned().collect(),
         Err(e) => {
             log(LogTag::Monitor, "ERROR", &format!("Failed to read LIST_MINTS: {}", e));
             return Err(Box::new(e));
         }
     };
+
+    // Make sure all position mints are included in our list (even if they somehow got removed from LIST_MINTS)
+    for mint in &position_mints {
+        if !mints.contains(mint) {
+            mints.push(mint.clone());
+        }
+    }
 
     if mints.is_empty() {
         return Ok(());
@@ -61,11 +92,40 @@ pub async fn update_tokens_from_mints(
 
     let mut tokens = Vec::new();
 
-    for chunk in mints.chunks(30) {
+    // Reorganize mints: prioritize position mints first
+    let mut prioritized_mints = Vec::new();
+
+    // First add all position mints
+    for mint in &position_mints {
+        prioritized_mints.push(mint.clone());
+    }
+
+    // Then add all other mints that aren't in position_mints
+    for mint in mints {
+        if !position_mints.contains(&mint) {
+            prioritized_mints.push(mint);
+        }
+    }
+
+    // Process in chunks of 30, but prioritize position mints
+    for chunk in prioritized_mints.chunks(30) {
         if check_shutdown_or_delay(&shutdown, Duration::from_millis(500)).await {
             log(LogTag::Monitor, "INFO", "update_tokens_from_mints task shutting down...");
             return Ok(());
         }
+
+        // Check if this chunk contains any position mints
+        let contains_positions = chunk.iter().any(|mint| position_mints.contains(mint));
+
+        // Log priority info if this chunk contains position mints
+        if contains_positions {
+            log(
+                LogTag::Monitor,
+                "INFO",
+                &format!("Processing chunk with prioritized position tokens")
+            );
+        }
+
         // Acquire permit for info rate limit (200 per minute)
         let permit = match INFO_RATE_LIMITER.clone().acquire_owned().await {
             Ok(p) => p,
@@ -351,11 +411,49 @@ pub async fn update_tokens_from_mints(
     match LIST_TOKENS.write() {
         Ok(mut list) => {
             *list = tokens;
-            log(
-                LogTag::Monitor,
-                "INFO",
-                &format!("[Dexscreener] Updated tokens: {}, mints: {}", list.len(), mints_count)
-            );
+
+            // Count how many position tokens were successfully updated
+            let position_tokens_updated = if !position_mints.is_empty() {
+                list.iter()
+                    .filter(|token| position_mints.contains(&token.mint))
+                    .count()
+            } else {
+                0
+            };
+
+            // Enhanced logging to show position tokens status
+            if !position_mints.is_empty() {
+                log(
+                    LogTag::Monitor,
+                    "INFO",
+                    &format!(
+                        "[Dexscreener] Updated tokens: {}, mints: {}, position tokens: {}/{}",
+                        list.len(),
+                        mints_count,
+                        position_tokens_updated,
+                        position_mints.len()
+                    )
+                );
+
+                // Check if any position tokens are missing and log a warning
+                if position_tokens_updated < position_mints.len() {
+                    log(
+                        LogTag::Monitor,
+                        "WARN",
+                        &format!(
+                            "Failed to update {}/{} position tokens! Will retry in next cycle.",
+                            position_mints.len() - position_tokens_updated,
+                            position_mints.len()
+                        )
+                    );
+                }
+            } else {
+                log(
+                    LogTag::Monitor,
+                    "INFO",
+                    &format!("[Dexscreener] Updated tokens: {}, mints: {}", list.len(), mints_count)
+                );
+            }
         }
         Err(e) => {
             log(LogTag::Monitor, "ERROR", &format!("Failed to write LIST_TOKENS: {}", e));
