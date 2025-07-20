@@ -145,3 +145,7 @@ path = "src/bin/test_websocket_debug_sync.rs"
 [[bin]]
 name = "test_continuous_transaction_cache"
 path = "src/bin/test_continuous_transaction_cache.rs"
+
+[[bin]]
+name = "test_token_discovery_caching"
+path = "src/bin/test_token_discovery_caching.rs"
