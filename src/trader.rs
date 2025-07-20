@@ -18,6 +18,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::*;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };
+use crate::profit_calculation::{ PROFIT_SYSTEM, AccuratePnL };
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -116,25 +117,48 @@ impl PositionDisplay {
         let pnl_sol_str = if let Some(pnl) = position.pnl_sol {
             if pnl >= 0.0 { format!("+{:.6}", pnl) } else { format!("{:.6}", pnl) }
         } else if let Some(price) = current_price {
-            // Calculate current P&L if position is still open using accurate method
-            let token_decimals = {
-                let tokens = LIST_TOKENS.read().unwrap();
-                tokens
-                    .iter()
-                    .find(|t| t.mint == position.mint)
-                    .map(|t| t.decimals)
-            };
+            // Use new accurate profit calculation system
+            if let Ok(profit_system) = PROFIT_SYSTEM.lock() {
+                let token_decimals = {
+                    let tokens = LIST_TOKENS.read().unwrap();
+                    tokens
+                        .iter()
+                        .find(|t| t.mint == position.mint)
+                        .map(|t| t.decimals)
+                };
 
-            let (current_pnl, _) = calculate_position_pnl_from_swaps(
-                position,
-                price,
-                token_decimals
-            );
+                let accurate_pnl = profit_system.calculate_accurate_pnl(
+                    position,
+                    price,
+                    token_decimals
+                );
 
-            if current_pnl >= 0.0 {
-                format!("+{:.6}", current_pnl)
+                if accurate_pnl.pnl_sol >= 0.0 {
+                    format!("+{:.6}", accurate_pnl.pnl_sol)
+                } else {
+                    format!("{:.6}", accurate_pnl.pnl_sol)
+                }
             } else {
-                format!("{:.6}", current_pnl)
+                // Fallback to old calculation
+                let token_decimals = {
+                    let tokens = LIST_TOKENS.read().unwrap();
+                    tokens
+                        .iter()
+                        .find(|t| t.mint == position.mint)
+                        .map(|t| t.decimals)
+                };
+
+                let (current_pnl, _) = calculate_position_pnl_from_swaps(
+                    position,
+                    price,
+                    token_decimals
+                );
+
+                if current_pnl >= 0.0 {
+                    format!("+{:.6}", current_pnl)
+                } else {
+                    format!("{:.6}", current_pnl)
+                }
             }
         } else {
             "N/A".to_string()
@@ -143,25 +167,48 @@ impl PositionDisplay {
         let pnl_percent_str = if let Some(pnl_pct) = position.pnl_percent {
             if pnl_pct >= 0.0 { format!("+{:.2}%", pnl_pct) } else { format!("{:.2}%", pnl_pct) }
         } else if let Some(price) = current_price {
-            // Calculate current P&L percentage if position is still open using accurate method
-            let token_decimals = {
-                let tokens = LIST_TOKENS.read().unwrap();
-                tokens
-                    .iter()
-                    .find(|t| t.mint == position.mint)
-                    .map(|t| t.decimals)
-            };
+            // Use new accurate profit calculation system
+            if let Ok(profit_system) = PROFIT_SYSTEM.lock() {
+                let token_decimals = {
+                    let tokens = LIST_TOKENS.read().unwrap();
+                    tokens
+                        .iter()
+                        .find(|t| t.mint == position.mint)
+                        .map(|t| t.decimals)
+                };
 
-            let (_, current_pnl_percent) = calculate_position_pnl_from_swaps(
-                position,
-                price,
-                token_decimals
-            );
+                let accurate_pnl = profit_system.calculate_accurate_pnl(
+                    position,
+                    price,
+                    token_decimals
+                );
 
-            if current_pnl_percent >= 0.0 {
-                format!("+{:.2}%", current_pnl_percent)
+                if accurate_pnl.pnl_percent >= 0.0 {
+                    format!("+{:.2}%", accurate_pnl.pnl_percent)
+                } else {
+                    format!("{:.2}%", accurate_pnl.pnl_percent)
+                }
             } else {
-                format!("{:.2}%", current_pnl_percent)
+                // Fallback to old calculation
+                let token_decimals = {
+                    let tokens = LIST_TOKENS.read().unwrap();
+                    tokens
+                        .iter()
+                        .find(|t| t.mint == position.mint)
+                        .map(|t| t.decimals)
+                };
+
+                let (_, current_pnl_percent) = calculate_position_pnl_from_swaps(
+                    position,
+                    price,
+                    token_decimals
+                );
+
+                if current_pnl_percent >= 0.0 {
+                    format!("+{:.2}%", current_pnl_percent)
+                } else {
+                    format!("{:.2}%", current_pnl_percent)
+                }
             }
         } else {
             "N/A".to_string()
@@ -262,25 +309,82 @@ fn get_open_positions_count() -> usize {
 }
 
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    // ===== CONSTANTS =====
-    const MIN_HOLD_TIME_SECS: f64 = 60.0; // Minimum time to hold before considering selling
-    const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Maximum time to hold a position
-    const STOP_LOSS_PERCENT: f64 = -20.0; // Maximum acceptable loss in percentage
-    const PROFIT_TARGET_PERCENT: f64 = 50.0; // Profit target percentage
-    const TRAILING_STOP_PERCENT: f64 = 5.0; // Trailing stop percentage after profit target reached
-    const TIME_DECAY_START_SECS: f64 = 1800.0; // Start applying time decay after 30 minutes
+    // Use the new smart profit calculation system
+    if let Ok(mut profit_system) = PROFIT_SYSTEM.lock() {
+        // Get token decimals from global token list
+        let token_decimals = {
+            let tokens = LIST_TOKENS.read().unwrap();
+            tokens
+                .iter()
+                .find(|t| t.mint == pos.mint)
+                .map(|t| t.decimals)
+        };
 
-    // ===== TIME CALCULATIONS =====
+        let (urgency, reason) = profit_system.should_sell_smart(
+            pos,
+            current_price,
+            now,
+            token_decimals
+        );
+
+        // Log the sell decision for debugging
+        if urgency > 0.1 {
+            log(
+                LogTag::Trader,
+                "SELL_DECISION",
+                &format!("{} - Urgency: {:.2}, Reason: {}", pos.symbol, urgency, reason)
+            );
+        }
+
+        return urgency;
+    }
+
+    // Fallback to original logic if profit system is unavailable
     let time_held_secs: f64 = (now - pos.entry_time).num_seconds() as f64;
 
-    // ===== PROFIT AND LOSS CALCULATIONS =====
-    let current_pnl_percent: f64 = if pos.entry_price > 0.0 {
-        ((current_price - pos.entry_price) / pos.entry_price) * 100.0
+    // More conservative fallback settings
+    const MIN_HOLD_TIME_SECS: f64 = 180.0; // Hold for at least 3 minutes
+    const STOP_LOSS_PERCENT: f64 = -30.0; // More conservative stop loss
+
+    // Don't sell too early unless it's a major loss
+    if time_held_secs < MIN_HOLD_TIME_SECS {
+        let entry_price_to_use = pos.effective_entry_price.unwrap_or(pos.entry_price);
+        let price_change_percent =
+            ((current_price - entry_price_to_use) / entry_price_to_use) * 100.0;
+
+        if price_change_percent <= STOP_LOSS_PERCENT {
+            return 1.0; // Emergency exit for major losses
+        } else {
+            return 0.0; // Hold for minimum time
+        }
+    }
+
+    // Use original logic for positions held longer than minimum time
+    const MAX_HOLD_TIME_SECS: f64 = 3600.0;
+    const PROFIT_TARGET_PERCENT: f64 = 25.0; // More realistic profit target
+    const TRAILING_STOP_PERCENT: f64 = 8.0; // Wider trailing stop
+    const TIME_DECAY_START_SECS: f64 = 1800.0;
+
+    let entry_price_to_use = pos.effective_entry_price.unwrap_or(pos.entry_price);
+
+    let current_pnl_percent: f64 = if entry_price_to_use > 0.0 {
+        let price_change_percent =
+            ((current_price - entry_price_to_use) / entry_price_to_use) * 100.0;
+
+        // Use more accurate fee calculation
+        let total_fee_cost = 2.0 * DEFAULT_FEE;
+        let fee_percent = (total_fee_cost / pos.entry_size_sol) * 100.0;
+
+        price_change_percent - fee_percent
     } else {
         0.0
     };
 
-    // ===== TRAILING STOP LOGIC =====
+    // Decision logic
+    let stop_loss_triggered: bool = current_pnl_percent <= STOP_LOSS_PERCENT;
+    let profit_target_reached: bool = current_pnl_percent >= PROFIT_TARGET_PERCENT;
+
+    // Trailing stop logic
     let peak_price: f64 = f64::max(pos.price_highest, current_price);
     let drawdown_percent: f64 = if peak_price > 0.0 {
         ((current_price - peak_price) / peak_price) * 100.0
@@ -290,49 +394,39 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     let trailing_stop_triggered: bool =
         current_pnl_percent >= PROFIT_TARGET_PERCENT && drawdown_percent <= -TRAILING_STOP_PERCENT;
 
-    // ===== DECISION FACTORS =====
-    // 1. Stop Loss Trigger
-    let stop_loss_triggered: bool = current_pnl_percent <= STOP_LOSS_PERCENT;
-
-    // 2. Profit Target Reached
-    let profit_target_reached: bool = current_pnl_percent >= PROFIT_TARGET_PERCENT;
-
-    // 3. Trailing Stop Active
-    let trailing_stop_active: bool = trailing_stop_triggered;
-
-    // 4. Time Decay Factor (starts affecting urgency after TIME_DECAY_START_SECS)
+    // Time decay factor
     let time_decay_factor: f64 = if time_held_secs > TIME_DECAY_START_SECS {
         let decay_duration = MAX_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
         let excess_time = time_held_secs - TIME_DECAY_START_SECS;
         let time_decay = excess_time / decay_duration;
-        f64::min(time_decay, 1.0) // Caps at 1.0
+        f64::min(time_decay, 1.0)
     } else {
         0.0
     };
 
-    // ===== URGENCY CALCULATION =====
-    // Base urgency is calculated from current PnL
+    // Calculate urgency
     let mut urgency: f64 = 0.0;
 
     if stop_loss_triggered {
-        urgency = 1.0; // Immediate exit due to stop loss
-    } else if trailing_stop_active {
-        urgency = 0.9; // High urgency to lock in profits with trailing stop
+        urgency = 1.0;
+    } else if trailing_stop_triggered {
+        urgency = 0.9;
     } else if profit_target_reached {
-        urgency = 0.8; // High urgency to secure profits
+        urgency = 0.8;
     } else {
-        // Apply time decay to increase urgency gradually after TIME_DECAY_START_SECS
-        urgency = time_decay_factor * 0.5; // Max additional urgency is 0.5
+        urgency = time_decay_factor * 0.4; // Reduced time pressure
     }
 
-    // Encourage exits for positions with low or negative PnL after significant time has elapsed
-    if time_held_secs > TIME_DECAY_START_SECS && current_pnl_percent <= 0.0 {
-        urgency = f64::max(urgency, 0.5); // Increase urgency to at least 0.5
+    // Less aggressive selling for positions with small losses
+    if
+        time_held_secs > TIME_DECAY_START_SECS &&
+        current_pnl_percent <= 0.0 &&
+        current_pnl_percent > -15.0
+    {
+        urgency = f64::max(urgency, 0.3); // Reduced urgency for small losses
     }
 
-    // Ensure urgency is within [0.0, 1.0]
     urgency = f64::max(0.0, f64::min(urgency, 1.0));
-
     urgency
 }
 
@@ -687,8 +781,10 @@ fn is_position_profitable(
     // This is used for display purposes when we don't have actual token amounts
     let price_change_percent = ((current_price - entry_price) / entry_price) * 100.0;
 
-    // Account for fees (approximately 0.5% total for buy + sell)
-    let net_pnl_percent = price_change_percent - 0.5;
+    // Account for fixed swap fees using the hardcoded DEFAULT_FEE (buy + sell = 2 * DEFAULT_FEE)
+    let total_fee_cost = 2.0 * DEFAULT_FEE; // Total cost for both buy and sell transactions
+    let fee_percent = (total_fee_cost / trade_size_sol) * 100.0;
+    let net_pnl_percent = price_change_percent - fee_percent;
     let net_pnl_sol = (net_pnl_percent / 100.0) * trade_size_sol;
 
     // Total value (initial investment + profit/loss)
@@ -705,7 +801,7 @@ pub fn calculate_position_pnl_from_swaps(
 ) -> (f64, f64) {
     // Use actual transaction data when available for maximum accuracy
     if
-        let (Some(token_amount), Some(effective_entry_price)) = (
+        let (Some(token_amount), Some(_effective_entry_price)) = (
             position.token_amount,
             position.effective_entry_price,
         )
@@ -717,8 +813,10 @@ pub fn calculate_position_pnl_from_swaps(
             // Current value of tokens at current price
             let current_value_sol = ui_token_amount * current_price;
 
-            // Net P&L = current value - initial investment (entry_size_sol)
-            let net_pnl_sol = current_value_sol - position.entry_size_sol;
+            // Net P&L = current value - initial investment - fees
+            // Account for buy fee (already paid) and estimated sell fee
+            let total_fee_cost = 2.0 * DEFAULT_FEE; // Buy + sell fees
+            let net_pnl_sol = current_value_sol - position.entry_size_sol - total_fee_cost;
             let net_pnl_percent = (net_pnl_sol / position.entry_size_sol) * 100.0;
 
             return (net_pnl_sol, net_pnl_percent);
@@ -836,7 +934,7 @@ async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 mint: token.mint.clone(),
                 symbol: token.symbol.clone(),
                 name: token.name.clone(),
-                entry_price: price,
+                entry_price: effective_entry_price, // Use effective price as the main entry price
                 entry_time: Utc::now(),
                 exit_price: None,
                 exit_time: None,
@@ -846,8 +944,8 @@ async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 entry_size_sol: TRADE_SIZE_SOL,
                 total_size_sol: TRADE_SIZE_SOL,
                 drawdown_percent: 0.0,
-                price_highest: price,
-                price_lowest: price,
+                price_highest: effective_entry_price, // Use effective price for tracking
+                price_lowest: effective_entry_price, // Use effective price for tracking
                 entry_transaction_signature: swap_result.transaction_signature,
                 exit_transaction_signature: None,
                 token_amount: Some(token_amount),
@@ -891,12 +989,23 @@ async fn close_position(
                 )
             );
 
-            // Mark position as closed with zero values
+            // Mark position as closed with calculated loss - first case
             position.exit_time = Some(exit_time);
             position.exit_price = Some(exit_price);
             position.effective_exit_price = Some(0.0);
             position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
+            position.pnl_percent = Some(-100.0); // Total loss
             position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
+
+            log(
+                LogTag::Trader,
+                "NO_SELL",
+                &format!(
+                    "Position {} marked as closed (stored amount 0) - Loss: {:.6} SOL (-100%)",
+                    position.symbol,
+                    position.entry_size_sol
+                )
+            );
             return true;
         }
 
@@ -947,12 +1056,23 @@ async fn close_position(
                 )
             );
 
-            // Mark position as closed with zero values
+            // Mark position as closed with calculated loss - second case
             position.exit_time = Some(exit_time);
             position.exit_price = Some(exit_price);
             position.effective_exit_price = Some(0.0);
             position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
+            position.pnl_percent = Some(-100.0); // Total loss
             position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
+
+            log(
+                LogTag::Trader,
+                "NO_SELL",
+                &format!(
+                    "Position {} marked as closed (no tokens in wallet) - Loss: {:.6} SOL (-100%)",
+                    position.symbol,
+                    position.entry_size_sol
+                )
+            );
             return true;
         }
 
@@ -1017,22 +1137,75 @@ async fn close_position(
                     return false; // Failed to close properly
                 }
 
-                // Calculate actual P&L based on real transaction amounts
-                let actual_sol_received = crate::wallet::lamports_to_sol(sol_received);
-                let net_pnl_sol = actual_sol_received - position.entry_size_sol;
-                let net_pnl_percent = (net_pnl_sol / position.entry_size_sol) * 100.0;
+                // Calculate actual P&L using the new profit calculation system
+                let net_pnl_sol: f64;
+                let net_pnl_percent: f64;
+
+                if let Ok(profit_system) = PROFIT_SYSTEM.lock() {
+                    // Use token decimals for accurate calculation
+                    let token_decimals = Some(token.decimals);
+
+                    // Create a temporary position with the exit data to calculate final P&L
+                    let mut temp_position = position.clone();
+                    temp_position.exit_price = Some(exit_price);
+                    temp_position.effective_exit_price = Some(effective_exit_price);
+
+                    let accurate_pnl = profit_system.calculate_accurate_pnl(
+                        &temp_position,
+                        effective_exit_price,
+                        token_decimals
+                    );
+
+                    net_pnl_sol = accurate_pnl.pnl_sol;
+                    net_pnl_percent = accurate_pnl.pnl_percent;
+
+                    log(
+                        LogTag::Trader,
+                        "PNL_CALC",
+                        &format!(
+                            "P&L calculation for {}: Method={}, SOL={:.6}, %={:.2}%",
+                            position.symbol,
+                            accurate_pnl.calculation_method,
+                            net_pnl_sol,
+                            net_pnl_percent
+                        )
+                    );
+                } else {
+                    // Fallback calculation if profit system is unavailable
+                    let actual_sol_received = crate::wallet::lamports_to_sol(sol_received);
+                    net_pnl_sol = actual_sol_received - position.entry_size_sol;
+                    net_pnl_percent = (net_pnl_sol / position.entry_size_sol) * 100.0;
+
+                    log(
+                        LogTag::Trader,
+                        "PNL_CALC",
+                        &format!(
+                            "P&L calculation for {} (fallback): SOL={:.6}, %={:.2}%",
+                            position.symbol,
+                            net_pnl_sol,
+                            net_pnl_percent
+                        )
+                    );
+                }
                 let is_profitable = net_pnl_sol > 0.0;
 
                 position.exit_price = Some(exit_price);
                 position.exit_time = Some(exit_time);
                 position.pnl_sol = Some(net_pnl_sol);
                 position.pnl_percent = Some(net_pnl_percent);
-                position.total_size_sol = actual_sol_received;
+                position.total_size_sol = crate::wallet::lamports_to_sol(sol_received);
                 position.exit_transaction_signature = transaction_signature.clone();
                 position.effective_exit_price = Some(effective_exit_price);
 
+                // Record trade performance for learning (profit system optimization)
+                if let Ok(mut profit_system) = PROFIT_SYSTEM.lock() {
+                    profit_system.record_trade_performance(position, "successful_sell".to_string());
+                }
+
                 let status_color = if is_profitable { "\x1b[32m" } else { "\x1b[31m" };
                 let status_text = if is_profitable { "PROFIT" } else { "LOSS" };
+
+                let actual_sol_received = crate::wallet::lamports_to_sol(sol_received);
 
                 log(
                     LogTag::Trader,
@@ -1165,7 +1338,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
         display_positions_table().await;
 
         // Wait 10 seconds or until shutdown
-        if check_shutdown_or_delay(&shutdown, Duration::from_secs(10)).await {
+        if check_shutdown_or_delay(&shutdown, Duration::from_secs(5)).await {
             log(LogTag::Trader, "INFO", "positions display monitor shutting down...");
             break;
         }

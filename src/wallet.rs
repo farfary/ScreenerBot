@@ -21,7 +21,7 @@ use std::str::FromStr;
 
 /// Configuration constants for swap operations
 pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
-pub const DEFAULT_FEE: f64 = 0.000001; // 0.006 SOL fee
+pub const DEFAULT_FEE: f64 = 0.0000005; // 0.006 SOL fee
 pub const ANTI_MEV: bool = false; // Enable anti-MEV by default
 pub const PARTNER: &str = "screenerbot"; // Partner identifier
 
