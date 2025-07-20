@@ -5,8 +5,19 @@ use serde::{ Deserialize, Serialize };
 use std::error::Error;
 use std::fmt;
 use base64::{ Engine as _, engine::general_purpose };
-use solana_sdk::{ signature::Keypair, transaction::VersionedTransaction, signer::Signer };
+use solana_sdk::{
+    signature::Keypair,
+    transaction::VersionedTransaction,
+    signer::Signer,
+    pubkey::Pubkey,
+    instruction::Instruction,
+    transaction::Transaction,
+    commitment_config::CommitmentConfig,
+};
+use spl_token::instruction::close_account;
+use spl_associated_token_account::get_associated_token_address;
 use bs58;
+use std::str::FromStr;
 
 /// Configuration constants for swap operations
 pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
@@ -1906,4 +1917,457 @@ pub fn validate_price_near_expected(
 ) -> bool {
     let price_difference = (((current_price - expected_price) / expected_price) * 100.0).abs();
     price_difference <= tolerance_percent
+}
+
+/// Closes the Associated Token Account (ATA) for a given token mint after selling all tokens
+/// This reclaims the rent SOL (~0.002 SOL) from empty token accounts
+/// Supports both regular SPL tokens and Token-2022 tokens
+pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<String, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    log(LogTag::Trader, "ATA", &format!("Attempting to close token account for mint: {}", mint));
+
+    // First verify the token balance is actually zero
+    match get_token_balance(wallet_address, mint).await {
+        Ok(balance) => {
+            if balance > 0 {
+                return Err(
+                    SwapError::InvalidAmount(
+                        format!("Cannot close token account - still has {} tokens", balance)
+                    )
+                );
+            }
+            log(
+                LogTag::Trader,
+                "ATA",
+                &format!("Verified zero balance for {}, proceeding to close ATA", mint)
+            );
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Could not verify token balance before closing ATA: {}", e)
+            );
+            // Continue anyway - the close instruction will fail if tokens remain
+        }
+    }
+
+    // Get the associated token account address
+    let token_account = match get_associated_token_account(wallet_address, mint).await {
+        Ok(account) => account,
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Could not find associated token account for {}: {}", mint, e)
+            );
+            return Err(e);
+        }
+    };
+
+    log(LogTag::Trader, "ATA", &format!("Found token account to close: {}", token_account));
+
+    // Determine if this is a Token-2022 token by checking the token program
+    let is_token_2022 = is_token_2022_mint(mint).await.unwrap_or(false);
+
+    if is_token_2022 {
+        log(LogTag::Trader, "ATA", "Detected Token-2022, using Token Extensions program");
+    } else {
+        log(LogTag::Trader, "ATA", "Using standard SPL Token program");
+    }
+
+    // Create and send the close account instruction using GMGN API approach
+    match close_ata_via_gmgn(wallet_address, &token_account, mint, is_token_2022).await {
+        Ok(signature) => {
+            log(
+                LogTag::Trader,
+                "SUCCESS",
+                &format!("Successfully closed token account for {}. TX: {}", mint, signature)
+            );
+            Ok(signature)
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Failed to close token account for {}: {}", mint, e)
+            );
+            Err(e)
+        }
+    }
+}
+
+/// Gets the associated token account address for a wallet and mint
+async fn get_associated_token_account(
+    wallet_address: &str,
+    mint: &str
+) -> Result<String, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    let rpc_payload =
+        serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTokenAccountsByOwner",
+        "params": [
+            wallet_address,
+            {
+                "mint": mint
+            },
+            {
+                "encoding": "jsonParsed"
+            }
+        ]
+    });
+
+    let client = reqwest::Client::new();
+
+    // Try main RPC first, then fallbacks
+    let rpc_endpoints = std::iter
+        ::once(&configs.rpc_url)
+        .chain(configs.rpc_fallbacks.iter())
+        .collect::<Vec<_>>();
+
+    for rpc_url in rpc_endpoints {
+        match
+            client
+                .post(rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                if !accounts.is_empty() {
+                                    if let Some(pubkey) = accounts[0].get("pubkey") {
+                                        if let Some(pubkey_str) = pubkey.as_str() {
+                                            return Ok(pubkey_str.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                continue;
+            }
+        }
+    }
+
+    Err(SwapError::TransactionError("No associated token account found".to_string()))
+}
+
+/// Checks if a mint is a Token-2022 token by examining its program ID
+async fn is_token_2022_mint(mint: &str) -> Result<bool, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    let rpc_payload =
+        serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getAccountInfo",
+        "params": [
+            mint,
+            {
+                "encoding": "jsonParsed"
+            }
+        ]
+    });
+
+    let client = reqwest::Client::new();
+
+    // Try main RPC first, then fallbacks
+    let rpc_endpoints = std::iter
+        ::once(&configs.rpc_url)
+        .chain(configs.rpc_fallbacks.iter())
+        .collect::<Vec<_>>();
+
+    for rpc_url in rpc_endpoints {
+        match
+            client
+                .post(rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(owner) = value.get("owner") {
+                                if let Some(owner_str) = owner.as_str() {
+                                    // Token Extensions Program ID (Token-2022)
+                                    return Ok(
+                                        owner_str == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                continue;
+            }
+        }
+    }
+
+    // Default to false if we can't determine
+    Ok(false)
+}
+
+/// Closes ATA using proper Solana SDK for real ATA closing
+async fn close_ata_via_gmgn(
+    wallet_address: &str,
+    token_account: &str,
+    mint: &str,
+    is_token_2022: bool
+) -> Result<String, SwapError> {
+    log(
+        LogTag::Trader,
+        "ATA",
+        &format!("Closing ATA {} for mint {} using {} program", token_account, mint, if
+            is_token_2022
+        {
+            "Token-2022"
+        } else {
+            "SPL Token"
+        })
+    );
+
+    // Use proper Solana SDK to build and send close instruction
+    match build_and_send_close_instruction(wallet_address, token_account, is_token_2022).await {
+        Ok(signature) => {
+            log(LogTag::Trader, "SUCCESS", &format!("ATA closed successfully. TX: {}", signature));
+            Ok(signature)
+        }
+        Err(e) => {
+            log(LogTag::Trader, "ERROR", &format!("Failed to close ATA: {}", e));
+            Err(e)
+        }
+    }
+}
+
+/// Builds and sends close account instruction using Solana SDK
+async fn build_and_send_close_instruction(
+    wallet_address: &str,
+    token_account: &str,
+    is_token_2022: bool
+) -> Result<String, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    // Parse addresses
+    let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|
+        SwapError::InvalidAmount(format!("Invalid wallet address: {}", e))
+    )?;
+
+    let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e|
+        SwapError::InvalidAmount(format!("Invalid token account: {}", e))
+    )?;
+
+    // Decode private key
+    let private_key_bytes = bs58
+        ::decode(&configs.main_wallet_private)
+        .into_vec()
+        .map_err(|e| SwapError::ConfigError(format!("Invalid private key: {}", e)))?;
+
+    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
+        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+    )?;
+
+    // Build close account instruction
+    let close_instruction = if is_token_2022 {
+        // For Token-2022, use the Token Extensions program
+        build_token_2022_close_instruction(&token_account_pubkey, &owner_pubkey)?
+    } else {
+        // For regular SPL tokens, use standard close_account instruction
+        close_account(
+            &spl_token::id(),
+            &token_account_pubkey,
+            &owner_pubkey,
+            &owner_pubkey,
+            &[]
+        ).map_err(|e|
+            SwapError::TransactionError(format!("Failed to build close instruction: {}", e))
+        )?
+    };
+
+    log(
+        LogTag::Trader,
+        "ATA",
+        &format!("Built close instruction for {} account", if is_token_2022 {
+            "Token-2022"
+        } else {
+            "SPL Token"
+        })
+    );
+
+    // Get recent blockhash via RPC
+    let recent_blockhash = get_latest_blockhash(&configs.rpc_url).await?;
+
+    // Build transaction
+    let transaction = Transaction::new_signed_with_payer(
+        &[close_instruction],
+        Some(&owner_pubkey),
+        &[&keypair],
+        recent_blockhash
+    );
+
+    log(LogTag::Trader, "ATA", "Built and signed close transaction");
+
+    // Send transaction via RPC
+    send_close_transaction_via_rpc(&transaction, &configs).await
+}
+
+/// Builds close instruction for Token-2022 accounts
+fn build_token_2022_close_instruction(
+    token_account: &Pubkey,
+    owner: &Pubkey
+) -> Result<Instruction, SwapError> {
+    // Token-2022 uses the same close account instruction format
+    // but with different program ID
+    let token_2022_program_id = Pubkey::from_str(
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    ).map_err(|e| SwapError::TransactionError(format!("Invalid Token-2022 program ID: {}", e)))?;
+
+    close_account(&token_2022_program_id, token_account, owner, owner, &[]).map_err(|e|
+        SwapError::TransactionError(format!("Failed to build Token-2022 close instruction: {}", e))
+    )
+}
+
+/// Gets latest blockhash from Solana RPC
+async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {
+    let client = reqwest::Client::new();
+
+    let rpc_payload =
+        serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getLatestBlockhash",
+        "params": [
+            {
+                "commitment": "finalized"
+            }
+        ]
+    });
+
+    let response = client
+        .post(rpc_url)
+        .header("Content-Type", "application/json")
+        .json(&rpc_payload)
+        .send().await
+        .map_err(|e| SwapError::NetworkError(e))?;
+
+    let rpc_response: serde_json::Value = response
+        .json().await
+        .map_err(|e| SwapError::NetworkError(e))?;
+
+    if let Some(result) = rpc_response.get("result") {
+        if let Some(value) = result.get("value") {
+            if let Some(blockhash_str) = value.get("blockhash").and_then(|b| b.as_str()) {
+                let blockhash = solana_sdk::hash::Hash
+                    ::from_str(blockhash_str)
+                    .map_err(|e| SwapError::TransactionError(format!("Invalid blockhash: {}", e)))?;
+                return Ok(blockhash);
+            }
+        }
+    }
+
+    Err(SwapError::TransactionError("Failed to get latest blockhash".to_string()))
+}
+
+/// Sends close transaction via RPC
+async fn send_close_transaction_via_rpc(
+    transaction: &Transaction,
+    configs: &crate::global::Configs
+) -> Result<String, SwapError> {
+    let client = reqwest::Client::new();
+
+    // Serialize transaction
+    let serialized_tx = bincode
+        ::serialize(transaction)
+        .map_err(|e|
+            SwapError::TransactionError(format!("Failed to serialize transaction: {}", e))
+        )?;
+
+    let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
+
+    let rpc_payload =
+        serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "sendTransaction",
+        "params": [
+            tx_base64,
+            {
+                "encoding": "base64",
+                "skipPreflight": false,
+                "preflightCommitment": "processed",
+                "maxRetries": 3
+            }
+        ]
+    });
+
+    log(LogTag::Trader, "ATA", "Sending close transaction to Solana network...");
+
+    // Try main RPC first, then fallbacks
+    let rpc_endpoints = std::iter
+        ::once(&configs.rpc_url)
+        .chain(configs.rpc_fallbacks.iter())
+        .collect::<Vec<_>>();
+
+    for (i, rpc_url) in rpc_endpoints.iter().enumerate() {
+        log(
+            LogTag::Trader,
+            "ATA",
+            &format!("Trying RPC endpoint {} ({}/{})", rpc_url, i + 1, rpc_endpoints.len())
+        );
+
+        match
+            client
+                .post(*rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(signature) = result.as_str() {
+                            log(
+                                LogTag::Trader,
+                                "SUCCESS",
+                                &format!(
+                                    "Transaction sent successfully via {}: {}",
+                                    rpc_url,
+                                    signature
+                                )
+                            );
+                            return Ok(signature.to_string());
+                        }
+                    }
+                    if let Some(error) = rpc_response.get("error") {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!("RPC error from {}: {:?}", rpc_url, error)
+                        );
+                        continue;
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::Trader, "ERROR", &format!("Network error with {}: {}", rpc_url, e));
+                continue;
+            }
+        }
+    }
+
+    Err(SwapError::TransactionError("All RPC endpoints failed to send transaction".to_string()))
 }

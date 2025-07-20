@@ -1,5 +1,5 @@
 /// Trading configuration constants
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 7.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 pub const DEFAULT_FEE: f64 = 0.000002;
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
@@ -8,6 +8,9 @@ pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 pub const MAX_OPEN_POSITIONS: usize = 5;
+
+/// ATA (Associated Token Account) management configuration
+pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
@@ -237,138 +240,78 @@ fn get_open_positions_count() -> usize {
 }
 
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    // ===== TIME PARAMETERS =====
-    let min_time_secs = 30.0;
-    let aggressive_profit_time_secs = 445.0;
-    let _normal_profit_time_secs = 900.0;
-    let max_time_secs = 3600.0;
+    // ===== CONSTANTS =====
+    const MIN_HOLD_TIME_SECS: f64 = 60.0; // Minimum time to hold before considering selling
+    const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Maximum time to hold a position
+    const STOP_LOSS_PERCENT: f64 = -20.0; // Maximum acceptable loss in percentage
+    const PROFIT_TARGET_PERCENT: f64 = 50.0; // Profit target percentage
+    const TRAILING_STOP_PERCENT: f64 = 5.0; // Trailing stop percentage after profit target reached
+    const TIME_DECAY_START_SECS: f64 = 1800.0; // Start applying time decay after 30 minutes
 
-    // ===== PROFIT/LOSS PARAMETERS =====
-    let small_profit = 3.0;
-    let good_profit = 25.0;
-    let great_profit = 50.0;
-    let excellent_profit = 100.0;
+    // ===== TIME CALCULATIONS =====
+    let time_held_secs: f64 = (now - pos.entry_time).num_seconds() as f64;
 
-    let _small_loss = -10.0;
-    let _medium_loss = -30.0;
-    let large_loss = -40.0;
-    let extreme_loss = -55.0;
-    let stop_loss = -70.0;
-
-    // ===== DRAWDOWN PARAMETERS =====
-    let drawdown_threshold = 30.0;
-    let max_drawdown = 50.0;
-
-    // Calculate position duration
-    let time_secs = (now - pos.entry_time).num_seconds().max(min_time_secs as i64) as f64;
-
-    // Normalized time factors
-    let norm_time_standard = (time_secs / max_time_secs).clamp(0.0, 1.0);
-    let norm_time_profit = (time_secs / aggressive_profit_time_secs).clamp(0.0, 1.0);
-
-    // USE EFFECTIVE ENTRY PRICE IF AVAILABLE
-    let entry_price = pos.effective_entry_price.unwrap_or(pos.entry_price);
-
-    // Calculate current P&L percentage
-    let current_pnl_percent = if entry_price > 0.0 {
-        ((current_price - entry_price) / entry_price) * 100.0
+    // ===== PROFIT AND LOSS CALCULATIONS =====
+    let current_pnl_percent: f64 = if pos.entry_price > 0.0 {
+        ((current_price - pos.entry_price) / pos.entry_price) * 100.0
     } else {
         0.0
     };
 
-    // Calculate distance from all-time high price
-    let peak_price = pos.price_highest;
-    let current_drawdown = if peak_price > 0.0 {
-        ((peak_price - current_price) / peak_price) * 100.0
+    // ===== TRAILING STOP LOGIC =====
+    let peak_price: f64 = f64::max(pos.price_highest, current_price);
+    let drawdown_percent: f64 = if peak_price > 0.0 {
+        ((current_price - peak_price) / peak_price) * 100.0
+    } else {
+        0.0
+    };
+    let trailing_stop_triggered: bool =
+        current_pnl_percent >= PROFIT_TARGET_PERCENT && drawdown_percent <= -TRAILING_STOP_PERCENT;
+
+    // ===== DECISION FACTORS =====
+    // 1. Stop Loss Trigger
+    let stop_loss_triggered: bool = current_pnl_percent <= STOP_LOSS_PERCENT;
+
+    // 2. Profit Target Reached
+    let profit_target_reached: bool = current_pnl_percent >= PROFIT_TARGET_PERCENT;
+
+    // 3. Trailing Stop Active
+    let trailing_stop_active: bool = trailing_stop_triggered;
+
+    // 4. Time Decay Factor (starts affecting urgency after TIME_DECAY_START_SECS)
+    let time_decay_factor: f64 = if time_held_secs > TIME_DECAY_START_SECS {
+        let decay_duration = MAX_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
+        let excess_time = time_held_secs - TIME_DECAY_START_SECS;
+        let time_decay = excess_time / decay_duration;
+        f64::min(time_decay, 1.0) // Caps at 1.0
     } else {
         0.0
     };
 
-    // ==== URGENCY CALCULATION ====
-    let time_urgency = norm_time_standard * 0.3;
+    // ===== URGENCY CALCULATION =====
+    // Base urgency is calculated from current PnL
+    let mut urgency: f64 = 0.0;
 
-    // IMPROVED LOSS HANDLING
-    let loss_urgency = if current_pnl_percent < 0.0 {
-        // More dynamic loss threshold curve
-        let time_adjusted_loss_threshold = if time_secs < 300.0 {
-            // First 5 minutes: higher tolerance
-            extreme_loss * 0.7
-        } else if time_secs < 900.0 {
-            // 5-15 minutes: normal tolerance
-            extreme_loss
-        } else {
-            // After 15 minutes: tightening tolerance
-            extreme_loss * 1.3
-        };
-
-        let severity = if time_adjusted_loss_threshold != 0.0 {
-            (current_pnl_percent / time_adjusted_loss_threshold).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-
-        // Early large losses trigger faster
-        if time_secs < 600.0 && current_pnl_percent <= large_loss {
-            severity * (1.0 - time_secs / 600.0).clamp(0.5, 1.0)
-        } else {
-            severity * norm_time_standard.powf(0.7) * 0.8
-        }
+    if stop_loss_triggered {
+        urgency = 1.0; // Immediate exit due to stop loss
+    } else if trailing_stop_active {
+        urgency = 0.9; // High urgency to lock in profits with trailing stop
+    } else if profit_target_reached {
+        urgency = 0.8; // High urgency to secure profits
     } else {
-        0.0
-    };
+        // Apply time decay to increase urgency gradually after TIME_DECAY_START_SECS
+        urgency = time_decay_factor * 0.5; // Max additional urgency is 0.5
+    }
 
-    // DYNAMIC PROFIT URGENCY
-    let profit_urgency = if current_pnl_percent > 0.0 {
-        // Scale thresholds based on time held
-        let scaled_great_profit = great_profit * (1.0 - norm_time_profit * 0.3);
-        let scaled_good_profit = good_profit * (1.0 - norm_time_profit * 0.5);
+    // Encourage exits for positions with low or negative PnL after significant time has elapsed
+    if time_held_secs > TIME_DECAY_START_SECS && current_pnl_percent <= 0.0 {
+        urgency = f64::max(urgency, 0.5); // Increase urgency to at least 0.5
+    }
 
-        let profit_factor = match current_pnl_percent {
-            p if p >= excellent_profit => 1.0,
-            p if p >= scaled_great_profit => 0.8,
-            p if p >= scaled_good_profit => 0.6,
-            p if p >= small_profit => 0.4,
-            _ => 0.2,
-        };
+    // Ensure urgency is within [0.0, 1.0]
+    urgency = f64::max(0.0, f64::min(urgency, 1.0));
 
-        // Quick profit bonus
-        let time_bonus = if time_secs < 300.0 && current_pnl_percent > good_profit {
-            0.3 * (1.0 - time_secs / 300.0)
-        } else {
-            0.0
-        };
-
-        (profit_factor * (0.6 * norm_time_profit + 0.4) + time_bonus).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-
-    // DRAWDOWN URGENCY WITH P&L AWARENESS
-    let drawdown_urgency = if current_drawdown > drawdown_threshold {
-        let tolerance_factor = if current_pnl_percent > 0.0 { 0.7 } else { 0.5 };
-        let severity = (
-            (current_drawdown - drawdown_threshold) /
-            (max_drawdown - drawdown_threshold)
-        ).clamp(0.0, 1.0);
-
-        // Increase urgency if drawdown occurs while in profit
-        severity * tolerance_factor * (1.0 + 0.5 * ((current_pnl_percent > 0.0) as u8 as f64))
-    } else {
-        0.0
-    };
-
-    // ABSOLUTE STOP-LOSS
-    let stop_loss_urgency = if current_pnl_percent <= stop_loss { 1.0 } else { 0.0 };
-
-    // COMBINE FACTORS WITH SMART CAPS
-    let raw_urgency =
-        time_urgency +
-        loss_urgency.min(0.6) + // Cap loss influence
-        profit_urgency.min(0.8) + // Cap profit influence
-        drawdown_urgency.min(0.7) +
-        stop_loss_urgency;
-
-    raw_urgency.clamp(0.0, 1.0)
+    urgency
 }
 
 /// Checks recent transactions to see if position was already closed
@@ -449,6 +392,51 @@ async fn check_recent_transactions_for_position(position: &mut Position) -> bool
                             net_pnl_percent
                         )
                     );
+
+                    // Attempt to close ATA since the position was auto-detected as sold
+                    if CLOSE_ATA_AFTER_SELL {
+                        // Get wallet address for ATA closing
+                        if let Ok(wallet_address) = crate::wallet::get_wallet_address() {
+                            log(
+                                LogTag::Trader,
+                                "ATA",
+                                &format!(
+                                    "Attempting to close ATA for auto-detected sold position: {}",
+                                    position.symbol
+                                )
+                            );
+
+                            match
+                                crate::wallet::close_token_account(
+                                    &position.mint,
+                                    &wallet_address
+                                ).await
+                            {
+                                Ok(close_tx) => {
+                                    log(
+                                        LogTag::Trader,
+                                        "SUCCESS",
+                                        &format!(
+                                            "Successfully closed ATA for auto-detected position {} - Rent reclaimed. TX: {}",
+                                            position.symbol,
+                                            close_tx
+                                        )
+                                    );
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Trader,
+                                        "WARN",
+                                        &format!(
+                                            "Failed to close ATA for auto-detected position {} (not critical): {}",
+                                            position.symbol,
+                                            e
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
 
                 return true;
@@ -831,14 +819,14 @@ async fn close_position(
     exit_time: DateTime<Utc>
 ) -> bool {
     // Only attempt to sell if we have tokens from the buy transaction
-    if let Some(token_amount) = position.token_amount {
+    if let Some(stored_token_amount) = position.token_amount {
         // Check if we actually have tokens to sell
-        if token_amount == 0 {
+        if stored_token_amount == 0 {
             log(
                 LogTag::Trader,
                 "WARNING",
                 &format!(
-                    "Cannot close position for {} ({}) - No tokens to sell (amount: 0)",
+                    "Cannot close position for {} ({}) - No tokens to sell (stored amount: 0)",
                     position.symbol,
                     position.mint
                 )
@@ -851,6 +839,76 @@ async fn close_position(
             position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
             position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
             return true;
+        }
+
+        // Check actual current wallet balance before attempting to sell
+        let wallet_address = match crate::wallet::get_wallet_address() {
+            Ok(addr) => addr,
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!(
+                        "Failed to get wallet address for {} balance check: {}",
+                        position.symbol,
+                        e
+                    )
+                );
+                return false;
+            }
+        };
+
+        let actual_balance = match
+            crate::wallet::get_token_balance(&wallet_address, &position.mint).await
+        {
+            Ok(balance) => balance,
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!("Failed to check current {} balance: {}", position.symbol, e)
+                );
+                return false;
+            }
+        };
+
+        // Use the minimum of stored amount and actual balance to avoid "insufficient balance" errors
+        let token_amount = std::cmp::min(stored_token_amount, actual_balance);
+
+        if token_amount == 0 {
+            log(
+                LogTag::Trader,
+                "WARNING",
+                &format!(
+                    "Cannot close position for {} ({}) - No tokens in wallet (stored: {}, actual: {})",
+                    position.symbol,
+                    position.mint,
+                    stored_token_amount,
+                    actual_balance
+                )
+            );
+
+            // Mark position as closed with zero values
+            position.exit_time = Some(exit_time);
+            position.exit_price = Some(exit_price);
+            position.effective_exit_price = Some(0.0);
+            position.pnl_sol = Some(-position.entry_size_sol); // Loss = entry amount
+            position.exit_transaction_signature = Some("NO_TOKENS_TO_SELL".to_string());
+            return true;
+        }
+
+        if actual_balance < stored_token_amount {
+            log(
+                LogTag::Trader,
+                "WARNING",
+                &format!(
+                    "Balance mismatch for {} - Position stored: {}, Wallet actual: {}, Selling: {}",
+                    position.symbol,
+                    stored_token_amount,
+                    actual_balance,
+                    token_amount
+                )
+            );
         }
 
         log(
@@ -932,6 +990,53 @@ async fn close_position(
                         position.drawdown_percent
                     )
                 );
+
+                // Attempt to close the Associated Token Account (ATA) if enabled
+                if CLOSE_ATA_AFTER_SELL {
+                    log(
+                        LogTag::Trader,
+                        "ATA",
+                        &format!(
+                            "Attempting to close ATA for {} after successful sell",
+                            position.symbol
+                        )
+                    );
+
+                    match crate::wallet::close_token_account(&position.mint, &wallet_address).await {
+                        Ok(close_tx) => {
+                            log(
+                                LogTag::Trader,
+                                "SUCCESS",
+                                &format!(
+                                    "Successfully closed ATA for {} - Rent reclaimed. TX: {}",
+                                    position.symbol,
+                                    close_tx
+                                )
+                            );
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Trader,
+                                "WARN",
+                                &format!(
+                                    "Failed to close ATA for {} (this is not critical): {}",
+                                    position.symbol,
+                                    e
+                                )
+                            );
+                            // Don't fail the position close if ATA close fails
+                        }
+                    }
+                } else {
+                    log(
+                        LogTag::Trader,
+                        "INFO",
+                        &format!(
+                            "ATA closing disabled for {} (CLOSE_ATA_AFTER_SELL = false)",
+                            position.symbol
+                        )
+                    );
+                }
 
                 return true; // Successfully closed
             }
