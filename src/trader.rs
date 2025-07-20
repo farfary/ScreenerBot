@@ -7,7 +7,7 @@ pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 2;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 1;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
