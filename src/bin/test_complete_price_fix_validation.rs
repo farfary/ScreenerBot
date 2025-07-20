@@ -174,6 +174,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📍 Found {} positions in positions.json", positions.len());
 
     let mut fixed_positions = Vec::new();
+    let original_positions_count = positions.len();
+    let wrong_price_count = positions
+        .iter()
+        .filter(|p| p.effective_entry_price.map_or(true, |price| price < 1e-10))
+        .count();
 
     for position in positions {
         println!("\n🔍 Position: {} ({})", position.symbol, position.mint);
@@ -239,14 +244,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=================================");
     println!(
         "Found and corrected {} positions with wrong effective prices.",
-        fixed_positions.len().saturating_sub(
-            positions.len().saturating_sub(
-                positions
-                    .iter()
-                    .filter(|p| p.effective_entry_price.map_or(true, |price| price < 1e-10))
-                    .count()
-            )
-        )
+        fixed_positions
+            .len()
+            .saturating_sub(original_positions_count.saturating_sub(wrong_price_count))
     );
 
     // Uncomment the next line if you want to save the corrected positions automatically
