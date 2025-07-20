@@ -584,25 +584,43 @@ pub async fn calculate_effective_price(
         return Err(SwapError::TransactionError("Transaction failed on-chain".to_string()));
     }
 
-    // Calculate balance changes
-    let (actual_input_change, actual_output_change) = calculate_balance_changes(
-        &meta,
-        input_mint,
-        output_mint,
-        wallet_address
-    )?;
+    // Calculate balance changes with decimals information
+    let (actual_input_change, actual_output_change, input_decimals, output_decimals) =
+        calculate_balance_changes_with_decimals(&meta, input_mint, output_mint, wallet_address)?;
 
-    // Calculate effective price
+    // Calculate effective price using UI amounts (accounting for decimals)
     let effective_price = if actual_input_change > 0 && actual_output_change > 0 {
         if input_mint == SOL_MINT {
-            // SOL -> Token: price = SOL spent / tokens received
-            lamports_to_sol(actual_input_change) / (actual_output_change as f64)
+            // SOL -> Token: price = SOL spent / UI tokens received
+            let sol_spent = lamports_to_sol(actual_input_change);
+            let ui_tokens_received =
+                (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
+            if ui_tokens_received > 0.0 {
+                sol_spent / ui_tokens_received
+            } else {
+                0.0
+            }
         } else if output_mint == SOL_MINT {
-            // Token -> SOL: price = SOL received / tokens spent
-            lamports_to_sol(actual_output_change) / (actual_input_change as f64)
+            // Token -> SOL: price = SOL received / UI tokens spent
+            let sol_received = lamports_to_sol(actual_output_change);
+            let ui_tokens_spent =
+                (actual_input_change as f64) / (10_f64).powi(input_decimals as i32);
+            if ui_tokens_spent > 0.0 {
+                sol_received / ui_tokens_spent
+            } else {
+                0.0
+            }
         } else {
-            // Token -> Token: ratio
-            (actual_output_change as f64) / (actual_input_change as f64)
+            // Token -> Token: ratio using UI amounts
+            let ui_input_amount =
+                (actual_input_change as f64) / (10_f64).powi(input_decimals as i32);
+            let ui_output_amount =
+                (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
+            if ui_input_amount > 0.0 {
+                ui_output_amount / ui_input_amount
+            } else {
+                0.0
+            }
         }
     } else {
         0.0
@@ -612,25 +630,29 @@ pub async fn calculate_effective_price(
         LogTag::Trader,
         "EFFECTIVE",
         &format!(
-            "Effective price calculated: {:.15} (Input: {} lamports, Output: {} lamports)",
+            "Effective price calculated: {:.15} (Input: {} raw units, Output: {} raw units, Input decimals: {}, Output decimals: {})",
             effective_price,
             actual_input_change,
-            actual_output_change
+            actual_output_change,
+            input_decimals,
+            output_decimals
         )
     );
 
     Ok((effective_price, actual_input_change, actual_output_change, 0.0))
 }
 
-/// Calculates balance changes from transaction metadata
-fn calculate_balance_changes(
+/// Calculates balance changes from transaction metadata with decimal information
+fn calculate_balance_changes_with_decimals(
     meta: &TransactionMeta,
     input_mint: &str,
     output_mint: &str,
     wallet_address: &str
-) -> Result<(u64, u64), SwapError> {
+) -> Result<(u64, u64, u8, u8), SwapError> {
     let mut input_change = 0u64;
     let mut output_change = 0u64;
+    let mut input_decimals = 9u8; // Default SOL decimals
+    let mut output_decimals = 9u8; // Default SOL decimals
 
     // Handle SOL balance changes
     if input_mint == SOL_MINT || output_mint == SOL_MINT {
@@ -641,8 +663,10 @@ fn calculate_balance_changes(
 
             if input_mint == SOL_MINT {
                 input_change = sol_change;
+                input_decimals = 9; // SOL has 9 decimals
             } else {
                 output_change = sol_change;
+                output_decimals = 9; // SOL has 9 decimals
             }
         }
     }
@@ -657,7 +681,7 @@ fn calculate_balance_changes(
         // Find changes for input token
         if input_mint != SOL_MINT {
             if
-                let Some(change) = find_token_balance_change(
+                let Some((change, decimals)) = find_token_balance_change_with_decimals(
                     pre_tokens,
                     post_tokens,
                     input_mint,
@@ -665,13 +689,14 @@ fn calculate_balance_changes(
                 )
             {
                 input_change = change;
+                input_decimals = decimals;
             }
         }
 
         // Find changes for output token
         if output_mint != SOL_MINT {
             if
-                let Some(change) = find_token_balance_change(
+                let Some((change, decimals)) = find_token_balance_change_with_decimals(
                     pre_tokens,
                     post_tokens,
                     output_mint,
@@ -679,11 +704,60 @@ fn calculate_balance_changes(
                 )
             {
                 output_change = change;
+                output_decimals = decimals;
             }
         }
     }
 
-    Ok((input_change, output_change))
+    Ok((input_change, output_change, input_decimals, output_decimals))
+}
+
+/// Finds token balance change for a specific mint and wallet with decimal information
+fn find_token_balance_change_with_decimals(
+    pre_balances: &[TokenBalance],
+    post_balances: &[TokenBalance],
+    mint: &str,
+    wallet_address: &str
+) -> Option<(u64, u8)> {
+    // Find pre-balance for this mint and wallet
+    let pre_balance = pre_balances
+        .iter()
+        .find(|tb| tb.mint == mint && tb.owner.as_ref() == Some(&wallet_address.to_string()))
+        .and_then(|tb| tb.ui_token_amount.amount.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    // Find post-balance for this mint and wallet with decimals
+    let (post_balance, decimals) = post_balances
+        .iter()
+        .find(|tb| tb.mint == mint && tb.owner.as_ref() == Some(&wallet_address.to_string()))
+        .map(|tb| {
+            let balance = tb.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+            let decimals = tb.ui_token_amount.decimals;
+            (balance, decimals)
+        })
+        .or_else(|| {
+            // If not found in post, check pre for decimals
+            pre_balances
+                .iter()
+                .find(
+                    |tb| tb.mint == mint && tb.owner.as_ref() == Some(&wallet_address.to_string())
+                )
+                .map(|tb| (0u64, tb.ui_token_amount.decimals))
+        })
+        .unwrap_or((0u64, 9u8)); // Default to 9 decimals if not found
+
+    // Return the absolute change with decimals
+    let change = if post_balance > pre_balance {
+        post_balance - pre_balance
+    } else {
+        pre_balance - post_balance
+    };
+
+    if change > 0 {
+        Some((change, decimals))
+    } else {
+        None
+    }
 }
 
 /// Finds token balance change for a specific mint and wallet

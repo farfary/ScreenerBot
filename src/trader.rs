@@ -1,7 +1,7 @@
 /// Trading configuration constants
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
-pub const DEFAULT_FEE: f64 = 0.00005;
+pub const DEFAULT_FEE: f64 = 0.0000015;
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 pub const STOP_LOSS_PERCENT: f64 = -30.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
@@ -429,6 +429,33 @@ async fn display_bot_summary(closed_positions: &[&Position]) {
     println!("{}", summary_table);
 }
 
+/// Get current price for a token from the global token list
+fn get_current_token_price(mint: &str) -> Option<f64> {
+    let tokens = LIST_TOKENS.read().unwrap();
+
+    // Find the token by mint address
+    for token in tokens.iter() {
+        if token.mint == mint {
+            // Try to get the best available price (prioritize DexScreener SOL price)
+            if let Some(price) = token.price_dexscreener_sol {
+                return Some(price);
+            }
+            // Fallback to other price sources
+            if let Some(price) = token.price_geckoterminal_sol {
+                return Some(price);
+            }
+            if let Some(price) = token.price_raydium_sol {
+                return Some(price);
+            }
+            if let Some(price) = token.price_pool_sol {
+                return Some(price);
+            }
+        }
+    }
+
+    None
+}
+
 async fn display_positions_table() {
     let (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl) = {
         let all_positions = SAVED_POSITIONS.lock().unwrap();
@@ -503,7 +530,11 @@ async fn display_positions_table() {
 
         let open_position_displays: Vec<_> = sorted_open
             .iter()
-            .map(|position| PositionDisplay::from_position(position, None))
+            .map(|position| {
+                // Get current price for this position
+                let current_price = get_current_token_price(&position.mint);
+                PositionDisplay::from_position(position, current_price)
+            })
             .collect();
 
         println!("\n🔄 Open Positions:");
