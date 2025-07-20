@@ -19,13 +19,14 @@ pub struct TransactionFetcher {
 
 impl TransactionFetcher {
     /// Create a new transaction fetcher
-    pub fn new(
-        configs: Configs,
-        batch_config: Option<BatchConfig>
-    ) -> Result<Self, Box<dyn Error>> {
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build()?;
+    pub fn new(configs: Configs, batch_config: Option<BatchConfig>) -> Result<Self, String> {
+        let client = reqwest::Client
+            ::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|e| e.to_string())?;
 
-        let db = TransactionDatabase::new()?;
+        let db = TransactionDatabase::new().map_err(|e| e.to_string())?;
         let batch_config = batch_config.unwrap_or_default();
 
         Ok(Self {
@@ -41,7 +42,7 @@ impl TransactionFetcher {
         &self,
         wallet_address: &str,
         limit: usize
-    ) -> Result<Vec<SignatureInfo>, Box<dyn Error>> {
+    ) -> Result<Vec<SignatureInfo>, String> {
         let actual_limit = limit.min(MAX_TRANSACTIONS_PER_REQUEST);
 
         let rpc_payload =
@@ -103,7 +104,84 @@ impl TransactionFetcher {
             }
         }
 
-        Err("All RPC endpoints failed for signature fetching".into())
+        Err("All RPC endpoints failed".to_string())
+    }
+
+    /// Get transaction signatures before a specific signature with RPC fallback support
+    pub async fn get_signatures_before(
+        &self,
+        wallet_address: &str,
+        limit: usize,
+        before_signature: &str
+    ) -> Result<Vec<SignatureInfo>, String> {
+        let actual_limit = limit.min(MAX_TRANSACTIONS_PER_REQUEST);
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSignaturesForAddress",
+            "params": [
+                wallet_address,
+                {
+                    "limit": actual_limit,
+                    "before": before_signature,
+                    "commitment": "confirmed"
+                }
+            ]
+        });
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "Fetching {} signatures before {} for wallet: {}",
+                actual_limit,
+                before_signature,
+                wallet_address
+            )
+        );
+
+        // Try main RPC first
+        match self.fetch_signatures_from_rpc(&self.configs.rpc_url, &rpc_payload).await {
+            Ok(signatures) => {
+                return Ok(signatures);
+            }
+            Err(e) => {
+                if e.to_string().contains("429") {
+                    log(LogTag::System, "WARNING", "Main RPC rate limited, trying fallbacks...");
+                } else {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Main RPC failed: {}, trying fallbacks...", e)
+                    );
+                }
+            }
+        }
+
+        // Try fallback RPCs
+        for (i, fallback_rpc) in self.configs.rpc_fallbacks.iter().enumerate() {
+            match self.fetch_signatures_from_rpc(fallback_rpc, &rpc_payload).await {
+                Ok(signatures) => {
+                    log(
+                        LogTag::System,
+                        "SUCCESS",
+                        &format!("Got signatures from fallback RPC {} ({})", i + 1, fallback_rpc)
+                    );
+                    return Ok(signatures);
+                }
+                Err(e) => {
+                    log(
+                        LogTag::System,
+                        "WARNING",
+                        &format!("Fallback RPC {} failed: {}", i + 1, e)
+                    );
+                }
+            }
+        }
+
+        Err("All RPC endpoints failed".to_string())
     }
 
     /// Fetch signatures from a specific RPC endpoint
@@ -200,7 +278,7 @@ impl TransactionFetcher {
     pub async fn get_transaction_details_with_fallback(
         &self,
         signature: &str
-    ) -> Result<Option<TransactionResult>, Box<dyn Error>> {
+    ) -> Result<Option<TransactionResult>, String> {
         // Try main RPC first
         match self.get_transaction_details(signature, &self.configs.rpc_url).await {
             Ok(transaction) => {
@@ -257,7 +335,7 @@ impl TransactionFetcher {
             }
         }
 
-        Err(format!("All RPC endpoints failed for transaction {}", signature).into())
+        Err(format!("All RPC endpoints failed for transaction {}", signature))
     }
 
     /// Batch fetch transactions with intelligent caching and concurrency control
@@ -358,7 +436,7 @@ impl TransactionFetcher {
     async fn fetch_batch_with_retry(
         &self,
         signatures: Vec<String>
-    ) -> Result<Vec<(String, TransactionResult)>, Box<dyn Error>> {
+    ) -> Result<Vec<(String, TransactionResult)>, String> {
         let mut results = Vec::new();
 
         for signature in signatures {
@@ -504,7 +582,7 @@ impl TaskFetcher {
     async fn get_transaction_details_with_fallback(
         &self,
         signature: &str
-    ) -> Result<Option<TransactionResult>, Box<dyn Error>> {
+    ) -> Result<Option<TransactionResult>, String> {
         // Simplified version without database access for async tasks
         let rpc_payload =
             serde_json::json!({
@@ -538,29 +616,32 @@ impl TaskFetcher {
             }
         }
 
-        Err(format!("All RPC endpoints failed for transaction {}", signature).into())
+        Err(format!("All RPC endpoints failed for transaction {}", signature))
     }
 
     async fn fetch_transaction_from_rpc(
         &self,
         rpc_url: &str,
         payload: &serde_json::Value
-    ) -> Result<Option<TransactionResult>, Box<dyn Error>> {
+    ) -> Result<Option<TransactionResult>, String> {
         let response = self.client
             .post(rpc_url)
             .header("Content-Type", "application/json")
             .json(payload)
-            .send().await?;
+            .send().await
+            .map_err(|e| e.to_string())?;
 
         if !response.status().is_success() {
-            return Err(format!("HTTP error: {}", response.status()).into());
+            return Err(format!("HTTP error: {}", response.status()));
         }
 
-        let response_text = response.text().await?;
-        let rpc_response: TransactionResponse = serde_json::from_str(&response_text)?;
+        let response_text = response.text().await.map_err(|e| e.to_string())?;
+        let rpc_response: TransactionResponse = serde_json
+            ::from_str(&response_text)
+            .map_err(|e| e.to_string())?;
 
         if let Some(error) = rpc_response.error {
-            return Err(format!("RPC error: {:?}", error).into());
+            return Err(format!("RPC error: {:?}", error));
         }
 
         Ok(rpc_response.result)
@@ -569,7 +650,7 @@ impl TaskFetcher {
     async fn fetch_batch_with_retry(
         &self,
         signatures: Vec<String>
-    ) -> Result<Vec<(String, TransactionResult)>, Box<dyn Error>> {
+    ) -> Result<Vec<(String, TransactionResult)>, String> {
         let mut results = Vec::new();
 
         for signature in signatures {
@@ -586,10 +667,8 @@ impl TaskFetcher {
                         break;
                     }
                     Err(e) => {
-                        if
-                            e.to_string().contains("429") &&
-                            retry_count < self.batch_config.max_retries
-                        {
+                        let error_str = e.to_string();
+                        if error_str.contains("429") && retry_count < self.batch_config.max_retries {
                             retry_count += 1;
                             sleep(Duration::from_millis(delay_ms)).await;
                             delay_ms *= 2;
@@ -613,7 +692,7 @@ pub async fn get_recent_signatures_with_fallback(
     wallet_address: &str,
     configs: &Configs,
     limit: usize
-) -> Result<Vec<SignatureInfo>, Box<dyn Error>> {
+) -> Result<Vec<SignatureInfo>, String> {
     let fetcher = TransactionFetcher::new(configs.clone(), None)?;
     fetcher.get_recent_signatures(wallet_address, limit).await
 }

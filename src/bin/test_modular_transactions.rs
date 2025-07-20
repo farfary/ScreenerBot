@@ -9,7 +9,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load configuration
     let configs = read_configs("configs.json")?;
-    let wallet_address = &configs.wallet_pubkey;
+    let wallet_address = {
+        use screenerbot::wallet::get_wallet_address;
+        get_wallet_address().map_err(
+            |e|
+                Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<
+                    dyn std::error::Error
+                >
+        )?
+    };
 
     // Test 1: Database operations
     log(LogTag::System, "INFO", "=== Testing Database Operations ===");
@@ -23,7 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fetcher = TransactionFetcher::new(configs.clone(), None)?;
 
     log(LogTag::System, "INFO", "Fetching recent signatures...");
-    let signatures = fetcher.get_recent_signatures(wallet_address, 10).await?;
+    let signatures = fetcher
+        .get_recent_signatures(&wallet_address, 10).await
+        .map_err(
+            |e|
+                Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<
+                    dyn std::error::Error
+                >
+        )?;
     log(LogTag::System, "SUCCESS", &format!("Retrieved {} signatures", signatures.len()));
 
     if !signatures.is_empty() {
@@ -87,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 4: Sync status
     log(LogTag::System, "INFO", "=== Testing Sync Status ===");
-    match db.get_sync_status(wallet_address)? {
+    match db.get_sync_status(&wallet_address)? {
         Some(sync_status) => {
             log(
                 LogTag::System,
@@ -134,10 +149,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let legacy_signatures = get_recent_signatures_with_fallback(
         &client,
-        wallet_address,
+        &wallet_address,
         &configs,
         5
-    ).await?;
+    ).await.map_err(
+        |e|
+            Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<
+                dyn std::error::Error
+            >
+    )?;
     log(
         LogTag::System,
         "SUCCESS",

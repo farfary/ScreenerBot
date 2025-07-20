@@ -1,6 +1,6 @@
 // transactions/cache.rs - SQLite database caching implementation
 use super::types::*;
-use rusqlite::{ Connection, Row, Result as SqliteResult, params };
+use rusqlite::{ Connection, OptionalExtension, params };
 use std::path::Path;
 use std::error::Error;
 use chrono::{ DateTime, Utc };
@@ -393,6 +393,92 @@ impl TransactionDatabase {
 
         log(LogTag::System, "SUCCESS", "Database optimization completed");
         Ok(())
+    }
+
+    /// Get transaction count for statistics
+    pub fn get_transaction_count(&self) -> Result<usize, Box<dyn Error>> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM transactions")?;
+        let count: i64 = stmt.query_row([], |row| row.get(0))?;
+        Ok(count as usize)
+    }
+
+    /// Get all transactions as raw records (for migration)
+    pub fn get_all_transactions_raw(&self) -> Result<Vec<TransactionRecord>, Box<dyn Error>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT signature, slot, block_time, data, created_at, last_accessed 
+             FROM transactions ORDER BY slot DESC"
+        )?;
+
+        let records = stmt.query_map([], |row| {
+            Ok(TransactionRecord {
+                signature: row.get(0)?,
+                slot: row.get::<_, i64>(1)? as u64,
+                block_time: row.get::<_, Option<i64>>(2)?.map(|t| t as u64),
+                data: row.get(3)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                    .map_err(|_|
+                        rusqlite::Error::InvalidColumnType(
+                            4,
+                            "timestamp".to_string(),
+                            rusqlite::types::Type::Text
+                        )
+                    )?
+                    .with_timezone(&Utc),
+                last_accessed: DateTime::parse_from_rfc3339(&row.get::<_, String>(5)?)
+                    .map_err(|_|
+                        rusqlite::Error::InvalidColumnType(
+                            5,
+                            "timestamp".to_string(),
+                            rusqlite::types::Type::Text
+                        )
+                    )?
+                    .with_timezone(&Utc),
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for record in records {
+            result.push(record?);
+        }
+        Ok(result)
+    }
+
+    /// Store a transaction in the database
+    pub fn store_transaction(&self, transaction: &TransactionResult) -> Result<(), Box<dyn Error>> {
+        let signature = transaction.transaction.signatures
+            .get(0)
+            .ok_or("Transaction has no signatures")?;
+        let slot = transaction.slot as i64;
+        let block_time = transaction.block_time.map(|t| t as i64);
+        let data = serde_json::to_string(transaction)?;
+        let now = Utc::now().to_rfc3339();
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO transactions 
+             (signature, slot, block_time, data, created_at, last_accessed) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![signature, slot, block_time, data, now, now]
+        )?;
+
+        log(LogTag::System, "DEBUG", &format!("Stored transaction in database: {}", signature));
+        Ok(())
+    }
+
+    /// Clean up old transactions beyond the retention period
+    pub fn cleanup_transactions_by_timestamp(
+        &self,
+        cutoff_timestamp: i64
+    ) -> Result<usize, Box<dyn Error>> {
+        let rows_affected = self.conn.execute(
+            "DELETE FROM transactions WHERE block_time IS NOT NULL AND block_time < ?1",
+            params![cutoff_timestamp]
+        )?;
+
+        if rows_affected > 0 {
+            log(LogTag::System, "INFO", &format!("Cleaned up {} old transactions", rows_affected));
+        }
+
+        Ok(rows_affected)
     }
 }
 

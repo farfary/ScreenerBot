@@ -21,7 +21,7 @@ impl TransactionAnalyzer {
 
         // Add DEX program IDs
         for (program_id, dex_name) in DEX_PROGRAM_IDS.iter() {
-            dex_programs.insert(program_id.to_string(), dex_name);
+            dex_programs.insert(program_id.to_string(), *dex_name);
         }
 
         Self { dex_programs }
@@ -30,14 +30,23 @@ impl TransactionAnalyzer {
     /// Analyze a transaction to determine its type and extract swap information
     pub fn analyze_transaction(&self, transaction: &TransactionResult) -> TransactionAnalysis {
         let mut analysis = TransactionAnalysis {
+            signature: transaction.transaction.signatures.first().cloned().unwrap_or_default(),
+            block_time: transaction.block_time,
+            slot: transaction.slot,
+            is_success: transaction.meta.as_ref().map_or(false, |m| m.err.is_none()),
+            fee_sol: transaction.meta.as_ref().map_or(0.0, |m| (m.fee as f64) / 1_000_000_000.0),
             transaction_type: TransactionType::Unknown,
             is_swap: false,
             is_airdrop: false,
             is_transfer: false,
             swap_info: None,
-            program_interactions: Vec::new(),
             token_transfers: Vec::new(),
             sol_balance_change: 0,
+            contains_swaps: false,
+            swaps: Vec::new(),
+            token_changes: Vec::new(),
+            involves_target_token: false,
+            program_interactions: Vec::new(),
         };
 
         // Extract program interactions
@@ -82,13 +91,10 @@ impl TransactionAnalyzer {
     ) -> Vec<ProgramInteraction> {
         let mut interactions = Vec::new();
 
-        if let Some(message) = &transaction.transaction.message {
-            for (i, instruction) in message.instructions.iter().enumerate() {
-                if
-                    let Some(program_key) = message.account_keys.get(
-                        instruction.program_id_index as usize
-                    )
-                {
+        let message = &transaction.transaction.message;
+        for (i, instruction) in message.instructions.iter().enumerate() {
+            if let Some(program_id_index) = instruction.program_id_index {
+                if let Some(program_key) = message.account_keys.get(program_id_index as usize) {
                     let program_id = program_key.clone();
                     let dex_name = self.get_dex_name(&program_id);
 
@@ -107,10 +113,10 @@ impl TransactionAnalyzer {
     }
 
     /// Find DEX-related program interactions
-    fn find_dex_interactions(
+    fn find_dex_interactions<'a>(
         &self,
-        interactions: &[ProgramInteraction]
-    ) -> Vec<&ProgramInteraction> {
+        interactions: &'a [ProgramInteraction]
+    ) -> Vec<&'a ProgramInteraction> {
         interactions
             .iter()
             .filter(|interaction| interaction.is_known_dex)
@@ -122,55 +128,62 @@ impl TransactionAnalyzer {
         let mut transfers = Vec::new();
 
         // Parse pre and post token balances
-        if
-            let (Some(pre_balances), Some(post_balances)) = (
-                &transaction.meta.pre_token_balances,
-                &transaction.meta.post_token_balances,
-            )
-        {
-            // Group balances by account and mint
-            let mut balance_changes: HashMap<(String, String), (u64, u64)> = HashMap::new();
+        if let Some(meta) = &transaction.meta {
+            if
+                let (Some(pre_balances), Some(post_balances)) = (
+                    &meta.pre_token_balances,
+                    &meta.post_token_balances,
+                )
+            {
+                // Group balances by account and mint
+                let mut balance_changes: HashMap<(String, String), (u64, u64)> = HashMap::new();
 
-            // Collect pre-balances
-            for pre_balance in pre_balances {
-                let key = (pre_balance.account_index.to_string(), pre_balance.mint.clone());
-                balance_changes.entry(key).or_insert((0, 0)).0 = pre_balance.ui_token_amount.amount
-                    .parse()
-                    .unwrap_or(0);
-            }
+                // Collect pre-balances
+                for pre_balance in pre_balances {
+                    let key = (pre_balance.account_index.to_string(), pre_balance.mint.clone());
+                    balance_changes.entry(key).or_insert((0, 0)).0 =
+                        pre_balance.ui_token_amount.amount.parse().unwrap_or(0);
+                }
 
-            // Collect post-balances
-            for post_balance in post_balances {
-                let key = (post_balance.account_index.to_string(), post_balance.mint.clone());
-                balance_changes.entry(key).or_insert((0, 0)).1 = post_balance.ui_token_amount.amount
-                    .parse()
-                    .unwrap_or(0);
-            }
+                // Collect post-balances
+                for post_balance in post_balances {
+                    let key = (post_balance.account_index.to_string(), post_balance.mint.clone());
+                    balance_changes.entry(key).or_insert((0, 0)).1 =
+                        post_balance.ui_token_amount.amount.parse().unwrap_or(0);
+                }
 
-            // Calculate changes and create transfers
-            for ((account_index, mint), (pre_amount, post_amount)) in balance_changes {
-                if pre_amount != post_amount {
-                    let amount_change = if post_amount > pre_amount {
-                        (post_amount - pre_amount) as i64
-                    } else {
-                        -((pre_amount - post_amount) as i64)
-                    };
+                // Calculate changes and create transfers
+                for ((account_index, mint), (pre_amount, post_amount)) in balance_changes {
+                    if pre_amount != post_amount {
+                        let amount_change = if post_amount > pre_amount {
+                            (post_amount - pre_amount) as i64
+                        } else {
+                            -((pre_amount - post_amount) as i64)
+                        };
 
-                    // Get decimals from post_balance if available
-                    let decimals = post_balances
-                        .iter()
-                        .find(|b| b.account_index.to_string() == account_index && b.mint == mint)
-                        .map(|b| b.ui_token_amount.decimals)
-                        .unwrap_or(9); // Default to 9 decimals
+                        // Get decimals from post_balance if available
+                        let decimals = post_balances
+                            .iter()
+                            .find(
+                                |b| b.account_index.to_string() == account_index && b.mint == mint
+                            )
+                            .map(|b| b.ui_token_amount.decimals)
+                            .unwrap_or(9); // Default to 9 decimals
 
-                    transfers.push(TokenTransfer {
-                        mint: mint.clone(),
-                        account_index: account_index.parse().unwrap_or(0),
-                        amount_change,
-                        decimals,
-                        is_incoming: amount_change > 0,
-                        ui_amount: (amount_change as f64) / (10_f64).powi(decimals as i32),
-                    });
+                        transfers.push(TokenTransfer {
+                            mint: mint.clone(),
+                            from: None,
+                            to: None,
+                            amount: amount_change.abs().to_string(),
+                            account_index: account_index.parse().unwrap_or(0),
+                            amount_change: amount_change as f64,
+                            decimals,
+                            is_incoming: amount_change > 0,
+                            ui_amount: Some(
+                                (amount_change as f64) / (10_f64).powi(decimals as i32)
+                            ),
+                        });
+                    }
                 }
             }
         }
@@ -180,12 +193,8 @@ impl TransactionAnalyzer {
 
     /// Calculate SOL balance change from transaction
     fn calculate_sol_balance_change(&self, transaction: &TransactionResult) -> i64 {
-        if
-            let (Some(pre_balances), Some(post_balances)) = (
-                &transaction.meta.pre_balances,
-                &transaction.meta.post_balances,
-            )
-        {
+        if let Some(meta) = &transaction.meta {
+            let (pre_balances, post_balances) = (&meta.pre_balances, &meta.post_balances);
             // Assume first account is the wallet (fee payer)
             if
                 let (Some(&pre_balance), Some(&post_balance)) = (
@@ -264,8 +273,21 @@ impl TransactionAnalyzer {
             )
         } else {
             // Handle complex swaps - use largest transfers
-            let largest_outgoing = outgoing.iter().max_by_key(|t| t.amount_change.abs())?;
-            let largest_incoming = incoming.iter().max_by_key(|t| t.amount_change)?;
+            let largest_outgoing = outgoing
+                .iter()
+                .max_by(|a, b|
+                    a.amount_change
+                        .abs()
+                        .partial_cmp(&b.amount_change.abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                )?;
+            let largest_incoming = incoming
+                .iter()
+                .max_by(|a, b|
+                    a.amount_change
+                        .partial_cmp(&b.amount_change)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                )?;
             (
                 largest_outgoing.mint.clone(),
                 largest_incoming.mint.clone(),
@@ -275,13 +297,17 @@ impl TransactionAnalyzer {
         };
 
         Some(SwapInfo {
-            dex_name: primary_dex,
-            input_token,
-            output_token,
-            input_amount: input_amount as u64,
-            output_amount: output_amount as u64,
+            dex_name: primary_dex.clone(),
+            program_id: "unknown".to_string(), // TODO: extract from dex_interactions
+            input_mint: input_token.clone(),
+            output_mint: output_token.clone(),
+            input_amount: input_amount.to_string(),
+            output_amount: output_amount.to_string(),
             input_decimals: outgoing.first()?.decimals,
             output_decimals: incoming.first()?.decimals,
+            swap_type: SwapType::SwapAtoB, // TODO: determine actual swap type
+            input_token: input_token.clone(),
+            output_token: output_token.clone(),
             effective_price: self.calculate_effective_price(
                 input_amount as u64,
                 output_amount as u64,
@@ -334,6 +360,7 @@ impl TransactionAnalyzer {
             airdrops: Vec::new(),
             transfers: Vec::new(),
             unknown: Vec::new(),
+            success_rate: 0.0, // Will be calculated later
             dex_usage: HashMap::new(),
         };
 
@@ -342,21 +369,21 @@ impl TransactionAnalyzer {
 
             match analysis.transaction_type {
                 TransactionType::Swap => {
-                    if let Some(swap_info) = analysis.swap_info {
-                        *categorization.dex_usage
-                            .entry(swap_info.dex_name.clone())
-                            .or_insert(0) += 1;
-                        categorization.swaps.push((sig_info.clone(), swap_info));
+                    if let Some(_swap_info) = analysis.swap_info {
+                        categorization.swaps.push(analysis.signature.clone());
                     }
                 }
                 TransactionType::Airdrop => {
-                    categorization.airdrops.push(sig_info.clone());
+                    categorization.airdrops.push(analysis.signature.clone());
                 }
                 TransactionType::Transfer => {
-                    categorization.transfers.push(sig_info.clone());
+                    categorization.transfers.push(analysis.signature.clone());
                 }
-                TransactionType::Unknown => {
-                    categorization.unknown.push(sig_info.clone());
+                | TransactionType::StakeUnstake
+                | TransactionType::ProgramDeploy
+                | TransactionType::AccountCreation
+                | TransactionType::Unknown => {
+                    categorization.unknown.push(analysis.signature.clone());
                 }
             }
         }
@@ -387,6 +414,11 @@ impl TransactionAnalyzer {
                 .into_iter()
                 .max_by_key(|(_, count)| *count)
                 .map(|(dex, count)| format!("{} ({} swaps)", dex, count)),
+            total_processed: categorization.total_transactions,
+            successful: categorization.total_transactions, // Assume all are successful for now
+            failed: 0,
+            swaps_detected: categorization.swaps.len(),
+            average_processing_time_ms: 0.0, // TODO: implement timing
         }
     }
 
@@ -433,7 +465,7 @@ impl TransactionAnalyzer {
                         } else {
                             "-"
                         },
-                        transfer.ui_amount,
+                        transfer.ui_amount.map_or("N/A".to_string(), |amount| amount.to_string()),
                         if transfer.is_incoming {
                             "incoming"
                         } else {
@@ -459,16 +491,6 @@ impl TransactionAnalyzer {
 pub fn is_swap_transaction(transaction: &TransactionResult) -> bool {
     let analyzer = TransactionAnalyzer::new();
     analyzer.is_swap_transaction(transaction)
-}
-
-pub fn get_dex_name(program_id: &str) -> Option<&'static str> {
-    let analyzer = TransactionAnalyzer::new();
-    analyzer.get_dex_name(program_id)
-}
-
-pub fn is_known_dex(program_id: &str) -> bool {
-    let analyzer = TransactionAnalyzer::new();
-    analyzer.is_known_dex(program_id)
 }
 
 pub fn find_swap_program(

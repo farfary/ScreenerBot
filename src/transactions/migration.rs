@@ -47,7 +47,12 @@ impl TransactionMigration {
         let batch_size = 100;
         let total_transactions = old_cache.transactions.len();
 
-        for (i, batch) in old_cache.transactions.chunks(batch_size).enumerate() {
+        // Convert HashMap to Vec for batching
+        let transactions_vec: Vec<(String, TransactionResult)> = old_cache.transactions
+            .into_iter()
+            .collect();
+
+        for (i, batch) in transactions_vec.chunks(batch_size).enumerate() {
             let batch_transactions: Vec<(String, TransactionResult)> = batch
                 .iter()
                 .map(|(sig, tx)| (sig.clone(), tx.clone()))
@@ -184,7 +189,15 @@ impl TransactionMigration {
         let transactions = self.db.get_all_transactions_raw()?;
 
         let export_cache = OldTransactionCache {
-            transactions: transactions.into_iter().collect(),
+            transactions: transactions
+                .into_iter()
+                .map(|record| {
+                    let transaction_result: TransactionResult = serde_json
+                        ::from_str(&record.data)
+                        .unwrap_or_default();
+                    (record.signature, transaction_result)
+                })
+                .collect(),
             last_update: chrono::Utc::now(),
         };
 

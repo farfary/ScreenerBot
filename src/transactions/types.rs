@@ -1,6 +1,88 @@
-// transactions/types.rs - Core data structures and types
 use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
+use std::collections::HashMap;
+
+/// Transaction type classification
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum TransactionType {
+    Unknown,
+    Swap,
+    Transfer,
+    Airdrop,
+    StakeUnstake,
+    ProgramDeploy,
+    AccountCreation,
+}
+
+/// Program interaction information
+#[derive(Debug, Clone, Serialize)]
+pub struct ProgramInteraction {
+    pub instruction_index: usize,
+    pub program_id: String,
+    pub dex_name: Option<String>,
+    pub is_known_dex: bool,
+    pub data_length: usize,
+}
+
+/// Token transfer information
+#[derive(Debug, Clone, Serialize)]
+pub struct TokenTransfer {
+    pub mint: String,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub amount: String,
+    pub decimals: u8,
+    pub ui_amount: Option<f64>,
+    pub account_index: u8,
+    pub amount_change: f64,
+    pub is_incoming: bool,
+}
+
+/// Detailed swap information
+#[derive(Debug, Clone, Serialize)]
+pub struct SwapInfo {
+    pub dex_name: String,
+    pub program_id: String,
+    pub input_mint: String,
+    pub output_mint: String,
+    pub input_amount: String,
+    pub output_amount: String,
+    pub input_decimals: u8,
+    pub output_decimals: u8,
+    pub swap_type: SwapType,
+    pub input_token: String,
+    pub output_token: String,
+    pub effective_price: f64,
+}
+
+/// Transaction categorization result
+#[derive(Debug, Clone, Serialize)]
+pub struct TransactionCategorization {
+    pub total_transactions: usize,
+    pub swaps: Vec<String>,
+    pub transfers: Vec<String>,
+    pub airdrops: Vec<String>,
+    pub unknown: Vec<String>,
+    pub success_rate: f64,
+    pub dex_usage: std::collections::HashMap<String, usize>,
+}
+
+/// Transaction processing statistics
+#[derive(Debug, Clone, Serialize)]
+pub struct TransactionStats {
+    pub total: usize,
+    pub swaps: usize,
+    pub airdrops: usize,
+    pub transfers: usize,
+    pub unknown: usize,
+    pub swap_percentage: f64,
+    pub most_used_dex: Option<String>,
+    pub total_processed: usize,
+    pub successful: usize,
+    pub failed: usize,
+    pub swaps_detected: usize,
+    pub average_processing_time_ms: f64,
+}
 
 /// Maximum number of transactions to fetch in one request
 pub const MAX_TRANSACTIONS_PER_REQUEST: usize = 100;
@@ -28,6 +110,20 @@ pub mod dex_program_ids {
     /// Phoenix
     pub const PHOENIX: &str = "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY";
 }
+
+/// DEX Program IDs as tuples for iteration
+pub const DEX_PROGRAM_IDS: &[(&str, &str)] = &[
+    (dex_program_ids::SERUM_DEX_V2, "Serum DEX V2"),
+    (dex_program_ids::SERUM_DEX_V3, "Serum DEX V3"),
+    (dex_program_ids::RAYDIUM_V2, "Raydium V2"),
+    (dex_program_ids::RAYDIUM_V3, "Raydium V3"),
+    (dex_program_ids::RAYDIUM_V4, "Raydium V4"),
+    (dex_program_ids::RAYDIUM_ROUTING, "Raydium Routing"),
+    (dex_program_ids::RAYDIUM_CONCENTRATED, "Raydium CLMM"),
+    (dex_program_ids::OPENOCEAN, "OpenOcean"),
+    (dex_program_ids::JUPITER, "Jupiter"),
+    (dex_program_ids::PHOENIX, "Phoenix"),
+];
 
 /// Get DEX name from program ID
 pub fn get_dex_name(program_id: &str) -> Option<&'static str> {
@@ -94,7 +190,7 @@ pub struct TransactionResponse {
     pub error: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct TransactionResult {
     pub transaction: Transaction,
     pub meta: Option<TransactionMeta>,
@@ -103,13 +199,13 @@ pub struct TransactionResult {
     pub slot: u64,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct Transaction {
     pub message: TransactionMessage,
     pub signatures: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct TransactionMessage {
     #[serde(rename = "accountKeys")]
     pub account_keys: Vec<String>,
@@ -246,11 +342,18 @@ pub struct TransactionAnalysis {
     pub slot: u64,
     pub is_success: bool,
     pub fee_sol: f64,
+    pub transaction_type: TransactionType,
+    pub is_swap: bool,
+    pub is_airdrop: bool,
+    pub is_transfer: bool,
+    pub swap_info: Option<SwapInfo>,
+    pub token_transfers: Vec<TokenTransfer>,
+    pub sol_balance_change: i64,
     pub contains_swaps: bool,
     pub swaps: Vec<SwapTransaction>,
     pub token_changes: Vec<TokenBalanceChange>,
     pub involves_target_token: bool,
-    pub program_interactions: Vec<String>,
+    pub program_interactions: Vec<ProgramInteraction>,
 }
 
 /// Database record for a cached transaction
@@ -288,20 +391,13 @@ impl Default for BatchConfig {
 
 /// WebSocket message types for real-time transaction updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum WebSocketMessage {
-    Subscribe {
-        address: String,
-    },
-    Unsubscribe {
-        address: String,
-    },
-    TransactionUpdate {
-        signature: String,
-        slot: u64,
-    },
-    Error {
-        message: String,
-    },
+pub struct WebSocketMessage {
+    pub jsonrpc: Option<String>,
+    pub id: Option<serde_json::Value>,
+    pub method: Option<String>,
+    pub params: Option<serde_json::Value>,
+    pub result: Option<serde_json::Value>,
+    pub error: Option<serde_json::Value>,
 }
 
 /// Transaction sync status

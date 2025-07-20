@@ -1,6 +1,7 @@
 // transactions/websocket.rs - Real-time transaction sync via WebSocket
 use super::types::*;
 use super::cache::TransactionDatabase;
+use super::fetcher::{ TransactionFetcher, get_transactions_with_cache_and_fallback };
 use crate::logger::{ log, LogTag };
 use serde_json;
 use tokio_tungstenite::{ connect_async, tungstenite::protocol::Message };
@@ -19,8 +20,8 @@ pub struct TransactionWebSocket {
 
 impl TransactionWebSocket {
     /// Create a new WebSocket client
-    pub fn new(wallet_addresses: Vec<String>) -> Result<Self, Box<dyn Error>> {
-        let db = Arc::new(Mutex::new(TransactionDatabase::new()?));
+    pub fn new(wallet_addresses: Vec<String>) -> Result<Self, String> {
+        let db = Arc::new(Mutex::new(TransactionDatabase::new().map_err(|e| e.to_string())?));
 
         Ok(Self {
             db,
@@ -30,20 +31,29 @@ impl TransactionWebSocket {
     }
 
     /// Start WebSocket connection and monitor transactions
-    pub async fn start_monitoring(&mut self, rpc_ws_url: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn start_monitoring(&mut self, rpc_ws_url: &str) -> Result<(), String> {
         log(LogTag::System, "INFO", &format!("Connecting to WebSocket: {}", rpc_ws_url));
 
-        let (ws_stream, _) = connect_async(rpc_ws_url).await?;
+        let (ws_stream, _) = connect_async(rpc_ws_url).await.map_err(|e| e.to_string())?;
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
         // Subscribe to account notifications for each wallet
         for wallet_address in &self.wallet_addresses {
             let subscription_request = self.create_account_subscription(wallet_address);
-            ws_sender.send(Message::Text(subscription_request)).await?;
+            ws_sender.send(Message::Text(subscription_request)).await.map_err(|e| e.to_string())?;
             log(
                 LogTag::System,
                 "INFO",
                 &format!("Subscribed to account notifications for: {}", wallet_address)
+            );
+
+            // Also subscribe to logs to catch transaction signatures
+            let logs_subscription = self.create_logs_subscription(wallet_address);
+            ws_sender.send(Message::Text(logs_subscription)).await.map_err(|e| e.to_string())?;
+            log(
+                LogTag::System,
+                "INFO",
+                &format!("Subscribed to logs notifications for: {}", wallet_address)
             );
         }
 
@@ -95,7 +105,7 @@ impl TransactionWebSocket {
     }
 
     /// Create account subscription message
-    fn create_account_subscription(&self, wallet_address: &str) -> String {
+    pub fn create_account_subscription(&self, wallet_address: &str) -> String {
         serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -111,13 +121,30 @@ impl TransactionWebSocket {
     }
 
     /// Create signature subscription message
-    fn create_signature_subscription(&self, wallet_address: &str) -> String {
+    pub fn create_signature_subscription(&self, wallet_address: &str) -> String {
         serde_json::json!({
             "jsonrpc": "2.0",
             "id": 2,
             "method": "signatureSubscribe",
             "params": [
                 wallet_address,
+                {
+                    "commitment": "confirmed"
+                }
+            ]
+        }).to_string()
+    }
+
+    /// Create logs subscription to monitor all transactions involving the wallet
+    pub fn create_logs_subscription(&self, wallet_address: &str) -> String {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "logsSubscribe",
+            "params": [
+                {
+                    "mentions": [wallet_address]
+                },
                 {
                     "commitment": "confirmed"
                 }
@@ -138,6 +165,9 @@ impl TransactionWebSocket {
             }
             Some("signatureNotification") => {
                 Self::handle_signature_notification(db, ws_message).await?;
+            }
+            Some("logsNotification") => {
+                Self::handle_logs_notification(db, ws_message).await?;
             }
             _ => {
                 // Handle subscription responses
@@ -183,14 +213,63 @@ impl TransactionWebSocket {
                 if let Some(signature) = result.get("signature").and_then(|s| s.as_str()) {
                     log(
                         LogTag::System,
-                        "INFO",
-                        &format!("New transaction signature: {}", signature)
+                        "SUCCESS",
+                        &format!("🎯 NEW TRANSACTION DETECTED via WebSocket: {}", signature)
                     );
 
-                    // Mark signature for fetching
-                    let db_lock = db.lock().await;
-                    // Note: We could add a "pending_fetch" table to track signatures that need to be fetched
-                    // This would allow the main fetcher to pick them up asynchronously
+                    // Increment notification counter (for debugging)
+                    static NOTIFICATION_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(
+                        0
+                    );
+                    let count =
+                        NOTIFICATION_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        &format!(
+                            "📊 WebSocket notification #{}: {} ready for database storage",
+                            count,
+                            signature
+                        )
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Handle logs notification (transaction logs with signatures)
+    async fn handle_logs_notification(
+        _db: &Arc<Mutex<TransactionDatabase>>,
+        message: WebSocketMessage
+    ) -> Result<(), Box<dyn Error>> {
+        if let Some(params) = message.params {
+            if let Some(result) = params.get("result") {
+                if let Some(value) = result.get("value") {
+                    if let Some(signature) = value.get("signature").and_then(|s| s.as_str()) {
+                        log(
+                            LogTag::System,
+                            "SUCCESS",
+                            &format!("🎯 TRANSACTION SIGNATURE from logs: {}", signature)
+                        );
+
+                        // Increment notification counter (for debugging)
+                        static LOGS_NOTIFICATION_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(
+                            0
+                        );
+                        let count =
+                            LOGS_NOTIFICATION_COUNT.fetch_add(
+                                1,
+                                std::sync::atomic::Ordering::Relaxed
+                            ) + 1;
+
+                        log(
+                            LogTag::System,
+                            "INFO",
+                            &format!("📊 Logs notification #{}: {} detected", count, signature)
+                        );
+                    }
                 }
             }
         }
@@ -201,7 +280,7 @@ impl TransactionWebSocket {
     pub async fn start_background_monitoring(
         wallet_addresses: Vec<String>,
         rpc_ws_url: String
-    ) -> Result<tokio::task::JoinHandle<()>, Box<dyn Error>> {
+    ) -> Result<tokio::task::JoinHandle<()>, String> {
         let task = tokio::spawn(async move {
             loop {
                 match TransactionWebSocket::new(wallet_addresses.clone()) {
@@ -374,42 +453,6 @@ impl TransactionWebSocket {
                                 "INFO",
                                 &format!("Queuing sync for wallet: {}", wallet_address)
                             );
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Handle transaction logs notifications
-    async fn handle_logs_notification(
-        db: &Arc<Mutex<TransactionDatabase>>,
-        message: WebSocketMessage
-    ) -> Result<(), Box<dyn Error>> {
-        if let Some(params) = message.params {
-            if let Some(result) = params.get("result") {
-                if let Some(signature) = result.get("signature").and_then(|s| s.as_str()) {
-                    log(LogTag::System, "INFO", &format!("Transaction logs for: {}", signature));
-
-                    // Extract logs for swap detection
-                    if let Some(logs) = result.get("logs").and_then(|l| l.as_array()) {
-                        for log_entry in logs {
-                            if let Some(log_str) = log_entry.as_str() {
-                                if
-                                    log_str.contains("Program log: Instruction: Swap") ||
-                                    log_str.contains("jupiter") ||
-                                    log_str.contains("raydium")
-                                {
-                                    log(
-                                        LogTag::System,
-                                        "INFO",
-                                        &format!("Potential swap detected in logs: {}", signature)
-                                    );
-                                    // Queue this transaction for detailed fetching
-                                    break;
-                                }
-                            }
                         }
                     }
                 }
