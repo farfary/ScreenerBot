@@ -3,11 +3,19 @@ use std::fs;
 use std::path::Path;
 use std::collections::HashSet;
 use once_cell::sync::Lazy;
-use std::sync::RwLock;
+use std::sync::{ RwLock, Mutex };
+use chrono::{ DateTime, Utc };
+use crate::token_cache::TokenDatabase;
 
 pub static LIST_MINTS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
 pub static LIST_TOKENS: Lazy<RwLock<Vec<Token>>> = Lazy::new(|| RwLock::new(vec![]));
+
+// Global token database instance
+pub static TOKEN_DB: Lazy<Mutex<Option<TokenDatabase>>> = Lazy::new(|| Mutex::new(None));
+
+// Startup timestamp to track when the bot started for trading logic
+pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +32,48 @@ pub fn read_configs<P: AsRef<Path>>(path: P) -> Result<Configs, Box<dyn std::err
     let data = fs::read_to_string(path)?;
     let configs: Configs = serde_json::from_str(&data)?;
     Ok(configs)
+}
+
+/// Initialize the global token database
+pub fn initialize_token_database() -> Result<(), Box<dyn std::error::Error>> {
+    let db = TokenDatabase::new()?;
+    if let Ok(mut token_db) = TOKEN_DB.lock() {
+        *token_db = Some(db);
+        crate::logger::log(
+            crate::logger::LogTag::System,
+            "SUCCESS",
+            "Token database initialized successfully"
+        );
+    }
+    Ok(())
+}
+
+/// Cache a token to the database (thread-safe)
+pub fn cache_token_to_db(
+    token: &Token,
+    discovery_source: &str
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if let Ok(token_db_guard) = TOKEN_DB.lock() {
+        if let Some(ref db) = *token_db_guard {
+            return db.add_or_update_token(token, discovery_source);
+        }
+    }
+    Err("Token database not initialized".into())
+}
+
+/// Get tokens that should be used for trading (discovered after startup)
+pub fn get_trading_tokens() -> Vec<Token> {
+    if let Ok(tokens) = LIST_TOKENS.read() { tokens.clone() } else { Vec::new() }
+}
+
+/// Get token from database by mint (for swap detection)
+pub fn get_token_from_db(mint: &str) -> Option<Token> {
+    if let Ok(token_db_guard) = TOKEN_DB.lock() {
+        if let Some(ref db) = *token_db_guard {
+            return db.get_token(mint).unwrap_or(None);
+        }
+    }
+    None
 }
 
 /// Represents a liquidity pool for a token.

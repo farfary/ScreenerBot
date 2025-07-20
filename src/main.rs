@@ -7,6 +7,13 @@ use tokio::sync::Notify;
 #[tokio::main]
 async fn main() {
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
+
+    // Initialize token database
+    if let Err(e) = screenerbot::global::initialize_token_database() {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize token database: {}", e));
+        std::process::exit(1);
+    }
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_monitor = shutdown.clone();
     let shutdown_trader = shutdown.clone();

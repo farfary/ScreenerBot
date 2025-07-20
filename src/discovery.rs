@@ -11,7 +11,6 @@ use solana_client::rpc_client::RpcClient;
 use std::path::Path;
 use colored::Colorize;
 
-
 static INFO_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell::sync::Lazy::new(||
     Arc::new(Semaphore::new(200))
 );
@@ -404,6 +403,40 @@ pub async fn update_tokens_from_mints(
         // Sleep to enforce 200 requests per minute (max 3.0 req/sec)
         sleep(Duration::from_millis(310)).await;
     }
+
+    // Cache all tokens to database before updating LIST_TOKENS
+    let mut cached_count = 0;
+    let mut new_tokens_count = 0;
+    for token in &tokens {
+        match crate::global::cache_token_to_db(token, "dexscreener") {
+            Ok(is_new) => {
+                cached_count += 1;
+                if is_new {
+                    new_tokens_count += 1;
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Monitor,
+                    "WARN",
+                    &format!("Failed to cache token {} to DB: {}", token.symbol, e)
+                        .dimmed()
+                        .to_string()
+                );
+            }
+        }
+    }
+
+    if cached_count > 0 {
+        log(
+            LogTag::Monitor,
+            "CACHE",
+            &format!("Cached {} tokens to DB ({} new)", cached_count, new_tokens_count)
+                .dimmed()
+                .to_string()
+        );
+    }
+
     // Update LIST_TOKENS
     let mints_count = match LIST_MINTS.read() {
         Ok(set) => set.len(),

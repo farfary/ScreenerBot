@@ -1396,7 +1396,19 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         let mut tokens: Vec<_> = {
             if let Ok(tokens_guard) = LIST_TOKENS.read() {
-                tokens_guard.iter().cloned().collect()
+                // Only include tokens that were discovered after startup time
+                // This ensures we trade only fresh discoveries, not historical data
+                let startup_time = *crate::global::STARTUP_TIME;
+                tokens_guard
+                    .iter()
+                    .filter(|token| {
+                        // Include tokens that either:
+                        // 1. Have no created_at timestamp (treat as new)
+                        // 2. Were created after our startup time
+                        token.created_at.map_or(true, |created| created >= startup_time)
+                    })
+                    .cloned()
+                    .collect()
             } else {
                 Vec::new()
             }

@@ -2,10 +2,12 @@
 use super::types::*;
 use crate::logger::{ log, LogTag };
 use std::collections::HashMap;
+use colored::Colorize;
 
 /// Transaction analyzer for categorization and swap detection
 pub struct TransactionAnalyzer {
     dex_programs: HashMap<String, &'static str>,
+    use_token_db: bool,
 }
 
 impl Default for TransactionAnalyzer {
@@ -24,7 +26,50 @@ impl TransactionAnalyzer {
             dex_programs.insert(program_id.to_string(), *dex_name);
         }
 
-        Self { dex_programs }
+        Self {
+            dex_programs,
+            use_token_db: true, // Enable token database usage by default
+        }
+    }
+
+    /// Create analyzer with token database usage control
+    pub fn new_with_db_option(use_token_db: bool) -> Self {
+        let mut analyzer = Self::new();
+        analyzer.use_token_db = use_token_db;
+        analyzer
+    }
+
+    /// Enrich token transfer data with database information
+    fn enrich_token_transfers(&self, transfers: &mut Vec<TokenTransfer>) {
+        if !self.use_token_db {
+            return;
+        }
+
+        for transfer in transfers.iter_mut() {
+            if let Some(token) = crate::global::get_token_from_db(&transfer.mint) {
+                // Update transfer with database information if available
+                transfer.decimals = token.decimals;
+
+                // Log enrichment for debugging
+                log(
+                    LogTag::System,
+                    "ENRICH",
+                    &format!("Enriched transfer for {} ({})", token.symbol, token.mint)
+                        .dimmed()
+                        .to_string()
+                );
+            }
+        }
+    }
+
+    /// Get token symbol from database for better logging
+    fn get_token_symbol(&self, mint: &str) -> String {
+        if self.use_token_db {
+            if let Some(token) = crate::global::get_token_from_db(mint) {
+                return token.symbol;
+            }
+        }
+        format!("{}...{}", &mint[..4], &mint[mint.len() - 4..])
     }
 
     /// Analyze a transaction to determine its type and extract swap information
@@ -57,6 +102,9 @@ impl TransactionAnalyzer {
 
         // Extract token transfers
         analysis.token_transfers = self.extract_token_transfers(transaction);
+
+        // Enrich token transfers with database information
+        self.enrich_token_transfers(&mut analysis.token_transfers);
 
         // Calculate SOL balance change
         analysis.sol_balance_change = self.calculate_sol_balance_change(transaction);
