@@ -1,6 +1,8 @@
 use crate::logger::{ log, LogTag };
 use crate::global::*;
 use crate::decimal_cache::{ DecimalCache, fetch_or_cache_decimals };
+use crate::positions::*;
+use crate::positions::*;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use reqwest::StatusCode;
@@ -10,6 +12,7 @@ use crate::utils::check_shutdown_or_delay;
 use solana_client::rpc_client::RpcClient;
 use std::path::Path;
 use colored::Colorize;
+
 
 static INFO_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell::sync::Lazy::new(||
     Arc::new(Semaphore::new(200))
@@ -24,7 +27,7 @@ pub async fn update_tokens_from_mints(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // First, get all mint addresses from open positions to ensure we always update them
     let position_mints = {
-        if let Ok(positions) = crate::trader::SAVED_POSITIONS.lock() {
+        if let Ok(positions) = SAVED_POSITIONS.lock() {
             positions
                 .iter()
                 .filter(|p| p.exit_time.is_none()) // Only consider open positions
@@ -508,7 +511,7 @@ pub async fn update_tokens_from_mints(
                     LogTag::Monitor,
                     "INFO",
                     &format!(
-                        "[Dexscreener] Updated tokens: {}, mints: {}, position tokens: {}/{}",
+                        "Dexscreener Updated tokens: {}, mints: {}, position tokens: {}/{}",
                         list.len(),
                         mints_count,
                         position_tokens_updated,
@@ -532,7 +535,7 @@ pub async fn update_tokens_from_mints(
                 log(
                     LogTag::Monitor,
                     "INFO",
-                    &format!("[Dexscreener] Updated tokens: {}, mints: {}", list.len(), mints_count)
+                    &format!("Dexscreener Updated tokens: {}, mints: {}", list.len(), mints_count).dimmed().to_string()
                 );
             }
         }
@@ -608,7 +611,7 @@ pub async fn discovery_dexscreener_fetch_token_boosts() -> Result<(), Box<dyn st
         crate::logger::log(
             crate::logger::LogTag::Monitor,
             "INFO",
-            &format!("[Dexscreener Boosts] New tokens seen: {}", new_count)
+            &format!("Dexscreener Boosts New tokens seen: {}", new_count)
         );
     }
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
@@ -682,7 +685,7 @@ pub async fn discovery_dexscreener_fetch_token_boosts_top() -> Result<
         crate::logger::log(
             crate::logger::LogTag::Monitor,
             "INFO",
-            &format!("[Dexscreener Boosts Top] New tokens seen: {}", new_count)
+            &format!("Dexscreener Boosts Top New tokens seen: {}", new_count)
         );
     }
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
@@ -756,7 +759,7 @@ pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<
         crate::logger::log(
             crate::logger::LogTag::Monitor,
             "INFO",
-            &format!("[Dexscreener Profiles] New tokens seen: {}", new_count)
+            &format!("Dexscreener Profiles New tokens seen: {}", new_count)
         );
     }
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)

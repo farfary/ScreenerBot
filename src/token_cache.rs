@@ -5,6 +5,7 @@ use std::error::Error;
 use chrono::{ DateTime, Utc };
 use serde_json;
 use crate::logger::{ log, LogTag };
+use colored::Colorize;
 
 /// SQLite database path for token cache
 const TOKEN_DB_PATH: &str = "tokens.db";
@@ -116,7 +117,7 @@ impl TokenDatabase {
                         .and_then(|l| l.usd)
                         .map(|usd| format!("{:.2}", usd))
                         .unwrap_or_else(|| "None".to_string())
-                )
+                ).dimmed().to_string()
             );
         } else {
             // Insert new token
@@ -157,6 +158,8 @@ impl TokenDatabase {
                         .map(|usd| format!("{:.2}", usd))
                         .unwrap_or_else(|| "None".to_string())
                 )
+                    .dimmed()
+                    .to_string()
             );
         }
 

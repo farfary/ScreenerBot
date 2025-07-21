@@ -3,7 +3,7 @@ use tokio::sync::Notify;
 use std::time::Duration;
 use std::fs;
 use serde_json;
-use crate::trader::Position;
+use crate::positions::*;
 use crate::logger::{ log, LogTag };
 
 /// Format a duration (from Option<DateTime<Utc>>) as a human-readable age string (y d h m s)
@@ -74,5 +74,33 @@ pub fn load_positions_from_file() -> Vec<Position> {
             })
         }
         Err(_) => Vec::new(), // File doesn't exist yet
+    }
+}
+
+/// Helper function to format duration in a compact way
+pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> String {
+    let duration = end.signed_duration_since(start);
+    let total_seconds = duration.num_seconds();
+
+    if total_seconds < 60 {
+        format!("{}s", total_seconds)
+    } else if total_seconds < 3600 {
+        format!("{}m", total_seconds / 60)
+    } else if total_seconds < 86400 {
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        if minutes > 0 {
+            format!("{}h{}m", hours, minutes)
+        } else {
+            format!("{}h", hours)
+        }
+    } else {
+        let days = total_seconds / 86400;
+        let hours = (total_seconds % 86400) / 3600;
+        if hours > 0 {
+            format!("{}d{}h", days, hours)
+        } else {
+            format!("{}d", days)
+        }
     }
 }

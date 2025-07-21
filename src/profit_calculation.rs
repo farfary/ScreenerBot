@@ -1,6 +1,6 @@
 use crate::global::*;
 use crate::logger::{ log, LogTag };
-use crate::trader::Position;
+use crate::positions::Position;
 use chrono::{ DateTime, Utc };
 use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
