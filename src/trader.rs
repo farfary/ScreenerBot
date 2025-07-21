@@ -1,8 +1,9 @@
 /// Trading configuration constants
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 2.5;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
-pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
-pub const DEFAULT_SLIPPAGE: f64 = 2.0; // 5% slippage
+// pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
+pub const DEFAULT_FEE: f64 = 0.0;
+pub const DEFAULT_SLIPPAGE: f64 = 3.0; // 5% slippage
 
 pub const TRADE_SIZE_SOL: f64 = 0.0001;
 pub const STOP_LOSS_PERCENT: f64 = -99.0;
