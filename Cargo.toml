@@ -11,6 +11,13 @@ codegen-units = 1    # one unit → best for LTO
 panic = "abort"      # drop unwinding
 strip = "symbols"    # remove symbol table
 
+[profile.dev]
+opt-level = 0         # No optimizations, fastest compile
+debug = true          # Keep debug info for better error messages
+incremental = true    # Enable incremental compilation
+codegen-units = 16    # More parallelism for faster builds
+lto = false           # Disable link-time optimization
+
 
 [lib]
 name = "screenerbot"
