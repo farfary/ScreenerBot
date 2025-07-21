@@ -684,6 +684,7 @@ async fn display_bot_summary(closed_positions: &[&Position]) {
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", summary_table);
+    println!("");
 }
 
 /// Get current price for a token from the global token list
