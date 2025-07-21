@@ -27,6 +27,10 @@ path = "src/lib.rs"
 name = "screenerbot"
 path = "src/main.rs"
 
+[[bin]]
+name = "sell_all_and_close_atas"
+path = "src/bin/sell_all_and_close_atas.rs"
+
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }

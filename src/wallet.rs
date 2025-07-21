@@ -571,16 +571,13 @@ pub async fn calculate_effective_price(
 
     // Try all available RPC endpoints with retries - prioritize fallbacks
     let mut rpc_endpoints = configs.rpc_fallbacks.iter().collect::<Vec<_>>();
-    // Only add main RPC as a last resort if we have no fallbacks
     if rpc_endpoints.is_empty() {
         rpc_endpoints.push(&configs.rpc_url);
     }
 
     let mut transaction_details = None;
-
     for (rpc_idx, rpc_endpoint) in rpc_endpoints.iter().enumerate() {
         for attempt in 1..=3 {
-            // Reduced attempts per endpoint
             match get_transaction_details(client, transaction_signature, rpc_endpoint).await {
                 Ok(details) => {
                     transaction_details = Some(details);
@@ -607,23 +604,18 @@ pub async fn calculate_effective_price(
                 }
             }
         }
-
         if transaction_details.is_some() {
             break;
         }
-
-        // Wait between RPC endpoints to avoid rate limiting
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     }
 
-    let details = transaction_details.ok_or_else(|| {
+    let details = transaction_details.ok_or_else(||
         SwapError::TransactionError("Failed to get transaction details after retries".to_string())
-    })?;
-
-    let meta = details.meta.ok_or_else(|| {
+    )?;
+    let meta = details.meta.ok_or_else(||
         SwapError::TransactionError("Transaction metadata not available".to_string())
-    })?;
-
+    )?;
     if meta.err.is_some() {
         return Err(SwapError::TransactionError("Transaction failed on-chain".to_string()));
     }
@@ -632,54 +624,42 @@ pub async fn calculate_effective_price(
     let (actual_input_change, actual_output_change, input_decimals, output_decimals) =
         calculate_balance_changes_with_decimals(&meta, input_mint, output_mint, wallet_address)?;
 
-    // Calculate effective price using UI amounts (accounting for decimals)
-    let effective_price = if actual_input_change > 0 && actual_output_change > 0 {
-        if input_mint == SOL_MINT {
-            // SOL -> Token: price = SOL spent / UI tokens received
-            let sol_spent = lamports_to_sol(actual_input_change);
-            let ui_tokens_received =
-                (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
-            if ui_tokens_received > 0.0 {
-                sol_spent / ui_tokens_received
-            } else {
-                0.0
-            }
-        } else if output_mint == SOL_MINT {
-            // Token -> SOL: price = SOL received / UI tokens spent
-            let sol_received = lamports_to_sol(actual_output_change);
-            let ui_tokens_spent =
-                (actual_input_change as f64) / (10_f64).powi(input_decimals as i32);
-            if ui_tokens_spent > 0.0 {
-                sol_received / ui_tokens_spent
-            } else {
-                0.0
-            }
-        } else {
-            // Token -> Token: ratio using UI amounts
-            let ui_input_amount =
-                (actual_input_change as f64) / (10_f64).powi(input_decimals as i32);
-            let ui_output_amount =
-                (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
-            if ui_input_amount > 0.0 {
-                ui_output_amount / ui_input_amount
-            } else {
-                0.0
-            }
-        }
+    // --- NEW LOGIC: Use wallet index for SOL delta and correct effective price calculation ---
+    // Locate wallet index in account_keys
+    let wallet_idx = details.transaction.message["accountKeys"]
+        .as_array()
+        .and_then(|keys| { keys.iter().position(|k| k.as_str() == Some(wallet_address)) })
+        .ok_or_else(|| SwapError::TransactionError("Wallet key not found".into()))?;
+
+    // SOL delta
+    let pre = meta.pre_balances[wallet_idx];
+    let post = meta.post_balances[wallet_idx];
+    let sol_delta_lamports = if input_mint == SOL_MINT {
+        pre.saturating_sub(post)
     } else {
-        0.0
+        post.saturating_sub(pre)
     };
+    let sol_amount = lamports_to_sol(sol_delta_lamports);
+
+    // Token delta
+    let (token_delta_raw, token_decimals) = if input_mint == SOL_MINT {
+        (actual_output_change, output_decimals)
+    } else {
+        (actual_input_change, input_decimals)
+    };
+    let token_amount = (token_delta_raw as f64) / (10_f64).powi(token_decimals as i32);
+
+    // Effective price
+    let effective_price = if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 };
 
     log(
         LogTag::Trader,
         "EFFECTIVE",
         &format!(
-            "Effective price calculated: {:.15} (Input: {} raw units, Output: {} raw units, Input decimals: {}, Output decimals: {})",
+            "EffPrice: {:.15} SOL/token (sol_delta={} lamports, token_delta_raw={} units)",
             effective_price,
-            actual_input_change,
-            actual_output_change,
-            input_decimals,
-            output_decimals
+            sol_delta_lamports,
+            token_delta_raw
         )
     );
 

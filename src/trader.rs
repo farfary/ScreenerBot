@@ -5,11 +5,11 @@ pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
 pub const DEFAULT_SLIPPAGE: f64 = 2.0; // 5% slippage
 
 pub const TRADE_SIZE_SOL: f64 = 0.0001;
-pub const STOP_LOSS_PERCENT: f64 = -70.0;
+pub const STOP_LOSS_PERCENT: f64 = -99.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 2;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
@@ -768,6 +768,7 @@ async fn display_positions_table() {
                 .with(Style::rounded())
                 .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
             println!("{}", closed_table);
+            println!("");
         }
     }
 
@@ -836,6 +837,73 @@ fn is_position_profitable(
 
     (net_pnl_sol > 0.0, net_pnl_sol, net_pnl_percent, total_value)
 }
+
+/// Updates position with current price to track extremes and drawdown
+/// Drawdown % = (price_highest – current_price) / price_highest * 100
+fn update_position_tracking(position: &mut Position, current_price: f64) {
+    if current_price == 0.0 {
+        log(
+            LogTag::Trader,
+            "WARN",
+            &format!(
+                "Skipping position tracking update for {}: current_price is zero",
+                position.symbol
+            )
+            .yellow()
+            .dimmed()
+            .to_string()
+        );
+        return;
+    }
+
+    // On first update, set both high/low to the actual entry price
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    if position.price_highest == 0.0 {
+        position.price_highest = entry_price;
+        position.price_lowest  = entry_price;
+    }
+
+    let old_high = position.price_highest;
+    let old_low  = position.price_lowest;
+    let old_dd   = position.drawdown_percent;
+
+    // Update running extremes
+    if current_price > position.price_highest {
+        position.price_highest = current_price;
+    }
+    if current_price < position.price_lowest {
+        position.price_lowest = current_price;
+    }
+
+    // Calculate drawdown % from the peak seen so far
+    let dd_pct = if position.price_highest > 0.0 {
+        ((position.price_highest - current_price) / position.price_highest) * 100.0
+    } else {
+        0.0
+    };
+    position.drawdown_percent = dd_pct.max(0.0);
+
+    // Log the transition
+    log(
+        LogTag::Trader,
+        "DEBUG",
+        &format!(
+            "Track {}: entry={:.6}, current={:.6}, high={:.6}->{:.6}, low={:.6}->{:.6}, drawdown={:.2}%->{:.2}%",
+            position.symbol,
+            entry_price,
+            current_price,
+            old_high,
+            position.price_highest,
+            old_low,
+            position.price_lowest,
+            old_dd,
+            position.drawdown_percent
+        )
+        .dimmed()
+        .to_string(),
+    );
+}
+
 
 /// Calculates accurate P&L using actual swap transaction data
 pub fn calculate_position_pnl_from_swaps(
@@ -1395,47 +1463,7 @@ async fn close_position(
     }
 }
 
-/// Updates position with current price to track extremes and drawdown
-fn update_position_tracking(position: &mut Position, current_price: f64) {
-    let old_highest = position.price_highest;
-    let old_lowest = position.price_lowest;
-    let old_drawdown = position.drawdown_percent;
 
-    // Update price extremes
-    if current_price > position.price_highest {
-        position.price_highest = current_price;
-    }
-    if current_price < position.price_lowest {
-        position.price_lowest = current_price;
-    }
-
-    // Calculate drawdown from entry price (not highest price)
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-    if entry_price > 0.0 {
-        let drawdown_from_entry = ((entry_price - current_price) / entry_price) * 100.0;
-        position.drawdown_percent = drawdown_from_entry.max(0.0); // Only positive drawdowns
-    }
-
-    // Log detailed tracking info
-    log(
-        LogTag::Trader,
-        "DEBUG",
-        &format!(
-            "Position tracking update for {}: current_price={:.8}, entry_price={:.8}, highest={:.8}->{:.8}, lowest={:.8}->{:.8}, drawdown={:.2}%->{:.2}%",
-            position.symbol,
-            current_price,
-            entry_price,
-            old_highest,
-            position.price_highest,
-            old_lowest,
-            position.price_lowest,
-            old_drawdown,
-            position.drawdown_percent
-        )
-            .dimmed()
-            .to_string()
-    );
-}
 /// Background task to display positions table every 10 seconds
 pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
     loop {
