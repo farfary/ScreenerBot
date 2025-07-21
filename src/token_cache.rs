@@ -107,10 +107,15 @@ impl TokenDatabase {
                 LogTag::System,
                 "UPDATE",
                 &format!(
-                    "Updated token {} ({}) from {}",
+                    "Updated token {} ({}) from {} - Liquidity USD: {}",
                     token.symbol,
                     token.mint,
-                    discovery_source
+                    discovery_source,
+                    token.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .map(|usd| format!("{:.2}", usd))
+                        .unwrap_or_else(|| "None".to_string())
                 )
             );
         } else {
@@ -142,10 +147,15 @@ impl TokenDatabase {
                 LogTag::System,
                 "CACHE",
                 &format!(
-                    "Cached new token {} ({}) from {}",
+                    "Cached new token {} ({}) from {} - Liquidity USD: {}",
                     token.symbol,
                     token.mint,
-                    discovery_source
+                    discovery_source,
+                    token.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .map(|usd| format!("{:.2}", usd))
+                        .unwrap_or_else(|| "None".to_string())
                 )
             );
         }

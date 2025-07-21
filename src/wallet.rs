@@ -1,6 +1,6 @@
 use crate::global::{ Token, read_configs };
 use crate::logger::{ log, LogTag };
-use crate::trader::{DEFAULT_FEE, DEFAULT_SLIPPAGE};
+use crate::trader::{ DEFAULT_FEE, DEFAULT_SLIPPAGE };
 
 use reqwest;
 use serde::{ Deserialize, Serialize };
@@ -1398,12 +1398,34 @@ pub async fn buy_token(
 ) -> Result<SwapResult, SwapError> {
     let wallet_address = get_wallet_address()?;
 
+    log(
+        LogTag::Wallet,
+        "BUY",
+        &format!(
+            "🎯 Starting token purchase: {} ({}) | Amount: {:.6} SOL | Expected price: {}",
+            token.symbol,
+            token.name,
+            amount_sol,
+            expected_price.map(|p| format!("{:.8} SOL", p)).unwrap_or_else(|| "Any".to_string())
+        )
+    );
+
     // Check SOL balance before swap
-    log(LogTag::Trader, "BALANCE", "Checking SOL balance...");
+    log(LogTag::Wallet, "BALANCE", "💰 Checking SOL balance...");
     let sol_balance = get_sol_balance(&wallet_address).await?;
-    log(LogTag::Trader, "BALANCE", &format!("Current SOL balance: {:.6} SOL", sol_balance));
+    log(LogTag::Wallet, "BALANCE", &format!("💰 Current SOL balance: {:.6} SOL", sol_balance));
 
     if sol_balance < amount_sol {
+        log(
+            LogTag::Wallet,
+            "ERROR",
+            &format!(
+                "❌ Insufficient SOL balance! Have: {:.6} SOL, Need: {:.6} SOL (Deficit: {:.6} SOL)",
+                sol_balance,
+                amount_sol,
+                amount_sol - sol_balance
+            )
+        );
         return Err(
             SwapError::InsufficientBalance(
                 format!(
@@ -1414,6 +1436,16 @@ pub async fn buy_token(
             )
         );
     }
+
+    log(
+        LogTag::Wallet,
+        "SUCCESS",
+        &format!(
+            "✅ SOL balance sufficient! Available: {:.6} SOL, Required: {:.6} SOL",
+            sol_balance,
+            amount_sol
+        )
+    );
 
     // Get quote once and use it for both price validation and execution
     let request = SwapRequest {
@@ -1426,48 +1458,64 @@ pub async fn buy_token(
     };
 
     log(
-        LogTag::Trader,
-        "SWAP",
+        LogTag::Wallet,
+        "QUOTE",
         &format!(
-            "Getting quote for {} ({}) - {} SOL -> {}",
-            token.symbol,
-            token.name,
+            "📊 Requesting swap quote: {} SOL → {} | Mint: {}...{}",
             amount_sol,
-            &token.mint[..8]
+            token.symbol,
+            &token.mint[..8],
+            &token.mint[token.mint.len() - 8..]
         )
     );
 
     // Get quote once
     let swap_data = get_swap_quote(&request).await?;
 
+    log(
+        LogTag::Wallet,
+        "QUOTE",
+        &format!(
+            "📋 Quote received: Input: {} | Output: {} | Price Impact: {:.4}% | Fee: {} lamports",
+            swap_data.quote.in_amount,
+            swap_data.quote.out_amount,
+            swap_data.quote.price_impact_pct,
+            swap_data.raw_tx.prioritization_fee_lamports
+        )
+    );
+
     // Check current price if expected price is provided
     if let Some(expected) = expected_price {
-        log(LogTag::Trader, "PRICE", "Validating current token price...");
+        log(LogTag::Wallet, "PRICE", "🔍 Validating current token price...");
 
         // Calculate current price from quote, accounting for token decimals
         let output_amount_str = &swap_data.quote.out_amount;
-        log(LogTag::Trader, "DEBUG", &format!("Raw out_amount string: '{}'", output_amount_str));
+        log(LogTag::Wallet, "DEBUG", &format!("📋 Raw out_amount string: '{}'", output_amount_str));
 
         let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "ERROR",
-                &format!("Failed to parse out_amount '{}': {}", output_amount_str, e)
+                &format!("❌ Failed to parse out_amount '{}': {}", output_amount_str, e)
             );
             0.0
         });
 
-        log(LogTag::Trader, "DEBUG", &format!("Parsed output_amount_raw: {}", output_amount_raw));
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!("🔢 Parsed output_amount_raw: {}", output_amount_raw)
+        );
 
         let token_decimals = token.decimals as u32;
         let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
         let current_price = if output_tokens > 0.0 { amount_sol / output_tokens } else { 0.0 };
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "DEBUG",
             &format!(
-                "Price calc debug: raw_amount={}, decimals={}, output_tokens={:.12}, current_price={:.12}",
+                "🧮 Price calculation: raw_amount={}, decimals={}, output_tokens={:.12}, current_price={:.12}",
                 output_amount_raw,
                 token_decimals,
                 output_tokens,
@@ -1476,14 +1524,24 @@ pub async fn buy_token(
         );
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "PRICE",
-            &format!("Current price: {:.12} SOL, Expected: {:.12} SOL", current_price, expected)
+            &format!("💲 Current price: {:.12} SOL, Expected: {:.12} SOL", current_price, expected)
         );
 
         // Use 5% tolerance for price validation
         if current_price > 0.0 && !validate_price_near_expected(current_price, expected, 5.0) {
             let price_diff = ((current_price - expected) / expected) * 100.0;
+            log(
+                LogTag::Wallet,
+                "ERROR",
+                &format!(
+                    "❌ Price validation failed! Current: {:.12} SOL, Expected: {:.12} SOL, Diff: {:.2}% (Max: 5%)",
+                    current_price,
+                    expected,
+                    price_diff
+                )
+            );
             return Err(
                 SwapError::SlippageExceeded(
                     format!(
@@ -1496,14 +1554,24 @@ pub async fn buy_token(
             );
         } else if current_price <= 0.0 {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "WARNING",
-                "Could not calculate current price from quote, proceeding without validation"
+                "⚠️ Could not calculate current price from quote, proceeding without validation"
             );
         } else {
-            log(LogTag::Trader, "PRICE", "✅ Price validation passed");
+            let price_diff = ((current_price - expected) / expected) * 100.0;
+            log(
+                LogTag::Wallet,
+                "SUCCESS",
+                &format!(
+                    "✅ Price validation passed! Diff: {:.2}% (within 5% tolerance)",
+                    price_diff
+                )
+            );
         }
     }
+
+    log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with validated quote..."));
 
     execute_swap_with_quote(
         token,

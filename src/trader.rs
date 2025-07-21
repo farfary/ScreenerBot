@@ -1,15 +1,15 @@
 /// Trading configuration constants
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 6.5;
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 2.5;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
 pub const DEFAULT_SLIPPAGE: f64 = 2.0; // 5% slippage
 
-pub const TRADE_SIZE_SOL: f64 = 0.00025;
+pub const TRADE_SIZE_SOL: f64 = 0.0001;
 pub const STOP_LOSS_PERCENT: f64 = -70.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 2;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
@@ -845,7 +845,7 @@ pub fn calculate_position_pnl_from_swaps(
 ) -> (f64, f64) {
     // Use actual transaction data when available for maximum accuracy
     if
-        let (Some(token_amount), Some(_effective_entry_price)) = (
+        let (Some(token_amount), Some(effective_entry_price)) = (
             position.token_amount,
             position.effective_entry_price,
         )
@@ -863,6 +863,26 @@ pub fn calculate_position_pnl_from_swaps(
             let net_pnl_sol = current_value_sol - position.entry_size_sol - total_fee_cost;
             let net_pnl_percent = (net_pnl_sol / position.entry_size_sol) * 100.0;
 
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "P&L calc for {}: token_amount={}, decimals={}, ui_amount={:.6}, current_price={:.8}, current_value={:.6}, entry_size={:.6}, fees={:.6}, pnl_sol={:.6}, pnl_percent={:.2}%",
+                    position.symbol,
+                    token_amount,
+                    decimals,
+                    ui_token_amount,
+                    current_price,
+                    current_value_sol,
+                    position.entry_size_sol,
+                    total_fee_cost,
+                    net_pnl_sol,
+                    net_pnl_percent
+                )
+                    .dimmed()
+                    .to_string()
+            );
+
             return (net_pnl_sol, net_pnl_percent);
         }
     }
@@ -874,6 +894,23 @@ pub fn calculate_position_pnl_from_swaps(
         current_price,
         position.entry_size_sol
     );
+
+    log(
+        LogTag::Trader,
+        "DEBUG",
+        &format!(
+            "P&L fallback calc for {}: entry_price={:.8}, current_price={:.8}, entry_size={:.6}, pnl_sol={:.6}, pnl_percent={:.2}%",
+            position.symbol,
+            price_to_use,
+            current_price,
+            position.entry_size_sol,
+            net_pnl_sol,
+            net_pnl_percent
+        )
+            .dimmed()
+            .to_string()
+    );
+
     (net_pnl_sol, net_pnl_percent)
 }
 
@@ -1360,6 +1397,10 @@ async fn close_position(
 
 /// Updates position with current price to track extremes and drawdown
 fn update_position_tracking(position: &mut Position, current_price: f64) {
+    let old_highest = position.price_highest;
+    let old_lowest = position.price_lowest;
+    let old_drawdown = position.drawdown_percent;
+
     // Update price extremes
     if current_price > position.price_highest {
         position.price_highest = current_price;
@@ -1368,13 +1409,33 @@ fn update_position_tracking(position: &mut Position, current_price: f64) {
         position.price_lowest = current_price;
     }
 
-    // Calculate drawdown from highest price
-    let drawdown = ((position.price_highest - current_price) / position.price_highest) * 100.0;
-    if drawdown > position.drawdown_percent {
-        position.drawdown_percent = drawdown;
+    // Calculate drawdown from entry price (not highest price)
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    if entry_price > 0.0 {
+        let drawdown_from_entry = ((entry_price - current_price) / entry_price) * 100.0;
+        position.drawdown_percent = drawdown_from_entry.max(0.0); // Only positive drawdowns
     }
-}
 
+    // Log detailed tracking info
+    log(
+        LogTag::Trader,
+        "DEBUG",
+        &format!(
+            "Position tracking update for {}: current_price={:.8}, entry_price={:.8}, highest={:.8}->{:.8}, lowest={:.8}->{:.8}, drawdown={:.2}%->{:.2}%",
+            position.symbol,
+            current_price,
+            entry_price,
+            old_highest,
+            position.price_highest,
+            old_lowest,
+            position.price_lowest,
+            old_drawdown,
+            position.drawdown_percent
+        )
+            .dimmed()
+            .to_string()
+    );
+}
 /// Background task to display positions table every 10 seconds
 pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
     loop {
@@ -1397,20 +1458,52 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         let mut tokens: Vec<_> = {
             if let Ok(tokens_guard) = LIST_TOKENS.read() {
-                // Only include tokens that were discovered after startup time
-                // This ensures we trade only fresh discoveries, not historical data
-                let startup_time = *crate::global::STARTUP_TIME;
-                tokens_guard
+                // Log total tokens available
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("Total tokens in LIST_TOKENS: {}", tokens_guard.len())
+                        .dimmed()
+                        .to_string()
+                );
+
+                // Include all tokens - we want to trade on existing tokens with updated info
+                // The discovery system ensures tokens are updated with fresh data before trading
+                let all_tokens: Vec<_> = tokens_guard.iter().cloned().collect();
+
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "Using all {} tokens for trading (startup filter removed)",
+                        all_tokens.len()
+                    )
+                        .dimmed()
+                        .to_string()
+                );
+
+                // Count tokens with liquidity data
+                let with_liquidity = all_tokens
                     .iter()
                     .filter(|token| {
-                        // Include tokens that either:
-                        // 1. Have no created_at timestamp (treat as new)
-                        // 2. Were created after our startup time
-                        token.created_at.map_or(true, |created| created >= startup_time)
+                        token.liquidity
+                            .as_ref()
+                            .and_then(|l| l.usd)
+                            .unwrap_or(0.0) > 0.0
                     })
-                    .cloned()
-                    .collect()
+                    .count();
+
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("Tokens with non-zero liquidity: {}", with_liquidity)
+                        .dimmed()
+                        .to_string()
+                );
+
+                all_tokens
             } else {
+                log(LogTag::Trader, "ERROR", "Failed to acquire read lock on LIST_TOKENS");
                 Vec::new()
             }
         };
@@ -1448,6 +1541,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 .dimmed()
                 .to_string()
         );
+
+        // Count tokens with zero liquidity before filtering
+        let zero_liquidity_count = tokens
+            .iter()
+            .filter(|token| {
+                let liquidity_usd = token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                liquidity_usd == 0.0
+            })
+            .count();
+
+        if zero_liquidity_count > 0 {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Found {} tokens with zero liquidity USD", zero_liquidity_count)
+                    .dimmed()
+                    .to_string()
+            );
+        }
 
         // Filter out zero-liquidity tokens first
         tokens.retain(|token| {
@@ -2044,15 +2159,31 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                                         let now = Utc::now();
 
-                                        // Update drawdown calculation
-                                        if position.price_highest > 0.0 {
+                                        // Update drawdown calculation - calculate from effective entry price
+                                        let old_drawdown = position.drawdown_percent;
+                                        let entry_price = position.effective_entry_price.unwrap_or(
+                                            position.entry_price
+                                        );
+                                        if entry_price > 0.0 {
                                             position.drawdown_percent =
-                                                ((position.price_highest - current_price) /
-                                                    position.price_highest) *
+                                                ((entry_price - current_price) / entry_price) *
                                                 100.0;
-                                        }
 
-                                        // Calculate sell urgency using the advanced mathematical model
+                                            log(
+                                                LogTag::Trader,
+                                                "DEBUG",
+                                                &format!(
+                                                    "Drawdown calc for {}: entry_price={:.8}, current_price={:.8}, drawdown={:.2}%->{:.2}%",
+                                                    position.symbol,
+                                                    entry_price,
+                                                    current_price,
+                                                    old_drawdown,
+                                                    position.drawdown_percent
+                                                )
+                                                    .dimmed()
+                                                    .to_string()
+                                            );
+                                        } // Calculate sell urgency using the advanced mathematical model
                                         let sell_urgency = should_sell(
                                             position,
                                             current_price,

@@ -230,6 +230,27 @@ pub async fn update_tokens_from_mints(
                             }
                         });
 
+                        // Log liquidity parsing for debugging
+                        if let Some(symbol) = base_token.get("symbol").and_then(|v| v.as_str()) {
+                            let liquidity_usd = liquidity
+                                .as_ref()
+                                .and_then(|l| l.usd)
+                                .unwrap_or(0.0);
+                            if liquidity_usd == 0.0 {
+                                log(
+                                    LogTag::Monitor,
+                                    "DEBUG",
+                                    &format!(
+                                        "Token {} parsed with zero liquidity USD from API: {:?}",
+                                        symbol,
+                                        pair.get("liquidity")
+                                    )
+                                        .dimmed()
+                                        .to_string()
+                                );
+                            }
+                        }
+
                         // Parse token info
                         let info = pair.get("info").map(|info_obj| {
                             let websites = info_obj
@@ -444,6 +465,32 @@ pub async fn update_tokens_from_mints(
     };
     match LIST_TOKENS.write() {
         Ok(mut list) => {
+            // Log liquidity breakdown before updating
+            let total_tokens = tokens.len();
+            let with_liquidity = tokens
+                .iter()
+                .filter(|token| {
+                    token.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .unwrap_or(0.0) > 0.0
+                })
+                .count();
+            let zero_liquidity = total_tokens - with_liquidity;
+
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!(
+                    "Updating LIST_TOKENS: {} total tokens, {} with liquidity, {} with zero liquidity",
+                    total_tokens,
+                    with_liquidity,
+                    zero_liquidity
+                )
+                    .dimmed()
+                    .to_string()
+            );
+
             *list = tokens;
 
             // Count how many position tokens were successfully updated
