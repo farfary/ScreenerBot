@@ -8,6 +8,7 @@ const ENABLE_MONITOR_LOGS: bool = false;
 const ENABLE_TRADER_LOGS: bool = true;
 const ENABLE_WALLET_LOGS: bool = true;
 const ENABLE_SYSTEM_LOGS: bool = true;
+const ENABLE_POOL_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -45,6 +46,7 @@ pub enum LogTag {
     Trader,
     Wallet,
     System,
+    Pool,
     Other(String),
 }
 
@@ -55,6 +57,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Trader => format!("{:<8}", "TRADER").bright_green().bold(), // 💰 Money green
             LogTag::Wallet => format!("{:<8}", "WALLET").bright_magenta().bold(), // 💜 Rich purple for wealth
             LogTag::System => format!("{:<8}", "SYSTEM").bright_yellow().bold(), // ⚙️ Mechanical yellow
+            LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -69,6 +72,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Trader => ENABLE_TRADER_LOGS,
         LogTag::Wallet => ENABLE_WALLET_LOGS,
         LogTag::System => ENABLE_SYSTEM_LOGS,
+        LogTag::Pool => ENABLE_POOL_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -126,6 +130,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::System =>
             format!("{:<width$}", "SYSTEM", width = TAG_WIDTH)
                 .bright_yellow()
+                .bold(),
+        LogTag::Pool =>
+            format!("{:<width$}", "POOL", width = TAG_WIDTH)
+                .bright_blue()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)

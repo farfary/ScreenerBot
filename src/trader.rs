@@ -16,7 +16,7 @@ pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// Pool price validation - maximum allowed difference from API price (10%)
-pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 10.0;
+pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 25.0;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
