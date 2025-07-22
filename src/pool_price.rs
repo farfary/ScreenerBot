@@ -71,6 +71,7 @@ impl PoolType {
                     PoolType::RaydiumAmm
                 }
             }
+            "launchlab" => PoolType::RaydiumLaunchLab, // DexScreener uses "launchlab" as DEX ID
             "meteora" => {
                 if labels.iter().any(|l| l.eq_ignore_ascii_case("DLMM")) {
                     PoolType::MeteoraDlmm
