@@ -79,7 +79,7 @@ pub async fn monitor(shutdown: Arc<Notify>) {
             }
         }
 
-        if check_shutdown_or_delay(&shutdown, Duration::from_secs(10)).await {
+        if check_shutdown_or_delay(&shutdown, Duration::from_secs(5)).await {
             log(LogTag::Monitor, "INFO", "monitor task shutting down...");
             break;
         }
