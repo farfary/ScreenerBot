@@ -131,3 +131,7 @@ path = "src/bin/tool_token_db_manager.rs"
 [[bin]]
 name = "test_raydium_launchlab"
 path = "src/bin/test_raydium_launchlab.rs"
+
+[[bin]]
+name = "tool_pool_prices"
+path = "src/bin/tool_pool_prices.rs"

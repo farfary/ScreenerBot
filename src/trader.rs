@@ -62,7 +62,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     const STOP_LOSS_PERCENT: f64 = -70.0; // Stop loss at -70%
     const PROFIT_TARGET_PERCENT: f64 = 25.0; // Take profit at +25%
     const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
-    const TIME_DECAY_START_SECS: f64 = 1800.0; // Start time decay after 30 minutes
+    const TIME_DECAY_START_SECS: f64 = 3600.0; // Start time decay after 30 minutes
 
     // Don't sell too early unless it's a major loss
     if time_held_secs < MIN_HOLD_TIME_SECS {
