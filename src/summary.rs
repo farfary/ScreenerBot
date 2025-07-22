@@ -10,17 +10,40 @@ use tokio::sync::Notify;
 use std::time::Duration;
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 
-/// Display structure for position table formatting
+/// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
-pub struct PositionDisplay {
+pub struct ClosedPositionDisplay {
     #[tabled(rename = "Symbol")]
     symbol: String,
     #[tabled(rename = "Mint")]
     mint: String,
-    #[tabled(rename = "Entry Price")]
+    #[tabled(rename = "Entry")]
     entry_price: String,
-    #[tabled(rename = "Current/Exit")]
-    current_or_exit: String,
+    #[tabled(rename = "Exit")]
+    exit_price: String,
+    #[tabled(rename = "Size (SOL)")]
+    size_sol: String,
+    #[tabled(rename = "P&L (SOL)")]
+    pnl_sol: String,
+    #[tabled(rename = "P&L (%)")]
+    pnl_percent: String,
+    #[tabled(rename = "Duration")]
+    duration: String,
+    #[tabled(rename = "Status")]
+    status: String,
+}
+
+/// Display structure for open positions with specific "Price" column
+#[derive(Tabled)]
+pub struct OpenPositionDisplay {
+    #[tabled(rename = "Symbol")]
+    symbol: String,
+    #[tabled(rename = "Mint")]
+    mint: String,
+    #[tabled(rename = "Entry")]
+    entry_price: String,
+    #[tabled(rename = "Price")]
+    current_price: String,
     #[tabled(rename = "Size (SOL)")]
     size_sol: String,
     #[tabled(rename = "P&L (SOL)")]
@@ -117,7 +140,7 @@ pub async fn display_positions_table() {
             .rev() // Most recent first
             .take(10) // Take last 10
             .rev() // Reverse back so oldest of the 10 is first
-            .map(|position| PositionDisplay::from_position(position, None))
+            .map(|position| ClosedPositionDisplay::from_position(position))
             .collect();
 
         if !recent_closed.is_empty() {
@@ -141,7 +164,7 @@ pub async fn display_positions_table() {
             .map(|position| {
                 // Get current price for this position
                 let current_price = get_current_token_price(&position.mint);
-                PositionDisplay::from_position(position, current_price)
+                OpenPositionDisplay::from_position(position, current_price)
             })
             .collect();
 
@@ -239,58 +262,25 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     println!("");
 }
 
-impl PositionDisplay {
-    fn from_position(position: &Position, current_price: Option<f64>) -> Self {
-        let current_or_exit = if position.exit_price.is_some() {
-            // For closed positions, prioritize effective exit price over regular exit price
-            let display_price = position.effective_exit_price.unwrap_or(
-                position.exit_price.unwrap()
-            );
-            format!("{:.8}", display_price)
-        } else if let Some(price) = current_price {
-            format!("{:.8}", price)
+impl ClosedPositionDisplay {
+    fn from_position(position: &Position) -> Self {
+        // For closed positions, prioritize effective exit price over regular exit price
+        let exit_price = position.effective_exit_price.unwrap_or(
+            position.exit_price.unwrap_or(0.0)
+        );
+
+        let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
+
+        let pnl_sol_str = if pnl_sol >= 0.0 {
+            format!("+{:.6}", pnl_sol)
         } else {
-            "N/A".to_string()
+            format!("{:.6}", pnl_sol)
         };
 
-        let pnl_sol_str = if position.exit_price.is_some() {
-            // Closed position - use unified calculation
-            let (pnl_sol, _) = calculate_position_pnl(position, None);
-            if pnl_sol >= 0.0 {
-                format!("+{:.6}", pnl_sol)
-            } else {
-                format!("{:.6}", pnl_sol)
-            }
-        } else if let Some(price) = current_price {
-            // Open position - use unified calculation with current price
-            let (pnl_sol, _) = calculate_position_pnl(position, Some(price));
-            if pnl_sol >= 0.0 {
-                format!("+{:.6}", pnl_sol)
-            } else {
-                format!("{:.6}", pnl_sol)
-            }
+        let pnl_percent_str = if pnl_percent >= 0.0 {
+            format!("+{:.2}%", pnl_percent)
         } else {
-            "N/A".to_string()
-        };
-
-        let pnl_percent_str = if position.exit_price.is_some() {
-            // Closed position - use unified calculation
-            let (_, pnl_percent) = calculate_position_pnl(position, None);
-            if pnl_percent >= 0.0 {
-                format!("+{:.2}%", pnl_percent)
-            } else {
-                format!("{:.2}%", pnl_percent)
-            }
-        } else if let Some(price) = current_price {
-            // Open position - use unified calculation with current price
-            let (_, pnl_percent) = calculate_position_pnl(position, Some(price));
-            if pnl_percent >= 0.0 {
-                format!("+{:.2}%", pnl_percent)
-            } else {
-                format!("{:.2}%", pnl_percent)
-            }
-        } else {
-            "N/A".to_string()
+            format!("{:.2}%", pnl_percent)
         };
 
         let duration = if let Some(exit_time) = position.exit_time {
@@ -299,34 +289,67 @@ impl PositionDisplay {
             format_duration_compact(position.entry_time, Utc::now())
         };
 
-        let status = if position.exit_price.is_some() {
-            let (pnl_sol, _) = calculate_position_pnl(position, None);
-            if pnl_sol >= 0.0 {
-                "✅ CLOSED".to_string()
-            } else {
-                "❌ CLOSED".to_string()
-            }
-        } else {
-            "🔄 OPEN".to_string()
-        };
-
-        // Keep full mint address for readability
-        let mint_display = position.mint.clone();
+        let status = if pnl_sol >= 0.0 { "✅ CLOSED".to_string() } else { "❌ CLOSED".to_string() };
 
         Self {
             symbol: position.symbol.clone(),
-            mint: mint_display,
+            mint: position.mint.clone(),
             entry_price: if let Some(effective_price) = position.effective_entry_price {
                 format!("{:.8}", effective_price)
             } else {
                 format!("{:.8}", position.entry_price)
             },
-            current_or_exit: current_or_exit,
+            exit_price: format!("{:.8}", exit_price),
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
             duration,
             status,
+        }
+    }
+}
+
+impl OpenPositionDisplay {
+    fn from_position(position: &Position, current_price: Option<f64>) -> Self {
+        let current_price_str = if let Some(price) = current_price {
+            format!("{:.8}", price)
+        } else {
+            "N/A".to_string()
+        };
+
+        let (pnl_sol_str, pnl_percent_str) = if let Some(price) = current_price {
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));
+            let sol_str = if pnl_sol >= 0.0 {
+                format!("+{:.6}", pnl_sol)
+            } else {
+                format!("{:.6}", pnl_sol)
+            };
+            let percent_str = if pnl_percent >= 0.0 {
+                format!("+{:.2}%", pnl_percent)
+            } else {
+                format!("{:.2}%", pnl_percent)
+            };
+            (sol_str, percent_str)
+        } else {
+            ("N/A".to_string(), "N/A".to_string())
+        };
+
+        let duration = format_duration_compact(position.entry_time, Utc::now());
+
+        Self {
+            symbol: position.symbol.clone(),
+            mint: position.mint.clone(),
+            entry_price: if let Some(effective_price) = position.effective_entry_price {
+                format!("{:.8}", effective_price)
+            } else {
+                format!("{:.8}", position.entry_price)
+            },
+            current_price: current_price_str,
+            size_sol: format!("{:.6}", position.entry_size_sol),
+            pnl_sol: pnl_sol_str,
+            pnl_percent: pnl_percent_str,
+            duration,
+            status: "🔄 OPEN".to_string(),
         }
     }
 }

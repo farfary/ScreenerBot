@@ -13,7 +13,7 @@ pub const STOP_LOSS_PERCENT: f64 = -99.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
