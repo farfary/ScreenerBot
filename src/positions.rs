@@ -18,9 +18,22 @@ pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(||
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
-/// This is the ONLY place where DEFAULT_FEE is used for pure profit calculation
+/// For closed positions with sol_received, uses actual SOL invested vs SOL received
 pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
-    // For closed positions, use effective exit price
+    // For closed positions, prioritize sol_received for most accurate P&L
+    if let (Some(_), Some(sol_received)) = (position.exit_price, position.sol_received) {
+        // Use actual SOL invested vs SOL received for closed positions
+        let sol_invested = position.entry_size_sol;
+
+        // Account for trading fees (buy + sell fees)
+        let total_fees = 2.0 * DEFAULT_FEE;
+        let net_pnl_sol = sol_received - sol_invested - total_fees;
+        let net_pnl_percent = (net_pnl_sol / sol_invested) * 100.0;
+
+        return (net_pnl_sol, net_pnl_percent);
+    }
+
+    // Fallback for closed positions without sol_received (backward compatibility)
     if let Some(exit_price) = position.exit_price {
         let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
         let effective_exit = position.effective_exit_price.unwrap_or(exit_price);
@@ -127,6 +140,7 @@ pub struct Position {
     pub token_amount: Option<u64>, // Amount of tokens bought/sold
     pub effective_entry_price: Option<f64>, // Actual price from on-chain transaction
     pub effective_exit_price: Option<f64>, // Actual exit price from on-chain transaction
+    pub sol_received: Option<f64>, // Actual SOL received after sell (lamports converted to SOL)
 }
 
 /// Checks recent transactions to see if position was already closed
@@ -476,6 +490,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 token_amount: Some(token_amount),
                 effective_entry_price: Some(effective_entry_price), // Actual transaction price
                 effective_exit_price: None,
+                sol_received: None, // Will be set when position is closed
             };
 
             if let Ok(mut positions) = SAVED_POSITIONS.lock() {
@@ -664,6 +679,7 @@ pub async fn close_position(
                 // Calculate actual P&L using unified function
                 position.exit_price = Some(exit_price);
                 position.effective_exit_price = Some(effective_exit_price);
+                position.sol_received = Some(crate::wallet::lamports_to_sol(sol_received)); // Store actual SOL received
 
                 let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
                 let is_profitable = net_pnl_sol > 0.0;

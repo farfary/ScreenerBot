@@ -1,5 +1,5 @@
 /// Trading configuration constants
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 7.5;
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 15.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 
 pub const DEFAULT_FEE: f64 = 0.000006;
