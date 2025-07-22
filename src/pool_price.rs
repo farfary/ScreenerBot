@@ -4,7 +4,10 @@ use serde::{ Deserialize, Serialize };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+use std::path::Path;
+use std::collections::HashMap;
 use reqwest;
+use crate::decimal_cache::{ DecimalCache, fetch_or_cache_decimals };
 
 // =============================================================================
 // CONSTANTS
@@ -693,18 +696,59 @@ impl PoolDiscoveryAndPricing {
 
     /// Universal price calculation method with smart SOL/Token orientation
     pub async fn calculate_price_from_pool_data(&self, pool_data: &PoolData) -> Result<f64> {
-        // Calculate UI amounts (considering decimals)
+        // Load decimal cache
+        let cache_path = Path::new("decimal_cache.json");
+        let mut decimal_cache = match DecimalCache::load_from_file(cache_path) {
+            Ok(cache) => cache,
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Failed to load decimal cache: {}", e));
+                DecimalCache::new()
+            }
+        };
+
+        // Get actual token decimals from cache or fetch from chain
+        let mints_to_check = vec![pool_data.token_a.mint.clone(), pool_data.token_b.mint.clone()];
+        let decimal_map = match
+            fetch_or_cache_decimals(
+                &self.rpc_client,
+                &mints_to_check,
+                &mut decimal_cache,
+                cache_path
+            ).await
+        {
+            Ok(map) => map,
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Failed to fetch decimals from cache: {}", e));
+                // Create fallback map using pool data decimals
+                let mut fallback_map = HashMap::new();
+                fallback_map.insert(pool_data.token_a.mint.clone(), pool_data.token_a.decimals);
+                fallback_map.insert(pool_data.token_b.mint.clone(), pool_data.token_b.decimals);
+                fallback_map
+            }
+        };
+
+        let token_a_decimals = decimal_map
+            .get(&pool_data.token_a.mint)
+            .copied()
+            .unwrap_or(pool_data.token_a.decimals);
+        let token_b_decimals = decimal_map
+            .get(&pool_data.token_b.mint)
+            .copied()
+            .unwrap_or(pool_data.token_b.decimals);
+
+        // Calculate UI amounts (considering actual decimals from cache)
         let token_a_ui_amount =
-            (pool_data.reserve_a.balance as f64) / (10_f64).powi(pool_data.token_a.decimals as i32);
+            (pool_data.reserve_a.balance as f64) / (10_f64).powi(token_a_decimals as i32);
         let token_b_ui_amount =
-            (pool_data.reserve_b.balance as f64) / (10_f64).powi(pool_data.token_b.decimals as i32);
+            (pool_data.reserve_b.balance as f64) / (10_f64).powi(token_b_decimals as i32);
 
         log(
             LogTag::System,
             "INFO",
             &format!(
-                "Token A UI amount: {} (decimals: {}) - {}",
+                "Token A UI amount: {} (cached decimals: {} vs pool decimals: {}) - {}",
                 token_a_ui_amount,
+                token_a_decimals,
                 pool_data.token_a.decimals,
                 if self.is_sol_mint(&pool_data.token_a.mint) {
                     "SOL"
@@ -717,8 +761,9 @@ impl PoolDiscoveryAndPricing {
             LogTag::System,
             "INFO",
             &format!(
-                "Token B UI amount: {} (decimals: {}) - {}",
+                "Token B UI amount: {} (cached decimals: {} vs pool decimals: {}) - {}",
                 token_b_ui_amount,
+                token_b_decimals,
                 pool_data.token_b.decimals,
                 if self.is_sol_mint(&pool_data.token_b.mint) {
                     "SOL"
@@ -753,11 +798,23 @@ impl PoolDiscoveryAndPricing {
                 let PoolSpecificData::RaydiumLaunchLab { real_base, real_quote, .. } =
                     &pool_data.specific_data
             {
-                // Calculate price using the real_base and real_quote values
-                let ui_real_base =
-                    (*real_base as f64) / (10_f64).powi(pool_data.token_a.decimals as i32);
-                let ui_real_quote =
-                    (*real_quote as f64) / (10_f64).powi(pool_data.token_b.decimals as i32);
+                // Use cached decimals for more accurate calculation
+                let ui_real_base = (*real_base as f64) / (10_f64).powi(token_a_decimals as i32);
+                let ui_real_quote = (*real_quote as f64) / (10_f64).powi(token_b_decimals as i32);
+
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!(
+                        "LaunchLab Real Values - Base: {} (raw: {}, decimals: {}), Quote: {} (raw: {}, decimals: {})",
+                        ui_real_base,
+                        *real_base,
+                        token_a_decimals,
+                        ui_real_quote,
+                        *real_quote,
+                        token_b_decimals
+                    )
+                );
 
                 if ui_real_base > 0.0 {
                     ui_real_quote / ui_real_base // Quote per Base (or SOL per Token if quote is SOL)
