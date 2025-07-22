@@ -5,7 +5,6 @@ use crate::logger::{ log, LogTag };
 use crate::global::*;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };
-use crate::profit_calculation::{ PROFIT_SYSTEM, AccuratePnL };
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -102,7 +101,10 @@ pub async fn display_positions_table() {
             .sum();
         let total_pnl: f64 = closed_positions
             .iter()
-            .filter_map(|p| p.pnl_sol)
+            .map(|p| {
+                let (pnl_sol, _) = calculate_position_pnl(p, None);
+                pnl_sol
+            })
             .sum();
 
         (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
@@ -166,11 +168,17 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     let total_trades = closed_positions.len();
     let profitable_trades = closed_positions
         .iter()
-        .filter(|p| p.pnl_sol.unwrap_or(0.0) > 0.0)
+        .filter(|p| {
+            let (pnl_sol, _) = calculate_position_pnl(p, None);
+            pnl_sol > 0.0
+        })
         .count();
     let losing_trades = closed_positions
         .iter()
-        .filter(|p| p.pnl_sol.unwrap_or(0.0) < 0.0)
+        .filter(|p| {
+            let (pnl_sol, _) = calculate_position_pnl(p, None);
+            pnl_sol < 0.0
+        })
         .count();
     let win_rate = if total_trades > 0 {
         ((profitable_trades as f64) / (total_trades as f64)) * 100.0
@@ -180,19 +188,28 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 
     let total_pnl: f64 = closed_positions
         .iter()
-        .filter_map(|p| p.pnl_sol)
+        .map(|p| {
+            let (pnl_sol, _) = calculate_position_pnl(p, None);
+            pnl_sol
+        })
         .sum();
     let avg_pnl_per_trade = if total_trades > 0 { total_pnl / (total_trades as f64) } else { 0.0 };
 
     let best_trade = closed_positions
         .iter()
-        .filter_map(|p| p.pnl_sol)
+        .map(|p| {
+            let (pnl_sol, _) = calculate_position_pnl(p, None);
+            pnl_sol
+        })
         .max_by(|a, b| a.partial_cmp(b).unwrap())
         .unwrap_or(0.0);
 
     let worst_trade = closed_positions
         .iter()
-        .filter_map(|p| p.pnl_sol)
+        .map(|p| {
+            let (pnl_sol, _) = calculate_position_pnl(p, None);
+            pnl_sol
+        })
         .min_by(|a, b| a.partial_cmp(b).unwrap())
         .unwrap_or(0.0);
 
@@ -239,101 +256,41 @@ impl PositionDisplay {
             "N/A".to_string()
         };
 
-        let pnl_sol_str = if let Some(pnl) = position.pnl_sol {
-            if pnl >= 0.0 { format!("+{:.6}", pnl) } else { format!("{:.6}", pnl) }
-        } else if let Some(price) = current_price {
-            // Use new accurate profit calculation system
-            if let Ok(profit_system) = PROFIT_SYSTEM.lock() {
-                let token_decimals = {
-                    let tokens = LIST_TOKENS.read().unwrap();
-                    tokens
-                        .iter()
-                        .find(|t| t.mint == position.mint)
-                        .map(|t| t.decimals)
-                };
-
-                let accurate_pnl = profit_system.calculate_accurate_pnl(
-                    position,
-                    price,
-                    token_decimals
-                );
-
-                if accurate_pnl.pnl_sol >= 0.0 {
-                    format!("+{:.6}", accurate_pnl.pnl_sol)
-                } else {
-                    format!("{:.6}", accurate_pnl.pnl_sol)
-                }
+        let pnl_sol_str = if position.exit_price.is_some() {
+            // Closed position - use unified calculation
+            let (pnl_sol, _) = calculate_position_pnl(position, None);
+            if pnl_sol >= 0.0 {
+                format!("+{:.6}", pnl_sol)
             } else {
-                // Fallback to old calculation
-                let token_decimals = {
-                    let tokens = LIST_TOKENS.read().unwrap();
-                    tokens
-                        .iter()
-                        .find(|t| t.mint == position.mint)
-                        .map(|t| t.decimals)
-                };
-
-                let (current_pnl, _) = calculate_position_pnl_from_swaps(
-                    position,
-                    price,
-                    token_decimals
-                );
-
-                if current_pnl >= 0.0 {
-                    format!("+{:.6}", current_pnl)
-                } else {
-                    format!("{:.6}", current_pnl)
-                }
+                format!("{:.6}", pnl_sol)
+            }
+        } else if let Some(price) = current_price {
+            // Open position - use unified calculation with current price
+            let (pnl_sol, _) = calculate_position_pnl(position, Some(price));
+            if pnl_sol >= 0.0 {
+                format!("+{:.6}", pnl_sol)
+            } else {
+                format!("{:.6}", pnl_sol)
             }
         } else {
             "N/A".to_string()
         };
 
-        let pnl_percent_str = if let Some(pnl_pct) = position.pnl_percent {
-            if pnl_pct >= 0.0 { format!("+{:.2}%", pnl_pct) } else { format!("{:.2}%", pnl_pct) }
-        } else if let Some(price) = current_price {
-            // Use new accurate profit calculation system
-            if let Ok(profit_system) = PROFIT_SYSTEM.lock() {
-                let token_decimals = {
-                    let tokens = LIST_TOKENS.read().unwrap();
-                    tokens
-                        .iter()
-                        .find(|t| t.mint == position.mint)
-                        .map(|t| t.decimals)
-                };
-
-                let accurate_pnl = profit_system.calculate_accurate_pnl(
-                    position,
-                    price,
-                    token_decimals
-                );
-
-                if accurate_pnl.pnl_percent >= 0.0 {
-                    format!("+{:.2}%", accurate_pnl.pnl_percent)
-                } else {
-                    format!("{:.2}%", accurate_pnl.pnl_percent)
-                }
+        let pnl_percent_str = if position.exit_price.is_some() {
+            // Closed position - use unified calculation
+            let (_, pnl_percent) = calculate_position_pnl(position, None);
+            if pnl_percent >= 0.0 {
+                format!("+{:.2}%", pnl_percent)
             } else {
-                // Fallback to old calculation
-                let token_decimals = {
-                    let tokens = LIST_TOKENS.read().unwrap();
-                    tokens
-                        .iter()
-                        .find(|t| t.mint == position.mint)
-                        .map(|t| t.decimals)
-                };
-
-                let (_, current_pnl_percent) = calculate_position_pnl_from_swaps(
-                    position,
-                    price,
-                    token_decimals
-                );
-
-                if current_pnl_percent >= 0.0 {
-                    format!("+{:.2}%", current_pnl_percent)
-                } else {
-                    format!("{:.2}%", current_pnl_percent)
-                }
+                format!("{:.2}%", pnl_percent)
+            }
+        } else if let Some(price) = current_price {
+            // Open position - use unified calculation with current price
+            let (_, pnl_percent) = calculate_position_pnl(position, Some(price));
+            if pnl_percent >= 0.0 {
+                format!("+{:.2}%", pnl_percent)
+            } else {
+                format!("{:.2}%", pnl_percent)
             }
         } else {
             "N/A".to_string()
@@ -346,7 +303,8 @@ impl PositionDisplay {
         };
 
         let status = if position.exit_price.is_some() {
-            if position.pnl_sol.unwrap_or(0.0) >= 0.0 {
+            let (pnl_sol, _) = calculate_position_pnl(position, None);
+            if pnl_sol >= 0.0 {
                 "✅ CLOSED".to_string()
             } else {
                 "❌ CLOSED".to_string()

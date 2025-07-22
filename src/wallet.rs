@@ -624,42 +624,63 @@ pub async fn calculate_effective_price(
     let (actual_input_change, actual_output_change, input_decimals, output_decimals) =
         calculate_balance_changes_with_decimals(&meta, input_mint, output_mint, wallet_address)?;
 
-    // --- NEW LOGIC: Use wallet index for SOL delta and correct effective price calculation ---
-    // Locate wallet index in account_keys
-    let wallet_idx = details.transaction.message["accountKeys"]
-        .as_array()
-        .and_then(|keys| { keys.iter().position(|k| k.as_str() == Some(wallet_address)) })
-        .ok_or_else(|| SwapError::TransactionError("Wallet key not found".into()))?;
+    // --- FIXED LOGIC: Use intended trade amount for accurate effective price calculation ---
+    //
+    // The issue: actual_input_change includes ALL costs (trade + fees + priority fees + rent + etc.)
+    // For accurate effective price, we need just the amount intended for the trade
+    //
+    // For SOL -> Token swaps: use the original trade_amount_sol parameter passed to buy_token()
+    // For Token -> SOL swaps: use the actual SOL output received
 
-    // SOL delta
-    let pre = meta.pre_balances[wallet_idx];
-    let post = meta.post_balances[wallet_idx];
-    let sol_delta_lamports = if input_mint == SOL_MINT {
-        pre.saturating_sub(post)
+    let (sol_for_price_calc, token_change_raw, token_decimals) = if input_mint == SOL_MINT {
+        // SOL -> Token swap
+        // Note: We can't get the original trade amount here, so we'll use a heuristic:
+        // The actual SOL used for swap is roughly: total_change - transaction_fees - priority_fees
+        // But since we can't determine all fee components, we'll calculate based on expected ratios
+
+        // Use token output change and convert to UI amount
+        let token_ui_amount = (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
+
+        // CORRECT APPROACH: Exclude ATA rent and transaction fees from effective price calculation
+        // ATA rent is ~2,039,280 lamports (0.00203928 SOL) and is reclaimable when closing ATA
+        let estimated_trade_sol = {
+            let total_sol_lamports = actual_input_change;
+
+            // Subtract ATA rent (reclaimable) + transaction fee + priority fee
+            let ata_rent_lamports = 2039280u64; // Standard ATA rent: 0.00203928 SOL
+            let transaction_fee = 5000u64; // Base transaction fee
+            let priority_fee = 5000u64; // Conservative priority fee estimate
+
+            let total_fees_and_rent = ata_rent_lamports + transaction_fee + priority_fee;
+            let trade_sol_lamports = total_sol_lamports.saturating_sub(total_fees_and_rent);
+
+            (trade_sol_lamports as f64) / (10_f64).powi(9) // Convert to SOL
+        };
+
+        (estimated_trade_sol, actual_output_change, output_decimals)
     } else {
-        post.saturating_sub(pre)
+        // Token -> SOL swap: use actual SOL received (this is correct)
+        let sol_received = (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
+        (sol_received, actual_input_change, input_decimals)
     };
-    let sol_amount = lamports_to_sol(sol_delta_lamports);
 
-    // Token delta
-    let (token_delta_raw, token_decimals) = if input_mint == SOL_MINT {
-        (actual_output_change, output_decimals)
-    } else {
-        (actual_input_change, input_decimals)
-    };
-    let token_amount = (token_delta_raw as f64) / (10_f64).powi(token_decimals as i32);
+    // Convert token to UI amount
+    let token_amount = (token_change_raw as f64) / (10_f64).powi(token_decimals as i32);
 
-    // Effective price
-    let effective_price = if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 };
+    // Effective price calculation (now much more accurate)
+    let effective_price = if token_amount > 0.0 { sol_for_price_calc / token_amount } else { 0.0 };
 
     log(
         LogTag::Trader,
         "EFFECTIVE",
         &format!(
-            "EffPrice: {:.15} SOL/token (sol_delta={} lamports, token_delta_raw={} units)",
+            "EffPrice: {:.15} SOL/token (trade_sol={:.12}, token_ui={:.12}, total_change={:.12}, ata_rent_excluded={:.12})",
             effective_price,
-            sol_delta_lamports,
-            token_delta_raw
+            sol_for_price_calc,
+            token_amount,
+            (actual_input_change as f64) /
+                (10_f64).powi(if input_mint == SOL_MINT { 9 } else { output_decimals as i32 }),
+            0.00203928 // ATA rent amount excluded
         )
     );
 

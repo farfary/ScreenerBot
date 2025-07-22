@@ -1,8 +1,8 @@
 /// Trading configuration constants
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 2.5;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
-// pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
-pub const DEFAULT_FEE: f64 = 0.0;
+pub const DEFAULT_FEE: f64 = 0.0000025 + 0.000006 + 0.000001;
+// pub const DEFAULT_FEE: f64 = 0.0;
 pub const DEFAULT_SLIPPAGE: f64 = 3.0; // 5% slippage
 
 pub const TRADE_SIZE_SOL: f64 = 0.0001;
@@ -18,11 +18,18 @@ pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA clos
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::global::*;
-use crate::positions::*;
+use crate::positions::{
+    Position,
+    calculate_position_pnl,
+    update_position_tracking,
+    get_open_positions_count,
+    open_position,
+    close_position,
+    SAVED_POSITIONS,
+};
 use crate::summary::*;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };
-use crate::profit_calculation::{ PROFIT_SYSTEM, AccuratePnL };
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -46,75 +53,30 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 });
 
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    // Use the new smart profit calculation system
-    if let Ok(mut profit_system) = PROFIT_SYSTEM.lock() {
-        // Get token decimals from global token list
-        let token_decimals = {
-            let tokens = LIST_TOKENS.read().unwrap();
-            tokens
-                .iter()
-                .find(|t| t.mint == pos.mint)
-                .map(|t| t.decimals)
-        };
+    // Calculate time held in seconds using total_seconds()
+    let duration = now - pos.entry_time;
+    let time_held_secs: f64 = duration.num_seconds() as f64;
 
-        let (urgency, reason) = profit_system.should_sell_smart(
-            pos,
-            current_price,
-            now,
-            token_decimals
-        );
-
-        // Log the sell decision for debugging
-        if urgency > 0.1 {
-            log(
-                LogTag::Trader,
-                "SELL_DECISION",
-                &format!("{} - Urgency: {:.2}, Reason: {}", pos.symbol, urgency, reason)
-            );
-        }
-
-        return urgency;
-    }
-
-    // Fallback to original logic if profit system is unavailable
-    let time_held_secs: f64 = (now - pos.entry_time).num_seconds() as f64;
-
-    // More conservative fallback settings
+    // Conservative settings for simplified logic
     const MIN_HOLD_TIME_SECS: f64 = 180.0; // Hold for at least 3 minutes
-    const STOP_LOSS_PERCENT: f64 = -70.0; // More conservative stop loss
+    const STOP_LOSS_PERCENT: f64 = -70.0; // Stop loss at -70%
+    const PROFIT_TARGET_PERCENT: f64 = 25.0; // Take profit at +25%
+    const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
+    const TIME_DECAY_START_SECS: f64 = 1800.0; // Start time decay after 30 minutes
 
     // Don't sell too early unless it's a major loss
     if time_held_secs < MIN_HOLD_TIME_SECS {
-        let entry_price_to_use = pos.effective_entry_price.unwrap_or(pos.entry_price);
-        let price_change_percent =
-            ((current_price - entry_price_to_use) / entry_price_to_use) * 100.0;
+        let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
 
-        if price_change_percent <= STOP_LOSS_PERCENT {
+        if current_pnl_percent <= STOP_LOSS_PERCENT {
             return 1.0; // Emergency exit for major losses
         } else {
             return 0.0; // Hold for minimum time
         }
     }
 
-    // Use original logic for positions held longer than minimum time
-    const MAX_HOLD_TIME_SECS: f64 = 3600.0;
-    const PROFIT_TARGET_PERCENT: f64 = 25.0; // More realistic profit target
-    const TIME_DECAY_START_SECS: f64 = 1800.0;
-
-    let entry_price_to_use = pos.effective_entry_price.unwrap_or(pos.entry_price);
-
-    let current_pnl_percent: f64 = if entry_price_to_use > 0.0 {
-        let price_change_percent =
-            ((current_price - entry_price_to_use) / entry_price_to_use) * 100.0;
-
-        // Use more accurate fee calculation
-        let total_fee_cost = 2.0 * DEFAULT_FEE;
-        let fee_percent = (total_fee_cost / pos.entry_size_sol) * 100.0;
-
-        price_change_percent - fee_percent
-    } else {
-        0.0
-    };
+    // Calculate current P&L using unified function
+    let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
 
     // Decision logic
     let stop_loss_triggered: bool = current_pnl_percent <= STOP_LOSS_PERCENT;
@@ -145,7 +107,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     if
         time_held_secs > TIME_DECAY_START_SECS &&
         current_pnl_percent <= 0.0 &&
-        current_pnl_percent > -15.0
+        current_pnl_percent > -30.0
     {
         urgency = f64::max(urgency, 0.3); // Reduced urgency for small losses
     }
@@ -1009,15 +971,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                         // Update position tracking (extremes)
                                         update_position_tracking(position, current_price);
 
-                                        let (
-                                            _is_profitable,
-                                            _net_pnl_sol,
-                                            net_pnl_percent,
-                                            _total_value,
-                                        ) = is_position_profitable(
-                                            position.entry_price,
-                                            current_price,
-                                            position.entry_size_sol
+                                        // Calculate P&L using unified function
+                                        let (pnl_sol, pnl_percent) = calculate_position_pnl(
+                                            position,
+                                            Some(current_price)
                                         );
 
                                         let now = Utc::now();
@@ -1030,7 +987,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                         );
 
                                         // Emergency exit conditions (keep original logic for safety)
-                                        let emergency_exit = net_pnl_percent <= STOP_LOSS_PERCENT;
+                                        let emergency_exit = pnl_percent <= STOP_LOSS_PERCENT;
 
                                         // Urgency-based exit (sell if urgency > 70% or emergency)
                                         let should_exit = emergency_exit || sell_urgency > 0.7;
@@ -1044,7 +1001,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                                     position.symbol,
                                                     position.mint,
                                                     sell_urgency,
-                                                    net_pnl_percent,
+                                                    pnl_percent,
                                                     emergency_exit
                                                 )
                                             );
@@ -1065,7 +1022,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                                     position.symbol,
                                                     position.mint,
                                                     sell_urgency,
-                                                    net_pnl_percent
+                                                    pnl_percent
                                                 )
                                             );
                                         }
