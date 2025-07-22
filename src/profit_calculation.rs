@@ -14,8 +14,6 @@ pub struct ProfitCalculationConfig {
     pub stop_loss_percent: f64,
     /// Dynamic profit target percentage
     pub profit_target_percent: f64,
-    /// Trailing stop percentage after profit target reached
-    pub trailing_stop_percent: f64,
     /// Time decay parameters
     pub time_decay_start_secs: f64,
     pub max_hold_time_secs: f64,
@@ -34,7 +32,6 @@ impl Default for ProfitCalculationConfig {
         Self {
             stop_loss_percent: -30.0, // More conservative initial stop loss
             profit_target_percent: 25.0, // More realistic profit target
-            trailing_stop_percent: 8.0, // Wider trailing stop
             time_decay_start_secs: 180.0, // Start decay after 3 minutes
             max_hold_time_secs: 3600.0, // Max 1 hour hold
             win_rate: 0.0,
@@ -338,26 +335,6 @@ impl ProfitCalculationSystem {
                     config.profit_target_percent
                 )
             );
-        } else if
-            // 3. Trailing Stop Logic
-            accurate_pnl.pnl_percent > 0.0
-        {
-            let peak_price = f64::max(position.price_highest, current_price);
-            let drawdown_from_peak = if peak_price > 0.0 {
-                ((current_price - peak_price) / peak_price) * 100.0
-            } else {
-                0.0
-            };
-
-            if drawdown_from_peak <= -config.trailing_stop_percent {
-                urgency = 0.75;
-                reasons.push(
-                    format!(
-                        "Trailing stop triggered: {:.2}% drawdown from peak",
-                        -drawdown_from_peak
-                    )
-                );
-            }
         }
 
         // 4. Time-based urgency (adaptive to market conditions)

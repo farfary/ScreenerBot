@@ -18,7 +18,6 @@ use serde::{ Serialize, Deserialize };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use colored::Colorize;
 
-
 /// Display structure for position table formatting
 #[derive(Tabled)]
 pub struct PositionDisplay {
@@ -36,8 +35,6 @@ pub struct PositionDisplay {
     pnl_sol: String,
     #[tabled(rename = "P&L (%)")]
     pnl_percent: String,
-    #[tabled(rename = "Drawdown")]
-    drawdown: String,
     #[tabled(rename = "Duration")]
     duration: String,
     #[tabled(rename = "Status")]
@@ -373,7 +370,6 @@ impl PositionDisplay {
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
-            drawdown: format!("-{:.2}%", position.drawdown_percent),
             duration,
             status,
         }

@@ -3,6 +3,27 @@ const LOG_SHOW_DATE: bool = false;
 /// Set to false to hide time in logs
 const LOG_SHOW_TIME: bool = false;
 
+/// Log Tag Configuration - Set to false to disable specific tags
+const ENABLE_MONITOR_LOGS: bool = false;
+const ENABLE_TRADER_LOGS: bool = true;
+const ENABLE_WALLET_LOGS: bool = true;
+const ENABLE_SYSTEM_LOGS: bool = true;
+const ENABLE_OTHER_LOGS: bool = true;
+
+/// Log Type Configuration - Set to false to disable specific log types
+const ENABLE_ERROR_LOGS: bool = true;
+const ENABLE_WARN_LOGS: bool = true;
+const ENABLE_SUCCESS_LOGS: bool = true;
+const ENABLE_INFO_LOGS: bool = true;
+const ENABLE_DEBUG_LOGS: bool = false; // Disabled by default - too verbose
+const ENABLE_PROFIT_LOGS: bool = true;
+const ENABLE_LOSS_LOGS: bool = true;
+const ENABLE_BUY_LOGS: bool = true;
+const ENABLE_SELL_LOGS: bool = true;
+const ENABLE_BALANCE_LOGS: bool = true;
+const ENABLE_PRICE_LOGS: bool = true;
+const ENABLE_GENERAL_LOGS: bool = true; // For any log type not specifically listed above
+
 /// Log format character widths (hardcoded for precise alignment)
 const TAG_WIDTH: usize = 8; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
 const LOG_TYPE_WIDTH: usize = 13; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
@@ -42,6 +63,39 @@ impl std::fmt::Display for LogTag {
 
 /// Logs a message with date, time, tag, log type, and message.
 pub fn log(tag: LogTag, log_type: &str, message: &str) {
+    // Check if the tag is enabled
+    let tag_enabled = match &tag {
+        LogTag::Monitor => ENABLE_MONITOR_LOGS,
+        LogTag::Trader => ENABLE_TRADER_LOGS,
+        LogTag::Wallet => ENABLE_WALLET_LOGS,
+        LogTag::System => ENABLE_SYSTEM_LOGS,
+        LogTag::Other(_) => ENABLE_OTHER_LOGS,
+    };
+
+    if !tag_enabled {
+        return; // Skip logging if tag is disabled
+    }
+
+    // Check if the log type is enabled
+    let log_type_enabled = match log_type.to_uppercase().as_str() {
+        "ERROR" => ENABLE_ERROR_LOGS,
+        "WARN" | "WARNING" => ENABLE_WARN_LOGS,
+        "SUCCESS" => ENABLE_SUCCESS_LOGS,
+        "INFO" => ENABLE_INFO_LOGS,
+        "DEBUG" => ENABLE_DEBUG_LOGS,
+        "PROFIT" => ENABLE_PROFIT_LOGS,
+        "LOSS" => ENABLE_LOSS_LOGS,
+        "BUY" => ENABLE_BUY_LOGS,
+        "SELL" => ENABLE_SELL_LOGS,
+        "BALANCE" => ENABLE_BALANCE_LOGS,
+        "PRICE" => ENABLE_PRICE_LOGS,
+        _ => ENABLE_GENERAL_LOGS,
+    };
+
+    if !log_type_enabled {
+        return; // Skip logging if log type is disabled
+    }
+
     let now = Local::now();
     let date = now.format("%Y-%m-%d").to_string();
     let time = now.format("%H:%M:%S").to_string();

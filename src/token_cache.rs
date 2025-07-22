@@ -60,7 +60,7 @@ impl TokenDatabase {
             []
         )?;
 
-        log(LogTag::System, "SUCCESS", &format!("Initialized token database at {}", TOKEN_DB_PATH));
+        log(LogTag::Monitor, "SUCCESS", &format!("Initialized token database at {}", TOKEN_DB_PATH));
 
         Ok(Self { conn })
     }
@@ -105,7 +105,7 @@ impl TokenDatabase {
             )?;
 
             log(
-                LogTag::System,
+                LogTag::Monitor,
                 "UPDATE",
                 &format!(
                     "Updated token {} ({}) from {} - Liquidity USD: {}",

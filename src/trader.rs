@@ -10,7 +10,7 @@ pub const STOP_LOSS_PERCENT: f64 = -99.0;
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
@@ -99,7 +99,6 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     // Use original logic for positions held longer than minimum time
     const MAX_HOLD_TIME_SECS: f64 = 3600.0;
     const PROFIT_TARGET_PERCENT: f64 = 25.0; // More realistic profit target
-    const TRAILING_STOP_PERCENT: f64 = 8.0; // Wider trailing stop
     const TIME_DECAY_START_SECS: f64 = 1800.0;
 
     let entry_price_to_use = pos.effective_entry_price.unwrap_or(pos.entry_price);
@@ -121,16 +120,6 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     let stop_loss_triggered: bool = current_pnl_percent <= STOP_LOSS_PERCENT;
     let profit_target_reached: bool = current_pnl_percent >= PROFIT_TARGET_PERCENT;
 
-    // Trailing stop logic
-    let peak_price: f64 = f64::max(pos.price_highest, current_price);
-    let drawdown_percent: f64 = if peak_price > 0.0 {
-        ((current_price - peak_price) / peak_price) * 100.0
-    } else {
-        0.0
-    };
-    let trailing_stop_triggered: bool =
-        current_pnl_percent >= PROFIT_TARGET_PERCENT && drawdown_percent <= -TRAILING_STOP_PERCENT;
-
     // Time decay factor
     let time_decay_factor: f64 = if time_held_secs > TIME_DECAY_START_SECS {
         let decay_duration = MAX_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
@@ -146,8 +135,6 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
 
     if stop_loss_triggered {
         urgency = 1.0;
-    } else if trailing_stop_triggered {
-        urgency = 0.9;
     } else if profit_target_reached {
         urgency = 0.8;
     } else {
@@ -1019,7 +1006,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             {
                                 if let Some(current_price) = token.price_dexscreener_sol {
                                     if current_price > 0.0 {
-                                        // Update position tracking (extremes and drawdown)
+                                        // Update position tracking (extremes)
                                         update_position_tracking(position, current_price);
 
                                         let (
@@ -1035,31 +1022,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                                         let now = Utc::now();
 
-                                        // Update drawdown calculation - calculate from effective entry price
-                                        let old_drawdown = position.drawdown_percent;
-                                        let entry_price = position.effective_entry_price.unwrap_or(
-                                            position.entry_price
-                                        );
-                                        if entry_price > 0.0 {
-                                            position.drawdown_percent =
-                                                ((entry_price - current_price) / entry_price) *
-                                                100.0;
-
-                                            log(
-                                                LogTag::Trader,
-                                                "DEBUG",
-                                                &format!(
-                                                    "Drawdown calc for {}: entry_price={:.8}, current_price={:.8}, drawdown={:.2}%->{:.2}%",
-                                                    position.symbol,
-                                                    entry_price,
-                                                    current_price,
-                                                    old_drawdown,
-                                                    position.drawdown_percent
-                                                )
-                                                    .dimmed()
-                                                    .to_string()
-                                            );
-                                        } // Calculate sell urgency using the advanced mathematical model
+                                        // Calculate sell urgency using the advanced mathematical model
                                         let sell_urgency = should_sell(
                                             position,
                                             current_price,

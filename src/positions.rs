@@ -17,8 +17,6 @@ use serde::{ Serialize, Deserialize };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use colored::Colorize;
 
-
-
 /// Static global: saved positions
 pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(|| {
     let positions = load_positions_from_file();
@@ -39,7 +37,6 @@ pub struct Position {
     pub position_type: String, // "buy" or "sell"
     pub entry_size_sol: f64,
     pub total_size_sol: f64,
-    pub drawdown_percent: f64,
     pub price_highest: f64,
     pub price_lowest: f64,
     // Real swap tracking
@@ -237,8 +234,7 @@ pub async fn check_recent_transactions_for_position(position: &mut Position) -> 
     false
 }
 
-/// Updates position with current price to track extremes and drawdown
-/// Drawdown % = (price_highest – current_price) / price_highest * 100
+/// Updates position with current price to track extremes
 pub fn update_position_tracking(position: &mut Position, current_price: f64) {
     if current_price == 0.0 {
         log(
@@ -248,9 +244,9 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
                 "Skipping position tracking update for {}: current_price is zero",
                 position.symbol
             )
-            .yellow()
-            .dimmed()
-            .to_string()
+                .yellow()
+                .dimmed()
+                .to_string()
         );
         return;
     }
@@ -259,12 +255,11 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
     let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
     if position.price_highest == 0.0 {
         position.price_highest = entry_price;
-        position.price_lowest  = entry_price;
+        position.price_lowest = entry_price;
     }
 
     let old_high = position.price_highest;
-    let old_low  = position.price_lowest;
-    let old_dd   = position.drawdown_percent;
+    let old_low = position.price_lowest;
 
     // Update running extremes
     if current_price > position.price_highest {
@@ -274,34 +269,22 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
         position.price_lowest = current_price;
     }
 
-    // Calculate drawdown % from the peak seen so far
-    let dd_pct = if position.price_highest > 0.0 {
-        ((position.price_highest - current_price) / position.price_highest) * 100.0
-    } else {
-        0.0
-    };
-
-    // position.drawdown_percent = dd_pct.max(0.0);
-    position.drawdown_percent = 0.0;
-
     // Log the transition
     log(
         LogTag::Trader,
         "DEBUG",
         &format!(
-            "Track {}: entry={:.6}, current={:.6}, high={:.6}->{:.6}, low={:.6}->{:.6}, drawdown={:.2}%->{:.2}%",
+            "Track {}: entry={:.6}, current={:.6}, high={:.6}->{:.6}, low={:.6}->{:.6}",
             position.symbol,
             entry_price,
             current_price,
             old_high,
             position.price_highest,
             old_low,
-            position.price_lowest,
-            old_dd,
-            position.drawdown_percent
+            position.price_lowest
         )
-        .dimmed()
-        .to_string(),
+            .dimmed()
+            .to_string()
     );
 }
 
@@ -493,7 +476,6 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 position_type: "buy".to_string(),
                 entry_size_sol: TRADE_SIZE_SOL,
                 total_size_sol: TRADE_SIZE_SOL,
-                drawdown_percent: 0.0,
                 price_highest: effective_entry_price, // Use effective price for tracking
                 price_lowest: effective_entry_price, // Use effective price for tracking
                 entry_transaction_signature: swap_result.transaction_signature,
@@ -760,15 +742,14 @@ pub async fn close_position(
                     LogTag::Trader,
                     status_text,
                     &format!(
-                        "Closed position for {} ({}) - TX: {}, SOL Received: {:.6}, Net P&L: {}{:.6} SOL ({:.2}%), Drawdown: {:.2}%\x1b[0m",
+                        "Closed position for {} ({}) - TX: {}, SOL Received: {:.6}, Net P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
                         position.symbol,
                         position.mint,
                         transaction_signature.as_ref().unwrap_or(&"None".to_string()),
                         actual_sol_received,
                         status_color,
                         net_pnl_sol,
-                        net_pnl_percent,
-                        position.drawdown_percent
+                        net_pnl_percent
                     )
                 );
 
