@@ -12,6 +12,7 @@ use reqwest;
 
 const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
 const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/solana";
 
 // =============================================================================
@@ -44,6 +45,7 @@ pub struct PoolToken {
 pub enum PoolType {
     RaydiumCpmm,
     MeteoraDlmm,
+    MeteoraDammV2,
     RaydiumAmm,
     Orca,
     Phoenix,
@@ -111,6 +113,10 @@ pub enum PoolSpecificData {
         bin_step: u16,
         oracle: String,
     },
+    MeteoraDammV2 {
+        sqrt_price: u128,
+        liquidity: u128,
+    },
     RaydiumAmm {},
     Orca {},
     Phoenix {},
@@ -163,6 +169,18 @@ pub struct MeteoraPoolData {
     pub active_id: i32,
     pub bin_step: u16,
     pub status: u8,
+}
+
+/// Meteora DAMM v2 pool data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeteoraDammV2Data {
+    pub token_a_mint: String,
+    pub token_b_mint: String,
+    pub token_a_vault: String,
+    pub token_b_vault: String,
+    pub liquidity: u128,
+    pub sqrt_price: u128,
+    pub pool_status: u8,
 }
 
 // =============================================================================
@@ -398,22 +416,65 @@ impl PoolDiscoveryAndPricing {
         Ok((price, token_a, token_b))
     }
 
-    /// Auto-detect pool type based on pool address and data structure
+    /// Auto-detect pool type based on pool address and program ID owner
     pub async fn detect_pool_type(&self, pool_address: &str) -> Result<PoolType> {
         let pool_pubkey = Pubkey::from_str(pool_address)?;
-        let account_data = self.rpc_client.get_account_data(&pool_pubkey)?;
+        let account_info = self.rpc_client.get_account(&pool_pubkey)?;
 
-        // Try to detect pool type based on data patterns
-        // This is a simplified detection - in production you might want more sophisticated detection
-        if account_data.len() >= 800 {
-            // Meteora DLMM pools are typically larger
-            Ok(PoolType::MeteoraDlmm)
-        } else if account_data.len() >= 600 {
-            // Raydium CPMM pools are mid-sized
-            Ok(PoolType::RaydiumCpmm)
-        } else {
-            // Default to Raydium CPMM for now
-            Ok(PoolType::RaydiumCpmm)
+        // Get the program ID that owns this account
+        let program_id = account_info.owner.to_string();
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!("Detecting pool type for {} owned by program {}", pool_address, program_id)
+        );
+
+        // Determine pool type based on program ID
+        match program_id.as_str() {
+            // Raydium CPMM Program ID
+            id if id == RAYDIUM_CPMM_PROGRAM_ID => {
+                log(LogTag::System, "INFO", "Detected Raydium CPMM pool");
+                Ok(PoolType::RaydiumCpmm)
+            }
+            // Meteora DLMM Program ID
+            id if id == METEORA_DLMM_PROGRAM_ID => {
+                log(LogTag::System, "INFO", "Detected Meteora DLMM pool");
+                Ok(PoolType::MeteoraDlmm)
+            }
+            // Meteora DAMM v2 Program ID
+            id if id == METEORA_DAMM_V2_PROGRAM_ID => {
+                log(LogTag::System, "INFO", "Detected Meteora DAMM v2 pool");
+                Ok(PoolType::MeteoraDammV2)
+            }
+            // Add other DEX program IDs as needed
+            // Phoenix, Orca, etc.
+
+            // Unknown program ID
+            _ => {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Unknown pool program ID: {}. Attempting to determine by data size...", program_id)
+                );
+
+                // Fallback to size-based detection as a last resort
+                let account_data = account_info.data.clone();
+                if account_data.len() >= 800 {
+                    log(LogTag::System, "INFO", "Guessing Meteora DLMM based on data size");
+                    Ok(PoolType::MeteoraDlmm)
+                } else if account_data.len() >= 600 {
+                    log(LogTag::System, "INFO", "Guessing Raydium CPMM based on data size");
+                    Ok(PoolType::RaydiumCpmm)
+                } else {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        "Could not determine pool type, defaulting to Raydium CPMM"
+                    );
+                    Ok(PoolType::RaydiumCpmm)
+                }
+            }
         }
     }
 
@@ -497,6 +558,44 @@ impl PoolDiscoveryAndPricing {
                         active_id: raw_data.active_id,
                         bin_step: raw_data.bin_step,
                         oracle: "".to_string(),
+                    },
+                })
+            }
+            PoolType::MeteoraDammV2 => {
+                let raw_data = self.parse_meteora_damm_v2_data(&account_data)?;
+
+                // Get token vault balances
+                let token_a_vault_pubkey = Pubkey::from_str(&raw_data.token_a_vault)?;
+                let token_b_vault_pubkey = Pubkey::from_str(&raw_data.token_b_vault)?;
+
+                let token_a_balance = self.get_token_balance(&token_a_vault_pubkey).await?;
+                let token_b_balance = self.get_token_balance(&token_b_vault_pubkey).await?;
+
+                // Get decimals for both tokens
+                let token_a_decimals = self.get_token_decimals(&raw_data.token_a_mint).await?;
+                let token_b_decimals = self.get_token_decimals(&raw_data.token_b_mint).await?;
+
+                Ok(PoolData {
+                    pool_type,
+                    token_a: TokenInfo {
+                        mint: raw_data.token_a_mint,
+                        decimals: token_a_decimals,
+                    },
+                    token_b: TokenInfo {
+                        mint: raw_data.token_b_mint,
+                        decimals: token_b_decimals,
+                    },
+                    reserve_a: ReserveInfo {
+                        vault_address: raw_data.token_a_vault,
+                        balance: token_a_balance,
+                    },
+                    reserve_b: ReserveInfo {
+                        vault_address: raw_data.token_b_vault,
+                        balance: token_b_balance,
+                    },
+                    specific_data: PoolSpecificData::MeteoraDammV2 {
+                        sqrt_price: raw_data.sqrt_price,
+                        liquidity: raw_data.liquidity,
                     },
                 })
             }
@@ -765,6 +864,81 @@ impl PoolDiscoveryAndPricing {
         })
     }
 
+    /// Parse Meteora DAMM v2 pool data from raw account bytes
+    fn parse_meteora_damm_v2_data(&self, data: &[u8]) -> Result<MeteoraDammV2Data> {
+        if data.len() < 1024 {
+            return Err(anyhow::anyhow!("Meteora DAMM v2 pool data too short"));
+        }
+
+        // Based on the provided JSON layout - these offsets are from the actual DAMM v2 program
+        // We need to extract token_a_mint, token_b_mint, token_a_vault, token_b_vault, liquidity, sqrt_price, and pool_status
+
+        // token_a_mint is at offset 192 (32 bytes)
+        let token_a_mint = Pubkey::new_from_array(
+            data[192..192 + 32]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to read token_a_mint"))?
+        ).to_string();
+
+        // token_b_mint is at offset 224 (32 bytes)
+        let token_b_mint = Pubkey::new_from_array(
+            data[224..224 + 32]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to read token_b_mint"))?
+        ).to_string();
+
+        // token_a_vault is at offset 256 (32 bytes)
+        let token_a_vault = Pubkey::new_from_array(
+            data[256..256 + 32]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to read token_a_vault"))?
+        ).to_string();
+
+        // token_b_vault is at offset 288 (32 bytes)
+        let token_b_vault = Pubkey::new_from_array(
+            data[288..288 + 32]
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Failed to read token_b_vault"))?
+        ).to_string();
+
+        // liquidity is at offset 352 (16 bytes as u128)
+        let liquidity_bytes: [u8; 16] = data[352..352 + 16]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to read liquidity"))?;
+        let liquidity = u128::from_le_bytes(liquidity_bytes);
+
+        // sqrt_price is at offset 608 (16 bytes as u128)
+        let sqrt_price_bytes: [u8; 16] = data[608..608 + 16]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to read sqrt_price"))?;
+        let sqrt_price = u128::from_le_bytes(sqrt_price_bytes);
+
+        // pool_status is at offset 633 (1 byte)
+        let pool_status = data[633];
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "Parsed DAMM v2 pool: token_a={}, token_b={}, liquidity={}, sqrt_price={}",
+                token_a_mint,
+                token_b_mint,
+                liquidity,
+                sqrt_price
+            )
+        );
+
+        Ok(MeteoraDammV2Data {
+            token_a_mint,
+            token_b_mint,
+            token_a_vault,
+            token_b_vault,
+            liquidity,
+            sqrt_price,
+            pool_status,
+        })
+    }
+
     /// Get token account balance using RPC
     pub async fn get_token_balance(&self, token_account: &Pubkey) -> Result<u64> {
         let account_info = self.rpc_client.get_account(token_account)?;
@@ -990,6 +1164,7 @@ impl PoolPriceResult {
         match self.pool_type {
             PoolType::RaydiumCpmm => "CPMM".to_string(),
             PoolType::MeteoraDlmm => "DLMM".to_string(),
+            PoolType::MeteoraDammV2 => "DAMM v2".to_string(),
             PoolType::RaydiumAmm => "AMM".to_string(),
             PoolType::Orca => "Orca".to_string(),
             PoolType::Phoenix => "Phoenix".to_string(),

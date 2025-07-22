@@ -2,7 +2,6 @@ use crate::logger::{ log, LogTag };
 use crate::global::*;
 use crate::decimal_cache::{ DecimalCache, fetch_or_cache_decimals };
 use crate::positions::*;
-use crate::positions::*;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use reqwest::StatusCode;

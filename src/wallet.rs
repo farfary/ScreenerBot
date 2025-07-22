@@ -178,7 +178,7 @@ impl Default for SwapRequest {
             amount_sol: 0.0,
             from_address: String::new(),
             slippage: DEFAULT_SLIPPAGE,
-            fee: DEFAULT_FEE,
+            fee: DEFAULT_FEE_SWAP,
             is_anti_mev: ANTI_MEV,
             expected_price: None,
         }
