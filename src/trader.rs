@@ -2,11 +2,11 @@
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 15.0;
 pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 
-pub const DEFAULT_FEE: f64 = 0.000006;
+pub const DEFAULT_FEE: f64 = 0.000002;
 // pub const DEFAULT_FEE: f64 = 0.0;
 
 pub const DEFAULT_FEE_SWAP: f64 = 0.000001;
-pub const DEFAULT_SLIPPAGE: f64 = 3.0; // 5% slippage
+pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
 
 pub const TRADE_SIZE_SOL: f64 = 0.0001;
 pub const STOP_LOSS_PERCENT: f64 = -99.0;
@@ -16,7 +16,7 @@ pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// Pool price validation - maximum allowed difference from API price (10%)
-pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 25.0;
+pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 100.0;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing

@@ -1535,19 +1535,21 @@ pub async fn buy_token(
                 LogTag::Wallet,
                 "ERROR",
                 &format!(
-                    "❌ Price validation failed! Current: {:.12} SOL, Expected: {:.12} SOL, Diff: {:.2}% (Max: 5%)",
+                    "❌ Price validation failed! Current: {:.12} SOL, Expected: {:.12} SOL, Diff: {:.2}% (Max: {:.1}%)",
                     current_price,
                     expected,
-                    price_diff
+                    price_diff,
+                    DEFAULT_SLIPPAGE
                 )
             );
             return Err(
                 SwapError::SlippageExceeded(
                     format!(
-                        "Current price {:.12} SOL differs from expected {:.12} SOL by {:.2}% (tolerance: 5%)",
+                        "Current price {:.12} SOL differs from expected {:.12} SOL by {:.2}% (tolerance: {:.1}%)",
                         current_price,
                         expected,
-                        price_diff
+                        price_diff,
+                        DEFAULT_SLIPPAGE
                     )
                 )
             );
@@ -1563,8 +1565,9 @@ pub async fn buy_token(
                 LogTag::Wallet,
                 "SUCCESS",
                 &format!(
-                    "✅ Price validation passed! Diff: {:.2}% (within 5% tolerance)",
-                    price_diff
+                    "✅ Price validation passed! Diff: {:.2}% (within {:.1}% tolerance)",
+                    price_diff,
+                    DEFAULT_SLIPPAGE
                 )
             );
         }

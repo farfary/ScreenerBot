@@ -27,6 +27,7 @@ const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qK
 const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
+const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/solana";
 
 // Cache expiration time - 2 minutes
@@ -83,12 +84,18 @@ pub enum PoolType {
     RaydiumAmm,
     RaydiumLaunchLab,
     Orca,
+    OrcaWhirlpool,
     Phoenix,
     Unknown,
 }
 
 impl PoolType {
     pub fn from_dex_id_and_labels(dex_id: &str, labels: &[String]) -> Self {
+        debug_log(
+            "DEBUG",
+            &format!("Determining pool type for dex_id='{}' with labels: {:?}", dex_id, labels)
+        );
+
         match dex_id.to_lowercase().as_str() {
             "raydium" => {
                 if labels.iter().any(|l| l.eq_ignore_ascii_case("CPMM")) {
@@ -109,7 +116,15 @@ impl PoolType {
                     PoolType::MeteoraDlmm // Default to DLMM for Meteora
                 }
             }
-            "orca" => PoolType::Orca,
+            "orca" => {
+                if labels.iter().any(|l| l.eq_ignore_ascii_case("Whirlpool")) {
+                    debug_log("DEBUG", "Detected Whirlpool from labels");
+                    PoolType::OrcaWhirlpool
+                } else {
+                    debug_log("DEBUG", "No Whirlpool label found, defaulting to Orca");
+                    PoolType::Orca
+                }
+            }
             "phoenix" => PoolType::Phoenix,
             _ => PoolType::Unknown,
         }
@@ -159,6 +174,14 @@ pub enum PoolSpecificData {
         total_base_sell: u64,
         real_base: u64,
         real_quote: u64,
+    },
+    OrcaWhirlpool {
+        sqrt_price: u128,
+        liquidity: u128,
+        tick_current_index: i32,
+        tick_spacing: u16,
+        fee_rate: u16,
+        protocol_fee_rate: u16,
     },
     RaydiumAmm {},
     Orca {},
@@ -269,6 +292,27 @@ pub struct RaydiumLaunchLabData {
     pub real_base: u64,
     pub real_quote: u64,
     pub status: u8,
+}
+
+/// Orca Whirlpool pool data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrcaWhirlpoolData {
+    pub whirlpools_config: String,
+    pub token_mint_a: String,
+    pub token_mint_b: String,
+    pub token_vault_a: String,
+    pub token_vault_b: String,
+    pub fee_rate: u16,
+    pub protocol_fee_rate: u16,
+    pub liquidity: u128,
+    pub sqrt_price: u128,
+    pub tick_current_index: i32,
+    pub tick_spacing: u16,
+    pub protocol_fee_owed_a: u64,
+    pub protocol_fee_owed_b: u64,
+    pub fee_growth_global_a: u128,
+    pub fee_growth_global_b: u128,
+    pub whirlpool_bump: u8,
 }
 
 // =============================================================================
@@ -575,10 +619,28 @@ impl PoolDiscoveryAndPricing {
         &self,
         discovered_pool: &DiscoveredPool
     ) -> PoolPriceResult {
-        let pool_type = PoolType::from_dex_id_and_labels(
+        let mut pool_type = PoolType::from_dex_id_and_labels(
             &discovered_pool.dex_id,
             &discovered_pool.labels
         );
+
+        // Override with actual program ID detection if possible (more accurate than DexScreener labels)
+        if pool_type == PoolType::Orca {
+            debug_log(
+                "DEBUG",
+                "DexScreener classified as generic Orca, checking actual program ID..."
+            );
+            if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
+                if detected_type == PoolType::OrcaWhirlpool {
+                    debug_log(
+                        "DEBUG",
+                        "Program ID confirms this is a Whirlpool, overriding classification"
+                    );
+                    pool_type = PoolType::OrcaWhirlpool;
+                }
+            }
+        }
+
         let dexscreener_price = discovered_pool.price_native.parse::<f64>().unwrap_or(0.0);
 
         let is_sol_pair =
@@ -727,6 +789,11 @@ impl PoolDiscoveryAndPricing {
             id if id == RAYDIUM_LAUNCHLAB_PROGRAM_ID => {
                 pool_log("SUCCESS", "Detected: Raydium LaunchLab pool");
                 Ok(PoolType::RaydiumLaunchLab)
+            }
+            // Orca Whirlpool Program ID
+            id if id == ORCA_WHIRLPOOL_PROGRAM_ID => {
+                pool_log("SUCCESS", "Detected: Orca Whirlpool pool");
+                Ok(PoolType::OrcaWhirlpool)
             }
             // Add other DEX program IDs as needed
             // Phoenix, Orca, etc.
@@ -945,6 +1012,66 @@ impl PoolDiscoveryAndPricing {
                     },
                 })
             }
+            PoolType::OrcaWhirlpool => {
+                let raw_data = self.parse_orca_whirlpool_data(&account_data)?;
+
+                // Get decimals for both tokens (required)
+                let token_a_decimals = self.get_token_decimals(&raw_data.token_mint_a).await?;
+                let token_b_decimals = self.get_token_decimals(&raw_data.token_mint_b).await?;
+
+                // Try to get token vault balances (optional - for fallback calculation)
+                let (token_a_balance, token_b_balance) = match
+                    (
+                        Pubkey::from_str(&raw_data.token_vault_a),
+                        Pubkey::from_str(&raw_data.token_vault_b),
+                    )
+                {
+                    (Ok(vault_a), Ok(vault_b)) => {
+                        let balance_a = self.get_token_balance(&vault_a).await.unwrap_or(0);
+                        let balance_b = self.get_token_balance(&vault_b).await.unwrap_or(0);
+                        debug_log(
+                            "DEBUG",
+                            &format!("Whirlpool vault balances: A={}, B={}", balance_a, balance_b)
+                        );
+                        (balance_a, balance_b)
+                    }
+                    _ => {
+                        debug_log(
+                            "WARN",
+                            "Invalid vault addresses, will use sqrt_price calculation only"
+                        );
+                        (0, 0)
+                    }
+                };
+
+                Ok(PoolData {
+                    pool_type,
+                    token_a: TokenInfo {
+                        mint: raw_data.token_mint_a,
+                        decimals: token_a_decimals,
+                    },
+                    token_b: TokenInfo {
+                        mint: raw_data.token_mint_b,
+                        decimals: token_b_decimals,
+                    },
+                    reserve_a: ReserveInfo {
+                        vault_address: raw_data.token_vault_a,
+                        balance: token_a_balance,
+                    },
+                    reserve_b: ReserveInfo {
+                        vault_address: raw_data.token_vault_b,
+                        balance: token_b_balance,
+                    },
+                    specific_data: PoolSpecificData::OrcaWhirlpool {
+                        sqrt_price: raw_data.sqrt_price,
+                        liquidity: raw_data.liquidity,
+                        tick_current_index: raw_data.tick_current_index,
+                        tick_spacing: raw_data.tick_spacing,
+                        fee_rate: raw_data.fee_rate,
+                        protocol_fee_rate: raw_data.protocol_fee_rate,
+                    },
+                })
+            }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported pool type: {:?}", pool_type));
             }
@@ -1102,6 +1229,66 @@ impl PoolDiscoveryAndPricing {
                     price
                 } else {
                     pool_log("WARN", "Token amount is zero, cannot calculate price");
+                    0.0
+                }
+            }
+        } else if pool_data.pool_type == PoolType::OrcaWhirlpool {
+            if let PoolSpecificData::OrcaWhirlpool { sqrt_price, .. } = &pool_data.specific_data {
+                // Whirlpool price calculation using sqrt_price
+                // Price = (sqrt_price / 2^64)^2 * (10^decimals_B / 10^decimals_A)
+                debug_log("DEBUG", &format!("Whirlpool sqrt_price: {}", sqrt_price));
+
+                let sqrt_price_f64 = *sqrt_price as f64;
+                let q64 = (2_f64).powi(64);
+
+                // Calculate price from sqrt_price
+                let raw_price = (sqrt_price_f64 / q64).powi(2);
+
+                // Adjust for token decimals - if token A is SOL and token B is the other token
+                let adjusted_price = if self.is_sol_mint(&pool_data.token_a.mint) {
+                    // Price = tokenA per tokenB, but we want SOL per token, so invert if needed
+                    raw_price *
+                        ((10_f64).powi(token_a_decimals as i32) /
+                            (10_f64).powi(token_b_decimals as i32))
+                } else if self.is_sol_mint(&pool_data.token_b.mint) {
+                    // Token B is SOL, so price is already token per SOL, need to invert
+                    let price_token_per_sol =
+                        raw_price *
+                        ((10_f64).powi(token_a_decimals as i32) /
+                            (10_f64).powi(token_b_decimals as i32));
+                    if price_token_per_sol > 0.0 {
+                        1.0 / price_token_per_sol
+                    } else {
+                        0.0
+                    }
+                } else {
+                    // Neither is SOL, use raw price
+                    raw_price *
+                        ((10_f64).powi(token_a_decimals as i32) /
+                            (10_f64).powi(token_b_decimals as i32))
+                };
+
+                pool_log(
+                    "SUCCESS",
+                    &format!(
+                        "Whirlpool price calculated: {} SOL per token (sqrt_price: {})",
+                        adjusted_price,
+                        sqrt_price
+                    )
+                );
+                adjusted_price
+            } else {
+                // Fallback to vault balance calculation
+                debug_log("DEBUG", "Using fallback vault balance calculation for Whirlpool");
+                if token_amount > 0.0 {
+                    let price = sol_amount / token_amount;
+                    pool_log(
+                        "SUCCESS",
+                        &format!("Whirlpool fallback price calculated: {} SOL per token", price)
+                    );
+                    price
+                } else {
+                    pool_log("WARN", "Token amount is zero, cannot calculate Whirlpool price");
                     0.0
                 }
             }
@@ -1732,6 +1919,143 @@ impl PoolDiscoveryAndPricing {
         })
     }
 
+    /// Parse Orca Whirlpool pool data from raw account bytes
+    fn parse_orca_whirlpool_data(&self, data: &[u8]) -> Result<OrcaWhirlpoolData> {
+        debug_log("DEBUG", &format!("Orca Whirlpool pool data length: {} bytes", data.len()));
+
+        if data.len() < 653 {
+            pool_log(
+                "ERROR",
+                &format!(
+                    "Orca Whirlpool pool data too short: {} bytes (expected at least 653)",
+                    data.len()
+                )
+            );
+            return Err(anyhow::anyhow!("Orca Whirlpool pool data too short: {} bytes", data.len()));
+        }
+
+        // Based on the provided JSON structure, parse the Whirlpool data
+        let mut offset = 8; // Skip 8-byte discriminator
+
+        // whirlpoolsConfig (32 bytes) - Skip for now, but we could store it
+        let whirlpools_config = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // whirlpoolBump (1 byte)
+        let whirlpool_bump = data[offset];
+        offset += 1;
+
+        // tickSpacing (u16) - 2 bytes
+        let tick_spacing = u16::from_le_bytes(data[offset..offset + 2].try_into()?);
+        offset += 2;
+
+        // feeTierIndexSeed (2 bytes) - skip
+        offset += 2;
+
+        // feeRate (u16) - 2 bytes
+        let fee_rate = u16::from_le_bytes(data[offset..offset + 2].try_into()?);
+        offset += 2;
+
+        // protocolFeeRate (u16) - 2 bytes
+        let protocol_fee_rate = u16::from_le_bytes(data[offset..offset + 2].try_into()?);
+        offset += 2;
+
+        // liquidity (u128) - 16 bytes
+        let liquidity = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
+        offset += 16;
+
+        // sqrtPrice (u128) - 16 bytes
+        let sqrt_price = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
+        offset += 16;
+
+        // tickCurrentIndex (i32) - 4 bytes
+        let tick_current_index = i32::from_le_bytes(data[offset..offset + 4].try_into()?);
+        offset += 4;
+
+        // protocolFeeOwedA (u64) - 8 bytes
+        let protocol_fee_owed_a = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
+        offset += 8;
+
+        // protocolFeeOwedB (u64) - 8 bytes
+        let protocol_fee_owed_b = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
+        offset += 8;
+
+        // tokenMintA (32 bytes)
+        let token_mint_a = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // tokenVaultA (32 bytes)
+        let token_vault_a = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // feeGrowthGlobalA (u128) - 16 bytes
+        let fee_growth_global_a = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
+        offset += 16;
+
+        // tokenMintB (32 bytes)
+        let token_mint_b = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // tokenVaultB (32 bytes)
+        let token_vault_b = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // feeGrowthGlobalB (u128) - 16 bytes
+        let fee_growth_global_b = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
+
+        pool_log(
+            "SUCCESS",
+            &format!(
+                "Parsed Orca Whirlpool: tokenA={} ({}), tokenB={} ({}), liquidity={}, sqrt_price={}, tick_spacing={}, fee_rate={}",
+                &token_mint_a,
+                if token_mint_a == "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump" {
+                    "✅EXPECTED"
+                } else {
+                    "❌WRONG"
+                },
+                &token_mint_b,
+                if token_mint_b == "So11111111111111111111111111111111111111112" {
+                    "✅SOL"
+                } else {
+                    "❌NOT_SOL"
+                },
+                liquidity,
+                sqrt_price,
+                tick_spacing,
+                fee_rate
+            )
+        );
+
+        Ok(OrcaWhirlpoolData {
+            whirlpools_config,
+            token_mint_a,
+            token_mint_b,
+            token_vault_a,
+            token_vault_b,
+            fee_rate,
+            protocol_fee_rate,
+            liquidity,
+            sqrt_price,
+            tick_current_index,
+            tick_spacing,
+            protocol_fee_owed_a,
+            protocol_fee_owed_b,
+            fee_growth_global_a,
+            fee_growth_global_b,
+            whirlpool_bump,
+        })
+    }
+
     /// Get token account balance using RPC
     pub async fn get_token_balance(&self, token_account: &Pubkey) -> Result<u64> {
         let account_info = self.rpc_client.get_account(token_account)?;
@@ -1960,6 +2284,7 @@ impl PoolPriceResult {
             PoolType::MeteoraDammV2 => "DAMM v2".to_string(),
             PoolType::RaydiumAmm => "AMM".to_string(),
             PoolType::Orca => "Orca".to_string(),
+            PoolType::OrcaWhirlpool => "Whirlpool".to_string(),
             PoolType::Phoenix => "Phoenix".to_string(),
             PoolType::RaydiumLaunchLab => "LaunchLab".to_string(),
             PoolType::Unknown => "Unknown".to_string(),
