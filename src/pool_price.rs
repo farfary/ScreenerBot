@@ -13,6 +13,7 @@ use reqwest;
 const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
 const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
+const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/solana";
 
 // =============================================================================
@@ -47,6 +48,7 @@ pub enum PoolType {
     MeteoraDlmm,
     MeteoraDammV2,
     RaydiumAmm,
+    RaydiumLaunchLab,
     Orca,
     Phoenix,
     Unknown,
@@ -60,6 +62,8 @@ impl PoolType {
                     PoolType::RaydiumCpmm
                 } else if labels.iter().any(|l| l.eq_ignore_ascii_case("CLMM")) {
                     PoolType::RaydiumCpmm // Treat CLMM similar to CPMM for now
+                } else if labels.iter().any(|l| l.eq_ignore_ascii_case("LaunchLab")) {
+                    PoolType::RaydiumLaunchLab
                 } else {
                     PoolType::RaydiumAmm
                 }
@@ -116,6 +120,11 @@ pub enum PoolSpecificData {
     MeteoraDammV2 {
         sqrt_price: u128,
         liquidity: u128,
+    },
+    RaydiumLaunchLab {
+        total_base_sell: u64,
+        real_base: u64,
+        real_quote: u64,
     },
     RaydiumAmm {},
     Orca {},
@@ -183,8 +192,24 @@ pub struct MeteoraDammV2Data {
     pub pool_status: u8,
 }
 
+/// Raydium LaunchLab pool data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaydiumLaunchLabData {
+    pub base_mint: String,
+    pub quote_mint: String,
+    pub base_vault: String,
+    pub quote_vault: String,
+    pub base_decimals: u8,
+    pub quote_decimals: u8,
+    pub total_base_sell: u64,
+    pub real_base: u64,
+    pub real_quote: u64,
+    pub status: u8,
+}
+
 // =============================================================================
 // MAIN POOL DISCOVERY AND PRICE CALCULATOR
+// =============================================================================
 // =============================================================================
 
 pub struct PoolDiscoveryAndPricing {
@@ -447,6 +472,11 @@ impl PoolDiscoveryAndPricing {
                 log(LogTag::System, "INFO", "Detected Meteora DAMM v2 pool");
                 Ok(PoolType::MeteoraDammV2)
             }
+            // Raydium LaunchLab Program ID
+            id if id == RAYDIUM_LAUNCHLAB_PROGRAM_ID => {
+                log(LogTag::System, "INFO", "Detected Raydium LaunchLab pool");
+                Ok(PoolType::RaydiumLaunchLab)
+            }
             // Add other DEX program IDs as needed
             // Phoenix, Orca, etc.
 
@@ -599,6 +629,62 @@ impl PoolDiscoveryAndPricing {
                     },
                 })
             }
+            PoolType::RaydiumLaunchLab => {
+                let raw_data = self.parse_raydium_launchlab_data(&account_data)?;
+
+                // Get token vault balances - handle cases where vaults might not exist
+                let base_vault_pubkey = Pubkey::from_str(&raw_data.base_vault)?;
+                let quote_vault_pubkey = Pubkey::from_str(&raw_data.quote_vault)?;
+
+                let base_balance = match self.get_token_balance(&base_vault_pubkey).await {
+                    Ok(balance) => balance,
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "WARN",
+                            &format!("Failed to get base vault balance: {}, using real_base value", e)
+                        );
+                        raw_data.real_base
+                    }
+                };
+
+                let quote_balance = match self.get_token_balance(&quote_vault_pubkey).await {
+                    Ok(balance) => balance,
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "WARN",
+                            &format!("Failed to get quote vault balance: {}, using real_quote value", e)
+                        );
+                        raw_data.real_quote
+                    }
+                };
+
+                Ok(PoolData {
+                    pool_type,
+                    token_a: TokenInfo {
+                        mint: raw_data.base_mint,
+                        decimals: raw_data.base_decimals,
+                    },
+                    token_b: TokenInfo {
+                        mint: raw_data.quote_mint,
+                        decimals: raw_data.quote_decimals,
+                    },
+                    reserve_a: ReserveInfo {
+                        vault_address: raw_data.base_vault,
+                        balance: base_balance,
+                    },
+                    reserve_b: ReserveInfo {
+                        vault_address: raw_data.quote_vault,
+                        balance: quote_balance,
+                    },
+                    specific_data: PoolSpecificData::RaydiumLaunchLab {
+                        total_base_sell: raw_data.total_base_sell,
+                        real_base: raw_data.real_base,
+                        real_quote: raw_data.real_quote,
+                    },
+                })
+            }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported pool type: {:?}", pool_type));
             }
@@ -661,10 +747,38 @@ impl PoolDiscoveryAndPricing {
             )
         };
 
-        let price = if token_amount > 0.0 {
-            sol_amount / token_amount // SOL per token (or token_a per token_b if no SOL)
+        // For LaunchLab pools, we can use real_base and real_quote for more accurate pricing
+        let price = if pool_data.pool_type == PoolType::RaydiumLaunchLab {
+            if
+                let PoolSpecificData::RaydiumLaunchLab { real_base, real_quote, .. } =
+                    &pool_data.specific_data
+            {
+                // Calculate price using the real_base and real_quote values
+                let ui_real_base =
+                    (*real_base as f64) / (10_f64).powi(pool_data.token_a.decimals as i32);
+                let ui_real_quote =
+                    (*real_quote as f64) / (10_f64).powi(pool_data.token_b.decimals as i32);
+
+                if ui_real_base > 0.0 {
+                    ui_real_quote / ui_real_base // Quote per Base (or SOL per Token if quote is SOL)
+                } else {
+                    0.0
+                }
+            } else {
+                // Fallback to standard calculation if specific data doesn't match expected pattern
+                if token_amount > 0.0 {
+                    sol_amount / token_amount
+                } else {
+                    0.0
+                }
+            }
         } else {
-            0.0
+            // Standard calculation for other pool types
+            if token_amount > 0.0 {
+                sol_amount / token_amount // SOL per token (or token_a per token_b if no SOL)
+            } else {
+                0.0
+            }
         };
 
         log(
@@ -939,6 +1053,116 @@ impl PoolDiscoveryAndPricing {
         })
     }
 
+    /// Parse Raydium LaunchLab pool data from raw account bytes
+    fn parse_raydium_launchlab_data(&self, data: &[u8]) -> Result<RaydiumLaunchLabData> {
+        log(LogTag::System, "INFO", &format!("LaunchLab pool data length: {} bytes", data.len()));
+
+        if data.len() < 300 {
+            return Err(
+                anyhow::anyhow!("Raydium LaunchLab pool data too short: {} bytes", data.len())
+            );
+        }
+
+        let mut offset = 0;
+
+        // Skip initial data (epoch) - 8 bytes
+        offset += 8;
+
+        // auth_bump (1 byte)
+        let _auth_bump = data[offset];
+        offset += 1;
+
+        // status (1 byte)
+        let status = data[offset];
+        offset += 1;
+
+        // base_decimals (1 byte)
+        let base_decimals = data[offset];
+        offset += 1;
+
+        // quote_decimals (1 byte)
+        let quote_decimals = data[offset];
+        offset += 1;
+
+        // Skip migrate_type (1 byte)
+        offset += 1;
+
+        // Skip supply (8 bytes)
+        offset += 8;
+
+        // total_base_sell (8 bytes)
+        let total_base_sell_bytes: [u8; 8] = data[offset..offset + 8]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to read total_base_sell"))?;
+        let total_base_sell = u64::from_le_bytes(total_base_sell_bytes);
+        offset += 8;
+
+        // Skip virtual_base (8 bytes)
+        offset += 8;
+
+        // Skip virtual_quote (8 bytes)
+        offset += 8;
+
+        // real_base (8 bytes)
+        let real_base_bytes: [u8; 8] = data[offset..offset + 8]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to read real_base"))?;
+        let real_base = u64::from_le_bytes(real_base_bytes);
+        offset += 8;
+
+        // real_quote (8 bytes)
+        let real_quote_bytes: [u8; 8] = data[offset..offset + 8]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to read real_quote"))?;
+        let real_quote = u64::from_le_bytes(real_quote_bytes);
+        offset += 8; // Update offset for completeness, though we'll reset it in the next line
+
+        // Skip ahead to base_mint at offset 192 (32 bytes)
+        // This is based on the JSON layout you provided
+        offset = 192;
+
+        // base_mint (32 bytes)
+        let base_mint = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // quote_mint (32 bytes)
+        let quote_mint = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // base_vault (32 bytes)
+        let base_vault = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // quote_vault (32 bytes)
+        let quote_vault = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        // No need to increment offset as this is the last field we're reading
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "Parsed LaunchLab pool: base_mint={}, quote_mint={}, real_base={}, real_quote={}",
+                base_mint,
+                quote_mint,
+                real_base,
+                real_quote
+            )
+        );
+
+        Ok(RaydiumLaunchLabData {
+            base_mint,
+            quote_mint,
+            base_vault,
+            quote_vault,
+            base_decimals,
+            quote_decimals,
+            total_base_sell,
+            real_base,
+            real_quote,
+            status,
+        })
+    }
+
     /// Get token account balance using RPC
     pub async fn get_token_balance(&self, token_account: &Pubkey) -> Result<u64> {
         let account_info = self.rpc_client.get_account(token_account)?;
@@ -1168,6 +1392,7 @@ impl PoolPriceResult {
             PoolType::RaydiumAmm => "AMM".to_string(),
             PoolType::Orca => "Orca".to_string(),
             PoolType::Phoenix => "Phoenix".to_string(),
+            PoolType::RaydiumLaunchLab => "LaunchLab".to_string(),
             PoolType::Unknown => "Unknown".to_string(),
         }
     }

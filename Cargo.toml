@@ -116,51 +116,18 @@ tabled = "0.20"  # Latest version for modern table formatting
 owo-colors = "4"
 
 
+[[bin]]
+name = "tool_sell_all_and_close_atas"
+path = "src/bin/tool_sell_all_and_close_atas.rs"
 
 [[bin]]
-name = "test_parallel_checking"
-path = "test_parallel_checking.rs"
+name = "tool_pool_discovery"
+path = "src/bin/tool_pool_discovery.rs"
 
 [[bin]]
-name = "sell_all_and_close_atas"
-path = "src/bin/sell_all_and_close_atas.rs"
+name = "tool_token_db_manager"
+path = "src/bin/tool_token_db_manager.rs"
 
 [[bin]]
-name = "migrate_transactions"
-path = "src/bin/migrate_transactions.rs"
-
-[[bin]]
-name = "test_modular_transactions"
-path = "src/bin/test_modular_transactions.rs"
-
-[[bin]]
-name = "test_modular_simple"
-path = "src/bin/test_modular_simple.rs"
-
-[[bin]]
-name = "test_websocket_wallet_watch"
-path = "src/bin/test_websocket_wallet_watch.rs"
-
-[[bin]]
-name = "test_websocket_live_swap"
-path = "src/bin/test_websocket_live_swap.rs"
-
-[[bin]]
-name = "test_websocket_debug_sync"
-path = "src/bin/test_websocket_debug_sync.rs"
-
-[[bin]]
-name = "test_continuous_transaction_cache"
-path = "src/bin/test_continuous_transaction_cache.rs"
-
-[[bin]]
-name = "test_token_discovery_caching"
-path = "src/bin/test_token_discovery_caching.rs"
-
-[[bin]]
-name = "test_single_token_info"
-path = "src/bin/test_single_token_info.rs"
-
-[[bin]]
-name = "test_enhanced_swap_detection"
-path = "src/bin/test_enhanced_swap_detection.rs"
+name = "test_raydium_launchlab"
+path = "src/bin/test_raydium_launchlab.rs"
