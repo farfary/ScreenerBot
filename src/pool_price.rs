@@ -44,7 +44,7 @@ fn debug_log(log_type: &str, message: &str) {
     }
 }
 
-/// Helper function for regular pool logging 
+/// Helper function for regular pool logging
 fn pool_log(log_type: &str, message: &str) {
     log(LogTag::Pool, log_type, message);
 }
@@ -299,21 +299,15 @@ impl PoolDiscoveryAndPricing {
     pub async fn discover_pools(&self, token_mint: &str) -> Result<Vec<DiscoveredPool>> {
         let url = format!("{}/{}", DEXSCREENER_API_BASE, token_mint);
 
-        debug_log(
-            "DEBUG",
-            &format!("Fetching pools from DexScreener API: {}", url)
-        );
+        debug_log("DEBUG", &format!("Fetching pools from DexScreener API: {}", url));
 
-        pool_log(
-            "INFO",
-            &format!("Discovering pools for token: {}", token_mint)
-        );
+        pool_log("INFO", &format!("Discovering pools for token: {}", token_mint));
 
         let response = self.http_client.get(&url).send().await?;
 
         if !response.status().is_success() {
             pool_log(
-                "ERROR", 
+                "ERROR",
                 &format!("DexScreener API request failed with status: {}", response.status())
             );
             return Err(
@@ -324,10 +318,7 @@ impl PoolDiscoveryAndPricing {
         let pairs: Vec<serde_json::Value> = response.json().await?;
         let mut discovered_pools = Vec::new();
 
-        debug_log(
-            "DEBUG",
-            &format!("Received {} raw pairs from API", pairs.len())
-        );
+        debug_log("DEBUG", &format!("Received {} raw pairs from API", pairs.len()));
 
         for pair in pairs {
             if let Ok(pool) = self.parse_pool_from_api_response(&pair) {
@@ -501,23 +492,14 @@ impl PoolDiscoveryAndPricing {
                     );
                     return Ok(entry.program_ids.clone());
                 } else {
-                    debug_log(
-                        "DEBUG",
-                        &format!("Cache EXPIRED for token {}", token_mint)
-                    );
+                    debug_log("DEBUG", &format!("Cache EXPIRED for token {}", token_mint));
                 }
             } else {
-                debug_log(
-                    "DEBUG",
-                    &format!("Cache MISS for token {}", token_mint)
-                );
+                debug_log("DEBUG", &format!("Cache MISS for token {}", token_mint));
             }
         }
 
-        pool_log(
-            "INFO",
-            &format!("Fetching program IDs for token: {}", token_mint)
-        );
+        pool_log("INFO", &format!("Fetching program IDs for token: {}", token_mint));
 
         // Discover pools to get their program IDs
         let discovered_pools = self.discover_pools(token_mint).await?;
@@ -646,7 +628,7 @@ impl PoolDiscoveryAndPricing {
         pool_address: &str
     ) -> Result<(f64, String, String, PoolType)> {
         pool_log("INFO", &format!("Starting price calculation for pool: {}", pool_address));
-        
+
         // First detect the pool type
         let pool_type = self.detect_pool_type(pool_address).await?;
         debug_log("DEBUG", &format!("Pool type detected: {:?}", pool_type));
@@ -657,7 +639,10 @@ impl PoolDiscoveryAndPricing {
 
         // Calculate price using the universal method
         let price = self.calculate_price_from_pool_data(&pool_data).await?;
-        pool_log("SUCCESS", &format!("Price calculation completed: {} (pool type: {:?})", price, pool_type));
+        pool_log(
+            "SUCCESS",
+            &format!("Price calculation completed: {} (pool type: {:?})", price, pool_type)
+        );
 
         Ok((price, pool_data.token_a.mint.clone(), pool_data.token_b.mint.clone(), pool_type))
     }
@@ -668,7 +653,14 @@ impl PoolDiscoveryAndPricing {
         pool_address: &str,
         pool_type: PoolType
     ) -> Result<(f64, String, String, PoolType)> {
-        pool_log("INFO", &format!("Calculating price with explicit type {:?} for pool: {}", pool_type, pool_address));
+        pool_log(
+            "INFO",
+            &format!(
+                "Calculating price with explicit type {:?} for pool: {}",
+                pool_type,
+                pool_address
+            )
+        );
         let pool_data = self.parse_pool_data(pool_address, pool_type).await?;
         let price = self.calculate_price_from_pool_data(&pool_data).await?;
 
@@ -707,10 +699,7 @@ impl PoolDiscoveryAndPricing {
         // Get the program ID that owns this account
         let program_id = account_info.owner.to_string();
 
-        debug_log(
-            "DEBUG",
-            &format!("Pool account data size: {} bytes", account_info.data.len())
-        );
+        debug_log("DEBUG", &format!("Pool account data size: {} bytes", account_info.data.len()));
 
         pool_log(
             "INFO",
@@ -753,7 +742,10 @@ impl PoolDiscoveryAndPricing {
                 let account_data = account_info.data.clone();
                 debug_log(
                     "DEBUG",
-                    &format!("Using fallback detection with data size: {} bytes", account_data.len())
+                    &format!(
+                        "Using fallback detection with data size: {} bytes",
+                        account_data.len()
+                    )
                 );
 
                 if account_data.len() >= 800 {
@@ -765,7 +757,10 @@ impl PoolDiscoveryAndPricing {
                 } else {
                     pool_log(
                         "ERROR",
-                        &format!("Could not determine pool type (data size: {} bytes), defaulting to Raydium CPMM", account_data.len())
+                        &format!(
+                            "Could not determine pool type (data size: {} bytes), defaulting to Raydium CPMM",
+                            account_data.len()
+                        )
                     );
                     Ok(PoolType::RaydiumCpmm)
                 }
@@ -974,7 +969,7 @@ impl PoolDiscoveryAndPricing {
         // Get actual token decimals from cache or fetch from chain
         let mints_to_check = vec![pool_data.token_a.mint.clone(), pool_data.token_b.mint.clone()];
         debug_log("DEBUG", &format!("Checking decimals for {} tokens", mints_to_check.len()));
-        
+
         let decimal_map = match
             fetch_or_cache_decimals(
                 &self.rpc_client,
@@ -1086,7 +1081,10 @@ impl PoolDiscoveryAndPricing {
 
                 if ui_real_base > 0.0 {
                     let price = ui_real_quote / ui_real_base;
-                    pool_log("SUCCESS", &format!("LaunchLab price calculated: {} SOL per token", price));
+                    pool_log(
+                        "SUCCESS",
+                        &format!("LaunchLab price calculated: {} SOL per token", price)
+                    );
                     price
                 } else {
                     pool_log("WARN", "LaunchLab real base is zero, cannot calculate price");
@@ -1097,7 +1095,10 @@ impl PoolDiscoveryAndPricing {
                 debug_log("DEBUG", "Using fallback price calculation (no specific LaunchLab data)");
                 if token_amount > 0.0 {
                     let price = sol_amount / token_amount;
-                    pool_log("SUCCESS", &format!("Standard price calculated: {} SOL per token", price));
+                    pool_log(
+                        "SUCCESS",
+                        &format!("Standard price calculated: {} SOL per token", price)
+                    );
                     price
                 } else {
                     pool_log("WARN", "Token amount is zero, cannot calculate price");
@@ -1433,10 +1434,7 @@ impl PoolDiscoveryAndPricing {
                 }
             }
 
-            debug_log(
-                "DEBUG",
-                &format!("{:08X} |{} | {}", offset, hex_string, ascii_string)
-            );
+            debug_log("DEBUG", &format!("{:08X} |{} | {}", offset, hex_string, ascii_string));
             offset += bytes_per_line;
         }
         debug_log("DEBUG", "=========================================");

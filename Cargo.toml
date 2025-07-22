@@ -135,3 +135,11 @@ path = "src/bin/test_raydium_launchlab.rs"
 [[bin]]
 name = "tool_pool_prices"
 path = "src/bin/tool_pool_prices.rs"
+
+[[bin]]
+name = "test_pool_caching"
+path = "src/bin/test_pool_caching.rs"
+
+[[bin]]
+name = "test_sol_received_pnl"
+path = "src/bin/test_sol_received_pnl.rs"
