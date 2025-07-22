@@ -1,19 +1,13 @@
 use crate::trader::*;
-use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::global::*;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };
 
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
-use chrono::{ Utc, Duration as ChronoDuration, DateTime };
-use std::sync::Arc;
-use tokio::sync::Notify;
-use std::time::Duration;
+use chrono::{ Utc, DateTime };
 use serde::{ Serialize, Deserialize };
-use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use colored::Colorize;
 
 /// Static global: saved positions

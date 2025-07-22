@@ -2,20 +2,13 @@ use crate::trader::*;
 use crate::positions::*;
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
-use crate::global::*;
 use crate::utils::*;
-use crate::wallet::{ buy_token, sell_token };
 
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
-use std::sync::{ Arc as StdArc, Mutex as StdMutex };
-use chrono::{ Utc, Duration as ChronoDuration, DateTime };
+use chrono::{ Utc };
 use std::sync::Arc;
 use tokio::sync::Notify;
 use std::time::Duration;
-use serde::{ Serialize, Deserialize };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
-use colored::Colorize;
 
 /// Display structure for position table formatting
 #[derive(Tabled)]
@@ -250,7 +243,9 @@ impl PositionDisplay {
     fn from_position(position: &Position, current_price: Option<f64>) -> Self {
         let current_or_exit = if position.exit_price.is_some() {
             // For closed positions, prioritize effective exit price over regular exit price
-            let display_price = position.effective_exit_price.unwrap_or(position.exit_price.unwrap());
+            let display_price = position.effective_exit_price.unwrap_or(
+                position.exit_price.unwrap()
+            );
             format!("{:.8}", display_price)
         } else if let Some(price) = current_price {
             format!("{:.8}", price)

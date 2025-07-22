@@ -13,11 +13,9 @@ use solana_sdk::{
     signer::Signer,
     pubkey::Pubkey,
     instruction::Instruction,
-    transaction::Transaction,
-    commitment_config::CommitmentConfig,
+    transaction::Transaction
 };
 use spl_token::instruction::close_account;
-use spl_associated_token_account::get_associated_token_address;
 use bs58;
 use std::str::FromStr;
 

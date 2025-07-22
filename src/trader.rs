@@ -32,7 +32,6 @@ use crate::positions::{
 };
 use crate::summary::*;
 use crate::utils::*;
-use crate::wallet::{ buy_token, sell_token };
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -41,8 +40,6 @@ use chrono::{ Utc, Duration as ChronoDuration, DateTime };
 use std::sync::Arc;
 use tokio::sync::Notify;
 use std::time::Duration;
-use serde::{ Serialize, Deserialize };
-use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use colored::Colorize;
 
 /// Static global: price history for each token (mint), stores Vec<(timestamp, price)>
