@@ -248,8 +248,10 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 
 impl PositionDisplay {
     fn from_position(position: &Position, current_price: Option<f64>) -> Self {
-        let current_or_exit = if let Some(exit_price) = position.exit_price {
-            format!("{:.8}", exit_price)
+        let current_or_exit = if position.exit_price.is_some() {
+            // For closed positions, prioritize effective exit price over regular exit price
+            let display_price = position.effective_exit_price.unwrap_or(position.exit_price.unwrap());
+            format!("{:.8}", display_price)
         } else if let Some(price) = current_price {
             format!("{:.8}", price)
         } else {
