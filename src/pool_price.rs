@@ -28,6 +28,7 @@ const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPw
 const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+const PUMPFUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/solana";
 
 // Cache expiration time - 2 minutes
@@ -86,6 +87,7 @@ pub enum PoolType {
     Orca,
     OrcaWhirlpool,
     Phoenix,
+    PumpfunAmm,
     Unknown,
 }
 
@@ -126,6 +128,7 @@ impl PoolType {
                 }
             }
             "phoenix" => PoolType::Phoenix,
+            "pump" | "pump.fun" => PoolType::PumpfunAmm,
             _ => PoolType::Unknown,
         }
     }
@@ -182,6 +185,14 @@ pub enum PoolSpecificData {
         tick_spacing: u16,
         fee_rate: u16,
         protocol_fee_rate: u16,
+    },
+    PumpfunAmm {
+        pool_bump: u8,
+        index: u16,
+        creator: String,
+        lp_mint: String,
+        lp_supply: u64,
+        coin_creator: String,
     },
     RaydiumAmm {},
     Orca {},
@@ -313,6 +324,20 @@ pub struct OrcaWhirlpoolData {
     pub fee_growth_global_a: u128,
     pub fee_growth_global_b: u128,
     pub whirlpool_bump: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct PumpfunAmmData {
+    pub pool_bump: u8,
+    pub index: u16,
+    pub creator: String,
+    pub base_mint: String,
+    pub quote_mint: String,
+    pub lp_mint: String,
+    pub pool_base_token_account: String,
+    pub pool_quote_token_account: String,
+    pub lp_supply: u64,
+    pub coin_creator: String,
 }
 
 // =============================================================================
@@ -557,6 +582,7 @@ impl PoolDiscoveryAndPricing {
                     PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
                     PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
                     PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
+                    PoolType::PumpfunAmm => PUMPFUN_AMM_PROGRAM_ID.to_string(),
                     _ => {
                         continue;
                     } // Skip unknown types
@@ -794,6 +820,11 @@ impl PoolDiscoveryAndPricing {
             id if id == ORCA_WHIRLPOOL_PROGRAM_ID => {
                 pool_log("SUCCESS", "Detected: Orca Whirlpool pool");
                 Ok(PoolType::OrcaWhirlpool)
+            }
+            // Pump.fun AMM Program ID
+            id if id == PUMPFUN_AMM_PROGRAM_ID => {
+                pool_log("SUCCESS", "Detected: Pump.fun AMM pool");
+                Ok(PoolType::PumpfunAmm)
             }
             // Add other DEX program IDs as needed
             // Phoenix, Orca, etc.
@@ -1072,6 +1103,48 @@ impl PoolDiscoveryAndPricing {
                     },
                 })
             }
+            PoolType::PumpfunAmm => {
+                let raw_data = self.parse_pumpfun_amm_data(&account_data)?;
+
+                // Get token vault balances
+                let base_vault_pubkey = Pubkey::from_str(&raw_data.pool_base_token_account)?;
+                let quote_vault_pubkey = Pubkey::from_str(&raw_data.pool_quote_token_account)?;
+
+                let base_balance = self.get_token_balance(&base_vault_pubkey).await?;
+                let quote_balance = self.get_token_balance(&quote_vault_pubkey).await?;
+
+                // Get decimals for both tokens
+                let base_decimals = self.get_token_decimals(&raw_data.base_mint).await?;
+                let quote_decimals = self.get_token_decimals(&raw_data.quote_mint).await?;
+
+                Ok(PoolData {
+                    pool_type,
+                    token_a: TokenInfo {
+                        mint: raw_data.base_mint,
+                        decimals: base_decimals,
+                    },
+                    token_b: TokenInfo {
+                        mint: raw_data.quote_mint,
+                        decimals: quote_decimals,
+                    },
+                    reserve_a: ReserveInfo {
+                        vault_address: raw_data.pool_base_token_account,
+                        balance: base_balance,
+                    },
+                    reserve_b: ReserveInfo {
+                        vault_address: raw_data.pool_quote_token_account,
+                        balance: quote_balance,
+                    },
+                    specific_data: PoolSpecificData::PumpfunAmm {
+                        pool_bump: raw_data.pool_bump,
+                        index: raw_data.index,
+                        creator: raw_data.creator,
+                        lp_mint: raw_data.lp_mint,
+                        lp_supply: raw_data.lp_supply,
+                        coin_creator: raw_data.coin_creator,
+                    },
+                })
+            }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported pool type: {:?}", pool_type));
             }
@@ -1291,6 +1364,21 @@ impl PoolDiscoveryAndPricing {
                     pool_log("WARN", "Token amount is zero, cannot calculate Whirlpool price");
                     0.0
                 }
+            }
+        } else if pool_data.pool_type == PoolType::PumpfunAmm {
+            // For Pump.fun AMM pools, use simple vault balance calculation
+            // Pump.fun pools are typically Base Token/SOL pairs
+            debug_log("DEBUG", "Using Pump.fun AMM price calculation");
+            if token_amount > 0.0 {
+                let price = sol_amount / token_amount;
+                pool_log(
+                    "SUCCESS",
+                    &format!("Pump.fun AMM price calculated: {} SOL per token", price)
+                );
+                price
+            } else {
+                pool_log("WARN", "Token amount is zero, cannot calculate Pump.fun AMM price");
+                0.0
             }
         } else {
             // Standard calculation for other pool types
@@ -2056,6 +2144,114 @@ impl PoolDiscoveryAndPricing {
         })
     }
 
+    /// Parse Pump.fun AMM pool data
+    fn parse_pumpfun_amm_data(&self, data: &[u8]) -> Result<PumpfunAmmData> {
+        debug_log("DEBUG", &format!("Parsing Pump.fun AMM pool data, length: {}", data.len()));
+
+        let mut offset = 8; // Skip discriminator
+
+        // pool_bump (u8) - 1 byte
+        if offset >= data.len() {
+            return Err(anyhow::anyhow!("Data too short for pool_bump"));
+        }
+        let pool_bump = data[offset];
+        offset += 1;
+
+        // index (u16) - 2 bytes
+        if offset + 2 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for index"));
+        }
+        let index = u16::from_le_bytes(data[offset..offset + 2].try_into()?);
+        offset += 2;
+
+        // creator (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for creator"));
+        }
+        let creator = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // base_mint (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for base_mint"));
+        }
+        let base_mint = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // quote_mint (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for quote_mint"));
+        }
+        let quote_mint = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // lp_mint (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for lp_mint"));
+        }
+        let lp_mint = Pubkey::new_from_array(data[offset..offset + 32].try_into()?).to_string();
+        offset += 32;
+
+        // pool_base_token_account (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for pool_base_token_account"));
+        }
+        let pool_base_token_account = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // pool_quote_token_account (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for pool_quote_token_account"));
+        }
+        let pool_quote_token_account = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+        offset += 32;
+
+        // lp_supply (u64) - 8 bytes
+        if offset + 8 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for lp_supply"));
+        }
+        let lp_supply = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
+        offset += 8;
+
+        // coin_creator (Pubkey) - 32 bytes
+        if offset + 32 > data.len() {
+            return Err(anyhow::anyhow!("Data too short for coin_creator"));
+        }
+        let coin_creator = Pubkey::new_from_array(
+            data[offset..offset + 32].try_into()?
+        ).to_string();
+
+        debug_log(
+            "DEBUG",
+            &format!(
+                "Parsed Pump.fun AMM data: pool_bump={}, index={}, creator={}, base_mint={}, quote_mint={}, lp_supply={}",
+                pool_bump,
+                index,
+                creator,
+                base_mint,
+                quote_mint,
+                lp_supply
+            )
+        );
+
+        Ok(PumpfunAmmData {
+            pool_bump,
+            index,
+            creator,
+            base_mint,
+            quote_mint,
+            lp_mint,
+            pool_base_token_account,
+            pool_quote_token_account,
+            lp_supply,
+            coin_creator,
+        })
+    }
+
     /// Get token account balance using RPC
     pub async fn get_token_balance(&self, token_account: &Pubkey) -> Result<u64> {
         let account_info = self.rpc_client.get_account(token_account)?;
@@ -2287,6 +2483,7 @@ impl PoolPriceResult {
             PoolType::OrcaWhirlpool => "Whirlpool".to_string(),
             PoolType::Phoenix => "Phoenix".to_string(),
             PoolType::RaydiumLaunchLab => "LaunchLab".to_string(),
+            PoolType::PumpfunAmm => "Pump.fun AMM".to_string(),
             PoolType::Unknown => "Unknown".to_string(),
         }
     }

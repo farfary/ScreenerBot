@@ -62,7 +62,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     let time_held_secs: f64 = duration.num_seconds() as f64;
 
     // Conservative settings for simplified logic
-    const MIN_HOLD_TIME_SECS: f64 = 120.0; // Hold for at least 3 minutes
+    const MIN_HOLD_TIME_SECS: f64 = 60.0; // Hold for at least 3 minutes
     const STOP_LOSS_PERCENT: f64 = -70.0; // Stop loss at -70%
     const PROFIT_TARGET_PERCENT: f64 = 25.0; // Take profit at +25%
     const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
