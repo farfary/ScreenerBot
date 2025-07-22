@@ -35,14 +35,6 @@ use serde::{ Serialize, Deserialize };
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 use colored::Colorize;
 
-
-
-
-
-
-
-
-
 /// Static global: price history for each token (mint), stores Vec<(timestamp, price)>
 pub static PRICE_HISTORY_24H: Lazy<
     StdArc<StdMutex<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>
@@ -52,8 +44,6 @@ pub static PRICE_HISTORY_24H: Lazy<
 pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new(|| {
     StdArc::new(StdMutex::new(HashMap::new()))
 });
-
-
 
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
     // Use the new smart profit calculation system
@@ -177,10 +167,6 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     urgency
 }
 
-
-
-
-
 /// Get current price for a token from the global token list
 pub fn get_current_token_price(mint: &str) -> Option<f64> {
     let tokens = LIST_TOKENS.read().unwrap();
@@ -208,40 +194,118 @@ pub fn get_current_token_price(mint: &str) -> Option<f64> {
     None
 }
 
-
-
 /// Validates if a token has all required metadata for trading
 pub fn validate_token(token: &Token) -> bool {
-    if token.symbol.is_empty() || token.name.is_empty() {
-        return false;
-    }
-
-    let has_url = token.logo_url
-        .as_ref()
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    let has_website = token.website
-        .as_ref()
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-
-    // Require either logo_url or website
-    has_url || has_website
+    !token.symbol.is_empty() &&
+        !token.mint.is_empty() &&
+        token.price_dexscreener_sol.is_some() &&
+        token.liquidity.is_some()
 }
 
+/// Checks if entry is allowed based on historical position data for this token
+/// Returns true only if current price is below both:
+/// 1. Average entry price from past closed positions
+/// 2. Maximum price this token has ever reached
+pub fn is_entry_allowed_by_historical_data(mint: &str, current_price: f64) -> bool {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        // Find all closed positions for this token
+        let token_positions: Vec<&Position> = positions
+            .iter()
+            .filter(|p| p.mint == mint && p.exit_price.is_some())
+            .collect();
 
+        // If no historical positions, allow entry (first time seeing this token)
+        if token_positions.is_empty() {
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!(
+                    "No historical positions found for token {}, allowing entry at {:.12}",
+                    mint,
+                    current_price
+                )
+            );
+            return true;
+        }
 
+        // Calculate average entry price from past positions
+        let total_entry_prices: f64 = token_positions
+            .iter()
+            .map(|p| p.effective_entry_price.unwrap_or(p.entry_price))
+            .sum();
+        let average_entry_price = total_entry_prices / (token_positions.len() as f64);
 
+        // Find maximum price this token has ever reached
+        let max_historical_price = token_positions
+            .iter()
+            .map(|p| p.price_highest)
+            .fold(0.0, f64::max);
 
+        // Log the analysis
+        log(
+            LogTag::Trader,
+            "ANALYSIS",
+            &format!(
+                "Historical analysis for {}: Current: {:.12}, Avg Entry: {:.12}, Max Ever: {:.12}, Positions: {}",
+                mint,
+                current_price,
+                average_entry_price,
+                max_historical_price,
+                token_positions.len()
+            )
+        );
 
+        // Allow entry only if current price is below both thresholds
+        let below_avg_entry = current_price < average_entry_price;
+        let below_max_price = current_price < max_historical_price;
 
+        if !below_avg_entry {
+            log(
+                LogTag::Trader,
+                "BLOCK",
+                &format!(
+                    "Entry blocked: Current price {:.12} >= average entry price {:.12}",
+                    current_price,
+                    average_entry_price
+                )
+            );
+        }
 
+        if !below_max_price {
+            log(
+                LogTag::Trader,
+                "BLOCK",
+                &format!(
+                    "Entry blocked: Current price {:.12} >= maximum historical price {:.12}",
+                    current_price,
+                    max_historical_price
+                )
+            );
+        }
 
+        if below_avg_entry && below_max_price {
+            log(
+                LogTag::Trader,
+                "ALLOW",
+                &format!(
+                    "Entry allowed: Current price {:.12} < avg entry {:.12} and < max price {:.12}",
+                    current_price,
+                    average_entry_price,
+                    max_historical_price
+                )
+            );
+        }
 
-
-
-
-
+        return below_avg_entry && below_max_price;
+    } else {
+        log(
+            LogTag::Trader,
+            "ERROR",
+            "Could not acquire lock on SAVED_POSITIONS for historical analysis"
+        );
+        return false; // Conservative: don't allow entry if we can't analyze
+    }
+}
 
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
@@ -532,18 +596,37 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                             percent_change = change * 100.0;
 
                                             if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
-                                                should_open_position = true;
-                                                log(
-                                                    LogTag::Trader,
-                                                    "OPPORTUNITY",
-                                                    &format!(
-                                                        "Entry opportunity detected for {} ({}): {:.2}% price drop, Liquidity: ${:.2}",
-                                                        token.symbol,
-                                                        token.mint,
-                                                        percent_change,
-                                                        liquidity_usd
+                                                // Check historical data before allowing entry
+                                                if
+                                                    is_entry_allowed_by_historical_data(
+                                                        &token.mint,
+                                                        current_price
                                                     )
-                                                );
+                                                {
+                                                    should_open_position = true;
+                                                    log(
+                                                        LogTag::Trader,
+                                                        "OPPORTUNITY",
+                                                        &format!(
+                                                            "Entry opportunity detected for {} ({}): {:.2}% price drop, Liquidity: ${:.2}",
+                                                            token.symbol,
+                                                            token.mint,
+                                                            percent_change,
+                                                            liquidity_usd
+                                                        )
+                                                    );
+                                                } else {
+                                                    log(
+                                                        LogTag::Trader,
+                                                        "SKIP",
+                                                        &format!(
+                                                            "Entry blocked for {} ({}): Current price {:.12} not below historical thresholds",
+                                                            token.symbol,
+                                                            token.mint,
+                                                            current_price
+                                                        )
+                                                    );
+                                                }
                                             }
                                         }
                                     }
