@@ -12,7 +12,6 @@ use solana_client::rpc_client::RpcClient;
 use std::path::Path;
 use colored::Colorize;
 
-
 static INFO_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell::sync::Lazy::new(||
     Arc::new(Semaphore::new(200))
 );
@@ -334,6 +333,19 @@ pub async fn update_tokens_from_mints(
                             })
                             .unwrap_or_default();
 
+                        // Parse price data
+                        let price = pair
+                            .get("priceNative")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<f64>().ok())
+                            .unwrap_or(0.0);
+
+                        let price_usd = pair
+                            .get("priceUsd")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<f64>().ok())
+                            .unwrap_or(0.0);
+
                         let token = Token {
                             mint: mint.to_string(),
                             symbol: base_token
@@ -379,18 +391,8 @@ pub async fn update_tokens_from_mints(
                             created_at,
 
                             // Price data
-                            price_dexscreener_sol: pair
-                                .get("priceNative")
-                                .and_then(|v| v.as_str())
-                                .and_then(|s| s.parse().ok()),
-                            price_dexscreener_usd: pair
-                                .get("priceUsd")
-                                .and_then(|v| v.as_str())
-                                .and_then(|s| s.parse().ok()),
-                            price_geckoterminal_sol: None,
-                            price_geckoterminal_usd: None,
-                            price_raydium_sol: None,
-                            price_raydium_usd: None,
+                            price_dexscreener_sol: Some(price),
+                            price_dexscreener_usd: Some(price_usd),
                             price_pool_sol: None,
                             price_pool_usd: None,
                             pools: vec![],
@@ -534,7 +536,9 @@ pub async fn update_tokens_from_mints(
                 log(
                     LogTag::Monitor,
                     "INFO",
-                    &format!("Dexscreener Updated tokens: {}, mints: {}", list.len(), mints_count).dimmed().to_string()
+                    &format!("Dexscreener Updated tokens: {}, mints: {}", list.len(), mints_count)
+                        .dimmed()
+                        .to_string()
                 );
             }
         }
@@ -1053,10 +1057,7 @@ pub async fn get_single_token_info(
                         .get("priceUsd")
                         .and_then(|v| v.as_str())
                         .and_then(|s| s.parse().ok()),
-                    price_geckoterminal_sol: None,
-                    price_geckoterminal_usd: None,
-                    price_raydium_sol: None,
-                    price_raydium_usd: None,
+
                     price_pool_sol: None,
                     price_pool_usd: None,
                     pools: vec![],

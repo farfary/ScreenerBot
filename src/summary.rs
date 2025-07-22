@@ -162,8 +162,8 @@ pub async fn display_positions_table() {
         let open_position_displays: Vec<_> = sorted_open
             .iter()
             .map(|position| {
-                // Get current price for this position
-                let current_price = get_current_token_price(&position.mint);
+                // Get current price for this position (use pool price for open positions)
+                let current_price = get_current_token_price(&position.mint, true);
                 OpenPositionDisplay::from_position(position, current_price)
             })
             .collect();

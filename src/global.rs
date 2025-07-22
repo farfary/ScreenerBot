@@ -8,7 +8,6 @@ use chrono::{ DateTime, Utc };
 use crate::token_cache::TokenDatabase;
 use solana_sdk::signature::Keypair;
 
-
 pub static LIST_MINTS: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
 
 pub static LIST_TOKENS: Lazy<RwLock<Vec<Token>>> = Lazy::new(|| RwLock::new(vec![]));
@@ -237,10 +236,6 @@ pub struct Token {
     // Price data from various sources
     pub price_dexscreener_sol: Option<f64>,
     pub price_dexscreener_usd: Option<f64>,
-    pub price_geckoterminal_sol: Option<f64>,
-    pub price_geckoterminal_usd: Option<f64>,
-    pub price_raydium_sol: Option<f64>,
-    pub price_raydium_usd: Option<f64>,
     pub price_pool_sol: Option<f64>,
     pub price_pool_usd: Option<f64>,
     pub pools: Vec<Pool>,

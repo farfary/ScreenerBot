@@ -6,6 +6,8 @@ use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::path::Path;
 use std::collections::HashMap;
+use std::sync::{ Arc, Mutex };
+use std::time::{ Duration, Instant };
 use reqwest;
 use crate::decimal_cache::{ DecimalCache, fetch_or_cache_decimals };
 
@@ -18,6 +20,9 @@ const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPw
 const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/solana";
+
+// Cache expiration time - 2 minutes
+const CACHE_EXPIRATION_SECONDS: u64 = 120;
 
 // =============================================================================
 // DATA STRUCTURES
@@ -157,6 +162,36 @@ pub struct PoolPriceResult {
 }
 
 // =============================================================================
+// CACHE STRUCTURES
+// =============================================================================
+
+/// Cache entry for biggest pool per token
+#[derive(Debug, Clone)]
+pub struct PoolCacheEntry {
+    pub pool_result: PoolPriceResult,
+    pub cached_at: Instant,
+}
+
+/// Cache entry for program IDs per token
+#[derive(Debug, Clone)]
+pub struct ProgramIdCacheEntry {
+    pub program_ids: Vec<String>,
+    pub cached_at: Instant,
+}
+
+impl PoolCacheEntry {
+    pub fn is_expired(&self) -> bool {
+        self.cached_at.elapsed() > Duration::from_secs(CACHE_EXPIRATION_SECONDS)
+    }
+}
+
+impl ProgramIdCacheEntry {
+    pub fn is_expired(&self) -> bool {
+        self.cached_at.elapsed() > Duration::from_secs(CACHE_EXPIRATION_SECONDS)
+    }
+}
+
+// =============================================================================
 // LEGACY STRUCTS FOR BACKWARD COMPATIBILITY
 // =============================================================================
 
@@ -219,6 +254,10 @@ pub struct RaydiumLaunchLabData {
 pub struct PoolDiscoveryAndPricing {
     rpc_client: RpcClient,
     http_client: reqwest::Client,
+    // Cache for biggest pool per token (token_mint -> PoolCacheEntry)
+    pool_cache: Arc<Mutex<HashMap<String, PoolCacheEntry>>>,
+    // Cache for program IDs per token (token_mint -> ProgramIdCacheEntry)
+    program_id_cache: Arc<Mutex<HashMap<String, ProgramIdCacheEntry>>>,
 }
 
 impl PoolDiscoveryAndPricing {
@@ -226,6 +265,8 @@ impl PoolDiscoveryAndPricing {
         Self {
             rpc_client: RpcClient::new(rpc_url.to_string()),
             http_client: reqwest::Client::new(),
+            pool_cache: Arc::new(Mutex::new(HashMap::new())),
+            program_id_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -338,6 +379,161 @@ impl PoolDiscoveryAndPricing {
         );
 
         Ok(results)
+    }
+
+    /// Get biggest pool for token with caching (2-minute expiration)
+    pub async fn get_biggest_pool_cached(
+        &self,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceResult>> {
+        // Check cache first
+        {
+            let cache = self.pool_cache.lock().unwrap();
+            if let Some(entry) = cache.get(token_mint) {
+                if !entry.is_expired() {
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        &format!("Using cached biggest pool for token: {}", token_mint)
+                    );
+                    return Ok(Some(entry.pool_result.clone()));
+                }
+            }
+        }
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!("Cache miss or expired, fetching biggest pool for token: {}", token_mint)
+        );
+
+        // Fetch all pool prices
+        let pool_results = self.get_token_pool_prices(token_mint).await?;
+
+        // Find the biggest successful pool (by liquidity)
+        let biggest_pool = pool_results
+            .into_iter()
+            .filter(|p| p.calculation_successful && p.is_sol_pair)
+            .max_by(|a, b|
+                a.liquidity_usd.partial_cmp(&b.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
+            );
+
+        // Cache the result if found
+        if let Some(pool) = &biggest_pool {
+            let mut cache = self.pool_cache.lock().unwrap();
+            cache.insert(token_mint.to_string(), PoolCacheEntry {
+                pool_result: pool.clone(),
+                cached_at: Instant::now(),
+            });
+
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "Cached biggest pool for token {} with liquidity ${:.2}",
+                    token_mint,
+                    pool.liquidity_usd
+                )
+            );
+        }
+
+        Ok(biggest_pool)
+    }
+
+    /// Get program IDs for token with caching (2-minute expiration)
+    pub async fn get_program_ids_cached(&self, token_mint: &str) -> Result<Vec<String>> {
+        // Check cache first
+        {
+            let cache = self.program_id_cache.lock().unwrap();
+            if let Some(entry) = cache.get(token_mint) {
+                if !entry.is_expired() {
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        &format!(
+                            "Using cached program IDs for token: {} (count: {})",
+                            token_mint,
+                            entry.program_ids.len()
+                        )
+                    );
+                    return Ok(entry.program_ids.clone());
+                }
+            }
+        }
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!("Cache miss or expired, fetching program IDs for token: {}", token_mint)
+        );
+
+        // Discover pools to get their program IDs
+        let discovered_pools = self.discover_pools(token_mint).await?;
+        let mut program_ids = Vec::new();
+
+        for pool in &discovered_pools {
+            // Detect program ID for each pool
+            if let Ok(pool_type) = self.detect_pool_type(&pool.pair_address).await {
+                let program_id = match pool_type {
+                    PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
+                    PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
+                    PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
+                    PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
+                    _ => {
+                        continue;
+                    } // Skip unknown types
+                };
+
+                if !program_ids.contains(&program_id) {
+                    program_ids.push(program_id);
+                }
+            }
+        }
+
+        // Cache the result
+        {
+            let mut cache = self.program_id_cache.lock().unwrap();
+            cache.insert(token_mint.to_string(), ProgramIdCacheEntry {
+                program_ids: program_ids.clone(),
+                cached_at: Instant::now(),
+            });
+        }
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!("Cached {} program IDs for token {}", program_ids.len(), token_mint)
+        );
+
+        Ok(program_ids)
+    }
+
+    /// Clear expired cache entries (maintenance function)
+    pub fn cleanup_expired_cache(&self) {
+        let mut pool_cache = self.pool_cache.lock().unwrap();
+        let mut program_id_cache = self.program_id_cache.lock().unwrap();
+
+        // Remove expired pool cache entries
+        let initial_pool_count = pool_cache.len();
+        pool_cache.retain(|_, entry| !entry.is_expired());
+        let final_pool_count = pool_cache.len();
+
+        // Remove expired program ID cache entries
+        let initial_program_count = program_id_cache.len();
+        program_id_cache.retain(|_, entry| !entry.is_expired());
+        let final_program_count = program_id_cache.len();
+
+        if initial_pool_count > final_pool_count || initial_program_count > final_program_count {
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "Cleaned up expired cache entries: {} pool entries removed, {} program ID entries removed",
+                    initial_pool_count - final_pool_count,
+                    initial_program_count - final_program_count
+                )
+            );
+        }
     }
 
     /// Calculate on-chain pool price using discovered pool info
