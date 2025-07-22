@@ -1,6 +1,6 @@
 use crate::global::{ Token, read_configs };
 use crate::logger::{ log, LogTag };
-use crate::trader::{ DEFAULT_FEE, DEFAULT_SLIPPAGE };
+use crate::trader::{ DEFAULT_FEE_SWAP, DEFAULT_SLIPPAGE };
 
 use reqwest;
 use serde::{ Deserialize, Serialize };
