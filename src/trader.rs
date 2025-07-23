@@ -71,12 +71,14 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
     StdArc::new(StdMutex::new(HashMap::new()))
 });
 
-pub fn should_sell_old(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    // Calculate time held in seconds using total_seconds()
+/// Determines if a position should be sold based on P&L, time, and token analysis
+/// Returns urgency score from 0.0 (don't sell) to 1.0 (sell immediately)
+pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
+    // Calculate time held in seconds
     let duration = now - pos.entry_time;
     let time_held_secs: f64 = duration.num_seconds() as f64;
 
-    // Don't sell too early unless it's a major loss
+    // Don't sell too early unless it's a major loss (safety check)
     if time_held_secs < MIN_HOLD_TIME_SECS {
         let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
 
@@ -87,7 +89,23 @@ pub fn should_sell_old(pos: &Position, current_price: f64, now: DateTime<Utc>) -
         }
     }
 
-    // Calculate current P&L using unified function
+    // Try to get the token from global list for full analysis
+    if let Ok(tokens) = LIST_TOKENS.read() {
+        for token in tokens.iter() {
+            if token.mint == pos.mint {
+                // Use the SMART profit system with full token data
+                let (urgency, _reason) = should_sell_smart_system(
+                    pos,
+                    token,
+                    current_price,
+                    time_held_secs
+                );
+                return urgency;
+            }
+        }
+    }
+
+    // Fallback logic if token not found in global list
     let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
 
     // Decision logic
@@ -105,68 +123,100 @@ pub fn should_sell_old(pos: &Position, current_price: f64, now: DateTime<Utc>) -
     };
 
     // Calculate urgency
-    let mut urgency: f64 = 0.0;
-
-    if stop_loss_triggered {
-        urgency = 1.0;
+    let urgency: f64 = if stop_loss_triggered {
+        1.0
     } else if profit_target_reached {
-        urgency = 0.8;
+        0.8
     } else {
-        urgency = time_decay_factor * 0.4; // Reduced time pressure
-    }
+        time_decay_factor * 0.4 // Reduced time pressure
+    };
 
     // Less aggressive selling for positions with small losses
-    if
+    let final_urgency = if
         time_held_secs > TIME_DECAY_START_SECS &&
         current_pnl_percent <= 0.0 &&
         current_pnl_percent > STOP_LOSS_PERCENT_AGGRESIVE
     {
-        urgency = f64::max(urgency, 0.3); // Reduced urgency for small losses
-    }
+        f64::max(urgency, 0.3) // Reduced urgency for small losses
+    } else {
+        urgency
+    };
 
-    urgency = f64::max(0.0, f64::min(urgency, 1.0));
-    urgency
+    f64::max(0.0, f64::min(final_urgency, 1.0))
 }
 
-pub fn should_sell_new(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    // Calculate time held in seconds
-    let duration = now - pos.entry_time;
-    let time_held_secs: f64 = duration.num_seconds() as f64;
+/// Determines if a token should be bought based on price drop and historical analysis
+/// Returns urgency score from 0.0 (don't buy) to 1.0 (buy immediately)
+pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
+    // Validate basic requirements
+    if current_price <= 0.0 || prev_price <= 0.0 || !validate_token_info(token) {
+        return 0.0;
+    }
 
-    // Don't sell too early unless it's a major loss (keep this safety check)
-    if time_held_secs < MIN_HOLD_TIME_SECS {
-        let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
+    // Validate token age before proceeding
+    if !validate_token_age(token) {
+        return 0.0;
+    }
 
-        if current_pnl_percent <= STOP_LOSS_PERCENT {
-            return 1.0; // Emergency exit for major losses
+    // Calculate price change percentage
+    let change = (current_price - prev_price) / prev_price;
+    let percent_change = change * 100.0;
+
+    // Check if price drop meets threshold
+    if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
+        // Check historical data before allowing entry
+        if is_entry_allowed_by_historical_data(&token.mint, current_price) {
+            // Calculate urgency based on drop magnitude
+            let drop_magnitude = percent_change.abs();
+            let base_urgency = f64::min(drop_magnitude / PRICE_DROP_THRESHOLD_PERCENT, 2.0) * 0.5;
+
+            // Factor in liquidity (higher liquidity = higher urgency)
+            let liquidity_usd = token.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(0.0);
+
+            let liquidity_factor = if liquidity_usd > 100000.0 {
+                1.0
+            } else if liquidity_usd > 50000.0 {
+                0.8
+            } else if liquidity_usd > 10000.0 {
+                0.6
+            } else {
+                0.4
+            };
+
+            let urgency = f64::min(base_urgency * liquidity_factor, 1.0);
+
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL",
+                &format!(
+                    "Buy signal for {} ({}): {:.2}% drop, urgency: {:.2}, liquidity: ${:.2}",
+                    token.symbol,
+                    token.mint,
+                    percent_change,
+                    urgency,
+                    liquidity_usd
+                )
+            );
+
+            return urgency;
         } else {
-            return 0.0; // Hold for minimum time
+            log(
+                LogTag::Trader,
+                "BUY_BLOCKED",
+                &format!(
+                    "Buy blocked for {} ({}): Current price {:.12} not below historical thresholds",
+                    token.symbol,
+                    token.mint,
+                    current_price
+                )
+            );
         }
     }
 
-    // Try to get the token from global list for full analysis
-    if let Ok(tokens) = LIST_TOKENS.read() {
-        for token in tokens.iter() {
-            if token.mint == pos.mint {
-                // Use the new SMART profit system with full token data
-                let (urgency, _reason) = should_sell_smart_system(
-                    pos,
-                    token,
-                    current_price,
-                    time_held_secs
-                );
-                return urgency;
-            }
-        }
-    }
-
-    // Fallback to old logic if token not found in global list
-    should_sell_old(pos, current_price, now)
-}
-
-// Main should_sell function that uses the new system
-pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    should_sell_new(pos, current_price, now)
+    0.0
 }
 
 /// Fetch pool prices for multiple tokens in parallel
@@ -929,11 +979,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 }
                             }
 
-                            // Check for entry opportunity with timeout
-                            let mut should_open_position = false;
-                            let mut percent_change = 0.0;
+                            // Check for entry opportunity using should_buy function
+                            let mut buy_urgency = 0.0;
 
-                            // Use timeout for last prices mutex as well
+                            // Use timeout for last prices mutex
                             match
                                 tokio::time::timeout(Duration::from_millis(500), async {
                                     LAST_PRICES.try_lock()
@@ -942,42 +991,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 Ok(Ok(mut last_prices)) => {
                                     if let Some(&prev_price) = last_prices.get(&token.mint) {
                                         if prev_price > 0.0 {
-                                            let change = (current_price - prev_price) / prev_price;
-                                            percent_change = change * 100.0;
-
-                                            if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
-                                                // Check historical data before allowing entry
-                                                if
-                                                    is_entry_allowed_by_historical_data(
-                                                        &token.mint,
-                                                        current_price
-                                                    )
-                                                {
-                                                    should_open_position = true;
-                                                    log(
-                                                        LogTag::Trader,
-                                                        "OPPORTUNITY",
-                                                        &format!(
-                                                            "Entry opportunity detected for {} ({}): {:.2}% price drop, Liquidity: ${:.2}",
-                                                            token.symbol,
-                                                            token.mint,
-                                                            percent_change,
-                                                            liquidity_usd
-                                                        )
-                                                    );
-                                                } else {
-                                                    log(
-                                                        LogTag::Trader,
-                                                        "SKIP",
-                                                        &format!(
-                                                            "Entry blocked for {} ({}): Current price {:.12} not below historical thresholds",
-                                                            token.symbol,
-                                                            token.mint,
-                                                            current_price
-                                                        )
-                                                    );
-                                                }
-                                            }
+                                            // Use the new should_buy function
+                                            buy_urgency = should_buy(
+                                                &token,
+                                                current_price,
+                                                prev_price
+                                            );
                                         }
                                     }
                                     last_prices.insert(token.mint.clone(), current_price);
@@ -995,9 +1014,23 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 }
                             }
 
-                            // Return the token, price, and percent change if it's an opportunity
-                            if should_open_position {
-                                return Some((token, current_price, percent_change));
+                            // Return the token and price if buy signal detected
+                            if buy_urgency > 0.0 {
+                                let change = if let Ok(last_prices) = LAST_PRICES.try_lock() {
+                                    if let Some(&prev_price) = last_prices.get(&token.mint) {
+                                        if prev_price > 0.0 {
+                                            ((current_price - prev_price) / prev_price) * 100.0
+                                        } else {
+                                            0.0
+                                        }
+                                    } else {
+                                        0.0
+                                    }
+                                } else {
+                                    0.0
+                                };
+
+                                return Some((token, current_price, change));
                             }
                         }
                         None

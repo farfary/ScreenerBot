@@ -660,46 +660,4 @@ pub fn should_sell_dynamic(
     should_sell_smart_system(position, token, current_price, time_held_seconds)
 }
 
-/// Legacy function - wraps the new smart system with minimal token data
-pub fn should_sell_simple(position: &Position, current_price: f64, time_held_seconds: f64) -> f64 {
-    // Create a minimal token for basic analysis
-    let minimal_token = Token {
-        mint: position.mint.clone(),
-        symbol: position.symbol.clone(),
-        name: position.name.clone(),
-        decimals: 6, // Default
-        chain: "solana".to_string(),
-        logo_url: None,
-        coingecko_id: None,
-        website: None,
-        description: None,
-        tags: Vec::new(),
-        is_verified: false,
-        created_at: None,
-        price_dexscreener_sol: Some(current_price),
-        price_dexscreener_usd: None,
-        price_pool_sol: None,
-        price_pool_usd: None,
-        pools: Vec::new(),
-        dex_id: None,
-        pair_address: None,
-        pair_url: None,
-        labels: Vec::new(),
-        fdv: None,
-        market_cap: None,
-        txns: None, // No transaction data
-        volume: None, // No volume data
-        price_change: None, // No price change data
-        liquidity: None,
-        info: None,
-        boosts: None,
-    };
 
-    let (urgency, _) = should_sell_smart_system(
-        position,
-        &minimal_token,
-        current_price,
-        time_held_seconds
-    );
-    urgency
-}
