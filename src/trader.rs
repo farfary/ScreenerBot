@@ -50,7 +50,7 @@ use crate::positions::{
 use crate::summary::*;
 use crate::utils::*;
 use crate::pool_price::PoolDiscoveryAndPricing;
-use crate::profit::should_sell_dynamic;
+use crate::profit::should_sell_smart_system;
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -148,8 +148,8 @@ pub fn should_sell_new(pos: &Position, current_price: f64, now: DateTime<Utc>) -
     if let Ok(tokens) = LIST_TOKENS.read() {
         for token in tokens.iter() {
             if token.mint == pos.mint {
-                // Use the new dynamic profit system with full token data
-                let (urgency, _reason) = should_sell_dynamic(
+                // Use the new SMART profit system with full token data
+                let (urgency, _reason) = should_sell_smart_system(
                     pos,
                     token,
                     current_price,

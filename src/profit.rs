@@ -4,6 +4,29 @@ use crate::logger::{ log, LogTag };
 use chrono::{ DateTime, Utc };
 use serde::{ Serialize, Deserialize };
 
+/// Represents price movement velocity analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriceVelocityAnalysis {
+    pub velocity_5m: f64, // Price change rate in last 5 minutes
+    pub velocity_1h: f64, // Price change rate in last 1 hour
+    pub velocity_deceleration: f64, // How much velocity is slowing (negative = slowing)
+    pub profit_momentum_score: f64, // 0.0-1.0, how strong is profit momentum
+    pub loss_momentum_score: f64, // 0.0-1.0, how strong is loss momentum
+    pub is_momentum_fading: bool, // Is upward momentum clearly fading
+    pub is_freefall: bool, // Is downward momentum accelerating dangerously
+}
+
+/// Represents recovery probability analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryProbabilityAnalysis {
+    pub base_recovery_chance: f64, // Historical 30% recovery probability
+    pub buy_pressure_score: f64, // Current buy vs sell pressure
+    pub volume_health_score: f64, // Volume trend health
+    pub liquidity_stability_score: f64, // Liquidity holding up
+    pub social_momentum_score: f64, // Social/boost activity
+    pub combined_recovery_probability: f64, // Final recovery probability 0.0-1.0
+}
+
 /// Represents the analysis of how much a position has declined
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceDeclineAnalysis {
@@ -15,28 +38,434 @@ pub struct PriceDeclineAnalysis {
     pub max_drawdown_percent: f64,
 }
 
-/// Represents the volatility profile of a token based on historical data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenVolatilityProfile {
-    pub avg_volatility_5m: f64,
-    pub avg_volatility_1h: f64,
-    pub avg_volatility_6h: f64,
-    pub avg_volatility_24h: f64,
-    pub recovery_probability: f64,
-    pub momentum_score: f64,
-    pub volume_trend_score: f64,
+/// Analyzes price movement velocity to detect momentum changes
+pub fn analyze_price_velocity(
+    token: &Token,
+    current_price: f64,
+    position: &Position
+) -> PriceVelocityAnalysis {
+    let mut velocity_5m = 0.0;
+    let mut velocity_1h = 0.0;
+    let mut profit_momentum_score = 0.0;
+    let mut loss_momentum_score = 0.0;
+
+    // Calculate velocity from price changes (% change per unit time)
+    if let Some(price_changes) = &token.price_change {
+        velocity_5m = price_changes.m5.unwrap_or(0.0) / 5.0; // % per minute
+        velocity_1h = price_changes.h1.unwrap_or(0.0) / 60.0; // % per minute
+
+        // Detect if we're in profit or loss territory
+        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+        let current_pnl_percent = ((current_price - entry_price) / entry_price) * 100.0;
+
+        if current_pnl_percent > 0.0 {
+            // In profit - check if momentum is slowing
+            if velocity_5m > 0.0 && velocity_1h > 0.0 {
+                // Both positive, check if recent is stronger
+                profit_momentum_score = if velocity_5m > velocity_1h {
+                    0.8 // Strong recent momentum
+                } else {
+                    0.3 // Momentum fading
+                };
+            } else if velocity_5m > 0.0 {
+                profit_momentum_score = 0.5; // Only recent positive
+            } else {
+                profit_momentum_score = 0.1; // No positive momentum
+            }
+        } else {
+            // In loss - check if momentum is accelerating downward
+            if velocity_5m < 0.0 && velocity_1h < 0.0 {
+                // Both negative, check if recent is worse
+                loss_momentum_score = if velocity_5m < velocity_1h {
+                    0.9 // Accelerating downward - danger
+                } else {
+                    0.4 // Slowing down
+                };
+            } else if velocity_5m < 0.0 {
+                loss_momentum_score = 0.6; // Recent negative trend
+            } else {
+                loss_momentum_score = 0.2; // Improving
+            }
+        }
+    }
+
+    // Calculate deceleration (positive = accelerating, negative = decelerating)
+    let velocity_deceleration = velocity_5m - velocity_1h;
+
+    // Determine key conditions
+    let is_momentum_fading = profit_momentum_score > 0.0 && velocity_deceleration < -0.1;
+    let is_freefall = loss_momentum_score > 0.7 && velocity_deceleration < -0.2;
+
+    PriceVelocityAnalysis {
+        velocity_5m,
+        velocity_1h,
+        velocity_deceleration,
+        profit_momentum_score,
+        loss_momentum_score,
+        is_momentum_fading,
+        is_freefall,
+    }
 }
 
-/// Represents the dynamic profit target calculation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DynamicProfitTarget {
-    pub base_target_percent: f64,
-    pub time_decay_multiplier: f64,
-    pub volatility_adjustment: f64,
-    pub recovery_adjustment: f64,
-    pub decline_adjustment: f64,
-    pub final_target_percent: f64,
+/// Analyzes recovery probability using multiple data sources
+pub fn analyze_recovery_probability(
+    token: &Token,
+    position: &Position,
+    current_price: f64
+) -> RecoveryProbabilityAnalysis {
+    let mut buy_pressure_score = 0.5; // Default neutral
+    let mut volume_health_score = 0.5;
+    let mut liquidity_stability_score = 0.5;
+    let mut social_momentum_score = 0.5;
+
+    // Buy pressure analysis from transaction data
+    if let Some(txns) = &token.txns {
+        buy_pressure_score = calculate_smart_buy_pressure(txns);
+    }
+
+    // Volume health analysis
+    if let Some(volume) = &token.volume {
+        volume_health_score = calculate_volume_health(volume);
+    }
+
+    // Liquidity stability analysis
+    if let Some(liquidity) = &token.liquidity {
+        liquidity_stability_score = calculate_liquidity_stability(liquidity, token);
+    }
+
+    // Social momentum from boosts and info
+    social_momentum_score = calculate_social_momentum(token);
+
+    // Base recovery chance - most tokens do recover from 30% drops
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    let decline_percent = ((current_price - entry_price) / entry_price) * 100.0;
+
+    let base_recovery_chance = if decline_percent >= -30.0 {
+        0.75 // Historical data shows ~75% recovery from <30% drops
+    } else if decline_percent >= -50.0 {
+        0.45 // Lower chance from deeper drops
+    } else {
+        0.15 // Very low chance from >50% drops
+    };
+
+    // Combine all factors with weights
+    let combined_recovery_probability = (
+        base_recovery_chance * 0.4 + // Historical baseline
+        buy_pressure_score * 0.25 + // Current buying interest
+        volume_health_score * 0.15 + // Volume trend
+        liquidity_stability_score * 0.15 + // Liquidity holding
+        social_momentum_score * 0.05
+    ) // Social activity
+        .max(0.0)
+        .min(1.0);
+
+    RecoveryProbabilityAnalysis {
+        base_recovery_chance,
+        buy_pressure_score,
+        volume_health_score,
+        liquidity_stability_score,
+        social_momentum_score,
+        combined_recovery_probability,
+    }
 }
+
+/// Calculate smart buy pressure with heavy weighting on recent activity
+fn calculate_smart_buy_pressure(txns: &TxnStats) -> f64 {
+    let mut total_weighted_buys = 0.0;
+    let mut total_weighted_transactions = 0.0;
+
+    // 5-minute data: 8x weight (most important)
+    if let Some(ref m5) = txns.m5 {
+        let buys = m5.buys.unwrap_or(0) as f64;
+        let sells = m5.sells.unwrap_or(0) as f64;
+        let weight = 8.0;
+
+        total_weighted_buys += buys * weight;
+        total_weighted_transactions += (buys + sells) * weight;
+    }
+
+    // 1-hour data: 3x weight
+    if let Some(ref h1) = txns.h1 {
+        let buys = h1.buys.unwrap_or(0) as f64;
+        let sells = h1.sells.unwrap_or(0) as f64;
+        let weight = 3.0;
+
+        total_weighted_buys += buys * weight;
+        total_weighted_transactions += (buys + sells) * weight;
+    }
+
+    // 6-hour data: 1x weight (baseline)
+    if let Some(ref h6) = txns.h6 {
+        let buys = h6.buys.unwrap_or(0) as f64;
+        let sells = h6.sells.unwrap_or(0) as f64;
+        let weight = 1.0;
+
+        total_weighted_buys += buys * weight;
+        total_weighted_transactions += (buys + sells) * weight;
+    }
+
+    if total_weighted_transactions > 0.0 {
+        total_weighted_buys / total_weighted_transactions
+    } else {
+        0.5 // Neutral if no data
+    }
+}
+
+/// Calculate volume health - increasing volume is bullish, declining is bearish
+fn calculate_volume_health(volume: &VolumeStats) -> f64 {
+    let mut score: f64 = 0.5; // Default neutral
+
+    // Recent volume surge detection
+    if let (Some(m5), Some(h1)) = (volume.m5, volume.h1) {
+        let expected_5m = h1 / 12.0; // Expected 5m volume if consistent
+        if m5 > expected_5m * 2.0 {
+            score += 0.3; // Strong recent volume surge
+        } else if m5 > expected_5m * 1.5 {
+            score += 0.15; // Moderate volume increase
+        } else if m5 < expected_5m * 0.5 {
+            score -= 0.2; // Volume declining
+        }
+    }
+
+    // Hourly vs 6-hour trend
+    if let (Some(h1), Some(h6)) = (volume.h1, volume.h6) {
+        let expected_1h = h6 / 6.0;
+        if h1 > expected_1h * 1.5 {
+            score += 0.2; // Volume trend increasing
+        } else if h1 < expected_1h * 0.7 {
+            score -= 0.15; // Volume trend decreasing
+        }
+    }
+
+    score.max(0.0).min(1.0)
+}
+
+/// Calculate liquidity stability - stable/increasing liquidity is bullish
+fn calculate_liquidity_stability(liquidity: &LiquidityInfo, _token: &Token) -> f64 {
+    // Use current liquidity as baseline
+    if let Some(current_liquidity) = liquidity.usd {
+        if current_liquidity > 100000.0 {
+            // >100K liquidity
+            0.8 // Very stable
+        } else if current_liquidity > 50000.0 {
+            // >50K liquidity
+            0.6 // Reasonably stable
+        } else if current_liquidity > 20000.0 {
+            // >20K liquidity
+            0.4 // Somewhat stable
+        } else {
+            0.2 // Low liquidity - risky
+        }
+    } else {
+        0.3 // Unknown liquidity
+    }
+}
+
+/// Calculate social momentum from boosts and social activity
+fn calculate_social_momentum(token: &Token) -> f64 {
+    let mut score: f64 = 0.5; // Default neutral
+
+    // Active boosts are bullish
+    if let Some(boosts) = &token.boosts {
+        if let Some(active_boosts) = boosts.active {
+            if active_boosts > 0 {
+                score += 0.3; // Active promotion
+            }
+        }
+    }
+
+    // Social links presence
+    if let Some(info) = &token.info {
+        if !info.socials.is_empty() {
+            score += 0.1; // Has social presence
+        }
+        if !info.websites.is_empty() {
+            score += 0.1; // Has website
+        }
+    }
+
+    score.max(0.0).min(1.0)
+}
+
+/// SMART PROFIT SYSTEM - Main decision engine
+/// This is the ONLY function that should be called from the trading bot
+/// It implements fast profit taking and smart loss management
+pub fn should_sell_smart_system(
+    position: &Position,
+    token: &Token,
+    current_price: f64,
+    time_held_seconds: f64
+) -> (f64, String) {
+    let (_, current_pnl_percent) = calculate_position_pnl(position, Some(current_price));
+
+    // === EMERGENCY EXITS - Immediate action required ===
+
+    // Catastrophic loss - immediate exit regardless of recovery probability
+    if current_pnl_percent <= -60.0 {
+        return (1.0, "EMERGENCY: Catastrophic loss >60%".to_string());
+    }
+
+    // Analyze market conditions
+    let velocity_analysis = analyze_price_velocity(token, current_price, position);
+    let recovery_analysis = analyze_recovery_probability(token, position, current_price);
+
+    // Freefall detection - price accelerating downward dangerously
+    if velocity_analysis.is_freefall && current_pnl_percent <= -25.0 {
+        return (0.95, "DANGER: Freefall detected with significant loss".to_string());
+    }
+
+    // === PROFIT MOMENTUM SYSTEM - Fast profit taking ===
+
+    if current_pnl_percent > 5.0 {
+        // In meaningful profit
+
+        // Momentum fading while profitable - SELL FAST
+        if velocity_analysis.is_momentum_fading {
+            let urgency = 0.85 + (current_pnl_percent / 100.0).min(0.1); // Higher profit = more urgent
+            return (urgency, format!("Profit momentum fading at +{:.1}%", current_pnl_percent));
+        }
+
+        // Strong profit but low momentum score - momentum dying
+        if current_pnl_percent > 15.0 && velocity_analysis.profit_momentum_score < 0.3 {
+            return (0.9, format!("Strong profit +{:.1}% but momentum dying", current_pnl_percent));
+        }
+
+        // Very high profit with any momentum concerns
+        if current_pnl_percent > 30.0 && velocity_analysis.profit_momentum_score < 0.6 {
+            return (0.95, format!("Very high profit +{:.1}% - secure gains", current_pnl_percent));
+        }
+
+        // Time-based profit taking - longer held = lower expectations
+        let time_hours = time_held_seconds / 3600.0;
+        if time_hours > 1.0 {
+            let time_decay_urgency = (time_hours / 6.0).min(0.4); // Max 40% urgency from time
+            let profit_urgency = (current_pnl_percent / 100.0).min(0.3); // Max 30% from profit
+
+            if time_decay_urgency + profit_urgency > 0.5 {
+                return (
+                    0.6 + time_decay_urgency,
+                    format!(
+                        "Time decay: {:.1}h held with +{:.1}% profit",
+                        time_hours,
+                        current_pnl_percent
+                    ),
+                );
+            }
+        }
+    }
+
+    // === SMART LOSS MANAGEMENT SYSTEM ===
+
+    if current_pnl_percent < -5.0 {
+        // In loss territory
+
+        // The 30% rule - most tokens drop 30% and recover, so be patient initially
+        if current_pnl_percent >= -30.0 {
+            // BUT exit early if recovery probability is very low
+            if recovery_analysis.combined_recovery_probability < 0.25 {
+                let urgency = 0.7 + ((30.0 + current_pnl_percent) / 30.0) * 0.2; // Worse loss = more urgent
+                return (
+                    urgency,
+                    format!(
+                        "Low recovery probability {:.1}% at {:.1}% loss",
+                        recovery_analysis.combined_recovery_probability * 100.0,
+                        current_pnl_percent
+                    ),
+                );
+            }
+
+            // Exit if strong negative momentum with moderate loss
+            if velocity_analysis.loss_momentum_score > 0.8 && current_pnl_percent <= -20.0 {
+                return (
+                    0.75,
+                    format!("Strong negative momentum at {:.1}% loss", current_pnl_percent),
+                );
+            }
+
+            // Very low buy pressure in loss territory
+            if recovery_analysis.buy_pressure_score < 0.2 && current_pnl_percent <= -15.0 {
+                return (0.65, format!("No buying interest at {:.1}% loss", current_pnl_percent));
+            }
+        } else {
+            // Beyond -30% - danger zone
+
+            // High recovery probability - give it a chance but be cautious
+            if recovery_analysis.combined_recovery_probability > 0.6 {
+                // But not forever - exit if too deep or too long
+                if current_pnl_percent <= -45.0 || time_held_seconds > 7200.0 {
+                    // 2 hours
+                    return (
+                        0.8,
+                        format!(
+                            "Deep loss {:.1}% despite high recovery probability",
+                            current_pnl_percent
+                        ),
+                    );
+                }
+
+                // Monitor momentum - if still falling fast, exit
+                if velocity_analysis.loss_momentum_score > 0.7 {
+                    return (
+                        0.75,
+                        format!(
+                            "High recovery probability but momentum still negative at {:.1}%",
+                            current_pnl_percent
+                        ),
+                    );
+                }
+            } else {
+                // Low recovery probability beyond -30%
+
+                let urgency = 0.85 + ((current_pnl_percent + 30.0) / -20.0) * 0.1; // Deeper = more urgent
+                return (
+                    urgency.min(0.98),
+                    format!(
+                        "Beyond 30% loss with low recovery probability: {:.1}%",
+                        current_pnl_percent
+                    ),
+                );
+            }
+        }
+    }
+
+    // === VOLUME AND LIQUIDITY CONCERNS ===
+
+    // Low volume during any price movement is concerning
+    if recovery_analysis.volume_health_score < 0.3 {
+        let volume_urgency = if current_pnl_percent > 0.0 {
+            0.4 // In profit - moderate urgency
+        } else {
+            0.3 // In loss - lower urgency (might recover)
+        };
+
+        if volume_urgency > 0.35 {
+            return (volume_urgency, "Low volume - weak price action".to_string());
+        }
+    }
+
+    // Liquidity concerns
+    if recovery_analysis.liquidity_stability_score < 0.3 && current_pnl_percent <= -10.0 {
+        return (0.55, "Low liquidity with loss - exit risk".to_string());
+    }
+
+    // === DEFAULT: HOLD ===
+
+    // Calculate a small base urgency based on time and minor factors
+    let time_hours = time_held_seconds / 3600.0;
+    let base_urgency = (time_hours / 12.0).min(0.15); // Very gradual time pressure
+
+    let reason = if current_pnl_percent > 0.0 {
+        format!("Hold: +{:.1}% profit with good momentum", current_pnl_percent)
+    } else if current_pnl_percent >= -30.0 {
+        format!("Hold: {:.1}% loss within recovery range", current_pnl_percent)
+    } else {
+        format!("Monitor: {:.1}% loss - watching recovery signals", current_pnl_percent)
+    };
+
+    (base_urgency, reason)
+}
+
+/// Legacy compatibility functions - these wrap the new smart system
 
 /// Analyzes how much the price has declined since position entry
 pub fn analyze_price_decline(position: &Position, current_price: f64) -> PriceDeclineAnalysis {
@@ -58,297 +487,17 @@ pub fn analyze_price_decline(position: &Position, current_price: f64) -> PriceDe
     }
 }
 
-/// Analyzes token volatility and recovery probability based on available data
-pub fn analyze_token_volatility(token: &Token) -> TokenVolatilityProfile {
-    let mut profile = TokenVolatilityProfile {
-        avg_volatility_5m: 0.0,
-        avg_volatility_1h: 0.0,
-        avg_volatility_6h: 0.0,
-        avg_volatility_24h: 0.0,
-        recovery_probability: 0.5, // Default neutral
-        momentum_score: 0.5, // Default neutral
-        volume_trend_score: 0.5, // Default neutral
-    };
-
-    // Calculate volatility from price changes if available
-    if let Some(price_changes) = &token.price_change {
-        profile.avg_volatility_5m = price_changes.m5.unwrap_or(0.0).abs();
-        profile.avg_volatility_1h = price_changes.h1.unwrap_or(0.0).abs();
-        profile.avg_volatility_6h = price_changes.h6.unwrap_or(0.0).abs();
-        profile.avg_volatility_24h = price_changes.h24.unwrap_or(0.0).abs();
-
-        // Recovery probability based on recent positive movements
-        let positive_movements = [
-            price_changes.m5.unwrap_or(0.0) > 0.0,
-            price_changes.h1.unwrap_or(0.0) > 0.0,
-            price_changes.h6.unwrap_or(0.0) > 0.0,
-        ]
-            .iter()
-            .filter(|&&x| x)
-            .count();
-
-        profile.recovery_probability = (positive_movements as f64) / 3.0;
-
-        // If we have 24h data, use it for longer-term recovery assessment
-        if let Some(h24_change) = price_changes.h24 {
-            if h24_change > 0.0 {
-                profile.recovery_probability = (profile.recovery_probability + 0.3).min(1.0);
-            }
-        }
-    }
-
-    // Momentum score based on transaction activity (buy pressure)
-    if let Some(txns) = &token.txns {
-        profile.momentum_score = calculate_buy_pressure(txns);
-    }
-
-    // Volume trend analysis
-    if let Some(volume) = &token.volume {
-        profile.volume_trend_score = calculate_volume_trend(volume);
-    }
-
-    profile
-}
-
-/// Calculates buy pressure from transaction data
-fn calculate_buy_pressure(txns: &TxnStats) -> f64 {
-    let mut total_buys = 0.0;
-    let mut total_sells = 0.0;
-    let mut timeframe_count = 0;
-
-    // Weight recent activity more heavily
-    if let Some(ref m5) = txns.m5 {
-        let buys = m5.buys.unwrap_or(0) as f64;
-        let sells = m5.sells.unwrap_or(0) as f64;
-        total_buys += buys * 4.0; // 4x weight for 5m data
-        total_sells += sells * 4.0;
-        timeframe_count += 1;
-    }
-
-    if let Some(ref h1) = txns.h1 {
-        let buys = h1.buys.unwrap_or(0) as f64;
-        let sells = h1.sells.unwrap_or(0) as f64;
-        total_buys += buys * 2.0; // 2x weight for 1h data
-        total_sells += sells * 2.0;
-        timeframe_count += 1;
-    }
-
-    if let Some(ref h6) = txns.h6 {
-        let buys = h6.buys.unwrap_or(0) as f64;
-        let sells = h6.sells.unwrap_or(0) as f64;
-        total_buys += buys; // 1x weight for 6h data
-        total_sells += sells;
-        timeframe_count += 1;
-    }
-
-    if total_buys + total_sells > 0.0 {
-        total_buys / (total_buys + total_sells)
-    } else {
-        0.5 // Neutral if no transaction data
-    }
-}
-
-/// Calculates volume trend score (increasing volume is bullish)
-fn calculate_volume_trend(volume: &VolumeStats) -> f64 {
-    let mut score: f64 = 0.5; // Default neutral
-
-    // Compare recent volume to longer timeframes
-    if let (Some(m5), Some(h1)) = (volume.m5, volume.h1) {
-        if m5 > h1 * 0.083 {
-            // 5min should be ~1/12 of hourly if consistent
-            score += 0.2; // Recent volume spike
-        }
-    }
-
-    if let (Some(h1), Some(h6)) = (volume.h1, volume.h6) {
-        if h1 > h6 * 0.167 {
-            // 1h should be ~1/6 of 6h if consistent
-            score += 0.2; // Hourly volume increasing
-        }
-    }
-
-    if let (Some(h6), Some(h24)) = (volume.h6, volume.h24) {
-        if h6 > h24 * 0.25 {
-            // 6h should be ~1/4 of 24h if consistent
-            score += 0.1; // Daily volume trend up
-        }
-    }
-
-    score.max(0.0).min(1.0)
-}
-
-/// Calculates dynamic profit target based on time, volatility, and position performance
-pub fn calculate_dynamic_profit_target(
-    position: &Position,
-    token: &Token,
-    current_price: f64,
-    time_held_seconds: f64
-) -> DynamicProfitTarget {
-    let volatility = analyze_token_volatility(token);
-    let decline = analyze_price_decline(position, current_price);
-
-    // Base target starts very high (exponential decay model from chart)
-    let base_target = 500.0; // 500% initial target like the green line
-
-    // Exponential time decay (steeper than original chart for faster convergence)
-    let time_decay = ((-0.15 * time_held_seconds) / 3600.0).exp(); // Decay over hours
-
-    // Volatility adjustment - more volatile tokens get higher targets
-    let avg_volatility = (volatility.avg_volatility_1h + volatility.avg_volatility_6h) / 2.0;
-    let volatility_multiplier = if avg_volatility > 50.0 {
-        1.5 // Very volatile tokens
-    } else if avg_volatility > 20.0 {
-        1.2 // Moderately volatile
-    } else {
-        1.0 // Low volatility
-    };
-
-    // Recovery adjustment - if token shows signs of recovery, be more patient
-    let recovery_multiplier = if volatility.recovery_probability > 0.7 {
-        1.4 // High recovery probability
-    } else if volatility.recovery_probability > 0.5 {
-        1.1 // Moderate recovery probability
-    } else if volatility.recovery_probability < 0.3 {
-        0.7 // Low recovery probability - exit faster
-    } else {
-        1.0 // Neutral
-    };
-
-    // Decline adjustment - if we're significantly down, lower expectations dramatically
-    let decline_adjustment = if decline.decline_from_entry_percent < -30.0 {
-        0.3 // Heavily underwater - very low targets
-    } else if decline.decline_from_entry_percent < -20.0 {
-        0.5 // Significantly down - lower targets
-    } else if decline.decline_from_entry_percent < -10.0 {
-        0.8 // Moderately down - slightly lower targets
-    } else {
-        1.0 // Profitable or small loss - normal targets
-    };
-
-    // Combine all factors
-    let final_target =
-        base_target * time_decay * volatility_multiplier * recovery_multiplier * decline_adjustment;
-
-    // Set reasonable bounds
-    let bounded_target = final_target.max(3.0).min(1000.0); // Between 3% and 1000%
-
-    DynamicProfitTarget {
-        base_target_percent: base_target,
-        time_decay_multiplier: time_decay,
-        volatility_adjustment: volatility_multiplier,
-        recovery_adjustment: recovery_multiplier,
-        decline_adjustment,
-        final_target_percent: bounded_target,
-    }
-}
-
-/// Enhanced should sell logic using dynamic profit calculation
+/// Legacy function - wraps the new smart system
 pub fn should_sell_dynamic(
     position: &Position,
     token: &Token,
     current_price: f64,
     time_held_seconds: f64
 ) -> (f64, String) {
-    let (_, current_pnl_percent) = calculate_position_pnl(position, Some(current_price));
-
-    // Get analysis components
-    let profit_target = calculate_dynamic_profit_target(
-        position,
-        token,
-        current_price,
-        time_held_seconds
-    );
-    let volatility = analyze_token_volatility(token);
-    let decline = analyze_price_decline(position, current_price);
-
-    let mut urgency: f64 = 0.0;
-    let mut reasons = Vec::new();
-
-    // Emergency stop loss - immediate exit
-    if current_pnl_percent <= -50.0 {
-        return (1.0, "Emergency stop loss: -50%".to_string());
-    }
-
-    // Catastrophic decline with low recovery probability
-    if current_pnl_percent <= -30.0 && volatility.recovery_probability < 0.3 {
-        return (
-            0.95,
-            format!("Catastrophic decline {}% with low recovery probability", current_pnl_percent),
-        );
-    }
-
-    // Dynamic profit target reached
-    if current_pnl_percent >= profit_target.final_target_percent {
-        urgency = 0.9;
-        reasons.push(format!("Profit target {:.1}% reached", profit_target.final_target_percent));
-    }
-
-    // Time-based urgency (exponential decay like the chart)
-    if time_held_seconds > 1800.0 {
-        // After 30 minutes
-        let time_urgency = 1.0 - (-time_held_seconds / 7200.0).exp(); // 2-hour exponential decay
-        urgency = urgency.max(time_urgency * 0.6);
-        reasons.push(format!("Time decay: {:.1}%", time_urgency * 100.0));
-    }
-
-    // Recovery probability adjustment
-    if volatility.recovery_probability < 0.3 && current_pnl_percent < -5.0 {
-        urgency += 0.25;
-        reasons.push("Low recovery probability".to_string());
-    }
-
-    // Momentum-based adjustment
-    if volatility.momentum_score < 0.4 {
-        // More sells than buys
-        urgency += 0.2;
-        reasons.push("Negative momentum".to_string());
-    }
-
-    // Volume trend consideration
-    if volatility.volume_trend_score < 0.4 && current_pnl_percent < 0.0 {
-        urgency += 0.15;
-        reasons.push("Declining volume".to_string());
-    }
-
-    // Maximum drawdown consideration
-    if decline.max_drawdown_percent < -40.0 && current_pnl_percent < -20.0 {
-        urgency += 0.3;
-        reasons.push("Severe drawdown history".to_string());
-    }
-
-    // Volatility spike protection (if very volatile but declining, exit faster)
-    if volatility.avg_volatility_1h > 30.0 && current_pnl_percent < -15.0 {
-        urgency += 0.2;
-        reasons.push("High volatility with loss".to_string());
-    }
-
-    // Ensure urgency is within bounds
-    urgency = urgency.max(0.0).min(1.0);
-
-    let reason = if reasons.is_empty() { "Hold".to_string() } else { reasons.join(" + ") };
-
-    // Log detailed analysis for debugging
-    if urgency > 0.3 {
-        log(
-            LogTag::Trader,
-            "ANALYSIS",
-            &format!(
-                "{}: P&L {:.1}% | Target {:.1}% | Recovery {:.1}% | Momentum {:.1}% | Urgency {:.1}% | {}",
-                position.symbol,
-                current_pnl_percent,
-                profit_target.final_target_percent,
-                volatility.recovery_probability * 100.0,
-                volatility.momentum_score * 100.0,
-                urgency * 100.0,
-                reason
-            )
-        );
-    }
-
-    (urgency, reason)
+    should_sell_smart_system(position, token, current_price, time_held_seconds)
 }
 
-/// Quick helper to get basic sell decision without full analysis (for compatibility)
+/// Legacy function - wraps the new smart system with minimal token data
 pub fn should_sell_simple(position: &Position, current_price: f64, time_held_seconds: f64) -> f64 {
     // Create a minimal token for basic analysis
     let minimal_token = Token {
@@ -383,7 +532,7 @@ pub fn should_sell_simple(position: &Position, current_price: f64, time_held_sec
         boosts: None,
     };
 
-    let (urgency, _) = should_sell_dynamic(
+    let (urgency, _) = should_sell_smart_system(
         position,
         &minimal_token,
         current_price,
