@@ -13,7 +13,7 @@ use solana_sdk::{
     signer::Signer,
     pubkey::Pubkey,
     instruction::Instruction,
-    transaction::Transaction
+    transaction::Transaction,
 };
 use spl_token::instruction::close_account;
 use bs58;
@@ -695,13 +695,13 @@ pub fn extract_sol_transfer_from_instructions(
     // This function needs to be enhanced to work with the proper transaction format
     // For now, we'll return None and rely on the balance change method
     // TODO: Enhance this to parse actual transaction instructions from RPC response
-    
+
     log(
         LogTag::Trader,
         "INFO",
         "extract_sol_transfer_from_instructions: Transaction instruction parsing not yet implemented for this format"
     );
-    
+
     None
 }
 
@@ -1818,10 +1818,20 @@ pub async fn sell_token(
     // For Token -> SOL swaps, try to get exact SOL received from instructions
     let exact_sol_received = if request.output_mint == SOL_MINT {
         // Try to get transaction details and extract exact SOL transfer
-        match get_transaction_details(&reqwest::Client::new(), &transaction_signature, &configs.rpc_url).await {
+        match
+            get_transaction_details(
+                &reqwest::Client::new(),
+                &transaction_signature,
+                &configs.rpc_url
+            ).await
+        {
             Ok(details) => extract_sol_transfer_from_instructions(&details, &wallet_address),
             Err(e) => {
-                log(LogTag::Trader, "INFO", &format!("Could not extract exact SOL from instructions: {}", e));
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    &format!("Could not extract exact SOL from instructions: {}", e)
+                );
                 None
             }
         }
@@ -1841,7 +1851,7 @@ pub async fn sell_token(
             )
         );
         // Convert back to lamports for consistency
-        (exact_sol * 10_f64.powi(9)) as u64
+        (exact_sol * (10_f64).powi(9)) as u64
     } else {
         actual_output_change
     };

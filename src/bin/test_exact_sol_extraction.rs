@@ -29,6 +29,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   - P&L calculation remains focused on pure trading performance");
     println!("   - ATA rent is clearly logged as separate wallet cleanup operation");
     println!("   - Logging distinguishes between trading gains and operational benefits");
-    
+
     Ok(())
 }
