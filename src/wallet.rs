@@ -460,8 +460,8 @@ pub fn detect_and_separate_ata_rent(
     }
 
     // Standard ATA rent amounts (in lamports)
-    const ATA_RENT_LAMPORTS: u64 = 2_039_280;  // Standard ATA rent
-    const ATA_RENT_TOLERANCE: u64 = 100_000;   // Allow some tolerance
+    const ATA_RENT_LAMPORTS: u64 = 2_039_280; // Standard ATA rent
+    const ATA_RENT_TOLERANCE: u64 = 100_000; // Allow some tolerance
 
     let mut ata_close_detected = false;
     let mut ata_rent_reclaimed = 0u64;
@@ -485,10 +485,10 @@ pub fn detect_and_separate_ata_rent(
     // Method 2: Check for accounts with negative balance changes (account closures)
     if !ata_close_detected {
         if let Some(meta) = &transaction.meta {
-            for (i, (pre_balance, post_balance)) in meta.pre_balances.iter()
+            for (i, (pre_balance, post_balance)) in meta.pre_balances
+                .iter()
                 .zip(meta.post_balances.iter())
-                .enumerate() 
-            {
+                .enumerate() {
                 // Skip the wallet account (first account)
                 if i == 0 {
                     continue;
@@ -497,13 +497,15 @@ pub fn detect_and_separate_ata_rent(
                 // Look for negative balance changes (account closures)
                 if *post_balance < *pre_balance {
                     let closed_amount = *pre_balance - *post_balance;
-                    
+
                     // Check if this matches ATA rent amount
-                    if closed_amount >= ATA_RENT_LAMPORTS - ATA_RENT_TOLERANCE &&
-                       closed_amount <= ATA_RENT_LAMPORTS + ATA_RENT_TOLERANCE {
+                    if
+                        closed_amount >= ATA_RENT_LAMPORTS - ATA_RENT_TOLERANCE &&
+                        closed_amount <= ATA_RENT_LAMPORTS + ATA_RENT_TOLERANCE
+                    {
                         log(
-                            LogTag::Trader, 
-                            "ATA_DETECT", 
+                            LogTag::Trader,
+                            "ATA_DETECT",
                             &format!("ATA account closure detected: {} lamports closed, matches rent pattern", closed_amount)
                         );
                         ata_close_detected = true;
@@ -538,7 +540,7 @@ pub fn detect_and_separate_ata_rent(
         if ata_rent_reclaimed == 0 {
             ata_rent_reclaimed = ATA_RENT_LAMPORTS;
         }
-        
+
         log(
             LogTag::Trader,
             "ATA_DETECT",
