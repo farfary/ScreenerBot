@@ -12,8 +12,8 @@ pub const MAX_OPEN_POSITIONS: usize = 30;
 
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 10.0;
-pub const PROFIT_TARGET_PERCENT: f64 = 10.0; // Take profit at +25%
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
+pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +25%
 
 pub const STOP_LOSS_PERCENT: f64 = -99.0;
 pub const STOP_LOSS_PERCENT_AGGRESIVE: f64 = -99.0;
@@ -22,8 +22,8 @@ pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 
-pub const MIN_TOKEN_AGE_HOURS: i64 = 0; // Don't trade tokens younger than 24 hours
-pub const MAX_TOKEN_AGE_HOURS: i64 = 9999; // Don't trade tokens older than 3 days (72 hours)
+pub const MIN_TOKEN_AGE_HOURS: i64 = 12; // Don't trade tokens younger than 24 hours
+pub const MAX_TOKEN_AGE_HOURS: i64 = 999; // Don't trade tokens older than 3 days (72 hours)
 
 pub const MIN_HOLD_TIME_SECS: f64 = 30.0; // Hold for at least 3 minutes
 pub const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold

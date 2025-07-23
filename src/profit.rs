@@ -14,6 +14,9 @@ pub struct PriceVelocityAnalysis {
     pub loss_momentum_score: f64, // 0.0-1.0, how strong is loss momentum
     pub is_momentum_fading: bool, // Is upward momentum clearly fading
     pub is_freefall: bool, // Is downward momentum accelerating dangerously
+    pub is_fast_spike: bool, // >25% jump detected in <15 minutes
+    pub spike_magnitude: f64, // Size of the spike in percentage
+    pub spike_sustainability_score: f64, // How likely the spike is to hold (0.0-1.0)
 }
 
 /// Represents recovery probability analysis
@@ -48,11 +51,38 @@ pub fn analyze_price_velocity(
     let mut velocity_1h = 0.0;
     let mut profit_momentum_score = 0.0;
     let mut loss_momentum_score = 0.0;
+    let mut is_fast_spike = false;
+    let mut spike_magnitude = 0.0;
+    let mut spike_sustainability_score = 0.5;
 
     // Calculate velocity from price changes (% change per unit time)
     if let Some(price_changes) = &token.price_change {
         velocity_5m = price_changes.m5.unwrap_or(0.0) / 5.0; // % per minute
         velocity_1h = price_changes.h1.unwrap_or(0.0) / 60.0; // % per minute
+
+        // FAST SPIKE DETECTION - >25% in 15 minutes or less
+        let change_5m = price_changes.m5.unwrap_or(0.0);
+        let change_1h = price_changes.h1.unwrap_or(0.0);
+
+        // Detect fast spike: significant 5-minute change that's much larger than hourly average
+        if change_5m > 25.0 {
+            // Direct >25% in 5 minutes - definitely a fast spike
+            is_fast_spike = true;
+            spike_magnitude = change_5m;
+        } else if change_5m > 15.0 && change_1h > 25.0 {
+            // Strong 5-minute change combined with >25% hourly suggests fast spike within 15 min
+            is_fast_spike = true;
+            spike_magnitude = change_1h;
+        }
+
+        // Calculate spike sustainability based on volume, liquidity, and momentum consistency
+        if is_fast_spike {
+            spike_sustainability_score = calculate_spike_sustainability(
+                token,
+                change_5m,
+                change_1h
+            );
+        }
 
         // Detect if we're in profit or loss territory
         let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
@@ -104,6 +134,9 @@ pub fn analyze_price_velocity(
         loss_momentum_score,
         is_momentum_fading,
         is_freefall,
+        is_fast_spike,
+        spike_magnitude,
+        spike_sustainability_score,
     }
 }
 
@@ -287,6 +320,83 @@ fn calculate_social_momentum(token: &Token) -> f64 {
     score.max(0.0).min(1.0)
 }
 
+/// Calculate spike sustainability - how likely a fast spike is to hold vs dump immediately
+/// Considers volume surge, liquidity depth, momentum consistency, and market conditions
+fn calculate_spike_sustainability(token: &Token, change_5m: f64, change_1h: f64) -> f64 {
+    let mut sustainability_score: f64 = 0.5; // Start neutral
+
+    // Volume analysis - spikes with volume surge are more sustainable
+    if let Some(volume) = &token.volume {
+        if let (Some(vol_5m), Some(vol_1h)) = (volume.m5, volume.h1) {
+            let expected_5m_volume = vol_1h / 12.0; // Expected if consistent
+            let volume_surge_ratio = vol_5m / expected_5m_volume;
+
+            if volume_surge_ratio > 5.0 {
+                sustainability_score += 0.3; // Strong volume support - very bullish
+            } else if volume_surge_ratio > 3.0 {
+                sustainability_score += 0.2; // Good volume support
+            } else if volume_surge_ratio > 1.5 {
+                sustainability_score += 0.1; // Some volume support
+            } else if volume_surge_ratio < 0.8 {
+                sustainability_score -= 0.2; // Weak volume - concerning for spike
+            }
+        }
+    }
+
+    // Liquidity depth analysis - deeper liquidity supports price stability
+    if let Some(liquidity) = &token.liquidity {
+        if let Some(usd_liquidity) = liquidity.usd {
+            if usd_liquidity > 500000.0 {
+                sustainability_score += 0.25; // Deep liquidity pool - can absorb sells
+            } else if usd_liquidity > 200000.0 {
+                sustainability_score += 0.15; // Good liquidity
+            } else if usd_liquidity > 100000.0 {
+                sustainability_score += 0.05; // Moderate liquidity
+            } else if usd_liquidity < 50000.0 {
+                sustainability_score -= 0.15; // Shallow liquidity - spike likely to dump
+            }
+        }
+    }
+
+    // Momentum consistency analysis - gradual buildup vs sudden spike
+    let momentum_consistency = if change_1h > 0.0 {
+        (change_5m / change_1h).min(2.0) // How much of hourly gain is in last 5 minutes
+    } else {
+        0.0
+    };
+
+    if momentum_consistency > 1.5 {
+        // Most gains in last 5 minutes - possible pump and dump
+        sustainability_score -= 0.2;
+    } else if momentum_consistency > 0.8 && momentum_consistency <= 1.2 {
+        // Consistent momentum buildup - more sustainable
+        sustainability_score += 0.15;
+    }
+
+    // Transaction pattern analysis - buying vs selling pressure during spike
+    if let Some(txns) = &token.txns {
+        let buy_pressure = calculate_smart_buy_pressure(txns);
+        if buy_pressure > 0.7 {
+            sustainability_score += 0.2; // Strong buying pressure supports spike
+        } else if buy_pressure > 0.6 {
+            sustainability_score += 0.1; // Good buying pressure
+        } else if buy_pressure < 0.4 {
+            sustainability_score -= 0.15; // More selling than buying during spike - red flag
+        }
+    }
+
+    // Spike magnitude risk - larger spikes are harder to sustain
+    if change_5m > 100.0 {
+        sustainability_score -= 0.3; // Extreme spikes often unsustainable
+    } else if change_5m > 50.0 {
+        sustainability_score -= 0.2; // Large spikes risky
+    } else if change_5m > 35.0 {
+        sustainability_score -= 0.1; // Moderate spike risk
+    }
+
+    sustainability_score.max(0.0).min(1.0)
+}
+
 /// SMART PROFIT SYSTEM - Main decision engine
 /// This is the ONLY function that should be called from the trading bot
 /// It implements fast profit taking and smart loss management
@@ -308,6 +418,59 @@ pub fn should_sell_smart_system(
     // Analyze market conditions
     let velocity_analysis = analyze_price_velocity(token, current_price, position);
     let recovery_analysis = analyze_recovery_probability(token, position, current_price);
+
+    // === FAST SPIKE DETECTION - >25% jump in <15 minutes ===
+
+    if velocity_analysis.is_fast_spike && current_pnl_percent > 15.0 {
+        // Fast spike detected with meaningful profit
+
+        let time_minutes = time_held_seconds / 60.0;
+
+        // Time-based urgency - faster spikes need faster exits
+        let time_urgency: f64 = if time_minutes < 5.0 {
+            0.9 // Very recent spike - high urgency
+        } else if time_minutes < 10.0 {
+            0.8 // Recent spike - high urgency
+        } else if time_minutes < 20.0 {
+            0.7 // Moderate time urgency
+        } else {
+            0.6 // Lower time urgency but still significant
+        };
+
+        // Sustainability-based adjustment
+        let sustainability_adjustment: f64 = if velocity_analysis.spike_sustainability_score > 0.7 {
+            -0.15 // High sustainability - reduce urgency slightly
+        } else if velocity_analysis.spike_sustainability_score > 0.5 {
+            -0.05 // Moderate sustainability - small reduction
+        } else if velocity_analysis.spike_sustainability_score < 0.3 {
+            0.1 // Low sustainability - increase urgency
+        } else {
+            0.0 // Neutral
+        };
+
+        // Profit magnitude consideration - higher profits deserve more caution
+        let profit_adjustment: f64 = if current_pnl_percent > 100.0 {
+            0.05 // Extreme profits - more urgent to secure
+        } else if current_pnl_percent > 50.0 {
+            0.03 // High profits - slightly more urgent
+        } else {
+            0.0
+        };
+
+        let final_urgency: f64 = (time_urgency + sustainability_adjustment + profit_adjustment)
+            .max(0.6) // Minimum 60% urgency for fast spikes
+            .min(0.98); // Cap at 98%
+
+        return (
+            final_urgency,
+            format!(
+                "FAST SPIKE: +{:.1}% spike detected ({:.1}% profit) - sustainability {:.0}%",
+                velocity_analysis.spike_magnitude,
+                current_pnl_percent,
+                velocity_analysis.spike_sustainability_score * 100.0
+            ),
+        );
+    }
 
     // Freefall detection - price accelerating downward dangerously
     if velocity_analysis.is_freefall && current_pnl_percent <= -25.0 {
