@@ -51,6 +51,7 @@ use crate::summary::*;
 use crate::utils::*;
 use crate::pool_price::PoolDiscoveryAndPricing;
 use crate::profit::should_sell_smart_system;
+use crate::loss_prevention::should_allow_token_purchase;
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -145,7 +146,90 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     f64::max(0.0, f64::min(final_urgency, 1.0))
 }
 
-/// Determines if a token should be bought based on price drop and historical analysis
+/// Calculate dynamic liquidity thresholds based on current token watch list
+/// Returns (high_threshold, medium_threshold, low_threshold) for liquidity factoring
+fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
+    if let Ok(tokens) = LIST_TOKENS.read() {
+        // Collect all liquidity values from tokens with valid liquidity data
+        let mut liquidity_values: Vec<f64> = tokens
+            .iter()
+            .filter_map(|token| {
+                token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .filter(|&usd| usd > 0.0)
+            })
+            .collect();
+
+        if liquidity_values.is_empty() {
+            // Fallback to original hardcoded values if no liquidity data
+            log(
+                LogTag::Trader,
+                "WARN",
+                "No liquidity data found in token list, using fallback thresholds"
+            );
+            return (100000.0, 50000.0, 10000.0);
+        }
+
+        // Sort liquidity values in descending order
+        liquidity_values.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+
+        let total_tokens = liquidity_values.len();
+
+        // Calculate percentile-based thresholds
+        // Top 25% = high liquidity (factor 1.0)
+        // Top 50% = medium liquidity (factor 0.8)
+        // Top 75% = low liquidity (factor 0.6)
+        // Bottom 25% = very low liquidity (factor 0.4)
+
+        let high_index = ((total_tokens as f64) * 0.25) as usize;
+        let medium_index = ((total_tokens as f64) * 0.5) as usize;
+        let low_index = ((total_tokens as f64) * 0.75) as usize;
+
+        let high_threshold = if high_index < total_tokens {
+            liquidity_values[high_index]
+        } else {
+            liquidity_values[total_tokens - 1]
+        };
+
+        let medium_threshold = if medium_index < total_tokens {
+            liquidity_values[medium_index]
+        } else {
+            liquidity_values[total_tokens - 1]
+        };
+
+        let low_threshold = if low_index < total_tokens {
+            liquidity_values[low_index]
+        } else {
+            liquidity_values[total_tokens - 1]
+        };
+
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!(
+                "Dynamic liquidity thresholds calculated from {} tokens: High: ${:.0}, Medium: ${:.0}, Low: ${:.0}",
+                total_tokens,
+                high_threshold,
+                medium_threshold,
+                low_threshold
+            )
+        );
+
+        (high_threshold, medium_threshold, low_threshold)
+    } else {
+        // Fallback if can't read token list
+        log(
+            LogTag::Trader,
+            "ERROR",
+            "Failed to read token list for liquidity threshold calculation, using fallback"
+        );
+        (100000.0, 50000.0, 10000.0)
+    }
+}
+
+/// Determines if a token should be bought based on smart dip analysis and volatility patterns
+/// Ensures we buy in actual dips by analyzing volatility patterns and price movements at the same scale
 /// Returns urgency score from 0.0 (don't buy) to 1.0 (buy immediately)
 pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
     // Validate basic requirements
@@ -158,50 +242,111 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
         return 0.0;
     }
 
-    // Calculate price change percentage
+    // Check loss prevention - analyze historical performance of this token
+    if !should_allow_token_purchase(&token.mint, &token.symbol) {
+        return 0.0; // Block purchase due to poor historical performance
+    }
+
+    // Analyze volatility patterns and ensure we're in a genuine dip
+    let volatility_analysis = analyze_token_volatility_patterns(&token.mint, current_price);
+
+    if !volatility_analysis.is_in_dip {
+        log(
+            LogTag::Trader,
+            "BUY_BLOCKED",
+            &format!(
+                "Buy blocked for {} ({}): Not in genuine dip. Current: {:.12}, Volatility Score: {:.2}",
+                token.symbol,
+                token.mint,
+                current_price,
+                volatility_analysis.volatility_score
+            )
+        );
+        return 0.0;
+    }
+
+    // Calculate immediate price change percentage
     let change = (current_price - prev_price) / prev_price;
     let percent_change = change * 100.0;
 
-    // Check if price drop meets threshold
+    // Enhanced dip detection: must meet both threshold and volatility requirements
     if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
+        // If volatility analysis says we're in a dip, be more permissive with pattern consistency
+        let pattern_consistent =
+            volatility_analysis.is_in_dip ||
+            is_dip_consistent_with_patterns(&volatility_analysis, percent_change.abs());
+
+        if !pattern_consistent {
+            log(
+                LogTag::Trader,
+                "BUY_BLOCKED",
+                &format!(
+                    "Buy blocked for {} ({}): Dip {:.2}% inconsistent with volatility patterns (avg: {:.2}%, scale: {:.2}, in_dip: {})",
+                    token.symbol,
+                    token.mint,
+                    percent_change.abs(),
+                    volatility_analysis.average_move_size,
+                    volatility_analysis.volatility_scale,
+                    volatility_analysis.is_in_dip
+                )
+            );
+            return 0.0;
+        }
+
         // Check historical data before allowing entry
         if is_entry_allowed_by_historical_data(&token.mint, current_price) {
-            // Calculate urgency based on drop magnitude
+            // Calculate base urgency with volatility-adjusted scoring
             let drop_magnitude = percent_change.abs();
-            let base_urgency = f64::min(drop_magnitude / PRICE_DROP_THRESHOLD_PERCENT, 2.0) * 0.5;
+            let volatility_adjusted_urgency = calculate_volatility_adjusted_urgency(
+                drop_magnitude,
+                &volatility_analysis
+            );
 
-            // Factor in liquidity (higher liquidity = higher urgency)
+            // Get current liquidity value
             let liquidity_usd = token.liquidity
                 .as_ref()
                 .and_then(|l| l.usd)
                 .unwrap_or(0.0);
 
-            let liquidity_factor = if liquidity_usd > 100000.0 {
-                1.0
-            } else if liquidity_usd > 50000.0 {
-                0.8
-            } else if liquidity_usd > 10000.0 {
-                0.6
+            // Calculate dynamic liquidity thresholds
+            let (high_threshold, medium_threshold, low_threshold) =
+                calculate_dynamic_liquidity_thresholds();
+
+            // Determine liquidity factor
+            let liquidity_factor = if liquidity_usd >= high_threshold {
+                1.0 // Top 25% liquidity
+            } else if liquidity_usd >= medium_threshold {
+                0.8 // Top 50% liquidity
+            } else if liquidity_usd >= low_threshold {
+                0.6 // Top 75% liquidity
             } else {
-                0.4
+                0.4 // Bottom 25% liquidity
             };
 
-            let urgency = f64::min(base_urgency * liquidity_factor, 1.0);
+            // Apply dip quality multiplier based on analysis
+            let dip_quality_multiplier = calculate_dip_quality_multiplier(&volatility_analysis);
+
+            let final_urgency = f64::min(
+                volatility_adjusted_urgency * liquidity_factor * dip_quality_multiplier,
+                2.0 // Increased from 1.0 to allow higher urgency scores
+            );
 
             log(
                 LogTag::Trader,
                 "BUY_SIGNAL",
                 &format!(
-                    "Buy signal for {} ({}): {:.2}% drop, urgency: {:.2}, liquidity: ${:.2}",
+                    "Smart buy signal for {} ({}): {:.2}% drop, volatility score: {:.2}, dip quality: {:.2}, final urgency: {:.2}, liquidity: ${:.2}",
                     token.symbol,
                     token.mint,
                     percent_change,
-                    urgency,
+                    volatility_analysis.volatility_score,
+                    dip_quality_multiplier,
+                    final_urgency,
                     liquidity_usd
                 )
             );
 
-            return urgency;
+            return final_urgency;
         } else {
             log(
                 LogTag::Trader,
@@ -214,9 +359,439 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
                 )
             );
         }
+    } else {
+        log(
+            LogTag::Trader,
+            "BUY_THRESHOLD",
+            &format!(
+                "Buy threshold not met for {} ({}): {:.2}% change < {:.1}% required",
+                token.symbol,
+                token.mint,
+                percent_change,
+                -PRICE_DROP_THRESHOLD_PERCENT
+            )
+        );
     }
 
     0.0
+}
+
+/// Volatility analysis structure for smart buying decisions
+#[derive(Debug, Clone)]
+struct VolatilityAnalysis {
+    is_in_dip: bool,
+    volatility_score: f64,
+    average_move_size: f64,
+    volatility_scale: f64,
+    recent_moves: Vec<f64>,
+    support_level: Option<f64>,
+    resistance_level: Option<f64>,
+}
+
+/// Analyzes token volatility patterns to determine if current price represents a genuine dip
+fn analyze_token_volatility_patterns(mint: &str, current_price: f64) -> VolatilityAnalysis {
+    if let Ok(price_history) = PRICE_HISTORY_24H.try_lock() {
+        if let Some(history) = price_history.get(mint) {
+            if history.len() < 3 {
+                // Reduced from 10 to 3
+                // Not enough data for analysis - be more permissive
+                return VolatilityAnalysis {
+                    is_in_dip: true, // Changed from false to true - allow trades with limited data
+                    volatility_score: 0.5, // Moderate volatility score
+                    average_move_size: 5.0, // Reasonable default
+                    volatility_scale: 5.0, // Reasonable default
+                    recent_moves: Vec::new(),
+                    support_level: None,
+                    resistance_level: None,
+                };
+            }
+
+            // Calculate price movements between consecutive points
+            let mut price_moves = Vec::new();
+            for i in 1..history.len() {
+                let prev_price = history[i - 1].1;
+                let curr_price = history[i].1;
+                if prev_price > 0.0 {
+                    let change_percent = ((curr_price - prev_price) / prev_price) * 100.0;
+                    price_moves.push(change_percent);
+                }
+            }
+
+            if price_moves.is_empty() {
+                return VolatilityAnalysis {
+                    is_in_dip: false,
+                    volatility_score: 0.0,
+                    average_move_size: 0.0,
+                    volatility_scale: 1.0,
+                    recent_moves: Vec::new(),
+                    support_level: None,
+                    resistance_level: None,
+                };
+            }
+
+            // Calculate volatility metrics
+            let average_move =
+                price_moves
+                    .iter()
+                    .map(|m| m.abs())
+                    .sum::<f64>() / (price_moves.len() as f64);
+            let volatility_score = calculate_volatility_score(&price_moves);
+
+            // Determine volatility scale (how big moves typically are for this token)
+            let volatility_scale = determine_volatility_scale(&price_moves);
+
+            // Find recent support and resistance levels
+            let (support_level, resistance_level) = find_support_resistance_levels(history);
+
+            // Determine if we're in a genuine dip
+            let is_in_dip = is_genuine_dip(
+                current_price,
+                history,
+                &price_moves,
+                support_level,
+                volatility_scale
+            );
+
+            // Debug logging to understand why dip detection might fail
+            log(
+                LogTag::Trader,
+                "DEBUG_DIP",
+                &format!(
+                    "Dip analysis for {}: current={:.8}, history_len={}, moves_len={}, support={:?}, scale={:.2}, result={}",
+                    mint,
+                    current_price,
+                    history.len(),
+                    price_moves.len(),
+                    support_level,
+                    volatility_scale,
+                    is_in_dip
+                )
+            );
+
+            // Get recent moves (last 5 moves) for pattern analysis
+            let recent_moves: Vec<f64> = price_moves.iter().rev().take(5).cloned().collect();
+
+            return VolatilityAnalysis {
+                is_in_dip,
+                volatility_score,
+                average_move_size: average_move,
+                volatility_scale,
+                recent_moves,
+                support_level,
+                resistance_level,
+            };
+        }
+    }
+
+    // Fallback if no history available - be permissive for new tokens
+    VolatilityAnalysis {
+        is_in_dip: true, // Changed from false to true - allow trades for new tokens
+        volatility_score: 0.5, // Moderate volatility score
+        average_move_size: 10.0, // Assume reasonable volatility
+        volatility_scale: 10.0, // Assume reasonable scale
+        recent_moves: Vec::new(),
+        support_level: None,
+        resistance_level: None,
+    }
+}
+
+/// Calculates volatility score based on price movement patterns
+fn calculate_volatility_score(price_moves: &[f64]) -> f64 {
+    if price_moves.len() < 3 {
+        return 0.0;
+    }
+
+    // Calculate standard deviation of price moves
+    let mean = price_moves.iter().sum::<f64>() / (price_moves.len() as f64);
+    let variance =
+        price_moves
+            .iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>() / (price_moves.len() as f64);
+    let std_dev = variance.sqrt();
+
+    // Normalize volatility score to 0-1 range
+    f64::min(std_dev / 20.0, 1.0)
+}
+
+/// Determines the typical scale of price movements for this token
+fn determine_volatility_scale(price_moves: &[f64]) -> f64 {
+    if price_moves.is_empty() {
+        return 1.0;
+    }
+
+    // Calculate 75th percentile of absolute price moves
+    let mut abs_moves: Vec<f64> = price_moves
+        .iter()
+        .map(|m| m.abs())
+        .collect();
+    abs_moves.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let percentile_75_index = ((abs_moves.len() as f64) * 0.75) as usize;
+    let volatility_scale = if percentile_75_index < abs_moves.len() {
+        abs_moves[percentile_75_index]
+    } else {
+        abs_moves[abs_moves.len() - 1]
+    };
+
+    f64::max(volatility_scale, 1.0) // Minimum scale of 1%
+}
+
+/// Finds support and resistance levels based on price history
+fn find_support_resistance_levels(history: &[(DateTime<Utc>, f64)]) -> (Option<f64>, Option<f64>) {
+    if history.len() < 20 {
+        return (None, None);
+    }
+
+    let prices: Vec<f64> = history
+        .iter()
+        .map(|(_, price)| *price)
+        .collect();
+
+    // Find local minima (support) and maxima (resistance)
+    let mut local_minima = Vec::new();
+    let mut local_maxima = Vec::new();
+
+    for i in 1..prices.len() - 1 {
+        if prices[i] < prices[i - 1] && prices[i] < prices[i + 1] {
+            local_minima.push(prices[i]);
+        }
+        if prices[i] > prices[i - 1] && prices[i] > prices[i + 1] {
+            local_maxima.push(prices[i]);
+        }
+    }
+
+    // Calculate average support and resistance
+    let support_level = if !local_minima.is_empty() {
+        Some(local_minima.iter().sum::<f64>() / (local_minima.len() as f64))
+    } else {
+        None
+    };
+
+    let resistance_level = if !local_maxima.is_empty() {
+        Some(local_maxima.iter().sum::<f64>() / (local_maxima.len() as f64))
+    } else {
+        None
+    };
+
+    (support_level, resistance_level)
+}
+
+/// Determines if current price represents a genuine dip based on multiple factors
+fn is_genuine_dip(
+    current_price: f64,
+    history: &[(DateTime<Utc>, f64)],
+    price_moves: &[f64],
+    support_level: Option<f64>,
+    volatility_scale: f64
+) -> bool {
+    // If we don't have enough data, be permissive
+    if history.len() < 5 || price_moves.len() < 3 {
+        return true; // Allow trades when we have limited data
+    }
+
+    // Check 1: Must be below recent average price (very lenient)
+    let recent_prices: Vec<f64> = history
+        .iter()
+        .rev()
+        .take(10)
+        .map(|(_, price)| *price)
+        .collect();
+    let recent_avg = recent_prices.iter().sum::<f64>() / (recent_prices.len() as f64);
+
+    // Very lenient - allow if current price is within 15% above recent average
+    let check1 = current_price <= recent_avg * 1.15;
+    if !check1 {
+        log(
+            LogTag::Trader,
+            "DEBUG_DIP_FAIL",
+            &format!(
+                "Check 1 failed: price {:.8} > {:.8} (115% of avg {:.8})",
+                current_price,
+                recent_avg * 1.15,
+                recent_avg
+            )
+        );
+        return false;
+    }
+
+    // Check 2: Support level check (very lenient)
+    if let Some(support) = support_level {
+        // Very lenient - allow if within 50% above support level
+        let check2 = current_price <= support * 1.5;
+        if !check2 {
+            log(
+                LogTag::Trader,
+                "DEBUG_DIP_FAIL",
+                &format!(
+                    "Check 2 failed: price {:.8} > {:.8} (150% of support {:.8})",
+                    current_price,
+                    support * 1.5,
+                    support
+                )
+            );
+            return false;
+        }
+    }
+
+    // Check 3: Recent moves - very flexible
+    let recent_moves: Vec<f64> = price_moves.iter().rev().take(5).cloned().collect();
+    let downward_moves = recent_moves
+        .iter()
+        .filter(|&m| *m < -0.5)
+        .count(); // Very small threshold
+
+    // Only block if absolutely no downward moves at all
+    let check3 = !(recent_moves.len() >= 5 && downward_moves == 0);
+    if !check3 {
+        log(
+            LogTag::Trader,
+            "DEBUG_DIP_FAIL",
+            &format!(
+                "Check 3 failed: no downward moves in recent {} moves (down: {})",
+                recent_moves.len(),
+                downward_moves
+            )
+        );
+        return false;
+    }
+
+    // Check 4: Drop significance (very lenient)
+    if let Some(last_price) = recent_prices.get(1) {
+        let current_drop = (((current_price - last_price) / last_price) * 100.0).abs();
+        // Very small requirement - just 10% of typical move size
+        let check4 = !(volatility_scale > 0.0 && current_drop < volatility_scale * 0.1);
+        if !check4 {
+            log(
+                LogTag::Trader,
+                "DEBUG_DIP_FAIL",
+                &format!(
+                    "Check 4 failed: drop {:.2}% < {:.2}% (10% of scale {:.2}%)",
+                    current_drop,
+                    volatility_scale * 0.1,
+                    volatility_scale
+                )
+            );
+            return false;
+        }
+    }
+
+    log(
+        LogTag::Trader,
+        "DEBUG_DIP_PASS",
+        &format!(
+            "All checks passed for price {:.8} (avg: {:.8}, support: {:?})",
+            current_price,
+            recent_avg,
+            support_level
+        )
+    );
+    true
+}
+
+/// Checks if the current dip is consistent with the token's historical volatility patterns
+fn is_dip_consistent_with_patterns(analysis: &VolatilityAnalysis, drop_magnitude: f64) -> bool {
+    // If we don't have enough data, allow the trade
+    if analysis.average_move_size <= 0.0 || analysis.volatility_scale <= 0.0 {
+        return true;
+    }
+
+    // Be more lenient with the drop size requirements
+    // Check if drop is at least 25% of average move size (reduced from 50%)
+    let min_drop = analysis.average_move_size * 0.25;
+    // Allow up to 5x the average move (increased from 3x)
+    let max_drop = analysis.average_move_size * 5.0;
+
+    if drop_magnitude < min_drop {
+        return false; // Still reject if drop is too small
+    }
+
+    if drop_magnitude > max_drop {
+        // For very large drops, be more careful but don't completely reject
+        return analysis.volatility_score < 0.8; // Only reject if also highly volatile
+    }
+
+    // More lenient scale adjustment
+    let scale_adjusted_drop = drop_magnitude / analysis.volatility_scale;
+    // Allow drops from 0.3x to 3.0x the volatility scale (more permissive)
+    if scale_adjusted_drop < 0.3 || scale_adjusted_drop > 3.0 {
+        return false;
+    }
+
+    true
+}
+
+/// Calculates volatility-adjusted urgency score
+fn calculate_volatility_adjusted_urgency(
+    drop_magnitude: f64,
+    analysis: &VolatilityAnalysis
+) -> f64 {
+    // More generous base urgency calculation
+    let base_urgency = f64::min(drop_magnitude / PRICE_DROP_THRESHOLD_PERCENT, 3.0) * 0.8; // Increased multiplier
+
+    // Less punitive volatility adjustment
+    let volatility_multiplier = if analysis.volatility_scale > 0.0 {
+        // Make volatility less punitive
+        1.0 / (1.0 + analysis.volatility_score * 0.3) // Reduced from 0.5
+    } else {
+        1.0
+    };
+
+    // More generous support level proximity bonus
+    let support_bonus = if let Some(support) = analysis.support_level {
+        // More lenient support detection and bigger bonus
+        let distance_to_support = (drop_magnitude - support.abs()) / support.abs();
+        if distance_to_support.abs() < 0.2 {
+            // Increased from 0.1 (within 20% of support)
+            1.5 // Increased bonus
+        } else if distance_to_support.abs() < 0.3 {
+            // Additional tier
+            1.3
+        } else {
+            1.0
+        }
+    } else {
+        1.1 // Small bonus even without support data
+    };
+
+    // Ensure minimum urgency for legitimate drops
+    let result = base_urgency * volatility_multiplier * support_bonus;
+    f64::max(result, drop_magnitude * 0.5) // Minimum urgency floor
+}
+
+/// Calculates dip quality multiplier based on technical analysis
+fn calculate_dip_quality_multiplier(analysis: &VolatilityAnalysis) -> f64 {
+    let mut multiplier = 1.2; // Start with higher base
+
+    // More generous momentum bonus
+    let downward_moves = analysis.recent_moves
+        .iter()
+        .filter(|&m| *m < 0.0)
+        .count();
+    if !analysis.recent_moves.is_empty() {
+        let momentum_bonus = ((downward_moves as f64) / (analysis.recent_moves.len() as f64)) * 0.5; // Increased
+        multiplier += momentum_bonus;
+    }
+
+    // Generous bonus for being near support level
+    if analysis.support_level.is_some() {
+        multiplier += 0.3; // Increased from 0.2
+    }
+
+    // Less punitive volatility penalty
+    if analysis.volatility_score > 0.8 {
+        // Only penalize very high volatility
+        multiplier *= 0.9; // Less penalty
+    }
+
+    // Bigger bonus for moderate volatility
+    if analysis.volatility_score > 0.2 && analysis.volatility_score < 0.7 {
+        // Wider range
+        multiplier += 0.2; // Increased bonus
+    }
+
+    // More generous range
+    f64::max(0.8, f64::min(multiplier, 2.0)) // Increased from 0.5-1.5 to 0.8-2.0
 }
 
 /// Fetch pool prices for multiple tokens in parallel

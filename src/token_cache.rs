@@ -103,22 +103,6 @@ impl TokenDatabase {
                 WHERE mint = ?2",
                 params![now, token.mint]
             )?;
-
-            log(
-                LogTag::Monitor,
-                "UPDATE",
-                &format!(
-                    "Updated token {} ({}) from {} - Liquidity USD: {}",
-                    token.symbol,
-                    token.mint,
-                    discovery_source,
-                    token.liquidity
-                        .as_ref()
-                        .and_then(|l| l.usd)
-                        .map(|usd| format!("{:.2}", usd))
-                        .unwrap_or_else(|| "None".to_string())
-                ).dimmed().to_string()
-            );
         } else {
             // Insert new token
             self.conn.execute(
