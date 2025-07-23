@@ -6,6 +6,11 @@ use tokio::sync::Notify;
 
 #[tokio::main]
 async fn main() {
+    // Start webserver in a thread (does not block main)
+    std::thread::spawn(|| {
+        screenerbot::webserver::start_webserver();
+    });
+
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
     // Initialize token database
