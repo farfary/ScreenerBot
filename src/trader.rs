@@ -444,7 +444,7 @@ pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64
 }
 
 /// Validates if a token has all required metadata for trading
-pub fn validate_token(token: &Token) -> bool {
+pub fn validate_token_info(token: &Token) -> bool {
     !token.symbol.is_empty() &&
         !token.mint.is_empty() &&
         token.price_dexscreener_sol.is_some() &&
@@ -842,7 +842,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 match
                     tokio::time::timeout(Duration::from_secs(30), async {
                         if let Some(current_price) = token.price_dexscreener_sol {
-                            if current_price <= 0.0 || !validate_token(&token) {
+                            if current_price <= 0.0 || !validate_token_info(&token) {
                                 return None;
                             }
 
@@ -856,21 +856,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 .and_then(|l| l.usd)
                                 .unwrap_or(0.0);
 
-                            // log(
-                            //     LogTag::Trader,
-                            //     "DEBUG",
-                            //     &format!(
-                            //         "Checking token {}/{}: {} ({}) - Price: {:.12} SOL, Liquidity: ${:.2}",
-                            //         index + 1,
-                            //         total,
-                            //         token.symbol,
-                            //         token.mint,
-                            //         current_price,
-                            //         liquidity_usd
-                            //     )
-                            //         .dimmed()
-                            //         .to_string()
-                            // );
 
                             // Update price history with proper error handling and timeout
                             let now = Utc::now();
