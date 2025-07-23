@@ -1,6 +1,6 @@
 // use crate::global::LIST_MINTS;
 // use crate::global::LIST_TOKENS;
-use crate::discovery::update_tokens_from_mints;
+use crate::discovery::update_tokens_from_mints_concurrent;
 use crate::discovery::*;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -17,26 +17,52 @@ pub async fn monitor(shutdown: Arc<Notify>) {
             break;
         }
 
-        // Call all mint-fetching functions with timeout handling
+        // Call all mint-fetching functions concurrently for better performance
         let discovery_tasks = async {
-            if let Err(e) = discovery_dexscreener_fetch_token_profiles().await {
+            // Run all discovery tasks concurrently using tokio::join!
+            let (
+                profiles_result,
+                boosts_result,
+                boosts_top_result,
+                rugcheck_verified_result,
+                rugcheck_trending_result,
+                rugcheck_recent_result,
+                rugcheck_new_tokens_result,
+            ) = tokio::join!(
+                discovery_dexscreener_fetch_token_profiles(),
+                discovery_dexscreener_fetch_token_boosts(),
+                discovery_dexscreener_fetch_token_boosts_top(),
+                discovery_rugcheck_fetch_verified(),
+                discovery_rugcheck_fetch_trending(),
+                discovery_rugcheck_fetch_recent(),
+                discovery_rugcheck_fetch_new_tokens()
+            );
+
+            // Log any errors from the concurrent tasks
+            if let Err(e) = profiles_result {
                 log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token profiles: {}", e));
             }
-
-            if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
-                return;
-            }
-
-            if let Err(e) = discovery_dexscreener_fetch_token_boosts().await {
+            if let Err(e) = boosts_result {
                 log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token boosts: {}", e));
             }
-
-            if check_shutdown_or_delay(&shutdown, Duration::from_millis(100)).await {
-                return;
-            }
-
-            if let Err(e) = discovery_dexscreener_fetch_token_boosts_top().await {
+            if let Err(e) = boosts_top_result {
                 log(LogTag::Monitor, "ERROR", &format!("Failed to fetch token boosts top: {}", e));
+            }
+            if let Err(e) = rugcheck_verified_result {
+                log(LogTag::Monitor, "ERROR", &format!("Failed to fetch RugCheck verified: {}", e));
+            }
+            if let Err(e) = rugcheck_trending_result {
+                log(LogTag::Monitor, "ERROR", &format!("Failed to fetch RugCheck trending: {}", e));
+            }
+            if let Err(e) = rugcheck_recent_result {
+                log(LogTag::Monitor, "ERROR", &format!("Failed to fetch RugCheck recent: {}", e));
+            }
+            if let Err(e) = rugcheck_new_tokens_result {
+                log(
+                    LogTag::Monitor,
+                    "ERROR",
+                    &format!("Failed to fetch RugCheck new tokens: {}", e)
+                );
             }
         };
 
@@ -58,10 +84,10 @@ pub async fn monitor(shutdown: Arc<Notify>) {
             break;
         }
 
-        // Update token info for all mints with timeout
+        // Update token info for all mints with concurrent batching
         let token_update_timeout = tokio::time::timeout(
-            Duration::from_secs(60),
-            update_tokens_from_mints(shutdown.clone())
+            Duration::from_secs(120), // Increased timeout for concurrent processing
+            update_tokens_from_mints_concurrent(shutdown.clone())
         );
 
         match token_update_timeout.await {
