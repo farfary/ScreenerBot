@@ -16,15 +16,20 @@ pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 pub const MAX_OPEN_POSITIONS: usize = 10;
 
+/// Token age filtering constants
+pub const MIN_TOKEN_AGE_HOURS: i64 = 0; // Don't trade tokens younger than 24 hours
+pub const MAX_TOKEN_AGE_HOURS: i64 = 4; // Don't trade tokens older than 3 days (72 hours)
+
 // Conservative settings for simplified logic
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 10.0;
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
 pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +25%
+
 pub const MIN_HOLD_TIME_SECS: f64 = 30.0; // Hold for at least 3 minutes
 pub const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
 pub const TIME_DECAY_START_SECS: f64 = 1800.0; // Start time decay after 30 minutes
 
 /// Pool price validation - maximum allowed difference from API price (10%)
-pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 100.0;
+pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 60.0;
 
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
@@ -446,6 +451,75 @@ pub fn validate_token(token: &Token) -> bool {
         token.liquidity.is_some()
 }
 
+/// Validates if a token age is within acceptable trading range
+/// Returns true if token is between MIN_TOKEN_AGE_HOURS and MAX_TOKEN_AGE_HOURS old
+pub fn validate_token_age(token: &Token) -> bool {
+    if let Some(created_at) = token.created_at {
+        let now = Utc::now();
+        let token_age = now - created_at;
+        let age_hours = token_age.num_hours();
+
+        let is_old_enough = age_hours >= MIN_TOKEN_AGE_HOURS;
+        let is_not_too_old = age_hours <= MAX_TOKEN_AGE_HOURS;
+
+        if !is_old_enough {
+            log(
+                LogTag::Trader,
+                "AGE_BLOCK",
+                &format!(
+                    "Token {} ({}) too young: {} hours old (minimum {} hours required)",
+                    token.symbol,
+                    token.mint,
+                    age_hours,
+                    MIN_TOKEN_AGE_HOURS
+                )
+            );
+            return false;
+        }
+
+        if !is_not_too_old {
+            log(
+                LogTag::Trader,
+                "AGE_BLOCK",
+                &format!(
+                    "Token {} ({}) too old: {} hours old (maximum {} hours allowed)",
+                    token.symbol,
+                    token.mint,
+                    age_hours,
+                    MAX_TOKEN_AGE_HOURS
+                )
+            );
+            return false;
+        }
+
+        log(
+            LogTag::Trader,
+            "AGE_OK",
+            &format!(
+                "Token {} ({}) age acceptable: {} hours old",
+                token.symbol,
+                token.mint,
+                age_hours
+            )
+        );
+
+        return true;
+    } else {
+        // If no created_at timestamp is available, log warning but allow trading
+        // This prevents blocking tokens where we don't have creation data
+        log(
+            LogTag::Trader,
+            "AGE_WARN",
+            &format!(
+                "Token {} ({}) has no creation timestamp - allowing trade (consider this risky)",
+                token.symbol,
+                token.mint
+            )
+        );
+        return true;
+    }
+}
+
 /// Checks if entry is allowed based on historical position data for this token
 /// Returns true only if current price is below both:
 /// 1. Average entry price from past closed positions
@@ -769,6 +843,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     tokio::time::timeout(Duration::from_secs(30), async {
                         if let Some(current_price) = token.price_dexscreener_sol {
                             if current_price <= 0.0 || !validate_token(&token) {
+                                return None;
+                            }
+
+                            // Validate token age before proceeding with trading logic
+                            if !validate_token_age(&token) {
                                 return None;
                             }
 
