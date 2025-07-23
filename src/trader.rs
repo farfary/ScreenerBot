@@ -22,7 +22,6 @@ pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 
-
 pub const MIN_TOKEN_AGE_HOURS: i64 = 0; // Don't trade tokens younger than 24 hours
 pub const MAX_TOKEN_AGE_HOURS: i64 = 9999; // Don't trade tokens older than 3 days (72 hours)
 
@@ -51,6 +50,7 @@ use crate::positions::{
 use crate::summary::*;
 use crate::utils::*;
 use crate::pool_price::PoolDiscoveryAndPricing;
+use crate::profit::should_sell_dynamic;
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -71,7 +71,7 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
     StdArc::new(StdMutex::new(HashMap::new()))
 });
 
-pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
+pub fn should_sell_old(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
     // Calculate time held in seconds using total_seconds()
     let duration = now - pos.entry_time;
     let time_held_secs: f64 = duration.num_seconds() as f64;
@@ -126,6 +126,47 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
 
     urgency = f64::max(0.0, f64::min(urgency, 1.0));
     urgency
+}
+
+pub fn should_sell_new(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
+    // Calculate time held in seconds
+    let duration = now - pos.entry_time;
+    let time_held_secs: f64 = duration.num_seconds() as f64;
+
+    // Don't sell too early unless it's a major loss (keep this safety check)
+    if time_held_secs < MIN_HOLD_TIME_SECS {
+        let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
+
+        if current_pnl_percent <= STOP_LOSS_PERCENT {
+            return 1.0; // Emergency exit for major losses
+        } else {
+            return 0.0; // Hold for minimum time
+        }
+    }
+
+    // Try to get the token from global list for full analysis
+    if let Ok(tokens) = LIST_TOKENS.read() {
+        for token in tokens.iter() {
+            if token.mint == pos.mint {
+                // Use the new dynamic profit system with full token data
+                let (urgency, _reason) = should_sell_dynamic(
+                    pos,
+                    token,
+                    current_price,
+                    time_held_secs
+                );
+                return urgency;
+            }
+        }
+    }
+
+    // Fallback to old logic if token not found in global list
+    should_sell_old(pos, current_price, now)
+}
+
+// Main should_sell function that uses the new system
+pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
+    should_sell_new(pos, current_price, now)
 }
 
 /// Fetch pool prices for multiple tokens in parallel
@@ -857,7 +898,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 .as_ref()
                                 .and_then(|l| l.usd)
                                 .unwrap_or(0.0);
-
 
                             // Update price history with proper error handling and timeout
                             let now = Utc::now();
