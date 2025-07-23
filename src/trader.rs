@@ -9,11 +9,20 @@ pub const DEFAULT_FEE_SWAP: f64 = 0.000001;
 pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
 
 pub const TRADE_SIZE_SOL: f64 = 0.0001;
+
 pub const STOP_LOSS_PERCENT: f64 = -99.0;
+pub const STOP_LOSS_PERCENT_AGGRESIVE: f64 = -99.0;
+
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 10;
+pub const MAX_OPEN_POSITIONS: usize = 50;
+
+// Conservative settings for simplified logic
+pub const MIN_HOLD_TIME_SECS: f64 = 60.0; // Hold for at least 3 minutes
+pub const PROFIT_TARGET_PERCENT: f64 = 25.0; // Take profit at +25%
+pub const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
+pub const TIME_DECAY_START_SECS: f64 = 3600.0; // Start time decay after 30 minutes
 
 /// Pool price validation - maximum allowed difference from API price (10%)
 pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 100.0;
@@ -61,13 +70,6 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     let duration = now - pos.entry_time;
     let time_held_secs: f64 = duration.num_seconds() as f64;
 
-    // Conservative settings for simplified logic
-    const MIN_HOLD_TIME_SECS: f64 = 60.0; // Hold for at least 3 minutes
-    const STOP_LOSS_PERCENT: f64 = -70.0; // Stop loss at -70%
-    const PROFIT_TARGET_PERCENT: f64 = 25.0; // Take profit at +25%
-    const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
-    const TIME_DECAY_START_SECS: f64 = 3600.0; // Start time decay after 30 minutes
-
     // Don't sell too early unless it's a major loss
     if time_held_secs < MIN_HOLD_TIME_SECS {
         let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
@@ -111,7 +113,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     if
         time_held_secs > TIME_DECAY_START_SECS &&
         current_pnl_percent <= 0.0 &&
-        current_pnl_percent > -30.0
+        current_pnl_percent > STOP_LOSS_PERCENT_AGGRESIVE
     {
         urgency = f64::max(urgency, 0.3); // Reduced urgency for small losses
     }
