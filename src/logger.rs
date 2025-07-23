@@ -27,11 +27,9 @@ const ENABLE_GENERAL_LOGS: bool = true; // For any log type not specifically lis
 
 /// Log format character widths (hardcoded for precise alignment)
 const TAG_WIDTH: usize = 8; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
-const LOG_TYPE_WIDTH: usize = 13; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
-const LOG_LABEL_WIDTH: usize = 8; // "[LOG     ]" = 10 chars (8 + 2 brackets)
+const LOG_TYPE_WIDTH: usize = 16; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
 const BRACKET_SPACE_WIDTH: usize = 3; // " [" + "] " = 3 chars between each component
-const TOTAL_PREFIX_WIDTH: usize =
-    TAG_WIDTH + LOG_TYPE_WIDTH + LOG_LABEL_WIDTH + BRACKET_SPACE_WIDTH * 3; // +1 for final space
+const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2; // +1 for final space
 
 /// Maximum line length before wrapping
 const MAX_LINE_LENGTH: usize = 155;
@@ -194,13 +192,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     };
 
     // Fixed-width log label
-    let log_label = format!("{:<width$}", "LOG", width = LOG_LABEL_WIDTH)
-        .bright_white()
-        .bold();
     let msg = message.bright_white();
 
     // Build the base log line with strict discipline
-    let base_line = format!("{}[{}] [{}] [{}] ", prefix, tag_str, log_type_str, log_label);
+    let base_line = format!("{}[{}] [{}] ", prefix, tag_str, log_type_str);
 
     // Use hardcoded TOTAL_PREFIX_WIDTH for alignment
     let base_length = strip_ansi_codes(&base_line)
