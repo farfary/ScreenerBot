@@ -35,7 +35,7 @@ async fn main() {
     shutdown.notify_waiters();
 
     // Wait for background tasks to finish with timeout
-    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         let _ = tokio::try_join!(monitor_handle, trader_handle);
     });
 

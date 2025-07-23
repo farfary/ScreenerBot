@@ -152,3 +152,11 @@ path = "src/bin/test_exact_sol_extraction.rs"
 [[bin]]
 name = "analyze_transaction"
 path = "src/bin/analyze_transaction.rs"
+
+[[bin]]
+name = "test_rugcheck_discovery"
+path = "src/bin/test_rugcheck_discovery.rs"
+
+[[bin]]
+name = "test_rugcheck_monitor"
+path = "src/bin/test_rugcheck_monitor.rs"
