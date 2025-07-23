@@ -86,7 +86,12 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
         display_positions_table().await;
 
         // Wait 10 seconds or until shutdown
-        if check_shutdown_or_delay(&shutdown, Duration::from_secs(PRINT_SUMMARY_INTERVAL_SECS)).await {
+        if
+            check_shutdown_or_delay(
+                &shutdown,
+                Duration::from_secs(PRINT_SUMMARY_INTERVAL_SECS)
+            ).await
+        {
             log(LogTag::Trader, "INFO", "positions display monitor shutting down...");
             break;
         }
@@ -289,7 +294,7 @@ impl ClosedPositionDisplay {
             format_duration_compact(position.entry_time, Utc::now())
         };
 
-        let status = if pnl_sol >= 0.0 { "✅ CLOSED".to_string() } else { "❌ CLOSED".to_string() };
+        let status = get_profit_status_emoji(pnl_sol, pnl_percent, true);
 
         Self {
             symbol: position.symbol.clone(),
@@ -336,6 +341,13 @@ impl OpenPositionDisplay {
 
         let duration = format_duration_compact(position.entry_time, Utc::now());
 
+        let status = if let Some(price) = current_price {
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));
+            get_profit_status_emoji(pnl_sol, pnl_percent, false)
+        } else {
+            "🔄 OPEN".to_string()
+        };
+
         Self {
             symbol: position.symbol.clone(),
             mint: position.mint.clone(),
@@ -349,7 +361,34 @@ impl OpenPositionDisplay {
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
             duration,
-            status: "🔄 OPEN".to_string(),
+            status,
         }
+    }
+}
+
+/// Generate profit-based status emoji for positions
+fn get_profit_status_emoji(pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
+    let base_status = if is_closed { "CLOSED" } else { "OPEN" };
+
+    if pnl_percent >= 50.0 {
+        format!("🚀 {}", base_status) // Moon shot gains
+    } else if pnl_percent >= 20.0 {
+        format!("🔥 {}", base_status) // Hot gains
+    } else if pnl_percent >= 10.0 {
+        format!("💰 {}", base_status) // Good profits
+    } else if pnl_percent >= 5.0 {
+        format!("✅ {}", base_status) // Modest gains
+    } else if pnl_percent >= 0.0 {
+        format!("🟢 {}", base_status) // Small gains
+    } else if pnl_percent >= -5.0 {
+        format!("🟡 {}", base_status) // Small loss
+    } else if pnl_percent >= -10.0 {
+        format!("🟠 {}", base_status) // Moderate loss
+    } else if pnl_percent >= -20.0 {
+        format!("🔴 {}", base_status) // Significant loss
+    } else if pnl_percent >= -50.0 {
+        format!("💥 {}", base_status) // Major loss
+    } else {
+        format!("☠️ {}", base_status) // Devastating loss
     }
 }
