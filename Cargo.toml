@@ -143,3 +143,11 @@ path = "src/bin/test_pool_caching.rs"
 [[bin]]
 name = "test_sol_received_pnl"
 path = "src/bin/test_sol_received_pnl.rs"
+
+[[bin]]
+name = "test_exact_sol_extraction"
+path = "src/bin/test_exact_sol_extraction.rs"
+
+[[bin]]
+name = "analyze_transaction"
+path = "src/bin/analyze_transaction.rs"

@@ -199,6 +199,10 @@ pub struct SwapResult {
     pub actual_input_change: Option<u64>,
     pub actual_output_change: Option<u64>,
     pub quote_vs_actual_difference: Option<f64>,
+    // ATA rent separation fields
+    pub ata_close_detected: bool,
+    pub ata_rent_reclaimed: Option<u64>, // ATA rent amount in lamports
+    pub sol_from_trade_only: Option<u64>, // SOL from trade excluding ATA rent
 }
 
 /// Transaction details from RPC
@@ -442,6 +446,183 @@ pub async fn sign_and_send_transaction(
     )
 }
 
+/// Detects ATA close operations in a transaction and separates rent from trading proceeds
+/// Returns (has_ata_close, ata_rent_amount_lamports, sol_from_trade_only_lamports)
+pub fn detect_and_separate_ata_rent(
+    transaction: &TransactionDetails,
+    wallet_address: &str,
+    actual_output_change: u64,
+    is_sell_transaction: bool
+) -> (bool, u64, u64) {
+    if !is_sell_transaction {
+        // ATA closing only matters for sell transactions
+        return (false, 0, actual_output_change);
+    }
+
+    // Standard ATA rent amounts (in lamports)
+    const ATA_RENT_LAMPORTS: u64 = 2_039_280;  // Standard ATA rent
+    const ATA_RENT_TOLERANCE: u64 = 100_000;   // Allow some tolerance
+
+    let mut ata_close_detected = false;
+    let mut ata_rent_reclaimed = 0u64;
+
+    // Method 1: Check transaction logs for ATA close operations
+    let has_ata_close_instruction = if let Some(meta) = &transaction.meta {
+        if let Some(log_messages) = &meta.log_messages {
+            detect_ata_close_in_logs(log_messages)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if has_ata_close_instruction {
+        ata_close_detected = true;
+        log(LogTag::Trader, "ATA_DETECT", "ATA close detected in transaction logs");
+    }
+
+    // Method 2: Check for accounts with negative balance changes (account closures)
+    if !ata_close_detected {
+        if let Some(meta) = &transaction.meta {
+            for (i, (pre_balance, post_balance)) in meta.pre_balances.iter()
+                .zip(meta.post_balances.iter())
+                .enumerate() 
+            {
+                // Skip the wallet account (first account)
+                if i == 0 {
+                    continue;
+                }
+
+                // Look for negative balance changes (account closures)
+                if *post_balance < *pre_balance {
+                    let closed_amount = *pre_balance - *post_balance;
+                    
+                    // Check if this matches ATA rent amount
+                    if closed_amount >= ATA_RENT_LAMPORTS - ATA_RENT_TOLERANCE &&
+                       closed_amount <= ATA_RENT_LAMPORTS + ATA_RENT_TOLERANCE {
+                        log(
+                            LogTag::Trader, 
+                            "ATA_DETECT", 
+                            &format!("ATA account closure detected: {} lamports closed, matches rent pattern", closed_amount)
+                        );
+                        ata_close_detected = true;
+                        ata_rent_reclaimed = closed_amount;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Method 3: Pattern analysis - check if SOL amount suggests ATA rent inclusion
+    if !ata_close_detected {
+        let likely_includes_ata_rent = detect_ata_rent_pattern(actual_output_change);
+        if likely_includes_ata_rent {
+            ata_close_detected = true;
+            log(LogTag::Trader, "ATA_DETECT", "ATA rent detected by pattern analysis");
+        }
+    }
+
+    // Method 4: Check for suspicious round numbers that might include ATA rent
+    if !ata_close_detected {
+        let suspicious_amount = check_suspicious_ata_amounts(actual_output_change);
+        if suspicious_amount {
+            ata_close_detected = true;
+            log(LogTag::Trader, "ATA_DETECT", "ATA rent detected by suspicious amount pattern");
+        }
+    }
+
+    if ata_close_detected {
+        // If no specific rent amount was detected, use standard amount
+        if ata_rent_reclaimed == 0 {
+            ata_rent_reclaimed = ATA_RENT_LAMPORTS;
+        }
+        
+        log(
+            LogTag::Trader,
+            "ATA_DETECT",
+            &format!(
+                "ATA close detected - total_sol: {:.6}, ata_rent: {:.6}, trade_only: {:.6}",
+                lamports_to_sol(actual_output_change),
+                lamports_to_sol(ata_rent_reclaimed),
+                lamports_to_sol(actual_output_change.saturating_sub(ata_rent_reclaimed))
+            )
+        );
+
+        // Separate ATA rent from trading proceeds
+        let sol_from_trade_only = actual_output_change.saturating_sub(ata_rent_reclaimed);
+        (true, ata_rent_reclaimed, sol_from_trade_only)
+    } else {
+        (false, 0, actual_output_change)
+    }
+}
+
+/// Detects ATA close operations in transaction log messages
+fn detect_ata_close_in_logs(log_messages: &[String]) -> bool {
+    for log in log_messages {
+        // Look for SPL Token close account instruction patterns
+        if
+            log.contains("Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke") ||
+            log.contains("Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke")
+        {
+            // Check for close account instruction (instruction index 9 in SPL Token)
+            if
+                log.contains("Instruction: CloseAccount") ||
+                log.contains("close account") ||
+                log.contains("Close Account")
+            {
+                return true;
+            }
+        }
+
+        // Alternative: Check for account closing patterns in logs
+        if
+            log.contains("closed") &&
+            log.contains("account") &&
+            (log.contains("token") || log.contains("Token"))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Detects if the SOL amount pattern suggests ATA rent inclusion
+fn detect_ata_rent_pattern(sol_amount_lamports: u64) -> bool {
+    const ATA_RENT_LAMPORTS: u64 = 2_039_280;
+
+    // Convert to SOL for easier analysis
+    let sol_amount = lamports_to_sol(sol_amount_lamports);
+    let ata_rent_sol = lamports_to_sol(ATA_RENT_LAMPORTS);
+
+    // Check if the amount is suspiciously close to trading amount + ATA rent
+    let remainder = sol_amount % ata_rent_sol;
+
+    // If remainder is very small, likely includes ATA rent
+    remainder < 0.0001 || remainder > ata_rent_sol - 0.0001
+}
+
+/// Checks for suspicious amounts that might include ATA rent
+fn check_suspicious_ata_amounts(sol_amount_lamports: u64) -> bool {
+    const ATA_RENT_LAMPORTS: u64 = 2_039_280;
+
+    // If the amount is exactly or very close to ATA rent amounts
+    if sol_amount_lamports < ATA_RENT_LAMPORTS * 2 {
+        let diff = if sol_amount_lamports > ATA_RENT_LAMPORTS {
+            sol_amount_lamports - ATA_RENT_LAMPORTS
+        } else {
+            ATA_RENT_LAMPORTS - sol_amount_lamports
+        };
+
+        // If difference is small, likely includes ATA rent
+        return diff < 10_000; // Less than 0.00001 SOL difference
+    }
+
+    // Check if it's a multiple of ATA rent (rare but possible)
+    sol_amount_lamports % ATA_RENT_LAMPORTS < 10_000
+}
+
 /// Gets transaction details from RPC to analyze balance changes
 async fn get_transaction_details(
     client: &reqwest::Client,
@@ -683,6 +864,147 @@ pub async fn calculate_effective_price(
     );
 
     Ok((effective_price, actual_input_change, actual_output_change, 0.0))
+}
+
+/// Enhanced version of calculate_effective_price that includes ATA detection
+/// Returns (effective_price, actual_input_change, actual_output_change, quote_vs_actual_diff, ata_close_detected, ata_rent_lamports, sol_from_trade_only)
+pub async fn calculate_effective_price_with_ata_detection(
+    client: &reqwest::Client,
+    transaction_signature: &str,
+    input_mint: &str,
+    output_mint: &str,
+    wallet_address: &str,
+    _rpc_url: &str,
+    configs: &crate::global::Configs
+) -> Result<(f64, u64, u64, f64, bool, u64, u64), SwapError> {
+    log(
+        LogTag::Trader,
+        "ANALYZE",
+        &format!("Calculating effective price with ATA detection for transaction: {}", transaction_signature)
+    );
+
+    // Wait a moment for transaction to be confirmed
+    tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
+
+    // Get transaction details with multiple RPC attempts
+    let mut transaction_details = None;
+    let rpc_endpoints = std::iter
+        ::once(&configs.rpc_url)
+        .chain(configs.rpc_fallbacks.iter())
+        .collect::<Vec<_>>();
+
+    for (attempt, rpc_url) in rpc_endpoints.iter().enumerate() {
+        match get_transaction_details(client, transaction_signature, rpc_url).await {
+            Ok(details) => {
+                transaction_details = Some(details);
+                log(
+                    LogTag::Trader,
+                    "SUCCESS",
+                    &format!(
+                        "Got transaction details from RPC {} on attempt {}",
+                        rpc_url,
+                        attempt + 1
+                    )
+                );
+                break;
+            }
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    &format!("RPC {} failed on attempt {}: {}", rpc_url, attempt + 1, e)
+                );
+                if attempt < 2 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                }
+            }
+        }
+    }
+
+    let details = transaction_details.ok_or_else(||
+        SwapError::TransactionError("Failed to get transaction details after retries".to_string())
+    )?;
+    let meta = details.meta
+        .as_ref()
+        .ok_or_else(||
+            SwapError::TransactionError("Transaction metadata not available".to_string())
+        )?;
+    if meta.err.is_some() {
+        return Err(SwapError::TransactionError("Transaction failed on-chain".to_string()));
+    }
+
+    // Calculate balance changes with decimals information
+    let (actual_input_change, actual_output_change, input_decimals, output_decimals) =
+        calculate_balance_changes_with_decimals(&meta, input_mint, output_mint, wallet_address)?;
+
+    // Determine if this is a sell transaction (Token -> SOL)
+    let is_sell_transaction = input_mint != SOL_MINT && output_mint == SOL_MINT;
+
+    // Detect and separate ATA rent from trading proceeds
+    let (ata_close_detected, ata_rent_lamports, sol_from_trade_only) = detect_and_separate_ata_rent(
+        &details,
+        wallet_address,
+        actual_output_change,
+        is_sell_transaction
+    );
+
+    // Calculate effective price using cleaned amounts
+    let (sol_for_price_calc, token_change_raw, token_decimals) = if input_mint == SOL_MINT {
+        // SOL -> Token swap (buy)
+        let token_ui_amount = (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
+
+        // For buy transactions, estimate trade SOL by excluding fees and ATA rent
+        let estimated_trade_sol = {
+            let total_sol_lamports = actual_input_change;
+            let ata_rent_lamports = if ata_close_detected { ata_rent_lamports } else { 2039280u64 };
+            let transaction_fee = 5000u64;
+            let priority_fee = 5000u64;
+
+            let total_fees_and_rent = ata_rent_lamports + transaction_fee + priority_fee;
+            let trade_sol_lamports = total_sol_lamports.saturating_sub(total_fees_and_rent);
+
+            (trade_sol_lamports as f64) / (10_f64).powi(9)
+        };
+
+        (estimated_trade_sol, actual_output_change, output_decimals)
+    } else {
+        // Token -> SOL swap (sell) - use cleaned SOL amount excluding ATA rent
+        let sol_received = if ata_close_detected {
+            (sol_from_trade_only as f64) / (10_f64).powi(9)
+        } else {
+            (actual_output_change as f64) / (10_f64).powi(9)
+        };
+        (sol_received, actual_input_change, input_decimals)
+    };
+
+    // Convert token to UI amount
+    let token_amount = (token_change_raw as f64) / (10_f64).powi(token_decimals as i32);
+
+    // Effective price calculation (now ATA-rent-clean)
+    let effective_price = if token_amount > 0.0 { sol_for_price_calc / token_amount } else { 0.0 };
+
+    log(
+        LogTag::Trader,
+        "EFFECTIVE",
+        &format!(
+            "EffPrice: {:.15} SOL/token (trade_sol={:.12}, token_ui={:.12}, ata_detected={}, ata_rent={:.6})",
+            effective_price,
+            sol_for_price_calc,
+            token_amount,
+            ata_close_detected,
+            lamports_to_sol(ata_rent_lamports)
+        )
+    );
+
+    Ok((
+        effective_price,
+        actual_input_change,
+        actual_output_change,
+        0.0,
+        ata_close_detected,
+        ata_rent_lamports,
+        sol_from_trade_only,
+    ))
 }
 
 /// Extract exact SOL transfer amount from transaction instructions
@@ -1261,6 +1583,9 @@ pub async fn execute_swap_with_quote(
                 actual_input_change: None,
                 actual_output_change: None,
                 quote_vs_actual_difference: None,
+                ata_close_detected: false,
+                ata_rent_reclaimed: None,
+                sol_from_trade_only: None,
             });
         }
     };
@@ -1278,6 +1603,9 @@ pub async fn execute_swap_with_quote(
         actual_input_change: Some(actual_input_change),
         actual_output_change: Some(actual_output_change),
         quote_vs_actual_difference: Some(quote_vs_actual_diff),
+        ata_close_detected: false, // Buy transactions don't close ATAs
+        ata_rent_reclaimed: None,
+        sol_from_trade_only: None,
     })
 }
 
@@ -1406,6 +1734,9 @@ pub async fn execute_swap(
         actual_input_change: Some(actual_input_change),
         actual_output_change: Some(actual_output_change),
         quote_vs_actual_difference: Some(quote_vs_actual_diff),
+        ata_close_detected: false, // This is from execute_swap (buy operation)
+        ata_rent_reclaimed: None,
+        sol_from_trade_only: None,
     })
 }
 
@@ -1840,20 +2171,58 @@ pub async fn sell_token(
     };
 
     // Use exact SOL amount if available, otherwise fall back to balance change calculation
+    // Calculate effective price using enhanced ATA detection
+    let (
+        effective_price,
+        actual_input_change,
+        enhanced_output_change,
+        quote_vs_actual_diff,
+        ata_close_detected,
+        ata_rent_lamports,
+        sol_from_trade_only,
+    ) = calculate_effective_price_with_ata_detection(
+        &client,
+        &transaction_signature,
+        &token.mint,
+        SOL_MINT,
+        &wallet_address,
+        &selected_rpc,
+        &configs
+    ).await.unwrap_or_else(|e| {
+        log(
+            LogTag::Trader,
+            "WARNING",
+            &format!("Failed to calculate effective price with ATA detection: {}", e)
+        );
+        (0.0, 0, actual_output_change, 0.0, false, 0, actual_output_change)
+    });
+
+    // Use exact SOL from instructions if available, otherwise use ATA-cleaned amount
     let final_output_change = if let Some(exact_sol) = exact_sol_received {
         log(
             LogTag::Trader,
             "EXACT",
             &format!(
-                "Using exact SOL from instructions: {:.9} SOL (vs balance change: {:.9} SOL)",
+                "Using exact SOL from instructions: {:.9} SOL (vs ATA-cleaned: {:.9} SOL)",
                 exact_sol,
-                lamports_to_sol(actual_output_change)
+                lamports_to_sol(sol_from_trade_only)
             )
         );
-        // Convert back to lamports for consistency
         (exact_sol * (10_f64).powi(9)) as u64
+    } else if ata_close_detected {
+        log(
+            LogTag::Trader,
+            "ATA_CLEAN",
+            &format!(
+                "Using ATA-cleaned SOL: {:.9} SOL (original: {:.9} SOL, ATA rent: {:.9} SOL)",
+                lamports_to_sol(sol_from_trade_only),
+                lamports_to_sol(enhanced_output_change),
+                lamports_to_sol(ata_rent_lamports)
+            )
+        );
+        sol_from_trade_only
     } else {
-        actual_output_change
+        enhanced_output_change
     };
 
     Ok(SwapResult {
@@ -1867,8 +2236,19 @@ pub async fn sell_token(
         error: None,
         effective_price: Some(effective_price),
         actual_input_change: Some(actual_input_change),
-        actual_output_change: Some(final_output_change), // Use exact amount if available
+        actual_output_change: Some(final_output_change), // ATA-cleaned amount
         quote_vs_actual_difference: Some(quote_vs_actual_diff),
+        ata_close_detected,
+        ata_rent_reclaimed: if ata_close_detected {
+            Some(ata_rent_lamports)
+        } else {
+            None
+        },
+        sol_from_trade_only: if ata_close_detected {
+            Some(sol_from_trade_only)
+        } else {
+            None
+        },
     })
 }
 
