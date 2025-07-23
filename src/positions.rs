@@ -19,6 +19,7 @@ pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(||
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
 /// For closed positions with sol_received, uses actual SOL invested vs SOL received
+/// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
 pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
     // For closed positions, prioritize sol_received for most accurate P&L
     if let (Some(_), Some(sol_received)) = (position.exit_price, position.sol_received) {
@@ -26,6 +27,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         let sol_invested = position.entry_size_sol;
 
         // Account for trading fees (buy + sell fees)
+        // NOTE: sol_received should already be the net amount from token sale only
+        // ATA rent reclaim (~0.002 SOL) is separate from trading P&L
         let total_fees = 2.0 * DEFAULT_FEE;
         let net_pnl_sol = sol_received - sol_invested - total_fees;
         let net_pnl_percent = (net_pnl_sol / sol_invested) * 100.0;
@@ -699,7 +702,7 @@ pub async fn close_position(
                     LogTag::Trader,
                     status_text,
                     &format!(
-                        "Closed position for {} ({}) - TX: {}, SOL Received: {:.6}, Net P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
+                        "Closed position for {} ({}) - TX: {}, SOL From Sale: {:.6}, Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
                         position.symbol,
                         position.mint,
                         transaction_signature.as_ref().unwrap_or(&"None".to_string()),
@@ -716,7 +719,7 @@ pub async fn close_position(
                         LogTag::Trader,
                         "ATA",
                         &format!(
-                            "Attempting to close ATA for {} after successful sell",
+                            "Attempting to close ATA for {} after successful sell (will reclaim ~0.002 SOL rent separately from trading P&L)",
                             position.symbol
                         )
                     );
@@ -727,7 +730,7 @@ pub async fn close_position(
                                 LogTag::Trader,
                                 "SUCCESS",
                                 &format!(
-                                    "Successfully closed ATA for {} - Rent reclaimed. TX: {}",
+                                    "Successfully closed ATA for {} - Rent reclaimed: ~0.002 SOL (separate from trading P&L). TX: {}",
                                     position.symbol,
                                     close_tx
                                 )

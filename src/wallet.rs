@@ -685,6 +685,26 @@ pub async fn calculate_effective_price(
     Ok((effective_price, actual_input_change, actual_output_change, 0.0))
 }
 
+/// Extract exact SOL transfer amount from transaction instructions
+/// This provides the most accurate SOL received amount, excluding fees and rent
+pub fn extract_sol_transfer_from_instructions(
+    transaction: &TransactionDetails,
+    wallet_address: &str
+) -> Option<f64> {
+    // Note: The TransactionDetails from wallet.rs doesn't have inner_instructions
+    // This function needs to be enhanced to work with the proper transaction format
+    // For now, we'll return None and rely on the balance change method
+    // TODO: Enhance this to parse actual transaction instructions from RPC response
+    
+    log(
+        LogTag::Trader,
+        "INFO",
+        "extract_sol_transfer_from_instructions: Transaction instruction parsing not yet implemented for this format"
+    );
+    
+    None
+}
+
 /// Calculates balance changes from transaction metadata with decimal information
 fn calculate_balance_changes_with_decimals(
     meta: &TransactionMeta,
@@ -1795,6 +1815,37 @@ pub async fn sell_token(
             (0.0, 0, 0, 0.0)
         });
 
+    // For Token -> SOL swaps, try to get exact SOL received from instructions
+    let exact_sol_received = if request.output_mint == SOL_MINT {
+        // Try to get transaction details and extract exact SOL transfer
+        match get_transaction_details(&reqwest::Client::new(), &transaction_signature, &configs.rpc_url).await {
+            Ok(details) => extract_sol_transfer_from_instructions(&details, &wallet_address),
+            Err(e) => {
+                log(LogTag::Trader, "INFO", &format!("Could not extract exact SOL from instructions: {}", e));
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Use exact SOL amount if available, otherwise fall back to balance change calculation
+    let final_output_change = if let Some(exact_sol) = exact_sol_received {
+        log(
+            LogTag::Trader,
+            "EXACT",
+            &format!(
+                "Using exact SOL from instructions: {:.9} SOL (vs balance change: {:.9} SOL)",
+                exact_sol,
+                lamports_to_sol(actual_output_change)
+            )
+        );
+        // Convert back to lamports for consistency
+        (exact_sol * 10_f64.powi(9)) as u64
+    } else {
+        actual_output_change
+    };
+
     Ok(SwapResult {
         success: true,
         transaction_signature: Some(transaction_signature),
@@ -1806,7 +1857,7 @@ pub async fn sell_token(
         error: None,
         effective_price: Some(effective_price),
         actual_input_change: Some(actual_input_change),
-        actual_output_change: Some(actual_output_change),
+        actual_output_change: Some(final_output_change), // Use exact amount if available
         quote_vs_actual_difference: Some(quote_vs_actual_diff),
     })
 }

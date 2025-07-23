@@ -1,6 +1,4 @@
 /// Trading configuration constants
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 15.0;
-pub const PROFIT_THRESHOLD_PERCENT: f64 = 5.0;
 
 pub const DEFAULT_FEE: f64 = 0.000002;
 // pub const DEFAULT_FEE: f64 = 0.0;
@@ -8,21 +6,22 @@ pub const DEFAULT_FEE: f64 = 0.000002;
 pub const DEFAULT_FEE_SWAP: f64 = 0.000001;
 pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
 
-pub const TRADE_SIZE_SOL: f64 = 0.0001;
+pub const TRADE_SIZE_SOL: f64 = 0.001;
 
-pub const STOP_LOSS_PERCENT: f64 = -99.0;
-pub const STOP_LOSS_PERCENT_AGGRESIVE: f64 = -99.0;
+pub const STOP_LOSS_PERCENT: f64 = -50.0;
+pub const STOP_LOSS_PERCENT_AGGRESIVE: f64 = -25.0;
 
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
-pub const MAX_OPEN_POSITIONS: usize = 50;
+pub const MAX_OPEN_POSITIONS: usize = 10;
 
 // Conservative settings for simplified logic
-pub const MIN_HOLD_TIME_SECS: f64 = 60.0; // Hold for at least 3 minutes
-pub const PROFIT_TARGET_PERCENT: f64 = 25.0; // Take profit at +25%
+pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 10.0;
+pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +25%
+pub const MIN_HOLD_TIME_SECS: f64 = 30.0; // Hold for at least 3 minutes
 pub const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
-pub const TIME_DECAY_START_SECS: f64 = 3600.0; // Start time decay after 30 minutes
+pub const TIME_DECAY_START_SECS: f64 = 1800.0; // Start time decay after 30 minutes
 
 /// Pool price validation - maximum allowed difference from API price (10%)
 pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 100.0;
