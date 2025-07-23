@@ -4,7 +4,7 @@ const LOG_SHOW_DATE: bool = false;
 const LOG_SHOW_TIME: bool = false;
 
 /// Log Tag Configuration - Set to false to disable specific tags
-const ENABLE_MONITOR_LOGS: bool = false;
+const ENABLE_MONITOR_LOGS: bool = true;
 const ENABLE_TRADER_LOGS: bool = true;
 const ENABLE_WALLET_LOGS: bool = true;
 const ENABLE_SYSTEM_LOGS: bool = true;

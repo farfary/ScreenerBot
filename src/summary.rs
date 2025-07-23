@@ -86,7 +86,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
         display_positions_table().await;
 
         // Wait 10 seconds or until shutdown
-        if check_shutdown_or_delay(&shutdown, Duration::from_secs(5)).await {
+        if check_shutdown_or_delay(&shutdown, Duration::from_secs(PRINT_SUMMARY_INTERVAL_SECS)).await {
             log(LogTag::Trader, "INFO", "positions display monitor shutting down...");
             break;
         }
