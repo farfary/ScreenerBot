@@ -2572,13 +2572,8 @@ impl PoolDiscoveryAndPricing {
             LogTag::Pool,
             "SUCCESS",
             &format!(
-                "Parsed Orca Whirlpool: tokenA={} ({}), tokenB={} ({}), liquidity={}, sqrt_price={}, tick_spacing={}, fee_rate={}",
+                "Parsed Orca Whirlpool: tokenA={}, tokenB={} ({}), liquidity={}, sqrt_price={}, tick_spacing={}, fee_rate={}",
                 &token_mint_a,
-                if token_mint_a == "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump" {
-                    "✅EXPECTED"
-                } else {
-                    "❌WRONG"
-                },
                 &token_mint_b,
                 if token_mint_b == "So11111111111111111111111111111111111111112" {
                     "✅SOL"
