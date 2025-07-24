@@ -18,16 +18,11 @@ use solana_sdk::program_pack::Pack;
 // DEBUG CONFIGURATION
 // =============================================================================
 
-/// Set to true to enable detailed debug logging in pool_price.rs
-/// This includes verbose logging of pool operations, parsing, and data details
-const ENABLE_POOL_DEBUG_LOGS: bool = true;
-
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
 const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
-const RAYDIUM_AMM_V4_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
 const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
@@ -37,23 +32,6 @@ const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/s
 
 // Cache expiration time - 2 minutes
 const CACHE_EXPIRATION_SECONDS: u64 = 120;
-
-// =============================================================================
-// DEBUG HELPERS
-// =============================================================================
-
-/// Helper function for conditional debug logging
-/// Only logs if ENABLE_POOL_DEBUG_LOGS is true
-fn debug_log(log_type: &str, message: &str) {
-    if ENABLE_POOL_DEBUG_LOGS {
-        log(LogTag::Pool, log_type, message);
-    }
-}
-
-/// Helper function for regular pool logging
-fn pool_log(log_type: &str, message: &str) {
-    log(LogTag::Pool, log_type, message);
-}
 
 // =============================================================================
 // DATA STRUCTURES
@@ -86,7 +64,6 @@ pub enum PoolType {
     RaydiumCpmm,
     MeteoraDlmm,
     MeteoraDammV2,
-    RaydiumAmmV4,
     RaydiumLaunchLab,
     Orca,
     OrcaWhirlpool,
@@ -97,9 +74,10 @@ pub enum PoolType {
 
 impl PoolType {
     pub fn from_dex_id_and_labels(dex_id: &str, labels: &[String]) -> Self {
-        debug_log(
+        log(
+            LogTag::Pool,
             "DEBUG",
-            &format!("Determining pool type for dex_id='{}' with labels: {:?}", dex_id, labels)
+            &format!("Determining pool type: dex_id='{}', labels={:?}", dex_id, labels)
         );
 
         match dex_id.to_lowercase().as_str() {
@@ -111,40 +89,33 @@ impl PoolType {
                 } else if labels.iter().any(|l| l.eq_ignore_ascii_case("LaunchLab")) {
                     PoolType::RaydiumLaunchLab
                 } else {
-                    // Raydium AMM V4 is disabled - fallback to CPMM or Unknown
-                    debug_log(
-                        "DEBUG",
-                        "Raydium AMM V4 disabled, falling back to CPMM for standard Raydium pools"
-                    );
-                    PoolType::RaydiumCpmm // Default to CPMM instead of V4 for standard Raydium pools
+                    // Default to CPMM for standard Raydium pools
+                    log(LogTag::Pool, "DEBUG", "Standard Raydium pool, defaulting to CPMM");
+                    PoolType::RaydiumCpmm
                 }
             }
-            "launchlab" => PoolType::RaydiumLaunchLab, // DexScreener uses "launchlab" as DEX ID
+            "launchlab" => PoolType::RaydiumLaunchLab,
             "meteora" => {
                 if labels.iter().any(|l| l.eq_ignore_ascii_case("DLMM")) {
                     PoolType::MeteoraDlmm
                 } else {
-                    // If no specific label, try to determine based on other factors
-                    // We can check program ID later in the detection override
-                    debug_log(
-                        "DEBUG",
-                        "Meteora pool without specific labels, defaulting to MeteoraDammV2 for further detection"
-                    );
+                    log(LogTag::Pool, "DEBUG", "Meteora pool without DLMM label, using DAMM V2");
                     PoolType::MeteoraDammV2
                 }
             }
             "orca" => {
                 if labels.iter().any(|l| l.eq_ignore_ascii_case("Whirlpool")) {
-                    debug_log("DEBUG", "Detected Whirlpool from labels");
                     PoolType::OrcaWhirlpool
                 } else {
-                    debug_log("DEBUG", "No Whirlpool label found, defaulting to Orca");
                     PoolType::Orca
                 }
             }
             "phoenix" => PoolType::Phoenix,
             "pump" | "pump.fun" | "pumpswap" | "pumpfun" => PoolType::PumpfunAmm,
-            _ => PoolType::Unknown,
+            _ => {
+                log(LogTag::Pool, "WARN", &format!("Unknown DEX ID: {}", dex_id));
+                PoolType::Unknown
+            }
         }
     }
 }
@@ -208,16 +179,6 @@ pub enum PoolSpecificData {
         lp_mint: String,
         lp_supply: u64,
         coin_creator: String,
-    },
-    RaydiumAmmV4 {
-        coin_vault: String,
-        pc_vault: String,
-        lp_mint: String,
-        coin_decimals: u8,
-        pc_decimals: u8,
-        lp_supply: u64,
-        coin_mint: String,
-        pc_mint: String,
     },
     Orca {},
     Phoenix {},
@@ -329,77 +290,6 @@ pub struct RaydiumLaunchLabData {
     pub status: u8,
 }
 
-/// Raydium AMM V4 pool data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RaydiumAmmV4Data {
-    pub status: u64,
-    pub nonce: u64,
-    pub max_order: u64,
-    pub depth: u64,
-    pub base_decimals: u64,
-    pub quote_decimals: u64,
-    pub state: u64,
-    pub reset_flag: u64,
-    pub min_size: u64,
-    pub vol_max_cut_ratio: u64,
-    pub amount_wave: u64,
-    pub coin_lot_size: u64,
-    pub pc_lot_size: u64,
-    pub min_price_multiplier: u64,
-    pub max_price_multiplier: u64,
-    pub sys_decimal_value: u64,
-    pub fees: AmmFees,
-    pub out_put: OutPutData,
-    pub token_coin: Pubkey,
-    pub token_pc: Pubkey,
-    pub coin_vault: Pubkey,
-    pub pc_vault: Pubkey,
-    pub withdraw_queue: Pubkey,
-    pub token_temp_lp: Pubkey,
-    pub amm_target_orders: Pubkey,
-    pub pool_withdraw_queue: Pubkey,
-    pub pool_temp_lp: Pubkey,
-    pub serum_program_id: Pubkey,
-    pub serum_market: Pubkey,
-    pub serum_bids: Pubkey,
-    pub serum_asks: Pubkey,
-    pub serum_event_queue: Pubkey,
-    pub serum_coin_vault_account: Pubkey,
-    pub serum_pc_vault_account: Pubkey,
-    pub serum_vault_signer: Pubkey,
-    pub official_flag: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AmmFees {
-    pub min_separate_numerator: u64,
-    pub min_separate_denominator: u64,
-    pub trade_fee_numerator: u64,
-    pub trade_fee_denominator: u64,
-    pub pnl_numerator: u64,
-    pub pnl_denominator: u64,
-    pub swap_fee_numerator: u64,
-    pub swap_fee_denominator: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OutPutData {
-    pub need_take_pnl_coin: u64,
-    pub need_take_pnl_pc: u64,
-    pub total_pnl_pc: u64,
-    pub total_pnl_coin: u64,
-    pub pool_open_time: u64,
-    pub punish_pc_amount: u64,
-    pub punish_coin_amount: u64,
-    pub orderbook_to_init_time: u64,
-    pub swap_coin_in_amount: u128,
-    pub swap_pc_out_amount: u128,
-    pub swap_coin2pc_fee: u64,
-    pub swap_pc_in_amount: u128,
-    pub swap_coin_out_amount: u128,
-    pub swap_pc2coin_fee: u64,
-}
-
 /// Orca Whirlpool pool data structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrcaWhirlpoolData {
@@ -463,25 +353,15 @@ impl PoolDiscoveryAndPricing {
     pub async fn discover_pools(&self, token_mint: &str) -> Result<Vec<DiscoveredPool>> {
         let url = format!("{}/{}", DEXSCREENER_API_BASE, token_mint);
 
-        debug_log("DEBUG", &format!("Fetching pools from DexScreener API: {}", url));
-
-        pool_log("INFO", &format!("Discovering pools for token: {}", token_mint));
+        log(LogTag::Pool, "INFO", &format!("Discovering pools for token: {}", token_mint));
 
         let response = self.http_client.get(&url).send().await?;
 
         if !response.status().is_success() {
-            pool_log(
+            log(
+                LogTag::Pool,
                 "ERROR",
-                &format!(
-                    "❌ DEXSCREENER API FAILED\n\
-                    Token Mint: {}\n\
-                    HTTP Status: {}\n\
-                    URL: {}\n\
-                    Error: Failed to fetch pool data from DexScreener API",
-                    token_mint,
-                    response.status(),
-                    url
-                )
+                &format!("DexScreener API failed: {} for token {}", response.status(), token_mint)
             );
             return Err(
                 anyhow::anyhow!("DexScreener API request failed with status: {}", response.status())
@@ -491,37 +371,34 @@ impl PoolDiscoveryAndPricing {
         let pairs: Vec<serde_json::Value> = response.json().await?;
         let mut discovered_pools = Vec::new();
 
-        debug_log("DEBUG", &format!("Received {} raw pairs from API", pairs.len()));
+        log(LogTag::Pool, "DEBUG", &format!("Received {} pairs from API", pairs.len()));
 
-        // Log if API returned no pairs
         if pairs.is_empty() {
-            pool_log(
-                "WARN",
-                &format!(
-                    "⚠️ NO PAIRS FROM DEXSCREENER\n\
-                    Token Mint: {}\n\
-                    API URL: {}\n\
-                    Response: Empty pairs array",
-                    token_mint,
-                    url
-                )
-            );
+            log(LogTag::Pool, "WARN", &format!("No pools found for token: {}", token_mint));
+            return Ok(discovered_pools);
         }
 
-        let pairs_count = pairs.len(); // Store count before moving
+        let pairs_count = pairs.len();
 
         for pair in pairs {
             if let Ok(pool) = self.parse_pool_from_api_response(&pair) {
-                debug_log(
+                log(
+                    LogTag::Pool,
                     "DEBUG",
-                    &format!("Parsed pool: {} ({})", pool.pair_address, pool.dex_id)
+                    &format!(
+                        "Parsed pool: {} ({}) with ${:.2} liquidity",
+                        pool.pair_address,
+                        pool.dex_id,
+                        pool.liquidity_usd
+                    )
                 );
                 discovered_pools.push(pool);
             } else {
-                debug_log(
-                    "DEBUG",
+                log(
+                    LogTag::Pool,
+                    "WARN",
                     &format!(
-                        "Failed to parse pool from API response: {:?}",
+                        "Failed to parse pool: {}",
                         pair
                             .get("pairAddress")
                             .and_then(|v| v.as_str())
@@ -531,22 +408,25 @@ impl PoolDiscoveryAndPricing {
             }
         }
 
-        pool_log(
+        log(
+            LogTag::Pool,
             "SUCCESS",
-            &format!("Discovered {} pools for token {}", discovered_pools.len(), token_mint)
+            &format!(
+                "Found {} valid pools out of {} for token {}",
+                discovered_pools.len(),
+                pairs_count,
+                token_mint
+            )
         );
 
-        // Log if no pools were discovered
         if discovered_pools.is_empty() {
-            pool_log(
+            log(
+                LogTag::Pool,
                 "WARN",
                 &format!(
-                    "⚠️ NO POOLS DISCOVERED\n\
-                    Token Mint: {}\n\
-                    DexScreener API Response: {} pairs total\n\
-                    Reason: No valid pools could be parsed from API response",
-                    token_mint,
-                    pairs_count
+                    "No valid pools found despite {} API pairs for token: {}",
+                    pairs_count,
+                    token_mint
                 )
             );
         }
@@ -612,78 +492,34 @@ impl PoolDiscoveryAndPricing {
         let mut results = Vec::new();
 
         log(
-            LogTag::System,
+            LogTag::Pool,
             "INFO",
-            &format!("Calculating on-chain prices for {} discovered pools", discovered_pools.len())
+            &format!("Calculating prices for {} pools", discovered_pools.len())
         );
 
         for pool in discovered_pools {
             let result = self.calculate_pool_price_with_discovery(&pool).await;
 
-            // Log detailed error information for failed price calculations
             if !result.calculation_successful {
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "ERROR",
                     &format!(
-                        "❌ PRICE CALCULATION FAILED\n\
-                        Token Name: {}\n\
-                        Token Symbol: {}\n\
-                        Token Mint: {}\n\
-                        Pool Address: {}\n\
-                        Pool Type: {:?}\n\
-                        DEX ID: {}\n\
-                        Owner Program ID: {}\n\
-                        Error: {}",
-                        if result.token_a_mint == token_mint {
-                            &result.token_a_symbol
-                        } else {
-                            &result.token_b_symbol
-                        },
-                        if result.token_a_mint == token_mint {
-                            &result.token_a_symbol
-                        } else {
-                            &result.token_b_symbol
-                        },
-                        token_mint,
+                        "Price calculation failed for pool {} ({}): {}",
                         result.pool_address,
-                        result.pool_type,
                         result.dex_id,
-                        self.get_program_id_for_pool_type(result.pool_type),
                         result.error_message.as_ref().unwrap_or(&"Unknown error".to_string())
                     )
                 );
-            } else if result.calculated_price <= 0.0 {
-                // Log for invalid prices (zero or negative)
-                pool_log(
-                    "WARN",
+            } else {
+                log(
+                    LogTag::Pool,
+                    "DEBUG",
                     &format!(
-                        "⚠️ INVALID PRICE CALCULATED\n\
-                        Token Name: {}\n\
-                        Token Symbol: {}\n\
-                        Token Mint: {}\n\
-                        Pool Address: {}\n\
-                        Pool Type: {:?}\n\
-                        DEX ID: {}\n\
-                        Owner Program ID: {}\n\
-                        Calculated Price: {}\n\
-                        DexScreener Price: {}",
-                        if result.token_a_mint == token_mint {
-                            &result.token_a_symbol
-                        } else {
-                            &result.token_b_symbol
-                        },
-                        if result.token_a_mint == token_mint {
-                            &result.token_a_symbol
-                        } else {
-                            &result.token_b_symbol
-                        },
-                        token_mint,
+                        "Calculated price for pool {} ({}): ${:.6}",
                         result.pool_address,
-                        result.pool_type,
                         result.dex_id,
-                        self.get_program_id_for_pool_type(result.pool_type),
-                        result.calculated_price,
-                        result.dexscreener_price
+                        result.calculated_price
                     )
                 );
             }
@@ -696,6 +532,12 @@ impl PoolDiscoveryAndPricing {
             b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
         );
 
+        log(
+            LogTag::Pool,
+            "SUCCESS",
+            &format!("Completed price calculation for {} pools", results.len())
+        );
+
         Ok(results)
     }
 
@@ -703,7 +545,6 @@ impl PoolDiscoveryAndPricing {
     fn get_program_id_for_pool_type(&self, pool_type: PoolType) -> String {
         match pool_type {
             PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
-            PoolType::RaydiumAmmV4 => "DISABLED".to_string(), // Raydium AMM V4 is disabled
             PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
             PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
             PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
@@ -724,20 +565,16 @@ impl PoolDiscoveryAndPricing {
             if let Some(entry) = cache.get(token_mint) {
                 if !entry.is_expired() {
                     log(
-                        LogTag::System,
-                        "INFO",
-                        &format!("Using cached biggest pool for token: {}", token_mint)
+                        LogTag::Pool,
+                        "DEBUG",
+                        &format!("Using cached pool for token: {}", token_mint)
                     );
                     return Ok(Some(entry.pool_result.clone()));
                 }
             }
         }
 
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("Cache miss or expired, fetching biggest pool for token: {}", token_mint)
-        );
+        log(LogTag::Pool, "INFO", &format!("Fetching biggest pool for token: {}", token_mint));
 
         // Fetch all pool prices
         let pool_results = self.get_token_pool_prices(token_mint).await?;
@@ -751,17 +588,24 @@ impl PoolDiscoveryAndPricing {
                 a.liquidity_usd.partial_cmp(&b.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
             );
 
-        // Log if no valid pools found
         if biggest_pool.is_none() {
-            pool_log(
+            log(
+                LogTag::Pool,
                 "WARN",
                 &format!(
-                    "⚠️ NO VALID POOLS FOUND\n\
-                    Token Mint: {}\n\
-                    Reason: No pools with successful calculation and SOL pairing found\n\
-                    Total pools discovered: {}",
+                    "No valid SOL-paired pools found for token {} (discovered {})",
                     token_mint,
                     pool_results_count
+                )
+            );
+        } else {
+            log(
+                LogTag::Pool,
+                "SUCCESS",
+                &format!(
+                    "Found biggest pool for token {} with ${:.2} liquidity",
+                    token_mint,
+                    biggest_pool.as_ref().unwrap().liquidity_usd
                 )
             );
         }
@@ -795,7 +639,8 @@ impl PoolDiscoveryAndPricing {
             let cache = self.program_id_cache.lock().unwrap();
             if let Some(entry) = cache.get(token_mint) {
                 if !entry.is_expired() {
-                    debug_log(
+                    log(
+                        LogTag::Pool,
                         "DEBUG",
                         &format!(
                             "Cache HIT: Program IDs for token {} (count: {}, age: {}s)",
@@ -806,14 +651,14 @@ impl PoolDiscoveryAndPricing {
                     );
                     return Ok(entry.program_ids.clone());
                 } else {
-                    debug_log("DEBUG", &format!("Cache EXPIRED for token {}", token_mint));
+                    log(LogTag::Pool, "DEBUG", &format!("Cache EXPIRED for token {}", token_mint));
                 }
             } else {
-                debug_log("DEBUG", &format!("Cache MISS for token {}", token_mint));
+                log(LogTag::Pool, "DEBUG", &format!("Cache MISS for token {}", token_mint));
             }
         }
 
-        pool_log("INFO", &format!("Fetching program IDs for token: {}", token_mint));
+        log(LogTag::Pool, "INFO", &format!("Fetching program IDs for token: {}", token_mint));
 
         // Discover pools to get their program IDs
         let discovered_pools = self.discover_pools(token_mint).await?;
@@ -824,11 +669,6 @@ impl PoolDiscoveryAndPricing {
             if let Ok(pool_type) = self.detect_pool_type(&pool.pair_address).await {
                 let program_id = match pool_type {
                     PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
-                    PoolType::RaydiumAmmV4 => {
-                        // Skip Raydium AMM V4 pools - they are disabled
-                        debug_log("DEBUG", "Skipping Raydium AMM V4 pool (disabled)");
-                        continue;
-                    }
                     PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
                     PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
                     PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
@@ -902,13 +742,15 @@ impl PoolDiscoveryAndPricing {
 
         // Override with actual program ID detection if possible (more accurate than DexScreener labels)
         if pool_type == PoolType::Orca {
-            debug_log(
+            log(
+                LogTag::Pool,
                 "DEBUG",
                 "DexScreener classified as generic Orca, checking actual program ID..."
             );
             if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
                 if detected_type == PoolType::OrcaWhirlpool {
-                    debug_log(
+                    log(
+                        LogTag::Pool,
                         "DEBUG",
                         "Program ID confirms this is a Whirlpool, overriding classification"
                     );
@@ -919,7 +761,8 @@ impl PoolDiscoveryAndPricing {
 
         // Similar override for Meteora pools - check actual program ID for accurate classification
         if pool_type == PoolType::MeteoraDammV2 || pool_type == PoolType::MeteoraDlmm {
-            debug_log(
+            log(
+                LogTag::Pool,
                 "DEBUG",
                 &format!("DexScreener classified as {:?}, checking actual program ID...", pool_type)
             );
@@ -928,7 +771,8 @@ impl PoolDiscoveryAndPricing {
                     detected_type == PoolType::MeteoraDammV2 ||
                     detected_type == PoolType::MeteoraDlmm
                 {
-                    debug_log(
+                    log(
+                        LogTag::Pool,
                         "DEBUG",
                         &format!(
                             "Program ID confirms this is {:?}, overriding classification",
@@ -942,13 +786,15 @@ impl PoolDiscoveryAndPricing {
 
         // Override for Pump.fun pools - detect actual program ID for accurate classification
         if pool_type == PoolType::Unknown || pool_type == PoolType::PumpfunAmm {
-            debug_log(
+            log(
+                LogTag::Pool,
                 "DEBUG",
                 &format!("DexScreener classified as {:?}, checking actual program ID...", pool_type)
             );
             if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
                 if detected_type == PoolType::PumpfunAmm {
-                    debug_log(
+                    log(
+                        LogTag::Pool,
                         "DEBUG",
                         "Program ID confirms this is a Pump.fun AMM, overriding classification"
                     );
@@ -971,7 +817,7 @@ impl PoolDiscoveryAndPricing {
                 if price <= 0.0 {
                     let error_msg =
                         format!("Invalid price calculated: {} (price must be > 0)", price);
-                    debug_log("WARN", &error_msg);
+                    log(LogTag::Pool, "WARN", &error_msg);
                     (price, false, Some(error_msg))
                 } else {
                     (price, true, None)
@@ -979,7 +825,8 @@ impl PoolDiscoveryAndPricing {
             }
             Err(e) => {
                 let error_msg = format!("Failed to calculate on-chain price: {}", e);
-                debug_log(
+                log(
+                    LogTag::Pool,
                     "ERROR",
                     &format!(
                         "Pool calculation failed - Address: {}, Type: {:?}, Error: {}",
@@ -1022,19 +869,24 @@ impl PoolDiscoveryAndPricing {
         &self,
         pool_address: &str
     ) -> Result<(f64, String, String, PoolType)> {
-        pool_log("INFO", &format!("Starting price calculation for pool: {}", pool_address));
+        log(
+            LogTag::Pool,
+            "INFO",
+            &format!("Starting price calculation for pool: {}", pool_address)
+        );
 
         // First detect the pool type
         let pool_type = self.detect_pool_type(pool_address).await?;
-        debug_log("DEBUG", &format!("Pool type detected: {:?}", pool_type));
+        log(LogTag::Pool, "DEBUG", &format!("Pool type detected: {:?}", pool_type));
 
         // Parse the pool data based on type
         let pool_data = self.parse_pool_data(pool_address, pool_type).await?;
-        debug_log("DEBUG", "Pool data parsed successfully");
+        log(LogTag::Pool, "DEBUG", "Pool data parsed successfully");
 
         // Calculate price using the universal method
         let price = self.calculate_price_from_pool_data(&pool_data).await?;
-        pool_log(
+        log(
+            LogTag::Pool,
             "SUCCESS",
             &format!("Price calculation completed: {} (pool type: {:?})", price, pool_type)
         );
@@ -1048,7 +900,8 @@ impl PoolDiscoveryAndPricing {
         pool_address: &str,
         pool_type: PoolType
     ) -> Result<(f64, String, String, PoolType)> {
-        pool_log(
+        log(
+            LogTag::Pool,
             "INFO",
             &format!(
                 "Calculating price with explicit type {:?} for pool: {}",
@@ -1091,12 +944,13 @@ impl PoolDiscoveryAndPricing {
         let pool_pubkey = match Pubkey::from_str(pool_address) {
             Ok(pubkey) => pubkey,
             Err(e) => {
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "ERROR",
                     &format!(
                         "❌ INVALID POOL ADDRESS\n\
-                        Pool Address: {}\n\
-                        Error: Failed to parse as Pubkey - {}",
+                    Pool Address: {}\n\
+                    Error: Failed to parse as Pubkey - {}",
                         pool_address,
                         e
                     )
@@ -1108,12 +962,13 @@ impl PoolDiscoveryAndPricing {
         let account_info = match self.rpc_client.get_account(&pool_pubkey) {
             Ok(info) => info,
             Err(e) => {
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "ERROR",
                     &format!(
                         "❌ FAILED TO FETCH POOL ACCOUNT\n\
-                        Pool Address: {}\n\
-                        Error: RPC call failed - {}",
+                    Pool Address: {}\n\
+                    Error: RPC call failed - {}",
                         pool_address,
                         e
                     )
@@ -1125,9 +980,14 @@ impl PoolDiscoveryAndPricing {
         // Get the program ID that owns this account
         let program_id = account_info.owner.to_string();
 
-        debug_log("DEBUG", &format!("Pool account data size: {} bytes", account_info.data.len()));
+        log(
+            LogTag::Pool,
+            "DEBUG",
+            &format!("Pool account data size: {} bytes", account_info.data.len())
+        );
 
-        pool_log(
+        log(
+            LogTag::Pool,
             "INFO",
             &format!("Detecting pool type for {} (program: {})", pool_address, program_id)
         );
@@ -1136,37 +996,32 @@ impl PoolDiscoveryAndPricing {
         match program_id.as_str() {
             // Raydium CPMM Program ID
             id if id == RAYDIUM_CPMM_PROGRAM_ID => {
-                pool_log("SUCCESS", "Detected: Raydium CPMM pool");
+                log(LogTag::Pool, "SUCCESS", "Detected: Raydium CPMM pool");
                 Ok(PoolType::RaydiumCpmm)
-            }
-            // Raydium AMM V4 Program ID - DISABLED
-            id if id == RAYDIUM_AMM_V4_PROGRAM_ID => {
-                pool_log("WARN", "⚠️ RAYDIUM AMM V4 DISABLED - Skipping pool");
-                Err(anyhow::anyhow!("Raydium AMM V4 pools are disabled"))
             }
             // Meteora DLMM Program ID
             id if id == METEORA_DLMM_PROGRAM_ID => {
-                pool_log("SUCCESS", "Detected: Meteora DLMM pool");
+                log(LogTag::Pool, "SUCCESS", "Detected: Meteora DLMM pool");
                 Ok(PoolType::MeteoraDlmm)
             }
             // Meteora DAMM v2 Program ID
             id if id == METEORA_DAMM_V2_PROGRAM_ID => {
-                pool_log("SUCCESS", "Detected: Meteora DAMM v2 pool");
+                log(LogTag::Pool, "SUCCESS", "Detected: Meteora DAMM v2 pool");
                 Ok(PoolType::MeteoraDammV2)
             }
             // Raydium LaunchLab Program ID
             id if id == RAYDIUM_LAUNCHLAB_PROGRAM_ID => {
-                pool_log("SUCCESS", "Detected: Raydium LaunchLab pool");
+                log(LogTag::Pool, "SUCCESS", "Detected: Raydium LaunchLab pool");
                 Ok(PoolType::RaydiumLaunchLab)
             }
             // Orca Whirlpool Program ID
             id if id == ORCA_WHIRLPOOL_PROGRAM_ID => {
-                pool_log("SUCCESS", "Detected: Orca Whirlpool pool");
+                log(LogTag::Pool, "SUCCESS", "Detected: Orca Whirlpool pool");
                 Ok(PoolType::OrcaWhirlpool)
             }
             // Pump.fun AMM Program ID
             id if id == PUMPFUN_AMM_PROGRAM_ID => {
-                pool_log("SUCCESS", "Detected: Pump.fun AMM pool");
+                log(LogTag::Pool, "SUCCESS", "Detected: Pump.fun AMM pool");
                 Ok(PoolType::PumpfunAmm)
             }
             // Add other DEX program IDs as needed
@@ -1174,14 +1029,15 @@ impl PoolDiscoveryAndPricing {
 
             // Unknown program ID
             _ => {
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "WARN",
                     &format!(
                         "⚠️ UNKNOWN PROGRAM ID\n\
-                        Pool Address: {}\n\
-                        Program ID: {}\n\
-                        Data Size: {} bytes\n\
-                        Falling back to size-based detection",
+                    Pool Address: {}\n\
+                    Program ID: {}\n\
+                    Data Size: {} bytes\n\
+                    Falling back to size-based detection",
                         pool_address,
                         program_id,
                         account_info.data.len()
@@ -1190,7 +1046,8 @@ impl PoolDiscoveryAndPricing {
 
                 // Fallback to size-based detection as a last resort
                 let account_data = account_info.data.clone();
-                debug_log(
+                log(
+                    LogTag::Pool,
                     "DEBUG",
                     &format!(
                         "Using fallback detection with data size: {} bytes",
@@ -1199,20 +1056,29 @@ impl PoolDiscoveryAndPricing {
                 );
 
                 if account_data.len() >= 800 {
-                    pool_log("WARN", "Guessing: Meteora DLMM (based on data size >= 800 bytes)");
+                    log(
+                        LogTag::Pool,
+                        "WARN",
+                        "Guessing: Meteora DLMM (based on data size >= 800 bytes)"
+                    );
                     Ok(PoolType::MeteoraDlmm)
                 } else if account_data.len() >= 600 {
-                    pool_log("WARN", "Guessing: Raydium CPMM (based on data size >= 600 bytes)");
+                    log(
+                        LogTag::Pool,
+                        "WARN",
+                        "Guessing: Raydium CPMM (based on data size >= 600 bytes)"
+                    );
                     Ok(PoolType::RaydiumCpmm)
                 } else {
-                    pool_log(
+                    log(
+                        LogTag::Pool,
                         "ERROR",
                         &format!(
                             "❌ POOL TYPE DETECTION FAILED\n\
-                            Pool Address: {}\n\
-                            Program ID: {}\n\
-                            Data Size: {} bytes\n\
-                            Defaulting to: Raydium CPMM",
+                        Pool Address: {}\n\
+                        Program ID: {}\n\
+                        Data Size: {} bytes\n\
+                        Defaulting to: Raydium CPMM",
                             pool_address,
                             program_id,
                             account_data.len()
@@ -1267,11 +1133,6 @@ impl PoolDiscoveryAndPricing {
                         observation_key: "".to_string(),
                     },
                 })
-            }
-            PoolType::RaydiumAmmV4 => {
-                // Raydium AMM V4 is disabled
-                pool_log("ERROR", "❌ RAYDIUM AMM V4 DISABLED - Cannot parse pool data");
-                return Err(anyhow::anyhow!("Raydium AMM V4 pools are disabled"));
             }
             PoolType::MeteoraDlmm => {
                 let raw_data = self.parse_meteora_dlmm_data(&account_data)?;
@@ -1423,14 +1284,16 @@ impl PoolDiscoveryAndPricing {
                     (Ok(vault_a), Ok(vault_b)) => {
                         let balance_a = self.get_token_balance(&vault_a).await.unwrap_or(0);
                         let balance_b = self.get_token_balance(&vault_b).await.unwrap_or(0);
-                        debug_log(
+                        log(
+                            LogTag::Pool,
                             "DEBUG",
                             &format!("Whirlpool vault balances: A={}, B={}", balance_a, balance_b)
                         );
                         (balance_a, balance_b)
                     }
                     _ => {
-                        debug_log(
+                        log(
+                            LogTag::Pool,
                             "WARN",
                             "Invalid vault addresses, will use sqrt_price calculation only"
                         );
@@ -1520,18 +1383,22 @@ impl PoolDiscoveryAndPricing {
         let cache_path = Path::new("decimal_cache.json");
         let mut decimal_cache = match DecimalCache::load_from_file(cache_path) {
             Ok(cache) => {
-                debug_log("DEBUG", "Decimal cache loaded successfully");
+                log(LogTag::Pool, "DEBUG", "Decimal cache loaded successfully");
                 cache
             }
             Err(e) => {
-                pool_log("WARN", &format!("Failed to load decimal cache: {}", e));
+                log(LogTag::Pool, "WARN", &format!("Failed to load decimal cache: {}", e));
                 DecimalCache::new()
             }
         };
 
         // Get actual token decimals from cache or fetch from chain
         let mints_to_check = vec![pool_data.token_a.mint.clone(), pool_data.token_b.mint.clone()];
-        debug_log("DEBUG", &format!("Checking decimals for {} tokens", mints_to_check.len()));
+        log(
+            LogTag::Pool,
+            "DEBUG",
+            &format!("Checking decimals for {} tokens", mints_to_check.len())
+        );
 
         let decimal_map = match
             fetch_or_cache_decimals(
@@ -1542,12 +1409,12 @@ impl PoolDiscoveryAndPricing {
             ).await
         {
             Ok(map) => {
-                debug_log("DEBUG", "Successfully fetched/cached token decimals");
+                log(LogTag::Pool, "DEBUG", "Successfully fetched/cached token decimals");
                 map
             }
             Err(e) => {
-                pool_log("WARN", &format!("Failed to fetch decimals from cache: {}", e));
-                debug_log("DEBUG", "Using fallback decimals from pool data");
+                log(LogTag::Pool, "WARN", &format!("Failed to fetch decimals from cache: {}", e));
+                log(LogTag::Pool, "DEBUG", "Using fallback decimals from pool data");
                 // Create fallback map using pool data decimals
                 let mut fallback_map = HashMap::new();
                 fallback_map.insert(pool_data.token_a.mint.clone(), pool_data.token_a.decimals);
@@ -1571,7 +1438,8 @@ impl PoolDiscoveryAndPricing {
         let token_b_ui_amount =
             (pool_data.reserve_b.balance as f64) / (10_f64).powi(token_b_decimals as i32);
 
-        debug_log(
+        log(
+            LogTag::Pool,
             "DEBUG",
             &format!(
                 "Token A UI amount: {} (cached decimals: {} vs pool decimals: {}) - {}",
@@ -1585,7 +1453,8 @@ impl PoolDiscoveryAndPricing {
                 }
             )
         );
-        debug_log(
+        log(
+            LogTag::Pool,
             "DEBUG",
             &format!(
                 "Token B UI amount: {} (cached decimals: {} vs pool decimals: {}) - {}",
@@ -1629,7 +1498,8 @@ impl PoolDiscoveryAndPricing {
                 let ui_real_base = (*real_base as f64) / (10_f64).powi(token_a_decimals as i32);
                 let ui_real_quote = (*real_quote as f64) / (10_f64).powi(token_b_decimals as i32);
 
-                debug_log(
+                log(
+                    LogTag::Pool,
                     "DEBUG",
                     &format!(
                         "LaunchLab Real Values - Base: {} (raw: {}, decimals: {}), Quote: {} (raw: {}, decimals: {})",
@@ -1644,27 +1514,37 @@ impl PoolDiscoveryAndPricing {
 
                 if ui_real_base > 0.0 {
                     let price = ui_real_quote / ui_real_base;
-                    pool_log(
+                    log(
+                        LogTag::Pool,
                         "SUCCESS",
                         &format!("LaunchLab price calculated: {} SOL per token", price)
                     );
                     price
                 } else {
-                    pool_log("WARN", "LaunchLab real base is zero, cannot calculate price");
+                    log(
+                        LogTag::Pool,
+                        "WARN",
+                        "LaunchLab real base is zero, cannot calculate price"
+                    );
                     0.0
                 }
             } else {
                 // Fallback to standard calculation if specific data doesn't match expected pattern
-                debug_log("DEBUG", "Using fallback price calculation (no specific LaunchLab data)");
+                log(
+                    LogTag::Pool,
+                    "DEBUG",
+                    "Using fallback price calculation (no specific LaunchLab data)"
+                );
                 if token_amount > 0.0 {
                     let price = sol_amount / token_amount;
-                    pool_log(
+                    log(
+                        LogTag::Pool,
                         "SUCCESS",
                         &format!("Standard price calculated: {} SOL per token", price)
                     );
                     price
                 } else {
-                    pool_log("WARN", "Token amount is zero, cannot calculate price");
+                    log(LogTag::Pool, "WARN", "Token amount is zero, cannot calculate price");
                     0.0
                 }
             }
@@ -1672,7 +1552,7 @@ impl PoolDiscoveryAndPricing {
             if let PoolSpecificData::OrcaWhirlpool { sqrt_price, .. } = &pool_data.specific_data {
                 // Whirlpool price calculation using sqrt_price
                 // Price = (sqrt_price / 2^64)^2 * (10^decimals_B / 10^decimals_A)
-                debug_log("DEBUG", &format!("Whirlpool sqrt_price: {}", sqrt_price));
+                log(LogTag::Pool, "DEBUG", &format!("Whirlpool sqrt_price: {}", sqrt_price));
 
                 let sqrt_price_f64 = *sqrt_price as f64;
                 let q64 = (2_f64).powi(64);
@@ -1704,7 +1584,8 @@ impl PoolDiscoveryAndPricing {
                             (10_f64).powi(token_b_decimals as i32))
                 };
 
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "SUCCESS",
                     &format!(
                         "Whirlpool price calculated: {} SOL per token (sqrt_price: {})",
@@ -1715,16 +1596,25 @@ impl PoolDiscoveryAndPricing {
                 adjusted_price
             } else {
                 // Fallback to vault balance calculation
-                debug_log("DEBUG", "Using fallback vault balance calculation for Whirlpool");
+                log(
+                    LogTag::Pool,
+                    "DEBUG",
+                    "Using fallback vault balance calculation for Whirlpool"
+                );
                 if token_amount > 0.0 {
                     let price = sol_amount / token_amount;
-                    pool_log(
+                    log(
+                        LogTag::Pool,
                         "SUCCESS",
                         &format!("Whirlpool fallback price calculated: {} SOL per token", price)
                     );
                     price
                 } else {
-                    pool_log("WARN", "Token amount is zero, cannot calculate Whirlpool price");
+                    log(
+                        LogTag::Pool,
+                        "WARN",
+                        "Token amount is zero, cannot calculate Whirlpool price"
+                    );
                     0.0
                 }
             }
@@ -1732,7 +1622,7 @@ impl PoolDiscoveryAndPricing {
             if let PoolSpecificData::MeteoraDammV2 { sqrt_price, .. } = &pool_data.specific_data {
                 // Meteora DAMM v2 price calculation using sqrt_price
                 // For concentrated liquidity pools: price = (sqrt_price / 2^64)^2
-                debug_log("DEBUG", &format!("Meteora DAMM v2 sqrt_price: {}", sqrt_price));
+                log(LogTag::Pool, "DEBUG", &format!("Meteora DAMM v2 sqrt_price: {}", sqrt_price));
 
                 let sqrt_price_f64 = *sqrt_price as f64;
                 let sqrt_price_normalized = sqrt_price_f64 / (2_f64).powi(64);
@@ -1744,7 +1634,8 @@ impl PoolDiscoveryAndPricing {
                     (10_f64).powi(token_a_decimals as i32) / (10_f64).powi(token_b_decimals as i32);
                 let adjusted_price = price_raw * decimal_adjustment;
 
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "SUCCESS",
                     &format!(
                         "Meteora DAMM v2 price calculated: {} SOL per token (sqrt_price: {}, raw_price: {}, decimal_adj: {})",
@@ -1757,43 +1648,53 @@ impl PoolDiscoveryAndPricing {
                 adjusted_price
             } else {
                 // Fallback to vault balance calculation
-                debug_log("DEBUG", "Using fallback vault balance calculation for DAMM v2");
+                log(LogTag::Pool, "DEBUG", "Using fallback vault balance calculation for DAMM v2");
                 if token_amount > 0.0 {
                     let price = sol_amount / token_amount;
-                    pool_log(
+                    log(
+                        LogTag::Pool,
                         "SUCCESS",
                         &format!("DAMM v2 fallback price calculated: {} SOL per token", price)
                     );
                     price
                 } else {
-                    pool_log("WARN", "Token amount is zero, cannot calculate DAMM v2 price");
+                    log(
+                        LogTag::Pool,
+                        "WARN",
+                        "Token amount is zero, cannot calculate DAMM v2 price"
+                    );
                     0.0
                 }
             }
         } else if pool_data.pool_type == PoolType::PumpfunAmm {
             // For Pump.fun AMM pools, use simple vault balance calculation
             // Pump.fun pools are typically Base Token/SOL pairs
-            debug_log("DEBUG", "Using Pump.fun AMM price calculation");
+            log(LogTag::Pool, "DEBUG", "Using Pump.fun AMM price calculation");
             if token_amount > 0.0 {
                 let price = sol_amount / token_amount;
-                pool_log(
+                log(
+                    LogTag::Pool,
                     "SUCCESS",
                     &format!("Pump.fun AMM price calculated: {} SOL per token", price)
                 );
                 price
             } else {
-                pool_log("WARN", "Token amount is zero, cannot calculate Pump.fun AMM price");
+                log(
+                    LogTag::Pool,
+                    "WARN",
+                    "Token amount is zero, cannot calculate Pump.fun AMM price"
+                );
                 0.0
             }
         } else {
             // Standard calculation for other pool types
-            debug_log("DEBUG", "Using standard price calculation for non-LaunchLab pool");
+            log(LogTag::Pool, "DEBUG", "Using standard price calculation for non-LaunchLab pool");
             if token_amount > 0.0 {
                 let price = sol_amount / token_amount; // SOL per token (or token_a per token_b if no SOL)
-                pool_log("SUCCESS", &format!("Price calculated: {} per token", price));
+                log(LogTag::Pool, "SUCCESS", &format!("Price calculated: {} per token", price));
                 price
             } else {
-                pool_log("WARN", "Token amount is zero, cannot calculate price");
+                log(LogTag::Pool, "WARN", "Token amount is zero, cannot calculate price");
                 0.0
             }
         };
@@ -1887,622 +1788,6 @@ impl PoolDiscoveryAndPricing {
             mint_0_decimals,
             mint_1_decimals,
             status,
-        })
-    }
-
-    /// Parse Raydium AMM V4 pool data from raw account bytes
-    pub async fn parse_raydium_amm_v4_data(&self, data: &[u8]) -> Result<RaydiumAmmV4Data> {
-        debug_log("DEBUG", &format!("Parsing Raydium AMM V4 data, length: {} bytes", data.len()));
-
-        // Expected mints based on DexScreener API
-        let expected_frogg_mint = "ADSXPGwP3riuvqYtwqogCD4Rfn1a6NASqaSpThpsmoon";
-        let expected_wsol_mint = "So11111111111111111111111111111111111111112";
-
-        debug_log(
-            "DEBUG",
-            &format!(
-                "Searching for expected mints: FROGG={}, WSOL={}",
-                expected_frogg_mint,
-                expected_wsol_mint
-            )
-        );
-
-        // Search for the expected mint addresses in the raw data
-        let frogg_mint_bytes = Pubkey::from_str(expected_frogg_mint).unwrap().to_bytes();
-        let wsol_mint_bytes = Pubkey::from_str(expected_wsol_mint).unwrap().to_bytes();
-
-        let mut frogg_found_at = None;
-        let mut wsol_found_at = None;
-
-        // Search through the data for these exact mint addresses
-        for i in 0..=data.len().saturating_sub(32) {
-            if data[i..i + 32] == frogg_mint_bytes {
-                debug_log("DEBUG", &format!("Found FROGG mint at offset {}", i));
-                frogg_found_at = Some(i);
-            }
-            if data[i..i + 32] == wsol_mint_bytes {
-                debug_log("DEBUG", &format!("Found WSOL mint at offset {}", i));
-                wsol_found_at = Some(i);
-            }
-        }
-
-        // Now search for actual vault addresses by scanning for token accounts with non-zero balances
-        debug_log("DEBUG", "Searching for vault addresses with actual token balances...");
-        let mut potential_vaults = Vec::new();
-
-        // Extract all potential pubkey addresses from the data
-        for i in 0..=data.len().saturating_sub(32) {
-            // Skip mint addresses we already found
-            if let (Some(frogg_offset), Some(wsol_offset)) = (frogg_found_at, wsol_found_at) {
-                if i == frogg_offset || i == wsol_offset {
-                    continue;
-                }
-            }
-
-            // Try to parse as a pubkey
-            if let Ok(pubkey_bytes) = data[i..i + 32].try_into() {
-                let pubkey = Pubkey::new_from_array(pubkey_bytes);
-                let pubkey_str = pubkey.to_string();
-
-                // Skip obvious invalid addresses (all zeros, all ones, etc.)
-                if
-                    pubkey_str == "11111111111111111111111111111111" ||
-                    pubkey_str == "00000000000000000000000000000000" ||
-                    pubkey == Pubkey::default()
-                {
-                    continue;
-                }
-
-                potential_vaults.push((i, pubkey_str));
-            }
-        }
-
-        debug_log(
-            "DEBUG",
-            &format!("Found {} potential vault addresses to check", potential_vaults.len())
-        );
-
-        // Use a simplified approach: try standard offsets first
-        let mut coin_vault = Pubkey::default();
-        let mut pc_vault = Pubkey::default();
-
-        // Try the standard offsets first (more efficient)
-        let coin_vault_offset = 264; // Known base coin vault offset
-        let pc_vault_offset = 296; // Known pc vault offset
-
-        if data.len() >= pc_vault_offset + 32 {
-            let potential_coin_vault = Pubkey::new_from_array(
-                data[coin_vault_offset..coin_vault_offset + 32].try_into()?
-            );
-            let potential_pc_vault = Pubkey::new_from_array(
-                data[pc_vault_offset..pc_vault_offset + 32].try_into()?
-            );
-
-            debug_log(
-                "DEBUG",
-                &format!(
-                    "Standard offset vaults: coin={}, pc={}",
-                    potential_coin_vault,
-                    potential_pc_vault
-                )
-            );
-
-            // Validate these aren't mint addresses and aren't default
-            if
-                potential_coin_vault.to_string() != expected_frogg_mint &&
-                potential_pc_vault.to_string() != expected_wsol_mint &&
-                potential_coin_vault != Pubkey::default() &&
-                potential_pc_vault != Pubkey::default()
-            {
-                coin_vault = potential_coin_vault;
-                pc_vault = potential_pc_vault;
-                debug_log("DEBUG", "✅ Standard offset vaults validated successfully");
-            } else {
-                debug_log(
-                    "WARN",
-                    "Standard offset vaults failed validation, will try scanning potential addresses"
-                );
-
-                // Try scanning through the potential addresses
-                let mut vault_found = false;
-                for i in 0..potential_vaults.len().saturating_sub(1) {
-                    let candidate = Pubkey::from_str(&potential_vaults[i].1)?;
-                    let next_candidate = Pubkey::from_str(&potential_vaults[i + 1].1)?;
-
-                    // Validate this pair isn't mint addresses
-                    if
-                        candidate.to_string() != expected_frogg_mint &&
-                        next_candidate.to_string() != expected_wsol_mint &&
-                        candidate != Pubkey::default() &&
-                        next_candidate != Pubkey::default()
-                    {
-                        coin_vault = candidate;
-                        pc_vault = next_candidate;
-                        vault_found = true;
-                        debug_log(
-                            "DEBUG",
-                            &format!(
-                                "✅ Found vault pair via scanning: coin={}, pc={}",
-                                coin_vault,
-                                pc_vault
-                            )
-                        );
-                        break;
-                    }
-                }
-
-                if !vault_found {
-                    debug_log("WARN", "Could not find valid vault addresses via any method");
-                }
-            }
-        }
-
-        // Assign token mints based on discovery
-        let token_coin = if frogg_found_at.is_some() {
-            Pubkey::from_str(expected_frogg_mint)?
-        } else {
-            Pubkey::default()
-        };
-
-        let token_pc = if wsol_found_at.is_some() {
-            Pubkey::from_str(expected_wsol_mint)?
-        } else {
-            Pubkey::default()
-        };
-
-        // For Raydium AMM V4, let's parse the core fields that are most likely to be present
-        // Based on the actual data size, we'll parse what we can safely
-        if data.len() < 400 {
-            return Err(
-                anyhow::anyhow!(
-                    "Raydium AMM V4 pool data too short, expected at least 400 bytes, got {}",
-                    data.len()
-                )
-            );
-        }
-
-        let mut offset = 0;
-
-        // Parse the AMM structure based on Raydium's layout
-        // status (u64)
-        let status = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // nonce (u64)
-        let nonce = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // max_order (u64)
-        let max_order = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // depth (u64)
-        let depth = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // base_decimals (u64)
-        let base_decimals = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // quote_decimals (u64)
-        let quote_decimals = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // state (u64)
-        let state = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // reset_flag (u64)
-        let reset_flag = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // min_size (u64)
-        let min_size = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // vol_max_cut_ratio (u64)
-        let vol_max_cut_ratio = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // amount_wave (u64)
-        let amount_wave = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // coin_lot_size (u64)
-        let coin_lot_size = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // pc_lot_size (u64)
-        let pc_lot_size = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // min_price_multiplier (u64)
-        let min_price_multiplier = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // max_price_multiplier (u64)
-        let max_price_multiplier = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // sys_decimal_value (u64)
-        let sys_decimal_value = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        // fees (AmmFees) - 64 bytes total
-        let min_separate_numerator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let min_separate_denominator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let trade_fee_numerator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let trade_fee_denominator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let pnl_numerator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let pnl_denominator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let swap_fee_numerator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-        let swap_fee_denominator = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-        offset += 8;
-
-        let fees = AmmFees {
-            min_separate_numerator,
-            min_separate_denominator,
-            trade_fee_numerator,
-            trade_fee_denominator,
-            pnl_numerator,
-            pnl_denominator,
-            swap_fee_numerator,
-            swap_fee_denominator,
-        };
-
-        // out_put (OutPutData) - 112 bytes total (if we have enough data)
-        let out_put = if offset + 112 <= data.len() {
-            let need_take_pnl_coin = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let need_take_pnl_pc = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let total_pnl_pc = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let total_pnl_coin = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let pool_open_time = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let punish_pc_amount = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let punish_coin_amount = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let orderbook_to_init_time = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let swap_coin_in_amount = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
-            offset += 16;
-            let swap_pc_out_amount = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
-            offset += 16;
-            let swap_coin2pc_fee = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-            let swap_pc_in_amount = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
-            offset += 16;
-            let swap_coin_out_amount = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
-            offset += 16;
-            let swap_pc2coin_fee = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
-            offset += 8;
-
-            OutPutData {
-                need_take_pnl_coin,
-                need_take_pnl_pc,
-                total_pnl_pc,
-                total_pnl_coin,
-                pool_open_time,
-                punish_pc_amount,
-                punish_coin_amount,
-                orderbook_to_init_time,
-                swap_coin_in_amount,
-                swap_pc_out_amount,
-                swap_coin2pc_fee,
-                swap_pc_in_amount,
-                swap_coin_out_amount,
-                swap_pc2coin_fee,
-            }
-        } else {
-            debug_log(
-                "WARN",
-                &format!(
-                    "Not enough data for OutPutData, using defaults. Have: {}, need: {}",
-                    data.len() - offset,
-                    112
-                )
-            );
-            OutPutData {
-                need_take_pnl_coin: 0,
-                need_take_pnl_pc: 0,
-                total_pnl_pc: 0,
-                total_pnl_coin: 0,
-                pool_open_time: 0,
-                punish_pc_amount: 0,
-                punish_coin_amount: 0,
-                orderbook_to_init_time: 0,
-                swap_coin_in_amount: 0,
-                swap_pc_out_amount: 0,
-                swap_coin2pc_fee: 0,
-                swap_pc_in_amount: 0,
-                swap_coin_out_amount: 0,
-                swap_pc2coin_fee: 0,
-            }
-        };
-
-        // Parse token addresses using the pattern search results
-        let (token_coin, token_pc) = if
-            let (Some(frogg_offset), Some(wsol_offset)) = (frogg_found_at, wsol_found_at)
-        {
-            debug_log(
-                "DEBUG",
-                &format!(
-                    "Using found mint addresses: FROGG at offset {}, WSOL at offset {}",
-                    frogg_offset,
-                    wsol_offset
-                )
-            );
-            (
-                Pubkey::from_str(expected_frogg_mint).unwrap(),
-                Pubkey::from_str(expected_wsol_mint).unwrap(),
-            )
-        } else {
-            debug_log("WARN", "Could not find expected mint addresses, using offset-based parsing");
-            if offset + 64 <= data.len() {
-                let coin = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-                offset += 32;
-                let pc = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-                offset += 32;
-                debug_log("DEBUG", &format!("Parsed token addresses - Coin: {}, PC: {}", coin, pc));
-                (coin, pc)
-            } else {
-                debug_log(
-                    "WARN",
-                    &format!(
-                        "Not enough data for token addresses, using defaults. Have: {}, need: 64",
-                        data.len() - offset
-                    )
-                );
-                (Pubkey::default(), Pubkey::default())
-            }
-        };
-
-        // Skip the original offset position if we used pattern matching
-        if frogg_found_at.is_some() && wsol_found_at.is_some() {
-            // Pattern matching was successful, skip offset-based token parsing
-            if offset + 64 <= data.len() {
-                offset += 64; // Skip the offset-based token positions
-                debug_log(
-                    "DEBUG",
-                    "Skipped offset-based token positions since pattern matching found the correct mints"
-                );
-            }
-        }
-
-        // Skip the next 64 bytes which are NOT vault addresses but other fields
-        // (Based on the test output, these are being misinterpreted)
-        if offset + 64 <= data.len() {
-            offset += 64; // Skip these bytes
-            debug_log(
-                "DEBUG",
-                &format!("Skipped 64 bytes at offset {} (not vault addresses)", offset - 64)
-            );
-        }
-
-        // Parse vault addresses at the correct offset (further down in the structure)
-        let (coin_vault, pc_vault) = if offset + 64 <= data.len() {
-            let coin = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            let pc = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            debug_log(
-                "DEBUG",
-                &format!(
-                    "Parsed vault addresses (attempt 1) - Coin Vault: {}, PC Vault: {}",
-                    coin,
-                    pc
-                )
-            );
-
-            // Validate these are actual vault addresses, not mint addresses
-            if coin.to_string() == token_coin.to_string() || pc.to_string() == token_pc.to_string() {
-                debug_log(
-                    "WARN",
-                    "Detected vault addresses are actually token mints, trying next position"
-                );
-
-                // Try the next position
-                if offset + 64 <= data.len() {
-                    let coin = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-                    offset += 32;
-                    let pc = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-                    offset += 32;
-                    debug_log(
-                        "DEBUG",
-                        &format!(
-                            "Parsed vault addresses (attempt 2) - Coin Vault: {}, PC Vault: {}",
-                            coin,
-                            pc
-                        )
-                    );
-                    (coin, pc)
-                } else {
-                    debug_log("WARN", "Not enough data for vault addresses at next position");
-                    (Pubkey::default(), Pubkey::default())
-                }
-            } else {
-                (coin, pc)
-            }
-        } else {
-            debug_log(
-                "WARN",
-                &format!(
-                    "Not enough data for vault addresses, using defaults. Have: {}, need: 64",
-                    data.len() - offset
-                )
-            );
-            (Pubkey::default(), Pubkey::default())
-        };
-
-        // For all other fields, use defaults if not enough data
-        let withdraw_queue = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let token_temp_lp = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let amm_target_orders = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let pool_withdraw_queue = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let pool_temp_lp = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_program_id = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_market = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_bids = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_asks = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_event_queue = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_coin_vault_account = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_pc_vault_account = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let serum_vault_signer = if offset + 32 <= data.len() {
-            let key = Pubkey::new_from_array(data[offset..offset + 32].try_into()?);
-            offset += 32;
-            key
-        } else {
-            Pubkey::default()
-        };
-
-        let official_flag = if offset + 8 <= data.len() {
-            u64::from_le_bytes(data[offset..offset + 8].try_into()?)
-        } else {
-            0
-        };
-
-        debug_log(
-            "DEBUG",
-            &format!(
-                "Successfully parsed Raydium AMM V4 data: coin_mint={}, pc_mint={}, status={}",
-                token_coin,
-                token_pc,
-                status
-            )
-        );
-
-        Ok(RaydiumAmmV4Data {
-            status,
-            nonce,
-            max_order,
-            depth,
-            base_decimals,
-            quote_decimals,
-            state,
-            reset_flag,
-            min_size,
-            vol_max_cut_ratio,
-            amount_wave,
-            coin_lot_size,
-            pc_lot_size,
-            min_price_multiplier,
-            max_price_multiplier,
-            sys_decimal_value,
-            fees,
-            out_put,
-            token_coin,
-            token_pc,
-            coin_vault,
-            pc_vault,
-            withdraw_queue,
-            token_temp_lp,
-            amm_target_orders,
-            pool_withdraw_queue,
-            pool_temp_lp,
-            serum_program_id,
-            serum_market,
-            serum_bids,
-            serum_asks,
-            serum_event_queue,
-            serum_coin_vault_account,
-            serum_pc_vault_account,
-            serum_vault_signer,
-            official_flag,
         })
     }
 
@@ -2619,7 +1904,7 @@ impl PoolDiscoveryAndPricing {
             );
         }
 
-        debug_log("DEBUG", &format!("Parsing DAMM v2 pool data: {} bytes", data.len()));
+        log(LogTag::Pool, "DEBUG", &format!("Parsing DAMM v2 pool data: {} bytes", data.len()));
 
         // Based on our analysis of actual pool data, the correct field positions are:
 
@@ -2671,7 +1956,8 @@ impl PoolDiscoveryAndPricing {
             0 // Default value if we can't read it
         };
 
-        debug_log(
+        log(
+            LogTag::Pool,
             "DEBUG",
             &format!(
                 "DAMM v2 parsed - token_a: {}, token_b: {}, token_a_vault: {}, token_b_vault: {}, liquidity: {}, sqrt_price: {}, status: {}",
@@ -2695,7 +1981,8 @@ impl PoolDiscoveryAndPricing {
             return Err(anyhow::anyhow!("Invalid pubkeys found in DAMM v2 pool data"));
         }
 
-        pool_log(
+        log(
+            LogTag::Pool,
             "SUCCESS",
             &format!(
                 "Successfully parsed DAMM v2 pool: token_a={}, token_b={}, liquidity={}, sqrt_price={}",
@@ -2761,18 +2048,23 @@ impl PoolDiscoveryAndPricing {
                 }
             }
 
-            debug_log("DEBUG", &format!("{:08X} |{} | {}", offset, hex_string, ascii_string));
+            log(
+                LogTag::Pool,
+                "DEBUG",
+                &format!("{:08X} |{} | {}", offset, hex_string, ascii_string)
+            );
             offset += bytes_per_line;
         }
-        debug_log("DEBUG", "=========================================");
+        log(LogTag::Pool, "DEBUG", "=========================================");
     }
 
     /// Parse Raydium LaunchLab pool data from raw account bytes
     fn parse_raydium_launchlab_data(&self, data: &[u8]) -> Result<RaydiumLaunchLabData> {
-        debug_log("DEBUG", &format!("LaunchLab pool data length: {} bytes", data.len()));
+        log(LogTag::Pool, "DEBUG", &format!("LaunchLab pool data length: {} bytes", data.len()));
 
         if data.len() < 317 {
-            pool_log(
+            log(
+                LogTag::Pool,
                 "ERROR",
                 &format!("LaunchLab pool data too short: {} bytes (minimum: 317)", data.len())
             );
@@ -2782,12 +2074,12 @@ impl PoolDiscoveryAndPricing {
         }
 
         // COMPREHENSIVE HEX DUMP - Print entire data structure in hex format
-        debug_log("DEBUG", "=== COMPREHENSIVE HEX DUMP ===");
+        log(LogTag::Pool, "DEBUG", "=== COMPREHENSIVE HEX DUMP ===");
         self.hex_dump_data(data, 0, std::cmp::min(400, data.len()));
 
         // Debug: Print first 100 bytes to understand the structure
         let debug_bytes = &data[0..std::cmp::min(100, data.len())];
-        debug_log("DEBUG", &format!("First 100 bytes: {:?}", debug_bytes));
+        log(LogTag::Pool, "DEBUG", &format!("First 100 bytes: {:?}", debug_bytes));
 
         // First, perform pattern matching for expected values
         // Looking at the values we expect: real_base=793100000000000, real_quote=85000000226
@@ -2927,7 +2219,8 @@ impl PoolDiscoveryAndPricing {
         let (real_base, real_quote) = if
             let (Some(_), Some(_)) = (real_base_found_at, real_quote_found_at)
         {
-            debug_log(
+            log(
+                LogTag::Pool,
                 "DEBUG",
                 &format!(
                     "Using pattern-matched values: real_base={}, real_quote={}",
@@ -2937,7 +2230,7 @@ impl PoolDiscoveryAndPricing {
             );
             (793100000000000u64, 85000000226u64)
         } else {
-            debug_log("DEBUG", "Pattern matching failed, using corrected parsing results");
+            log(LogTag::Pool, "DEBUG", "Pattern matching failed, using corrected parsing results");
             (real_base_corrected, real_quote_corrected)
         };
 
@@ -3061,10 +2354,15 @@ impl PoolDiscoveryAndPricing {
 
     /// Parse Orca Whirlpool pool data from raw account bytes
     fn parse_orca_whirlpool_data(&self, data: &[u8]) -> Result<OrcaWhirlpoolData> {
-        debug_log("DEBUG", &format!("Orca Whirlpool pool data length: {} bytes", data.len()));
+        log(
+            LogTag::Pool,
+            "DEBUG",
+            &format!("Orca Whirlpool pool data length: {} bytes", data.len())
+        );
 
         if data.len() < 653 {
-            pool_log(
+            log(
+                LogTag::Pool,
                 "ERROR",
                 &format!(
                     "Orca Whirlpool pool data too short: {} bytes (expected at least 653)",
@@ -3153,7 +2451,8 @@ impl PoolDiscoveryAndPricing {
         // feeGrowthGlobalB (u128) - 16 bytes
         let fee_growth_global_b = u128::from_le_bytes(data[offset..offset + 16].try_into()?);
 
-        pool_log(
+        log(
+            LogTag::Pool,
             "SUCCESS",
             &format!(
                 "Parsed Orca Whirlpool: tokenA={} ({}), tokenB={} ({}), liquidity={}, sqrt_price={}, tick_spacing={}, fee_rate={}",
@@ -3198,7 +2497,11 @@ impl PoolDiscoveryAndPricing {
 
     /// Parse Pump.fun AMM pool data
     fn parse_pumpfun_amm_data(&self, data: &[u8]) -> Result<PumpfunAmmData> {
-        debug_log("DEBUG", &format!("Parsing Pump.fun AMM pool data, length: {}", data.len()));
+        log(
+            LogTag::Pool,
+            "DEBUG",
+            &format!("Parsing Pump.fun AMM pool data, length: {}", data.len())
+        );
 
         let mut offset = 8; // Skip discriminator
 
@@ -3277,7 +2580,8 @@ impl PoolDiscoveryAndPricing {
             data[offset..offset + 32].try_into()?
         ).to_string();
 
-        debug_log(
+        log(
+            LogTag::Pool,
             "DEBUG",
             &format!(
                 "Parsed Pump.fun AMM data: pool_bump={}, index={}, creator={}, base_mint={}, quote_mint={}, lp_supply={}",
@@ -3530,7 +2834,6 @@ impl PoolPriceResult {
             PoolType::RaydiumCpmm => "CPMM".to_string(),
             PoolType::MeteoraDlmm => "DLMM".to_string(),
             PoolType::MeteoraDammV2 => "DAMM v2".to_string(),
-            PoolType::RaydiumAmmV4 => "AMM V4 (DISABLED)".to_string(),
             PoolType::Orca => "Orca".to_string(),
             PoolType::OrcaWhirlpool => "Whirlpool".to_string(),
             PoolType::Phoenix => "Phoenix".to_string(),
