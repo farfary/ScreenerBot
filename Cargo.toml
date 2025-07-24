@@ -123,17 +123,9 @@ name = "tool_sell_all_and_close_atas"
 path = "src/bin/tool_sell_all_and_close_atas.rs"
 
 [[bin]]
-name = "tool_pool_discovery"
-path = "src/bin/tool_pool_discovery.rs"
-
-[[bin]]
-name = "tool_token_db_manager"
-path = "src/bin/tool_token_db_manager.rs"
-
-[[bin]]
 name = "tool_pool_prices"
 path = "src/bin/tool_pool_prices.rs"
 
 [[bin]]
-name = "test_debug_filtering"
-path = "src/bin/test_debug_filtering.rs"
+name = "test_token_monitoring_system"
+path = "src/bin/test_token_monitoring_system.rs"
