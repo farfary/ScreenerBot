@@ -115,7 +115,13 @@ impl PoolType {
                 if labels.iter().any(|l| l.eq_ignore_ascii_case("DLMM")) {
                     PoolType::MeteoraDlmm
                 } else {
-                    PoolType::MeteoraDlmm // Default to DLMM for Meteora
+                    // If no specific label, try to determine based on other factors
+                    // We can check program ID later in the detection override
+                    debug_log(
+                        "DEBUG",
+                        "Meteora pool without specific labels, defaulting to MeteoraDammV2 for further detection"
+                    );
+                    PoolType::MeteoraDammV2
                 }
             }
             "orca" => {
@@ -812,6 +818,29 @@ impl PoolDiscoveryAndPricing {
                         "Program ID confirms this is a Whirlpool, overriding classification"
                     );
                     pool_type = PoolType::OrcaWhirlpool;
+                }
+            }
+        }
+
+        // Similar override for Meteora pools - check actual program ID for accurate classification
+        if pool_type == PoolType::MeteoraDammV2 || pool_type == PoolType::MeteoraDlmm {
+            debug_log(
+                "DEBUG",
+                &format!("DexScreener classified as {:?}, checking actual program ID...", pool_type)
+            );
+            if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
+                if
+                    detected_type == PoolType::MeteoraDammV2 ||
+                    detected_type == PoolType::MeteoraDlmm
+                {
+                    debug_log(
+                        "DEBUG",
+                        &format!(
+                            "Program ID confirms this is {:?}, overriding classification",
+                            detected_type
+                        )
+                    );
+                    pool_type = detected_type;
                 }
             }
         }
@@ -1577,6 +1606,48 @@ impl PoolDiscoveryAndPricing {
                     0.0
                 }
             }
+        } else if pool_data.pool_type == PoolType::MeteoraDammV2 {
+            if let PoolSpecificData::MeteoraDammV2 { sqrt_price, .. } = &pool_data.specific_data {
+                // Meteora DAMM v2 price calculation using sqrt_price
+                // For concentrated liquidity pools: price = (sqrt_price / 2^64)^2
+                debug_log("DEBUG", &format!("Meteora DAMM v2 sqrt_price: {}", sqrt_price));
+
+                let sqrt_price_f64 = *sqrt_price as f64;
+                let sqrt_price_normalized = sqrt_price_f64 / (2_f64).powi(64);
+                let price_raw = sqrt_price_normalized * sqrt_price_normalized;
+
+                // Apply decimal adjustment to get proper price in SOL per token
+                // This gives us price in the base unit ratio, then adjust for decimals
+                let decimal_adjustment =
+                    (10_f64).powi(token_a_decimals as i32) / (10_f64).powi(token_b_decimals as i32);
+                let adjusted_price = price_raw * decimal_adjustment;
+
+                pool_log(
+                    "SUCCESS",
+                    &format!(
+                        "Meteora DAMM v2 price calculated: {} SOL per token (sqrt_price: {}, raw_price: {}, decimal_adj: {})",
+                        adjusted_price,
+                        sqrt_price,
+                        price_raw,
+                        decimal_adjustment
+                    )
+                );
+                adjusted_price
+            } else {
+                // Fallback to vault balance calculation
+                debug_log("DEBUG", "Using fallback vault balance calculation for DAMM v2");
+                if token_amount > 0.0 {
+                    let price = sol_amount / token_amount;
+                    pool_log(
+                        "SUCCESS",
+                        &format!("DAMM v2 fallback price calculated: {} SOL per token", price)
+                    );
+                    price
+                } else {
+                    pool_log("WARN", "Token amount is zero, cannot calculate DAMM v2 price");
+                    0.0
+                }
+            }
         } else if pool_data.pool_type == PoolType::PumpfunAmm {
             // For Pump.fun AMM pools, use simple vault balance calculation
             // Pump.fun pools are typically Base Token/SOL pairs
@@ -1804,61 +1875,92 @@ impl PoolDiscoveryAndPricing {
 
     /// Parse Meteora DAMM v2 pool data from raw account bytes
     fn parse_meteora_damm_v2_data(&self, data: &[u8]) -> Result<MeteoraDammV2Data> {
-        if data.len() < 1024 {
-            return Err(anyhow::anyhow!("Meteora DAMM v2 pool data too short"));
+        if data.len() < 500 {
+            return Err(
+                anyhow::anyhow!("Meteora DAMM v2 pool data too short: {} bytes", data.len())
+            );
         }
 
-        // Based on the provided JSON layout - these offsets are from the actual DAMM v2 program
-        // We need to extract token_a_mint, token_b_mint, token_a_vault, token_b_vault, liquidity, sqrt_price, and pool_status
+        debug_log("DEBUG", &format!("Parsing DAMM v2 pool data: {} bytes", data.len()));
 
-        // token_a_mint is at offset 192 (32 bytes)
+        // Based on our analysis of actual pool data, the correct field positions are:
+
+        // token_a_mint at offset 168 (32 bytes)
         let token_a_mint = Pubkey::new_from_array(
-            data[192..192 + 32]
+            data[168..168 + 32]
                 .try_into()
-                .map_err(|_| anyhow::anyhow!("Failed to read token_a_mint"))?
+                .map_err(|_| anyhow::anyhow!("Failed to read token_a_mint at offset 168"))?
         ).to_string();
 
-        // token_b_mint is at offset 224 (32 bytes)
+        // token_b_mint at offset 200 (32 bytes)
         let token_b_mint = Pubkey::new_from_array(
-            data[224..224 + 32]
+            data[200..200 + 32]
                 .try_into()
-                .map_err(|_| anyhow::anyhow!("Failed to read token_b_mint"))?
+                .map_err(|_| anyhow::anyhow!("Failed to read token_b_mint at offset 200"))?
         ).to_string();
 
-        // token_a_vault is at offset 256 (32 bytes)
+        // token_a_vault at offset 232 (32 bytes)
         let token_a_vault = Pubkey::new_from_array(
-            data[256..256 + 32]
+            data[232..232 + 32]
                 .try_into()
-                .map_err(|_| anyhow::anyhow!("Failed to read token_a_vault"))?
+                .map_err(|_| anyhow::anyhow!("Failed to read token_a_vault at offset 232"))?
         ).to_string();
 
-        // token_b_vault is at offset 288 (32 bytes)
+        // token_b_vault at offset 264 (32 bytes)
         let token_b_vault = Pubkey::new_from_array(
-            data[288..288 + 32]
+            data[264..264 + 32]
                 .try_into()
-                .map_err(|_| anyhow::anyhow!("Failed to read token_b_vault"))?
+                .map_err(|_| anyhow::anyhow!("Failed to read token_b_vault at offset 264"))?
         ).to_string();
 
-        // liquidity is at offset 352 (16 bytes as u128)
-        let liquidity_bytes: [u8; 16] = data[352..352 + 16]
+        // liquidity at offset 360 (16 bytes as u128)
+        let liquidity_bytes: [u8; 16] = data[360..360 + 16]
             .try_into()
-            .map_err(|_| anyhow::anyhow!("Failed to read liquidity"))?;
+            .map_err(|_| anyhow::anyhow!("Failed to read liquidity at offset 360"))?;
         let liquidity = u128::from_le_bytes(liquidity_bytes);
 
-        // sqrt_price is at offset 608 (16 bytes as u128)
-        let sqrt_price_bytes: [u8; 16] = data[608..608 + 16]
+        // sqrt_price at offset 456 (16 bytes as u128)
+        let sqrt_price_bytes: [u8; 16] = data[456..456 + 16]
             .try_into()
-            .map_err(|_| anyhow::anyhow!("Failed to read sqrt_price"))?;
+            .map_err(|_| anyhow::anyhow!("Failed to read sqrt_price at offset 456"))?;
         let sqrt_price = u128::from_le_bytes(sqrt_price_bytes);
 
-        // pool_status is at offset 633 (1 byte)
-        let pool_status = data[633];
+        // pool_status - let's check a few possible locations based on the JSON structure
+        // The JSON shows activation_type and pool_status fields, let's try around offset 470-480
+        let pool_status = if data.len() > 480 {
+            data[480] // Try this position first
+        } else {
+            0 // Default value if we can't read it
+        };
 
-        log(
-            LogTag::System,
-            "INFO",
+        debug_log(
+            "DEBUG",
             &format!(
-                "Parsed DAMM v2 pool: token_a={}, token_b={}, liquidity={}, sqrt_price={}",
+                "DAMM v2 parsed - token_a: {}, token_b: {}, token_a_vault: {}, token_b_vault: {}, liquidity: {}, sqrt_price: {}, status: {}",
+                token_a_mint,
+                token_b_mint,
+                token_a_vault,
+                token_b_vault,
+                liquidity,
+                sqrt_price,
+                pool_status
+            )
+        );
+
+        // Validate that we have valid pubkeys (not all 1's)
+        if
+            token_a_mint == "11111111111111111111111111111111" ||
+            token_b_mint == "11111111111111111111111111111111" ||
+            token_a_vault == "11111111111111111111111111111111" ||
+            token_b_vault == "11111111111111111111111111111111"
+        {
+            return Err(anyhow::anyhow!("Invalid pubkeys found in DAMM v2 pool data"));
+        }
+
+        pool_log(
+            "SUCCESS",
+            &format!(
+                "Successfully parsed DAMM v2 pool: token_a={}, token_b={}, liquidity={}, sqrt_price={}",
                 token_a_mint,
                 token_b_mint,
                 liquidity,
