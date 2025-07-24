@@ -377,7 +377,16 @@ impl PoolDiscoveryAndPricing {
         if !response.status().is_success() {
             pool_log(
                 "ERROR",
-                &format!("DexScreener API request failed with status: {}", response.status())
+                &format!(
+                    "❌ DEXSCREENER API FAILED\n\
+                    Token Mint: {}\n\
+                    HTTP Status: {}\n\
+                    URL: {}\n\
+                    Error: Failed to fetch pool data from DexScreener API",
+                    token_mint,
+                    response.status(),
+                    url
+                )
             );
             return Err(
                 anyhow::anyhow!("DexScreener API request failed with status: {}", response.status())
@@ -389,6 +398,23 @@ impl PoolDiscoveryAndPricing {
 
         debug_log("DEBUG", &format!("Received {} raw pairs from API", pairs.len()));
 
+        // Log if API returned no pairs
+        if pairs.is_empty() {
+            pool_log(
+                "WARN",
+                &format!(
+                    "⚠️ NO PAIRS FROM DEXSCREENER\n\
+                    Token Mint: {}\n\
+                    API URL: {}\n\
+                    Response: Empty pairs array",
+                    token_mint,
+                    url
+                )
+            );
+        }
+
+        let pairs_count = pairs.len(); // Store count before moving
+
         for pair in pairs {
             if let Ok(pool) = self.parse_pool_from_api_response(&pair) {
                 debug_log(
@@ -397,7 +423,16 @@ impl PoolDiscoveryAndPricing {
                 );
                 discovered_pools.push(pool);
             } else {
-                debug_log("DEBUG", "Failed to parse pool from API response");
+                debug_log(
+                    "DEBUG",
+                    &format!(
+                        "Failed to parse pool from API response: {:?}",
+                        pair
+                            .get("pairAddress")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                    )
+                );
             }
         }
 
@@ -405,6 +440,22 @@ impl PoolDiscoveryAndPricing {
             "SUCCESS",
             &format!("Discovered {} pools for token {}", discovered_pools.len(), token_mint)
         );
+
+        // Log if no pools were discovered
+        if discovered_pools.is_empty() {
+            pool_log(
+                "WARN",
+                &format!(
+                    "⚠️ NO POOLS DISCOVERED\n\
+                    Token Mint: {}\n\
+                    DexScreener API Response: {} pairs total\n\
+                    Reason: No valid pools could be parsed from API response",
+                    token_mint,
+                    pairs_count
+                )
+            );
+        }
+
         Ok(discovered_pools)
     }
 
@@ -473,6 +524,75 @@ impl PoolDiscoveryAndPricing {
 
         for pool in discovered_pools {
             let result = self.calculate_pool_price_with_discovery(&pool).await;
+
+            // Log detailed error information for failed price calculations
+            if !result.calculation_successful {
+                pool_log(
+                    "ERROR",
+                    &format!(
+                        "❌ PRICE CALCULATION FAILED\n\
+                        Token Name: {}\n\
+                        Token Symbol: {}\n\
+                        Token Mint: {}\n\
+                        Pool Address: {}\n\
+                        Pool Type: {:?}\n\
+                        DEX ID: {}\n\
+                        Owner Program ID: {}\n\
+                        Error: {}",
+                        if result.token_a_mint == token_mint {
+                            &result.token_a_symbol
+                        } else {
+                            &result.token_b_symbol
+                        },
+                        if result.token_a_mint == token_mint {
+                            &result.token_a_symbol
+                        } else {
+                            &result.token_b_symbol
+                        },
+                        token_mint,
+                        result.pool_address,
+                        result.pool_type,
+                        result.dex_id,
+                        self.get_program_id_for_pool_type(result.pool_type),
+                        result.error_message.as_ref().unwrap_or(&"Unknown error".to_string())
+                    )
+                );
+            } else if result.calculated_price <= 0.0 {
+                // Log for invalid prices (zero or negative)
+                pool_log(
+                    "WARN",
+                    &format!(
+                        "⚠️ INVALID PRICE CALCULATED\n\
+                        Token Name: {}\n\
+                        Token Symbol: {}\n\
+                        Token Mint: {}\n\
+                        Pool Address: {}\n\
+                        Pool Type: {:?}\n\
+                        DEX ID: {}\n\
+                        Owner Program ID: {}\n\
+                        Calculated Price: {}\n\
+                        DexScreener Price: {}",
+                        if result.token_a_mint == token_mint {
+                            &result.token_a_symbol
+                        } else {
+                            &result.token_b_symbol
+                        },
+                        if result.token_a_mint == token_mint {
+                            &result.token_a_symbol
+                        } else {
+                            &result.token_b_symbol
+                        },
+                        token_mint,
+                        result.pool_address,
+                        result.pool_type,
+                        result.dex_id,
+                        self.get_program_id_for_pool_type(result.pool_type),
+                        result.calculated_price,
+                        result.dexscreener_price
+                    )
+                );
+            }
+
             results.push(result);
         }
 
@@ -482,6 +602,19 @@ impl PoolDiscoveryAndPricing {
         );
 
         Ok(results)
+    }
+
+    /// Get program ID string for a given pool type
+    fn get_program_id_for_pool_type(&self, pool_type: PoolType) -> String {
+        match pool_type {
+            PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
+            PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
+            PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
+            PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
+            PoolType::OrcaWhirlpool => ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
+            PoolType::PumpfunAmm => PUMPFUN_AMM_PROGRAM_ID.to_string(),
+            _ => "Unknown".to_string(),
+        }
     }
 
     /// Get biggest pool for token with caching (2-minute expiration)
@@ -512,6 +645,7 @@ impl PoolDiscoveryAndPricing {
 
         // Fetch all pool prices
         let pool_results = self.get_token_pool_prices(token_mint).await?;
+        let pool_results_count = pool_results.len(); // Store count before moving
 
         // Find the biggest successful pool (by liquidity)
         let biggest_pool = pool_results
@@ -520,6 +654,21 @@ impl PoolDiscoveryAndPricing {
             .max_by(|a, b|
                 a.liquidity_usd.partial_cmp(&b.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
             );
+
+        // Log if no valid pools found
+        if biggest_pool.is_none() {
+            pool_log(
+                "WARN",
+                &format!(
+                    "⚠️ NO VALID POOLS FOUND\n\
+                    Token Mint: {}\n\
+                    Reason: No pools with successful calculation and SOL pairing found\n\
+                    Total pools discovered: {}",
+                    token_mint,
+                    pool_results_count
+                )
+            );
+        }
 
         // Cache the result if found
         if let Some(pool) = &biggest_pool {
@@ -677,10 +826,27 @@ impl PoolDiscoveryAndPricing {
         let (calculated_price, calculation_successful, error_message) = match
             self.calculate_pool_price_with_type(&discovered_pool.pair_address, pool_type).await
         {
-            Ok((price, _, _, _)) => (price, true, None),
+            Ok((price, _, _, _)) => {
+                if price <= 0.0 {
+                    let error_msg =
+                        format!("Invalid price calculated: {} (price must be > 0)", price);
+                    debug_log("WARN", &error_msg);
+                    (price, false, Some(error_msg))
+                } else {
+                    (price, true, None)
+                }
+            }
             Err(e) => {
                 let error_msg = format!("Failed to calculate on-chain price: {}", e);
-                pool_log("WARN", &error_msg);
+                debug_log(
+                    "ERROR",
+                    &format!(
+                        "Pool calculation failed - Address: {}, Type: {:?}, Error: {}",
+                        discovered_pool.pair_address,
+                        pool_type,
+                        e
+                    )
+                );
                 (0.0, false, Some(error_msg))
             }
         };
@@ -781,8 +947,39 @@ impl PoolDiscoveryAndPricing {
 
     /// Auto-detect pool type based on pool address and program ID owner
     pub async fn detect_pool_type(&self, pool_address: &str) -> Result<PoolType> {
-        let pool_pubkey = Pubkey::from_str(pool_address)?;
-        let account_info = self.rpc_client.get_account(&pool_pubkey)?;
+        let pool_pubkey = match Pubkey::from_str(pool_address) {
+            Ok(pubkey) => pubkey,
+            Err(e) => {
+                pool_log(
+                    "ERROR",
+                    &format!(
+                        "❌ INVALID POOL ADDRESS\n\
+                        Pool Address: {}\n\
+                        Error: Failed to parse as Pubkey - {}",
+                        pool_address,
+                        e
+                    )
+                );
+                return Err(anyhow::anyhow!("Invalid pool address: {}", e));
+            }
+        };
+
+        let account_info = match self.rpc_client.get_account(&pool_pubkey) {
+            Ok(info) => info,
+            Err(e) => {
+                pool_log(
+                    "ERROR",
+                    &format!(
+                        "❌ FAILED TO FETCH POOL ACCOUNT\n\
+                        Pool Address: {}\n\
+                        Error: RPC call failed - {}",
+                        pool_address,
+                        e
+                    )
+                );
+                return Err(anyhow::anyhow!("Failed to fetch pool account: {}", e));
+            }
+        };
 
         // Get the program ID that owns this account
         let program_id = account_info.owner.to_string();
@@ -833,7 +1030,16 @@ impl PoolDiscoveryAndPricing {
             _ => {
                 pool_log(
                     "WARN",
-                    &format!("Unknown program ID: {}. Fallback to size-based detection", program_id)
+                    &format!(
+                        "⚠️ UNKNOWN PROGRAM ID\n\
+                        Pool Address: {}\n\
+                        Program ID: {}\n\
+                        Data Size: {} bytes\n\
+                        Falling back to size-based detection",
+                        pool_address,
+                        program_id,
+                        account_info.data.len()
+                    )
                 );
 
                 // Fallback to size-based detection as a last resort
@@ -856,7 +1062,13 @@ impl PoolDiscoveryAndPricing {
                     pool_log(
                         "ERROR",
                         &format!(
-                            "Could not determine pool type (data size: {} bytes), defaulting to Raydium CPMM",
+                            "❌ POOL TYPE DETECTION FAILED\n\
+                            Pool Address: {}\n\
+                            Program ID: {}\n\
+                            Data Size: {} bytes\n\
+                            Defaulting to: Raydium CPMM",
+                            pool_address,
+                            program_id,
                             account_data.len()
                         )
                     );
