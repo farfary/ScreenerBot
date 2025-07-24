@@ -250,19 +250,28 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
         return 0.0; // Hold for minimum time unless profit target reached
     }
 
-    // Try to get the token from global list for full analysis
-    if let Ok(tokens) = LIST_TOKENS.read() {
-        for token in tokens.iter() {
-            if token.mint == pos.mint {
-                // Use the SMART profit system with full token data (profit-only)
-                let (urgency, _reason) = should_sell_smart_system(
-                    pos,
-                    token,
-                    current_price,
-                    time_held_secs
-                );
-                return urgency;
+    // Try to get the token from global list for full analysis (non-blocking)
+    match LIST_TOKENS.try_read() {
+        Ok(tokens) => {
+            for token in tokens.iter() {
+                if token.mint == pos.mint {
+                    // Use the SMART profit system with full token data (profit-only)
+                    let (urgency, _reason) = should_sell_smart_system(
+                        pos,
+                        token,
+                        current_price,
+                        time_held_secs
+                    );
+                    return urgency;
+                }
             }
+        }
+        Err(_) => {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Could not acquire token list lock for sell analysis: {}", pos.symbol)
+            );
         }
     }
 
@@ -285,82 +294,85 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
 /// Calculate dynamic liquidity thresholds based on current token watch list
 /// Returns (high_threshold, medium_threshold, low_threshold) for liquidity factoring
 fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
-    if let Ok(tokens) = LIST_TOKENS.read() {
-        // Collect all liquidity values from tokens with valid liquidity data
-        let mut liquidity_values: Vec<f64> = tokens
-            .iter()
-            .filter_map(|token| {
-                token.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .filter(|&usd| usd > 0.0)
-            })
-            .collect();
+    match LIST_TOKENS.try_read() {
+        Ok(tokens) => {
+            // Collect all liquidity values from tokens with valid liquidity data
+            let mut liquidity_values: Vec<f64> = tokens
+                .iter()
+                .filter_map(|token| {
+                    token.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .filter(|&usd| usd > 0.0)
+                })
+                .collect();
 
-        if liquidity_values.is_empty() {
-            // Fallback to original hardcoded values if no liquidity data
+            if liquidity_values.is_empty() {
+                // Fallback to original hardcoded values if no liquidity data
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    "No liquidity data found in token list, using fallback thresholds"
+                );
+                return (100000.0, 50000.0, 10000.0);
+            }
+
+            // Sort liquidity values in descending order
+            liquidity_values.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+
+            let total_tokens = liquidity_values.len();
+
+            // Calculate percentile-based thresholds
+            // Top 25% = high liquidity (factor 1.0)
+            // Top 50% = medium liquidity (factor 0.8)
+            // Top 75% = low liquidity (factor 0.6)
+            // Bottom 25% = very low liquidity (factor 0.4)
+
+            let high_index = ((total_tokens as f64) * 0.25) as usize;
+            let medium_index = ((total_tokens as f64) * 0.5) as usize;
+            let low_index = ((total_tokens as f64) * 0.75) as usize;
+
+            let high_threshold = if high_index < total_tokens {
+                liquidity_values[high_index]
+            } else {
+                liquidity_values[total_tokens - 1]
+            };
+
+            let medium_threshold = if medium_index < total_tokens {
+                liquidity_values[medium_index]
+            } else {
+                liquidity_values[total_tokens - 1]
+            };
+
+            let low_threshold = if low_index < total_tokens {
+                liquidity_values[low_index]
+            } else {
+                liquidity_values[total_tokens - 1]
+            };
+
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!(
+                    "Dynamic liquidity thresholds calculated from {} tokens: High: ${:.0}, Medium: ${:.0}, Low: ${:.0}",
+                    total_tokens,
+                    high_threshold,
+                    medium_threshold,
+                    low_threshold
+                )
+            );
+
+            (high_threshold, medium_threshold, low_threshold)
+        }
+        Err(_) => {
+            // Fallback if can't read token list (non-blocking)
             log(
                 LogTag::Trader,
                 "WARN",
-                "No liquidity data found in token list, using fallback thresholds"
+                "Could not acquire token list lock for liquidity threshold calculation, using fallback"
             );
-            return (100000.0, 50000.0, 10000.0);
+            (100000.0, 50000.0, 10000.0)
         }
-
-        // Sort liquidity values in descending order
-        liquidity_values.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-
-        let total_tokens = liquidity_values.len();
-
-        // Calculate percentile-based thresholds
-        // Top 25% = high liquidity (factor 1.0)
-        // Top 50% = medium liquidity (factor 0.8)
-        // Top 75% = low liquidity (factor 0.6)
-        // Bottom 25% = very low liquidity (factor 0.4)
-
-        let high_index = ((total_tokens as f64) * 0.25) as usize;
-        let medium_index = ((total_tokens as f64) * 0.5) as usize;
-        let low_index = ((total_tokens as f64) * 0.75) as usize;
-
-        let high_threshold = if high_index < total_tokens {
-            liquidity_values[high_index]
-        } else {
-            liquidity_values[total_tokens - 1]
-        };
-
-        let medium_threshold = if medium_index < total_tokens {
-            liquidity_values[medium_index]
-        } else {
-            liquidity_values[total_tokens - 1]
-        };
-
-        let low_threshold = if low_index < total_tokens {
-            liquidity_values[low_index]
-        } else {
-            liquidity_values[total_tokens - 1]
-        };
-
-        log(
-            LogTag::Trader,
-            "INFO",
-            &format!(
-                "Dynamic liquidity thresholds calculated from {} tokens: High: ${:.0}, Medium: ${:.0}, Low: ${:.0}",
-                total_tokens,
-                high_threshold,
-                medium_threshold,
-                low_threshold
-            )
-        );
-
-        (high_threshold, medium_threshold, low_threshold)
-    } else {
-        // Fallback if can't read token list
-        log(
-            LogTag::Trader,
-            "ERROR",
-            "Failed to read token list for liquidity threshold calculation, using fallback"
-        );
-        (100000.0, 50000.0, 10000.0)
     }
 }
 
@@ -1492,50 +1504,70 @@ async fn fetch_pool_prices_parallel(token_mints: Vec<String>) -> HashMap<String,
     }
 }
 
-/// Update pool prices in global token list
+/// Update pool prices in global token list (non-blocking)
 fn update_pool_prices_in_tokens(pool_prices: &HashMap<String, f64>) {
-    if let Ok(mut tokens) = LIST_TOKENS.write() {
-        for token in tokens.iter_mut() {
-            if let Some(&pool_price) = pool_prices.get(&token.mint) {
-                // Validate pool price against API price before updating
-                if let Some(api_price) = token.price_dexscreener_sol {
-                    if validate_pool_price_against_api(pool_price, api_price, &token.symbol) {
-                        token.price_pool_sol = Some(pool_price);
-                        log(
-                            LogTag::Trader,
-                            "UPDATE",
-                            &format!(
-                                "Updated pool price for {}: {:.12} SOL (validated against API)",
-                                token.symbol,
-                                pool_price
-                            )
-                        );
-                    } else {
-                        log(
-                            LogTag::Trader,
-                            "REJECT",
-                            &format!(
-                                "Rejected pool price for {}: {:.12} SOL (too different from API price {:.12})",
-                                token.symbol,
-                                pool_price,
-                                api_price
-                            )
-                        );
+    match LIST_TOKENS.try_write() {
+        Ok(mut tokens) => {
+            for token in tokens.iter_mut() {
+                if let Some(&pool_price) = pool_prices.get(&token.mint) {
+                    if pool_price > 0.0 {
+                        // Validate pool price against API price before updating
+                        if let Some(api_price) = token.price_dexscreener_sol {
+                            if
+                                validate_pool_price_against_api(
+                                    pool_price,
+                                    api_price,
+                                    &token.symbol
+                                )
+                            {
+                                token.price_pool_sol = Some(pool_price);
+                                log(
+                                    LogTag::Trader,
+                                    "UPDATE",
+                                    &format!(
+                                        "Updated pool price for {}: {:.12} SOL (validated against API)",
+                                        token.symbol,
+                                        pool_price
+                                    )
+                                );
+                            } else {
+                                log(
+                                    LogTag::Trader,
+                                    "REJECT",
+                                    &format!(
+                                        "Rejected pool price for {}: {:.12} SOL (too different from API price {:.12})",
+                                        token.symbol,
+                                        pool_price,
+                                        api_price
+                                    )
+                                );
+                            }
+                        } else {
+                            // If no API price available, use pool price
+                            token.price_pool_sol = Some(pool_price);
+                            log(
+                                LogTag::Trader,
+                                "UPDATE",
+                                &format!(
+                                    "Updated pool price for {} without API validation: {:.12} SOL",
+                                    token.symbol,
+                                    pool_price
+                                )
+                            );
+                        }
                     }
-                } else {
-                    // If no API price available, use pool price but log warning
-                    token.price_pool_sol = Some(pool_price);
-                    log(
-                        LogTag::Trader,
-                        "WARN",
-                        &format!(
-                            "Updated pool price for {} without API validation: {:.12} SOL",
-                            token.symbol,
-                            pool_price
-                        )
-                    );
                 }
             }
+        }
+        Err(_) => {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!(
+                    "Could not acquire token list write lock for pool price updates. Skipping {} updates.",
+                    pool_prices.len()
+                )
+            );
         }
     }
 }
@@ -1588,55 +1620,68 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
 }
 
 /// Get current price for a token from the global token list
-/// For open positions, prioritizes pool price over API price
+/// Priority: 1. Pool price (if valid), 2. DexScreener API price
+/// Non-blocking approach that never locks threads
 pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64> {
-    let tokens = LIST_TOKENS.read().unwrap();
-
-    // Find the token by mint address
-    for token in tokens.iter() {
-        if token.mint == mint {
-            // For open positions, prioritize pool price if available and valid
-            if is_open_position {
-                if let Some(pool_price) = token.price_pool_sol {
-                    // If we have both pool and API price, validate the pool price
-                    if let Some(api_price) = token.price_dexscreener_sol {
-                        if validate_pool_price_against_api(pool_price, api_price, &token.symbol) {
-                            return Some(pool_price);
-                        } else {
-                            // Pool price is not valid, fall back to API price
-                            log(
-                                LogTag::Trader,
-                                "FALLBACK",
-                                &format!(
-                                    "Using API price for {} instead of invalid pool price",
-                                    token.symbol
-                                )
-                            );
-                            return Some(api_price);
+    // Use try_read to avoid blocking if lock is held by another thread
+    match LIST_TOKENS.try_read() {
+        Ok(tokens) => {
+            // Find the token by mint address
+            for token in tokens.iter() {
+                if token.mint == mint {
+                    // Priority 1: Pool price if available and valid
+                    if let Some(pool_price) = token.price_pool_sol {
+                        if pool_price > 0.0 {
+                            // If we have both pool and API price, validate the pool price
+                            if let Some(api_price) = token.price_dexscreener_sol {
+                                if
+                                    validate_pool_price_against_api(
+                                        pool_price,
+                                        api_price,
+                                        &token.symbol
+                                    )
+                                {
+                                    return Some(pool_price);
+                                } else {
+                                    // Pool price is not valid, fall back to API price
+                                    log(
+                                        LogTag::Trader,
+                                        "FALLBACK",
+                                        &format!(
+                                            "Using API price for {} instead of invalid pool price",
+                                            token.symbol
+                                        )
+                                    );
+                                    return Some(api_price);
+                                }
+                            } else {
+                                // No API price to validate against, use pool price
+                                return Some(pool_price);
+                            }
                         }
-                    } else {
-                        // No API price to validate against, use pool price with warning
-                        log(
-                            LogTag::Trader,
-                            "WARN",
-                            &format!(
-                                "Using unvalidated pool price for {}: no API price available",
-                                token.symbol
-                            )
-                        );
-                        return Some(pool_price);
+                    }
+
+                    // Priority 2: DexScreener API price
+                    if let Some(price) = token.price_dexscreener_sol {
+                        if price > 0.0 {
+                            return Some(price);
+                        }
                     }
                 }
             }
-
-            // Fallback to DexScreener price
-            if let Some(price) = token.price_dexscreener_sol {
-                return Some(price);
-            }
+            None
+        }
+        Err(_) => {
+            // If we can't get the lock, return None rather than blocking
+            // This prevents the entire system from getting stuck
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Could not acquire token list lock for price lookup: {}", mint)
+            );
+            None
         }
     }
-
-    None
 }
 
 /// Checks if entry is allowed based on historical position data for this token
@@ -1751,51 +1796,58 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let cycle_start = std::time::Instant::now();
 
         let mut tokens: Vec<_> = {
-            if let Ok(tokens_guard) = LIST_TOKENS.read() {
-                // Log total tokens available
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!("Total tokens in LIST_TOKENS: {}", tokens_guard.len())
-                        .dimmed()
-                        .to_string()
-                );
+            match LIST_TOKENS.try_read() {
+                Ok(tokens_guard) => {
+                    // Log total tokens available
+                    log(
+                        LogTag::Trader,
+                        "DEBUG",
+                        &format!("Total tokens in LIST_TOKENS: {}", tokens_guard.len())
+                            .dimmed()
+                            .to_string()
+                    );
 
-                // Include all tokens - we want to trade on existing tokens with updated info
-                // The discovery system ensures tokens are updated with fresh data before trading
-                let all_tokens: Vec<_> = tokens_guard.iter().cloned().collect();
+                    // Include all tokens - we want to trade on existing tokens with updated info
+                    // The discovery system ensures tokens are updated with fresh data before trading
+                    let all_tokens: Vec<_> = tokens_guard.iter().cloned().collect();
 
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!(
-                        "Using all {} tokens for trading (startup filter removed)",
-                        all_tokens.len()
-                    )
-                        .dimmed()
-                        .to_string()
-                );
+                    log(
+                        LogTag::Trader,
+                        "DEBUG",
+                        &format!(
+                            "Using all {} tokens for trading (startup filter removed)",
+                            all_tokens.len()
+                        )
+                            .dimmed()
+                            .to_string()
+                    );
 
-                // Count tokens with liquidity data
-                let with_liquidity = all_tokens
-                    .iter()
-                    .filter(|token| {
-                        token.liquidity
-                            .as_ref()
-                            .and_then(|l| l.usd)
-                            .unwrap_or(0.0) > 0.0
-                    })
-                    .count();
+                    // Count tokens with liquidity data
+                    let with_liquidity = all_tokens
+                        .iter()
+                        .filter(|token| {
+                            token.liquidity
+                                .as_ref()
+                                .and_then(|l| l.usd)
+                                .unwrap_or(0.0) > 0.0
+                        })
+                        .count();
 
-                debug_filtering_log(
-                    "TOKEN_COUNT",
-                    &format!("Tokens with non-zero liquidity: {}", with_liquidity)
-                );
+                    debug_filtering_log(
+                        "TOKEN_COUNT",
+                        &format!("Tokens with non-zero liquidity: {}", with_liquidity)
+                    );
 
-                all_tokens
-            } else {
-                log(LogTag::Trader, "ERROR", "Failed to acquire read lock on LIST_TOKENS");
-                Vec::new()
+                    all_tokens
+                }
+                Err(_) => {
+                    log(
+                        LogTag::Trader,
+                        "WARN",
+                        "Could not acquire read lock on LIST_TOKENS, skipping cycle"
+                    );
+                    Vec::new()
+                }
             }
         };
 
@@ -2435,58 +2487,71 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 let should_exit = emergency_exit || sell_urgency > 0.7;
 
                                 if should_exit {
-                                    // Find the token for closing
-                                    if let Ok(tokens_guard) = LIST_TOKENS.read() {
-                                        if
-                                            let Some(token) = tokens_guard
-                                                .iter()
-                                                .find(|t| t.mint == position.mint)
-                                        {
-                                            log(
-                                                LogTag::Trader,
-                                                "SELL",
-                                                &format!(
-                                                    "Sell signal for {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Emergency: {}, Pool Price: {}",
-                                                    position.symbol,
-                                                    position.mint,
-                                                    sell_urgency,
-                                                    pnl_percent,
-                                                    emergency_exit,
-                                                    if token.price_pool_sol.is_some() {
-                                                        "YES"
-                                                    } else {
-                                                        "NO"
-                                                    }
-                                                )
-                                            );
-
-                                            positions_to_close.push((
-                                                index,
-                                                position.clone(), // Include the full position data
-                                                token.clone(),
-                                                current_price,
-                                                now,
-                                            ));
-                                        }
-                                    }
-                                } else {
-                                    let price_source = {
-                                        if let Ok(tokens_guard) = LIST_TOKENS.read() {
+                                    // Find the token for closing (non-blocking)
+                                    match LIST_TOKENS.try_read() {
+                                        Ok(tokens_guard) => {
                                             if
                                                 let Some(token) = tokens_guard
                                                     .iter()
                                                     .find(|t| t.mint == position.mint)
                                             {
-                                                if token.price_pool_sol.is_some() {
-                                                    "pool"
-                                                } else {
-                                                    "api"
-                                                }
-                                            } else {
-                                                "unknown"
+                                                log(
+                                                    LogTag::Trader,
+                                                    "SELL",
+                                                    &format!(
+                                                        "Sell signal for {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Emergency: {}, Pool Price: {}",
+                                                        position.symbol,
+                                                        position.mint,
+                                                        sell_urgency,
+                                                        pnl_percent,
+                                                        emergency_exit,
+                                                        if token.price_pool_sol.is_some() {
+                                                            "YES"
+                                                        } else {
+                                                            "NO"
+                                                        }
+                                                    )
+                                                );
+
+                                                positions_to_close.push((
+                                                    index,
+                                                    position.clone(), // Include the full position data
+                                                    token.clone(),
+                                                    current_price,
+                                                    now,
+                                                ));
                                             }
-                                        } else {
-                                            "unknown"
+                                        }
+                                        Err(_) => {
+                                            log(
+                                                LogTag::Trader,
+                                                "WARN",
+                                                &format!(
+                                                    "Could not acquire token list lock for closing position: {}",
+                                                    position.symbol
+                                                )
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    let price_source = {
+                                        match LIST_TOKENS.try_read() {
+                                            Ok(tokens_guard) => {
+                                                if
+                                                    let Some(token) = tokens_guard
+                                                        .iter()
+                                                        .find(|t| t.mint == position.mint)
+                                                {
+                                                    if token.price_pool_sol.is_some() {
+                                                        "pool"
+                                                    } else {
+                                                        "api"
+                                                    }
+                                                } else {
+                                                    "unknown"
+                                                }
+                                            }
+                                            Err(_) => { "unavailable" }
                                         }
                                     };
 
