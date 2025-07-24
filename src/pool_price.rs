@@ -23,6 +23,7 @@ use solana_sdk::program_pack::Pack;
 // =============================================================================
 
 const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
+const RAYDIUM_AMM_PROGRAM_ID: &str = "RVKd61ztZW9g2VZgPZrFYuXJcZ1t7xvaUo1NkL6MZ5w";
 const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
@@ -62,6 +63,7 @@ pub struct PoolToken {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PoolType {
     RaydiumCpmm,
+    RaydiumAmm,
     MeteoraDlmm,
     MeteoraDammV2,
     RaydiumLaunchLab,
@@ -88,10 +90,12 @@ impl PoolType {
                     PoolType::RaydiumCpmm // Treat CLMM similar to CPMM for now
                 } else if labels.iter().any(|l| l.eq_ignore_ascii_case("LaunchLab")) {
                     PoolType::RaydiumLaunchLab
+                } else if labels.iter().any(|l| l.eq_ignore_ascii_case("AMM")) {
+                    PoolType::RaydiumAmm
                 } else {
-                    // Default to CPMM for standard Raydium pools
-                    log(LogTag::Pool, "DEBUG", "Standard Raydium pool, defaulting to CPMM");
-                    PoolType::RaydiumCpmm
+                    // Default to AMM for standard Raydium pools (legacy support)
+                    log(LogTag::Pool, "DEBUG", "Standard Raydium pool, defaulting to AMM");
+                    PoolType::RaydiumAmm
                 }
             }
             "launchlab" => PoolType::RaydiumLaunchLab,
@@ -149,6 +153,10 @@ pub enum PoolSpecificData {
     RaydiumCpmm {
         lp_mint: String,
         observation_key: String,
+    },
+    RaydiumAmm {
+        base_vault: String,
+        quote_vault: String,
     },
     MeteoraDlmm {
         active_id: i32,
@@ -249,6 +257,17 @@ pub struct RaydiumCpmmData {
     pub mint_0_decimals: u8,
     pub mint_1_decimals: u8,
     pub status: u8,
+}
+
+/// Raydium AMM pool data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaydiumAmmData {
+    pub base_mint: String,
+    pub quote_mint: String,
+    pub base_vault: String,
+    pub quote_vault: String,
+    pub base_decimals: u8,
+    pub quote_decimals: u8,
 }
 
 /// Legacy Meteora DLMM pool data structure
@@ -545,6 +564,7 @@ impl PoolDiscoveryAndPricing {
     fn get_program_id_for_pool_type(&self, pool_type: PoolType) -> String {
         match pool_type {
             PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
+            PoolType::RaydiumAmm => RAYDIUM_AMM_PROGRAM_ID.to_string(),
             PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
             PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
             PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
@@ -669,6 +689,7 @@ impl PoolDiscoveryAndPricing {
             if let Ok(pool_type) = self.detect_pool_type(&pool.pair_address).await {
                 let program_id = match pool_type {
                     PoolType::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID.to_string(),
+                    PoolType::RaydiumAmm => RAYDIUM_AMM_PROGRAM_ID.to_string(),
                     PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
                     PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
                     PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
@@ -1131,6 +1152,44 @@ impl PoolDiscoveryAndPricing {
                     specific_data: PoolSpecificData::RaydiumCpmm {
                         lp_mint: "".to_string(),
                         observation_key: "".to_string(),
+                    },
+                })
+            }
+            PoolType::RaydiumAmm => {
+                let raw_data = self.parse_raydium_amm_data(&account_data)?;
+
+                // Get token vault balances
+                let base_vault_pubkey = Pubkey::from_str(&raw_data.base_vault)?;
+                let quote_vault_pubkey = Pubkey::from_str(&raw_data.quote_vault)?;
+
+                let base_balance = self.get_token_balance(&base_vault_pubkey).await?;
+                let quote_balance = self.get_token_balance(&quote_vault_pubkey).await?;
+
+                // Get decimals for both tokens
+                let base_decimals = self.get_token_decimals(&raw_data.base_mint).await?;
+                let quote_decimals = self.get_token_decimals(&raw_data.quote_mint).await?;
+
+                Ok(PoolData {
+                    pool_type,
+                    token_a: TokenInfo {
+                        mint: raw_data.base_mint,
+                        decimals: base_decimals,
+                    },
+                    token_b: TokenInfo {
+                        mint: raw_data.quote_mint,
+                        decimals: quote_decimals,
+                    },
+                    reserve_a: ReserveInfo {
+                        vault_address: raw_data.base_vault.clone(),
+                        balance: base_balance,
+                    },
+                    reserve_b: ReserveInfo {
+                        vault_address: raw_data.quote_vault.clone(),
+                        balance: quote_balance,
+                    },
+                    specific_data: PoolSpecificData::RaydiumAmm {
+                        base_vault: raw_data.base_vault,
+                        quote_vault: raw_data.quote_vault,
                     },
                 })
             }
@@ -1788,6 +1847,34 @@ impl PoolDiscoveryAndPricing {
             mint_0_decimals,
             mint_1_decimals,
             status,
+        })
+    }
+
+    /// Parse Raydium AMM pool data from raw account bytes
+    fn parse_raydium_amm_data(&self, data: &[u8]) -> Result<RaydiumAmmData> {
+        if data.len() < 264 {
+            return Err(anyhow::anyhow!("AMM account too short"));
+        }
+
+        // Extract mint addresses from pool account (based on the provided decode_raydium_amm function)
+        let base_mint = Pubkey::new_from_array(data[168..200].try_into()?);
+        let quote_mint = Pubkey::new_from_array(data[216..248].try_into()?);
+
+        let base_vault = Pubkey::new_from_array(data[200..232].try_into()?);
+        let quote_vault = Pubkey::new_from_array(data[232..264].try_into()?);
+
+        // For AMM pools, we'll need to get decimals from the token mints
+        // For now, we'll set default values and get them in the parse_pool_data function
+        let base_decimals = 9; // Default, will be overridden
+        let quote_decimals = 9; // Default, will be overridden
+
+        Ok(RaydiumAmmData {
+            base_mint: base_mint.to_string(),
+            quote_mint: quote_mint.to_string(),
+            base_vault: base_vault.to_string(),
+            quote_vault: quote_vault.to_string(),
+            base_decimals,
+            quote_decimals,
         })
     }
 
@@ -2832,6 +2919,7 @@ impl PoolPriceResult {
     fn pool_type_display(&self) -> String {
         match self.pool_type {
             PoolType::RaydiumCpmm => "CPMM".to_string(),
+            PoolType::RaydiumAmm => "AMM".to_string(),
             PoolType::MeteoraDlmm => "DLMM".to_string(),
             PoolType::MeteoraDammV2 => "DAMM v2".to_string(),
             PoolType::Orca => "Orca".to_string(),
@@ -2842,4 +2930,48 @@ impl PoolPriceResult {
             PoolType::Unknown => "Unknown".to_string(),
         }
     }
+}
+
+// =============================================================================
+// HELPER FUNCTIONS - based on user provided decode_raydium_amm
+// =============================================================================
+
+use num_format::{ Locale, ToFormattedString };
+use solana_sdk::account::Account;
+
+/// Decode Raydium AMM pool data from account - based on user provided function
+pub fn decode_raydium_amm(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    if acct.data.len() < 264 {
+        return Err(anyhow::anyhow!("AMM account too short"));
+    }
+
+    // Extract mint addresses from pool account
+    let base_mint = Pubkey::new_from_array(acct.data[168..200].try_into()?);
+    let quote_mint = Pubkey::new_from_array(acct.data[216..248].try_into()?);
+
+    let base_vault = Pubkey::new_from_array(acct.data[200..232].try_into()?);
+    let quote_vault = Pubkey::new_from_array(acct.data[232..264].try_into()?);
+    let base = rpc.get_token_account_balance(&base_vault)?.amount.parse::<u64>().unwrap_or(0);
+    let quote = rpc.get_token_account_balance(&quote_vault)?.amount.parse::<u64>().unwrap_or(0);
+
+    println!(
+        "✅ Raydium AMM   → Base: {} | Quote: {}",
+        base.to_formatted_string(&Locale::en),
+        quote.to_formatted_string(&Locale::en)
+    );
+    Ok((base, quote, base_mint, quote_mint))
+}
+
+/// Decode Raydium AMM from account - wrapper function
+pub fn decode_raydium_amm_from_account(
+    rpc: &RpcClient,
+    pool_pk: &Pubkey,
+    acct: &Account
+) -> Result<(u64, u64, Pubkey, Pubkey)> {
+    // Same logic as decode_raydium_amm, but account is already provided
+    decode_raydium_amm(rpc, pool_pk, acct)
 }
