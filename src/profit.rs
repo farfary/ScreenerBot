@@ -4,6 +4,73 @@ use crate::logger::{ log, LogTag };
 use chrono::{ DateTime, Utc };
 use serde::{ Serialize, Deserialize };
 
+// ========== PROFIT SYSTEM CONFIGURATION ==========
+// Hardcoded parameters for fine-tuning the profit system behavior
+
+/// Fast spike detection thresholds
+const FAST_SPIKE_THRESHOLD_5M: f64 = 25.0; // % gain in 5 minutes to trigger fast spike
+const FAST_SPIKE_THRESHOLD_COMBO: f64 = 15.0; // 5m threshold when combined with hourly gain
+const FAST_SPIKE_HOURLY_MIN: f64 = 25.0; // Minimum hourly gain for combo detection
+const FAST_SPIKE_MIN_PROFIT: f64 = 15.0; // Minimum profit % to act on fast spikes
+
+/// Profit momentum thresholds
+const PROFIT_MOMENTUM_MIN: f64 = 5.0; // Minimum profit % to consider momentum selling
+const PROFIT_MOMENTUM_HIGH: f64 = 15.0; // High profit threshold for momentum analysis
+const PROFIT_MOMENTUM_VERY_HIGH: f64 = 30.0; // Very high profit threshold
+const MOMENTUM_FADING_THRESHOLD: f64 = 0.3; // Momentum score below this = fading
+const MOMENTUM_DECELERATION_MIN: f64 = -0.1; // Velocity change threshold for fading
+
+/// Time-based selling parameters
+const TIME_DECAY_THRESHOLD_HOURS: f64 = 1.0; // Hours after which time decay begins
+const MAX_TIME_URGENCY: f64 = 0.4; // Maximum urgency from time decay
+const MAX_PROFIT_URGENCY: f64 = 0.3; // Maximum urgency from profit level
+const TIME_URGENCY_TRIGGER: f64 = 0.5; // Combined urgency threshold to trigger sell
+
+/// Spike sustainability scoring weights
+const VOLUME_SURGE_STRONG: f64 = 5.0; // Volume ratio for strong surge
+const VOLUME_SURGE_GOOD: f64 = 3.0; // Volume ratio for good surge
+const VOLUME_SURGE_WEAK: f64 = 0.8; // Volume ratio below this = weak
+const LIQUIDITY_DEEP_USD: f64 = 500000.0; // USD liquidity for deep pool
+const LIQUIDITY_GOOD_USD: f64 = 200000.0; // USD liquidity for good pool
+const LIQUIDITY_MODERATE_USD: f64 = 100000.0; // USD liquidity for moderate pool
+const LIQUIDITY_SHALLOW_USD: f64 = 50000.0; // USD liquidity below this = shallow
+
+/// Spike time urgency parameters
+const SPIKE_TIME_VERY_RECENT: f64 = 5.0; // Minutes for very recent spike urgency
+const SPIKE_TIME_RECENT: f64 = 10.0; // Minutes for recent spike urgency
+const SPIKE_TIME_MODERATE: f64 = 20.0; // Minutes for moderate spike urgency
+
+/// Spike urgency levels
+const SPIKE_URGENCY_VERY_RECENT: f64 = 0.9; // Urgency for very recent spikes
+const SPIKE_URGENCY_RECENT: f64 = 0.8; // Urgency for recent spikes
+const SPIKE_URGENCY_MODERATE: f64 = 0.7; // Urgency for moderate time spikes
+const SPIKE_URGENCY_OLDER: f64 = 0.6; // Urgency for older spikes
+const SPIKE_URGENCY_MIN: f64 = 0.6; // Minimum urgency for any fast spike
+const SPIKE_URGENCY_MAX: f64 = 0.98; // Maximum urgency cap
+
+/// Momentum-based selling urgency
+const MOMENTUM_FADING_URGENCY: f64 = 0.85; // Base urgency when momentum fading
+const MOMENTUM_DYING_URGENCY: f64 = 0.9; // Urgency when momentum dying
+const VERY_HIGH_PROFIT_URGENCY: f64 = 0.95; // Urgency for very high profits
+
+/// Emergency stop loss
+const EMERGENCY_PRICE_THRESHOLD: f64 = -99.0; // Price decline % for emergency exit
+const EMERGENCY_PNL_THRESHOLD: f64 = -99.9; // P&L decline % for emergency exit
+
+/// Sustainability adjustment factors
+const SUSTAINABILITY_HIGH_BONUS: f64 = -0.15; // Urgency reduction for high sustainability
+const SUSTAINABILITY_MODERATE_BONUS: f64 = -0.05; // Urgency reduction for moderate sustainability
+const SUSTAINABILITY_LOW_PENALTY: f64 = 0.1; // Urgency increase for low sustainability
+const EXTREME_PROFIT_URGENCY_BONUS: f64 = 0.05; // Extra urgency for extreme profits (>100%)
+const HIGH_PROFIT_URGENCY_BONUS: f64 = 0.03; // Extra urgency for high profits (>50%)
+
+/// Time decay parameters
+const TIME_DECAY_MAX_HOURS: f64 = 6.0; // Hours for maximum time decay
+const TIME_DECAY_GRADUAL_HOURS: f64 = 12.0; // Hours for gradual time pressure
+const BASE_TIME_URGENCY_MAX: f64 = 0.15; // Maximum base urgency from time
+
+// ================================================
+
 /// Represents price movement velocity analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceVelocityAnalysis {
@@ -49,17 +116,17 @@ pub fn analyze_price_velocity(
         velocity_5m = price_changes.m5.unwrap_or(0.0) / 5.0; // % per minute
         velocity_1h = price_changes.h1.unwrap_or(0.0) / 60.0; // % per minute
 
-        // FAST SPIKE DETECTION - >25% in 15 minutes or less
+        // FAST SPIKE DETECTION - configurable thresholds
         let change_5m = price_changes.m5.unwrap_or(0.0);
         let change_1h = price_changes.h1.unwrap_or(0.0);
 
         // Detect fast spike: significant 5-minute change that's much larger than hourly average
-        if change_5m > 25.0 {
-            // Direct >25% in 5 minutes - definitely a fast spike
+        if change_5m > FAST_SPIKE_THRESHOLD_5M {
+            // Direct spike threshold in 5 minutes - definitely a fast spike
             is_fast_spike = true;
             spike_magnitude = change_5m;
-        } else if change_5m > 15.0 && change_1h > 25.0 {
-            // Strong 5-minute change combined with >25% hourly suggests fast spike within 15 min
+        } else if change_5m > FAST_SPIKE_THRESHOLD_COMBO && change_1h > FAST_SPIKE_HOURLY_MIN {
+            // Strong 5-minute change combined with hourly threshold suggests fast spike within 15 min
             is_fast_spike = true;
             spike_magnitude = change_1h;
         }
@@ -112,7 +179,8 @@ pub fn analyze_price_velocity(
     let velocity_deceleration = velocity_5m - velocity_1h;
 
     // Determine key conditions
-    let is_momentum_fading = profit_momentum_score > 0.0 && velocity_deceleration < -0.1;
+    let is_momentum_fading =
+        profit_momentum_score > 0.0 && velocity_deceleration < MOMENTUM_DECELERATION_MIN;
     let is_freefall = loss_momentum_score > 0.7 && velocity_deceleration < -0.2;
 
     PriceVelocityAnalysis {
@@ -140,13 +208,13 @@ fn calculate_spike_sustainability(token: &Token, change_5m: f64, change_1h: f64)
             let expected_5m_volume = vol_1h / 12.0; // Expected if consistent
             let volume_surge_ratio = vol_5m / expected_5m_volume;
 
-            if volume_surge_ratio > 5.0 {
+            if volume_surge_ratio > VOLUME_SURGE_STRONG {
                 sustainability_score += 0.3; // Strong volume support - very bullish
-            } else if volume_surge_ratio > 3.0 {
+            } else if volume_surge_ratio > VOLUME_SURGE_GOOD {
                 sustainability_score += 0.2; // Good volume support
             } else if volume_surge_ratio > 1.5 {
                 sustainability_score += 0.1; // Some volume support
-            } else if volume_surge_ratio < 0.8 {
+            } else if volume_surge_ratio < VOLUME_SURGE_WEAK {
                 sustainability_score -= 0.2; // Weak volume - concerning for spike
             }
         }
@@ -155,13 +223,13 @@ fn calculate_spike_sustainability(token: &Token, change_5m: f64, change_1h: f64)
     // Liquidity depth analysis - deeper liquidity supports price stability
     if let Some(liquidity) = &token.liquidity {
         if let Some(usd_liquidity) = liquidity.usd {
-            if usd_liquidity > 500000.0 {
+            if usd_liquidity > LIQUIDITY_DEEP_USD {
                 sustainability_score += 0.25; // Deep liquidity pool - can absorb sells
-            } else if usd_liquidity > 200000.0 {
+            } else if usd_liquidity > LIQUIDITY_GOOD_USD {
                 sustainability_score += 0.15; // Good liquidity
-            } else if usd_liquidity > 100000.0 {
+            } else if usd_liquidity > LIQUIDITY_MODERATE_USD {
                 sustainability_score += 0.05; // Moderate liquidity
-            } else if usd_liquidity < 50000.0 {
+            } else if usd_liquidity < LIQUIDITY_SHALLOW_USD {
                 sustainability_score -= 0.15; // Shallow liquidity - spike likely to dump
             }
         }
@@ -231,7 +299,10 @@ pub fn should_sell_smart_system(
     let (_, current_pnl_percent) = calculate_position_pnl(position, Some(current_price));
 
     // Only allow emergency exit if BOTH price AND P&L show extreme loss
-    if current_pnl_percent <= -99.9 && simple_price_change_percent <= -99.0 {
+    if
+        current_pnl_percent <= EMERGENCY_PNL_THRESHOLD &&
+        simple_price_change_percent <= EMERGENCY_PRICE_THRESHOLD
+    {
         log(
             LogTag::Trader,
             "EMERGENCY",
@@ -264,47 +335,47 @@ pub fn should_sell_smart_system(
     // Analyze market conditions for profit taking
     let velocity_analysis = analyze_price_velocity(token, current_price, position);
 
-    // === FAST SPIKE DETECTION - >25% jump in <15 minutes ===
+    // === FAST SPIKE DETECTION - configurable thresholds ===
 
-    if velocity_analysis.is_fast_spike && current_pnl_percent > 15.0 {
+    if velocity_analysis.is_fast_spike && current_pnl_percent > FAST_SPIKE_MIN_PROFIT {
         // Fast spike detected with meaningful profit
 
         let time_minutes = time_held_seconds / 60.0;
 
         // Time-based urgency - faster spikes need faster exits
-        let time_urgency: f64 = if time_minutes < 5.0 {
-            0.9 // Very recent spike - high urgency
-        } else if time_minutes < 10.0 {
-            0.8 // Recent spike - high urgency
-        } else if time_minutes < 20.0 {
-            0.7 // Moderate time urgency
+        let time_urgency: f64 = if time_minutes < SPIKE_TIME_VERY_RECENT {
+            SPIKE_URGENCY_VERY_RECENT // Very recent spike - high urgency
+        } else if time_minutes < SPIKE_TIME_RECENT {
+            SPIKE_URGENCY_RECENT // Recent spike - high urgency
+        } else if time_minutes < SPIKE_TIME_MODERATE {
+            SPIKE_URGENCY_MODERATE // Moderate time urgency
         } else {
-            0.6 // Lower time urgency but still significant
+            SPIKE_URGENCY_OLDER // Lower time urgency but still significant
         };
 
         // Sustainability-based adjustment
         let sustainability_adjustment: f64 = if velocity_analysis.spike_sustainability_score > 0.7 {
-            -0.15 // High sustainability - reduce urgency slightly
+            SUSTAINABILITY_HIGH_BONUS // High sustainability - reduce urgency slightly
         } else if velocity_analysis.spike_sustainability_score > 0.5 {
-            -0.05 // Moderate sustainability - small reduction
+            SUSTAINABILITY_MODERATE_BONUS // Moderate sustainability - small reduction
         } else if velocity_analysis.spike_sustainability_score < 0.3 {
-            0.1 // Low sustainability - increase urgency
+            SUSTAINABILITY_LOW_PENALTY // Low sustainability - increase urgency
         } else {
             0.0 // Neutral
         };
 
         // Profit magnitude consideration - higher profits deserve more caution
         let profit_adjustment: f64 = if current_pnl_percent > 100.0 {
-            0.05 // Extreme profits - more urgent to secure
+            EXTREME_PROFIT_URGENCY_BONUS // Extreme profits - more urgent to secure
         } else if current_pnl_percent > 50.0 {
-            0.03 // High profits - slightly more urgent
+            HIGH_PROFIT_URGENCY_BONUS // High profits - slightly more urgent
         } else {
             0.0
         };
 
         let final_urgency: f64 = (time_urgency + sustainability_adjustment + profit_adjustment)
-            .max(0.6) // Minimum 60% urgency for fast spikes
-            .min(0.98); // Cap at 98%
+            .max(SPIKE_URGENCY_MIN) // Minimum urgency for fast spikes
+            .min(SPIKE_URGENCY_MAX); // Cap urgency
 
         return (
             final_urgency,
@@ -319,32 +390,44 @@ pub fn should_sell_smart_system(
 
     // === PROFIT MOMENTUM SYSTEM - Fast profit taking ===
 
-    if current_pnl_percent > 5.0 {
+    if current_pnl_percent > PROFIT_MOMENTUM_MIN {
         // In meaningful profit
 
         // Momentum fading while profitable - SELL FAST
         if velocity_analysis.is_momentum_fading {
-            let urgency = 0.85 + (current_pnl_percent / 100.0).min(0.1); // Higher profit = more urgent
+            let urgency = MOMENTUM_FADING_URGENCY + (current_pnl_percent / 100.0).min(0.1); // Higher profit = more urgent
             return (urgency, format!("Profit momentum fading at +{:.1}%", current_pnl_percent));
         }
 
         // Strong profit but low momentum score - momentum dying
-        if current_pnl_percent > 15.0 && velocity_analysis.profit_momentum_score < 0.3 {
-            return (0.9, format!("Strong profit +{:.1}% but momentum dying", current_pnl_percent));
+        if
+            current_pnl_percent > PROFIT_MOMENTUM_HIGH &&
+            velocity_analysis.profit_momentum_score < MOMENTUM_FADING_THRESHOLD
+        {
+            return (
+                MOMENTUM_DYING_URGENCY,
+                format!("Strong profit +{:.1}% but momentum dying", current_pnl_percent),
+            );
         }
 
         // Very high profit with any momentum concerns
-        if current_pnl_percent > 30.0 && velocity_analysis.profit_momentum_score < 0.6 {
-            return (0.95, format!("Very high profit +{:.1}% - secure gains", current_pnl_percent));
+        if
+            current_pnl_percent > PROFIT_MOMENTUM_VERY_HIGH &&
+            velocity_analysis.profit_momentum_score < 0.6
+        {
+            return (
+                VERY_HIGH_PROFIT_URGENCY,
+                format!("Very high profit +{:.1}% - secure gains", current_pnl_percent),
+            );
         }
 
         // Time-based profit taking - longer held = lower expectations
         let time_hours = time_held_seconds / 3600.0;
-        if time_hours > 1.0 {
-            let time_decay_urgency = (time_hours / 6.0).min(0.4); // Max 40% urgency from time
-            let profit_urgency = (current_pnl_percent / 100.0).min(0.3); // Max 30% from profit
+        if time_hours > TIME_DECAY_THRESHOLD_HOURS {
+            let time_decay_urgency = (time_hours / TIME_DECAY_MAX_HOURS).min(MAX_TIME_URGENCY); // Max urgency from time
+            let profit_urgency = (current_pnl_percent / 100.0).min(MAX_PROFIT_URGENCY); // Max from profit
 
-            if time_decay_urgency + profit_urgency > 0.5 {
+            if time_decay_urgency + profit_urgency > TIME_URGENCY_TRIGGER {
                 return (
                     0.6 + time_decay_urgency,
                     format!(
@@ -362,7 +445,7 @@ pub fn should_sell_smart_system(
     // For profitable positions, calculate small base urgency for time pressure
     if current_pnl_percent > 0.0 {
         let time_hours = time_held_seconds / 3600.0;
-        let base_urgency = (time_hours / 12.0).min(0.15); // Very gradual time pressure
+        let base_urgency = (time_hours / TIME_DECAY_GRADUAL_HOURS).min(BASE_TIME_URGENCY_MAX); // Very gradual time pressure
 
         return (
             base_urgency,
