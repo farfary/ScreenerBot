@@ -84,6 +84,9 @@ pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 60.0;
 /// ATA (Associated Token Account) management configuration
 pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
 
+/// Recent position close protection - don't buy tokens that had positions closed recently
+pub const RECENT_CLOSE_COOLDOWN_MINUTES: i64 = 30; // Don't buy tokens closed within last 30 minutes
+
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::global::*;
@@ -299,6 +302,49 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
     }
 }
 
+/// Checks if a token had a position closed recently within the cooldown period
+/// Returns true if token should be blocked from purchase, false if purchase is allowed
+fn is_token_recently_closed(mint: &str, symbol: &str) -> bool {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        let now = Utc::now();
+        let cooldown_duration = ChronoDuration::minutes(RECENT_CLOSE_COOLDOWN_MINUTES);
+
+        // Find any closed positions for this token within the cooldown period
+        for position in positions.iter() {
+            if position.mint == mint && position.exit_time.is_some() {
+                if let Some(exit_time) = position.exit_time {
+                    let time_since_close = now - exit_time;
+
+                    if time_since_close <= cooldown_duration {
+                        log(
+                            LogTag::Trader,
+                            "COOLDOWN",
+                            &format!(
+                                "Blocking {} ({}) purchase - position closed {:.1} minutes ago (cooldown: {} min)",
+                                symbol,
+                                &mint[..8],
+                                time_since_close.num_minutes() as f64,
+                                RECENT_CLOSE_COOLDOWN_MINUTES
+                            )
+                        );
+                        return true; // Block purchase
+                    }
+                }
+            }
+        }
+
+        // No recent closes found, allow purchase
+        false
+    } else {
+        log(
+            LogTag::Trader,
+            "ERROR",
+            "Could not acquire lock on SAVED_POSITIONS for recent close check"
+        );
+        false // Allow purchase if we can't check (conservative approach)
+    }
+}
+
 /// Advanced Multi-Strategy Dip Detection System
 /// Uses 5 different strategies to identify dips from -5% to -30%
 /// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
@@ -314,6 +360,11 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
     // Check loss prevention - analyze historical performance of this token
     if !should_allow_token_purchase(&token.mint, &token.symbol) {
         return 0.0; // Block purchase due to poor historical performance
+    }
+
+    // Check for recently closed positions - don't buy tokens that were sold recently
+    if is_token_recently_closed(&token.mint, &token.symbol) {
+        return 0.0; // Block purchase due to recent position close
     }
 
     // Run all 5 dip detection strategies
