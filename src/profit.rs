@@ -579,7 +579,7 @@ pub fn should_sell_smart_system(
             } else {
                 // Low recovery probability beyond -30%
 
-                let urgency = 0.85 + ((current_pnl_percent + 30.0) / -20.0) * 0.1; // Deeper = more urgent
+                let urgency = 0.85 + ((current_pnl_percent + 30.0) / -45.0) * 0.1; // Deeper = more urgent
                 return (
                     urgency.min(0.98),
                     format!(

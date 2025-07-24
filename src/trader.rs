@@ -35,7 +35,7 @@
 
 pub const PRINT_SUMMARY_INTERVAL_SECS: u64 = 3;
 
-pub const DEFAULT_FEE: f64 = 0.0000015;
+pub const DEFAULT_FEE: f64 = 0.000006;
 pub const DEFAULT_FEE_SWAP: f64 = 0.0;
 pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
 
