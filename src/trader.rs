@@ -41,7 +41,7 @@ pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
 
 // pub const DEFAULT_FEE: f64 = 0.0;
 
-pub const MAX_OPEN_POSITIONS: usize = 30;
+pub const MAX_OPEN_POSITIONS: usize = 50;
 
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 
