@@ -51,3 +51,5 @@ async fn main() {
     // Force exit to ensure clean shutdown
     std::process::exit(0);
 }
+
+// Access CMD_ARGS anywhere via CMD_ARGS.lock().unwrap()

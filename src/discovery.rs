@@ -19,8 +19,23 @@ static DISCOVERY_RATE_LIMITER: once_cell::sync::Lazy<Arc<Semaphore>> = once_cell
     Arc::new(Semaphore::new(30))
 );
 
+/// Check if debug discovery mode is enabled via command line args
+fn is_debug_discovery_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-discovery".to_string())
+    } else {
+        false
+    }
+}
+
 /// For each mint in LIST_MINTS, fetch token info and update LIST_TOKENS
 pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting update_tokens_from_mints...");
+    }
+
     // First, get all mint addresses from open positions to ensure we always update them
     let position_mints = {
         if let Ok(positions) = SAVED_POSITIONS.lock() {
@@ -36,11 +51,22 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
 
     // Log the position mints we're prioritizing
     if !position_mints.is_empty() {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
         log(
             LogTag::Monitor,
-            "INFO",
+            log_level,
             &format!("Prioritizing {} tokens from open positions", position_mints.len())
         );
+        if debug_mode && !position_mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!(
+                    "Position mints: {:?}",
+                    &position_mints[..std::cmp::min(5, position_mints.len())]
+                )
+            );
+        }
     }
 
     // Get all mints from the global list
@@ -107,7 +133,7 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
     }
 
     // Process in chunks of 30, but prioritize position mints
-    for chunk in prioritized_mints.chunks(30) {
+    for (chunk_index, chunk) in prioritized_mints.chunks(30).enumerate() {
         if check_shutdown_or_delay(&shutdown, Duration::from_millis(500)).await {
             log(LogTag::Monitor, "INFO", "update_tokens_from_mints task shutting down...");
             return Ok(());
@@ -116,8 +142,21 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
         // Check if this chunk contains any position mints
         let contains_positions = chunk.iter().any(|mint| position_mints.contains(mint));
 
+        if debug_mode {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!(
+                    "Processing chunk {} with {} tokens (contains positions: {})",
+                    chunk_index + 1,
+                    chunk.len(),
+                    contains_positions
+                )
+            );
+        }
+
         // Log priority info if this chunk contains position mints
-        if contains_positions {
+        if contains_positions && !debug_mode {
             log(
                 LogTag::Monitor,
                 "INFO",
@@ -430,12 +469,24 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
     // Cache all tokens to database before updating LIST_TOKENS
     let mut cached_count = 0;
     let mut new_tokens_count = 0;
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Caching {} tokens to database...", tokens.len()));
+    }
+
     for token in &tokens {
         match crate::global::cache_token_to_db(token, "dexscreener") {
             Ok(is_new) => {
                 cached_count += 1;
                 if is_new {
                     new_tokens_count += 1;
+                    if debug_mode {
+                        log(
+                            LogTag::Monitor,
+                            "DEBUG",
+                            &format!("New token cached: {} ({})", token.symbol, token.mint)
+                        );
+                    }
                 }
             }
             Err(e) => {
@@ -450,10 +501,11 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
         }
     }
 
-    if cached_count > 0 {
+    if cached_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "CACHE" };
         log(
             LogTag::Monitor,
-            "CACHE",
+            log_level,
             &format!("Cached {} tokens to DB ({} new)", cached_count, new_tokens_count)
                 .dimmed()
                 .to_string()
@@ -506,9 +558,10 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
 
             // Enhanced logging to show position tokens status
             if !position_mints.is_empty() {
+                let log_level = if debug_mode { "DEBUG" } else { "INFO" };
                 log(
                     LogTag::Monitor,
-                    "INFO",
+                    log_level,
                     &format!(
                         "Dexscreener Updated tokens: {}, mints: {}, position tokens: {}/{}",
                         list.len(),
@@ -530,10 +583,11 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
                         )
                     );
                 }
-            } else {
+            } else if debug_mode || list.len() > 0 {
+                let log_level = if debug_mode { "DEBUG" } else { "INFO" };
                 log(
                     LogTag::Monitor,
-                    "INFO",
+                    log_level,
                     &format!("Dexscreener Updated tokens: {}, mints: {}", list.len(), mints_count)
                         .dimmed()
                         .to_string()
@@ -551,6 +605,12 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
 // End of update_tokens_from_mints
 /// Fetch token boosts from Dexscreener API, only filling mint field
 pub async fn discovery_dexscreener_fetch_token_boosts() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting Dexscreener token boosts fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -564,6 +624,10 @@ pub async fn discovery_dexscreener_fetch_token_boosts() -> Result<(), String> {
         }
     };
     let url = "https://api.dexscreener.com/token-boosts/latest/v1";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -592,6 +656,11 @@ pub async fn discovery_dexscreener_fetch_token_boosts() -> Result<(), String> {
             return Err(e.to_string());
         }
     };
+
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -600,21 +669,43 @@ pub async fn discovery_dexscreener_fetch_token_boosts() -> Result<(), String> {
         .filter_map(|item| item.get("tokenAddress").and_then(|v| v.as_str()))
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
+
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} Solana tokens", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
-    if new_count > 0 {
+
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
         crate::logger::log(
             crate::logger::LogTag::Monitor,
-            "INFO",
+            log_level,
             &format!("Dexscreener Boosts New tokens seen: {}", new_count)
         );
     }
+
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
     sleep(Duration::from_millis(2100)).await;
     Ok(())
@@ -622,6 +713,12 @@ pub async fn discovery_dexscreener_fetch_token_boosts() -> Result<(), String> {
 
 /// Fetch token boosts from Dexscreener TOP API, only filling mint field
 pub async fn discovery_dexscreener_fetch_token_boosts_top() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting Dexscreener token boosts TOP fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -635,6 +732,10 @@ pub async fn discovery_dexscreener_fetch_token_boosts_top() -> Result<(), String
         }
     };
     let url = "https://api.dexscreener.com/token-boosts/top/v1";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -663,6 +764,11 @@ pub async fn discovery_dexscreener_fetch_token_boosts_top() -> Result<(), String
             return Err(e.to_string());
         }
     };
+
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -671,21 +777,43 @@ pub async fn discovery_dexscreener_fetch_token_boosts_top() -> Result<(), String
         .filter_map(|item| item.get("tokenAddress").and_then(|v| v.as_str()))
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
+
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} Solana tokens", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
-    if new_count > 0 {
+
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
         crate::logger::log(
             crate::logger::LogTag::Monitor,
-            "INFO",
+            log_level,
             &format!("Dexscreener Boosts Top New tokens seen: {}", new_count)
         );
     }
+
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
     sleep(Duration::from_millis(2100)).await;
     Ok(())
@@ -693,6 +821,12 @@ pub async fn discovery_dexscreener_fetch_token_boosts_top() -> Result<(), String
 
 /// Fetch token profiles from Dexscreener API, only filling mint field
 pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting Dexscreener token profiles fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -706,6 +840,10 @@ pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<(), String> 
         }
     };
     let url = "https://api.dexscreener.com/token-profiles/latest/v1";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -734,6 +872,11 @@ pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<(), String> 
             return Err(e.to_string());
         }
     };
+
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -742,21 +885,43 @@ pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<(), String> 
         .filter_map(|item| item.get("tokenAddress").and_then(|v| v.as_str()))
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
+
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} Solana tokens", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
-    if new_count > 0 {
+
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
         crate::logger::log(
             crate::logger::LogTag::Monitor,
-            "INFO",
+            log_level,
             &format!("Dexscreener Profiles New tokens seen: {}", new_count)
         );
     }
+
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
     sleep(Duration::from_millis(2100)).await;
     Ok(())
@@ -764,6 +929,12 @@ pub async fn discovery_dexscreener_fetch_token_profiles() -> Result<(), String> 
 
 /// Fetch verified tokens from RugCheck API, only filling mint field
 pub async fn discovery_rugcheck_fetch_verified() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting RugCheck verified tokens fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -777,6 +948,10 @@ pub async fn discovery_rugcheck_fetch_verified() -> Result<(), String> {
         }
     };
     let url = "https://api.rugcheck.xyz/v1/stats/verified";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -812,6 +987,10 @@ pub async fn discovery_rugcheck_fetch_verified() -> Result<(), String> {
         }
     };
 
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -820,17 +999,40 @@ pub async fn discovery_rugcheck_fetch_verified() -> Result<(), String> {
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
 
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} valid mints", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
 
-    if new_count > 0 {
-        log(LogTag::Monitor, "INFO", &format!("RugCheck Verified New tokens seen: {}", new_count));
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
+        log(
+            LogTag::Monitor,
+            log_level,
+            &format!("RugCheck Verified New tokens seen: {}", new_count)
+        );
     }
 
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
@@ -840,6 +1042,12 @@ pub async fn discovery_rugcheck_fetch_verified() -> Result<(), String> {
 
 /// Fetch trending tokens from RugCheck API, only filling mint field
 pub async fn discovery_rugcheck_fetch_trending() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting RugCheck trending tokens fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -853,6 +1061,10 @@ pub async fn discovery_rugcheck_fetch_trending() -> Result<(), String> {
         }
     };
     let url = "https://api.rugcheck.xyz/v1/stats/trending";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -888,6 +1100,10 @@ pub async fn discovery_rugcheck_fetch_trending() -> Result<(), String> {
         }
     };
 
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -896,17 +1112,40 @@ pub async fn discovery_rugcheck_fetch_trending() -> Result<(), String> {
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
 
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} valid mints", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
 
-    if new_count > 0 {
-        log(LogTag::Monitor, "INFO", &format!("RugCheck Trending New tokens seen: {}", new_count));
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
+        log(
+            LogTag::Monitor,
+            log_level,
+            &format!("RugCheck Trending New tokens seen: {}", new_count)
+        );
     }
 
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
@@ -916,6 +1155,12 @@ pub async fn discovery_rugcheck_fetch_trending() -> Result<(), String> {
 
 /// Fetch recent tokens from RugCheck API, only filling mint field
 pub async fn discovery_rugcheck_fetch_recent() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting RugCheck recent tokens fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -929,6 +1174,10 @@ pub async fn discovery_rugcheck_fetch_recent() -> Result<(), String> {
         }
     };
     let url = "https://api.rugcheck.xyz/v1/stats/recent";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -960,6 +1209,10 @@ pub async fn discovery_rugcheck_fetch_recent() -> Result<(), String> {
         }
     };
 
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -968,17 +1221,36 @@ pub async fn discovery_rugcheck_fetch_recent() -> Result<(), String> {
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
 
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} valid mints", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
 
-    if new_count > 0 {
-        log(LogTag::Monitor, "INFO", &format!("RugCheck Recent New tokens seen: {}", new_count));
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
+        log(LogTag::Monitor, log_level, &format!("RugCheck Recent New tokens seen: {}", new_count));
     }
 
     // Sleep to enforce 30 requests per minute (max 2.0 req/sec)
@@ -988,6 +1260,12 @@ pub async fn discovery_rugcheck_fetch_recent() -> Result<(), String> {
 
 /// Fetch new tokens from RugCheck API, only filling mint field
 pub async fn discovery_rugcheck_fetch_new_tokens() -> Result<(), String> {
+    let debug_mode = is_debug_discovery_enabled();
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", "Starting RugCheck new tokens fetch...");
+    }
+
     // Acquire permit for discovery rate limit (30 per minute)
     let permit = match DISCOVERY_RATE_LIMITER.clone().acquire_owned().await {
         Ok(p) => p,
@@ -1001,6 +1279,10 @@ pub async fn discovery_rugcheck_fetch_new_tokens() -> Result<(), String> {
         }
     };
     let url = "https://api.rugcheck.xyz/v1/stats/new_tokens";
+
+    if debug_mode {
+        log(LogTag::Monitor, "DEBUG", &format!("Fetching from URL: {}", url));
+    }
 
     // Create HTTP client with timeout for shutdown responsiveness
     let client = reqwest::Client
@@ -1036,6 +1318,10 @@ pub async fn discovery_rugcheck_fetch_new_tokens() -> Result<(), String> {
         }
     };
 
+    let all_items_count = arr
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
     let mints = arr
         .as_array()
         .unwrap_or(&vec![])
@@ -1044,19 +1330,38 @@ pub async fn discovery_rugcheck_fetch_new_tokens() -> Result<(), String> {
         .map(|mint| mint.to_string())
         .collect::<Vec<_>>();
 
+    if debug_mode {
+        log(
+            LogTag::Monitor,
+            "DEBUG",
+            &format!("Found {} total items, {} valid mints", all_items_count, mints.len())
+        );
+        if !mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "DEBUG",
+                &format!("Sample mints: {:?}", &mints[..std::cmp::min(3, mints.len())])
+            );
+        }
+    }
+
     let mut new_count = 0;
     if let Ok(mut set) = LIST_MINTS.write() {
         for mint in mints {
-            if set.insert(mint) {
+            if set.insert(mint.clone()) {
                 new_count += 1;
+                if debug_mode {
+                    log(LogTag::Monitor, "DEBUG", &format!("Added new mint: {}", mint));
+                }
             }
         }
     }
 
-    if new_count > 0 {
+    if new_count > 0 || debug_mode {
+        let log_level = if debug_mode { "DEBUG" } else { "INFO" };
         log(
             LogTag::Monitor,
-            "INFO",
+            log_level,
             &format!("RugCheck New Tokens New tokens seen: {}", new_count)
         );
     }
