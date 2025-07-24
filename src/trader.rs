@@ -82,7 +82,8 @@ pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
 // Exit Signal Configuration (Profit Taking)
 // -----------------------------------------------------------------------------
 
-/// Profit target percentage for position exits
+/// Profit target percentage for position exits - now duration-based
+/// This is the base target for short-term positions (< 2 hours)
 pub const PROFIT_TARGET_PERCENT: f64 = 5.0;
 
 /// Emergency stop loss (set to -99.9% to effectively disable loss selling)
@@ -90,17 +91,17 @@ pub const PROFIT_TARGET_PERCENT: f64 = 5.0;
 pub const EMERGENCY_STOP_LOSS_PERCENT: f64 = -99.9;
 
 // -----------------------------------------------------------------------------
-// Position Timing Configuration
+// Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------
 
-/// Minimum hold time before considering sell (seconds)
+/// Minimum hold time before considering sell (seconds) - reduced for flexibility
 pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 30.0;
 
-/// Maximum hold time before forcing sell (seconds)
-pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 3600.0;
+/// Maximum hold time extended for longer-term profit taking (48 hours)
+pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 172800.0; // 48 hours
 
-/// Time after which time decay pressure starts (seconds)
-pub const TIME_DECAY_START_SECS: f64 = 1800.0;
+/// Time after which time decay pressure starts - now 2 hours for better patience
+pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
 
 // -----------------------------------------------------------------------------
 // Trading Logic Configuration
