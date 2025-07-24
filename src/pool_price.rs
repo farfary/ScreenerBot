@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crate::logger::{ log, LogTag };
+use crate::global::CMD_ARGS;
 use serde::{ Deserialize, Serialize };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -17,6 +18,44 @@ use solana_sdk::program_pack::Pack;
 // =============================================================================
 // DEBUG CONFIGURATION
 // =============================================================================
+
+/// Check if debug pool price mode is enabled via command line args
+fn is_debug_pool_price_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-pool-price".to_string())
+    } else {
+        false
+    }
+}
+
+/// Helper function for conditional debug logging
+fn debug_log(log_type: &str, message: &str) {
+    if is_debug_pool_price_enabled() {
+        log(LogTag::Pool, log_type, message);
+    }
+}
+
+/// Helper function for regular pool logging (always visible)
+fn pool_log(log_type: &str, message: &str) {
+    log(LogTag::Pool, log_type, message);
+}
+
+/// Log pool price system summary when debug mode is disabled
+fn log_pool_summary(operation: &str, success_count: usize, total_count: usize) {
+    if !is_debug_pool_price_enabled() && total_count > 0 {
+        let success_rate = ((success_count as f64) / (total_count as f64)) * 100.0;
+        pool_log(
+            "INFO",
+            &format!(
+                "Pool Price System - {}: {}/{} pools processed ({:.1}% success)",
+                operation,
+                success_count,
+                total_count,
+                success_rate
+            )
+        );
+    }
+}
 
 // =============================================================================
 // CONSTANTS
@@ -76,8 +115,7 @@ pub enum PoolType {
 
 impl PoolType {
     pub fn from_dex_id_and_labels(dex_id: &str, labels: &[String]) -> Self {
-        log(
-            LogTag::Pool,
+        debug_log(
             "DEBUG",
             &format!("Determining pool type: dex_id='{}', labels={:?}", dex_id, labels)
         );
@@ -94,7 +132,7 @@ impl PoolType {
                     PoolType::RaydiumAmm
                 } else {
                     // Default to AMM for standard Raydium pools (legacy support)
-                    log(LogTag::Pool, "DEBUG", "Standard Raydium pool, defaulting to AMM");
+                    debug_log("DEBUG", "Standard Raydium pool, defaulting to AMM");
                     PoolType::RaydiumAmm
                 }
             }
@@ -103,7 +141,7 @@ impl PoolType {
                 if labels.iter().any(|l| l.eq_ignore_ascii_case("DLMM")) {
                     PoolType::MeteoraDlmm
                 } else {
-                    log(LogTag::Pool, "DEBUG", "Meteora pool without DLMM label, using DAMM V2");
+                    debug_log("DEBUG", "Meteora pool without DLMM label, using DAMM V2");
                     PoolType::MeteoraDammV2
                 }
             }
@@ -117,7 +155,7 @@ impl PoolType {
             "phoenix" => PoolType::Phoenix,
             "pump" | "pump.fun" | "pumpswap" | "pumpfun" => PoolType::PumpfunAmm,
             _ => {
-                log(LogTag::Pool, "WARN", &format!("Unknown DEX ID: {}", dex_id));
+                pool_log("WARN", &format!("Unknown DEX ID: {}", dex_id));
                 PoolType::Unknown
             }
         }
@@ -372,13 +410,12 @@ impl PoolDiscoveryAndPricing {
     pub async fn discover_pools(&self, token_mint: &str) -> Result<Vec<DiscoveredPool>> {
         let url = format!("{}/{}", DEXSCREENER_API_BASE, token_mint);
 
-        log(LogTag::Pool, "INFO", &format!("Discovering pools for token: {}", token_mint));
+        pool_log("INFO", &format!("Discovering pools for token: {}", token_mint));
 
         let response = self.http_client.get(&url).send().await?;
 
         if !response.status().is_success() {
-            log(
-                LogTag::Pool,
+            pool_log(
                 "ERROR",
                 &format!("DexScreener API failed: {} for token {}", response.status(), token_mint)
             );
@@ -390,10 +427,10 @@ impl PoolDiscoveryAndPricing {
         let pairs: Vec<serde_json::Value> = response.json().await?;
         let mut discovered_pools = Vec::new();
 
-        log(LogTag::Pool, "DEBUG", &format!("Received {} pairs from API", pairs.len()));
+        debug_log("DEBUG", &format!("Received {} pairs from API", pairs.len()));
 
         if pairs.is_empty() {
-            log(LogTag::Pool, "WARN", &format!("No pools found for token: {}", token_mint));
+            pool_log("WARN", &format!("No pools found for token: {}", token_mint));
             return Ok(discovered_pools);
         }
 
@@ -427,20 +464,23 @@ impl PoolDiscoveryAndPricing {
             }
         }
 
-        log(
-            LogTag::Pool,
-            "SUCCESS",
-            &format!(
-                "Found {} valid pools out of {} for token {}",
-                discovered_pools.len(),
-                pairs_count,
-                token_mint
-            )
-        );
+        // Log results - detailed in debug mode, summary otherwise
+        if is_debug_pool_price_enabled() {
+            pool_log(
+                "SUCCESS",
+                &format!(
+                    "Found {} valid pools out of {} for token {}",
+                    discovered_pools.len(),
+                    pairs_count,
+                    token_mint
+                )
+            );
+        } else if discovered_pools.len() > 0 {
+            log_pool_summary("Discovery", discovered_pools.len(), pairs_count);
+        }
 
         if discovered_pools.is_empty() {
-            log(
-                LogTag::Pool,
+            pool_log(
                 "WARN",
                 &format!(
                     "No valid pools found despite {} API pairs for token: {}",
@@ -551,11 +591,24 @@ impl PoolDiscoveryAndPricing {
             b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
         );
 
-        log(
-            LogTag::Pool,
-            "SUCCESS",
-            &format!("Completed price calculation for {} pools", results.len())
-        );
+        // Log completion - detailed in debug mode, summary otherwise
+        let successful_pools = results
+            .iter()
+            .filter(|r| r.calculation_successful)
+            .count();
+
+        if is_debug_pool_price_enabled() {
+            pool_log(
+                "SUCCESS",
+                &format!(
+                    "Completed price calculation for {} pools ({} successful)",
+                    results.len(),
+                    successful_pools
+                )
+            );
+        } else {
+            log_pool_summary("Token Analysis", successful_pools, results.len());
+        }
 
         Ok(results)
     }
@@ -584,17 +637,13 @@ impl PoolDiscoveryAndPricing {
             let cache = self.pool_cache.lock().unwrap();
             if let Some(entry) = cache.get(token_mint) {
                 if !entry.is_expired() {
-                    log(
-                        LogTag::Pool,
-                        "DEBUG",
-                        &format!("Using cached pool for token: {}", token_mint)
-                    );
+                    debug_log("DEBUG", &format!("Using cached pool for token: {}", token_mint));
                     return Ok(Some(entry.pool_result.clone()));
                 }
             }
         }
 
-        log(LogTag::Pool, "INFO", &format!("Fetching biggest pool for token: {}", token_mint));
+        pool_log("INFO", &format!("Fetching biggest pool for token: {}", token_mint));
 
         // Fetch all pool prices
         let pool_results = self.get_token_pool_prices(token_mint).await?;
@@ -659,8 +708,7 @@ impl PoolDiscoveryAndPricing {
             let cache = self.program_id_cache.lock().unwrap();
             if let Some(entry) = cache.get(token_mint) {
                 if !entry.is_expired() {
-                    log(
-                        LogTag::Pool,
+                    debug_log(
                         "DEBUG",
                         &format!(
                             "Cache HIT: Program IDs for token {} (count: {}, age: {}s)",
@@ -671,14 +719,14 @@ impl PoolDiscoveryAndPricing {
                     );
                     return Ok(entry.program_ids.clone());
                 } else {
-                    log(LogTag::Pool, "DEBUG", &format!("Cache EXPIRED for token {}", token_mint));
+                    debug_log("DEBUG", &format!("Cache EXPIRED for token {}", token_mint));
                 }
             } else {
-                log(LogTag::Pool, "DEBUG", &format!("Cache MISS for token {}", token_mint));
+                debug_log("DEBUG", &format!("Cache MISS for token {}", token_mint));
             }
         }
 
-        log(LogTag::Pool, "INFO", &format!("Fetching program IDs for token: {}", token_mint));
+        pool_log("INFO", &format!("Fetching program IDs for token: {}", token_mint));
 
         // Discover pools to get their program IDs
         let discovered_pools = self.discover_pools(token_mint).await?;
@@ -838,7 +886,7 @@ impl PoolDiscoveryAndPricing {
                 if price <= 0.0 {
                     let error_msg =
                         format!("Invalid price calculated: {} (price must be > 0)", price);
-                    log(LogTag::Pool, "WARN", &error_msg);
+                    pool_log("WARN", &error_msg);
                     (price, false, Some(error_msg))
                 } else {
                     (price, true, None)
@@ -846,8 +894,7 @@ impl PoolDiscoveryAndPricing {
             }
             Err(e) => {
                 let error_msg = format!("Failed to calculate on-chain price: {}", e);
-                log(
-                    LogTag::Pool,
+                pool_log(
                     "ERROR",
                     &format!(
                         "Pool calculation failed - Address: {}, Type: {:?}, Error: {}",
@@ -890,24 +937,19 @@ impl PoolDiscoveryAndPricing {
         &self,
         pool_address: &str
     ) -> Result<(f64, String, String, PoolType)> {
-        log(
-            LogTag::Pool,
-            "INFO",
-            &format!("Starting price calculation for pool: {}", pool_address)
-        );
+        pool_log("INFO", &format!("Starting price calculation for pool: {}", pool_address));
 
         // First detect the pool type
         let pool_type = self.detect_pool_type(pool_address).await?;
-        log(LogTag::Pool, "DEBUG", &format!("Pool type detected: {:?}", pool_type));
+        debug_log("DEBUG", &format!("Pool type detected: {:?}", pool_type));
 
         // Parse the pool data based on type
         let pool_data = self.parse_pool_data(pool_address, pool_type).await?;
-        log(LogTag::Pool, "DEBUG", "Pool data parsed successfully");
+        debug_log("DEBUG", "Pool data parsed successfully");
 
         // Calculate price using the universal method
         let price = self.calculate_price_from_pool_data(&pool_data).await?;
-        log(
-            LogTag::Pool,
+        pool_log(
             "SUCCESS",
             &format!("Price calculation completed: {} (pool type: {:?})", price, pool_type)
         );
@@ -1001,14 +1043,9 @@ impl PoolDiscoveryAndPricing {
         // Get the program ID that owns this account
         let program_id = account_info.owner.to_string();
 
-        log(
-            LogTag::Pool,
-            "DEBUG",
-            &format!("Pool account data size: {} bytes", account_info.data.len())
-        );
+        debug_log("DEBUG", &format!("Pool account data size: {} bytes", account_info.data.len()));
 
-        log(
-            LogTag::Pool,
+        pool_log(
             "INFO",
             &format!("Detecting pool type for {} (program: {})", pool_address, program_id)
         );
@@ -1017,32 +1054,32 @@ impl PoolDiscoveryAndPricing {
         match program_id.as_str() {
             // Raydium CPMM Program ID
             id if id == RAYDIUM_CPMM_PROGRAM_ID => {
-                log(LogTag::Pool, "SUCCESS", "Detected: Raydium CPMM pool");
+                pool_log("SUCCESS", "Detected: Raydium CPMM pool");
                 Ok(PoolType::RaydiumCpmm)
             }
             // Meteora DLMM Program ID
             id if id == METEORA_DLMM_PROGRAM_ID => {
-                log(LogTag::Pool, "SUCCESS", "Detected: Meteora DLMM pool");
+                pool_log("SUCCESS", "Detected: Meteora DLMM pool");
                 Ok(PoolType::MeteoraDlmm)
             }
             // Meteora DAMM v2 Program ID
             id if id == METEORA_DAMM_V2_PROGRAM_ID => {
-                log(LogTag::Pool, "SUCCESS", "Detected: Meteora DAMM v2 pool");
+                pool_log("SUCCESS", "Detected: Meteora DAMM v2 pool");
                 Ok(PoolType::MeteoraDammV2)
             }
             // Raydium LaunchLab Program ID
             id if id == RAYDIUM_LAUNCHLAB_PROGRAM_ID => {
-                log(LogTag::Pool, "SUCCESS", "Detected: Raydium LaunchLab pool");
+                pool_log("SUCCESS", "Detected: Raydium LaunchLab pool");
                 Ok(PoolType::RaydiumLaunchLab)
             }
             // Orca Whirlpool Program ID
             id if id == ORCA_WHIRLPOOL_PROGRAM_ID => {
-                log(LogTag::Pool, "SUCCESS", "Detected: Orca Whirlpool pool");
+                pool_log("SUCCESS", "Detected: Orca Whirlpool pool");
                 Ok(PoolType::OrcaWhirlpool)
             }
             // Pump.fun AMM Program ID
             id if id == PUMPFUN_AMM_PROGRAM_ID => {
-                log(LogTag::Pool, "SUCCESS", "Detected: Pump.fun AMM pool");
+                pool_log("SUCCESS", "Detected: Pump.fun AMM pool");
                 Ok(PoolType::PumpfunAmm)
             }
             // Add other DEX program IDs as needed
@@ -1050,8 +1087,7 @@ impl PoolDiscoveryAndPricing {
 
             // Unknown program ID
             _ => {
-                log(
-                    LogTag::Pool,
+                pool_log(
                     "WARN",
                     &format!(
                         "⚠️ UNKNOWN PROGRAM ID\n\
@@ -1442,22 +1478,18 @@ impl PoolDiscoveryAndPricing {
         let cache_path = Path::new("decimal_cache.json");
         let mut decimal_cache = match DecimalCache::load_from_file(cache_path) {
             Ok(cache) => {
-                log(LogTag::Pool, "DEBUG", "Decimal cache loaded successfully");
+                debug_log("DEBUG", "Decimal cache loaded successfully");
                 cache
             }
             Err(e) => {
-                log(LogTag::Pool, "WARN", &format!("Failed to load decimal cache: {}", e));
+                pool_log("WARN", &format!("Failed to load decimal cache: {}", e));
                 DecimalCache::new()
             }
         };
 
         // Get actual token decimals from cache or fetch from chain
         let mints_to_check = vec![pool_data.token_a.mint.clone(), pool_data.token_b.mint.clone()];
-        log(
-            LogTag::Pool,
-            "DEBUG",
-            &format!("Checking decimals for {} tokens", mints_to_check.len())
-        );
+        debug_log("DEBUG", &format!("Checking decimals for {} tokens", mints_to_check.len()));
 
         let decimal_map = match
             fetch_or_cache_decimals(
@@ -1468,12 +1500,12 @@ impl PoolDiscoveryAndPricing {
             ).await
         {
             Ok(map) => {
-                log(LogTag::Pool, "DEBUG", "Successfully fetched/cached token decimals");
+                debug_log("DEBUG", "Successfully fetched/cached token decimals");
                 map
             }
             Err(e) => {
-                log(LogTag::Pool, "WARN", &format!("Failed to fetch decimals from cache: {}", e));
-                log(LogTag::Pool, "DEBUG", "Using fallback decimals from pool data");
+                pool_log("WARN", &format!("Failed to fetch decimals from cache: {}", e));
+                debug_log("DEBUG", "Using fallback decimals from pool data");
                 // Create fallback map using pool data decimals
                 let mut fallback_map = HashMap::new();
                 fallback_map.insert(pool_data.token_a.mint.clone(), pool_data.token_a.decimals);
@@ -1596,14 +1628,13 @@ impl PoolDiscoveryAndPricing {
                 );
                 if token_amount > 0.0 {
                     let price = sol_amount / token_amount;
-                    log(
-                        LogTag::Pool,
+                    pool_log(
                         "SUCCESS",
                         &format!("Standard price calculated: {} SOL per token", price)
                     );
                     price
                 } else {
-                    log(LogTag::Pool, "WARN", "Token amount is zero, cannot calculate price");
+                    pool_log("WARN", "Token amount is zero, cannot calculate price");
                     0.0
                 }
             }
@@ -1611,7 +1642,7 @@ impl PoolDiscoveryAndPricing {
             if let PoolSpecificData::OrcaWhirlpool { sqrt_price, .. } = &pool_data.specific_data {
                 // Whirlpool price calculation using sqrt_price
                 // Price = (sqrt_price / 2^64)^2 * (10^decimals_B / 10^decimals_A)
-                log(LogTag::Pool, "DEBUG", &format!("Whirlpool sqrt_price: {}", sqrt_price));
+                debug_log("DEBUG", &format!("Whirlpool sqrt_price: {}", sqrt_price));
 
                 let sqrt_price_f64 = *sqrt_price as f64;
                 let q64 = (2_f64).powi(64);
@@ -1681,7 +1712,7 @@ impl PoolDiscoveryAndPricing {
             if let PoolSpecificData::MeteoraDammV2 { sqrt_price, .. } = &pool_data.specific_data {
                 // Meteora DAMM v2 price calculation using sqrt_price
                 // For concentrated liquidity pools: price = (sqrt_price / 2^64)^2
-                log(LogTag::Pool, "DEBUG", &format!("Meteora DAMM v2 sqrt_price: {}", sqrt_price));
+                debug_log("DEBUG", &format!("Meteora DAMM v2 sqrt_price: {}", sqrt_price));
 
                 let sqrt_price_f64 = *sqrt_price as f64;
                 let sqrt_price_normalized = sqrt_price_f64 / (2_f64).powi(64);
@@ -1707,7 +1738,7 @@ impl PoolDiscoveryAndPricing {
                 adjusted_price
             } else {
                 // Fallback to vault balance calculation
-                log(LogTag::Pool, "DEBUG", "Using fallback vault balance calculation for DAMM v2");
+                debug_log("DEBUG", "Using fallback vault balance calculation for DAMM v2");
                 if token_amount > 0.0 {
                     let price = sol_amount / token_amount;
                     log(
@@ -1728,7 +1759,7 @@ impl PoolDiscoveryAndPricing {
         } else if pool_data.pool_type == PoolType::PumpfunAmm {
             // For Pump.fun AMM pools, use simple vault balance calculation
             // Pump.fun pools are typically Base Token/SOL pairs
-            log(LogTag::Pool, "DEBUG", "Using Pump.fun AMM price calculation");
+            debug_log("DEBUG", "Using Pump.fun AMM price calculation");
             if token_amount > 0.0 {
                 let price = sol_amount / token_amount;
                 log(
@@ -1747,13 +1778,13 @@ impl PoolDiscoveryAndPricing {
             }
         } else {
             // Standard calculation for other pool types
-            log(LogTag::Pool, "DEBUG", "Using standard price calculation for non-LaunchLab pool");
+            debug_log("DEBUG", "Using standard price calculation for non-LaunchLab pool");
             if token_amount > 0.0 {
                 let price = sol_amount / token_amount; // SOL per token (or token_a per token_b if no SOL)
-                log(LogTag::Pool, "SUCCESS", &format!("Price calculated: {} per token", price));
+                pool_log("SUCCESS", &format!("Price calculated: {} per token", price));
                 price
             } else {
-                log(LogTag::Pool, "WARN", "Token amount is zero, cannot calculate price");
+                pool_log("WARN", "Token amount is zero, cannot calculate price");
                 0.0
             }
         };
@@ -1991,7 +2022,7 @@ impl PoolDiscoveryAndPricing {
             );
         }
 
-        log(LogTag::Pool, "DEBUG", &format!("Parsing DAMM v2 pool data: {} bytes", data.len()));
+        debug_log("DEBUG", &format!("Parsing DAMM v2 pool data: {} bytes", data.len()));
 
         // Based on our analysis of actual pool data, the correct field positions are:
 
@@ -2142,16 +2173,15 @@ impl PoolDiscoveryAndPricing {
             );
             offset += bytes_per_line;
         }
-        log(LogTag::Pool, "DEBUG", "=========================================");
+        debug_log("DEBUG", "=========================================");
     }
 
     /// Parse Raydium LaunchLab pool data from raw account bytes
     fn parse_raydium_launchlab_data(&self, data: &[u8]) -> Result<RaydiumLaunchLabData> {
-        log(LogTag::Pool, "DEBUG", &format!("LaunchLab pool data length: {} bytes", data.len()));
+        debug_log("DEBUG", &format!("LaunchLab pool data length: {} bytes", data.len()));
 
         if data.len() < 317 {
-            log(
-                LogTag::Pool,
+            pool_log(
                 "ERROR",
                 &format!("LaunchLab pool data too short: {} bytes (minimum: 317)", data.len())
             );
@@ -2161,12 +2191,12 @@ impl PoolDiscoveryAndPricing {
         }
 
         // COMPREHENSIVE HEX DUMP - Print entire data structure in hex format
-        log(LogTag::Pool, "DEBUG", "=== COMPREHENSIVE HEX DUMP ===");
+        debug_log("DEBUG", "=== COMPREHENSIVE HEX DUMP ===");
         self.hex_dump_data(data, 0, std::cmp::min(400, data.len()));
 
         // Debug: Print first 100 bytes to understand the structure
         let debug_bytes = &data[0..std::cmp::min(100, data.len())];
-        log(LogTag::Pool, "DEBUG", &format!("First 100 bytes: {:?}", debug_bytes));
+        debug_log("DEBUG", &format!("First 100 bytes: {:?}", debug_bytes));
 
         // First, perform pattern matching for expected values
         // Looking at the values we expect: real_base=793100000000000, real_quote=85000000226
@@ -2317,7 +2347,7 @@ impl PoolDiscoveryAndPricing {
             );
             (793100000000000u64, 85000000226u64)
         } else {
-            log(LogTag::Pool, "DEBUG", "Pattern matching failed, using corrected parsing results");
+            debug_log("DEBUG", "Pattern matching failed, using corrected parsing results");
             (real_base_corrected, real_quote_corrected)
         };
 
