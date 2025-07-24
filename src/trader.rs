@@ -105,6 +105,24 @@ use crate::pool_price::PoolDiscoveryAndPricing;
 use crate::profit::should_sell_smart_system;
 use crate::loss_prevention::should_allow_token_purchase;
 
+// =============================================================================
+// DEBUG FILTERING CONFIGURATION
+// =============================================================================
+
+/// Helper function for conditional debug filtering logs
+fn debug_filtering_log(log_type: &str, message: &str) {
+    if is_debug_filtering_enabled() {
+        log(LogTag::Trader, log_type, message);
+    }
+}
+
+/// Helper function for regular trader logging (always visible)
+fn trader_log(log_type: &str, message: &str) {
+    log(LogTag::Trader, log_type, message);
+}
+
+// =============================================================================
+
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
@@ -316,9 +334,8 @@ fn is_token_recently_closed(mint: &str, symbol: &str) -> bool {
                     let time_since_close = now - exit_time;
 
                     if time_since_close <= cooldown_duration {
-                        log(
-                            LogTag::Trader,
-                            "COOLDOWN",
+                        debug_filtering_log(
+                            "COOLDOWN_BLOCK",
                             &format!(
                                 "Blocking {} ({}) purchase - position closed {:.1} minutes ago (cooldown: {} min)",
                                 symbol,
@@ -1624,10 +1641,38 @@ pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64
 
 /// Validates if a token has all required metadata for trading
 pub fn validate_token_info(token: &Token) -> bool {
-    !token.symbol.is_empty() &&
-        !token.mint.is_empty() &&
-        token.price_dexscreener_sol.is_some() &&
-        token.liquidity.is_some()
+    if token.symbol.is_empty() {
+        debug_filtering_log("INFO_BLOCK", &format!("Token {} has empty symbol", token.mint));
+        return false;
+    }
+
+    if token.mint.is_empty() {
+        debug_filtering_log("INFO_BLOCK", &format!("Token {} has empty mint", token.symbol));
+        return false;
+    }
+
+    if token.price_dexscreener_sol.is_none() {
+        debug_filtering_log(
+            "INFO_BLOCK",
+            &format!("Token {} ({}) has no DexScreener SOL price", token.symbol, token.mint)
+        );
+        return false;
+    }
+
+    if token.liquidity.is_none() {
+        debug_filtering_log(
+            "INFO_BLOCK",
+            &format!("Token {} ({}) has no liquidity data", token.symbol, token.mint)
+        );
+        return false;
+    }
+
+    debug_filtering_log(
+        "INFO_OK",
+        &format!("Token {} ({}) metadata validation passed", token.symbol, token.mint)
+    );
+
+    true
 }
 
 /// Validates if a token age is within acceptable trading range
@@ -1642,8 +1687,7 @@ pub fn validate_token_age(token: &Token) -> bool {
         let is_not_too_old = age_hours <= MAX_TOKEN_AGE_HOURS;
 
         if !is_old_enough {
-            log(
-                LogTag::Trader,
+            debug_filtering_log(
                 "AGE_BLOCK",
                 &format!(
                     "Token {} ({}) too young: {} hours old (minimum {} hours required)",
@@ -1657,8 +1701,7 @@ pub fn validate_token_age(token: &Token) -> bool {
         }
 
         if !is_not_too_old {
-            log(
-                LogTag::Trader,
+            debug_filtering_log(
                 "AGE_BLOCK",
                 &format!(
                     "Token {} ({}) too old: {} hours old (maximum {} hours allowed)",
@@ -1671,8 +1714,7 @@ pub fn validate_token_age(token: &Token) -> bool {
             return false;
         }
 
-        log(
-            LogTag::Trader,
+        debug_filtering_log(
             "AGE_OK",
             &format!(
                 "Token {} ({}) age acceptable: {} hours old",
@@ -1686,8 +1728,7 @@ pub fn validate_token_age(token: &Token) -> bool {
     } else {
         // If no created_at timestamp is available, log warning but allow trading
         // This prevents blocking tokens where we don't have creation data
-        log(
-            LogTag::Trader,
+        debug_filtering_log(
             "AGE_WARN",
             &format!(
                 "Token {} ({}) has no creation timestamp - allowing trade (consider this risky)",
@@ -1847,12 +1888,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     })
                     .count();
 
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
+                debug_filtering_log(
+                    "TOKEN_COUNT",
                     &format!("Tokens with non-zero liquidity: {}", with_liquidity)
-                        .dimmed()
-                        .to_string()
                 );
 
                 all_tokens
@@ -1909,12 +1947,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             .count();
 
         if zero_liquidity_count > 0 {
-            log(
-                LogTag::Trader,
-                "WARN",
+            debug_filtering_log(
+                "LIQUIDITY_FILTER",
                 &format!("Found {} tokens with zero liquidity USD", zero_liquidity_count)
-                    .dimmed()
-                    .to_string()
             );
         }
 
@@ -1925,15 +1960,34 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 .and_then(|l| l.usd)
                 .unwrap_or(0.0);
 
+            if liquidity_usd == 0.0 {
+                debug_filtering_log(
+                    "LIQUIDITY_BLOCK",
+                    &format!(
+                        "Token {} ({}) filtered out: zero liquidity USD",
+                        token.symbol,
+                        token.mint
+                    )
+                );
+                return false;
+            }
+
+            debug_filtering_log(
+                "LIQUIDITY_OK",
+                &format!(
+                    "Token {} ({}) liquidity acceptable: ${:.2}",
+                    token.symbol,
+                    token.mint,
+                    liquidity_usd
+                )
+            );
+
             liquidity_usd > 0.0
         });
 
-        log(
-            LogTag::Trader,
-            "INFO",
+        debug_filtering_log(
+            "FILTER_RESULT",
             &format!("Processing {} tokens with non-zero liquidity", tokens.len())
-                .dimmed()
-                .to_string()
         );
 
         // Early return if no tokens to process
@@ -1962,10 +2016,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
-        log(
-            LogTag::Trader,
-            "INFO",
-            &format!("Starting to spawn {} token checking tasks", tokens.len()).dimmed().to_string()
+        debug_filtering_log(
+            "TASK_SPAWN",
+            &format!("Starting to spawn {} token checking tasks", tokens.len())
         );
 
         // Process all tokens in parallel with concurrent tasks

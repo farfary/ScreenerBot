@@ -21,6 +21,15 @@ pub static TOKEN_DB: Lazy<Mutex<Option<TokenDatabase>>> = Lazy::new(|| Mutex::ne
 // Startup timestamp to track when the bot started for trading logic
 pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 
+/// Check if debug filtering mode is enabled via command line args
+pub fn is_debug_filtering_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-filtering".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {
