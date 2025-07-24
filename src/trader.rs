@@ -1,5 +1,20 @@
 /// Trading configuration constants
 ///
+/// ======================================
+/// NEVER SELL AT LOSS PROTECTION SYSTEM
+/// ======================================
+///
+/// This trading bot implements a strict "NEVER SELL AT LOSS" policy with multiple layers of protection:
+///
+/// 1. **Extreme Emergency Stop Loss Only**: Set at -99.9% (essentially impossible to reach)
+/// 2. **Profit-Only Exit Logic**: All sell decisions only trigger when in profit
+/// 3. **Smart System Validation**: Advanced profit system also enforces no-loss rule
+/// 4. **Final Safeguard**: Last-minute validation before any sell execution
+/// 5. **Hold-Forever Strategy**: Any position at a loss is held indefinitely for recovery
+///
+/// This ensures capital preservation and relies on the principle that crypto tokens
+/// can recover over time, making it better to hold through dips than to realize losses.
+///
 /// MULTI-STRATEGY DIP DETECTION SYSTEM
 /// ===================================
 ///
@@ -46,10 +61,11 @@ pub const MAX_OPEN_POSITIONS: usize = 50;
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
-pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +25%
+pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +5%
 
-/// Hardcoded stop loss - only sell at -99% loss (essentially never sell at loss)
-pub const STOP_LOSS_PERCENT: f64 = -99.0;
+/// NEVER SELL AT LOSS - Only emergency exit at -99.9% loss (essentially never sell at loss)
+/// This ensures we NEVER sell at a loss under normal circumstances
+pub const STOP_LOSS_PERCENT: f64 = -99.9;
 
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
@@ -107,23 +123,61 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 
 /// Determines if a position should be sold based on P&L, time, and token analysis
 /// Returns urgency score from 0.0 (don't sell) to 1.0 (sell immediately)
-/// Only sells at profit or at -99% stop loss (essentially never sell at loss)
+/// NEVER SELL AT LOSS - Only sells at profit or extreme emergency (-99.9% loss)
+/// This function ensures we NEVER sell at a loss under normal trading conditions
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
     // Calculate time held in seconds
     let duration = now - pos.entry_time;
     let time_held_secs: f64 = duration.num_seconds() as f64;
 
-    // Calculate current P&L
-    let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
+    // BULLETPROOF PROTECTION: Check simple price relationship FIRST
+    let entry_price = pos.effective_entry_price.unwrap_or(pos.entry_price);
+    let simple_price_change_percent = ((current_price - entry_price) / entry_price) * 100.0;
 
-    // Only sell at -99% stop loss (emergency exit for catastrophic failures)
-    if current_pnl_percent <= STOP_LOSS_PERCENT {
-        return 1.0; // Emergency exit only at -99%
+    // ABSOLUTE RULE: If simple price check shows loss, NEVER SELL (regardless of P&L calculation)
+    if simple_price_change_percent < 0.0 {
+        log(
+            LogTag::Trader,
+            "HOLD",
+            &format!(
+                "HOLDING {} - Simple price check: {:.2}% loss - NEVER SELL AT LOSS",
+                pos.symbol,
+                simple_price_change_percent
+            )
+        );
+        return 0.0; // NEVER sell when price is below entry
     }
 
-    // Don't sell at any loss above -99%
+    // Secondary check: Calculate P&L for additional validation
+    let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
+
+    // Only allow emergency exit if BOTH price AND P&L show extreme loss
+    if current_pnl_percent <= STOP_LOSS_PERCENT && simple_price_change_percent <= -99.0 {
+        log(
+            LogTag::Trader,
+            "EMERGENCY",
+            &format!(
+                "EXTREME EMERGENCY: {} - Price: {:.2}%, P&L: {:.2}% - emergency exit",
+                pos.symbol,
+                simple_price_change_percent,
+                current_pnl_percent
+            )
+        );
+        return 1.0; // Emergency exit only when BOTH checks confirm extreme loss
+    }
+
+    // Additional P&L based protection (backup)
     if current_pnl_percent < 0.0 {
-        return 0.0; // Never sell at loss
+        log(
+            LogTag::Trader,
+            "HOLD",
+            &format!(
+                "HOLDING {} - P&L shows {:.2}% loss - NEVER SELL AT LOSS",
+                pos.symbol,
+                current_pnl_percent
+            )
+        );
+        return 0.0; // NEVER sell at loss
     }
 
     // Don't sell too early unless we have significant profit
@@ -2563,6 +2617,24 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     let mut position = position;
                     let token_symbol = token.symbol.clone();
+
+                    // FINAL SAFEGUARD: Double-check we're not selling at a loss
+                    let (_, final_pnl_percent) = calculate_position_pnl(
+                        &position,
+                        Some(exit_price)
+                    );
+                    if final_pnl_percent < 0.0 && final_pnl_percent > -99.0 {
+                        log(
+                            LogTag::Trader,
+                            "ABORT",
+                            &format!(
+                                "ABORTING SELL for {} - would sell at {:.2}% loss. NEVER SELL AT LOSS!",
+                                token_symbol,
+                                final_pnl_percent
+                            )
+                        );
+                        return None; // Abort the sale
+                    }
 
                     // Wrap the sell operation in a timeout
                     match

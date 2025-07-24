@@ -203,17 +203,60 @@ pub fn should_sell_smart_system(
     current_price: f64,
     time_held_seconds: f64
 ) -> (f64, String) {
-    let (_, current_pnl_percent) = calculate_position_pnl(position, Some(current_price));
+    // BULLETPROOF PROTECTION: Check simple price relationship FIRST
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    let simple_price_change_percent = ((current_price - entry_price) / entry_price) * 100.0;
 
-    // === NEVER SELL AT LOSS ===
-    // Only the hardcoded -99% stop loss can trigger loss sales
-    if current_pnl_percent <= -99.0 {
-        return (1.0, "EMERGENCY: -99% stop loss triggered".to_string());
+    // ABSOLUTE RULE: If simple price check shows loss, NEVER SELL (regardless of P&L calculation)
+    if simple_price_change_percent < 0.0 {
+        log(
+            LogTag::Trader,
+            "HOLD",
+            &format!(
+                "HOLDING {} - Simple price check: {:.2}% loss - NEVER SELL AT LOSS",
+                position.symbol,
+                simple_price_change_percent
+            )
+        );
+        return (
+            0.0,
+            format!(
+                "HOLD: Price {:.1}% below entry - NEVER SELL AT LOSS",
+                simple_price_change_percent
+            ),
+        );
     }
 
-    // Never sell at any other loss - always hold for recovery
+    // Secondary check: Calculate P&L for additional validation
+    let (_, current_pnl_percent) = calculate_position_pnl(position, Some(current_price));
+
+    // Only allow emergency exit if BOTH price AND P&L show extreme loss
+    if current_pnl_percent <= -99.9 && simple_price_change_percent <= -99.0 {
+        log(
+            LogTag::Trader,
+            "EMERGENCY",
+            &format!(
+                "EXTREME EMERGENCY: {} - Price: {:.2}%, P&L: {:.2}% - emergency exit",
+                position.symbol,
+                simple_price_change_percent,
+                current_pnl_percent
+            )
+        );
+        return (1.0, "EMERGENCY: Confirmed extreme loss on both price and P&L".to_string());
+    }
+
+    // Additional P&L based protection (backup)
     if current_pnl_percent < 0.0 {
-        return (0.0, format!("HOLD: At {:.1}% loss - waiting for recovery", current_pnl_percent));
+        log(
+            LogTag::Trader,
+            "HOLD",
+            &format!(
+                "HOLDING {} - P&L shows {:.2}% loss - NEVER SELL AT LOSS",
+                position.symbol,
+                current_pnl_percent
+            )
+        );
+        return (0.0, format!("HOLD: P&L {:.1}% loss - NEVER SELL AT LOSS", current_pnl_percent));
     }
 
     // === PROFIT-ONLY LOGIC BELOW ===
