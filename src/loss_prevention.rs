@@ -1,6 +1,7 @@
 /// Loss prevention system to analyze token history and prevent buying tokens with poor performance
 use crate::positions::{ Position, calculate_position_pnl, SAVED_POSITIONS };
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_loss_prevention_enabled;
 use std::collections::HashMap;
 
 /// Configuration for loss prevention system
@@ -9,6 +10,13 @@ pub const MIN_CLOSED_POSITIONS_FOR_ANALYSIS: usize = 2; // Need at least 2 close
 pub const MAX_LOSS_RATE_PERCENT: f64 = 70.0; // Don't buy if more than 70% of positions were losses
 pub const MAX_AVERAGE_LOSS_PERCENT: f64 = -15.0; // Don't buy if average loss is worse than -15%
 pub const LOOKBACK_HOURS: i64 = 168; // Look back 7 days (168 hours) for position history
+
+/// Helper function to log only when debug loss prevention is enabled
+fn debug_log(log_type: &str, message: &str) {
+    if is_debug_loss_prevention_enabled() {
+        log(LogTag::Trader, log_type, message);
+    }
+}
 
 /// Statistics for a token's trading history
 #[derive(Debug, Clone)]
@@ -36,8 +44,7 @@ pub fn should_allow_token_purchase(mint: &str, symbol: &str) -> bool {
 
     // If we don't have enough data, allow the purchase (benefit of the doubt)
     if stats.total_closed_positions < MIN_CLOSED_POSITIONS_FOR_ANALYSIS {
-        log(
-            LogTag::Trader,
+        debug_log(
             "LOSS_PREVENTION",
             &format!(
                 "Allowing {} purchase - insufficient history ({} positions < {} required)",
@@ -51,8 +58,7 @@ pub fn should_allow_token_purchase(mint: &str, symbol: &str) -> bool {
 
     // Check loss rate threshold
     if stats.loss_rate_percent > MAX_LOSS_RATE_PERCENT {
-        log(
-            LogTag::Trader,
+        debug_log(
             "BUY_BLOCKED",
             &format!(
                 "❌ Blocking {} purchase - high loss rate: {:.1}% losses ({}/{} positions) exceeds {:.1}% threshold",
@@ -68,8 +74,7 @@ pub fn should_allow_token_purchase(mint: &str, symbol: &str) -> bool {
 
     // Check average loss threshold
     if stats.average_pnl_percent < MAX_AVERAGE_LOSS_PERCENT {
-        log(
-            LogTag::Trader,
+        debug_log(
             "BUY_BLOCKED",
             &format!(
                 "❌ Blocking {} purchase - poor average P&L: {:.1}% < {:.1}% threshold (Total: {:.6} SOL)",
@@ -83,8 +88,7 @@ pub fn should_allow_token_purchase(mint: &str, symbol: &str) -> bool {
     }
 
     // Token passes all checks
-    log(
-        LogTag::Trader,
+    debug_log(
         "LOSS_PREVENTION",
         &format!(
             "✅ Allowing {} purchase - good history: {:.1}% loss rate, {:.1}% avg P&L, {:.6} SOL total",
@@ -116,8 +120,7 @@ pub fn analyze_token_loss_history(mint: &str, symbol: &str) -> TokenLossStats {
     let positions = match SAVED_POSITIONS.lock() {
         Ok(positions) => positions,
         Err(e) => {
-            log(
-                LogTag::Trader,
+            debug_log(
                 "ERROR",
                 &format!("Failed to acquire positions lock for loss analysis: {}", e)
             );
@@ -179,8 +182,7 @@ pub fn get_comprehensive_loss_analysis() -> HashMap<String, TokenLossStats> {
     let positions = match SAVED_POSITIONS.lock() {
         Ok(positions) => positions,
         Err(e) => {
-            log(
-                LogTag::Trader,
+            debug_log(
                 "ERROR",
                 &format!("Failed to acquire positions lock for comprehensive analysis: {}", e)
             );
@@ -214,16 +216,11 @@ pub fn print_loss_analysis_report() {
     let analysis = get_comprehensive_loss_analysis();
 
     if analysis.is_empty() {
-        log(
-            LogTag::Trader,
-            "LOSS_ANALYSIS",
-            "No closed positions found in the last week for analysis"
-        );
+        debug_log("LOSS_ANALYSIS", "No closed positions found in the last week for analysis");
         return;
     }
 
-    log(
-        LogTag::Trader,
+    debug_log(
         "LOSS_ANALYSIS",
         &format!("📊 Token Performance Analysis (Last {} hours)", LOOKBACK_HOURS)
     );
@@ -242,8 +239,7 @@ pub fn print_loss_analysis_report() {
             "✅ ALLOWED"
         };
 
-        log(
-            LogTag::Trader,
+        debug_log(
             "LOSS_ANALYSIS",
             &format!(
                 "{} {} - {}/{} losses ({:.1}%), Avg P&L: {:.1}%, Total: {:.6} SOL, Range: {:.1}% to {:.1}%",

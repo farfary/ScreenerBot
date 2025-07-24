@@ -3,6 +3,12 @@ use solana_sdk::pubkey::Pubkey;
 use super::super::types::*;
 use crate::logger::{ log, LogTag };
 
+/// Check if a mint is SOL or WSOL
+fn is_sol_mint(mint: &str) -> bool {
+    const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+    mint == SOL_MINT
+}
+
 /// Parse Orca Whirlpool pool data from raw account bytes
 pub fn parse_orca_whirlpool_data(data: &[u8]) -> Result<OrcaWhirlpoolData> {
     log(LogTag::Pool, "DEBUG", &format!("Orca Whirlpool pool data length: {} bytes", data.len()));
@@ -97,7 +103,7 @@ pub fn parse_orca_whirlpool_data(data: &[u8]) -> Result<OrcaWhirlpoolData> {
             "Parsed Orca Whirlpool: tokenA={}, tokenB={} ({}), liquidity={}, sqrt_price={}, tick_spacing={}, fee_rate={}",
             &token_mint_a,
             &token_mint_b,
-            if token_mint_b == "So11111111111111111111111111111111111111112" {
+            if is_sol_mint(&token_mint_b) {
                 "✅SOL"
             } else {
                 "❌NOT_SOL"

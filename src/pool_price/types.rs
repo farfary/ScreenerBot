@@ -14,6 +14,7 @@ pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWA
 pub const RAYDIUM_LAUNCHLAB_PROGRAM_ID: &str = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 pub const PUMPFUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+pub const PUMPFUN_BONDING_CURVE_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
 pub const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/token-pairs/v1/solana";
 
 // Cache expiration time - 2 minutes
@@ -77,6 +78,7 @@ pub enum PoolType {
     OrcaWhirlpool,
     Phoenix,
     PumpfunAmm,
+    PumpfunBondingCurve,
     Unknown,
 }
 
@@ -211,6 +213,14 @@ pub enum PoolSpecificData {
         protocol_fee_rate: u16,
     },
     PumpfunAmm {
+        pool_bump: u8,
+        index: u16,
+        creator: String,
+        lp_mint: String,
+        lp_supply: u64,
+        coin_creator: String,
+    },
+    PumpfunBondingCurve {
         pool_bump: u8,
         index: u16,
         creator: String,

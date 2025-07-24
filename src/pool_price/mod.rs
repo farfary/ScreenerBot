@@ -14,8 +14,12 @@ use solana_sdk::program_pack::Pack;
 use crate::logger::{ log, LogTag };
 use crate::decimal_cache::{ DecimalCache, fetch_or_cache_decimals };
 
+// SOL and WSOL mint constants
+const SOL_MINT: &str = "So11111111111111111111111111111111111111112"; // Native SOL
+const WSOL_MINT: &str = "So11111111111111111111111111111111111111112"; // Wrapped SOL (same as native)
+
 // Pool logging configuration and helper functions
-const ENABLE_POOL_DEBUG_LOGS: bool = false; // Set to true for detailed debugging
+const ENABLE_POOL_DEBUG_LOGS: bool = true; // Set to true for detailed debugging
 
 /// Helper function for conditional debug logging
 fn debug_log(log_type: &str, message: &str) {
@@ -57,6 +61,11 @@ impl PoolDiscoveryAndPricing {
             pool_cache: Arc::new(Mutex::new(HashMap::new())),
             program_id_cache: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Check if a mint address is SOL or WSOL
+    fn is_sol_mint(&self, mint_address: &str) -> bool {
+        mint_address == SOL_MINT || mint_address == WSOL_MINT
     }
 
     /// Discover all pools for a given token mint address
@@ -276,6 +285,7 @@ impl PoolDiscoveryAndPricing {
             PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
             PoolType::OrcaWhirlpool => ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
             PoolType::PumpfunAmm => PUMPFUN_AMM_PROGRAM_ID.to_string(),
+            PoolType::PumpfunBondingCurve => PUMPFUN_BONDING_CURVE_PROGRAM_ID.to_string(),
             _ => "Unknown".to_string(),
         }
     }
@@ -395,6 +405,7 @@ impl PoolDiscoveryAndPricing {
                     PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
                     PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),
                     PoolType::PumpfunAmm => PUMPFUN_AMM_PROGRAM_ID.to_string(),
+                    PoolType::PumpfunBondingCurve => PUMPFUN_BONDING_CURVE_PROGRAM_ID.to_string(),
                     _ => {
                         continue;
                     } // Skip unknown types
@@ -457,81 +468,72 @@ impl PoolDiscoveryAndPricing {
         &self,
         discovered_pool: &DiscoveredPool
     ) -> PoolPriceResult {
-        let mut pool_type = PoolType::from_dex_id_and_labels(
-            &discovered_pool.dex_id,
-            &discovered_pool.labels
+        // ALWAYS use program ID detection - ignore DexScreener classification completely
+        pool_log(
+            "INFO",
+            &format!(
+                "Detecting actual pool type for {} (ignoring DexScreener dex_id: '{}')",
+                discovered_pool.pair_address,
+                discovered_pool.dex_id
+            )
         );
 
-        // Override with actual program ID detection if possible (more accurate than DexScreener labels)
-        if pool_type == PoolType::Orca {
-            log(
-                LogTag::Pool,
-                "DEBUG",
-                "DexScreener classified as generic Orca, checking actual program ID..."
-            );
-            if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
-                if detected_type == PoolType::OrcaWhirlpool {
-                    log(
-                        LogTag::Pool,
-                        "DEBUG",
-                        "Program ID confirms this is a Whirlpool, overriding classification"
-                    );
-                    pool_type = PoolType::OrcaWhirlpool;
-                }
+        let pool_type = match self.detect_pool_type(&discovered_pool.pair_address).await {
+            Ok(detected_type) => {
+                pool_log(
+                    "SUCCESS",
+                    &format!(
+                        "Program ID detection: {:?} (DexScreener said: '{}')",
+                        detected_type,
+                        discovered_pool.dex_id
+                    )
+                );
+                detected_type
             }
-        }
-
-        // Similar override for Meteora pools - check actual program ID for accurate classification
-        if pool_type == PoolType::MeteoraDammV2 || pool_type == PoolType::MeteoraDlmm {
-            log(
-                LogTag::Pool,
-                "DEBUG",
-                &format!("DexScreener classified as {:?}, checking actual program ID...", pool_type)
-            );
-            if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
-                if
-                    detected_type == PoolType::MeteoraDammV2 ||
-                    detected_type == PoolType::MeteoraDlmm
-                {
-                    log(
-                        LogTag::Pool,
-                        "DEBUG",
-                        &format!(
-                            "Program ID confirms this is {:?}, overriding classification",
-                            detected_type
-                        )
-                    );
-                    pool_type = detected_type;
-                }
+            Err(e) => {
+                pool_log(
+                    "ERROR",
+                    &format!("Failed to detect pool type via program ID: {} - defaulting to Unknown", e)
+                );
+                PoolType::Unknown
             }
-        }
-
-        // Override for Pump.fun pools - detect actual program ID for accurate classification
-        if pool_type == PoolType::Unknown || pool_type == PoolType::PumpfunAmm {
-            log(
-                LogTag::Pool,
-                "DEBUG",
-                &format!("DexScreener classified as {:?}, checking actual program ID...", pool_type)
-            );
-            if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
-                if detected_type == PoolType::PumpfunAmm {
-                    log(
-                        LogTag::Pool,
-                        "DEBUG",
-                        "Program ID confirms this is a Pump.fun AMM, overriding classification"
-                    );
-                    pool_type = PoolType::PumpfunAmm;
-                }
-            }
-        }
+        };
 
         let dexscreener_price = discovered_pool.price_native.parse::<f64>().unwrap_or(0.0);
 
         let is_sol_pair =
-            discovered_pool.base_token.address == "So11111111111111111111111111111111111111112" ||
-            discovered_pool.quote_token.address == "So11111111111111111111111111111111111111112";
+            self.is_sol_mint(&discovered_pool.base_token.address) ||
+            self.is_sol_mint(&discovered_pool.quote_token.address);
 
-        // Try to calculate on-chain price
+        // Only support pools with SOL/WSOL on one side
+        if !is_sol_pair {
+            let error_msg = format!(
+                "Pool rejected: No SOL/WSOL pair (base: {}, quote: {})",
+                discovered_pool.base_token.address,
+                discovered_pool.quote_token.address
+            );
+            pool_log("WARN", &error_msg);
+
+            return PoolPriceResult {
+                pool_address: discovered_pool.pair_address.clone(),
+                pool_type,
+                dex_id: discovered_pool.dex_id.clone(),
+                token_a_mint: discovered_pool.base_token.address.clone(),
+                token_b_mint: discovered_pool.quote_token.address.clone(),
+                token_a_symbol: discovered_pool.base_token.symbol.clone(),
+                token_b_symbol: discovered_pool.quote_token.symbol.clone(),
+                calculated_price: 0.0,
+                dexscreener_price,
+                price_difference_percent: 0.0,
+                liquidity_usd: discovered_pool.liquidity_usd,
+                volume_24h: discovered_pool.volume_24h,
+                is_sol_pair: false,
+                calculation_successful: false,
+                error_message: Some(error_msg),
+            };
+        }
+
+        // Try to calculate on-chain price with detected pool type
         let (calculated_price, calculation_successful, error_message) = match
             self.calculate_pool_price_with_type(&discovered_pool.pair_address, pool_type).await
         {
@@ -542,6 +544,10 @@ impl PoolDiscoveryAndPricing {
                     pool_log("WARN", &error_msg);
                     (price, false, Some(error_msg))
                 } else {
+                    pool_log(
+                        "SUCCESS",
+                        &format!("Price calculated successfully: {} for {:?}", price, pool_type)
+                    );
                     (price, true, None)
                 }
             }
@@ -734,6 +740,11 @@ impl PoolDiscoveryAndPricing {
             id if id == PUMPFUN_AMM_PROGRAM_ID => {
                 pool_log("SUCCESS", "Detected: Pump.fun AMM pool");
                 Ok(PoolType::PumpfunAmm)
+            }
+            // Pump.fun Bonding Curve Program ID
+            id if id == PUMPFUN_BONDING_CURVE_PROGRAM_ID => {
+                pool_log("SUCCESS", "Detected: Pump.fun Bonding Curve pool");
+                Ok(PoolType::PumpfunBondingCurve)
             }
             // Add other DEX program IDs as needed
             // Phoenix, Orca, etc.
@@ -1119,6 +1130,66 @@ impl PoolDiscoveryAndPricing {
                     },
                 })
             }
+            PoolType::PumpfunBondingCurve => {
+                // For now, try to parse as AMM - bonding curve might use similar structure
+                // If this fails, we'll need to create a separate parser for bonding curve
+                match parse_pumpfun_amm_data(&account_data) {
+                    Ok(raw_data) => {
+                        // Get token vault balances
+                        let base_vault_pubkey = Pubkey::from_str(
+                            &raw_data.pool_base_token_account
+                        )?;
+                        let quote_vault_pubkey = Pubkey::from_str(
+                            &raw_data.pool_quote_token_account
+                        )?;
+
+                        let base_balance = self.get_token_balance(&base_vault_pubkey).await?;
+                        let quote_balance = self.get_token_balance(&quote_vault_pubkey).await?;
+
+                        // Get decimals for both tokens
+                        let base_decimals = self.get_token_decimals(&raw_data.base_mint).await?;
+                        let quote_decimals = self.get_token_decimals(&raw_data.quote_mint).await?;
+
+                        Ok(PoolData {
+                            pool_type,
+                            token_a: TokenInfo {
+                                mint: raw_data.base_mint,
+                                decimals: base_decimals,
+                            },
+                            token_b: TokenInfo {
+                                mint: raw_data.quote_mint,
+                                decimals: quote_decimals,
+                            },
+                            reserve_a: ReserveInfo {
+                                vault_address: raw_data.pool_base_token_account,
+                                balance: base_balance,
+                            },
+                            reserve_b: ReserveInfo {
+                                vault_address: raw_data.pool_quote_token_account,
+                                balance: quote_balance,
+                            },
+                            specific_data: PoolSpecificData::PumpfunBondingCurve {
+                                pool_bump: raw_data.pool_bump,
+                                index: raw_data.index,
+                                creator: raw_data.creator,
+                                lp_mint: raw_data.lp_mint,
+                                lp_supply: raw_data.lp_supply,
+                                coin_creator: raw_data.coin_creator,
+                            },
+                        })
+                    }
+                    Err(e) => {
+                        pool_log("WARN", &format!("Pump.fun bonding curve parsing failed: {}", e));
+                        // Return error for now - we'll implement proper bonding curve parser if needed
+                        Err(
+                            anyhow::anyhow!(
+                                "Pump.fun bonding curve parsing not yet implemented: {}",
+                                e
+                            )
+                        )
+                    }
+                }
+            }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported pool type: {:?}", pool_type));
             }
@@ -1386,11 +1457,6 @@ impl PoolDiscoveryAndPricing {
         price_squared * decimal_adjustment
     }
 
-    /// Check if a mint address is SOL
-    fn is_sol_mint(&self, mint: &str) -> bool {
-        mint == "So11111111111111111111111111111111111111112"
-    }
-
     /// Get token account balance using RPC
     pub async fn get_token_balance(&self, token_account: &Pubkey) -> Result<u64> {
         let account_info = self.rpc_client.get_account(token_account)?;
@@ -1572,6 +1638,7 @@ impl PoolPriceResult {
             PoolType::Phoenix => "Phoenix".to_string(),
             PoolType::RaydiumLaunchLab => "LaunchLab".to_string(),
             PoolType::PumpfunAmm => "Pump.fun AMM".to_string(),
+            PoolType::PumpfunBondingCurve => "Pump.fun Bonding Curve".to_string(),
             PoolType::Unknown => "Unknown".to_string(),
         }
     }

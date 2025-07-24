@@ -4,6 +4,16 @@ use std::str::FromStr;
 use super::super::types::*;
 use crate::logger::{ log, LogTag };
 
+// Conditional debug logging helper
+fn debug_log(log_type: &str, message: &str) {
+    // For now, we'll make this always log - can be controlled by parent module
+    log(LogTag::Pool, log_type, message);
+}
+
+fn pool_log(log_type: &str, message: &str) {
+    log(LogTag::Pool, log_type, message);
+}
+
 /// Parse Raydium CPMM pool data from raw account bytes
 pub fn parse_raydium_cpmm_data(data: &[u8]) -> Result<RaydiumCpmmData> {
     // For Raydium CPMM, we need to parse the specific layout
@@ -68,8 +78,10 @@ pub fn parse_raydium_cpmm_data(data: &[u8]) -> Result<RaydiumCpmmData> {
 /// Parse Raydium AMM pool data from raw account bytes
 pub fn parse_raydium_amm_data(data: &[u8]) -> Result<RaydiumAmmData> {
     if data.len() < 264 {
-        return Err(anyhow::anyhow!("AMM account too short"));
+        return Err(anyhow::anyhow!("AMM account too short: {} bytes", data.len()));
     }
+
+    debug_log("DEBUG", &format!("Parsing Raydium AMM pool data: {} bytes", data.len()));
 
     // Extract mint addresses from pool account (based on the provided decode_raydium_amm function)
     let base_mint = Pubkey::new_from_array(data[168..200].try_into()?);
@@ -77,6 +89,38 @@ pub fn parse_raydium_amm_data(data: &[u8]) -> Result<RaydiumAmmData> {
 
     let base_vault = Pubkey::new_from_array(data[200..232].try_into()?);
     let quote_vault = Pubkey::new_from_array(data[232..264].try_into()?);
+
+    // Validate that we don't have null pubkeys
+    const NULL_PUBKEY: &str = "11111111111111111111111111111111";
+    if
+        base_mint.to_string() == NULL_PUBKEY ||
+        quote_mint.to_string() == NULL_PUBKEY ||
+        base_vault.to_string() == NULL_PUBKEY ||
+        quote_vault.to_string() == NULL_PUBKEY
+    {
+        return Err(anyhow::anyhow!("Invalid null pubkeys found in Raydium AMM pool data"));
+    }
+
+    // Also check if any vault matches SOL mint (which would be invalid for vaults)
+    let sol_mint = "So11111111111111111111111111111111111111112";
+    if base_vault.to_string() == sol_mint || quote_vault.to_string() == sol_mint {
+        return Err(
+            anyhow::anyhow!(
+                "Invalid vault addresses (SOL mint used as vault) in Raydium AMM pool data"
+            )
+        );
+    }
+
+    debug_log(
+        "DEBUG",
+        &format!(
+            "Parsed Raydium AMM: base_mint={}, quote_mint={}, base_vault={}, quote_vault={}",
+            base_mint,
+            quote_mint,
+            base_vault,
+            quote_vault
+        )
+    );
 
     // For AMM pools, we'll need to get decimals from the token mints
     // For now, we'll set default values and get them in the parse_pool_data function
@@ -113,84 +157,6 @@ pub fn parse_raydium_launchlab_data(data: &[u8]) -> Result<RaydiumLaunchLabData>
     let debug_bytes = &data[0..std::cmp::min(100, data.len())];
     debug_log("DEBUG", &format!("First 100 bytes: {:?}", debug_bytes));
 
-    // First, perform pattern matching for expected values
-    // Looking at the values we expect: real_base=793100000000000, real_quote=85000000226
-    // Let's search for these patterns in the data
-    let expected_real_base_bytes = (793100000000000u64).to_le_bytes();
-    let expected_real_quote_bytes = (85000000226u64).to_le_bytes();
-
-    let mut real_base_found_at = None;
-    let mut real_quote_found_at = None;
-
-    // Search for expected values in the data
-    for i in 0..=data.len().saturating_sub(8) {
-        if data[i..i + 8] == expected_real_base_bytes {
-            real_base_found_at = Some(i);
-            log(
-                LogTag::System,
-                "INFO",
-                &format!("Found expected real_base (793100000000000) at offset {}", i)
-            );
-            log(LogTag::System, "INFO", &format!("Hex at offset {}: {:02X?}", i, &data[i..i + 8]));
-        }
-        if data[i..i + 8] == expected_real_quote_bytes {
-            real_quote_found_at = Some(i);
-            log(
-                LogTag::System,
-                "INFO",
-                &format!("Found expected real_quote (85000000226) at offset {}", i)
-            );
-            log(LogTag::System, "INFO", &format!("Hex at offset {}: {:02X?}", i, &data[i..i + 8]));
-        }
-    }
-
-    // Also search for known mint addresses
-    let expected_base_mint = "4zJy5WHdTbmNuhTiJ5HYbJjLij2k3a8pmB99cJN5bonk";
-    let expected_quote_mint = "So11111111111111111111111111111111111111112";
-
-    // Convert base58 strings to bytes for searching
-    if let Ok(base_mint_pubkey) = Pubkey::from_str(expected_base_mint) {
-        let base_mint_bytes = base_mint_pubkey.to_bytes();
-        for i in 0..=data.len().saturating_sub(32) {
-            if data[i..i + 32] == base_mint_bytes {
-                log(LogTag::System, "INFO", &format!("Found expected base_mint at offset {}", i));
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "Hex at offset {}: {:02X?}",
-                        i,
-                        &data[i..std::cmp::min(i + 8, data.len())]
-                    )
-                );
-                break;
-            }
-        }
-    }
-
-    if let Ok(quote_mint_pubkey) = Pubkey::from_str(expected_quote_mint) {
-        let quote_mint_bytes = quote_mint_pubkey.to_bytes();
-        for i in 0..=data.len().saturating_sub(32) {
-            if data[i..i + 32] == quote_mint_bytes {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!("Found expected quote_mint (SOL) at offset {}", i)
-                );
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "Hex at offset {}: {:02X?}",
-                        i,
-                        &data[i..std::cmp::min(i + 8, data.len())]
-                    )
-                );
-                break;
-            }
-        }
-    }
-
     // Parse using corrected offsets from hex dump analysis
     let mut offset = 0;
     offset += 8; // epoch
@@ -199,60 +165,32 @@ pub fn parse_raydium_launchlab_data(data: &[u8]) -> Result<RaydiumLaunchLabData>
     offset += 1;
 
     // Based on hex dump analysis, the structure seems different
-    // Let's use the values we found through pattern matching
-    let real_base_corrected = if let Some(_) = real_base_found_at {
-        // Use the value found by pattern matching
-        793100000000000u64
+    // We'll use dynamic parsing without hardcoded mint addresses
+    let real_base_corrected = if data.len() > 37 {
+        u64::from_le_bytes(data[29..37].try_into().unwrap_or([0; 8]))
     } else {
-        // Fallback to offset 29 from hex dump
-        if data.len() > 37 {
-            u64::from_le_bytes(data[29..37].try_into().unwrap_or([0; 8]))
-        } else {
-            0
-        }
+        0
     };
 
-    let real_quote_corrected = if let Some(_) = real_quote_found_at {
-        // Use the value found by pattern matching
-        85000000226u64
+    let real_quote_corrected = if data.len() > 69 {
+        u64::from_le_bytes(data[61..69].try_into().unwrap_or([0; 8]))
     } else {
-        // Fallback to offset 61 from hex dump
-        if data.len() > 69 {
-            u64::from_le_bytes(data[61..69].try_into().unwrap_or([0; 8]))
-        } else {
-            0
-        }
+        0
     };
 
     log(
         LogTag::System,
         "INFO",
         &format!(
-            "Corrected parsing: real_base={}, real_quote={}, status={}",
+            "Parsed values: real_base={}, real_quote={}, status={}",
             real_base_corrected,
             real_quote_corrected,
             status_corrected
         )
     );
 
-    // Use found values if available, otherwise fallback to corrected parsing
-    let (real_base, real_quote) = if
-        let (Some(_), Some(_)) = (real_base_found_at, real_quote_found_at)
-    {
-        log(
-            LogTag::Pool,
-            "DEBUG",
-            &format!(
-                "Using pattern-matched values: real_base={}, real_quote={}",
-                793100000000000u64,
-                85000000226u64
-            )
-        );
-        (793100000000000u64, 85000000226u64)
-    } else {
-        debug_log("DEBUG", "Pattern matching failed, using corrected parsing results");
-        (real_base_corrected, real_quote_corrected)
-    };
+    // Use parsed values without hardcoded validation
+    let (real_base, real_quote) = (real_base_corrected, real_quote_corrected);
 
     // For decimals and status, we need better logic based on hex dump analysis
     // Let's try to parse decimals from a more reliable location or use expected values
@@ -261,37 +199,16 @@ pub fn parse_raydium_launchlab_data(data: &[u8]) -> Result<RaydiumLaunchLabData>
     let quote_decimals = 9; // Expected value for SOL
     let total_base_sell = 0; // We might not have this data in the correct format
 
-    // For mints, use the found offsets from hex dump analysis
+    // Parse mints from the data without hardcoded validation
     let base_mint = if data.len() > 237 {
-        // Found at offset 205 from hex dump analysis
+        // Try offset 205 first, then fallback to 192
         if let Ok(bytes_array) = data[205..237].try_into() {
             let pk = Pubkey::new_from_array(bytes_array);
             let mint_str = pk.to_string();
-            log(LogTag::System, "INFO", &format!("Parsing base_mint at offset 205: {}", mint_str));
-            if mint_str == "4zJy5WHdTbmNuhTiJ5HYbJjLij2k3a8pmB99cJN5bonk" {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    "✅ Successfully found expected base_mint at offset 205"
-                );
-                mint_str
-            } else {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "❌ base_mint at offset 205 doesn't match expected. Trying fallback..."
-                    )
-                );
-                // Try original method as fallback
-                Pubkey::new_from_array(data[192..224].try_into()?).to_string()
-            }
+            debug_log("DEBUG", &format!("Parsing base_mint at offset 205: {}", mint_str));
+            mint_str
         } else {
-            log(
-                LogTag::System,
-                "INFO",
-                "Failed to parse base_mint at offset 205, trying original method"
-            );
+            debug_log("DEBUG", "Failed to parse base_mint at offset 205, trying original method");
             Pubkey::new_from_array(data[192..224].try_into()?).to_string()
         }
     } else {
@@ -299,35 +216,14 @@ pub fn parse_raydium_launchlab_data(data: &[u8]) -> Result<RaydiumLaunchLabData>
     };
 
     let quote_mint = if data.len() > 269 {
-        // Found at offset 237 from hex dump analysis
+        // Try offset 237 first, then fallback to 224
         if let Ok(bytes_array) = data[237..269].try_into() {
             let pk = Pubkey::new_from_array(bytes_array);
             let mint_str = pk.to_string();
-            log(LogTag::System, "INFO", &format!("Parsing quote_mint at offset 237: {}", mint_str));
-            if mint_str == "So11111111111111111111111111111111111111112" {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    "✅ Successfully found expected quote_mint (SOL) at offset 237"
-                );
-                mint_str
-            } else {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "❌ quote_mint at offset 237 doesn't match expected SOL. Trying fallback..."
-                    )
-                );
-                // Try original method as fallback
-                Pubkey::new_from_array(data[224..256].try_into()?).to_string()
-            }
+            debug_log("DEBUG", &format!("Parsing quote_mint at offset 237: {}", mint_str));
+            mint_str
         } else {
-            log(
-                LogTag::System,
-                "INFO",
-                "Failed to parse quote_mint at offset 237, trying original method"
-            );
+            debug_log("DEBUG", "Failed to parse quote_mint at offset 237, trying original method");
             Pubkey::new_from_array(data[224..256].try_into()?).to_string()
         }
     } else {

@@ -1831,11 +1831,14 @@ pub async fn update_tokens_from_mints_concurrent(shutdown: Arc<Notify>) -> Resul
     log(
         LogTag::Monitor,
         "INFO",
-        &format!("Processing {} token chunks concurrently (30 tokens per chunk)", chunks.len())
+        &format!(
+            "Processing {} token chunks concurrently (30 tokens per chunk, max 2 API calls)",
+            chunks.len()
+        )
     );
 
-    // Create semaphore to limit concurrent chunk processing (max 5 concurrent chunks)
-    let semaphore = StdArc::new(Semaphore::new(5));
+    // Create semaphore to limit concurrent chunk processing (max 2 concurrent API calls)
+    let semaphore = StdArc::new(Semaphore::new(2));
     let decimals_map = StdArc::new(decimals_map);
     let position_mints = StdArc::new(position_mints);
 

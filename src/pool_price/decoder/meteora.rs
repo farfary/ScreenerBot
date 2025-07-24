@@ -181,14 +181,15 @@ pub fn parse_meteora_damm_v2_data(data: &[u8]) -> Result<MeteoraDammV2Data> {
         )
     );
 
-    // Validate that we have valid pubkeys (not all 1's)
+    // Validate that we have valid pubkeys (not null keys)
+    const NULL_PUBKEY: &str = "11111111111111111111111111111111"; // 32 bytes of zeros as base58
     if
-        token_a_mint == "11111111111111111111111111111111" ||
-        token_b_mint == "11111111111111111111111111111111" ||
-        token_a_vault == "11111111111111111111111111111111" ||
-        token_b_vault == "11111111111111111111111111111111"
+        token_a_mint == NULL_PUBKEY ||
+        token_b_mint == NULL_PUBKEY ||
+        token_a_vault == NULL_PUBKEY ||
+        token_b_vault == NULL_PUBKEY
     {
-        return Err(anyhow::anyhow!("Invalid pubkeys found in DAMM v2 pool data"));
+        return Err(anyhow::anyhow!("Invalid null pubkeys found in DAMM v2 pool data"));
     }
 
     log(
