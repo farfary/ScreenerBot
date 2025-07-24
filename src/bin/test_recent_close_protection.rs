@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Result: {:.3} (should be > 0, open positions do not block)", result4);
 
     println!("Recent Position Close Protection Summary:");
-    println!("   - Cooldown period: {} minutes", RECENT_CLOSE_COOLDOWN_MINUTES);
+    println!("   - Cooldown period: {} minutes", POSITION_CLOSE_COOLDOWN_MINUTES);
     println!("   - Blocks purchases of tokens with recent closes");
     println!("   - Allows purchases for old closes or open positions");
     println!("   - Helps prevent rapid re-entry into recently sold tokens");

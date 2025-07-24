@@ -1,4 +1,4 @@
-/// Trading configuration constants
+/// ScreenerBot Trading Engine
 ///
 /// ======================================
 /// NEVER SELL AT LOSS PROTECTION SYSTEM
@@ -48,44 +48,102 @@
 /// The system calculates urgency scores from 0.0 to 2.0, with multiple strategies
 /// providing consensus-based scoring and increased confidence.
 
-pub const PRINT_SUMMARY_INTERVAL_SECS: u64 = 3;
+// =============================================================================
+// TRADING SYSTEM CONFIGURATION CONSTANTS
+// =============================================================================
 
-pub const DEFAULT_FEE: f64 = 0.000006;
-pub const DEFAULT_FEE_SWAP: f64 = 0.0;
-pub const DEFAULT_SLIPPAGE: f64 = 5.0; // 5% slippage
+// -----------------------------------------------------------------------------
+// Core Trading Parameters
+// -----------------------------------------------------------------------------
 
-// pub const DEFAULT_FEE: f64 = 0.0;
-
+/// Maximum number of concurrent open positions
 pub const MAX_OPEN_POSITIONS: usize = 50;
 
+/// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 
-pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
-pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +5%
+/// Default transaction fee for buy/sell operations
+pub const TRANSACTION_FEE_SOL: f64 = 0.000006;
 
-/// NEVER SELL AT LOSS - Only emergency exit at -99.9% loss (essentially never sell at loss)
-/// This ensures we NEVER sell at a loss under normal circumstances
-pub const STOP_LOSS_PERCENT: f64 = -99.9;
+/// Default swap fee (set to 0 for GMGN routing)
+pub const SWAP_FEE_PERCENT: f64 = 0.0;
 
-pub const PRICE_HISTORY_HOURS: i64 = 24;
-pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
-pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
+/// Default slippage tolerance for swaps
+pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
 
-pub const MIN_TOKEN_AGE_HOURS: i64 = 12; // Don't trade tokens younger than 24 hours
-pub const MAX_TOKEN_AGE_HOURS: i64 = 999999; // Don't trade tokens older than 3 days (72 hours)
+// -----------------------------------------------------------------------------
+// Entry Signal Configuration (Dip Detection)
+// -----------------------------------------------------------------------------
 
-pub const MIN_HOLD_TIME_SECS: f64 = 30.0; // Hold for at least 3 minutes
-pub const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
-pub const TIME_DECAY_START_SECS: f64 = 1800.0; // Start time decay after 30 minutes
+/// Minimum price drop percentage to trigger buy signal
+pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
 
-/// Pool price validation - maximum allowed difference from API price (10%)
-pub const MAX_POOL_PRICE_DIFFERENCE_PERCENT: f64 = 60.0;
+// -----------------------------------------------------------------------------
+// Exit Signal Configuration (Profit Taking)
+// -----------------------------------------------------------------------------
 
-/// ATA (Associated Token Account) management configuration
-pub const CLOSE_ATA_AFTER_SELL: bool = true; // Set to false to disable ATA closing
+/// Profit target percentage for position exits
+pub const PROFIT_TARGET_PERCENT: f64 = 5.0;
 
-/// Recent position close protection - don't buy tokens that had positions closed recently
-pub const RECENT_CLOSE_COOLDOWN_MINUTES: i64 = 30; // Don't buy tokens closed within last 30 minutes
+/// Emergency stop loss (set to -99.9% to effectively disable loss selling)
+/// NEVER SELL AT LOSS POLICY: Only extreme emergency exit at -99.9%
+pub const EMERGENCY_STOP_LOSS_PERCENT: f64 = -99.9;
+
+// -----------------------------------------------------------------------------
+// Position Timing Configuration
+// -----------------------------------------------------------------------------
+
+/// Minimum hold time before considering sell (seconds)
+pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 30.0;
+
+/// Maximum hold time before forcing sell (seconds)
+pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 3600.0;
+
+/// Time after which time decay pressure starts (seconds)
+pub const TIME_DECAY_START_SECS: f64 = 1800.0;
+
+// -----------------------------------------------------------------------------
+// Token Filtering Configuration
+// -----------------------------------------------------------------------------
+
+/// Minimum token age in hours before trading
+pub const MIN_TOKEN_AGE_HOURS: i64 = 12;
+
+/// Maximum token age in hours (effectively unlimited)
+pub const MAX_TOKEN_AGE_HOURS: i64 = 999999;
+
+/// Cooldown period after closing position before re-entering same token (minutes)
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 30;
+
+// -----------------------------------------------------------------------------
+// Monitoring & Display Configuration
+// -----------------------------------------------------------------------------
+
+/// Summary display refresh interval (seconds)
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 3;
+
+/// New entry signals check interval (seconds)
+pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
+
+/// Open positions monitoring interval (seconds)
+pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
+
+/// Price history tracking duration (hours)
+pub const PRICE_HISTORY_DURATION_HOURS: i64 = 24;
+
+// -----------------------------------------------------------------------------
+// Pool Price Validation Configuration
+// -----------------------------------------------------------------------------
+
+/// Maximum allowed difference between pool price and API price
+pub const MAX_POOL_PRICE_DEVIATION_PERCENT: f64 = 60.0;
+
+// -----------------------------------------------------------------------------
+// Wallet Management Configuration
+// -----------------------------------------------------------------------------
+
+/// Automatically close Associated Token Accounts after selling tokens
+pub const AUTO_CLOSE_ATA_AFTER_SELL: bool = true;
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
@@ -106,7 +164,34 @@ use crate::profit::should_sell_smart_system;
 use crate::loss_prevention::should_allow_token_purchase;
 
 // =============================================================================
-// DEBUG FILTERING CONFIGURATION
+// IMPORTS AND DEPENDENCIES
+// =============================================================================
+
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::{ Arc as StdArc, Mutex as StdMutex };
+use chrono::{ Utc, Duration as ChronoDuration, DateTime };
+use std::sync::Arc;
+use tokio::sync::Notify;
+use std::time::Duration;
+use colored::Colorize;
+
+// =============================================================================
+// GLOBAL STATE AND STATIC STORAGE
+// =============================================================================
+
+/// Static global: price history for each token (mint), stores Vec<(timestamp, price)>
+pub static PRICE_HISTORY_24H: Lazy<
+    StdArc<StdMutex<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>
+> = Lazy::new(|| StdArc::new(StdMutex::new(HashMap::new())));
+
+/// Static global: last known prices for each token
+pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new(|| {
+    StdArc::new(StdMutex::new(HashMap::new()))
+});
+
+// =============================================================================
+// DEBUG LOGGING CONFIGURATION
 // =============================================================================
 
 /// Helper function for conditional debug filtering logs
@@ -120,27 +205,6 @@ fn debug_filtering_log(log_type: &str, message: &str) {
 fn trader_log(log_type: &str, message: &str) {
     log(LogTag::Trader, log_type, message);
 }
-
-// =============================================================================
-
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
-use std::sync::{ Arc as StdArc, Mutex as StdMutex };
-use chrono::{ Utc, Duration as ChronoDuration, DateTime };
-use std::sync::Arc;
-use tokio::sync::Notify;
-use std::time::Duration;
-use colored::Colorize;
-
-/// Static global: price history for each token (mint), stores Vec<(timestamp, price)>
-pub static PRICE_HISTORY_24H: Lazy<
-    StdArc<StdMutex<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>
-> = Lazy::new(|| StdArc::new(StdMutex::new(HashMap::new())));
-
-/// Static global: last known prices for each token
-pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new(|| {
-    StdArc::new(StdMutex::new(HashMap::new()))
-});
 
 /// Determines if a position should be sold based on P&L, time, and token analysis
 /// Returns urgency score from 0.0 (don't sell) to 1.0 (sell immediately)
@@ -173,7 +237,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
 
     // Only allow emergency exit if BOTH price AND P&L show extreme loss
-    if current_pnl_percent <= STOP_LOSS_PERCENT && simple_price_change_percent <= -99.0 {
+    if current_pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT && simple_price_change_percent <= -99.0 {
         log(
             LogTag::Trader,
             "EMERGENCY",
@@ -202,7 +266,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
     }
 
     // Don't sell too early unless we have significant profit
-    if time_held_secs < MIN_HOLD_TIME_SECS && current_pnl_percent < PROFIT_TARGET_PERCENT {
+    if time_held_secs < MIN_POSITION_HOLD_TIME_SECS && current_pnl_percent < PROFIT_TARGET_PERCENT {
         return 0.0; // Hold for minimum time unless profit target reached
     }
 
@@ -229,7 +293,7 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
 
     // Time decay factor for profitable positions only
     if current_pnl_percent > 0.0 && time_held_secs > TIME_DECAY_START_SECS {
-        let decay_duration = MAX_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
+        let decay_duration = MAX_POSITION_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
         let excess_time = time_held_secs - TIME_DECAY_START_SECS;
         let time_decay = excess_time / decay_duration;
         return f64::min(time_decay * 0.4, 0.6); // Gentle time pressure for profits
@@ -325,7 +389,7 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
 fn is_token_recently_closed(mint: &str, symbol: &str) -> bool {
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         let now = Utc::now();
-        let cooldown_duration = ChronoDuration::minutes(RECENT_CLOSE_COOLDOWN_MINUTES);
+        let cooldown_duration = ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
 
         // Find any closed positions for this token within the cooldown period
         for position in positions.iter() {
@@ -341,7 +405,7 @@ fn is_token_recently_closed(mint: &str, symbol: &str) -> bool {
                                 symbol,
                                 &mint[..8],
                                 time_since_close.num_minutes() as f64,
-                                RECENT_CLOSE_COOLDOWN_MINUTES
+                                POSITION_CLOSE_COOLDOWN_MINUTES
                             )
                         );
                         return true; // Block purchase
@@ -1203,7 +1267,7 @@ fn calculate_volatility_adjusted_urgency(
     analysis: &VolatilityAnalysis
 ) -> f64 {
     // More generous base urgency calculation
-    let base_urgency = f64::min(drop_magnitude / PRICE_DROP_THRESHOLD_PERCENT, 3.0) * 0.8; // Increased multiplier
+    let base_urgency = f64::min(drop_magnitude / MIN_DIP_THRESHOLD_PERCENT, 3.0) * 0.8; // Increased multiplier
 
     // Less punitive volatility adjustment
     let volatility_multiplier = if analysis.volatility_scale > 0.0 {
@@ -1541,7 +1605,7 @@ fn update_pool_prices_in_tokens(pool_prices: &HashMap<String, f64>) {
 }
 
 /// Validates if a pool price is within acceptable range of the API price
-/// Returns true if pool price is within MAX_POOL_PRICE_DIFFERENCE_PERCENT of API price
+/// Returns true if pool price is within MAX_POOL_PRICE_DEVIATION_PERCENT of API price
 pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: &str) -> bool {
     if pool_price <= 0.0 || api_price <= 0.0 {
         log(
@@ -1560,7 +1624,7 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
     // Calculate percentage difference between pool price and API price
     let difference_percent = ((pool_price - api_price).abs() / api_price) * 100.0;
 
-    let is_valid = difference_percent <= MAX_POOL_PRICE_DIFFERENCE_PERCENT;
+    let is_valid = difference_percent <= MAX_POOL_PRICE_DEVIATION_PERCENT;
 
     log(
         LogTag::Trader,
@@ -1575,7 +1639,7 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
             pool_price,
             api_price,
             difference_percent,
-            MAX_POOL_PRICE_DIFFERENCE_PERCENT,
+            MAX_POOL_PRICE_DEVIATION_PERCENT,
             if is_valid {
                 "VALID"
             } else {
@@ -1996,12 +2060,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
             // Calculate how long we've spent in this cycle
             let cycle_duration = cycle_start.elapsed();
-            let wait_time = if
-                cycle_duration >= Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS)
-            {
+            let wait_time = if cycle_duration >= Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) {
                 Duration::from_millis(100)
             } else {
-                Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS) - cycle_duration
+                Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
             };
 
             if check_shutdown_or_delay(&shutdown, wait_time).await {
@@ -2102,7 +2164,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     entry.push((now, current_price));
 
                                     // Retain only last 24h
-                                    let cutoff = now - ChronoDuration::hours(PRICE_HISTORY_HOURS);
+                                    let cutoff =
+                                        now - ChronoDuration::hours(PRICE_HISTORY_DURATION_HOURS);
                                     entry.retain(|(ts, _)| *ts >= cutoff);
                                 }
                                 Ok(Err(_)) | Err(_) => {
@@ -2502,7 +2565,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Calculate how long we've spent in this cycle
         let cycle_duration = cycle_start.elapsed();
-        let wait_time = if cycle_duration >= Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS) {
+        let wait_time = if cycle_duration >= Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) {
             // If we've already spent more time than the interval, just wait a short time
             log(
                 LogTag::Trader,
@@ -2512,7 +2575,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             Duration::from_millis(100)
         } else {
             // Otherwise wait for the remaining interval time
-            Duration::from_secs(NEW_ENTRIES_CHECK_INTERVAL_SECS) - cycle_duration
+            Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
         };
 
         if check_shutdown_or_delay(&shutdown, wait_time).await {
@@ -2569,7 +2632,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 let sell_urgency = should_sell(position, current_price, now);
 
                                 // Emergency exit conditions (keep original logic for safety)
-                                let emergency_exit = pnl_percent <= STOP_LOSS_PERCENT;
+                                let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
 
                                 // Urgency-based exit (sell if urgency > 70% or emergency)
                                 let should_exit = emergency_exit || sell_urgency > 0.7;
@@ -2878,7 +2941,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         if
             check_shutdown_or_delay(
                 &shutdown,
-                Duration::from_secs(OPEN_POSITIONS_CHECK_INTERVAL_SECS)
+                Duration::from_secs(POSITION_MONITOR_INTERVAL_SECS)
             ).await
         {
             log(LogTag::Trader, "INFO", "open positions monitor shutting down...");

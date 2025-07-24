@@ -133,7 +133,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
         if
             check_shutdown_or_delay(
                 &shutdown,
-                Duration::from_secs(PRINT_SUMMARY_INTERVAL_SECS)
+                Duration::from_secs(SUMMARY_DISPLAY_INTERVAL_SECS)
             ).await
         {
             log(LogTag::Trader, "INFO", "positions display monitor shutting down...");
@@ -368,10 +368,10 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     let config = ConfigDisplay {
         trade_size: format!("{:.6} SOL", TRADE_SIZE_SOL),
         profit_target: format!("{:.1}%", PROFIT_TARGET_PERCENT),
-        stop_loss: format!("{:.1}%", STOP_LOSS_PERCENT),
+        stop_loss: format!("{:.1}%", EMERGENCY_STOP_LOSS_PERCENT),
         max_positions: format!("{}", MAX_OPEN_POSITIONS),
-        min_hold_time: format!("{:.0}s", MIN_HOLD_TIME_SECS),
-        max_hold_time: format!("{:.0}s", MAX_HOLD_TIME_SECS),
+        min_hold_time: format!("{:.0}s", MIN_POSITION_HOLD_TIME_SECS),
+        max_hold_time: format!("{:.0}s", MAX_POSITION_HOLD_TIME_SECS),
     };
 
     // Display all tables

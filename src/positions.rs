@@ -29,7 +29,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         // Account for trading fees (buy + sell fees)
         // NOTE: sol_received should already be the net amount from token sale only
         // ATA rent reclaim (~0.002 SOL) is separate from trading P&L
-        let total_fees = 2.0 * DEFAULT_FEE;
+        let total_fees = 2.0 * TRANSACTION_FEE_SOL;
         let net_pnl_sol = sol_received - sol_invested - total_fees;
         let net_pnl_percent = (net_pnl_sol / sol_invested) * 100.0;
 
@@ -61,7 +61,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             let exit_value = ui_token_amount * effective_exit;
 
             // Account for buy + sell fees
-            let total_fees = 2.0 * DEFAULT_FEE;
+            let total_fees = 2.0 * TRANSACTION_FEE_SOL;
             let net_pnl_sol = exit_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
@@ -70,7 +70,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // Fallback for closed positions without token amount
         let price_change = (effective_exit - entry_price) / entry_price;
-        let total_fees = 2.0 * DEFAULT_FEE;
+        let total_fees = 2.0 * TRANSACTION_FEE_SOL;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
@@ -102,7 +102,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             let entry_cost = position.entry_size_sol;
 
             // Account for buy fee (already paid) + estimated sell fee
-            let total_fees = 2.0 * DEFAULT_FEE;
+            let total_fees = 2.0 * TRANSACTION_FEE_SOL;
             let net_pnl_sol = current_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
@@ -111,7 +111,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // Fallback for open positions without token amount
         let price_change = (current - entry_price) / entry_price;
-        let total_fees = 2.0 * DEFAULT_FEE;
+        let total_fees = 2.0 * TRANSACTION_FEE_SOL;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
@@ -752,7 +752,7 @@ pub async fn close_position(
                 log(LogTag::Trader, status_text, &log_message);
 
                 // Attempt to close the Associated Token Account (ATA) if enabled
-                if CLOSE_ATA_AFTER_SELL {
+                if AUTO_CLOSE_ATA_AFTER_SELL {
                     log(
                         LogTag::Trader,
                         "ATA",
@@ -792,7 +792,7 @@ pub async fn close_position(
                         LogTag::Trader,
                         "INFO",
                         &format!(
-                            "ATA closing disabled for {} (CLOSE_ATA_AFTER_SELL = false)",
+                            "ATA closing disabled for {} (AUTO_CLOSE_ATA_AFTER_SELL = false)",
                             position.symbol
                         )
                     );

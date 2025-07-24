@@ -1,6 +1,6 @@
 use crate::global::{ Token, read_configs };
 use crate::logger::{ log, LogTag };
-use crate::trader::{ DEFAULT_FEE_SWAP, DEFAULT_SLIPPAGE };
+use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
 
 use reqwest;
 use serde::{ Deserialize, Serialize };
@@ -175,8 +175,8 @@ impl Default for SwapRequest {
             output_mint: String::new(),
             amount_sol: 0.0,
             from_address: String::new(),
-            slippage: DEFAULT_SLIPPAGE,
-            fee: DEFAULT_FEE_SWAP,
+            slippage: SLIPPAGE_TOLERANCE_PERCENT,
+            fee: SWAP_FEE_PERCENT,
             is_anti_mev: ANTI_MEV,
             expected_price: None,
         }
@@ -1515,13 +1515,13 @@ pub async fn execute_swap_with_quote(
             )
         );
 
-        if price_difference > DEFAULT_SLIPPAGE {
+        if price_difference > SLIPPAGE_TOLERANCE_PERCENT {
             return Err(
                 SwapError::SlippageExceeded(
                     format!(
                         "Price difference {:.2}% exceeds slippage tolerance {:.2}%",
                         price_difference,
-                        DEFAULT_SLIPPAGE
+                        SLIPPAGE_TOLERANCE_PERCENT
                     )
                 )
             );
@@ -1892,7 +1892,7 @@ pub async fn buy_token(
                     current_price,
                     expected,
                     price_diff,
-                    DEFAULT_SLIPPAGE
+                    SLIPPAGE_TOLERANCE_PERCENT
                 )
             );
             return Err(
@@ -1902,7 +1902,7 @@ pub async fn buy_token(
                         current_price,
                         expected,
                         price_diff,
-                        DEFAULT_SLIPPAGE
+                        SLIPPAGE_TOLERANCE_PERCENT
                     )
                 )
             );
@@ -1920,7 +1920,7 @@ pub async fn buy_token(
                 &format!(
                     "✅ Price validation passed! Diff: {:.2}% (within {:.1}% tolerance)",
                     price_diff,
-                    DEFAULT_SLIPPAGE
+                    SLIPPAGE_TOLERANCE_PERCENT
                 )
             );
         }

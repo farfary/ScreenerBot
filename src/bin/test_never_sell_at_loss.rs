@@ -1,7 +1,7 @@
 /// Test to verify the "NEVER SELL AT LOSS" protection system
 /// This test validates that all sell decision functions properly enforce the no-loss rule
 
-use screenerbot::trader::{ should_sell, STOP_LOSS_PERCENT };
+use screenerbot::trader::{ should_sell, EMERGENCY_STOP_LOSS_PERCENT };
 use screenerbot::profit::should_sell_smart_system;
 use screenerbot::positions::Position;
 use screenerbot::global::Token;
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (current_price, expected_pnl, description) in &test_scenarios {
         let sell_urgency = should_sell(&test_position, *current_price, now);
 
-        let should_sell_result = if *expected_pnl <= STOP_LOSS_PERCENT {
+        let should_sell_result = if *expected_pnl <= EMERGENCY_STOP_LOSS_PERCENT {
             "🚨 EMERGENCY SELL"
         } else if *expected_pnl < 0.0 {
             "🔒 HOLD (NEVER SELL AT LOSS)"
@@ -168,7 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✅ ALL TESTS PASSED!");
     println!("====================================");
     println!("🔒 NEVER SELL AT LOSS system is working correctly");
-    println!("🚨 Emergency exit only at {:.1}% loss", STOP_LOSS_PERCENT);
+    println!("🚨 Emergency exit only at {:.1}% loss", EMERGENCY_STOP_LOSS_PERCENT);
     println!("💰 All other exits are profit-only");
     println!("⏳ Positions at loss are held indefinitely for recovery");
 
