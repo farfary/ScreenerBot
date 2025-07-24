@@ -134,7 +134,7 @@ impl PoolType {
                 }
             }
             "phoenix" => PoolType::Phoenix,
-            "pump" | "pump.fun" => PoolType::PumpfunAmm,
+            "pump" | "pump.fun" | "pumpswap" | "pumpfun" => PoolType::PumpfunAmm,
             _ => PoolType::Unknown,
         }
     }
@@ -841,6 +841,23 @@ impl PoolDiscoveryAndPricing {
                         )
                     );
                     pool_type = detected_type;
+                }
+            }
+        }
+
+        // Override for Pump.fun pools - detect actual program ID for accurate classification
+        if pool_type == PoolType::Unknown || pool_type == PoolType::PumpfunAmm {
+            debug_log(
+                "DEBUG",
+                &format!("DexScreener classified as {:?}, checking actual program ID...", pool_type)
+            );
+            if let Ok(detected_type) = self.detect_pool_type(&discovered_pool.pair_address).await {
+                if detected_type == PoolType::PumpfunAmm {
+                    debug_log(
+                        "DEBUG",
+                        "Program ID confirms this is a Pump.fun AMM, overriding classification"
+                    );
+                    pool_type = PoolType::PumpfunAmm;
                 }
             }
         }

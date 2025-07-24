@@ -1,11 +1,10 @@
 use anyhow::Result;
 use screenerbot::pool_price::PoolDiscoveryAndPricing;
-use screenerbot::logger::{ log, LogTag };
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("🧪 Testing Pump.fun AMM Pool Price Calculation");
-    println!("===============================================");
+    println!("🚀 Testing Pump.fun AMM Pool Price Calculation");
+    println!("==============================================");
 
     // Load configuration
     let configs_json = std::fs
@@ -19,13 +18,14 @@ async fn main() -> Result<()> {
 
     let pool_discovery = PoolDiscoveryAndPricing::new(rpc_url);
 
-    // Test the specific Pump.fun AMM pool
+    // Test the specific Pump.fun AMM pool you provided
     let test_pool_address = "8koRLicQQcFn7cvqSC1gRZ5AJ6YieP5gv1ksSVkPGyou";
     let test_token_mint = "BDNPD38erhzRmu5qYLTLFAwmyyW5UvGryUu6TsJFpump";
 
-    println!("\n🔍 Testing Pool Detection:");
+    println!("\n🔍 Testing CRONG/WSOL Pump.fun AMM Pool:");
     println!("Pool Address: {}", test_pool_address);
     println!("Token Mint: {}", test_token_mint);
+    println!("Expected Program ID: pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
 
     // Test pool type detection
     match pool_discovery.detect_pool_type(test_pool_address).await {
@@ -33,17 +33,17 @@ async fn main() -> Result<()> {
             println!("✅ Pool type detected: {:?}", pool_type);
 
             // Test price calculation with detected type
-            println!("\n💰 Testing Price Calculation:");
+            println!("\n💰 Testing On-Chain Price Calculation:");
             match pool_discovery.calculate_pool_price_with_type(test_pool_address, pool_type).await {
                 Ok((price, token_a, token_b, detected_type)) => {
                     println!("✅ Price calculation successful!");
-                    println!("   Price: {} SOL per token", price);
+                    println!("   Calculated Price: {} SOL per token", price);
                     println!("   Token A: {}", token_a);
                     println!("   Token B: {}", token_b);
                     println!("   Pool Type: {:?}", detected_type);
 
                     // Get DexScreener price for comparison
-                    println!("\n📊 Fetching DexScreener API price for comparison:");
+                    println!("\n📊 Comparing with DexScreener API:");
                     let api_price = get_dexscreener_price(test_token_mint).await;
 
                     if let Some(api_price) = api_price {
@@ -51,8 +51,10 @@ async fn main() -> Result<()> {
                         let difference = ((price - api_price).abs() / api_price) * 100.0;
                         println!("   Price Difference: {:.2}%", difference);
 
-                        if difference < 5.0 {
-                            println!("✅ Price calculation is accurate (within 5%)");
+                        if difference < 1.0 {
+                            println!("✅ Excellent accuracy! (within 1%)");
+                        } else if difference < 5.0 {
+                            println!("✅ Good accuracy (within 5%)");
                         } else {
                             println!("⚠️  Price difference is significant (>5%)");
                         }
@@ -88,6 +90,25 @@ async fn main() -> Result<()> {
                                 pool_data.reserve_b.balance,
                                 pool_data.reserve_b.vault_address
                             );
+
+                            if
+                                let screenerbot::pool_price::PoolSpecificData::PumpfunAmm {
+                                    pool_bump,
+                                    index,
+                                    creator,
+                                    lp_mint,
+                                    lp_supply,
+                                    coin_creator,
+                                } = &pool_data.specific_data
+                            {
+                                println!("   Pump.fun Specific Data:");
+                                println!("     Pool Bump: {}", pool_bump);
+                                println!("     Index: {}", index);
+                                println!("     Creator: {}", creator);
+                                println!("     LP Mint: {}", lp_mint);
+                                println!("     LP Supply: {}", lp_supply);
+                                println!("     Coin Creator: {}", coin_creator);
+                            }
                         }
                         Err(parse_err) => {
                             println!("❌ Pool data parsing failed: {}", parse_err);
@@ -101,11 +122,13 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Test pool discovery via API
+    // Test pool discovery via API for multiple Pump.fun pools
     println!("\n🌐 Testing Pool Discovery via DexScreener API:");
     match pool_discovery.discover_pools(test_token_mint).await {
         Ok(pools) => {
             println!("✅ Discovered {} pools", pools.len());
+
+            let mut pumpfun_pools = 0;
             for (i, pool) in pools.iter().enumerate() {
                 println!(
                     "   Pool {}: {} ({}) - Liquidity: ${:.2}",
@@ -114,29 +137,62 @@ async fn main() -> Result<()> {
                     pool.dex_id,
                     pool.liquidity_usd
                 );
+
+                if pool.dex_id.contains("pump") {
+                    pumpfun_pools += 1;
+                }
             }
 
-            // Test price calculation for all discovered pools
+            println!("   Found {} Pump.fun related pools", pumpfun_pools);
+
+            // Test price calculation for all pools
             println!("\n💹 Testing Price Calculation for All Pools:");
             match pool_discovery.get_token_pool_prices(test_token_mint).await {
                 Ok(results) => {
-                    println!("✅ Calculated prices for {} pools", results.len());
+                    println!("✅ Results for {} pools:\n", results.len());
+
+                    let mut successful_calcs = 0;
+                    let mut pumpfun_success = 0;
+
                     for result in &results {
-                        println!("   Pool: {} ({})", result.pool_address, result.dex_id);
+                        let is_pumpfun = result.dex_id.contains("pump");
+                        let status_icon = if result.calculation_successful { "✅" } else { "❌" };
+
+                        println!(
+                            "{}  Pool: {} ({})",
+                            status_icon,
+                            result.pool_address,
+                            result.dex_id
+                        );
+
                         if result.calculation_successful {
-                            println!("     ✅ Calculated Price: {} SOL", result.calculated_price);
+                            successful_calcs += 1;
+                            if is_pumpfun {
+                                pumpfun_success += 1;
+                            }
+
+                            println!("     🎯 Calculated Price: {} SOL", result.calculated_price);
                             println!("     📊 DexScreener Price: {} SOL", result.dexscreener_price);
                             println!("     📈 Difference: {:.2}%", result.price_difference_percent);
                             println!("     💧 Liquidity: ${:.2}", result.liquidity_usd);
+                            println!("     🏷️  Pool Type: {:?}", result.pool_type);
                         } else {
                             println!(
-                                "     ❌ Calculation failed: {}",
+                                "     ❌ Error: {}",
                                 result.error_message
                                     .as_ref()
                                     .unwrap_or(&"Unknown error".to_string())
                             );
                         }
                         println!();
+                    }
+
+                    println!("📈 Summary:");
+                    println!("   Successful calculations: {}/{}", successful_calcs, results.len());
+                    println!("   Pump.fun pools working: {}", pumpfun_success);
+
+                    if pumpfun_success > 0 {
+                        println!("🎉 Pump.fun AMM integration working successfully!");
                     }
                 }
                 Err(e) => {
@@ -149,7 +205,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    println!("\n🏁 Test completed!");
+    println!("\n🏁 Pump.fun AMM testing completed!");
     Ok(())
 }
 
