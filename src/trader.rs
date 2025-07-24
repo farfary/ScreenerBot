@@ -48,8 +48,8 @@ pub const TRADE_SIZE_SOL: f64 = 0.0005;
 pub const PRICE_DROP_THRESHOLD_PERCENT: f64 = 5.0;
 pub const PROFIT_TARGET_PERCENT: f64 = 5.0; // Take profit at +25%
 
+/// Hardcoded stop loss - only sell at -99% loss (essentially never sell at loss)
 pub const STOP_LOSS_PERCENT: f64 = -99.0;
-pub const STOP_LOSS_PERCENT_AGGRESIVE: f64 = -99.0;
 
 pub const PRICE_HISTORY_HOURS: i64 = 24;
 pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
@@ -107,27 +107,35 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 
 /// Determines if a position should be sold based on P&L, time, and token analysis
 /// Returns urgency score from 0.0 (don't sell) to 1.0 (sell immediately)
+/// Only sells at profit or at -99% stop loss (essentially never sell at loss)
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
     // Calculate time held in seconds
     let duration = now - pos.entry_time;
     let time_held_secs: f64 = duration.num_seconds() as f64;
 
-    // Don't sell too early unless it's a major loss (safety check)
-    if time_held_secs < MIN_HOLD_TIME_SECS {
-        let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
+    // Calculate current P&L
+    let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
 
-        if current_pnl_percent <= STOP_LOSS_PERCENT {
-            return 1.0; // Emergency exit for major losses
-        } else {
-            return 0.0; // Hold for minimum time
-        }
+    // Only sell at -99% stop loss (emergency exit for catastrophic failures)
+    if current_pnl_percent <= STOP_LOSS_PERCENT {
+        return 1.0; // Emergency exit only at -99%
+    }
+
+    // Don't sell at any loss above -99%
+    if current_pnl_percent < 0.0 {
+        return 0.0; // Never sell at loss
+    }
+
+    // Don't sell too early unless we have significant profit
+    if time_held_secs < MIN_HOLD_TIME_SECS && current_pnl_percent < PROFIT_TARGET_PERCENT {
+        return 0.0; // Hold for minimum time unless profit target reached
     }
 
     // Try to get the token from global list for full analysis
     if let Ok(tokens) = LIST_TOKENS.read() {
         for token in tokens.iter() {
             if token.mint == pos.mint {
-                // Use the SMART profit system with full token data
+                // Use the SMART profit system with full token data (profit-only)
                 let (urgency, _reason) = should_sell_smart_system(
                     pos,
                     token,
@@ -139,44 +147,20 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
         }
     }
 
-    // Fallback logic if token not found in global list
-    let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
+    // Fallback logic if token not found in global list - only profit-based
+    if current_pnl_percent >= PROFIT_TARGET_PERCENT {
+        return 0.8; // Take profit at target
+    }
 
-    // Decision logic
-    let stop_loss_triggered: bool = current_pnl_percent <= STOP_LOSS_PERCENT;
-    let profit_target_reached: bool = current_pnl_percent >= PROFIT_TARGET_PERCENT;
-
-    // Time decay factor
-    let time_decay_factor: f64 = if time_held_secs > TIME_DECAY_START_SECS {
+    // Time decay factor for profitable positions only
+    if current_pnl_percent > 0.0 && time_held_secs > TIME_DECAY_START_SECS {
         let decay_duration = MAX_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
         let excess_time = time_held_secs - TIME_DECAY_START_SECS;
         let time_decay = excess_time / decay_duration;
-        f64::min(time_decay, 1.0)
-    } else {
-        0.0
-    };
+        return f64::min(time_decay * 0.4, 0.6); // Gentle time pressure for profits
+    }
 
-    // Calculate urgency
-    let urgency: f64 = if stop_loss_triggered {
-        1.0
-    } else if profit_target_reached {
-        0.8
-    } else {
-        time_decay_factor * 0.4 // Reduced time pressure
-    };
-
-    // Less aggressive selling for positions with small losses
-    let final_urgency = if
-        time_held_secs > TIME_DECAY_START_SECS &&
-        current_pnl_percent <= 0.0 &&
-        current_pnl_percent > STOP_LOSS_PERCENT_AGGRESIVE
-    {
-        f64::max(urgency, 0.3) // Reduced urgency for small losses
-    } else {
-        urgency
-    };
-
-    f64::max(0.0, f64::min(final_urgency, 1.0))
+    0.0 // Hold otherwise
 }
 
 /// Calculate dynamic liquidity thresholds based on current token watch list

@@ -19,17 +19,6 @@ pub struct PriceVelocityAnalysis {
     pub spike_sustainability_score: f64, // How likely the spike is to hold (0.0-1.0)
 }
 
-/// Represents recovery probability analysis
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecoveryProbabilityAnalysis {
-    pub base_recovery_chance: f64, // Historical 30% recovery probability
-    pub buy_pressure_score: f64, // Current buy vs sell pressure
-    pub volume_health_score: f64, // Volume trend health
-    pub liquidity_stability_score: f64, // Liquidity holding up
-    pub social_momentum_score: f64, // Social/boost activity
-    pub combined_recovery_probability: f64, // Final recovery probability 0.0-1.0
-}
-
 /// Represents the analysis of how much a position has declined
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceDeclineAnalysis {
@@ -140,186 +129,6 @@ pub fn analyze_price_velocity(
     }
 }
 
-/// Analyzes recovery probability using multiple data sources
-pub fn analyze_recovery_probability(
-    token: &Token,
-    position: &Position,
-    current_price: f64
-) -> RecoveryProbabilityAnalysis {
-    let mut buy_pressure_score = 0.5; // Default neutral
-    let mut volume_health_score = 0.5;
-    let mut liquidity_stability_score = 0.5;
-    let mut social_momentum_score = 0.5;
-
-    // Buy pressure analysis from transaction data
-    if let Some(txns) = &token.txns {
-        buy_pressure_score = calculate_smart_buy_pressure(txns);
-    }
-
-    // Volume health analysis
-    if let Some(volume) = &token.volume {
-        volume_health_score = calculate_volume_health(volume);
-    }
-
-    // Liquidity stability analysis
-    if let Some(liquidity) = &token.liquidity {
-        liquidity_stability_score = calculate_liquidity_stability(liquidity, token);
-    }
-
-    // Social momentum from boosts and info
-    social_momentum_score = calculate_social_momentum(token);
-
-    // Base recovery chance - most tokens do recover from 30% drops
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-    let decline_percent = ((current_price - entry_price) / entry_price) * 100.0;
-
-    let base_recovery_chance = if decline_percent >= -30.0 {
-        0.75 // Historical data shows ~75% recovery from <30% drops
-    } else if decline_percent >= -50.0 {
-        0.45 // Lower chance from deeper drops
-    } else {
-        0.15 // Very low chance from >50% drops
-    };
-
-    // Combine all factors with weights
-    let combined_recovery_probability = (
-        base_recovery_chance * 0.4 + // Historical baseline
-        buy_pressure_score * 0.25 + // Current buying interest
-        volume_health_score * 0.15 + // Volume trend
-        liquidity_stability_score * 0.15 + // Liquidity holding
-        social_momentum_score * 0.05
-    ) // Social activity
-        .max(0.0)
-        .min(1.0);
-
-    RecoveryProbabilityAnalysis {
-        base_recovery_chance,
-        buy_pressure_score,
-        volume_health_score,
-        liquidity_stability_score,
-        social_momentum_score,
-        combined_recovery_probability,
-    }
-}
-
-/// Calculate smart buy pressure with heavy weighting on recent activity
-fn calculate_smart_buy_pressure(txns: &TxnStats) -> f64 {
-    let mut total_weighted_buys = 0.0;
-    let mut total_weighted_transactions = 0.0;
-
-    // 5-minute data: 8x weight (most important)
-    if let Some(ref m5) = txns.m5 {
-        let buys = m5.buys.unwrap_or(0) as f64;
-        let sells = m5.sells.unwrap_or(0) as f64;
-        let weight = 8.0;
-
-        total_weighted_buys += buys * weight;
-        total_weighted_transactions += (buys + sells) * weight;
-    }
-
-    // 1-hour data: 3x weight
-    if let Some(ref h1) = txns.h1 {
-        let buys = h1.buys.unwrap_or(0) as f64;
-        let sells = h1.sells.unwrap_or(0) as f64;
-        let weight = 3.0;
-
-        total_weighted_buys += buys * weight;
-        total_weighted_transactions += (buys + sells) * weight;
-    }
-
-    // 6-hour data: 1x weight (baseline)
-    if let Some(ref h6) = txns.h6 {
-        let buys = h6.buys.unwrap_or(0) as f64;
-        let sells = h6.sells.unwrap_or(0) as f64;
-        let weight = 1.0;
-
-        total_weighted_buys += buys * weight;
-        total_weighted_transactions += (buys + sells) * weight;
-    }
-
-    if total_weighted_transactions > 0.0 {
-        total_weighted_buys / total_weighted_transactions
-    } else {
-        0.5 // Neutral if no data
-    }
-}
-
-/// Calculate volume health - increasing volume is bullish, declining is bearish
-fn calculate_volume_health(volume: &VolumeStats) -> f64 {
-    let mut score: f64 = 0.5; // Default neutral
-
-    // Recent volume surge detection
-    if let (Some(m5), Some(h1)) = (volume.m5, volume.h1) {
-        let expected_5m = h1 / 12.0; // Expected 5m volume if consistent
-        if m5 > expected_5m * 2.0 {
-            score += 0.3; // Strong recent volume surge
-        } else if m5 > expected_5m * 1.5 {
-            score += 0.15; // Moderate volume increase
-        } else if m5 < expected_5m * 0.5 {
-            score -= 0.2; // Volume declining
-        }
-    }
-
-    // Hourly vs 6-hour trend
-    if let (Some(h1), Some(h6)) = (volume.h1, volume.h6) {
-        let expected_1h = h6 / 6.0;
-        if h1 > expected_1h * 1.5 {
-            score += 0.2; // Volume trend increasing
-        } else if h1 < expected_1h * 0.7 {
-            score -= 0.15; // Volume trend decreasing
-        }
-    }
-
-    score.max(0.0).min(1.0)
-}
-
-/// Calculate liquidity stability - stable/increasing liquidity is bullish
-fn calculate_liquidity_stability(liquidity: &LiquidityInfo, _token: &Token) -> f64 {
-    // Use current liquidity as baseline
-    if let Some(current_liquidity) = liquidity.usd {
-        if current_liquidity > 100000.0 {
-            // >100K liquidity
-            0.8 // Very stable
-        } else if current_liquidity > 50000.0 {
-            // >50K liquidity
-            0.6 // Reasonably stable
-        } else if current_liquidity > 20000.0 {
-            // >20K liquidity
-            0.4 // Somewhat stable
-        } else {
-            0.2 // Low liquidity - risky
-        }
-    } else {
-        0.3 // Unknown liquidity
-    }
-}
-
-/// Calculate social momentum from boosts and social activity
-fn calculate_social_momentum(token: &Token) -> f64 {
-    let mut score: f64 = 0.5; // Default neutral
-
-    // Active boosts are bullish
-    if let Some(boosts) = &token.boosts {
-        if let Some(active_boosts) = boosts.active {
-            if active_boosts > 0 {
-                score += 0.3; // Active promotion
-            }
-        }
-    }
-
-    // Social links presence
-    if let Some(info) = &token.info {
-        if !info.socials.is_empty() {
-            score += 0.1; // Has social presence
-        }
-        if !info.websites.is_empty() {
-            score += 0.1; // Has website
-        }
-    }
-
-    score.max(0.0).min(1.0)
-}
-
 /// Calculate spike sustainability - how likely a fast spike is to hold vs dump immediately
 /// Considers volume surge, liquidity depth, momentum consistency, and market conditions
 fn calculate_spike_sustainability(token: &Token, change_5m: f64, change_1h: f64) -> f64 {
@@ -373,18 +182,6 @@ fn calculate_spike_sustainability(token: &Token, change_5m: f64, change_1h: f64)
         sustainability_score += 0.15;
     }
 
-    // Transaction pattern analysis - buying vs selling pressure during spike
-    if let Some(txns) = &token.txns {
-        let buy_pressure = calculate_smart_buy_pressure(txns);
-        if buy_pressure > 0.7 {
-            sustainability_score += 0.2; // Strong buying pressure supports spike
-        } else if buy_pressure > 0.6 {
-            sustainability_score += 0.1; // Good buying pressure
-        } else if buy_pressure < 0.4 {
-            sustainability_score -= 0.15; // More selling than buying during spike - red flag
-        }
-    }
-
     // Spike magnitude risk - larger spikes are harder to sustain
     if change_5m > 100.0 {
         sustainability_score -= 0.3; // Extreme spikes often unsustainable
@@ -398,8 +195,8 @@ fn calculate_spike_sustainability(token: &Token, change_5m: f64, change_1h: f64)
 }
 
 /// SMART PROFIT SYSTEM - Main decision engine
-/// This is the ONLY function that should be called from the trading bot
-/// It implements fast profit taking and smart loss management
+/// This system ONLY handles profit taking - never sells at loss
+/// Loss management is handled by hardcoded -99% stop loss only
 pub fn should_sell_smart_system(
     position: &Position,
     token: &Token,
@@ -408,16 +205,21 @@ pub fn should_sell_smart_system(
 ) -> (f64, String) {
     let (_, current_pnl_percent) = calculate_position_pnl(position, Some(current_price));
 
-    // === EMERGENCY EXITS - Immediate action required ===
-
-    // Catastrophic loss - immediate exit regardless of recovery probability
-    if current_pnl_percent <= -60.0 {
-        return (1.0, "EMERGENCY: Catastrophic loss >60%".to_string());
+    // === NEVER SELL AT LOSS ===
+    // Only the hardcoded -99% stop loss can trigger loss sales
+    if current_pnl_percent <= -99.0 {
+        return (1.0, "EMERGENCY: -99% stop loss triggered".to_string());
     }
 
-    // Analyze market conditions
+    // Never sell at any other loss - always hold for recovery
+    if current_pnl_percent < 0.0 {
+        return (0.0, format!("HOLD: At {:.1}% loss - waiting for recovery", current_pnl_percent));
+    }
+
+    // === PROFIT-ONLY LOGIC BELOW ===
+
+    // Analyze market conditions for profit taking
     let velocity_analysis = analyze_price_velocity(token, current_price, position);
-    let recovery_analysis = analyze_recovery_probability(token, position, current_price);
 
     // === FAST SPIKE DETECTION - >25% jump in <15 minutes ===
 
@@ -472,11 +274,6 @@ pub fn should_sell_smart_system(
         );
     }
 
-    // Freefall detection - price accelerating downward dangerously
-    if velocity_analysis.is_freefall && current_pnl_percent <= -25.0 {
-        return (0.95, "DANGER: Freefall detected with significant loss".to_string());
-    }
-
     // === PROFIT MOMENTUM SYSTEM - Fast profit taking ===
 
     if current_pnl_percent > 5.0 {
@@ -517,115 +314,26 @@ pub fn should_sell_smart_system(
         }
     }
 
-    // === SMART LOSS MANAGEMENT SYSTEM ===
+    // === DEFAULT: HOLD (Only for profitable positions) ===
 
-    if current_pnl_percent < -5.0 {
-        // In loss territory
+    // For profitable positions, calculate small base urgency for time pressure
+    if current_pnl_percent > 0.0 {
+        let time_hours = time_held_seconds / 3600.0;
+        let base_urgency = (time_hours / 12.0).min(0.15); // Very gradual time pressure
 
-        // The 30% rule - most tokens drop 30% and recover, so be patient initially
-        if current_pnl_percent >= -30.0 {
-            // BUT exit early if recovery probability is very low
-            if recovery_analysis.combined_recovery_probability < 0.25 {
-                let urgency = 0.7 + ((30.0 + current_pnl_percent) / 30.0) * 0.2; // Worse loss = more urgent
-                return (
-                    urgency,
-                    format!(
-                        "Low recovery probability {:.1}% at {:.1}% loss",
-                        recovery_analysis.combined_recovery_probability * 100.0,
-                        current_pnl_percent
-                    ),
-                );
-            }
-
-            // Exit if strong negative momentum with moderate loss
-            if velocity_analysis.loss_momentum_score > 0.8 && current_pnl_percent <= -20.0 {
-                return (
-                    0.75,
-                    format!("Strong negative momentum at {:.1}% loss", current_pnl_percent),
-                );
-            }
-
-            // Very low buy pressure in loss territory
-            if recovery_analysis.buy_pressure_score < 0.2 && current_pnl_percent <= -15.0 {
-                return (0.65, format!("No buying interest at {:.1}% loss", current_pnl_percent));
-            }
-        } else {
-            // Beyond -30% - danger zone
-
-            // High recovery probability - give it a chance but be cautious
-            if recovery_analysis.combined_recovery_probability > 0.6 {
-                // But not forever - exit if too deep or too long
-                if current_pnl_percent <= -45.0 || time_held_seconds > 7200.0 {
-                    // 2 hours
-                    return (
-                        0.8,
-                        format!(
-                            "Deep loss {:.1}% despite high recovery probability",
-                            current_pnl_percent
-                        ),
-                    );
-                }
-
-                // Monitor momentum - if still falling fast, exit
-                if velocity_analysis.loss_momentum_score > 0.7 {
-                    return (
-                        0.75,
-                        format!(
-                            "High recovery probability but momentum still negative at {:.1}%",
-                            current_pnl_percent
-                        ),
-                    );
-                }
-            } else {
-                // Low recovery probability beyond -30%
-
-                let urgency = 0.85 + ((current_pnl_percent + 30.0) / -45.0) * 0.1; // Deeper = more urgent
-                return (
-                    urgency.min(0.98),
-                    format!(
-                        "Beyond 30% loss with low recovery probability: {:.1}%",
-                        current_pnl_percent
-                    ),
-                );
-            }
-        }
+        return (
+            base_urgency,
+            format!("Hold: +{:.1}% profit with good momentum", current_pnl_percent),
+        );
     }
 
-    // === VOLUME AND LIQUIDITY CONCERNS ===
-
-    // Low volume during any price movement is concerning
-    if recovery_analysis.volume_health_score < 0.3 {
-        let volume_urgency = if current_pnl_percent > 0.0 {
-            0.4 // In profit - moderate urgency
-        } else {
-            0.3 // In loss - lower urgency (might recover)
-        };
-
-        if volume_urgency > 0.35 {
-            return (volume_urgency, "Low volume - weak price action".to_string());
-        }
+    // For positions at break-even or small profits
+    if current_pnl_percent >= -1.0 {
+        return (0.0, format!("Hold: Near break-even at {:.1}%", current_pnl_percent));
     }
 
-    // Liquidity concerns
-    if recovery_analysis.liquidity_stability_score < 0.3 && current_pnl_percent <= -10.0 {
-        return (0.55, "Low liquidity with loss - exit risk".to_string());
-    }
-
-    // === DEFAULT: HOLD ===
-
-    // Calculate a small base urgency based on time and minor factors
-    let time_hours = time_held_seconds / 3600.0;
-    let base_urgency = (time_hours / 12.0).min(0.15); // Very gradual time pressure
-
-    let reason = if current_pnl_percent > 0.0 {
-        format!("Hold: +{:.1}% profit with good momentum", current_pnl_percent)
-    } else if current_pnl_percent >= -30.0 {
-        format!("Hold: {:.1}% loss within recovery range", current_pnl_percent)
-    } else {
-        format!("Monitor: {:.1}% loss - watching recovery signals", current_pnl_percent)
-    };
-
-    (base_urgency, reason)
+    // All other cases (losses) - always hold except -99% stop loss
+    (0.0, format!("Hold: At {:.1}% loss - waiting for recovery", current_pnl_percent))
 }
 
 /// Legacy compatibility functions - these wrap the new smart system
@@ -659,5 +367,3 @@ pub fn should_sell_dynamic(
 ) -> (f64, String) {
     should_sell_smart_system(position, token, current_price, time_held_seconds)
 }
-
-
