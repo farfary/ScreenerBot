@@ -3,7 +3,7 @@ use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
 
 use reqwest;
-use serde::{ Deserialize, Serialize };
+use serde::{ Deserialize, Serialize, Deserializer };
 use std::error::Error;
 use std::fmt;
 use base64::{ Engine as _, engine::general_purpose };
@@ -25,6 +25,94 @@ pub const PARTNER: &str = "screenerbot"; // Partner identifier
 
 /// SOL token mint address (native Solana)
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+/// Custom deserializer for fields that can be either string or number
+fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
+    where D: Deserializer<'de>
+{
+    use serde::de::{ self, Visitor };
+    use std::fmt;
+
+    struct StringOrNumber;
+
+    impl<'de> Visitor<'de> for StringOrNumber {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string or number")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<String, E> where E: de::Error {
+            Ok(value.to_owned())
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<String, E> where E: de::Error {
+            Ok(value.to_string())
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<String, E> where E: de::Error {
+            Ok(value.to_string())
+        }
+
+        fn visit_f64<E>(self, value: f64) -> Result<String, E> where E: de::Error {
+            Ok(value.to_string())
+        }
+    }
+
+    deserializer.deserialize_any(StringOrNumber)
+}
+
+/// Custom deserializer for optional fields that can be either string or number
+fn deserialize_optional_string_or_number<'de, D>(
+    deserializer: D
+) -> Result<Option<String>, D::Error>
+    where D: Deserializer<'de>
+{
+    use serde::de::{ self, Visitor };
+    use std::fmt;
+
+    struct OptionalStringOrNumber;
+
+    impl<'de> Visitor<'de> for OptionalStringOrNumber {
+        type Value = Option<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("an optional string or number")
+        }
+
+        fn visit_none<E>(self) -> Result<Option<String>, E> where E: de::Error {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Option<String>, D::Error>
+            where D: Deserializer<'de>
+        {
+            deserialize_string_or_number(deserializer).map(Some)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Option<String>, E> where E: de::Error {
+            Ok(Some(value.to_owned()))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Option<String>, E> where E: de::Error {
+            Ok(Some(value.to_string()))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Option<String>, E> where E: de::Error {
+            Ok(Some(value.to_string()))
+        }
+
+        fn visit_f64<E>(self, value: f64) -> Result<Option<String>, E> where E: de::Error {
+            Ok(Some(value.to_string()))
+        }
+
+        fn visit_unit<E>(self) -> Result<Option<String>, E> where E: de::Error {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_option(OptionalStringOrNumber)
+}
 
 /// Custom error types for swap operations
 #[derive(Debug)]
@@ -107,7 +195,7 @@ pub struct SwapQuote {
     pub out_decimals: u8,
     #[serde(rename = "swapMode")]
     pub swap_mode: String,
-    #[serde(rename = "slippageBps")]
+    #[serde(rename = "slippageBps", deserialize_with = "deserialize_string_or_number")]
     pub slippage_bps: String,
     #[serde(rename = "platformFee")]
     pub platform_fee: Option<String>,
@@ -143,6 +231,7 @@ pub struct SwapData {
     pub amount_in_usd: Option<String>,
     pub amount_out_usd: Option<String>,
     pub jito_order_id: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_string_or_number")]
     pub sol_cost: Option<String>,
 }
 
