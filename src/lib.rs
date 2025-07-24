@@ -14,3 +14,4 @@ pub mod types;
 pub mod pool_price;
 pub mod profit;
 pub mod loss_prevention;
+pub mod filtering;

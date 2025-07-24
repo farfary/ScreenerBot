@@ -1,6 +1,6 @@
 /// Test binary to verify debug filtering functionality
 use screenerbot::global::{ is_debug_filtering_enabled, Token, LiquidityInfo };
-use screenerbot::trader::{ validate_token_age, validate_token_info };
+use screenerbot::filtering::{ filter_token_for_trading, FilterResult };
 use screenerbot::logger::{ log, LogTag };
 use chrono::{ Utc, Duration };
 
@@ -170,26 +170,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         boosts: None,
     };
 
-    // Run tests
+    // Run tests using centralized filtering
     println!("🟢 Testing VALID token:");
-    let valid_info = validate_token_info(&valid_token);
-    let valid_age = validate_token_age(&valid_token);
-    println!("   Info validation: {} | Age validation: {}", valid_info, valid_age);
+    let valid_result = filter_token_for_trading(&valid_token);
+    match valid_result {
+        FilterResult::Approved => println!("   ✅ Token approved for trading"),
+        FilterResult::Rejected(reason) => println!("   ❌ Token rejected: {:?}", reason),
+    }
 
     println!("\n🟡 Testing YOUNG token:");
-    let young_info = validate_token_info(&young_token);
-    let young_age = validate_token_age(&young_token);
-    println!("   Info validation: {} | Age validation: {}", young_info, young_age);
+    let young_result = filter_token_for_trading(&young_token);
+    match young_result {
+        FilterResult::Approved => println!("   ✅ Token approved for trading"),
+        FilterResult::Rejected(reason) => println!("   ❌ Token rejected: {:?}", reason),
+    }
 
     println!("\n🔴 Testing NO LIQUIDITY token:");
-    let no_liq_info = validate_token_info(&no_liquidity_token);
-    let no_liq_age = validate_token_age(&no_liquidity_token);
-    println!("   Info validation: {} | Age validation: {}", no_liq_info, no_liq_age);
+    let no_liq_result = filter_token_for_trading(&no_liquidity_token);
+    match no_liq_result {
+        FilterResult::Approved => println!("   ✅ Token approved for trading"),
+        FilterResult::Rejected(reason) => println!("   ❌ Token rejected: {:?}", reason),
+    }
 
     println!("\n🔴 Testing EMPTY SYMBOL token:");
-    let empty_info = validate_token_info(&empty_symbol_token);
-    let empty_age = validate_token_age(&empty_symbol_token);
-    println!("   Info validation: {} | Age validation: {}", empty_info, empty_age);
+    let empty_result = filter_token_for_trading(&empty_symbol_token);
+    match empty_result {
+        FilterResult::Approved => println!("   ✅ Token approved for trading"),
+        FilterResult::Rejected(reason) => println!("   ❌ Token rejected: {:?}", reason),
+    }
 
     println!("\n✨ Test Complete!");
     println!("================");

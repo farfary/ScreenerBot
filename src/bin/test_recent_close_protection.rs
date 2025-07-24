@@ -2,6 +2,7 @@ use screenerbot::trader::*;
 use screenerbot::global::*;
 use screenerbot::positions::*;
 use screenerbot::logger::*;
+use screenerbot::filtering::POSITION_CLOSE_COOLDOWN_MINUTES;
 use chrono::{ Utc, Duration };
 
 #[tokio::main]

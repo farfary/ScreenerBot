@@ -63,7 +63,7 @@ pub const MAX_OPEN_POSITIONS: usize = 50;
 pub const TRADE_SIZE_SOL: f64 = 0.0005;
 
 /// Default transaction fee for buy/sell operations
-pub const TRANSACTION_FEE_SOL: f64 = 0.000006;
+pub const TRANSACTION_FEE_SOL: f64 = 0.00001;
 
 /// Default swap fee (set to 0 for GMGN routing)
 pub const SWAP_FEE_PERCENT: f64 = 0.0;
@@ -103,18 +103,7 @@ pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 3600.0;
 pub const TIME_DECAY_START_SECS: f64 = 1800.0;
 
 // -----------------------------------------------------------------------------
-// Token Filtering Configuration
-// -----------------------------------------------------------------------------
-
-/// Minimum token age in hours before trading
-pub const MIN_TOKEN_AGE_HOURS: i64 = 12;
-
-/// Maximum token age in hours (effectively unlimited)
-pub const MAX_TOKEN_AGE_HOURS: i64 = 999999;
-
-/// Cooldown period after closing position before re-entering same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 30;
-
+// Trading Logic Configuration
 // -----------------------------------------------------------------------------
 // Monitoring & Display Configuration
 // -----------------------------------------------------------------------------
@@ -161,7 +150,7 @@ use crate::summary::*;
 use crate::utils::*;
 use crate::pool_price::PoolDiscoveryAndPricing;
 use crate::profit::should_sell_smart_system;
-use crate::loss_prevention::should_allow_token_purchase;
+use crate::filtering::{ filter_token_for_trading, FilterResult, debug_filtering_log };
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -193,13 +182,6 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 // =============================================================================
 // DEBUG LOGGING CONFIGURATION
 // =============================================================================
-
-/// Helper function for conditional debug filtering logs
-fn debug_filtering_log(log_type: &str, message: &str) {
-    if is_debug_filtering_enabled() {
-        log(LogTag::Trader, log_type, message);
-    }
-}
 
 /// Helper function for regular trader logging (always visible)
 fn trader_log(log_type: &str, message: &str) {
@@ -384,68 +366,24 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
     }
 }
 
-/// Checks if a token had a position closed recently within the cooldown period
-/// Returns true if token should be blocked from purchase, false if purchase is allowed
-fn is_token_recently_closed(mint: &str, symbol: &str) -> bool {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        let now = Utc::now();
-        let cooldown_duration = ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
-
-        // Find any closed positions for this token within the cooldown period
-        for position in positions.iter() {
-            if position.mint == mint && position.exit_time.is_some() {
-                if let Some(exit_time) = position.exit_time {
-                    let time_since_close = now - exit_time;
-
-                    if time_since_close <= cooldown_duration {
-                        debug_filtering_log(
-                            "COOLDOWN_BLOCK",
-                            &format!(
-                                "Blocking {} ({}) purchase - position closed {:.1} minutes ago (cooldown: {} min)",
-                                symbol,
-                                &mint[..8],
-                                time_since_close.num_minutes() as f64,
-                                POSITION_CLOSE_COOLDOWN_MINUTES
-                            )
-                        );
-                        return true; // Block purchase
-                    }
-                }
-            }
-        }
-
-        // No recent closes found, allow purchase
-        false
-    } else {
-        log(
-            LogTag::Trader,
-            "ERROR",
-            "Could not acquire lock on SAVED_POSITIONS for recent close check"
-        );
-        false // Allow purchase if we can't check (conservative approach)
-    }
-}
-
 /// Advanced Multi-Strategy Dip Detection System
 /// Uses 5 different strategies to identify dips from -5% to -30%
 /// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
 pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
-    // Validate basic requirements
-    if current_price <= 0.0 || prev_price <= 0.0 || !validate_token_info(token) {
+    // Use centralized filtering system
+    match filter_token_for_trading(token) {
+        FilterResult::Approved => {
+            // Token passed all filters, proceed with dip detection
+        }
+        FilterResult::Rejected(_) => {
+            // Token was filtered out, return 0.0 (no buy signal)
+            return 0.0;
+        }
+    }
+
+    // Additional price validation for dip detection
+    if current_price <= 0.0 || prev_price <= 0.0 {
         return 0.0;
-    }
-
-    // Note: Token age is validated in monitor_new_entries before calling this function
-    // No need to validate again here to avoid duplicate logs
-
-    // Check loss prevention - analyze historical performance of this token
-    if !should_allow_token_purchase(&token.mint, &token.symbol) {
-        return 0.0; // Block purchase due to poor historical performance
-    }
-
-    // Check for recently closed positions - don't buy tokens that were sold recently
-    if is_token_recently_closed(&token.mint, &token.symbol) {
-        return 0.0; // Block purchase due to recent position close
     }
 
     // Run all 5 dip detection strategies
@@ -1703,107 +1641,6 @@ pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64
     None
 }
 
-/// Validates if a token has all required metadata for trading
-pub fn validate_token_info(token: &Token) -> bool {
-    if token.symbol.is_empty() {
-        debug_filtering_log("INFO_BLOCK", &format!("Token {} has empty symbol", token.mint));
-        return false;
-    }
-
-    if token.mint.is_empty() {
-        debug_filtering_log("INFO_BLOCK", &format!("Token {} has empty mint", token.symbol));
-        return false;
-    }
-
-    if token.price_dexscreener_sol.is_none() {
-        debug_filtering_log(
-            "INFO_BLOCK",
-            &format!("Token {} ({}) has no DexScreener SOL price", token.symbol, token.mint)
-        );
-        return false;
-    }
-
-    if token.liquidity.is_none() {
-        debug_filtering_log(
-            "INFO_BLOCK",
-            &format!("Token {} ({}) has no liquidity data", token.symbol, token.mint)
-        );
-        return false;
-    }
-
-    debug_filtering_log(
-        "INFO_OK",
-        &format!("Token {} ({}) metadata validation passed", token.symbol, token.mint)
-    );
-
-    true
-}
-
-/// Validates if a token age is within acceptable trading range
-/// Returns true if token is between MIN_TOKEN_AGE_HOURS and MAX_TOKEN_AGE_HOURS old
-pub fn validate_token_age(token: &Token) -> bool {
-    if let Some(created_at) = token.created_at {
-        let now = Utc::now();
-        let token_age = now - created_at;
-        let age_hours = token_age.num_hours();
-
-        let is_old_enough = age_hours >= MIN_TOKEN_AGE_HOURS;
-        let is_not_too_old = age_hours <= MAX_TOKEN_AGE_HOURS;
-
-        if !is_old_enough {
-            debug_filtering_log(
-                "AGE_BLOCK",
-                &format!(
-                    "Token {} ({}) too young: {} hours old (minimum {} hours required)",
-                    token.symbol,
-                    token.mint,
-                    age_hours,
-                    MIN_TOKEN_AGE_HOURS
-                )
-            );
-            return false;
-        }
-
-        if !is_not_too_old {
-            debug_filtering_log(
-                "AGE_BLOCK",
-                &format!(
-                    "Token {} ({}) too old: {} hours old (maximum {} hours allowed)",
-                    token.symbol,
-                    token.mint,
-                    age_hours,
-                    MAX_TOKEN_AGE_HOURS
-                )
-            );
-            return false;
-        }
-
-        debug_filtering_log(
-            "AGE_OK",
-            &format!(
-                "Token {} ({}) age acceptable: {} hours old",
-                token.symbol,
-                token.mint,
-                age_hours
-            )
-        );
-
-        return true;
-    } else {
-        // If no created_at timestamp is available, log warning but allow trading
-        // This prevents blocking tokens where we don't have creation data
-        debug_filtering_log(
-            "AGE_WARN",
-            &format!(
-                "Token {} ({}) has no creation timestamp - allowing trade (consider this risky)",
-                token.symbol,
-                token.mint
-            )
-        );
-        return true;
-    }
-}
-
 /// Checks if entry is allowed based on historical position data for this token
 /// Returns true only if current price is below both:
 /// 1. Average entry price from past closed positions
@@ -1998,61 +1835,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 .to_string()
         );
 
-        // Count tokens with zero liquidity before filtering
-        let zero_liquidity_count = tokens
-            .iter()
-            .filter(|token| {
-                let liquidity_usd = token.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .unwrap_or(0.0);
-                liquidity_usd == 0.0
-            })
-            .count();
+        // Use centralized filtering system to get eligible tokens
+        use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
 
-        if zero_liquidity_count > 0 {
-            debug_filtering_log(
-                "LIQUIDITY_FILTER",
-                &format!("Found {} tokens with zero liquidity USD", zero_liquidity_count)
-            );
-        }
+        let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&tokens);
 
-        // Filter out zero-liquidity tokens first
-        tokens.retain(|token| {
-            let liquidity_usd = token.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-
-            if liquidity_usd == 0.0 {
-                debug_filtering_log(
-                    "LIQUIDITY_BLOCK",
-                    &format!(
-                        "Token {} ({}) filtered out: zero liquidity USD",
-                        token.symbol,
-                        token.mint
-                    )
-                );
-                return false;
-            }
-
-            debug_filtering_log(
-                "LIQUIDITY_OK",
-                &format!(
-                    "Token {} ({}) liquidity acceptable: ${:.2}",
-                    token.symbol,
-                    token.mint,
-                    liquidity_usd
-                )
-            );
-
-            liquidity_usd > 0.0
-        });
-
-        debug_filtering_log(
-            "FILTER_RESULT",
-            &format!("Processing {} tokens with non-zero liquidity", tokens.len())
+        // Log filtering statistics
+        let (total, passed, pass_rate) = get_filtering_stats(&tokens);
+        log(
+            LogTag::Trader,
+            "FILTER_STATS",
+            &format!("Token filtering: {}/{} passed ({:.1}% pass rate)", passed, total, pass_rate)
         );
+
+        // Use eligible tokens for trading
+        tokens = eligible_tokens;
 
         // Early return if no tokens to process
         if tokens.is_empty() {
@@ -2136,13 +1933,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 match
                     tokio::time::timeout(Duration::from_secs(30), async {
                         if let Some(current_price) = token.price_dexscreener_sol {
-                            if current_price <= 0.0 || !validate_token_info(&token) {
-                                return None;
-                            }
-
-                            // Validate token age before proceeding with trading logic
-                            if !validate_token_age(&token) {
-                                return None;
+                            // Use centralized filtering system
+                            match filter_token_for_trading(&token) {
+                                FilterResult::Approved => {
+                                    // Token passed all filters, proceed with trading logic
+                                }
+                                FilterResult::Rejected(_) => {
+                                    // Token was filtered out, skip processing
+                                    return None;
+                                }
                             }
 
                             let liquidity_usd = token.liquidity
