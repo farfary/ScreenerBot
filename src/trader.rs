@@ -270,10 +270,8 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
         return 0.0;
     }
 
-    // Validate token age before proceeding
-    if !validate_token_age(token) {
-        return 0.0;
-    }
+    // Note: Token age is validated in monitor_new_entries before calling this function
+    // No need to validate again here to avoid duplicate logs
 
     // Check loss prevention - analyze historical performance of this token
     if !should_allow_token_purchase(&token.mint, &token.symbol) {

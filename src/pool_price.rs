@@ -112,7 +112,10 @@ impl PoolType {
                     PoolType::RaydiumLaunchLab
                 } else {
                     // Raydium AMM V4 is disabled - fallback to CPMM or Unknown
-                    debug_log("DEBUG", "Raydium AMM V4 disabled, falling back to CPMM for standard Raydium pools");
+                    debug_log(
+                        "DEBUG",
+                        "Raydium AMM V4 disabled, falling back to CPMM for standard Raydium pools"
+                    );
                     PoolType::RaydiumCpmm // Default to CPMM instead of V4 for standard Raydium pools
                 }
             }
@@ -825,7 +828,7 @@ impl PoolDiscoveryAndPricing {
                         // Skip Raydium AMM V4 pools - they are disabled
                         debug_log("DEBUG", "Skipping Raydium AMM V4 pool (disabled)");
                         continue;
-                    },
+                    }
                     PoolType::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID.to_string(),
                     PoolType::MeteoraDammV2 => METEORA_DAMM_V2_PROGRAM_ID.to_string(),
                     PoolType::RaydiumLaunchLab => RAYDIUM_LAUNCHLAB_PROGRAM_ID.to_string(),

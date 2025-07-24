@@ -1,4 +1,4 @@
-use screenerbot::pool_price::{PoolDiscoveryAndPricing, PoolType};
+use screenerbot::pool_price::{ PoolDiscoveryAndPricing, PoolType };
 
 /// Test that Raydium AMM V4 pools are properly disabled
 #[tokio::main]
