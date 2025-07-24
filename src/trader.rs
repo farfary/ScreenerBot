@@ -1,4 +1,37 @@
 /// Trading configuration constants
+///
+/// MULTI-STRATEGY DIP DETECTION SYSTEM
+/// ===================================
+///
+/// This system implements 5 sophisticated strategies to detect profitable dip entry points:
+///
+/// 1. **Immediate Drop Detection** (-5% to -30%)
+///    - Detects sudden price drops in the immediate timeframe
+///    - Adapts thresholds based on token's historical volatility
+///    - Higher urgency for larger drops within the range
+///
+/// 2. **Moving Average Deviation** (-8% to -25%)
+///    - Analyzes deviation from 5, 10, and 20-period moving averages
+///    - Longer period deviations get higher weight
+///    - Identifies oversold conditions relative to recent trends
+///
+/// 3. **Support Level Bounce** (-10% to -30%)
+///    - Detects when price approaches historical support levels
+///    - Uses technical analysis to find key price levels
+///    - Bonus urgency for proximity to strong support
+///
+/// 4. **Volume-Weighted Price Dip** (-7% to -20%)
+///    - Combines price drops with volume analysis
+///    - Higher volume during dips indicates buying interest
+///    - Validates dips with market participation data
+///
+/// 5. **Multi-Timeframe Convergence** (-6% to -18%)
+///    - Requires multiple timeframes showing dip signals
+///    - Short, medium, and long-term trend analysis
+///    - Higher confidence when timeframes converge
+///
+/// The system calculates urgency scores from 0.0 to 2.0, with multiple strategies
+/// providing consensus-based scoring and increased confidence.
 
 pub const PRINT_SUMMARY_INTERVAL_SECS: u64 = 3;
 
@@ -23,7 +56,7 @@ pub const NEW_ENTRIES_CHECK_INTERVAL_SECS: u64 = 5;
 pub const OPEN_POSITIONS_CHECK_INTERVAL_SECS: u64 = 5;
 
 pub const MIN_TOKEN_AGE_HOURS: i64 = 12; // Don't trade tokens younger than 24 hours
-pub const MAX_TOKEN_AGE_HOURS: i64 = 999; // Don't trade tokens older than 3 days (72 hours)
+pub const MAX_TOKEN_AGE_HOURS: i64 = 999999; // Don't trade tokens older than 3 days (72 hours)
 
 pub const MIN_HOLD_TIME_SECS: f64 = 30.0; // Hold for at least 3 minutes
 pub const MAX_HOLD_TIME_SECS: f64 = 3600.0; // Max 1 hour hold
@@ -228,9 +261,9 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
     }
 }
 
-/// Determines if a token should be bought based on smart dip analysis and volatility patterns
-/// Ensures we buy in actual dips by analyzing volatility patterns and price movements at the same scale
-/// Returns urgency score from 0.0 (don't buy) to 1.0 (buy immediately)
+/// Advanced Multi-Strategy Dip Detection System
+/// Uses 5 different strategies to identify dips from -5% to -30%
+/// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
 pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
     // Validate basic requirements
     if current_price <= 0.0 || prev_price <= 0.0 || !validate_token_info(token) {
@@ -247,133 +280,472 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
         return 0.0; // Block purchase due to poor historical performance
     }
 
-    // Analyze volatility patterns and ensure we're in a genuine dip
-    let volatility_analysis = analyze_token_volatility_patterns(&token.mint, current_price);
+    // Run all 5 dip detection strategies
+    let dip_signals = run_multi_strategy_dip_detection(token, current_price, prev_price);
 
-    if !volatility_analysis.is_in_dip {
-        log(
-            LogTag::Trader,
-            "BUY_BLOCKED",
-            &format!(
-                "Buy blocked for {} ({}): Not in genuine dip. Current: {:.12}, Volatility Score: {:.2}",
-                token.symbol,
-                token.mint,
-                current_price,
-                volatility_analysis.volatility_score
-            )
-        );
+    // If no strategies triggered, no buy signal
+    if dip_signals.is_empty() {
         return 0.0;
     }
 
-    // Calculate immediate price change percentage
-    let change = (current_price - prev_price) / prev_price;
-    let percent_change = change * 100.0;
+    // Calculate final urgency based on multiple strategy consensus
+    let final_urgency = calculate_multi_strategy_urgency(&dip_signals, token);
 
-    // Enhanced dip detection: must meet both threshold and volatility requirements
-    if percent_change <= -PRICE_DROP_THRESHOLD_PERCENT {
-        // If volatility analysis says we're in a dip, be more permissive with pattern consistency
-        let pattern_consistent =
-            volatility_analysis.is_in_dip ||
-            is_dip_consistent_with_patterns(&volatility_analysis, percent_change.abs());
-
-        if !pattern_consistent {
-            log(
-                LogTag::Trader,
-                "BUY_BLOCKED",
-                &format!(
-                    "Buy blocked for {} ({}): Dip {:.2}% inconsistent with volatility patterns (avg: {:.2}%, scale: {:.2}, in_dip: {})",
-                    token.symbol,
-                    token.mint,
-                    percent_change.abs(),
-                    volatility_analysis.average_move_size,
-                    volatility_analysis.volatility_scale,
-                    volatility_analysis.is_in_dip
-                )
-            );
-            return 0.0;
-        }
-
-        // Check historical data before allowing entry
-        if is_entry_allowed_by_historical_data(&token.mint, current_price) {
-            // Calculate base urgency with volatility-adjusted scoring
-            let drop_magnitude = percent_change.abs();
-            let volatility_adjusted_urgency = calculate_volatility_adjusted_urgency(
-                drop_magnitude,
-                &volatility_analysis
-            );
-
-            // Get current liquidity value
-            let liquidity_usd = token.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-
-            // Calculate dynamic liquidity thresholds
-            let (high_threshold, medium_threshold, low_threshold) =
-                calculate_dynamic_liquidity_thresholds();
-
-            // Determine liquidity factor
-            let liquidity_factor = if liquidity_usd >= high_threshold {
-                1.0 // Top 25% liquidity
-            } else if liquidity_usd >= medium_threshold {
-                0.8 // Top 50% liquidity
-            } else if liquidity_usd >= low_threshold {
-                0.6 // Top 75% liquidity
-            } else {
-                0.4 // Bottom 25% liquidity
-            };
-
-            // Apply dip quality multiplier based on analysis
-            let dip_quality_multiplier = calculate_dip_quality_multiplier(&volatility_analysis);
-
-            let final_urgency = f64::min(
-                volatility_adjusted_urgency * liquidity_factor * dip_quality_multiplier,
-                2.0 // Increased from 1.0 to allow higher urgency scores
-            );
-
-            log(
-                LogTag::Trader,
-                "BUY_SIGNAL",
-                &format!(
-                    "Smart buy signal for {} ({}): {:.2}% drop, volatility score: {:.2}, dip quality: {:.2}, final urgency: {:.2}, liquidity: ${:.2}",
-                    token.symbol,
-                    token.mint,
-                    percent_change,
-                    volatility_analysis.volatility_score,
-                    dip_quality_multiplier,
-                    final_urgency,
-                    liquidity_usd
-                )
-            );
-
-            return final_urgency;
-        } else {
-            log(
-                LogTag::Trader,
-                "BUY_BLOCKED",
-                &format!(
-                    "Buy blocked for {} ({}): Current price {:.12} not below historical thresholds",
-                    token.symbol,
-                    token.mint,
-                    current_price
-                )
-            );
-        }
-    } else {
+    if final_urgency > 0.0 {
         log(
             LogTag::Trader,
-            "BUY_THRESHOLD",
+            "MULTI_DIP_SIGNAL",
             &format!(
-                "Buy threshold not met for {} ({}): {:.2}% change < {:.1}% required",
+                "Multi-strategy dip signal for {} ({}): {} strategies triggered, final urgency: {:.2}",
                 token.symbol,
                 token.mint,
-                percent_change,
-                -PRICE_DROP_THRESHOLD_PERCENT
+                dip_signals.len(),
+                final_urgency
             )
         );
     }
 
-    0.0
+    final_urgency
+}
+
+/// Dip detection strategy result
+#[derive(Debug, Clone)]
+struct DipSignal {
+    strategy_name: String,
+    urgency: f64,
+    drop_percent: f64,
+    confidence: f64,
+    details: String,
+}
+
+/// Runs all 5 dip detection strategies and returns triggered signals
+fn run_multi_strategy_dip_detection(
+    token: &Token,
+    current_price: f64,
+    prev_price: f64
+) -> Vec<DipSignal> {
+    let mut signals = Vec::new();
+
+    // Strategy 1: Immediate Drop Detection (-5% to -30%)
+    if let Some(signal) = strategy_immediate_drop_detection(token, current_price, prev_price) {
+        signals.push(signal);
+    }
+
+    // Strategy 2: Moving Average Deviation (-8% to -25%)
+    if let Some(signal) = strategy_moving_average_deviation(token, current_price) {
+        signals.push(signal);
+    }
+
+    // Strategy 3: Support Level Bounce (-10% to -30%)
+    if let Some(signal) = strategy_support_level_bounce(token, current_price) {
+        signals.push(signal);
+    }
+
+    // Strategy 4: Volume-Weighted Price Dip (-7% to -20%)
+    if let Some(signal) = strategy_volume_weighted_dip(token, current_price) {
+        signals.push(signal);
+    }
+
+    // Strategy 5: Multi-Timeframe Convergence (-6% to -18%)
+    if let Some(signal) = strategy_multi_timeframe_convergence(token, current_price) {
+        signals.push(signal);
+    }
+
+    signals
+}
+
+/// Strategy 1: Immediate Drop Detection
+/// Detects sudden drops from -5% to -30% with volatility scaling
+fn strategy_immediate_drop_detection(
+    token: &Token,
+    current_price: f64,
+    prev_price: f64
+) -> Option<DipSignal> {
+    let change = (current_price - prev_price) / prev_price;
+    let percent_change = change * 100.0;
+
+    // Base threshold: -5% to -30% (inclusive bounds)
+    if percent_change > -5.0 || percent_change < -30.0 {
+        return None;
+    }
+
+    // Analyze token volatility to adjust thresholds
+    let volatility_analysis = analyze_token_volatility_patterns(&token.mint, current_price);
+
+    // Scale thresholds based on token's typical volatility
+    let volatility_scale = f64::max(volatility_analysis.volatility_scale, 5.0);
+    let adjusted_min_drop = f64::min(-5.0, -volatility_scale * 0.8);
+    let adjusted_max_drop = f64::max(-30.0, -volatility_scale * 4.0); // Increased multiplier
+
+    if percent_change <= adjusted_min_drop && percent_change >= adjusted_max_drop {
+        // Calculate urgency based on drop magnitude and volatility
+        let drop_magnitude = percent_change.abs();
+        let base_urgency = (drop_magnitude - 5.0) / 25.0; // 0.0 at -5%, 1.0 at -30%
+
+        // Volatility adjustment - less volatile tokens get higher urgency for same drop
+        let volatility_multiplier = 1.0 / (1.0 + volatility_analysis.volatility_score * 0.3); // Reduced penalty
+
+        let urgency = base_urgency * volatility_multiplier;
+        let confidence = if volatility_analysis.is_in_dip { 0.9 } else { 0.7 };
+
+        return Some(DipSignal {
+            strategy_name: "ImmediateDrop".to_string(),
+            urgency,
+            drop_percent: percent_change,
+            confidence,
+            details: format!("Drop: {:.1}%, Vol Scale: {:.1}%", percent_change, volatility_scale),
+        });
+    }
+
+    None
+}
+
+/// Strategy 2: Moving Average Deviation
+/// Detects when price drops -8% to -25% below various moving averages
+fn strategy_moving_average_deviation(token: &Token, current_price: f64) -> Option<DipSignal> {
+    if let Ok(price_history) = PRICE_HISTORY_24H.try_lock() {
+        if let Some(history) = price_history.get(&token.mint) {
+            if history.len() < 10 {
+                return None;
+            }
+
+            let prices: Vec<f64> = history
+                .iter()
+                .map(|(_, price)| *price)
+                .collect();
+
+            // Calculate multiple moving averages
+            let ma_5 = calculate_moving_average(&prices, 5);
+            let ma_10 = calculate_moving_average(&prices, 10);
+            let ma_20 = calculate_moving_average(&prices, 20);
+
+            let mut best_signal: Option<DipSignal> = None;
+            let mut best_urgency = 0.0;
+
+            // Check deviation from each MA
+            for (period, ma_price) in [
+                (5, ma_5),
+                (10, ma_10),
+                (20, ma_20),
+            ] {
+                if let Some(ma) = ma_price {
+                    let deviation = ((current_price - ma) / ma) * 100.0;
+
+                    // Look for -8% to -25% deviation
+                    if deviation >= -8.0 || deviation <= -25.0 {
+                        continue;
+                    }
+
+                    // Calculate urgency based on deviation and MA period
+                    let deviation_magnitude = deviation.abs();
+                    let base_urgency = (deviation_magnitude - 8.0) / 17.0; // 0.0 at -8%, 1.0 at -25%
+
+                    // Longer MA deviations are more significant
+                    let period_multiplier = match period {
+                        5 => 0.8,
+                        10 => 1.0,
+                        20 => 1.2,
+                        _ => 1.0,
+                    };
+
+                    let urgency = base_urgency * period_multiplier;
+
+                    if urgency > best_urgency {
+                        best_urgency = urgency;
+                        best_signal = Some(DipSignal {
+                            strategy_name: "MovingAverage".to_string(),
+                            urgency,
+                            drop_percent: deviation,
+                            confidence: 0.8,
+                            details: format!("MA{} deviation: {:.1}%", period, deviation),
+                        });
+                    }
+                }
+            }
+
+            return best_signal;
+        }
+    }
+
+    None
+}
+
+/// Strategy 3: Support Level Bounce
+/// Detects when price approaches or bounces from support levels with -10% to -30% drops
+fn strategy_support_level_bounce(token: &Token, current_price: f64) -> Option<DipSignal> {
+    if let Ok(price_history) = PRICE_HISTORY_24H.try_lock() {
+        if let Some(history) = price_history.get(&token.mint) {
+            if history.len() < 20 {
+                return None;
+            }
+
+            let (support_level, _) = find_support_resistance_levels(history);
+
+            if let Some(support) = support_level {
+                // Calculate distance from support
+                let support_distance = ((current_price - support) / support) * 100.0;
+
+                // Look for price within 5% of support level
+                if support_distance >= -5.0 && support_distance <= 10.0 {
+                    // Calculate recent drop magnitude
+                    let recent_prices: Vec<f64> = history
+                        .iter()
+                        .rev()
+                        .take(10)
+                        .map(|(_, p)| *p)
+                        .collect();
+                    if
+                        let Some(recent_high) = recent_prices
+                            .iter()
+                            .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    {
+                        let drop_from_high = ((current_price - recent_high) / recent_high) * 100.0;
+
+                        // Look for -10% to -30% drop from recent high
+                        if drop_from_high >= -10.0 || drop_from_high <= -30.0 {
+                            return None;
+                        }
+
+                        // Calculate urgency based on proximity to support and drop magnitude
+                        let drop_magnitude = drop_from_high.abs();
+                        let base_urgency = (drop_magnitude - 10.0) / 20.0; // 0.0 at -10%, 1.0 at -30%
+
+                        // Bonus for being very close to support
+                        let support_proximity_bonus = if support_distance.abs() < 2.0 {
+                            1.3
+                        } else if support_distance.abs() < 5.0 {
+                            1.1
+                        } else {
+                            1.0
+                        };
+
+                        let urgency = base_urgency * support_proximity_bonus;
+
+                        return Some(DipSignal {
+                            strategy_name: "SupportBounce".to_string(),
+                            urgency,
+                            drop_percent: drop_from_high,
+                            confidence: 0.85,
+                            details: format!(
+                                "Drop: {:.1}%, Support dist: {:.1}%",
+                                drop_from_high,
+                                support_distance
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Strategy 4: Volume-Weighted Price Dip
+/// Detects dips of -7% to -20% with volume confirmation
+fn strategy_volume_weighted_dip(token: &Token, current_price: f64) -> Option<DipSignal> {
+    // Get volume data from token
+    let current_volume = token.volume
+        .as_ref()
+        .and_then(|v| v.h24)
+        .unwrap_or(0.0);
+
+    if current_volume <= 0.0 {
+        return None;
+    }
+
+    if let Ok(price_history) = PRICE_HISTORY_24H.try_lock() {
+        if let Some(history) = price_history.get(&token.mint) {
+            if history.len() < 10 {
+                return None;
+            }
+
+            // Calculate VWAP-like metric using available data
+            let recent_prices: Vec<f64> = history
+                .iter()
+                .rev()
+                .take(10)
+                .map(|(_, p)| *p)
+                .collect();
+            let avg_price = recent_prices.iter().sum::<f64>() / (recent_prices.len() as f64);
+
+            let price_deviation = ((current_price - avg_price) / avg_price) * 100.0;
+
+            // Look for -7% to -20% deviation
+            if price_deviation >= -7.0 || price_deviation <= -20.0 {
+                return None;
+            }
+
+            // Check if volume is above average (indicating interest during dip)
+            let volume_score = if current_volume > 100000.0 {
+                1.2 // High volume
+            } else if current_volume > 50000.0 {
+                1.0 // Medium volume
+            } else {
+                0.8 // Low volume
+            };
+
+            let deviation_magnitude = price_deviation.abs();
+            let base_urgency = (deviation_magnitude - 7.0) / 13.0; // 0.0 at -7%, 1.0 at -20%
+            let urgency = base_urgency * volume_score;
+
+            return Some(DipSignal {
+                strategy_name: "VolumeWeighted".to_string(),
+                urgency,
+                drop_percent: price_deviation,
+                confidence: 0.75,
+                details: format!(
+                    "VWAP deviation: {:.1}%, Vol: ${:.0}",
+                    price_deviation,
+                    current_volume
+                ),
+            });
+        }
+    }
+
+    None
+}
+
+/// Strategy 5: Multi-Timeframe Convergence
+/// Detects when multiple timeframes show dip signals converging (-6% to -18%)
+fn strategy_multi_timeframe_convergence(token: &Token, current_price: f64) -> Option<DipSignal> {
+    if let Ok(price_history) = PRICE_HISTORY_24H.try_lock() {
+        if let Some(history) = price_history.get(&token.mint) {
+            if history.len() < 15 {
+                return None;
+            }
+
+            let prices: Vec<f64> = history
+                .iter()
+                .map(|(_, price)| *price)
+                .collect();
+
+            // Analyze multiple timeframes
+            let short_term = analyze_timeframe_trend(&prices, 5); // Last 5 periods
+            let medium_term = analyze_timeframe_trend(&prices, 10); // Last 10 periods
+            let long_term = analyze_timeframe_trend(&prices, 15); // Last 15 periods
+
+            let mut convergence_signals = 0;
+            let mut total_drop = 0.0;
+
+            // Check for dip signals in each timeframe
+            if
+                short_term.is_dipping &&
+                short_term.drop_percent >= 6.0 &&
+                short_term.drop_percent <= 18.0
+            {
+                convergence_signals += 1;
+                total_drop += short_term.drop_percent;
+            }
+
+            if
+                medium_term.is_dipping &&
+                medium_term.drop_percent >= 6.0 &&
+                medium_term.drop_percent <= 18.0
+            {
+                convergence_signals += 1;
+                total_drop += medium_term.drop_percent;
+            }
+
+            if
+                long_term.is_dipping &&
+                long_term.drop_percent >= 6.0 &&
+                long_term.drop_percent <= 18.0
+            {
+                convergence_signals += 1;
+                total_drop += long_term.drop_percent;
+            }
+
+            // Require at least 2 timeframes showing dip signals
+            if convergence_signals >= 2 {
+                let avg_drop = total_drop / (convergence_signals as f64);
+                let base_urgency = (avg_drop - 6.0) / 12.0; // 0.0 at -6%, 1.0 at -18%
+
+                // Bonus for more timeframes converging
+                let convergence_multiplier = match convergence_signals {
+                    2 => 1.0,
+                    3 => 1.3,
+                    _ => 1.0,
+                };
+
+                let urgency = base_urgency * convergence_multiplier;
+
+                return Some(DipSignal {
+                    strategy_name: "MultiTimeframe".to_string(),
+                    urgency,
+                    drop_percent: -avg_drop,
+                    confidence: 0.9,
+                    details: format!(
+                        "Convergence: {} timeframes, avg drop: {:.1}%",
+                        convergence_signals,
+                        avg_drop
+                    ),
+                });
+            }
+        }
+    }
+
+    None
+}
+
+/// Calculate final urgency based on multiple strategy consensus
+fn calculate_multi_strategy_urgency(signals: &[DipSignal], token: &Token) -> f64 {
+    if signals.is_empty() {
+        return 0.0;
+    }
+
+    // Weight strategies by confidence and combine signals
+    let mut weighted_urgency = 0.0;
+    let mut total_weight = 0.0;
+
+    for signal in signals {
+        let weight = signal.confidence;
+        weighted_urgency += signal.urgency * weight;
+        total_weight += weight;
+    }
+
+    let base_urgency = if total_weight > 0.0 { weighted_urgency / total_weight } else { 0.0 };
+
+    // Apply liquidity and quality multipliers
+    let liquidity_usd = token.liquidity
+        .as_ref()
+        .and_then(|l| l.usd)
+        .unwrap_or(0.0);
+
+    let (high_threshold, medium_threshold, low_threshold) =
+        calculate_dynamic_liquidity_thresholds();
+
+    let liquidity_factor = if liquidity_usd >= high_threshold {
+        1.2 // Top 25% liquidity
+    } else if liquidity_usd >= medium_threshold {
+        1.0 // Top 50% liquidity
+    } else if liquidity_usd >= low_threshold {
+        0.8 // Top 75% liquidity
+    } else {
+        0.6 // Bottom 25% liquidity
+    };
+
+    // Multi-strategy bonus - more strategies = higher confidence
+    let strategy_consensus_bonus = match signals.len() {
+        1 => 1.0,
+        2 => 1.2,
+        3 => 1.4,
+        4 => 1.6,
+        5 => 1.8,
+        _ => 2.0,
+    };
+
+    // Check historical data
+    let historical_allowed = is_entry_allowed_by_historical_data(
+        &token.mint,
+        token.price_dexscreener_sol.unwrap_or(0.0)
+    );
+    let historical_factor = if historical_allowed { 1.0 } else { 0.5 };
+
+    let final_urgency =
+        base_urgency * liquidity_factor * strategy_consensus_bonus * historical_factor;
+
+    f64::min(final_urgency, 2.0) // Cap at 2.0 for multi-strategy signals
 }
 
 /// Volatility analysis structure for smart buying decisions
@@ -792,6 +1164,58 @@ fn calculate_dip_quality_multiplier(analysis: &VolatilityAnalysis) -> f64 {
 
     // More generous range
     f64::max(0.8, f64::min(multiplier, 2.0)) // Increased from 0.5-1.5 to 0.8-2.0
+}
+
+/// Helper function to calculate moving average
+fn calculate_moving_average(prices: &[f64], period: usize) -> Option<f64> {
+    if prices.len() < period {
+        return None;
+    }
+
+    let sum: f64 = prices.iter().rev().take(period).sum();
+    Some(sum / (period as f64))
+}
+
+/// Timeframe trend analysis result
+#[derive(Debug, Clone)]
+struct TimeframeTrend {
+    is_dipping: bool,
+    drop_percent: f64,
+    momentum: f64,
+}
+
+/// Analyze trend for a specific timeframe
+fn analyze_timeframe_trend(prices: &[f64], period: usize) -> TimeframeTrend {
+    if prices.len() < period + 2 {
+        return TimeframeTrend {
+            is_dipping: false,
+            drop_percent: 0.0,
+            momentum: 0.0,
+        };
+    }
+
+    let recent_prices: Vec<f64> = prices.iter().rev().take(period).cloned().collect();
+    let current_price = recent_prices[0];
+    let period_high = recent_prices
+        .iter()
+        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .unwrap_or(&current_price);
+    let period_start = recent_prices[period - 1];
+
+    // Calculate drop from period high
+    let drop_from_high = ((current_price - period_high) / period_high) * 100.0;
+
+    // Calculate momentum (trend direction)
+    let momentum = ((current_price - period_start) / period_start) * 100.0;
+
+    // Determine if we're in a dip
+    let is_dipping = drop_from_high < -3.0 && momentum < 0.0; // At least 3% drop from high and negative momentum
+
+    TimeframeTrend {
+        is_dipping,
+        drop_percent: drop_from_high.abs(),
+        momentum,
+    }
 }
 
 /// Fetch pool prices for multiple tokens in parallel
