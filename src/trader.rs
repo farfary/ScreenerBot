@@ -185,9 +185,6 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 // =============================================================================
 
 /// Helper function for regular trader logging (always visible)
-fn trader_log(log_type: &str, message: &str) {
-    log(LogTag::Trader, log_type, message);
-}
 
 /// Determines if a position should be sold based on P&L, time, and token analysis
 /// Returns urgency score from 0.0 (don't sell) to 1.0 (sell immediately)

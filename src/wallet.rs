@@ -1237,33 +1237,6 @@ fn find_token_balance_change_with_decimals(
 }
 
 /// Finds token balance change for a specific mint and wallet
-fn find_token_balance_change(
-    pre_balances: &[TokenBalance],
-    post_balances: &[TokenBalance],
-    mint: &str,
-    wallet_address: &str
-) -> Option<u64> {
-    // Find pre-balance for this mint and wallet
-    let pre_balance = pre_balances
-        .iter()
-        .find(|tb| tb.mint == mint && tb.owner.as_ref() == Some(&wallet_address.to_string()))
-        .and_then(|tb| tb.ui_token_amount.amount.parse::<u64>().ok())
-        .unwrap_or(0);
-
-    // Find post-balance for this mint and wallet
-    let post_balance = post_balances
-        .iter()
-        .find(|tb| tb.mint == mint && tb.owner.as_ref() == Some(&wallet_address.to_string()))
-        .and_then(|tb| tb.ui_token_amount.amount.parse::<u64>().ok())
-        .unwrap_or(0);
-
-    // Return the absolute change
-    if post_balance > pre_balance {
-        Some(post_balance - pre_balance)
-    } else {
-        Some(pre_balance - post_balance)
-    }
-}
 
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {

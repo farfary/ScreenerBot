@@ -1,6 +1,8 @@
 // token_monitor.rs - Advanced token monitoring with database periodic checks and liquidity-based prioritization
+// Excludes open position tokens which are monitored separately by position_monitor.rs
 use crate::global::{ Token, TOKEN_DB, LIST_TOKENS };
 use crate::token_blacklist::{ check_and_track_liquidity, is_token_blacklisted };
+use crate::position_monitor::get_open_position_mints;
 use crate::logger::{ log, LogTag };
 use crate::utils::check_shutdown_or_delay;
 use std::sync::Arc;
@@ -9,7 +11,7 @@ use tokio::time::{ Duration, sleep };
 use reqwest::StatusCode;
 use serde_json;
 use std::collections::HashMap;
-use chrono::{ Utc, DateTime };
+use chrono::Utc;
 
 /// Token monitoring manager with database-driven periodic checks
 pub struct TokenMonitor {
@@ -118,9 +120,26 @@ impl TokenMonitor {
     }
 
     /// Prioritize tokens: 50% high liquidity, 50% others
+    /// Excludes open position tokens which are monitored separately
     fn prioritize_tokens(&self, mut tokens: Vec<Token>) -> (Vec<Token>, Vec<Token>) {
-        // Remove blacklisted tokens
-        tokens.retain(|token| !is_token_blacklisted(&token.mint));
+        // Get open position mints to exclude from main monitoring
+        let open_position_mints = get_open_position_mints();
+
+        // Remove blacklisted tokens and open position tokens
+        tokens.retain(|token| {
+            !is_token_blacklisted(&token.mint) && !open_position_mints.contains(&token.mint)
+        });
+
+        if !open_position_mints.is_empty() {
+            log(
+                LogTag::Monitor,
+                "INFO",
+                &format!(
+                    "Excluded {} open position tokens from main monitoring",
+                    open_position_mints.len()
+                )
+            );
+        }
 
         // Sort by liquidity (highest first)
         tokens.sort_by(|a, b| {
@@ -318,34 +337,91 @@ impl TokenMonitor {
         Ok(None)
     }
 
-    /// Parse token data from DexScreener API response
-    fn parse_token_from_api(
-        &self,
-        token_data: &serde_json::Value
-    ) -> Result<Option<Token>, String> {
-        // Parse the token data similar to discovery.rs but simplified
-        let mint = token_data["mint"].as_str().ok_or("Missing mint field")?.to_string();
+    /// Parse token data from DexScreener API response (pair structure)
+    fn parse_token_from_api(&self, pair_data: &serde_json::Value) -> Result<Option<Token>, String> {
+        // The API returns pairs, so we need to extract token info from baseToken
+        let base_token = pair_data.get("baseToken").ok_or("Missing baseToken field")?;
 
-        let symbol = token_data["symbol"].as_str().unwrap_or("UNKNOWN").to_string();
+        let mint = base_token
+            .get("address")
+            .and_then(|a| a.as_str())
+            .ok_or("Missing token address field")?
+            .to_string();
 
-        let name = token_data["name"].as_str().unwrap_or("Unknown Token").to_string();
+        let symbol = base_token
+            .get("symbol")
+            .and_then(|s| s.as_str())
+            .unwrap_or("UNKNOWN")
+            .to_string();
 
-        let decimals = token_data["decimals"].as_u64().unwrap_or(9) as u8;
+        let name = base_token
+            .get("name")
+            .and_then(|n| n.as_str())
+            .unwrap_or("Unknown Token")
+            .to_string();
 
-        // Parse liquidity data
-        let liquidity = if let Some(liquidity_obj) = token_data["liquidity"].as_object() {
-            Some(crate::global::LiquidityInfo {
-                usd: liquidity_obj["usd"].as_f64(),
-                base: liquidity_obj["base"].as_f64(),
-                quote: liquidity_obj["quote"].as_f64(),
-            })
-        } else {
-            None
-        };
+        let decimals = 9; // Default to 9, we'll need to fetch this separately if needed
 
-        // Parse price data
-        let price_dexscreener_sol = token_data["price"].as_f64();
-        let price_dexscreener_usd = token_data["priceUsd"].as_f64();
+        // Parse liquidity data from pair level
+        let liquidity = pair_data.get("liquidity").map(|liquidity_obj| {
+            crate::global::LiquidityInfo {
+                usd: liquidity_obj.get("usd").and_then(|v| v.as_f64()),
+                base: liquidity_obj.get("base").and_then(|v| v.as_f64()),
+                quote: liquidity_obj.get("quote").and_then(|v| v.as_f64()),
+            }
+        });
+
+        // Parse price data from pair level
+        let price_dexscreener_sol = pair_data.get("priceNative").and_then(|v| v.as_f64());
+        let price_dexscreener_usd = pair_data.get("priceUsd").and_then(|v| v.as_f64());
+
+        // Parse transaction stats
+        let txns = pair_data.get("txns").map(|txns_obj| {
+            crate::global::TxnStats {
+                m5: txns_obj.get("m5").map(|m5| crate::global::TxnPeriod {
+                    buys: m5.get("buys").and_then(|v| v.as_i64()),
+                    sells: m5.get("sells").and_then(|v| v.as_i64()),
+                }),
+                h1: txns_obj.get("h1").map(|h1| crate::global::TxnPeriod {
+                    buys: h1.get("buys").and_then(|v| v.as_i64()),
+                    sells: h1.get("sells").and_then(|v| v.as_i64()),
+                }),
+                h6: txns_obj.get("h6").map(|h6| crate::global::TxnPeriod {
+                    buys: h6.get("buys").and_then(|v| v.as_i64()),
+                    sells: h6.get("sells").and_then(|v| v.as_i64()),
+                }),
+                h24: txns_obj.get("h24").map(|h24| crate::global::TxnPeriod {
+                    buys: h24.get("buys").and_then(|v| v.as_i64()),
+                    sells: h24.get("sells").and_then(|v| v.as_i64()),
+                }),
+            }
+        });
+
+        // Parse volume stats
+        let volume = pair_data.get("volume").map(|vol_obj| {
+            crate::global::VolumeStats {
+                m5: vol_obj.get("m5").and_then(|v| v.as_f64()),
+                h1: vol_obj.get("h1").and_then(|v| v.as_f64()),
+                h6: vol_obj.get("h6").and_then(|v| v.as_f64()),
+                h24: vol_obj.get("h24").and_then(|v| v.as_f64()),
+            }
+        });
+
+        // Parse price change stats
+        let price_change = pair_data.get("priceChange").map(|pc_obj| {
+            crate::global::PriceChangeStats {
+                m5: pc_obj.get("m5").and_then(|v| v.as_f64()),
+                h1: pc_obj.get("h1").and_then(|v| v.as_f64()),
+                h6: pc_obj.get("h6").and_then(|v| v.as_f64()),
+                h24: pc_obj.get("h24").and_then(|v| v.as_f64()),
+            }
+        });
+
+        // Parse created_at from pair
+        let created_at = pair_data
+            .get("pairCreatedAt")
+            .and_then(|v| v.as_i64())
+            .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts));
 
         // Create basic token struct with essential fields
         let token = Token {
@@ -354,30 +430,47 @@ impl TokenMonitor {
             name,
             decimals,
             chain: "solana".to_string(),
-            logo_url: token_data["logoUrl"].as_str().map(|s| s.to_string()),
+            logo_url: None, // We'd need to parse this from info if available
             coingecko_id: None,
             website: None,
             description: None,
             tags: Vec::new(),
             is_verified: false,
-            created_at: None, // Will be preserved from cache
+            created_at,
             price_dexscreener_sol,
             price_dexscreener_usd,
             price_pool_sol: None,
             price_pool_usd: None,
             pools: Vec::new(),
-            dex_id: None,
-            pair_address: None,
-            pair_url: None,
-            labels: Vec::new(),
-            fdv: token_data["fdv"].as_f64(),
-            market_cap: token_data["marketCap"].as_f64(),
-            txns: None, // Could be parsed if needed
-            volume: None, // Could be parsed if needed
-            price_change: None, // Could be parsed if needed
+            dex_id: pair_data
+                .get("dexId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            pair_address: pair_data
+                .get("pairAddress")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            pair_url: pair_data
+                .get("url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            labels: pair_data
+                .get("labels")
+                .and_then(|l| l.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            fdv: pair_data.get("fdv").and_then(|v| v.as_f64()),
+            market_cap: pair_data.get("marketCap").and_then(|v| v.as_f64()),
+            txns,
+            volume,
+            price_change,
             liquidity,
-            info: None,
-            boosts: None,
+            info: None, // Could be parsed if needed
+            boosts: None, // Could be parsed if needed
         };
 
         Ok(Some(token))

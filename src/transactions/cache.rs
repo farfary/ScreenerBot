@@ -1,7 +1,6 @@
 // transactions/cache.rs - SQLite database caching implementation
 use super::types::*;
 use rusqlite::{ Connection, OptionalExtension, params };
-use std::path::Path;
 use std::error::Error;
 use chrono::{ DateTime, Utc };
 use serde_json;

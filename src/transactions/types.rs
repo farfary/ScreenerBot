@@ -1,6 +1,5 @@
 use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
-use std::collections::HashMap;
 
 /// Transaction type classification
 #[derive(Debug, Clone, Serialize, PartialEq)]
