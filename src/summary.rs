@@ -3,6 +3,7 @@ use crate::positions::*;
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::utils::*;
+use crate::global::STARTUP_TIME;
 
 use chrono::{ Utc };
 use std::sync::Arc;
@@ -56,27 +57,70 @@ pub struct OpenPositionDisplay {
     status: String,
 }
 
-/// Display structure for bot summary table formatting
+/// Display structure for bot summary overview
 #[derive(Tabled)]
-pub struct BotSummaryDisplay {
+pub struct BotOverviewDisplay {
     #[tabled(rename = "💼 Wallet Balance")]
     wallet_balance: String,
-    #[tabled(rename = "📊 Total Trades")]
+    #[tabled(rename = "� Open Positions")]
+    open_positions: String,
+    #[tabled(rename = "�📊 Total Trades")]
     total_trades: usize,
-    #[tabled(rename = "🏆 Win Rate")]
-    win_rate: String,
+    #[tabled(rename = "⏱️ Bot Uptime")]
+    bot_uptime: String,
     #[tabled(rename = "💰 Total P&L")]
     total_pnl: String,
+}
+
+/// Display structure for detailed trading statistics
+#[derive(Tabled)]
+pub struct TradingStatsDisplay {
+    #[tabled(rename = "🏆 Win Rate")]
+    win_rate: String,
     #[tabled(rename = "✅ Winners")]
     winners: usize,
     #[tabled(rename = "❌ Losers")]
     losers: usize,
+    #[tabled(rename = "🎯 Break-even")]
+    break_even: usize,
     #[tabled(rename = "📈 Avg P&L/Trade")]
     avg_pnl: String,
-    #[tabled(rename = "🚀 Best Trade")]
+    #[tabled(rename = "� Trade Volume")]
+    total_volume: String,
+}
+
+/// Display structure for performance metrics
+#[derive(Tabled)]
+pub struct PerformanceDisplay {
+    #[tabled(rename = "�🚀 Best Trade")]
     best_trade: String,
     #[tabled(rename = "📉 Worst Trade")]
     worst_trade: String,
+    #[tabled(rename = "📈 Profit Factor")]
+    profit_factor: String,
+    #[tabled(rename = "🔥 Max Drawdown")]
+    max_drawdown: String,
+    #[tabled(rename = "💎 Best Streak")]
+    best_streak: String,
+    #[tabled(rename = "💀 Worst Streak")]
+    worst_streak: String,
+}
+
+/// Display structure for current configuration
+#[derive(Tabled)]
+pub struct ConfigDisplay {
+    #[tabled(rename = "💵 Trade Size")]
+    trade_size: String,
+    #[tabled(rename = "🎯 Profit Target")]
+    profit_target: String,
+    #[tabled(rename = "🛡️ Stop Loss")]
+    stop_loss: String,
+    #[tabled(rename = "📦 Max Positions")]
+    max_positions: String,
+    #[tabled(rename = "⏰ Min Hold Time")]
+    min_hold_time: String,
+    #[tabled(rename = "⏳ Max Hold Time")]
+    max_hold_time: String,
 }
 
 /// Background task to display positions table every 10 seconds
@@ -173,7 +217,7 @@ pub async fn display_positions_table() {
             })
             .collect();
 
-        println!("\n🔄 Open Positions:");
+        println!("\n🔄 Open Positions ({}):", open_positions.len());
         let mut open_table = Table::new(open_position_displays);
         open_table
             .with(Style::rounded())
@@ -183,9 +227,33 @@ pub async fn display_positions_table() {
     }
 }
 
-/// Displays all positions in a beautifully formatted table
+/// Convenience function to display bot summary using current positions
+pub async fn display_current_bot_summary() {
+    let closed_positions_refs: Vec<_> = {
+        let positions = SAVED_POSITIONS.lock().unwrap();
+        positions
+            .iter()
+            .filter(|p| p.exit_time.is_some())
+            .cloned()
+            .collect()
+    };
+
+    let refs: Vec<&_> = closed_positions_refs.iter().collect();
+    display_bot_summary(&refs).await;
+}
+
+/// Displays comprehensive bot summary with detailed statistics and performance metrics
 pub async fn display_bot_summary(closed_positions: &[&Position]) {
-    // Calculate trading statistics
+    // Get open positions count
+    let open_count = {
+        let all_positions = SAVED_POSITIONS.lock().unwrap();
+        all_positions
+            .iter()
+            .filter(|p| p.exit_time.is_none())
+            .count()
+    };
+
+    // Calculate comprehensive trading statistics
     let total_trades = closed_positions.len();
     let profitable_trades = closed_positions
         .iter()
@@ -201,38 +269,60 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
             pnl_sol < 0.0
         })
         .count();
+    let break_even_trades = total_trades - profitable_trades - losing_trades;
+
     let win_rate = if total_trades > 0 {
         ((profitable_trades as f64) / (total_trades as f64)) * 100.0
     } else {
         0.0
     };
 
-    let total_pnl: f64 = closed_positions
+    // Calculate P&L metrics
+    let pnl_values: Vec<f64> = closed_positions
         .iter()
         .map(|p| {
             let (pnl_sol, _) = calculate_position_pnl(p, None);
             pnl_sol
         })
-        .sum();
+        .collect();
+
+    let total_pnl: f64 = pnl_values.iter().sum();
     let avg_pnl_per_trade = if total_trades > 0 { total_pnl / (total_trades as f64) } else { 0.0 };
 
-    let best_trade = closed_positions
+    let best_trade = pnl_values
         .iter()
-        .map(|p| {
-            let (pnl_sol, _) = calculate_position_pnl(p, None);
-            pnl_sol
-        })
         .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .copied()
         .unwrap_or(0.0);
 
-    let worst_trade = closed_positions
+    let worst_trade = pnl_values
         .iter()
-        .map(|p| {
-            let (pnl_sol, _) = calculate_position_pnl(p, None);
-            pnl_sol
-        })
         .min_by(|a, b| a.partial_cmp(b).unwrap())
+        .copied()
         .unwrap_or(0.0);
+
+    // Calculate advanced metrics
+    let total_volume = closed_positions
+        .iter()
+        .map(|p| p.entry_size_sol)
+        .sum::<f64>();
+
+    let total_gains: f64 = pnl_values
+        .iter()
+        .filter(|&&x| x > 0.0)
+        .sum();
+    let total_losses: f64 = pnl_values
+        .iter()
+        .filter(|&&x| x < 0.0)
+        .sum::<f64>()
+        .abs();
+    let profit_factor = if total_losses > 0.0 { total_gains / total_losses } else { 0.0 };
+
+    // Calculate streaks
+    let (best_streak, worst_streak) = calculate_win_loss_streaks(&pnl_values);
+
+    // Calculate maximum drawdown
+    let max_drawdown = calculate_max_drawdown(&pnl_values);
 
     // Get wallet balance
     let wallet_balance = match crate::wallet::get_wallet_address() {
@@ -245,26 +335,178 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         Err(_) => "Error getting address".to_string(),
     };
 
-    // Create bot summary display data
-    let summary = BotSummaryDisplay {
+    // Calculate bot uptime
+    let uptime = format_duration_compact(*STARTUP_TIME, Utc::now());
+
+    // Create display structures
+    let overview = BotOverviewDisplay {
         wallet_balance,
+        open_positions: format!("{}", open_count),
         total_trades,
-        win_rate: format!("{:.1}%", win_rate),
+        bot_uptime: uptime,
         total_pnl: format!("{:+.6} SOL", total_pnl),
-        winners: profitable_trades,
-        losers: losing_trades,
-        avg_pnl: format!("{:+.6} SOL", avg_pnl_per_trade),
-        best_trade: format!("{:+.6} SOL", best_trade),
-        worst_trade: format!("{:+.6} SOL", worst_trade),
     };
 
-    println!("\n🤖 Bot Summary");
-    let mut summary_table = Table::new(vec![summary]);
-    summary_table
+    let trading_stats = TradingStatsDisplay {
+        win_rate: format!("{:.1}%", win_rate),
+        winners: profitable_trades,
+        losers: losing_trades,
+        break_even: break_even_trades,
+        avg_pnl: format!("{:+.6} SOL", avg_pnl_per_trade),
+        total_volume: format!("{:.3} SOL", total_volume),
+    };
+
+    let performance = PerformanceDisplay {
+        best_trade: format!("{:+.6} SOL", best_trade),
+        worst_trade: format!("{:+.6} SOL", worst_trade),
+        profit_factor: format!("{:.2}", profit_factor),
+        max_drawdown: format!("{:.2}%", max_drawdown),
+        best_streak: format!("{} wins", best_streak),
+        worst_streak: format!("{} losses", worst_streak),
+    };
+
+    let config = ConfigDisplay {
+        trade_size: format!("{:.6} SOL", TRADE_SIZE_SOL),
+        profit_target: format!("{:.1}%", PROFIT_TARGET_PERCENT),
+        stop_loss: format!("{:.1}%", STOP_LOSS_PERCENT),
+        max_positions: format!("{}", MAX_OPEN_POSITIONS),
+        min_hold_time: format!("{:.0}s", MIN_HOLD_TIME_SECS),
+        max_hold_time: format!("{:.0}s", MAX_HOLD_TIME_SECS),
+    };
+
+    // Display all tables
+    println!("\n🤖 Bot Overview");
+    let mut overview_table = Table::new(vec![overview]);
+    overview_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", summary_table);
+    println!("{}", overview_table);
+
+    println!("\n📊 Trading Statistics");
+    let mut stats_table = Table::new(vec![trading_stats]);
+    stats_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    println!("{}", stats_table);
+
+    println!("\n🚀 Performance Metrics");
+    let mut performance_table = Table::new(vec![performance]);
+    performance_table
+        .with(Style::rounded())
+        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    println!("{}", performance_table);
+
+    println!("\n⚙️ Current Configuration");
+    let mut config_table = Table::new(vec![config]);
+    config_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    println!("{}", config_table);
+
+    // Display additional insights
+    display_trading_insights(closed_positions, total_pnl, win_rate, profit_factor);
     println!("");
+}
+
+/// Calculate consecutive win/loss streaks
+fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
+    if pnl_values.is_empty() {
+        return (0, 0);
+    }
+
+    let mut best_win_streak = 0;
+    let mut worst_loss_streak = 0;
+    let mut current_win_streak = 0;
+    let mut current_loss_streak = 0;
+
+    for &pnl in pnl_values {
+        if pnl > 0.0 {
+            current_win_streak += 1;
+            current_loss_streak = 0;
+            best_win_streak = best_win_streak.max(current_win_streak);
+        } else if pnl < 0.0 {
+            current_loss_streak += 1;
+            current_win_streak = 0;
+            worst_loss_streak = worst_loss_streak.max(current_loss_streak);
+        } else {
+            // Break even trades reset both streaks
+            current_win_streak = 0;
+            current_loss_streak = 0;
+        }
+    }
+
+    (best_win_streak, worst_loss_streak)
+}
+
+/// Calculate maximum drawdown percentage
+fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
+    if pnl_values.is_empty() {
+        return 0.0;
+    }
+
+    let mut running_total = 0.0_f64;
+    let mut peak = 0.0_f64;
+    let mut max_drawdown = 0.0_f64;
+
+    for &pnl in pnl_values {
+        running_total += pnl;
+        peak = peak.max(running_total);
+        let drawdown = ((peak - running_total) / peak.max(0.001)) * 100.0; // Avoid division by zero
+        max_drawdown = max_drawdown.max(drawdown);
+    }
+
+    max_drawdown
+}
+
+/// Display additional trading insights and recommendations
+fn display_trading_insights(
+    closed_positions: &[&Position],
+    total_pnl: f64,
+    win_rate: f64,
+    profit_factor: f64
+) {
+    println!("💡 Trading Insights:");
+
+    if total_pnl > 0.0 {
+        println!("   ✅ Overall profitable strategy (+{:.6} SOL)", total_pnl);
+    } else if total_pnl < 0.0 {
+        println!("   ⚠️  Currently losing strategy ({:+.6} SOL)", total_pnl);
+    } else {
+        println!("   ➖ Break-even performance");
+    }
+
+    if win_rate >= 60.0 {
+        println!("   🎯 Excellent win rate ({:.1}%)", win_rate);
+    } else if win_rate >= 50.0 {
+        println!("   👍 Good win rate ({:.1}%)", win_rate);
+    } else if win_rate > 0.0 {
+        println!("   ⚠️  Low win rate ({:.1}%) - consider strategy adjustment", win_rate);
+    }
+
+    if profit_factor >= 2.0 {
+        println!("   🚀 Strong profit factor ({:.2})", profit_factor);
+    } else if profit_factor >= 1.5 {
+        println!("   📈 Good profit factor ({:.2})", profit_factor);
+    } else if profit_factor >= 1.0 {
+        println!("   ⚠️  Weak profit factor ({:.2}) - wins barely exceed losses", profit_factor);
+    } else if profit_factor > 0.0 {
+        println!("   🔴 Poor profit factor ({:.2}) - losses exceed wins", profit_factor);
+    }
+
+    // Recent performance (last 10 trades)
+    if closed_positions.len() >= 10 {
+        let recent_pnl: f64 = closed_positions
+            .iter()
+            .rev()
+            .take(10)
+            .map(|p| {
+                let (pnl_sol, _) = calculate_position_pnl(p, None);
+                pnl_sol
+            })
+            .sum();
+
+        if recent_pnl > 0.0 {
+            println!("   📈 Recent momentum: Last 10 trades +{:.6} SOL", recent_pnl);
+        } else {
+            println!("   📉 Recent momentum: Last 10 trades {:+.6} SOL", recent_pnl);
+        }
+    }
 }
 
 impl ClosedPositionDisplay {

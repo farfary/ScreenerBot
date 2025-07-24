@@ -133,3 +133,7 @@ path = "src/bin/tool_token_db_manager.rs"
 [[bin]]
 name = "tool_pool_prices"
 path = "src/bin/tool_pool_prices.rs"
+
+[[bin]]
+name = "test_debug_filtering"
+path = "src/bin/test_debug_filtering.rs"
