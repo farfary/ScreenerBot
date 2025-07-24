@@ -1,4 +1,4 @@
-use screenerbot::{ monitor::monitor, trader::trader };
+use screenerbot::{ monitor::monitor, trader::trader, pool_price_manager::pool_price_manager };
 use screenerbot::logger::{ log, LogTag };
 
 use std::sync::Arc;
@@ -17,6 +17,7 @@ async fn main() {
     let shutdown = Arc::new(Notify::new());
     let shutdown_monitor = shutdown.clone();
     let shutdown_trader = shutdown.clone();
+    let shutdown_pool_manager = shutdown.clone();
 
     let monitor_handle = tokio::spawn(async move {
         log(LogTag::Monitor, "INFO", "Monitor task started");
@@ -28,6 +29,11 @@ async fn main() {
         trader(shutdown_trader).await;
         log(LogTag::Trader, "INFO", "Trader task ended");
     });
+    let pool_manager_handle = tokio::spawn(async move {
+        log(LogTag::Pool, "INFO", "Pool price manager task started");
+        pool_price_manager(shutdown_pool_manager).await;
+        log(LogTag::Pool, "INFO", "Pool price manager task ended");
+    });
 
     log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
     tokio::signal::ctrl_c().await.expect("failed to listen for event");
@@ -36,7 +42,7 @@ async fn main() {
 
     // Wait for background tasks to finish with timeout
     let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-        let _ = tokio::try_join!(monitor_handle, trader_handle);
+        let _ = tokio::try_join!(monitor_handle, trader_handle, pool_manager_handle);
     });
 
     match shutdown_timeout.await {

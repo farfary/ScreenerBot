@@ -149,7 +149,7 @@ use crate::positions::{
 };
 use crate::summary::*;
 use crate::utils::*;
-use crate::pool_price::PoolDiscoveryAndPricing;
+use crate::pool_price_manager::{ get_best_available_price, request_immediate_pool_price_check };
 use crate::profit::should_sell_smart_system;
 use crate::filtering::{ filter_token_for_trading, FilterResult, debug_filtering_log };
 
@@ -1334,244 +1334,6 @@ fn analyze_timeframe_trend(prices: &[f64], period: usize) -> TimeframeTrend {
     }
 }
 
-/// Fetch pool prices for multiple tokens in parallel
-/// Returns a HashMap of mint -> best_pool_price_sol
-async fn fetch_pool_prices_parallel(token_mints: Vec<String>) -> HashMap<String, f64> {
-    use tokio::sync::Semaphore;
-    use std::collections::HashMap;
-
-    if token_mints.is_empty() {
-        return HashMap::new();
-    }
-
-    // Load RPC URL from config
-    let configs = match read_configs("configs.json") {
-        Ok(configs) => configs,
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("Failed to load configs for pool pricing: {}", e)
-            );
-            return HashMap::new();
-        }
-    };
-
-    let pool_service = PoolDiscoveryAndPricing::new(&configs.rpc_url);
-
-    // Use semaphore to limit concurrent pool price fetches (avoid overwhelming RPC)
-    let semaphore = Arc::new(Semaphore::new(3)); // Limit to 3 concurrent fetches
-    let mut handles = Vec::new();
-
-    log(
-        LogTag::Trader,
-        "INFO",
-        &format!("Fetching pool prices for {} tokens in parallel", token_mints.len())
-    );
-
-    let token_count = token_mints.len(); // Store the length before moving
-
-    for mint in token_mints {
-        let permit = match
-            tokio::time::timeout(Duration::from_secs(5), semaphore.clone().acquire_owned()).await
-        {
-            Ok(Ok(permit)) => permit,
-            Ok(Err(e)) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!("Failed to acquire semaphore for pool price fetch: {}", e)
-                );
-                continue;
-            }
-            Err(_) => {
-                log(LogTag::Trader, "WARN", "Pool price semaphore acquire timed out");
-                continue;
-            }
-        };
-
-        let pool_service_clone = PoolDiscoveryAndPricing::new(&configs.rpc_url);
-        let mint_clone = mint.clone();
-
-        let handle = tokio::spawn(async move {
-            let _permit = permit; // Keep permit alive
-
-            // Wrap pool price fetching in timeout
-            match
-                tokio::time::timeout(Duration::from_secs(15), async {
-                    pool_service_clone.get_token_pool_prices(&mint_clone).await
-                }).await
-            {
-                Ok(Ok(pool_results)) => {
-                    // Find the best pool price (highest liquidity)
-                    let best_price = pool_results
-                        .iter()
-                        .filter(
-                            |result| result.calculation_successful && result.calculated_price > 0.0
-                        )
-                        .max_by(|a, b|
-                            a.liquidity_usd
-                                .partial_cmp(&b.liquidity_usd)
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                        )
-                        .map(|result| result.calculated_price);
-
-                    match best_price {
-                        Some(price) => {
-                            log(
-                                LogTag::Trader,
-                                "SUCCESS",
-                                &format!("Got pool price for {}: {:.12} SOL", mint_clone, price)
-                            );
-                            Some((mint_clone, price))
-                        }
-                        None => {
-                            log(
-                                LogTag::Trader,
-                                "WARN",
-                                &format!("No valid pool price found for {}", mint_clone)
-                            );
-                            None
-                        }
-                    }
-                }
-                Ok(Err(e)) => {
-                    log(
-                        LogTag::Trader,
-                        "ERROR",
-                        &format!("Pool price fetch failed for {}: {}", mint_clone, e)
-                    );
-                    None
-                }
-                Err(_) => {
-                    log(
-                        LogTag::Trader,
-                        "WARN",
-                        &format!("Pool price fetch timed out for {}", mint_clone)
-                    );
-                    None
-                }
-            }
-        });
-
-        handles.push(handle);
-    }
-
-    // Collect results with timeout
-    let mut pool_prices = HashMap::new();
-
-    let collection_result = tokio::time::timeout(Duration::from_secs(30), async {
-        for handle in handles {
-            match tokio::time::timeout(Duration::from_secs(20), handle).await {
-                Ok(task_result) => {
-                    match task_result {
-                        Ok(Some((mint, price))) => {
-                            pool_prices.insert(mint, price);
-                        }
-                        Ok(None) => {
-                            // No price found, continue
-                        }
-                        Err(e) => {
-                            log(LogTag::Trader, "ERROR", &format!("Pool price task failed: {}", e));
-                        }
-                    }
-                }
-                Err(_) => {
-                    log(LogTag::Trader, "WARN", "Pool price task timed out");
-                }
-            }
-        }
-        pool_prices
-    }).await;
-
-    match collection_result {
-        Ok(prices) => {
-            log(
-                LogTag::Trader,
-                "SUCCESS",
-                &format!(
-                    "Pool price collection completed: {}/{} successful",
-                    prices.len(),
-                    token_count
-                )
-            );
-            prices
-        }
-        Err(_) => {
-            log(LogTag::Trader, "ERROR", "Pool price collection timed out");
-            HashMap::new()
-        }
-    }
-}
-
-/// Update pool prices in global token list (non-blocking)
-fn update_pool_prices_in_tokens(pool_prices: &HashMap<String, f64>) {
-    match LIST_TOKENS.try_write() {
-        Ok(mut tokens) => {
-            for token in tokens.iter_mut() {
-                if let Some(&pool_price) = pool_prices.get(&token.mint) {
-                    if pool_price > 0.0 {
-                        // Validate pool price against API price before updating
-                        if let Some(api_price) = token.price_dexscreener_sol {
-                            if
-                                validate_pool_price_against_api(
-                                    pool_price,
-                                    api_price,
-                                    &token.symbol
-                                )
-                            {
-                                token.price_pool_sol = Some(pool_price);
-                                log(
-                                    LogTag::Trader,
-                                    "UPDATE",
-                                    &format!(
-                                        "Updated pool price for {}: {:.12} SOL (validated against API)",
-                                        token.symbol,
-                                        pool_price
-                                    )
-                                );
-                            } else {
-                                log(
-                                    LogTag::Trader,
-                                    "REJECT",
-                                    &format!(
-                                        "Rejected pool price for {}: {:.12} SOL (too different from API price {:.12})",
-                                        token.symbol,
-                                        pool_price,
-                                        api_price
-                                    )
-                                );
-                            }
-                        } else {
-                            // If no API price available, use pool price
-                            token.price_pool_sol = Some(pool_price);
-                            log(
-                                LogTag::Trader,
-                                "UPDATE",
-                                &format!(
-                                    "Updated pool price for {} without API validation: {:.12} SOL",
-                                    token.symbol,
-                                    pool_price
-                                )
-                            );
-                        }
-                    }
-                }
-            }
-        }
-        Err(_) => {
-            log(
-                LogTag::Trader,
-                "WARN",
-                &format!(
-                    "Could not acquire token list write lock for pool price updates. Skipping {} updates.",
-                    pool_prices.len()
-                )
-            );
-        }
-    }
-}
-
 /// Validates if a pool price is within acceptable range of the API price
 /// Returns true if pool price is within MAX_POOL_PRICE_DEVIATION_PERCENT of API price
 pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: &str) -> bool {
@@ -1620,60 +1382,27 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
 }
 
 /// Get current price for a token from the global token list
-/// Priority: 1. Pool price (if valid), 2. DexScreener API price
+/// Uses the background pool price manager for best available prices
 /// Non-blocking approach that never locks threads
 pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64> {
-    // Use try_read to avoid blocking if lock is held by another thread
+    // First try to get the best available price from pool price manager
+    if let Some(price) = get_best_available_price(mint) {
+        return Some(price);
+    }
+
+    // Fallback to direct token list lookup (non-blocking)
     match LIST_TOKENS.try_read() {
         Ok(tokens) => {
-            // Find the token by mint address
             for token in tokens.iter() {
                 if token.mint == mint {
-                    // Priority 1: Pool price if available and valid
-                    if let Some(pool_price) = token.price_pool_sol {
-                        if pool_price > 0.0 {
-                            // If we have both pool and API price, validate the pool price
-                            if let Some(api_price) = token.price_dexscreener_sol {
-                                if
-                                    validate_pool_price_against_api(
-                                        pool_price,
-                                        api_price,
-                                        &token.symbol
-                                    )
-                                {
-                                    return Some(pool_price);
-                                } else {
-                                    // Pool price is not valid, fall back to API price
-                                    log(
-                                        LogTag::Trader,
-                                        "FALLBACK",
-                                        &format!(
-                                            "Using API price for {} instead of invalid pool price",
-                                            token.symbol
-                                        )
-                                    );
-                                    return Some(api_price);
-                                }
-                            } else {
-                                // No API price to validate against, use pool price
-                                return Some(pool_price);
-                            }
-                        }
-                    }
-
-                    // Priority 2: DexScreener API price
-                    if let Some(price) = token.price_dexscreener_sol {
-                        if price > 0.0 {
-                            return Some(price);
-                        }
-                    }
+                    // Priority: DexScreener SOL > Pool price
+                    return token.price_dexscreener_sol.or(token.price_pool_sol);
                 }
             }
             None
         }
         Err(_) => {
             // If we can't get the lock, return None rather than blocking
-            // This prevents the entire system from getting stuck
             log(
                 LogTag::Trader,
                 "WARN",
@@ -2165,16 +1894,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 }
 
                 completed += 1;
-                if completed % 10 == 0 || completed == total_handles {
-                    log(
-                        LogTag::Trader,
-                        "INFO",
-                        &format!("Completed {}/{} token checks", completed, total_handles)
-                            .dimmed()
-                            .to_string()
-                    );
-                }
             }
+
+            // Log summary of token check completion
+            log(
+                LogTag::Trader,
+                "INFO",
+                &format!(
+                    "Token check completed: {}/{} tokens processed, {} opportunities found",
+                    completed,
+                    total_handles,
+                    opportunities.len()
+                )
+                    .dimmed()
+                    .to_string()
+            );
 
             opportunities
         }).await;
@@ -2450,10 +2184,14 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             }
         };
 
-        // Fetch pool prices for all open positions in parallel (if any)
+        // Request immediate pool price checks for open positions (non-blocking)
         if !open_position_mints.is_empty() {
-            let pool_prices = fetch_pool_prices_parallel(open_position_mints).await;
-            update_pool_prices_in_tokens(&pool_prices);
+            for mint in &open_position_mints {
+                let mint_clone = mint.clone();
+                tokio::spawn(async move {
+                    request_immediate_pool_price_check(&mint_clone).await;
+                });
+            }
         }
 
         let mut positions_to_close = Vec::new();
