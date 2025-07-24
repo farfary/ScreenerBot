@@ -117,6 +117,7 @@ tabled = "0.20"  # Latest version for modern table formatting
 owo-colors = "4"
 
 
+
 [[bin]]
 name = "tool_sell_all_and_close_atas"
 path = "src/bin/tool_sell_all_and_close_atas.rs"
@@ -130,33 +131,5 @@ name = "tool_token_db_manager"
 path = "src/bin/tool_token_db_manager.rs"
 
 [[bin]]
-name = "test_raydium_launchlab"
-path = "src/bin/test_raydium_launchlab.rs"
-
-[[bin]]
 name = "tool_pool_prices"
 path = "src/bin/tool_pool_prices.rs"
-
-[[bin]]
-name = "test_pool_caching"
-path = "src/bin/test_pool_caching.rs"
-
-[[bin]]
-name = "test_sol_received_pnl"
-path = "src/bin/test_sol_received_pnl.rs"
-
-[[bin]]
-name = "test_exact_sol_extraction"
-path = "src/bin/test_exact_sol_extraction.rs"
-
-[[bin]]
-name = "analyze_transaction"
-path = "src/bin/analyze_transaction.rs"
-
-[[bin]]
-name = "test_rugcheck_discovery"
-path = "src/bin/test_rugcheck_discovery.rs"
-
-[[bin]]
-name = "test_rugcheck_monitor"
-path = "src/bin/test_rugcheck_monitor.rs"
