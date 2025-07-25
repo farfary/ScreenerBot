@@ -1,12 +1,15 @@
 use screenerbot::{ monitor::monitor, trader::trader };
 use screenerbot::pool_price::start_pool_price_monitor;
-use screenerbot::logger::{ log, LogTag };
+use screenerbot::logger::{ log, LogTag, init_file_logging };
 
 use std::sync::Arc;
 use tokio::sync::Notify;
 
 #[tokio::main]
 async fn main() {
+    // Initialize file logging system first
+    init_file_logging();
+
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
     // Initialize token database

@@ -1,7 +1,43 @@
+/// ScreenerBot Logger with 24-hour File Persistence
+///
+/// This logger provides dual output: console with colors and file persistence without colors.
+///
+/// ## Features:
+/// - **Console Logging**: Colored output with emoji tags and professional formatting
+/// - **File Logging**: Clean text logs stored in `logs/screenerbot_YYYY-MM-DD.log`
+/// - **24-hour Retention**: Log files are automatically rotated daily and kept for 24 hours
+/// - **Automatic Cleanup**: Old log files are removed after retention period (configurable)
+/// - **Thread-Safe**: Concurrent logging from multiple async tasks
+/// - **Graceful Fallback**: If file logging fails, console logging continues
+///
+/// ## Usage:
+/// ```rust
+/// use screenerbot::logger::{log, LogTag, init_file_logging};
+///
+/// // Initialize file logging (call once at startup)
+/// init_file_logging();
+///
+/// // Log messages with various tags and types
+/// log(LogTag::System, "INFO", "Application started");
+/// log(LogTag::Trader, "BUY", "Bought 1000 tokens");
+/// log(LogTag::Wallet, "BALANCE", "Current balance: 10.5 SOL");
+/// ```
+///
+/// ## Configuration:
+/// - `ENABLE_FILE_LOGGING`: Enable/disable file logging (default: true)
+/// - `LOG_RETENTION_HOURS`: How long to keep log files (default: 24 hours)
+/// - `MAX_LOG_FILES`: Maximum number of log files to keep (default: 7)
+/// - Individual log tags and types can be enabled/disabled via constants
+
 /// Set to false to hide date in logs
 const LOG_SHOW_DATE: bool = false;
 /// Set to false to hide time in logs
 const LOG_SHOW_TIME: bool = false;
+
+/// File logging configuration
+const ENABLE_FILE_LOGGING: bool = true;
+const LOG_RETENTION_HOURS: u64 = 24; // Keep logs for 24 hours
+const MAX_LOG_FILES: usize = 7; // Keep maximum 7 days of logs as backup
 
 /// Log Tag Configuration - Set to false to disable specific tags
 const ENABLE_MONITOR_LOGS: bool = true;
@@ -36,6 +72,195 @@ const MAX_LINE_LENGTH: usize = 155;
 
 use chrono::Local;
 use colored::*;
+use std::fs::{ self, File, OpenOptions };
+use std::io::{ Write, BufWriter };
+use std::path::PathBuf;
+use std::sync::{ Arc, Mutex };
+use once_cell::sync::Lazy;
+
+/// File logger state for thread-safe file operations
+struct FileLogger {
+    file_writer: Option<BufWriter<File>>,
+    current_date: String,
+    log_dir: PathBuf,
+}
+
+impl FileLogger {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let log_dir = get_log_directory()?;
+        fs::create_dir_all(&log_dir)?;
+
+        let current_date = Local::now().format("%Y-%m-%d").to_string();
+        let log_file_path = log_dir.join(format!("screenerbot_{}.log", current_date));
+
+        let file = OpenOptions::new().create(true).append(true).open(&log_file_path)?;
+
+        let file_writer = Some(BufWriter::new(file));
+
+        Ok(FileLogger {
+            file_writer,
+            current_date,
+            log_dir,
+        })
+    }
+
+    fn write_to_file(&mut self, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let today = Local::now().format("%Y-%m-%d").to_string();
+
+        // Check if we need to rotate the log file (new day)
+        if today != self.current_date {
+            self.rotate_log_file()?;
+            self.current_date = today;
+        }
+
+        if let Some(ref mut writer) = self.file_writer {
+            writeln!(writer, "{}", message)?;
+            writer.flush()?;
+        }
+
+        Ok(())
+    }
+
+    fn rotate_log_file(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Close current file
+        if let Some(writer) = self.file_writer.take() {
+            drop(writer);
+        }
+
+        // Clean up old log files
+        self.cleanup_old_logs()?;
+
+        // Create new log file for today
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        let log_file_path = self.log_dir.join(format!("screenerbot_{}.log", today));
+
+        let file = OpenOptions::new().create(true).append(true).open(&log_file_path)?;
+
+        self.file_writer = Some(BufWriter::new(file));
+
+        Ok(())
+    }
+
+    fn cleanup_old_logs(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let now = Local::now();
+        let cutoff_time = now - chrono::Duration::hours(LOG_RETENTION_HOURS as i64);
+
+        if let Ok(entries) = fs::read_dir(&self.log_dir) {
+            let mut log_files: Vec<_> = entries
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry.file_name().to_string_lossy().starts_with("screenerbot_") &&
+                        entry.file_name().to_string_lossy().ends_with(".log")
+                })
+                .collect();
+
+            // Sort by modification time (oldest first)
+            log_files.sort_by_key(|entry| {
+                entry
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            });
+
+            // Remove files older than retention period
+            for entry in &log_files {
+                if let Ok(metadata) = entry.metadata() {
+                    if let Ok(modified) = metadata.modified() {
+                        let modified_chrono = chrono::DateTime::<Local>::from(modified);
+                        if modified_chrono < cutoff_time {
+                            if let Err(e) = fs::remove_file(entry.path()) {
+                                eprintln!(
+                                    "Failed to remove old log file {:?}: {}",
+                                    entry.path(),
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also enforce max file count limit
+            let remaining_files: Vec<_> = log_files
+                .iter()
+                .filter(|entry| entry.path().exists())
+                .collect();
+
+            if remaining_files.len() > MAX_LOG_FILES {
+                let files_to_remove = remaining_files.len() - MAX_LOG_FILES;
+                for entry in remaining_files.iter().take(files_to_remove) {
+                    if let Err(e) = fs::remove_file(entry.path()) {
+                        eprintln!("Failed to remove excess log file {:?}: {}", entry.path(), e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Global file logger instance
+static FILE_LOGGER: Lazy<Arc<Mutex<Option<FileLogger>>>> = Lazy::new(|| {
+    if ENABLE_FILE_LOGGING {
+        match FileLogger::new() {
+            Ok(logger) => Arc::new(Mutex::new(Some(logger))),
+            Err(e) => {
+                eprintln!("Failed to initialize file logger: {}", e);
+                Arc::new(Mutex::new(None))
+            }
+        }
+    } else {
+        Arc::new(Mutex::new(None))
+    }
+});
+
+/// Get the log directory path
+fn get_log_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // Try to create logs directory in the project root
+    let current_dir = std::env::current_dir()?;
+    let log_dir = current_dir.join("logs");
+
+    // If that fails, try user data directory
+    if log_dir.exists() || fs::create_dir_all(&log_dir).is_ok() {
+        return Ok(log_dir);
+    }
+
+    // Fallback to system temp directory
+    if let Some(data_dir) = dirs::data_dir() {
+        let app_log_dir = data_dir.join("screenerbot").join("logs");
+        fs::create_dir_all(&app_log_dir)?;
+        return Ok(app_log_dir);
+    }
+
+    // Final fallback to temp directory
+    let temp_log_dir = std::env::temp_dir().join("screenerbot_logs");
+    fs::create_dir_all(&temp_log_dir)?;
+    Ok(temp_log_dir)
+}
+
+/// Initialize the file logging system
+pub fn init_file_logging() {
+    if ENABLE_FILE_LOGGING {
+        Lazy::force(&FILE_LOGGER);
+    }
+}
+
+/// Write message to log file (stripped of color codes)
+fn write_to_file(message: &str) {
+    if !ENABLE_FILE_LOGGING {
+        return;
+    }
+
+    if let Ok(mut logger_guard) = FILE_LOGGER.lock() {
+        if let Some(ref mut logger) = logger_guard.as_mut() {
+            let clean_message = strip_ansi_codes(message);
+            if let Err(e) = logger.write_to_file(&clean_message) {
+                eprintln!("Failed to write to log file: {}", e);
+            }
+        }
+    }
+}
 
 /// Log tags for categorizing log messages.
 #[derive(Debug)]
@@ -210,18 +435,43 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Split message into chunks that fit
     let message_chunks = wrap_text(message, available_space);
 
-    // Print first line with full prefix
-    println!("{}{}", base_line, message_chunks[0].bright_white());
+    // Print first line with full prefix (console output)
+    let console_line = format!("{}{}", base_line, message_chunks[0].bright_white());
+    println!("{}", console_line);
 
-    // Print continuation lines with proper indentation
+    // Write to file (clean version without color codes)
+    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let tag_clean = match tag {
+        LogTag::Monitor => "MONITOR",
+        LogTag::Trader => "TRADER",
+        LogTag::Wallet => "WALLET",
+        LogTag::System => "SYSTEM",
+        LogTag::Pool => "POOL",
+        LogTag::Other(ref s) => s,
+    };
+    let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);
+    write_to_file(&file_line);
+
+    // Print continuation lines with proper indentation (console)
     if message_chunks.len() > 1 {
         let continuation_prefix = format!(
             "{}{}",
-            " ".repeat(prefix.len()),
+            " ".repeat(strip_ansi_codes(&prefix).len()),
             " ".repeat(TOTAL_PREFIX_WIDTH)
         );
         for chunk in &message_chunks[1..] {
-            println!("{}{}", continuation_prefix, chunk.bright_white());
+            let console_continuation = format!("{}{}", continuation_prefix, chunk.bright_white());
+            println!("{}", console_continuation);
+
+            // Write continuation lines to file as well
+            let file_continuation = format!(
+                "{} [{}] [{}] {}",
+                timestamp,
+                tag_clean,
+                log_type,
+                chunk
+            );
+            write_to_file(&file_continuation);
         }
     }
 }
