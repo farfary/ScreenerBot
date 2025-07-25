@@ -1,65 +1,42 @@
-// Test to verify batched RPC works with positions.rs integration
-use screenerbot::pool_price::PoolDiscoveryAndPricing;
-use screenerbot::pool_price::types::PoolType;
+// Test to verify new pool price system works with positions.rs integration
+use screenerbot::pool_price::{ get_token_price, get_detailed_price_info };
 
 #[tokio::main]
-pub async fn main() {
+async fn main() {
     test_positions_integration().await;
 }
 
 pub async fn test_positions_integration() {
-    println!("=== Testing Batched RPC Integration with Positions ===");
+    println!("=== Testing New Pool Price System with Positions ===");
 
-    let pool_discovery = PoolDiscoveryAndPricing::new("https://api.mainnet-beta.solana.com");
-
-    // Test multiple pool types that positions.rs might encounter
-    let test_pools = vec![
-        ("6UmmUiYoBjSrhakAobJw8BvkmJtDVxaeBtbt7rxWo1mg", PoolType::RaydiumCpmm)
-        // Add more pool addresses here for comprehensive testing
+    // Test multiple token mints that positions.rs might encounter
+    let test_mints = vec![
+        "So11111111111111111111111111111111111111112", // SOL
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" // USDC
+        // Add more token mints here for comprehensive testing
     ];
 
-    for (pool_address, pool_type) in test_pools {
-        println!("\n🔍 Testing pool: {} (type: {:?})", pool_address, pool_type);
+    for mint in test_mints {
+        println!("\n🔍 Testing token: {}", mint);
 
-        match pool_discovery.parse_pool_data_batched(pool_address, pool_type).await {
-            Ok(pool_data) => {
-                println!("✅ Batched RPC successful!");
-                println!(
-                    "   Token A: {} (decimals: {})",
-                    pool_data.token_a.mint,
-                    pool_data.token_a.decimals
-                );
-                println!(
-                    "   Token B: {} (decimals: {})",
-                    pool_data.token_b.mint,
-                    pool_data.token_b.decimals
-                );
-                println!("   Reserve A: {} tokens", pool_data.reserve_a.balance);
-                println!("   Reserve B: {} tokens", pool_data.reserve_b.balance);
+        match get_token_price(mint).await {
+            Some(price) => {
+                println!("✅ Price lookup successful!");
+                println!("   Price: {:.12} SOL", price);
 
-                // Simulate position price calculation
-                if pool_data.reserve_a.balance > 0 && pool_data.reserve_b.balance > 0 {
-                    let token_a_ui =
-                        (pool_data.reserve_a.balance as f64) /
-                        (10_f64).powi(pool_data.token_a.decimals as i32);
-                    let token_b_ui =
-                        (pool_data.reserve_b.balance as f64) /
-                        (10_f64).powi(pool_data.token_b.decimals as i32);
-
-                    if token_a_ui > 0.0 {
-                        let calculated_price = token_b_ui / token_a_ui;
-                        println!("   💰 Calculated price: {} SOL per token", calculated_price);
-                        println!("   🎯 Position integration: Ready for P&L calculations");
-                    }
-                } else {
-                    println!("   ⚠️  Empty reserves - might be inactive pool");
+                // Get detailed info for debugging
+                if let Ok(Some(detailed)) = get_detailed_price_info(mint).await {
+                    println!("   Confidence: {:.2}", detailed.confidence);
+                    println!("   Source pools: {:?}", detailed.source_pools);
                 }
+
+                println!("   💰 Ready for position calculations");
             }
-            Err(e) => {
-                println!("❌ Error: {}", e);
+            None => {
+                println!("❌ Failed to get price for token {}", mint);
             }
         }
     }
 
-    println!("\n✨ Integration test complete - batched RPC optimization ready for positions.rs!");
+    println!("\n✨ Integration test complete - new pool price system ready for positions.rs!");
 }

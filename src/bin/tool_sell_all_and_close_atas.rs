@@ -197,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             price_dexscreener_usd: None,
             price_pool_sol: None,
             price_pool_usd: None,
-            pools: vec![],
+
             dex_id: None,
             pair_address: None,
             pair_url: None,

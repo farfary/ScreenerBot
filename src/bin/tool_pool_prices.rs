@@ -1,4 +1,4 @@
-use screenerbot::pool_price::PoolDiscoveryAndPricing;
+use screenerbot::pool_price::{ get_token_price, validate_system_health, get_detailed_price_info };
 use screenerbot::global::read_configs;
 use screenerbot::logger::{ log, LogTag };
 use std::env;
@@ -12,8 +12,15 @@ pub async fn display_token_pool_prices(token_mint: &str) -> Result<()> {
         anyhow::anyhow!("Failed to read configs: {}", e)
     )?;
 
-    // Create pool discovery instance
-    let pool_discovery = PoolDiscoveryAndPricing::new(&configs.rpc_url);
+    // Test system health
+    println!("Testing pool price system health...");
+    if let Ok(healthy) = validate_system_health().await {
+        if healthy {
+            println!("✅ Pool price system is healthy");
+        } else {
+            println!("❌ Pool price system health check failed");
+        }
+    }
 
     println!("{}", "=".repeat(80).bright_cyan());
     println!(

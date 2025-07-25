@@ -4,7 +4,8 @@ use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::utils::*;
 use crate::global::STARTUP_TIME;
-use crate::pool_price_manager::refresh_open_position_prices;
+// TODO: Replace with new pool price system
+// use crate::pool_price_manager::refresh_open_position_prices;
 
 use chrono::{ Utc };
 use std::sync::Arc;
@@ -144,8 +145,8 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
 }
 
 pub async fn display_positions_table() {
-    // First, refresh pool prices for all open positions before displaying
-    refresh_open_position_prices().await;
+    // The new pool price system runs in background and continuously updates prices
+    // for open positions, so we don't need to refresh them here
 
     let (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl) = {
         let all_positions = SAVED_POSITIONS.lock().unwrap();

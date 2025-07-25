@@ -6,7 +6,8 @@ use once_cell::sync::Lazy;
 use std::sync::{ RwLock, Mutex };
 use chrono::{ DateTime, Utc };
 use crate::token_cache::TokenDatabase;
-use crate::pool_price::Pool; // Import Pool from pool_price module
+// TODO: Replace with new pool price system
+// use crate::pool_price::Pool; // Import Pool from pool_price module
 use solana_sdk::signature::Keypair;
 use std::env;
 
@@ -263,7 +264,8 @@ pub struct Token {
     pub price_dexscreener_usd: Option<f64>,
     pub price_pool_sol: Option<f64>,
     pub price_pool_usd: Option<f64>,
-    pub pools: Vec<Pool>,
+    // TODO: Replace with new pool price system
+    // pub pools: Vec<Pool>,
 
     // New fields from DexScreener API
     pub dex_id: Option<String>,

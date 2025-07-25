@@ -432,7 +432,6 @@ pub async fn update_tokens_from_mints(shutdown: Arc<Notify>) -> Result<(), Strin
                             price_dexscreener_usd: Some(price_usd),
                             price_pool_sol: None,
                             price_pool_usd: None,
-                            pools: vec![],
 
                             // New DexScreener fields
                             dex_id: pair
@@ -1661,7 +1660,6 @@ pub async fn get_single_token_info(
 
                     price_pool_sol: None,
                     price_pool_usd: None,
-                    pools: vec![],
 
                     // New DexScreener fields
                     dex_id: pair
@@ -2114,7 +2112,6 @@ pub async fn update_tokens_from_mints_concurrent(shutdown: Arc<Notify>) -> Resul
                                 price_dexscreener_usd: Some(price_usd),
                                 price_pool_sol: None,
                                 price_pool_usd: None,
-                                pools: vec![],
 
                                 dex_id: pair
                                     .get("dexId")

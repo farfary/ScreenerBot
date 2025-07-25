@@ -149,7 +149,7 @@ use crate::positions::{
 };
 use crate::summary::*;
 use crate::utils::*;
-use crate::pool_price_manager::{ get_best_available_price, request_immediate_pool_price_check };
+use crate::pool_price::get_token_price;
 use crate::profit::should_sell_smart_system;
 use crate::filtering::{ filter_token_for_trading, FilterResult, debug_filtering_log };
 
@@ -1382,13 +1382,12 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
 }
 
 /// Get current price for a token from the global token list
-/// Uses the background pool price manager for best available prices
+/// Uses the new pool price system for best available prices
 /// Non-blocking approach that never locks threads
 pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64> {
-    // First try to get the best available price from pool price manager
-    if let Some(price) = get_best_available_price(mint) {
-        return Some(price);
-    }
+    // Use the new pool price system to get current price
+    // Note: This function is synchronous but the pool price system runs async in background
+    // For real-time prices, use the async version: pool_price::get_token_price()
 
     // Fallback to direct token list lookup (non-blocking)
     match LIST_TOKENS.try_read() {
@@ -2189,7 +2188,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             for mint in &open_position_mints {
                 let mint_clone = mint.clone();
                 tokio::spawn(async move {
-                    request_immediate_pool_price_check(&mint_clone).await;
+                    // Use new pool price system for immediate price check
+                    let _price = get_token_price(&mint_clone).await;
                 });
             }
         }

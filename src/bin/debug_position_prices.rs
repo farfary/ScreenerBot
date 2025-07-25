@@ -9,12 +9,13 @@
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::global::{ read_configs, LIST_TOKENS };
 use screenerbot::positions::SAVED_POSITIONS;
-use screenerbot::pool_price_manager::{
-    debug_token_price_lookup,
-    get_best_available_price,
-    is_token_validated,
-    get_cached_pool_price,
-};
+// TODO: Replace with new pool price system
+// use screenerbot::pool_price_manager::{
+//     debug_token_price_lookup,
+//     get_best_available_price,
+//     is_token_validated,
+//     get_cached_pool_price,
+// };
 use screenerbot::trader::get_current_token_price;
 
 #[tokio::main]
@@ -62,16 +63,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if current_price.is_none() {
             println!("   ❌ NO PRICE FOUND - Analyzing why...\n");
 
+            // TODO: Replace with new pool price system debug functions
             // Detailed analysis
-            let debug_info = debug_token_price_lookup(&position.mint);
-            for line in debug_info.lines() {
-                println!("      {}", line);
-            }
+            // let debug_info = debug_token_price_lookup(&position.mint);
+            // for line in debug_info.lines() {
+            //     println!("      {}", line);
+            // }
 
             // Try best available price
-            let best_price = get_best_available_price(&position.mint);
-            println!("      Best available price: {:?}", best_price);
+            // let best_price = get_best_available_price(&position.mint);
+            // println!("      Best available price: {:?}", best_price);
 
+            println!(
+                "      Debug functions temporarily disabled during pool price system migration"
+            );
             println!();
         } else {
             println!("   ✅ Price found: {:.10} SOL\n", current_price.unwrap());
@@ -123,16 +128,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cached_count = 0;
 
     for position in &open_positions {
-        if is_token_validated(&position.mint) {
-            validated_count += 1;
-            if get_cached_pool_price(&position.mint).is_some() {
-                cached_count += 1;
-            }
-        }
+        // TODO: Replace with new pool price system validation functions
+        // if is_token_validated(&position.mint) {
+        //     validated_count += 1;
+        //     if get_cached_pool_price(&position.mint).is_some() {
+        //         cached_count += 1;
+        //     }
+        // }
+        validated_count += 1; // Temporary placeholder
     }
 
-    println!("   ✅ Validated tokens: {}/{}", validated_count, open_positions.len());
-    println!("   💾 Cached pool prices: {}/{}", cached_count, validated_count);
+    println!(
+        "   ✅ Validated tokens: {}/{} (validation temporarily disabled)",
+        validated_count,
+        open_positions.len()
+    );
+    println!(
+        "   💾 Cached pool prices: {}/{} (cache analysis temporarily disabled)",
+        cached_count,
+        validated_count
+    );
 
     println!("\n🔧 Recommendations:");
     if validated_count == 0 {

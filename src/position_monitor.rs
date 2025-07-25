@@ -317,7 +317,7 @@ impl PositionMonitor {
             price_dexscreener_usd,
             price_pool_sol: None,
             price_pool_usd: None,
-            pools: Vec::new(),
+
             dex_id: pair_data
                 .get("dexId")
                 .and_then(|v| v.as_str())
