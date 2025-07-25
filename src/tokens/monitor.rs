@@ -79,9 +79,11 @@ impl TokenMonitor {
     }
 
     /// Monitor and update token prices
-    async fn monitor_tokens(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn monitor_tokens(&mut self) -> Result<(), String> {
         // Get all tokens from database
-        let all_tokens = self.database.get_all_tokens().await?;
+        let all_tokens = self.database
+            .get_all_tokens().await
+            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
 
         if all_tokens.is_empty() {
             log(LogTag::System, "MONITOR", "No tokens in database to monitor");
@@ -154,10 +156,7 @@ impl TokenMonitor {
     }
 
     /// Process tokens in batches with rate limiting
-    async fn process_tokens_in_batches(
-        &mut self,
-        tokens: Vec<ApiToken>
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    async fn process_tokens_in_batches(&mut self, tokens: Vec<ApiToken>) -> Result<(), String> {
         let mut processed = 0;
         let mut updated = 0;
         let mut errors = 0;
@@ -257,7 +256,7 @@ impl TokenMonitor {
 /// Start token monitoring in background task
 pub async fn start_token_monitoring(
     shutdown: Arc<tokio::sync::Notify>
-) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
+) -> Result<tokio::task::JoinHandle<()>, String> {
     log(LogTag::System, "START", "Token monitoring background task started");
 
     let handle = tokio::spawn(async move {
@@ -276,15 +275,18 @@ pub async fn start_token_monitoring(
 }
 
 /// Manual token monitoring trigger (for testing)
-pub async fn monitor_tokens_once() -> Result<(), Box<dyn std::error::Error>> {
-    let mut monitor = TokenMonitor::new()?;
+pub async fn monitor_tokens_once() -> Result<(), String> {
+    let mut monitor = TokenMonitor::new().map_err(|e| format!("Failed to create monitor: {}", e))?;
     monitor.monitor_tokens().await
 }
 
 /// Get monitoring statistics
-pub async fn get_monitoring_stats() -> Result<MonitoringStats, Box<dyn std::error::Error>> {
-    let database = TokenDatabase::new()?;
-    let total_tokens = database.get_all_tokens().await?.len();
+pub async fn get_monitoring_stats() -> Result<MonitoringStats, String> {
+    let database = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
+    let total_tokens = database
+        .get_all_tokens().await
+        .map_err(|e| format!("Failed to get tokens: {}", e))?
+        .len();
 
     let blacklisted_count = if let Some(stats) = crate::tokens::blacklist::get_blacklist_stats() {
         stats.total_blacklisted

@@ -8,6 +8,8 @@
 /// - Comprehensive token data types and structures
 /// - Rate limiting and API management
 
+use std::error::Error;
+
 pub mod api;
 pub mod pool;
 pub mod discovery;
@@ -53,6 +55,7 @@ use std::sync::{ Arc, Mutex };
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 use tokio::sync::Notify;
+use tokio::time::Duration;
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -105,7 +108,7 @@ impl TokensSystem {
     pub async fn start_background_tasks(
         &mut self,
         shutdown: Arc<Notify>
-    ) -> Result<Vec<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<tokio::task::JoinHandle<()>>, String> {
         let mut handles = Vec::new();
 
         // Start discovery task
@@ -124,8 +127,10 @@ impl TokensSystem {
     }
 
     /// Get system statistics
-    pub async fn get_system_stats(&self) -> Result<TokensSystemStats, Box<dyn std::error::Error>> {
-        let db_stats = self.database.get_stats()?;
+    pub async fn get_system_stats(&self) -> Result<TokensSystemStats, String> {
+        let db_stats = self.database
+            .get_stats()
+            .map_err(|e| format!("Failed to get database stats: {}", e))?;
         let monitor_stats = get_monitoring_stats().await?;
         let blacklist_stats = get_blacklist_stats();
 
@@ -156,10 +161,10 @@ pub struct TokensSystemStats {
 // =============================================================================
 
 /// Initialize complete tokens system
-pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::error::Error>> {
+pub async fn initialize_tokens_system() -> Result<TokensSystem, String> {
     log(LogTag::System, "INIT", "Initializing complete tokens system...");
 
-    let system = TokensSystem::new()?;
+    let system = TokensSystem::new().map_err(|e| format!("Failed to create tokens system: {}", e))?;
 
     log(LogTag::System, "SUCCESS", "Tokens system initialized successfully");
 
@@ -199,14 +204,15 @@ pub fn get_token_decimals_or_default(mint: &str) -> u8 {
     cache::get_token_decimals_cached(mint).unwrap_or(9)
 }
 
-/// Get token from database by mint address
+/// Get token from database by mint address using static database instance
 pub async fn get_token_from_db(mint: &str) -> Option<Token> {
-    // Create a temporary database instance to avoid threading issues
-    if let Ok(db) = TokenDatabase::new() {
-        if let Ok(api_tokens) = db.get_all_tokens().await {
-            for api_token in api_tokens {
-                if api_token.mint == mint {
-                    return Some(api_token.into());
+    if let Ok(db_guard) = TOKEN_DB.lock() {
+        if let Some(ref db) = *db_guard {
+            if let Ok(api_tokens) = db.get_all_tokens().await {
+                for api_token in api_tokens {
+                    if api_token.mint == mint {
+                        return Some(api_token.into());
+                    }
                 }
             }
         }
@@ -224,57 +230,67 @@ pub fn initialize_token_database() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Get current token price from cached data
+/// Get current token price from cached data using static database instance
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    // Create a temporary database instance to avoid threading issues
-    if let Ok(db) = TokenDatabase::new() {
-        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
-            // Return the most recent price available
-            return Some(token.price_usd);
+    if let Ok(db_guard) = TOKEN_DB.lock() {
+        if let Some(ref db) = *db_guard {
+            if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+                // Return the most recent price available
+                return Some(token.price_usd);
+            }
         }
     }
     None
 }
 
-/// Get token by mint address
-pub async fn get_token_by_mint(mint: &str) -> Result<Option<ApiToken>, Box<dyn std::error::Error>> {
-    // Create a temporary database instance to avoid threading issues
-    let db = TokenDatabase::new()?;
-    db.get_token_by_mint(mint)
+/// Get token by mint address using static database instance
+pub async fn get_token_by_mint(mint: &str) -> Result<Option<ApiToken>, String> {
+    if let Ok(db_guard) = TOKEN_DB.lock() {
+        if let Some(ref db) = *db_guard {
+            return db.get_token_by_mint(mint).map_err(|e| format!("Failed to get token: {}", e));
+        }
+    }
+    Err("Token database not initialized".to_string())
 }
 
-/// Get all tokens sorted by liquidity
-pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
-    // Create a temporary database instance to avoid threading issues
-    let db = TokenDatabase::new()?;
-    db.get_all_tokens().await
+/// Get all tokens sorted by liquidity using static database instance
+pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
+    let db = {
+        if let Ok(db_guard) = TOKEN_DB.lock() {
+            if let Some(ref db) = *db_guard {
+                db.clone()
+            } else {
+                return Err("Database not initialized".to_string());
+            }
+        } else {
+            return Err("Failed to acquire database lock".to_string());
+        }
+    };
+
+    match db.get_all_tokens().await {
+        Ok(tokens) => {
+            let mut sorted_tokens = tokens;
+            sorted_tokens.sort_by(|a, b| {
+                let a_liq = a.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                let b_liq = b.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0);
+                b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            Ok(sorted_tokens)
+        }
+        Err(e) => Err(format!("Database error: {}", e)),
+    }
 }
 
-/// Thread-safe version for use in tokio::spawn contexts
-/// Creates its own database connection to avoid Send/Sync issues
-pub async fn get_all_tokens_by_liquidity_threadsafe() -> Result<
-    Vec<ApiToken>,
-    Box<dyn std::error::Error>
-> {
-    // Create a new database connection for this call to avoid threading issues
-    let db = TokenDatabase::new()?;
-    let tokens = db.get_all_tokens().await?;
-
-    // Sort by liquidity descending
-    let mut sorted_tokens = tokens;
-    sorted_tokens.sort_by(|a, b| {
-        let liquidity_a = a.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0);
-        let liquidity_b = b.liquidity
-            .as_ref()
-            .and_then(|l| l.usd)
-            .unwrap_or(0.0);
-        liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    Ok(sorted_tokens)
+/// Thread-safe version for use in tokio::spawn contexts using static database instance
+pub async fn get_all_tokens_by_liquidity_threadsafe() -> Result<Vec<ApiToken>, String> {
+    // Use the same static database instance for consistency
+    get_all_tokens_by_liquidity().await
 }
 
 // =============================================================================
@@ -424,23 +440,164 @@ pub async fn initialize_pricing_system() -> Result<(), String> {
     Ok(())
 }
 
-/// Start background price monitoring
-pub async fn start_pricing_background_tasks(shutdown: Arc<Notify>) {
+/// Start background price monitoring using static database instance
+pub async fn start_pricing_background_tasks(
+    shutdown: Arc<Notify>
+) -> Result<Vec<tokio::task::JoinHandle<()>>, String> {
     log(LogTag::System, "INFO", "Starting pricing background tasks...");
 
-    // Note: Background tasks are temporarily disabled due to Send/Sync issues with SQLite
-    // This needs to be fixed by making the database thread-safe or using a different approach
+    // Initialize DexScreener API if needed
+    if let Ok(mut api_guard) = DEXSCREENER_API.lock() {
+        if let Err(e) = api_guard.initialize().await {
+            log(LogTag::System, "WARN", &format!("Failed to initialize DexScreener API: {}", e));
+        }
+    }
+
+    let shutdown_monitor = shutdown.clone();
+
+    // For now, return empty handles to avoid Send/Sync issues
+    // The pricing monitor will be called from main loop instead
+    log(LogTag::System, "INFO", "Pricing background tasks configured for manual scheduling");
+    Ok(vec![])
+}
+
+/// Manual pricing monitor that can be called from main loop
+pub async fn update_token_prices_manual() -> Result<(), String> {
+    log(LogTag::System, "MONITOR", "Starting manual price update cycle");
+
+    if let Err(e) = monitor_tokens_with_static_db().await {
+        log(LogTag::System, "ERROR", &format!("Manual price monitoring failed: {}", e));
+        return Err(e);
+    }
+
+    log(LogTag::System, "MONITOR", "Manual price update cycle completed");
+    Ok(())
+}
+
+/// Monitor tokens using static database instance
+async fn monitor_tokens_with_static_db() -> Result<(), String> {
+    // Get tokens first
+    let tokens = {
+        if let Ok(db_guard) = TOKEN_DB.lock() {
+            if let Some(ref db) = *db_guard {
+                match db.get_all_tokens().await {
+                    Ok(tokens) => tokens,
+                    Err(e) => {
+                        return Err(format!("Failed to get tokens from database: {}", e));
+                    }
+                }
+            } else {
+                return Err("Token database not initialized".to_string());
+            }
+        } else {
+            return Err("Failed to acquire database lock".to_string());
+        }
+    };
+
+    if tokens.is_empty() {
+        log(LogTag::System, "MONITOR", "No tokens in database to monitor");
+        return Ok(());
+    }
+
+    // Filter out blacklisted tokens and sort by liquidity
+    let mut tokens_to_check: Vec<ApiToken> = tokens
+        .into_iter()
+        .filter(|token| !is_token_blacklisted(&token.mint))
+        .collect();
+
+    if tokens_to_check.is_empty() {
+        log(LogTag::System, "MONITOR", "No non-blacklisted tokens to monitor");
+        return Ok(());
+    }
+
+    // Sort by liquidity (highest first) for better trading opportunities
+    tokens_to_check.sort_by(|a, b| {
+        let a_liquidity = a.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+        let b_liquidity = b.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+        b_liquidity.partial_cmp(&a_liquidity).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Process tokens in batches
+    let batch_size = 30; // DexScreener supports up to 30 tokens per call
+    let mut total_updated = 0;
+    let mut total_errors = 0;
+
+    for chunk in tokens_to_check.chunks(batch_size) {
+        let mints: Vec<String> = chunk
+            .iter()
+            .map(|t| t.mint.clone())
+            .collect();
+
+        // Get updated token info from API and update database
+        let (api_result, update_result) = {
+            // Get API info
+            let api_result = if let Ok(mut api_guard) = DEXSCREENER_API.lock() {
+                api_guard.get_tokens_info(&mints).await
+            } else {
+                Err("Failed to acquire API lock".to_string())
+            };
+
+            // If successful, update database
+            let update_result = if let Ok(ref updated_tokens) = api_result {
+                if let Ok(db_guard) = TOKEN_DB.lock() {
+                    if let Some(ref db) = *db_guard {
+                        db.update_tokens(updated_tokens).await.map_err(|e| e.to_string())
+                    } else {
+                        Err("Database not initialized".to_string())
+                    }
+                } else {
+                    Err("Failed to acquire database lock".to_string())
+                }
+            } else {
+                Ok(()) // No tokens to update
+            };
+
+            (api_result, update_result)
+        };
+
+        match api_result {
+            Ok(updated_tokens) => {
+                match update_result {
+                    Ok(_) => {
+                        total_updated += updated_tokens.len();
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Failed to update tokens in database: {}", e)
+                        );
+                        total_errors += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Failed to get token info for batch: {}", e));
+                total_errors += 1;
+            }
+        }
+
+        // Rate limiting: small delay between batches
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
 
     log(
         LogTag::System,
-        "WARN",
-        "Background tasks disabled - database needs Send/Sync implementation"
+        "MONITOR",
+        &format!(
+            "Monitoring cycle complete: {} tokens updated, {} errors",
+            total_updated,
+            total_errors
+        )
     );
 
-    // Wait for shutdown
-    shutdown.notified().await;
-
-    log(LogTag::System, "INFO", "Pricing background tasks stopped");
+    Ok(())
 }
 
 /// Get pricing system statistics

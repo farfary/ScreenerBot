@@ -73,15 +73,21 @@ impl TokenDiscovery {
     }
 
     /// Discover new tokens from all configured sources
-    pub async fn discover_new_tokens(
-        &mut self
-    ) -> Result<Vec<DiscoveryResult>, Box<dyn std::error::Error>> {
+    pub async fn discover_new_tokens(&mut self) -> Result<Vec<DiscoveryResult>, String> {
         let mut results = Vec::new();
 
         log(LogTag::System, "DISCOVERY", "Starting token discovery cycle");
 
+        // Get existing token mints from database to avoid duplicates
+        let existing_mints = self.get_existing_mints().await?;
+        log(
+            LogTag::System,
+            "DISCOVERY",
+            &format!("Found {} existing tokens in database", existing_mints.len())
+        );
+
         for source in &self.sources.clone() {
-            match self.discover_from_source(source).await {
+            match self.discover_from_source(source, &existing_mints).await {
                 Ok(result) => {
                     if result.success {
                         log(
@@ -93,6 +99,26 @@ impl TokenDiscovery {
                                 result.source
                             )
                         );
+
+                        // Save new tokens to database
+                        if !result.new_tokens.is_empty() {
+                            if let Err(e) = self.database.add_tokens(&result.new_tokens).await {
+                                log(
+                                    LogTag::System,
+                                    "ERROR",
+                                    &format!("Failed to save tokens to database: {}", e)
+                                );
+                            } else {
+                                log(
+                                    LogTag::System,
+                                    "SUCCESS",
+                                    &format!(
+                                        "Saved {} new tokens to database",
+                                        result.new_tokens.len()
+                                    )
+                                );
+                            }
+                        }
                     } else {
                         log(
                             LogTag::System,
@@ -131,71 +157,162 @@ impl TokenDiscovery {
     /// Discover tokens from a specific source
     async fn discover_from_source(
         &mut self,
-        source: &DiscoverySource
-    ) -> Result<DiscoveryResult, Box<dyn std::error::Error>> {
+        source: &DiscoverySource,
+        existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
         let now = chrono::Utc::now();
 
         match source {
             DiscoverySource::DexScreener { chain } => {
-                self.discover_from_dexscreener(chain, now).await
+                self.discover_from_dexscreener(chain, now, existing_mints).await
             }
-            DiscoverySource::RugCheck => { self.discover_from_rugcheck(now).await }
-            DiscoverySource::TrendingBots => { self.discover_from_trending_bots(now).await }
+            DiscoverySource::RugCheck => { self.discover_from_rugcheck(now, existing_mints).await }
+            DiscoverySource::TrendingBots => {
+                self.discover_from_trending_bots(now, existing_mints).await
+            }
         }
     }
 
-    /// Discover tokens from DexScreener trending/new listings
+    /// Discover tokens from DexScreener using multiple endpoints
     async fn discover_from_dexscreener(
         &mut self,
         chain: &str,
-        timestamp: chrono::DateTime<chrono::Utc>
-    ) -> Result<DiscoveryResult, Box<dyn std::error::Error>> {
+        timestamp: chrono::DateTime<chrono::Utc>,
+        existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
         let source = format!("DexScreener-{}", chain);
 
-        match self.api.get_trending_tokens(chain, MAX_NEW_TOKENS_PER_CYCLE).await {
-            Ok(tokens) => {
-                // Filter out tokens we already have
-                let existing_mints = self.get_existing_mints().await?;
-                let new_tokens: Vec<ApiToken> = tokens
+        log(LogTag::System, "DISCOVERY", &format!("Starting DexScreener discovery for {}", chain));
+
+        let mut all_new_tokens = Vec::new();
+
+        // Method 1: Token boosts (trending/promoted tokens)
+        match
+            self.api.discover_and_fetch_tokens(
+                DiscoverySourceType::DexScreenerBoosts,
+                MAX_NEW_TOKENS_PER_CYCLE / 2
+            ).await
+        {
+            Ok(boost_tokens) => {
+                let new_boost_tokens: Vec<ApiToken> = boost_tokens
                     .into_iter()
                     .filter(|token| !existing_mints.contains(&token.mint))
                     .collect();
 
-                // Save new tokens to database
-                if !new_tokens.is_empty() {
-                    self.database.add_tokens(&new_tokens).await?;
-                    log(
-                        LogTag::System,
-                        "CACHE",
-                        &format!("Saved {} new tokens to database", new_tokens.len())
-                    );
-                }
-
-                Ok(DiscoveryResult {
-                    source,
-                    new_tokens,
-                    timestamp,
-                    success: true,
-                    error: None,
-                })
+                log(
+                    LogTag::System,
+                    "DISCOVERY",
+                    &format!("Found {} new tokens from boosts", new_boost_tokens.len())
+                );
+                all_new_tokens.extend(new_boost_tokens);
             }
             Err(e) => {
-                Ok(DiscoveryResult {
-                    source,
-                    new_tokens: Vec::new(),
-                    timestamp,
-                    success: false,
-                    error: Some(e.to_string()),
-                })
+                log(LogTag::System, "WARN", &format!("Boost discovery failed: {}", e));
             }
         }
+
+        // Method 2: Token profiles (recently created profiles)
+        match
+            self.api.discover_and_fetch_tokens(
+                DiscoverySourceType::DexScreenerProfiles,
+                MAX_NEW_TOKENS_PER_CYCLE / 2
+            ).await
+        {
+            Ok(profile_tokens) => {
+                let new_profile_tokens: Vec<ApiToken> = profile_tokens
+                    .into_iter()
+                    .filter(|token| !existing_mints.contains(&token.mint))
+                    .collect();
+
+                log(
+                    LogTag::System,
+                    "DISCOVERY",
+                    &format!("Found {} new tokens from profiles", new_profile_tokens.len())
+                );
+                all_new_tokens.extend(new_profile_tokens);
+            }
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Profile discovery failed: {}", e));
+            }
+        }
+
+        // Method 3: Top tokens by volume
+        match self.api.get_top_tokens(MAX_NEW_TOKENS_PER_CYCLE / 2).await {
+            Ok(top_mints) => {
+                let new_top_mints: Vec<String> = top_mints
+                    .into_iter()
+                    .filter(|mint| !existing_mints.contains(mint))
+                    .collect();
+
+                if !new_top_mints.is_empty() {
+                    log(
+                        LogTag::System,
+                        "DISCOVERY",
+                        &format!(
+                            "Found {} new top tokens, fetching details...",
+                            new_top_mints.len()
+                        )
+                    );
+
+                    // Fetch detailed info for top tokens
+                    match self.api.get_multiple_token_data(&new_top_mints).await {
+                        Ok(top_tokens) => {
+                            log(
+                                LogTag::System,
+                                "SUCCESS",
+                                &format!("Fetched details for {} top tokens", top_tokens.len())
+                            );
+                            all_new_tokens.extend(top_tokens);
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::System,
+                                "WARN",
+                                &format!("Failed to fetch top token details: {}", e)
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Top tokens discovery failed: {}", e));
+            }
+        }
+
+        // Remove duplicates within discovered tokens
+        let mut unique_tokens = Vec::new();
+        let mut seen_mints = HashSet::new();
+
+        for token in all_new_tokens {
+            if seen_mints.insert(token.mint.clone()) {
+                unique_tokens.push(token);
+            }
+        }
+
+        log(
+            LogTag::System,
+            "DISCOVERY",
+            &format!(
+                "DexScreener discovery completed: {} unique new tokens found",
+                unique_tokens.len()
+            )
+        );
+
+        Ok(DiscoveryResult {
+            source,
+            new_tokens: unique_tokens,
+            timestamp,
+            success: true,
+            error: None,
+        })
     }
 
     /// Discover tokens from RugCheck (placeholder)
     async fn discover_from_rugcheck(
         &mut self,
-        timestamp: chrono::DateTime<chrono::Utc>
-    ) -> Result<DiscoveryResult, Box<dyn std::error::Error>> {
+        timestamp: chrono::DateTime<chrono::Utc>,
+        _existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
         // TODO: Implement RugCheck API integration
         Ok(DiscoveryResult {
             source: "RugCheck".to_string(),
@@ -209,8 +326,9 @@ impl TokenDiscovery {
     /// Discover tokens from trending bots (placeholder)
     async fn discover_from_trending_bots(
         &mut self,
-        timestamp: chrono::DateTime<chrono::Utc>
-    ) -> Result<DiscoveryResult, Box<dyn std::error::Error>> {
+        timestamp: chrono::DateTime<chrono::Utc>,
+        _existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
         // TODO: Implement trending bot integration
         Ok(DiscoveryResult {
             source: "TrendingBots".to_string(),
@@ -222,8 +340,10 @@ impl TokenDiscovery {
     }
 
     /// Get set of existing token mints from database
-    async fn get_existing_mints(&self) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
-        let tokens = self.database.get_all_tokens().await?;
+    async fn get_existing_mints(&self) -> Result<HashSet<String>, String> {
+        let tokens = self.database
+            .get_all_tokens().await
+            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
         Ok(
             tokens
                 .into_iter()
@@ -263,7 +383,7 @@ impl TokenDiscovery {
 /// Start token discovery in background task
 pub async fn start_token_discovery(
     shutdown: std::sync::Arc<tokio::sync::Notify>
-) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
+) -> Result<tokio::task::JoinHandle<()>, String> {
     log(crate::logger::LogTag::System, "START", "Token discovery background task started");
 
     let handle = tokio::spawn(async move {
@@ -313,8 +433,10 @@ pub async fn start_token_discovery(
 }
 
 /// Manual token discovery trigger (for testing)
-pub async fn discover_tokens_once() -> Result<Vec<DiscoveryResult>, Box<dyn std::error::Error>> {
-    let mut discovery = TokenDiscovery::new()?;
+pub async fn discover_tokens_once() -> Result<Vec<DiscoveryResult>, String> {
+    let mut discovery = TokenDiscovery::new().map_err(|e|
+        format!("Failed to create discovery: {}", e)
+    )?;
     discovery.discover_new_tokens().await
 }
 

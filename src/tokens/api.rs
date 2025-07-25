@@ -598,7 +598,7 @@ impl DexScreenerApi {
 
                     // Parse response and extract tokens
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if let Some(pairs) = json["pairs"].as_array() {
+                        if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
                             let mut tokens = Vec::new();
 
                             for pair in pairs.iter().take(limit) {
@@ -650,7 +650,7 @@ impl DexScreenerApi {
                     let text = response.text().await.map_err(|e| e.to_string())?;
 
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if let Some(pairs) = json["pairs"].as_array() {
+                        if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
                             let mut tokens = Vec::new();
 
                             for pair in pairs {
@@ -686,90 +686,131 @@ impl DexScreenerApi {
         &self,
         pair: &serde_json::Value
     ) -> Result<ApiToken, Box<dyn std::error::Error>> {
-        let base_token = &pair["baseToken"];
-        let quote_token = &pair["quoteToken"];
+        let base_token = pair.get("baseToken");
+        let quote_token = pair.get("quoteToken");
 
         // Prefer base token for analysis
-        let token_data = if base_token["symbol"].as_str().unwrap_or("") != "SOL" {
-            base_token
+        let token_data = if let Some(base) = base_token {
+            if
+                base
+                    .get("symbol")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("") != "SOL"
+            {
+                base
+            } else {
+                quote_token.unwrap_or(base)
+            }
         } else {
-            quote_token
+            return Err("Missing token data".into());
         };
 
-        let mint = token_data["address"].as_str().unwrap_or("").to_string();
-        let symbol = token_data["symbol"].as_str().unwrap_or("").to_string();
-        let name = token_data["name"].as_str().unwrap_or("").to_string();
+        let mint = token_data
+            .get("address")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let symbol = token_data
+            .get("symbol")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let name = token_data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         if mint.is_empty() || symbol.is_empty() {
             return Err("Missing required token data".into());
         }
 
-        let price_usd = pair["priceUsd"]
-            .as_str()
+        let price_usd = pair
+            .get("priceUsd")
+            .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(0.0);
 
-        let price_native = pair["priceNative"]
-            .as_str()
+        let price_native = pair
+            .get("priceNative")
+            .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(0.0);
 
-        let price_sol = if quote_token["symbol"].as_str() == Some("SOL") {
+        let price_sol = if
+            quote_token.and_then(|q| q.get("symbol")).and_then(|v| v.as_str()) == Some("SOL")
+        {
             Some(price_native)
         } else {
             None
         };
 
-        let liquidity = if let Some(liquidity_obj) = pair["liquidity"].as_object() {
+        let liquidity = if
+            let Some(liquidity_obj) = pair.get("liquidity").and_then(|v| v.as_object())
+        {
             Some(LiquidityInfo {
-                usd: liquidity_obj["usd"].as_f64(),
-                base: liquidity_obj["base"].as_f64(),
-                quote: liquidity_obj["quote"].as_f64(),
+                usd: liquidity_obj.get("usd").and_then(|v| v.as_f64()),
+                base: liquidity_obj.get("base").and_then(|v| v.as_f64()),
+                quote: liquidity_obj.get("quote").and_then(|v| v.as_f64()),
             })
         } else {
             None
         };
 
-        let volume = if let Some(volume_obj) = pair["volume"].as_object() {
+        let volume = if let Some(volume_obj) = pair.get("volume").and_then(|v| v.as_object()) {
             Some(VolumeStats {
-                h24: volume_obj["h24"].as_f64(),
-                h6: volume_obj["h6"].as_f64(),
-                h1: volume_obj["h1"].as_f64(),
-                m5: volume_obj["m5"].as_f64(),
+                h24: volume_obj.get("h24").and_then(|v| v.as_f64()),
+                h6: volume_obj.get("h6").and_then(|v| v.as_f64()),
+                h1: volume_obj.get("h1").and_then(|v| v.as_f64()),
+                m5: volume_obj.get("m5").and_then(|v| v.as_f64()),
             })
         } else {
             None
         };
 
-        let txns = if let Some(txns_obj) = pair["txns"].as_object() {
+        let txns = if let Some(txns_obj) = pair.get("txns").and_then(|v| v.as_object()) {
             Some(TxnStats {
-                h24: txns_obj["h24"].as_object().map(|h24| TxnPeriod {
-                    buys: h24["buys"].as_i64(),
-                    sells: h24["sells"].as_i64(),
-                }),
-                h6: txns_obj["h6"].as_object().map(|h6| TxnPeriod {
-                    buys: h6["buys"].as_i64(),
-                    sells: h6["sells"].as_i64(),
-                }),
-                h1: txns_obj["h1"].as_object().map(|h1| TxnPeriod {
-                    buys: h1["buys"].as_i64(),
-                    sells: h1["sells"].as_i64(),
-                }),
-                m5: txns_obj["m5"].as_object().map(|m5| TxnPeriod {
-                    buys: m5["buys"].as_i64(),
-                    sells: m5["sells"].as_i64(),
-                }),
+                h24: txns_obj
+                    .get("h24")
+                    .and_then(|v| v.as_object())
+                    .map(|h24| TxnPeriod {
+                        buys: h24.get("buys").and_then(|v| v.as_i64()),
+                        sells: h24.get("sells").and_then(|v| v.as_i64()),
+                    }),
+                h6: txns_obj
+                    .get("h6")
+                    .and_then(|v| v.as_object())
+                    .map(|h6| TxnPeriod {
+                        buys: h6.get("buys").and_then(|v| v.as_i64()),
+                        sells: h6.get("sells").and_then(|v| v.as_i64()),
+                    }),
+                h1: txns_obj
+                    .get("h1")
+                    .and_then(|v| v.as_object())
+                    .map(|h1| TxnPeriod {
+                        buys: h1.get("buys").and_then(|v| v.as_i64()),
+                        sells: h1.get("sells").and_then(|v| v.as_i64()),
+                    }),
+                m5: txns_obj
+                    .get("m5")
+                    .and_then(|v| v.as_object())
+                    .map(|m5| TxnPeriod {
+                        buys: m5.get("buys").and_then(|v| v.as_i64()),
+                        sells: m5.get("sells").and_then(|v| v.as_i64()),
+                    }),
             })
         } else {
             None
         };
 
-        let price_change = if let Some(price_change_obj) = pair["priceChange"].as_object() {
+        let price_change = if
+            let Some(price_change_obj) = pair.get("priceChange").and_then(|v| v.as_object())
+        {
             Some(PriceChangeStats {
-                h24: price_change_obj["h24"].as_f64(),
-                h6: price_change_obj["h6"].as_f64(),
-                h1: price_change_obj["h1"].as_f64(),
-                m5: price_change_obj["m5"].as_f64(),
+                h24: price_change_obj.get("h24").and_then(|v| v.as_f64()),
+                h6: price_change_obj.get("h6").and_then(|v| v.as_f64()),
+                h1: price_change_obj.get("h1").and_then(|v| v.as_f64()),
+                m5: price_change_obj.get("m5").and_then(|v| v.as_f64()),
             })
         } else {
             None
@@ -820,14 +861,84 @@ impl DexScreenerApi {
                         .collect()
                 }),
             }),
-            labels: pair["labels"].as_array().map(|labels| {
-                labels
-                    .iter()
-                    .filter_map(|l| l.as_str().map(|s| s.to_string()))
-                    .collect()
-            }),
+            labels: pair
+                .get("labels")
+                .and_then(|v| v.as_array())
+                .map(|labels| {
+                    labels
+                        .iter()
+                        .filter_map(|l| l.as_str().map(|s| s.to_string()))
+                        .collect()
+                }),
             last_updated: Utc::now(),
         })
+    }
+
+    /// Get top tokens from DexScreener with optional limit
+    pub async fn get_top_tokens(&mut self, limit: usize) -> Result<Vec<String>, String> {
+        log(LogTag::Monitor, "TOP_TOKENS", &format!("Fetching top {} tokens", limit));
+
+        // DexScreener doesn't have a simple "top tokens" endpoint
+        // We'll use the latest endpoint as the closest equivalent
+        let url = "https://api.dexscreener.com/latest/dex/tokens";
+
+        let response = self.client
+            .get(url)
+            .send().await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("HTTP error: {}", response.status()));
+        }
+
+        let text = response.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+
+        let json: serde_json::Value = serde_json
+            ::from_str(&text)
+            .map_err(|e| format!("JSON parsing failed: {}", e))?;
+
+        let mut mints = Vec::new();
+
+        if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
+            for pair in pairs.iter().take(limit) {
+                if let Some(base_token) = pair.get("baseToken") {
+                    if let Some(mint) = base_token.get("address").and_then(|v| v.as_str()) {
+                        if
+                            !mint.is_empty() &&
+                            base_token
+                                .get("symbol")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("") != "SOL"
+                        {
+                            mints.push(mint.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        log(LogTag::Monitor, "TOP_TOKENS", &format!("Found {} top tokens", mints.len()));
+        Ok(mints)
+    }
+
+    /// Discover tokens and fetch their detailed information in one call
+    pub async fn discover_and_fetch_tokens(
+        &mut self,
+        source: DiscoverySourceType,
+        limit: usize
+    ) -> Result<Vec<ApiToken>, String> {
+        // First discover the token mints
+        let mints = self.discover_tokens(source).await?;
+
+        // Take only the requested limit
+        let limited_mints: Vec<String> = mints.into_iter().take(limit).collect();
+
+        if limited_mints.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Then fetch detailed information for these tokens
+        self.get_tokens_info(&limited_mints).await
     }
 }
 

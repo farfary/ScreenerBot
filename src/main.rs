@@ -29,6 +29,7 @@ async fn main() {
     let shutdown = Arc::new(Notify::new());
     let shutdown_trader = shutdown.clone();
     let shutdown_tokens = shutdown.clone();
+    let shutdown_pricing = shutdown.clone();
 
     // Start tokens system background tasks
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
@@ -38,6 +39,21 @@ async fn main() {
                 LogTag::System,
                 "WARN",
                 &format!("Some tokens system tasks failed to start: {}", e)
+            );
+            Vec::new()
+        }
+    };
+
+    // Start pricing background tasks
+    let pricing_handles = match
+        screenerbot::tokens::start_pricing_background_tasks(shutdown_pricing).await
+    {
+        Ok(handles) => handles,
+        Err(e) => {
+            log(
+                LogTag::System,
+                "WARN",
+                &format!("Pricing background tasks failed to start: {}", e)
             );
             Vec::new()
         }
@@ -61,6 +77,11 @@ async fn main() {
 
         // Wait for tokens system tasks
         for handle in tokens_handles {
+            let _ = handle.await;
+        }
+
+        // Wait for pricing tasks
+        for handle in pricing_handles {
             let _ = handle.await;
         }
     });
