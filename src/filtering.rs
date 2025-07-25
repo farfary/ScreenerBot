@@ -24,7 +24,7 @@ pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24;
 pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 30;
 
 /// Enable debug filtering logs
-pub const ENABLE_DEBUG_FILTERING_LOGS: bool = false;
+pub const ENABLE_DEBUG_FILTERING_LOGS: bool = true;
 
 // =============================================================================
 // FILTERING RESULT ENUM

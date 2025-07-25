@@ -205,7 +205,7 @@ impl From<ApiToken> for Token {
             tags: Vec::new(),
             is_verified: false,
             created_at: api_token.pair_created_at.map(|ts| {
-                DateTime::from_timestamp(ts, 0).unwrap_or_default().with_timezone(&Utc)
+                DateTime::from_timestamp_millis(ts).unwrap_or_default().with_timezone(&Utc)
             }),
 
             price_dexscreener_sol: api_token.price_sol,
