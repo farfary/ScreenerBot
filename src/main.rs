@@ -1,5 +1,4 @@
-use screenerbot::{ monitor::monitor, trader::trader };
-use screenerbot::pool_price::start_pool_price_monitor;
+use screenerbot::trader::trader;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 
 use std::sync::Arc;
@@ -19,24 +18,12 @@ async fn main() {
     }
 
     let shutdown = Arc::new(Notify::new());
-    let shutdown_monitor = shutdown.clone();
     let shutdown_trader = shutdown.clone();
-    let shutdown_pool_monitor = shutdown.clone();
 
-    let monitor_handle = tokio::spawn(async move {
-        log(LogTag::Monitor, "INFO", "Monitor task started");
-        monitor(shutdown_monitor).await;
-        log(LogTag::Monitor, "INFO", "Monitor task ended");
-    });
     let trader_handle = tokio::spawn(async move {
         log(LogTag::Trader, "INFO", "Trader task started");
         trader(shutdown_trader).await;
         log(LogTag::Trader, "INFO", "Trader task ended");
-    });
-    let pool_monitor_handle = tokio::spawn(async move {
-        log(LogTag::Pool, "INFO", "Pool price monitor task started");
-        start_pool_price_monitor(shutdown_pool_monitor).await;
-        log(LogTag::Pool, "INFO", "Pool price monitor task ended");
     });
 
     log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
@@ -46,7 +33,7 @@ async fn main() {
 
     // Wait for background tasks to finish with timeout
     let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-        let _ = tokio::try_join!(monitor_handle, trader_handle, pool_monitor_handle);
+        let _ = trader_handle.await;
     });
 
     match shutdown_timeout.await {

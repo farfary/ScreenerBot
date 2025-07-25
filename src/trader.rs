@@ -122,13 +122,6 @@ pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
 pub const PRICE_HISTORY_DURATION_HOURS: i64 = 24;
 
 // -----------------------------------------------------------------------------
-// Pool Price Validation Configuration
-// -----------------------------------------------------------------------------
-
-/// Maximum allowed difference between pool price and API price
-pub const MAX_POOL_PRICE_DEVIATION_PERCENT: f64 = 60.0;
-
-// -----------------------------------------------------------------------------
 // Wallet Management Configuration
 // -----------------------------------------------------------------------------
 
@@ -1333,117 +1326,6 @@ fn analyze_timeframe_trend(prices: &[f64], period: usize) -> TimeframeTrend {
     }
 }
 
-/// Validates if a pool price is within acceptable range of the API price
-/// Returns true if pool price is within MAX_POOL_PRICE_DEVIATION_PERCENT of API price
-pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: &str) -> bool {
-    if pool_price <= 0.0 || api_price <= 0.0 {
-        log(
-            LogTag::Trader,
-            "WARN",
-            &format!(
-                "Invalid price values for {}: pool_price={:.12}, api_price={:.12}",
-                symbol,
-                pool_price,
-                api_price
-            )
-        );
-        return false;
-    }
-
-    // Calculate percentage difference between pool price and API price
-    let difference_percent = ((pool_price - api_price).abs() / api_price) * 100.0;
-
-    let is_valid = difference_percent <= MAX_POOL_PRICE_DEVIATION_PERCENT;
-
-    log(
-        LogTag::Trader,
-        if is_valid {
-            "VALIDATE"
-        } else {
-            "REJECT"
-        },
-        &format!(
-            "Pool price validation for {}: pool={:.12}, api={:.12}, diff={:.2}% (max={:.1}%) - {}",
-            symbol,
-            pool_price,
-            api_price,
-            difference_percent,
-            MAX_POOL_PRICE_DEVIATION_PERCENT,
-            if is_valid {
-                "VALID"
-            } else {
-                "INVALID"
-            }
-        )
-    );
-
-    is_valid
-}
-
-/// Get current price for a token from the centralized pricing system
-/// Uses DexScreener API as primary source, with optional pool price fallback
-/// Non-blocking approach that never locks threads
-pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64> {
-    // Use the new centralized pricing system
-    // This is a synchronous wrapper for the async pricing system
-    // For real-time trading, we prioritize cached prices for speed
-
-    // Try to get from cache first (fastest)
-    if let Ok(mut cache) = crate::tokens::PRICE_CACHE.lock() {
-        if let Some(price) = cache.get_price(mint) {
-            log(
-                LogTag::Trader,
-                "PRICE",
-                &format!("Got cached price for {}: {:.12} SOL", mint, price)
-            );
-            return Some(price);
-        }
-    }
-
-    // Fallback to existing token list (for compatibility during transition)
-    match LIST_TOKENS.try_read() {
-        Ok(tokens) => {
-            for token in tokens.iter() {
-                if token.mint == mint {
-                    // Always prioritize DexScreener price (reliable and fast)
-                    if let Some(dex_price) = token.price_dexscreener_sol {
-                        return Some(dex_price);
-                    }
-
-                    // Only use pool price if it's already calculated and cached (if enabled)
-                    if crate::tokens::ENABLE_POOL_PRICES {
-                        if let Some(pool_price) = token.price_pool_sol {
-                            log(
-                                LogTag::Trader,
-                                "POOL",
-                                &format!(
-                                    "Using validated pool price for {}: {:.12} SOL",
-                                    mint,
-                                    pool_price
-                                )
-                            );
-                            return Some(pool_price);
-                        }
-                    }
-
-                    // No price available
-                    return None;
-                }
-            }
-            None
-        }
-        Err(_) => {
-            // If we can't get the lock, return None rather than blocking
-            log(
-                LogTag::Trader,
-                "WARN",
-                &format!("Could not acquire token list lock for price lookup: {}", mint)
-            );
-            None
-        }
-    }
-}
-
 /// Checks if entry is allowed based on historical position data for this token
 /// Returns true only if current price is below both:
 /// 1. Average entry price from past closed positions
@@ -2230,133 +2112,129 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
         let mut positions_to_close = Vec::new();
 
-        // Find open positions and check if they should be closed
-        {
-            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                for (index, position) in positions.iter_mut().enumerate() {
-                    if position.position_type == "buy" && position.exit_price.is_none() {
-                        // Get current price with pool price priority for open positions
-                        if let Some(current_price) = get_current_token_price(&position.mint, true) {
-                            if current_price > 0.0 {
-                                // Update position tracking (extremes)
-                                update_position_tracking(position, current_price);
+        // First, collect open positions data (without holding mutex across await)
+        let open_positions_data: Vec<(usize, Position)> = {
+            if let Ok(positions) = SAVED_POSITIONS.lock() {
+                positions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, position)| {
+                        if position.position_type == "buy" && position.exit_price.is_none() {
+                            Some((index, position.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        };
 
-                                // Calculate P&L using unified function with pool price
-                                let (pnl_sol, pnl_percent) = calculate_position_pnl(
-                                    position,
-                                    Some(current_price)
-                                );
+        // Now process each position with async calls (mutex is released)
+        for (index, mut position) in open_positions_data {
+            // Get current price from tokens module
+            if
+                let Some(current_price) = crate::tokens::get_current_token_price(
+                    &position.mint
+                ).await
+            {
+                if current_price > 0.0 {
+                    // Update position tracking (extremes) on the local copy
+                    update_position_tracking(&mut position, current_price);
 
-                                let now = Utc::now();
+                    // Calculate P&L using unified function with pool price
+                    let (pnl_sol, pnl_percent) = calculate_position_pnl(
+                        &position,
+                        Some(current_price)
+                    );
 
-                                // Calculate sell urgency using the advanced mathematical model
-                                let sell_urgency = should_sell(position, current_price, now);
+                    let now = Utc::now();
 
-                                // Emergency exit conditions (keep original logic for safety)
-                                let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
+                    // Calculate sell urgency using the advanced mathematical model
+                    let sell_urgency = should_sell(&position, current_price, now);
 
-                                // Urgency-based exit (sell if urgency > 70% or emergency)
-                                let should_exit = emergency_exit || sell_urgency > 0.7;
+                    // Emergency exit conditions (keep original logic for safety)
+                    let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
 
-                                if should_exit {
-                                    // Find the token for closing (non-blocking)
-                                    match LIST_TOKENS.try_read() {
-                                        Ok(tokens_guard) => {
-                                            if
-                                                let Some(token) = tokens_guard
-                                                    .iter()
-                                                    .find(|t| t.mint == position.mint)
-                                            {
-                                                log(
-                                                    LogTag::Trader,
-                                                    "SELL",
-                                                    &format!(
-                                                        "Sell signal for {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Emergency: {}, Pool Price: {}",
-                                                        position.symbol,
-                                                        position.mint,
-                                                        sell_urgency,
-                                                        pnl_percent,
-                                                        emergency_exit,
-                                                        if token.price_pool_sol.is_some() {
-                                                            "YES"
-                                                        } else {
-                                                            "NO"
-                                                        }
-                                                    )
-                                                );
+                    // Urgency-based exit (sell if urgency > 70% or emergency)
+                    let should_exit = emergency_exit || sell_urgency > 0.7;
 
-                                                positions_to_close.push((
-                                                    index,
-                                                    position.clone(), // Include the full position data
-                                                    token.clone(),
-                                                    current_price,
-                                                    now,
-                                                ));
-                                            }
-                                        }
-                                        Err(_) => {
-                                            log(
-                                                LogTag::Trader,
-                                                "WARN",
-                                                &format!(
-                                                    "Could not acquire token list lock for closing position: {}",
-                                                    position.symbol
-                                                )
-                                            );
-                                        }
-                                    }
-                                } else {
-                                    let price_source = {
-                                        match LIST_TOKENS.try_read() {
-                                            Ok(tokens_guard) => {
-                                                if
-                                                    let Some(token) = tokens_guard
-                                                        .iter()
-                                                        .find(|t| t.mint == position.mint)
-                                                {
-                                                    if token.price_pool_sol.is_some() {
-                                                        "pool"
-                                                    } else {
-                                                        "api"
-                                                    }
-                                                } else {
-                                                    "unknown"
-                                                }
-                                            }
-                                            Err(_) => { "unavailable" }
-                                        }
-                                    };
-
+                    if should_exit {
+                        // Find the token for closing (non-blocking)
+                        match LIST_TOKENS.try_read() {
+                            Ok(tokens_guard) => {
+                                if
+                                    let Some(token) = tokens_guard
+                                        .iter()
+                                        .find(|t| t.mint == position.mint)
+                                {
                                     log(
                                         LogTag::Trader,
-                                        "HOLD",
+                                        "SELL",
                                         &format!(
-                                            "Holding {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Price: {:.12} ({})",
+                                            "Sell signal for {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Emergency: {}",
                                             position.symbol,
                                             position.mint,
                                             sell_urgency,
                                             pnl_percent,
-                                            current_price,
-                                            price_source
+                                            emergency_exit
                                         )
                                     );
+
+                                    positions_to_close.push((
+                                        index,
+                                        position.clone(), // Include the full position data
+                                        token.clone(),
+                                        current_price,
+                                        now,
+                                    ));
                                 }
                             }
-                        } else {
-                            log(
-                                LogTag::Trader,
-                                "WARN",
-                                &format!(
-                                    "No price found for open position: {} ({})",
-                                    position.symbol,
-                                    position.mint
-                                )
-                            );
+                            Err(_) => {
+                                log(
+                                    LogTag::Trader,
+                                    "WARN",
+                                    &format!(
+                                        "Could not acquire token list lock for closing position: {}",
+                                        position.symbol
+                                    )
+                                );
+                            }
+                        }
+                    } else {
+                        log(
+                            LogTag::Trader,
+                            "HOLD",
+                            &format!(
+                                "Holding {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Price: {:.12}",
+                                position.symbol,
+                                position.mint,
+                                sell_urgency,
+                                pnl_percent,
+                                current_price
+                            )
+                        );
+                    }
+
+                    // Update the position in the global list with tracking data
+                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                        if let Some(saved_position) = positions.get_mut(index) {
+                            saved_position.price_highest = position.price_highest;
+                            saved_position.price_lowest = position.price_lowest;
                         }
                     }
                 }
-                // Save updated positions with tracking data
-                save_positions_to_file(&positions);
+            } else {
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    &format!(
+                        "No price found for open position: {} ({})",
+                        position.symbol,
+                        position.mint
+                    )
+                );
             }
         }
 

@@ -123,13 +123,5 @@ name = "tool_sell_all_and_close_atas"
 path = "src/bin/tool_sell_all_and_close_atas.rs"
 
 [[bin]]
-name = "tool_pool_prices"
-path = "src/bin/tool_pool_prices.rs"
-
-[[bin]]
-name = "test_token_monitoring_system"
-path = "src/bin/test_token_monitoring_system.rs"
-
-[[bin]]
-name = "test_file_logging"
-path = "src/bin/test_file_logging.rs"
+name = "test_enhanced_tokens_module"
+path = "src/bin/test_enhanced_tokens_module.rs"

@@ -216,14 +216,15 @@ pub async fn display_positions_table() {
         let mut sorted_open = open_positions.clone();
         sorted_open.sort_by_key(|p| p.entry_time);
 
-        let open_position_displays: Vec<_> = sorted_open
-            .iter()
-            .map(|position| {
-                // Get current price for this position (use pool price for open positions)
-                let current_price = get_current_token_price(&position.mint, true);
-                OpenPositionDisplay::from_position(position, current_price)
-            })
-            .collect();
+        let open_position_displays: Vec<_> = {
+            let mut displays = Vec::new();
+            for position in &sorted_open {
+                // Get current price for this position from tokens module
+                let current_price = crate::tokens::get_current_token_price(&position.mint).await;
+                displays.push(OpenPositionDisplay::from_position(position, current_price));
+            }
+            displays
+        };
 
         println!("\n🔄 Open Positions ({}):", open_positions.len());
         let mut open_table = Table::new(open_position_displays);
@@ -667,7 +668,7 @@ async fn log_positions_summary(
     if !open_positions.is_empty() {
         log(LogTag::System, "OPEN_POS", &format!("Open positions ({})", open_positions.len()));
         for position in open_positions {
-            let current_price = get_current_token_price(&position.mint, true);
+            let current_price = crate::tokens::get_current_token_price(&position.mint).await;
             let (pnl_sol, pnl_percent) = if let Some(price) = current_price {
                 calculate_position_pnl(position, Some(price))
             } else {

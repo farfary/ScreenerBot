@@ -167,23 +167,43 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 
 /// Get current token price from cached data
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    if let Ok(db) = TokenDatabase::new() {
-        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
-            // Return the most recent price available
-            return Some(token.price_usd);
+    // Use the global database from global.rs if available
+    if let Ok(global_db) = crate::global::TOKEN_DB.lock() {
+        if let Some(ref db) = *global_db {
+            if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+                // Return the most recent price available
+                return Some(token.price_usd);
+            }
         }
     }
+
     None
 }
 
 /// Get token by mint address
 pub async fn get_token_by_mint(mint: &str) -> Result<Option<ApiToken>, Box<dyn std::error::Error>> {
+    // Use the global database from global.rs if available
+    if let Ok(global_db) = crate::global::TOKEN_DB.lock() {
+        if let Some(ref db) = *global_db {
+            return db.get_token_by_mint(mint);
+        }
+    }
+
+    // Fallback: create temporary database if global not initialized
     let db = TokenDatabase::new()?;
     db.get_token_by_mint(mint)
 }
 
 /// Get all tokens sorted by liquidity
 pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
+    // Use the global database from global.rs if available
+    if let Ok(global_db) = crate::global::TOKEN_DB.lock() {
+        if let Some(ref db) = *global_db {
+            return db.get_all_tokens().await;
+        }
+    }
+
+    // Fallback: create temporary database if global not initialized
     let db = TokenDatabase::new()?;
     db.get_all_tokens().await
 }
