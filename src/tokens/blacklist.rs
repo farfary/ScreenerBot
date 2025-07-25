@@ -1,0 +1,377 @@
+/// Token blacklist system for managing problematic tokens
+/// Automatically blacklists tokens with poor liquidity performance
+use serde::{ Serialize, Deserialize };
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+use chrono::{ DateTime, Utc, Duration as ChronoDuration };
+use crate::logger::{ log, LogTag };
+
+// =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
+
+/// Low liquidity threshold in USD
+pub const LOW_LIQUIDITY_THRESHOLD: f64 = 100.0;
+
+/// Minimum token age in hours before tracking for blacklist
+pub const MIN_AGE_HOURS: i64 = 2;
+
+/// Maximum low liquidity occurrences before blacklisting
+pub const MAX_LOW_LIQUIDITY_COUNT: u32 = 5;
+
+/// Blacklist file path
+pub const BLACKLIST_FILE: &str = "token_blacklist.json";
+
+// =============================================================================
+// DATA STRUCTURES
+// =============================================================================
+
+/// Token blacklist entry with tracking information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlacklistEntry {
+    pub mint: String,
+    pub symbol: String,
+    pub reason: BlacklistReason,
+    pub first_occurrence: DateTime<Utc>,
+    pub last_occurrence: DateTime<Utc>,
+    pub occurrence_count: u32,
+    pub liquidity_checks: Vec<LiquidityCheck>,
+}
+
+/// Reasons for blacklisting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BlacklistReason {
+    LowLiquidity,
+    PoorPerformance,
+    ManualBlacklist,
+}
+
+/// Individual liquidity check record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiquidityCheck {
+    pub timestamp: DateTime<Utc>,
+    pub liquidity_usd: f64,
+    pub token_age_hours: i64,
+}
+
+/// Complete blacklist data structure
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenBlacklist {
+    pub blacklisted_tokens: HashMap<String, BlacklistEntry>, // mint -> entry
+    pub tracking_data: HashMap<String, Vec<LiquidityCheck>>, // mint -> checks
+    pub last_updated: Option<DateTime<Utc>>,
+}
+
+// =============================================================================
+// BLACKLIST MANAGER
+// =============================================================================
+
+impl TokenBlacklist {
+    /// Create new empty blacklist
+    pub fn new() -> Self {
+        Self {
+            blacklisted_tokens: HashMap::new(),
+            tracking_data: HashMap::new(),
+            last_updated: Some(Utc::now()),
+        }
+    }
+
+    /// Load blacklist from file
+    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        if !Path::new(BLACKLIST_FILE).exists() {
+            log(LogTag::System, "INFO", "No blacklist file found, creating new one");
+            return Ok(Self::new());
+        }
+
+        match fs::read_to_string(BLACKLIST_FILE) {
+            Ok(content) => {
+                match serde_json::from_str::<Self>(&content) {
+                    Ok(blacklist) => {
+                        log(
+                            LogTag::System,
+                            "SUCCESS",
+                            &format!(
+                                "Loaded blacklist with {} entries",
+                                blacklist.blacklisted_tokens.len()
+                            )
+                        );
+                        Ok(blacklist)
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "WARN",
+                            &format!("Failed to parse blacklist file: {}", e)
+                        );
+                        Ok(Self::new())
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Failed to read blacklist file: {}", e));
+                Ok(Self::new())
+            }
+        }
+    }
+
+    /// Save blacklist to file
+    pub fn save(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.last_updated = Some(Utc::now());
+
+        let json = serde_json::to_string_pretty(self)?;
+        fs::write(BLACKLIST_FILE, json)?;
+
+        log(
+            LogTag::System,
+            "SUCCESS",
+            &format!("Saved blacklist with {} entries", self.blacklisted_tokens.len())
+        );
+        Ok(())
+    }
+
+    /// Check if token is blacklisted
+    pub fn is_blacklisted(&self, mint: &str) -> bool {
+        self.blacklisted_tokens.contains_key(mint)
+    }
+
+    /// Add token to blacklist
+    pub fn add_to_blacklist(&mut self, mint: &str, symbol: &str, reason: BlacklistReason) {
+        let now = Utc::now();
+
+        let entry = BlacklistEntry {
+            mint: mint.to_string(),
+            symbol: symbol.to_string(),
+            reason,
+            first_occurrence: now,
+            last_occurrence: now,
+            occurrence_count: 1,
+            liquidity_checks: self.tracking_data.get(mint).cloned().unwrap_or_default(),
+        };
+
+        self.blacklisted_tokens.insert(mint.to_string(), entry);
+
+        log(LogTag::System, "BLACKLIST", &format!("Added {} ({}) to blacklist", symbol, mint));
+    }
+
+    /// Check and track token liquidity for potential blacklisting
+    pub fn check_and_track_liquidity(
+        &mut self,
+        mint: &str,
+        symbol: &str,
+        liquidity_usd: f64,
+        token_age_hours: i64
+    ) -> bool {
+        // Skip if already blacklisted
+        if self.is_blacklisted(mint) {
+            return false;
+        }
+
+        // Only track tokens older than minimum age
+        if token_age_hours < MIN_AGE_HOURS {
+            return true;
+        }
+
+        let now = Utc::now();
+        let check = LiquidityCheck {
+            timestamp: now,
+            liquidity_usd,
+            token_age_hours,
+        };
+
+        // Add to tracking data
+        self.tracking_data.entry(mint.to_string()).or_insert_with(Vec::new).push(check);
+
+        // Check if liquidity is below threshold
+        if liquidity_usd < LOW_LIQUIDITY_THRESHOLD {
+            let low_liquidity_count = self.tracking_data
+                .get(mint)
+                .map(
+                    |checks|
+                        checks
+                            .iter()
+                            .filter(|c| c.liquidity_usd < LOW_LIQUIDITY_THRESHOLD)
+                            .count() as u32
+                )
+                .unwrap_or(0);
+
+            log(
+                LogTag::System,
+                "TRACK",
+                &format!(
+                    "Low liquidity for {} ({}): ${:.2} USD (count: {})",
+                    symbol,
+                    mint,
+                    liquidity_usd,
+                    low_liquidity_count
+                )
+            );
+
+            // Blacklist if threshold exceeded
+            if low_liquidity_count >= MAX_LOW_LIQUIDITY_COUNT {
+                self.add_to_blacklist(mint, symbol, BlacklistReason::LowLiquidity);
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Remove token from blacklist
+    pub fn remove_from_blacklist(&mut self, mint: &str) -> bool {
+        if let Some(entry) = self.blacklisted_tokens.remove(mint) {
+            log(
+                LogTag::System,
+                "UNBLACKLIST",
+                &format!("Removed {} ({}) from blacklist", entry.symbol, mint)
+            );
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get blacklist statistics
+    pub fn get_stats(&self) -> BlacklistStats {
+        let mut reason_counts = HashMap::new();
+
+        for entry in self.blacklisted_tokens.values() {
+            let reason_str = match entry.reason {
+                BlacklistReason::LowLiquidity => "LowLiquidity",
+                BlacklistReason::PoorPerformance => "PoorPerformance",
+                BlacklistReason::ManualBlacklist => "ManualBlacklist",
+            };
+            *reason_counts.entry(reason_str.to_string()).or_insert(0) += 1;
+        }
+
+        BlacklistStats {
+            total_blacklisted: self.blacklisted_tokens.len(),
+            total_tracked: self.tracking_data.len(),
+            reason_breakdown: reason_counts,
+        }
+    }
+
+    /// Clean old tracking data (older than 7 days)
+    pub fn cleanup_old_data(&mut self) {
+        let cutoff = Utc::now() - ChronoDuration::days(7);
+
+        for (mint, checks) in self.tracking_data.iter_mut() {
+            checks.retain(|check| check.timestamp > cutoff);
+        }
+
+        // Remove empty tracking entries
+        self.tracking_data.retain(|_, checks| !checks.is_empty());
+
+        log(LogTag::System, "CLEANUP", &format!("Cleaned old blacklist tracking data"));
+    }
+}
+
+/// Blacklist statistics
+#[derive(Debug, Clone)]
+pub struct BlacklistStats {
+    pub total_blacklisted: usize,
+    pub total_tracked: usize,
+    pub reason_breakdown: HashMap<String, usize>,
+}
+
+// =============================================================================
+// GLOBAL BLACKLIST INSTANCE
+// =============================================================================
+
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+/// Global blacklist instance
+pub static TOKEN_BLACKLIST: Lazy<Mutex<TokenBlacklist>> = Lazy::new(|| {
+    match TokenBlacklist::load() {
+        Ok(blacklist) => Mutex::new(blacklist),
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to load blacklist, using empty: {}", e));
+            Mutex::new(TokenBlacklist::new())
+        }
+    }
+});
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/// Check if token is blacklisted (thread-safe)
+pub fn is_token_blacklisted(mint: &str) -> bool {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(blacklist) => blacklist.is_blacklisted(mint),
+        Err(_) => {
+            log(LogTag::System, "WARN", "Could not acquire blacklist lock for check");
+            false // Assume not blacklisted if can't check
+        }
+    }
+}
+
+/// Track token liquidity for blacklisting (thread-safe)
+pub fn check_and_track_liquidity(
+    mint: &str,
+    symbol: &str,
+    liquidity_usd: f64,
+    token_age_hours: i64
+) -> bool {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(mut blacklist) => {
+            let result = blacklist.check_and_track_liquidity(
+                mint,
+                symbol,
+                liquidity_usd,
+                token_age_hours
+            );
+
+            // Save after tracking
+            if let Err(e) = blacklist.save() {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Failed to save blacklist after tracking: {}", e)
+                );
+            }
+
+            result
+        }
+        Err(_) => {
+            log(LogTag::System, "WARN", "Could not acquire blacklist lock for tracking");
+            true // Assume allowed if can't track
+        }
+    }
+}
+
+/// Get blacklist statistics (thread-safe)
+pub fn get_blacklist_stats() -> Option<BlacklistStats> {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(blacklist) => Some(blacklist.get_stats()),
+        Err(_) => {
+            log(LogTag::System, "WARN", "Could not acquire blacklist lock for stats");
+            None
+        }
+    }
+}
+
+/// Manual blacklist addition (thread-safe)
+pub fn add_to_blacklist_manual(mint: &str, symbol: &str) -> bool {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(mut blacklist) => {
+            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::ManualBlacklist);
+
+            if let Err(e) = blacklist.save() {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Failed to save blacklist after manual addition: {}", e)
+                );
+                false
+            } else {
+                true
+            }
+        }
+        Err(_) => {
+            log(LogTag::System, "WARN", "Could not acquire blacklist lock for manual addition");
+            false
+        }
+    }
+}

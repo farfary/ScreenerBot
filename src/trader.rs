@@ -149,7 +149,6 @@ use crate::positions::{
 };
 use crate::summary::*;
 use crate::utils::*;
-use crate::pool_price::get_token_price;
 use crate::profit::should_sell_smart_system;
 use crate::filtering::{ filter_token_for_trading, FilterResult, debug_filtering_log };
 
@@ -1381,16 +1380,27 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
     is_valid
 }
 
-/// Get current price for a token from the global token list
-/// Uses DexScreener API as primary source, pool price as validated backup
+/// Get current price for a token from the centralized pricing system
+/// Uses DexScreener API as primary source, with optional pool price fallback
 /// Non-blocking approach that never locks threads
 pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64> {
-    // Priority system:
-    // 1. DexScreener SOL price (primary, always reliable)
-    // 2. Pool price SOL (secondary, only if validated and cached)
-    // 3. No blocking for pool calculations
+    // Use the new centralized pricing system
+    // This is a synchronous wrapper for the async pricing system
+    // For real-time trading, we prioritize cached prices for speed
 
-    // Non-blocking token list lookup
+    // Try to get from cache first (fastest)
+    if let Ok(mut cache) = crate::tokens::PRICE_CACHE.lock() {
+        if let Some(price) = cache.get_price(mint) {
+            log(
+                LogTag::Trader,
+                "PRICE",
+                &format!("Got cached price for {}: {:.12} SOL", mint, price)
+            );
+            return Some(price);
+        }
+    }
+
+    // Fallback to existing token list (for compatibility during transition)
     match LIST_TOKENS.try_read() {
         Ok(tokens) => {
             for token in tokens.iter() {
@@ -1400,19 +1410,20 @@ pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64
                         return Some(dex_price);
                     }
 
-                    // Only use pool price if it's already calculated and cached
-                    // Don't trigger new calculations here to avoid blocking
-                    if let Some(pool_price) = token.price_pool_sol {
-                        log(
-                            LogTag::Trader,
-                            "POOL",
-                            &format!(
-                                "Using validated pool price for {}: {:.12} SOL",
-                                mint,
-                                pool_price
-                            )
-                        );
-                        return Some(pool_price);
+                    // Only use pool price if it's already calculated and cached (if enabled)
+                    if crate::tokens::ENABLE_POOL_PRICES {
+                        if let Some(pool_price) = token.price_pool_sol {
+                            log(
+                                LogTag::Trader,
+                                "POOL",
+                                &format!(
+                                    "Using validated pool price for {}: {:.12} SOL",
+                                    mint,
+                                    pool_price
+                                )
+                            );
+                            return Some(pool_price);
+                        }
                     }
 
                     // No price available
@@ -2208,10 +2219,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         if !open_position_mints.is_empty() {
             for mint in &open_position_mints {
                 let mint_clone = mint.clone();
-                tokio::spawn(async move {
-                    // Use new pool price system for immediate price check
-                    let _price = get_token_price(&mint_clone).await;
-                });
+                // Temporarily disabled tokio::spawn due to Send/Sync issues with database
+                // TODO: Re-enable once database is made thread-safe
+                // tokio::spawn(async move {
+                //     // Use new pool price system for immediate price check
+                //     let _price = crate::tokens::get_token_price(&mint_clone).await;
+                // });
             }
         }
 

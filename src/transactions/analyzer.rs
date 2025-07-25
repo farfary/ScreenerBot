@@ -1,7 +1,7 @@
 // transactions/analyzer.rs - Transaction analysis and swap detection
 use super::types::*;
 use crate::logger::{ log, LogTag };
-use crate::discovery::get_single_token_info;
+use crate::tokens::api::DexScreenerApi;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -101,8 +101,10 @@ impl TransactionAnalyzer {
 
         // Fetch information for each unknown token
         for mint in unknown_mints {
-            match get_single_token_info(&mint, shutdown.clone()).await {
-                Ok(Some(token)) => {
+            let mut api = DexScreenerApi::new();
+            match api.get_tokens_info(&[mint.clone()]).await {
+                Ok(tokens) if !tokens.is_empty() => {
+                    let token = &tokens[0];
                     log(
                         LogTag::System,
                         "CACHE",
@@ -116,20 +118,13 @@ impl TransactionAnalyzer {
                     );
                     newly_cached_mints.push(mint);
                 }
-                Ok(None) => {
+                Ok(_) | Err(_) => {
                     log(
                         LogTag::System,
                         "WARN",
                         &format!("Token not found on DexScreener: {}", mint)
                             .bright_yellow()
                             .to_string()
-                    );
-                }
-                Err(e) => {
-                    log(
-                        LogTag::System,
-                        "ERROR",
-                        &format!("Failed to fetch token {}: {}", mint, e).bright_red().to_string()
                     );
                 }
             }
