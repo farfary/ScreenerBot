@@ -16,7 +16,6 @@ pub mod cache;
 pub mod types;
 pub mod blacklist;
 pub mod tests;
-pub mod compatibility;
 
 // Re-export main types and functions
 pub use types::*;
