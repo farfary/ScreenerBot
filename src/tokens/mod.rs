@@ -35,6 +35,9 @@ pub use blacklist::{
     check_and_track_liquidity,
     get_blacklist_stats,
 };
+
+// Re-export decimal caching functions
+pub use cache::{ get_token_decimals_cached, fetch_or_cache_decimals };
 pub use tests::{
     run_token_system_tests,
     test_discovery_manual,
@@ -49,7 +52,6 @@ pub use pool::{ PoolPriceCalculator, get_token_price_from_pools };
 use crate::logger::{ log, LogTag };
 use std::sync::{ Arc, Mutex };
 use std::collections::HashMap;
-use std::error::Error;
 use once_cell::sync::Lazy;
 use tokio::sync::Notify;
 
@@ -165,52 +167,123 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
     Ok(system)
 }
 
-/// Get current token price from cached data
-pub async fn get_current_token_price(mint: &str) -> Option<f64> {
-    // Use the global database from global.rs if available
-    if let Ok(global_db) = crate::global::TOKEN_DB.lock() {
-        if let Some(ref db) = *global_db {
-            if let Ok(Some(token)) = db.get_token_by_mint(mint) {
-                // Return the most recent price available
-                return Some(token.price_usd);
+/// Get all tokens from database (synchronous version)
+pub fn get_all_tokens_sync() -> Vec<Token> {
+    if let Ok(db_guard) = TOKEN_DB.lock() {
+        if let Some(ref db) = *db_guard {
+            // This needs to be handled differently since the database method is async
+            // For now, return empty vector - this will need to be addressed later
+            // TODO: Implement proper sync/async bridge or change database to support sync operations
+            return Vec::new();
+        }
+    }
+    Vec::new()
+}
+
+/// Get token decimals by mint address from database
+pub async fn get_token_decimals(mint: &str) -> Option<u8> {
+    // First try the cached version
+    if let Some(decimals) = cache::get_token_decimals_cached(mint) {
+        return Some(decimals);
+    }
+
+    // If not cached, try to get from token database
+    if let Some(token) = get_token_from_db(mint).await {
+        Some(token.decimals)
+    } else {
+        None
+    }
+}
+
+/// Get token decimals synchronously (fallback to default 9 if not found)
+pub fn get_token_decimals_or_default(mint: &str) -> u8 {
+    cache::get_token_decimals_cached(mint).unwrap_or(9)
+}
+
+/// Get token from database by mint address
+pub async fn get_token_from_db(mint: &str) -> Option<Token> {
+    // Create a temporary database instance to avoid threading issues
+    if let Ok(db) = TokenDatabase::new() {
+        if let Ok(api_tokens) = db.get_all_tokens().await {
+            for api_token in api_tokens {
+                if api_token.mint == mint {
+                    return Some(api_token.into());
+                }
             }
         }
     }
+    None
+}
 
+/// Initialize the global token database
+pub fn initialize_token_database() -> Result<(), Box<dyn std::error::Error>> {
+    let db = TokenDatabase::new()?;
+    if let Ok(mut token_db) = TOKEN_DB.lock() {
+        *token_db = Some(db);
+        log(LogTag::System, "SUCCESS", "Token database initialized successfully");
+    }
+    Ok(())
+}
+
+/// Get current token price from cached data
+pub async fn get_current_token_price(mint: &str) -> Option<f64> {
+    // Create a temporary database instance to avoid threading issues
+    if let Ok(db) = TokenDatabase::new() {
+        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+            // Return the most recent price available
+            return Some(token.price_usd);
+        }
+    }
     None
 }
 
 /// Get token by mint address
 pub async fn get_token_by_mint(mint: &str) -> Result<Option<ApiToken>, Box<dyn std::error::Error>> {
-    // Use the global database from global.rs if available
-    if let Ok(global_db) = crate::global::TOKEN_DB.lock() {
-        if let Some(ref db) = *global_db {
-            return db.get_token_by_mint(mint);
-        }
-    }
-
-    // Fallback: create temporary database if global not initialized
+    // Create a temporary database instance to avoid threading issues
     let db = TokenDatabase::new()?;
     db.get_token_by_mint(mint)
 }
 
 /// Get all tokens sorted by liquidity
 pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
-    // Use the global database from global.rs if available
-    if let Ok(global_db) = crate::global::TOKEN_DB.lock() {
-        if let Some(ref db) = *global_db {
-            return db.get_all_tokens().await;
-        }
-    }
-
-    // Fallback: create temporary database if global not initialized
+    // Create a temporary database instance to avoid threading issues
     let db = TokenDatabase::new()?;
     db.get_all_tokens().await
+}
+
+/// Thread-safe version for use in tokio::spawn contexts
+/// Creates its own database connection to avoid Send/Sync issues
+pub async fn get_all_tokens_by_liquidity_threadsafe() -> Result<
+    Vec<ApiToken>,
+    Box<dyn std::error::Error>
+> {
+    // Create a new database connection for this call to avoid threading issues
+    let db = TokenDatabase::new()?;
+    let tokens = db.get_all_tokens().await?;
+
+    // Sort by liquidity descending
+    let mut sorted_tokens = tokens;
+    sorted_tokens.sort_by(|a, b| {
+        let liquidity_a = a.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+        let liquidity_b = b.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+        liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Ok(sorted_tokens)
 }
 
 // =============================================================================
 // GLOBAL INSTANCES
 // =============================================================================
+
+/// Global token database instance
+pub static TOKEN_DB: Lazy<Mutex<Option<TokenDatabase>>> = Lazy::new(|| Mutex::new(None));
 
 /// Global price cache instance
 pub static PRICE_CACHE: Lazy<Arc<Mutex<PriceCache>>> = Lazy::new(|| {

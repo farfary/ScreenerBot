@@ -584,7 +584,7 @@ impl DexScreenerApi {
         &mut self,
         chain: &str,
         limit: usize
-    ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<ApiToken>, String> {
         let _permit = self.discovery_rate_limiter.acquire().await.unwrap();
 
         let url = format!("https://api.dexscreener.com/latest/dex/pairs/{}", chain);
@@ -594,7 +594,7 @@ impl DexScreenerApi {
         match self.client.get(&url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
-                    let text = response.text().await?;
+                    let text = response.text().await.map_err(|e| e.to_string())?;
 
                     // Parse response and extract tokens
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
@@ -617,23 +617,20 @@ impl DexScreenerApi {
                         }
                     }
 
-                    Err("Failed to parse trending tokens response".into())
+                    Err("Failed to parse trending tokens response".to_string())
                 } else {
-                    Err(format!("API request failed with status: {}", response.status()).into())
+                    Err(format!("API request failed with status: {}", response.status()))
                 }
             }
             Err(e) => {
                 log(LogTag::System, "ERROR", &format!("Failed to fetch trending tokens: {}", e));
-                Err(e.into())
+                Err(e.to_string())
             }
         }
     }
 
     /// Get detailed token information for multiple tokens
-    pub async fn get_tokens_info(
-        &mut self,
-        mints: &[String]
-    ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
+    pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<ApiToken>, String> {
         if mints.is_empty() {
             return Ok(Vec::new());
         }
@@ -650,7 +647,7 @@ impl DexScreenerApi {
         match self.client.get(&url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
-                    let text = response.text().await?;
+                    let text = response.text().await.map_err(|e| e.to_string())?;
 
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                         if let Some(pairs) = json["pairs"].as_array() {
@@ -672,14 +669,14 @@ impl DexScreenerApi {
                         }
                     }
 
-                    Err("Failed to parse token info response".into())
+                    Err("Failed to parse token info response".to_string())
                 } else {
-                    Err(format!("API request failed with status: {}", response.status()).into())
+                    Err(format!("API request failed with status: {}", response.status()))
                 }
             }
             Err(e) => {
                 log(LogTag::System, "ERROR", &format!("Failed to fetch token info: {}", e));
-                Err(e.into())
+                Err(e.to_string())
             }
         }
     }

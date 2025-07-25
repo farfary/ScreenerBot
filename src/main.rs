@@ -12,13 +12,36 @@ async fn main() {
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
     // Initialize token database
-    if let Err(e) = screenerbot::global::initialize_token_database() {
+    if let Err(e) = screenerbot::tokens::initialize_token_database() {
         log(LogTag::System, "ERROR", &format!("Failed to initialize token database: {}", e));
         std::process::exit(1);
     }
 
+    // Initialize tokens system
+    let mut tokens_system = match screenerbot::tokens::initialize_tokens_system().await {
+        Ok(system) => system,
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to initialize tokens system: {}", e));
+            std::process::exit(1);
+        }
+    };
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_trader = shutdown.clone();
+    let shutdown_tokens = shutdown.clone();
+
+    // Start tokens system background tasks
+    let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
+        Ok(handles) => handles,
+        Err(e) => {
+            log(
+                LogTag::System,
+                "WARN",
+                &format!("Some tokens system tasks failed to start: {}", e)
+            );
+            Vec::new()
+        }
+    };
 
     let trader_handle = tokio::spawn(async move {
         log(LogTag::Trader, "INFO", "Trader task started");
@@ -33,7 +56,13 @@ async fn main() {
 
     // Wait for background tasks to finish with timeout
     let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        // Wait for trader task
         let _ = trader_handle.await;
+
+        // Wait for tokens system tasks
+        for handle in tokens_handles {
+            let _ = handle.await;
+        }
     });
 
     match shutdown_timeout.await {

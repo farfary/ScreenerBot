@@ -23,7 +23,8 @@
 //! ## Warning
 //! This tool will attempt to sell ALL tokens in your wallet. Use with caution!
 
-use screenerbot::global::{ Token, read_configs };
+use screenerbot::global::{ read_configs };
+use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::wallet::{ get_wallet_address, sell_token, close_token_account, SwapError };
 use reqwest;

@@ -6,7 +6,6 @@ use crate::tokens::types::*;
 use std::collections::HashSet;
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
-use std::error::Error as StdError;
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -265,17 +264,49 @@ impl TokenDiscovery {
 pub async fn start_token_discovery(
     shutdown: std::sync::Arc<tokio::sync::Notify>
 ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
-    // Temporarily disabled tokio::spawn due to Send/Sync issues with database
-    // TODO: Re-enable once database is made thread-safe
-    log(
-        crate::logger::LogTag::System,
-        "WARN",
-        "Token discovery background task disabled - database needs Send/Sync implementation"
-    );
+    log(crate::logger::LogTag::System, "START", "Token discovery background task started");
 
     let handle = tokio::spawn(async move {
-        // Placeholder - just wait for shutdown
-        shutdown.notified().await;
+        let mut discovery = match TokenDiscovery::new() {
+            Ok(discovery) => discovery,
+            Err(e) => {
+                log(
+                    crate::logger::LogTag::System,
+                    "ERROR",
+                    &format!("Failed to initialize token discovery: {}", e)
+                );
+                return;
+            }
+        };
+
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    log(
+                        crate::logger::LogTag::System,
+                        "SHUTDOWN",
+                        "Token discovery background task stopping"
+                    );
+                    break;
+                }
+                
+                _ = tokio::time::sleep(std::time::Duration::from_secs(300)) => { // 5 minutes
+                    log(
+                        crate::logger::LogTag::System,
+                        "DISCOVERY",
+                        "Running token discovery cycle"
+                    );
+                    
+                    if let Err(e) = discovery.discover_new_tokens().await {
+                        log(
+                            crate::logger::LogTag::System,
+                            "ERROR",
+                            &format!("Token discovery failed: {}", e)
+                        );
+                    }
+                }
+            }
+        }
     });
 
     Ok(handle)

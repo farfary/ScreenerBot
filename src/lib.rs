@@ -3,7 +3,6 @@ pub mod utils;
 pub mod trader;
 pub mod logger;
 pub mod wallet;
-pub mod decimal_cache;
 pub mod transactions;
 pub mod summary;
 pub mod positions;

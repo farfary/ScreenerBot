@@ -1,6 +1,7 @@
 use crate::trader::*;
 use crate::logger::{ log, LogTag };
 use crate::global::*;
+use crate::tokens::Token;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };
 
@@ -43,18 +44,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // For closed positions: actual transaction-based calculation
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from global list
-            let token_decimals = {
-                if let Ok(tokens) = LIST_TOKENS.read() {
-                    tokens
-                        .iter()
-                        .find(|t| t.mint == position.mint)
-                        .map(|t| t.decimals)
-                        .unwrap_or(9) // Default to 9 decimals if not found
-                } else {
-                    9
-                }
-            };
+            // Get token decimals from tokens module database
+            let token_decimals = crate::tokens::get_token_decimals_or_default(&position.mint);
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let entry_cost = position.entry_size_sol;
@@ -84,18 +75,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from global list
-            let token_decimals = {
-                if let Ok(tokens) = LIST_TOKENS.read() {
-                    tokens
-                        .iter()
-                        .find(|t| t.mint == position.mint)
-                        .map(|t| t.decimals)
-                        .unwrap_or(9) // Default to 9 decimals if not found
-                } else {
-                    9
-                }
-            };
+            // Get token decimals from tokens module database
+            let token_decimals = crate::tokens::get_token_decimals_or_default(&position.mint);
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let current_value = ui_token_amount * current;
@@ -270,21 +251,10 @@ pub async fn check_recent_transactions_for_position(position: &mut Position) -> 
 
         // Use the last known price as exit price if not set
         if position.exit_price.is_none() {
-            // Try to get current price from token list
-            if let Ok(tokens_guard) = LIST_TOKENS.read() {
-                if let Some(token) = tokens_guard.iter().find(|t| t.mint == position.mint) {
-                    if let Some(current_price) = token.price_dexscreener_sol {
-                        position.exit_price = Some(current_price);
-                        position.effective_exit_price = Some(current_price);
-                    }
-                }
-            }
-
-            // Fallback to entry price if no current price available
-            if position.exit_price.is_none() {
-                position.exit_price = Some(position.entry_price);
-                position.effective_exit_price = Some(position.entry_price);
-            }
+            // Fallback to entry price since LIST_TOKENS was moved to tokens module
+            // TODO: Implement proper async price lookup from tokens database
+            position.exit_price = Some(position.entry_price);
+            position.effective_exit_price = Some(position.entry_price);
         }
 
         // Calculate P&L using unified function

@@ -1,4 +1,5 @@
-use crate::global::{ Token, read_configs };
+use crate::global::{ read_configs };
+use crate::tokens::{ Token, get_token_decimals_or_default };
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
 

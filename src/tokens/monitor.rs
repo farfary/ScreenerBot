@@ -258,14 +258,18 @@ impl TokenMonitor {
 pub async fn start_token_monitoring(
     shutdown: Arc<tokio::sync::Notify>
 ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
-    // Note: Background monitoring is temporarily disabled due to Send/Sync issues
+    log(LogTag::System, "START", "Token monitoring background task started");
+
     let handle = tokio::spawn(async move {
-        log(
-            LogTag::System,
-            "WARN",
-            "Token monitoring background task disabled - needs Send/Sync fix"
-        );
-        shutdown.notified().await;
+        let mut monitor = match TokenMonitor::new() {
+            Ok(monitor) => monitor,
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("Failed to initialize token monitor: {}", e));
+                return;
+            }
+        };
+
+        monitor.start_monitoring_loop(shutdown).await;
     });
 
     Ok(handle)

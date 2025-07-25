@@ -224,19 +224,19 @@ pub async fn test_tokens_integration() -> Result<(), Box<dyn std::error::Error>>
 
     // Step 2: Test blacklist functionality
     log(LogTag::System, "STEP", "2. Testing blacklist functionality...");
-    let test_mint = "integration_test_mint";
+    let test_mint = format!("integration_test_mint_{}", chrono::Utc::now().timestamp());
     let test_symbol = "ITEST";
 
     // Should not be blacklisted initially
-    assert!(!is_token_blacklisted(test_mint));
+    assert!(!is_token_blacklisted(&test_mint));
 
     // Manually add to blacklist
-    let added = crate::tokens::blacklist::add_to_blacklist_manual(test_mint, test_symbol);
+    let added = crate::tokens::blacklist::add_to_blacklist_manual(&test_mint, test_symbol);
     if added {
         log(LogTag::System, "SUCCESS", "Manual blacklist addition works");
 
         // Should now be blacklisted
-        assert!(is_token_blacklisted(test_mint));
+        assert!(is_token_blacklisted(&test_mint));
         log(LogTag::System, "SUCCESS", "Blacklist checking works");
     }
 

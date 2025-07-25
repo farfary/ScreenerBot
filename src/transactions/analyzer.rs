@@ -43,13 +43,13 @@ impl TransactionAnalyzer {
     }
 
     /// Enrich token transfers with database information
-    fn enrich_token_transfers(&self, transfers: &mut Vec<TokenTransfer>) {
+    async fn enrich_token_transfers(&self, transfers: &mut Vec<TokenTransfer>) {
         if !self.use_token_db {
             return;
         }
 
         for transfer in transfers.iter_mut() {
-            if let Some(token) = crate::global::get_token_from_db(&transfer.mint) {
+            if let Some(token) = crate::tokens::get_token_from_db(&transfer.mint).await {
                 // Update transfer with database information if available
                 transfer.decimals = token.decimals;
 
@@ -76,7 +76,7 @@ impl TransactionAnalyzer {
 
         // Identify unknown tokens
         for transfer in transfers {
-            if crate::global::get_token_from_db(&transfer.mint).is_none() {
+            if crate::tokens::get_token_from_db(&transfer.mint).await.is_none() {
                 unknown_mints.push(transfer.mint.clone());
             }
         }
@@ -137,9 +137,9 @@ impl TransactionAnalyzer {
     }
 
     /// Get token symbol from database for better logging
-    fn get_token_symbol(&self, mint: &str) -> String {
+    async fn get_token_symbol(&self, mint: &str) -> String {
         if self.use_token_db {
-            if let Some(token) = crate::global::get_token_from_db(mint) {
+            if let Some(token) = crate::tokens::get_token_from_db(mint).await {
                 return token.symbol;
             }
         }
