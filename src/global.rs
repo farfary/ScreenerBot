@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 use std::sync::{ RwLock, Mutex };
 use chrono::{ DateTime, Utc };
 use crate::token_cache::TokenDatabase;
+use crate::pool_price::Pool; // Import Pool from pool_price module
 use solana_sdk::signature::Keypair;
 use std::env;
 
@@ -43,6 +44,15 @@ pub fn is_debug_loss_prevention_enabled() -> bool {
 pub fn is_debug_profit_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() {
         args.contains(&"--debug-profit".to_string())
+    } else {
+        false
+    }
+}
+
+/// Check if debug pool prices mode is enabled via command line args
+pub fn is_debug_pool_prices_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-pool-prices".to_string())
     } else {
         false
     }
@@ -156,21 +166,6 @@ pub fn get_token_from_db(mint: &str) -> Option<Token> {
         }
     }
     None
-}
-
-/// Represents a liquidity pool for a token.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Pool {
-    pub address: String,
-    pub dex: String,
-    pub base_token: String,
-    pub quote_token: String,
-    pub liquidity_usd: Option<f64>,
-    pub volume_24h: Option<f64>,
-    pub fee: Option<f64>,
-    pub url: Option<String>,
-    pub price_sol: Option<f64>,
-    pub price_usd: Option<f64>,
 }
 
 /// Represents transaction data for different time periods

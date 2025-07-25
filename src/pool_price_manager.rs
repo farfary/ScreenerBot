@@ -16,8 +16,8 @@
 /// 3. Recently discovered tokens
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ LIST_TOKENS, read_configs };
-use crate::pool_price::PoolDiscoveryAndPricing;
+use crate::global::{ LIST_TOKENS, read_configs, is_debug_pool_prices_enabled };
+use crate::pool_price::{ PoolDiscoveryAndPricing, cleanup_expired_pools, get_pool_cache_stats };
 use crate::positions::SAVED_POSITIONS;
 use crate::utils::check_shutdown_or_delay;
 
@@ -26,58 +26,59 @@ use std::sync::{ Arc, Mutex };
 use std::time::{ Duration, Instant };
 use tokio::sync::Notify;
 use once_cell::sync::Lazy;
+use serde_json;
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// Pool price update interval (30 seconds)
+/// Pool price update interval (30 seconds as originally designed)
 const POOL_PRICE_UPDATE_INTERVAL_SECS: u64 = 30;
 
 /// Maximum number of tokens to check per cycle
-const MAX_TOKENS_PER_CYCLE: usize = 20;
+const MAX_TOKENS_PER_CYCLE: usize = 50;
 
 /// Maximum concurrent pool price checks
 const MAX_CONCURRENT_POOL_CHECKS: usize = 3;
 
-/// Pool price cache validity duration (5 minutes)
-const POOL_PRICE_CACHE_DURATION_SECS: u64 = 300;
+/// Maximum time to wait for pool price check (8 seconds)
+const POOL_PRICE_TIMEOUT_SECS: u64 = 8;
 
-/// Maximum time to wait for pool price check (10 seconds)
-const POOL_PRICE_TIMEOUT_SECS: u64 = 10;
+/// Helper function for conditional debug logging - only shows when --debug-pool-prices is used
+fn debug_log(log_type: &str, message: &str) {
+    if is_debug_pool_prices_enabled() {
+        log(LogTag::Pool, log_type, message);
+    }
+}
+
+/// Helper function for regular pool logging - always visible for important operations
+fn pool_log(log_type: &str, message: &str) {
+    log(LogTag::Pool, log_type, message);
+}
 
 // =============================================================================
-// GLOBAL STATE FOR POOL PRICE MANAGEMENT
+// GLOBAL STATE FOR POOL PRICE MANAGEMENT (Legacy - using new cache system)
 // =============================================================================
 
-/// Cache for successfully decoded tokens (mint -> timestamp)
+/// Legacy cache for compatibility - now using the global pool cache system
 static VALIDATED_TOKENS: Lazy<Arc<Mutex<HashMap<String, Instant>>>> = Lazy::new(||
     Arc::new(Mutex::new(HashMap::new()))
 );
 
-/// Cache for pool prices (mint -> (price, timestamp))
-static POOL_PRICE_CACHE: Lazy<Arc<Mutex<HashMap<String, (f64, Instant)>>>> = Lazy::new(||
-    Arc::new(Mutex::new(HashMap::new()))
-);
-
-/// Tokens that failed to decode (to avoid retrying too often)
+/// Legacy cache for compatibility - now using the global pool cache system
 static FAILED_DECODE_TOKENS: Lazy<Arc<Mutex<HashMap<String, Instant>>>> = Lazy::new(||
     Arc::new(Mutex::new(HashMap::new()))
 );
 
 // =============================================================================
-// POOL PRICE VALIDATION AND TRACKING
+// POOL PRICE VALIDATION AND TRACKING (Updated for new cache system)
 // =============================================================================
 
 /// Marks a token as successfully validated for pool price decoding
 pub fn mark_token_as_validated(mint: &str) {
     if let Ok(mut validated) = VALIDATED_TOKENS.lock() {
         validated.insert(mint.to_string(), Instant::now());
-        log(
-            LogTag::Pool,
-            "VALIDATED",
-            &format!("Token {} marked as validated for pool decoding", mint)
-        );
+        debug_log("VALIDATED", &format!("Token {} marked as validated for pool decoding", mint));
     }
 }
 
@@ -85,7 +86,7 @@ pub fn mark_token_as_validated(mint: &str) {
 pub fn mark_token_decode_failed(mint: &str) {
     if let Ok(mut failed) = FAILED_DECODE_TOKENS.lock() {
         failed.insert(mint.to_string(), Instant::now());
-        log(LogTag::Pool, "DECODE_FAIL", &format!("Token {} marked as failed to decode", mint));
+        debug_log("DECODE_FAIL", &format!("Token {} marked as failed to decode", mint));
     }
 }
 
@@ -101,33 +102,24 @@ pub fn is_token_validated(mint: &str) -> bool {
 }
 
 /// Checks if a token recently failed to decode (avoid retrying too soon)
+/// Reduced retry time for open positions to be more aggressive
 fn is_token_recently_failed(mint: &str) -> bool {
     if let Ok(failed) = FAILED_DECODE_TOKENS.lock() {
         if let Some(&timestamp) = failed.get(mint) {
-            // Retry failed tokens after 1 hour
-            return timestamp.elapsed() < Duration::from_secs(3600);
+            // Retry failed tokens after 10 minutes (more aggressive for open positions)
+            return timestamp.elapsed() < Duration::from_secs(600);
         }
     }
     false
 }
 
-/// Gets cached pool price if available and not expired
+/// Gets cached pool price if available and not expired (using new cache system)
+/// Note: With the new address-only cache system, we don't cache prices anymore
+/// This function returns None to indicate no cached price is available
 pub fn get_cached_pool_price(mint: &str) -> Option<f64> {
-    if let Ok(cache) = POOL_PRICE_CACHE.lock() {
-        if let Some(&(price, timestamp)) = cache.get(mint) {
-            if timestamp.elapsed() < Duration::from_secs(POOL_PRICE_CACHE_DURATION_SECS) {
-                return Some(price);
-            }
-        }
-    }
+    // Since we only cache addresses now (not prices), always return None
+    // The caller should use the full discovery process to get fresh prices
     None
-}
-
-/// Updates pool price cache
-fn update_pool_price_cache(mint: &str, price: f64) {
-    if let Ok(mut cache) = POOL_PRICE_CACHE.lock() {
-        cache.insert(mint.to_string(), (price, Instant::now()));
-    }
 }
 
 // =============================================================================
@@ -135,60 +127,33 @@ fn update_pool_price_cache(mint: &str, price: f64) {
 // =============================================================================
 
 /// Gets list of tokens prioritized for pool price checks
+/// ONLY focuses on open position tokens - no need to check all tokens
 fn get_prioritized_tokens_for_pool_checks() -> Vec<String> {
-    let mut prioritized_tokens = Vec::new();
+    let mut open_position_tokens = Vec::new();
 
-    // Priority 1: Open position tokens (highest priority)
+    // ONLY Priority: Open position tokens (focus on what matters)
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         for position in positions.iter() {
             if position.exit_price.is_none() {
                 // Position is open if no exit price
-                prioritized_tokens.push(position.mint.clone());
+                open_position_tokens.push(position.mint.clone());
             }
         }
     }
 
-    // Priority 2: High liquidity tokens from global list
-    if let Ok(tokens) = LIST_TOKENS.try_read() {
-        let mut high_liquidity_tokens: Vec<_> = tokens
-            .iter()
-            .filter(|token| {
-                // Only include tokens with good liquidity that we haven't already added
-                if prioritized_tokens.contains(&token.mint) {
-                    return false;
-                }
-
-                let liquidity_usd = token.liquidity
-                    .as_ref()
-                    .and_then(|l| l.usd)
-                    .unwrap_or(0.0);
-
-                liquidity_usd > 50000.0 // Only tokens with >$50k liquidity
-            })
-            .map(|token| token.mint.clone())
-            .collect();
-
-        // Sort by liquidity (highest first)
-        high_liquidity_tokens.sort_by(|a, b| {
-            let liquidity_a = tokens
-                .iter()
-                .find(|t| &t.mint == a)
-                .and_then(|t| t.liquidity.as_ref().and_then(|l| l.usd))
-                .unwrap_or(0.0);
-            let liquidity_b = tokens
-                .iter()
-                .find(|t| &t.mint == b)
-                .and_then(|t| t.liquidity.as_ref().and_then(|l| l.usd))
-                .unwrap_or(0.0);
-            liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        prioritized_tokens.extend(high_liquidity_tokens);
+    // Log the focus
+    if !open_position_tokens.is_empty() {
+        log(
+            LogTag::Pool,
+            "FOCUS",
+            &format!(
+                "Pool price manager focusing on {} open position tokens only",
+                open_position_tokens.len()
+            )
+        );
     }
 
-    // Limit to maximum tokens per cycle
-    prioritized_tokens.truncate(MAX_TOKENS_PER_CYCLE);
-    prioritized_tokens
+    open_position_tokens
 }
 
 // =============================================================================
@@ -227,37 +192,32 @@ async fn check_token_pool_price(pool_service: &PoolDiscoveryAndPricing, mint: &s
 
             if let Some(best) = best_result {
                 let price = best.calculated_price;
-                // Successfully got pool price - mark as validated and cache it
+                // Successfully got pool price - mark as validated (cache is handled in pool_price module)
                 mark_token_as_validated(mint);
-                update_pool_price_cache(mint, price);
-                log(
-                    LogTag::Pool,
-                    "SUCCESS",
-                    &format!("Pool price for {}: {:.10} SOL", mint, price)
-                );
+                debug_log("SUCCESS", &format!("Pool price for {}: {:.10} SOL", mint, price));
                 Some(price)
             } else {
                 // No valid pool price found
                 mark_token_decode_failed(mint);
-                log(LogTag::Pool, "FAIL", &format!("No valid pool price found for {}", mint));
+                debug_log("FAIL", &format!("No valid pool price found for {}", mint));
                 None
             }
         }
         Ok(Ok(_)) => {
             // Empty results
             mark_token_decode_failed(mint);
-            log(LogTag::Pool, "FAIL", &format!("No pool results found for {}", mint));
+            debug_log("FAIL", &format!("No pool results found for {}", mint));
             None
         }
         Ok(Err(e)) => {
             // Failed to get pool price - mark as failed
             mark_token_decode_failed(mint);
-            log(LogTag::Pool, "FAIL", &format!("Failed to get pool price for {}: {}", mint, e));
+            debug_log("FAIL", &format!("Failed to get pool price for {}: {}", mint, e));
             None
         }
         Err(_) => {
             // Timeout occurred
-            log(LogTag::Pool, "TIMEOUT", &format!("Pool price check timeout for {}", mint));
+            debug_log("TIMEOUT", &format!("Pool price check timeout for {}", mint));
             None
         }
     }
@@ -301,32 +261,61 @@ fn update_global_tokens_with_pool_prices(pool_prices: &HashMap<String, f64>) {
 
 /// Main background task for pool price management
 pub async fn pool_price_manager(shutdown: Arc<Notify>) {
-    log(LogTag::Pool, "START", "Pool price manager background task started");
+    pool_log("START", "Pool price manager background task started");
 
     // Load configuration
     let configs = match read_configs("configs.json") {
         Ok(configs) => configs,
         Err(e) => {
-            log(LogTag::Pool, "ERROR", &format!("Failed to load configs: {}", e));
+            pool_log("ERROR", &format!("Failed to load configs: {}", e));
             return;
         }
     };
 
     let pool_service = PoolDiscoveryAndPricing::new(&configs.rpc_url);
 
+    // Log cache statistics if in debug mode
+    if is_debug_pool_prices_enabled() {
+        let (total, valid, expired, failed) = get_pool_cache_stats();
+        debug_log(
+            "CACHE",
+            &format!(
+                "Starting with cache: {} total, {} valid, {} expired, {} failed tokens",
+                total,
+                valid,
+                expired,
+                failed
+            )
+        );
+    }
+
     loop {
         let cycle_start = Instant::now();
 
-        // Get prioritized tokens for this cycle
+        // Cleanup expired cache entries periodically
+        if let Err(e) = cleanup_expired_pools() {
+            debug_log("ERROR", &format!("Failed to cleanup expired pools: {}", e));
+        }
+
+        // Get prioritized tokens for this cycle (only open positions)
         let tokens_to_check = get_prioritized_tokens_for_pool_checks();
 
         if tokens_to_check.is_empty() {
-            log(LogTag::Pool, "IDLE", "No tokens to check for pool prices");
+            // No open positions, wait longer before next check
+            debug_log("IDLE", "No open positions to check for pool prices");
+            if
+                check_shutdown_or_delay(
+                    &shutdown,
+                    Duration::from_secs(60) // Wait 1 minute when no positions
+                ).await
+            {
+                break;
+            }
+            continue;
         } else {
-            log(
-                LogTag::Pool,
+            pool_log(
                 "CYCLE",
-                &format!("Checking pool prices for {} tokens", tokens_to_check.len())
+                &format!("Checking pool prices for {} open position tokens", tokens_to_check.len())
             );
 
             // Store the count before moving tokens_to_check
@@ -380,10 +369,10 @@ pub async fn pool_price_manager(shutdown: Arc<Notify>) {
                         // Failed to get price, already logged
                     }
                     Ok(Err(e)) => {
-                        log(LogTag::Pool, "ERROR", &format!("Task error: {}", e));
+                        debug_log("ERROR", &format!("Task error: {}", e));
                     }
                     Err(_) => {
-                        log(LogTag::Pool, "TIMEOUT", "Pool price check task timeout");
+                        debug_log("TIMEOUT", "Pool price check task timeout");
                     }
                 }
             }
@@ -393,8 +382,7 @@ pub async fn pool_price_manager(shutdown: Arc<Notify>) {
                 update_global_tokens_with_pool_prices(&pool_prices);
             }
 
-            log(
-                LogTag::Pool,
+            pool_log(
                 "COMPLETE",
                 &format!(
                     "Pool price cycle complete: {}/{} successful checks in {:.2}s",
@@ -416,7 +404,7 @@ pub async fn pool_price_manager(shutdown: Arc<Notify>) {
         }
     }
 
-    log(LogTag::Pool, "STOP", "Pool price manager background task stopped");
+    pool_log("STOP", "Pool price manager background task stopped");
 }
 
 // =============================================================================
@@ -425,10 +413,16 @@ pub async fn pool_price_manager(shutdown: Arc<Notify>) {
 
 /// Gets the best available price for a token (pool price if validated, otherwise API price)
 /// This is non-blocking and returns immediately
+/// Enhanced for open positions with more aggressive fallback logic
 pub fn get_best_available_price(mint: &str) -> Option<f64> {
     // First, try to get validated pool price from cache
     if is_token_validated(mint) {
         if let Some(pool_price) = get_cached_pool_price(mint) {
+            log(
+                LogTag::Pool,
+                "CACHE_HIT",
+                &format!("Pool price for {}: {:.10} SOL", mint, pool_price)
+            );
             return Some(pool_price);
         }
     }
@@ -437,10 +431,38 @@ pub fn get_best_available_price(mint: &str) -> Option<f64> {
     if let Ok(tokens) = LIST_TOKENS.try_read() {
         for token in tokens.iter() {
             if token.mint == mint {
-                // Priority: DexScreener SOL > Pool price
-                return token.price_dexscreener_sol.or(token.price_pool_sol);
+                // Enhanced priority: DexScreener SOL > Pool price
+                if let Some(price) = token.price_dexscreener_sol {
+                    log(
+                        LogTag::Pool,
+                        "DEXSCR_SOL",
+                        &format!("DexScreener SOL price for {}: {:.10}", mint, price)
+                    );
+                    return Some(price);
+                }
+                if let Some(price) = token.price_pool_sol {
+                    log(
+                        LogTag::Pool,
+                        "POOL_SOL",
+                        &format!("Pool SOL price for {}: {:.10}", mint, price)
+                    );
+                    return Some(price);
+                }
+
+                // Log when we can't find any price
+                log(
+                    LogTag::Pool,
+                    "NO_PRICE",
+                    &format!("No price found for {} in global token list", mint)
+                );
+                break;
             }
         }
+
+        // Log when token is not found in list
+        debug_log("NOT_FOUND", &format!("Token {} not found in global token list", mint));
+    } else {
+        debug_log("LOCK_FAIL", "Could not acquire read lock for token list");
     }
 
     None
@@ -448,30 +470,257 @@ pub fn get_best_available_price(mint: &str) -> Option<f64> {
 
 /// Forces a pool price check for a specific token (for immediate use)
 /// This is non-blocking and will update the cache for future use
+/// Enhanced for open positions with immediate cache update
 pub async fn request_immediate_pool_price_check(mint: &str) {
     if is_token_recently_failed(mint) {
+        debug_log("SKIP_RECENT_FAIL", &format!("Skipping recently failed token: {}", mint));
         return; // Don't retry recently failed tokens
     }
 
     // Load configuration
     let configs = match read_configs("configs.json") {
         Ok(configs) => configs,
-        Err(_) => {
+        Err(e) => {
+            debug_log("CONFIG_ERROR", &format!("Failed to load configs: {}", e));
             return;
         }
     };
 
     let pool_service = PoolDiscoveryAndPricing::new(&configs.rpc_url);
 
-    // Spawn a quick background check
+    // Spawn a quick background check with priority for open positions
     let mint_clone = mint.to_string();
     tokio::spawn(async move {
+        log(
+            LogTag::Pool,
+            "IMMEDIATE_START",
+            &format!("Starting immediate pool price check for {}", mint_clone)
+        );
+
         if let Some(price) = check_token_pool_price(&pool_service, &mint_clone).await {
             log(
                 LogTag::Pool,
-                "IMMEDIATE",
+                "IMMEDIATE_SUCCESS",
                 &format!("Immediate pool price check for {}: {:.10} SOL", mint_clone, price)
+            );
+
+            // Update global token list immediately
+            let mut prices = std::collections::HashMap::new();
+            prices.insert(mint_clone.clone(), price);
+            update_global_tokens_with_pool_prices(&prices);
+        } else {
+            log(
+                LogTag::Pool,
+                "IMMEDIATE_FAIL",
+                &format!("Immediate pool price check failed for {}", mint_clone)
             );
         }
     });
+}
+
+/// Triggers immediate pool price checks for all open positions
+/// This is called when displaying positions to ensure fresh data
+pub async fn refresh_open_position_prices() {
+    let open_position_mints = get_prioritized_tokens_for_pool_checks();
+
+    if open_position_mints.is_empty() {
+        return;
+    }
+
+    log(
+        LogTag::Pool,
+        "REFRESH_ALL",
+        &format!("Refreshing pool prices for {} open positions", open_position_mints.len())
+    );
+
+    // First, try to bootstrap token data for open positions if global list is empty
+    bootstrap_open_position_tokens(&open_position_mints).await;
+
+    // Then trigger immediate checks for all open positions
+    for mint in open_position_mints {
+        request_immediate_pool_price_check(&mint).await;
+        // Small delay to avoid overwhelming the system
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// Bootstrap function to fetch basic token information for open positions
+/// when the global token list is empty or missing these tokens
+async fn bootstrap_open_position_tokens(mints: &[String]) {
+    // Check if we need to bootstrap (if tokens are missing from global list)
+    let missing_mints = {
+        if let Ok(tokens) = LIST_TOKENS.try_read() {
+            if tokens.is_empty() {
+                // Global list is empty, bootstrap all
+                mints.to_vec()
+            } else {
+                // Check which mints are missing
+                mints
+                    .iter()
+                    .filter(|mint| !tokens.iter().any(|t| &t.mint == *mint))
+                    .cloned()
+                    .collect()
+            }
+        } else {
+            // Can't read global list, bootstrap all
+            mints.to_vec()
+        }
+    };
+
+    if missing_mints.is_empty() {
+        return;
+    }
+
+    log(
+        LogTag::Pool,
+        "BOOTSTRAP",
+        &format!("Bootstrapping {} missing tokens for open positions", missing_mints.len())
+    );
+
+    // Try to fetch basic token information from DexScreener API
+    let configs = match read_configs("configs.json") {
+        Ok(configs) => configs,
+        Err(e) => {
+            log(LogTag::Pool, "BOOTSTRAP_ERROR", &format!("Failed to load configs: {}", e));
+            return;
+        }
+    };
+
+    // Fetch token info from DexScreener API
+    for mint in missing_mints {
+        if let Ok(token_info) = fetch_basic_token_info(&configs, &mint).await {
+            // Add to global token list
+            if let Ok(mut tokens) = LIST_TOKENS.try_write() {
+                tokens.push(token_info.clone());
+                log(
+                    LogTag::Pool,
+                    "BOOTSTRAP_ADD",
+                    &format!("Added {} ({}) to global token list", token_info.symbol, mint)
+                );
+            }
+        }
+
+        // Small delay between API calls
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
+/// Fetch basic token information from DexScreener API for a single mint
+async fn fetch_basic_token_info(
+    configs: &crate::global::Configs,
+    mint: &str
+) -> Result<crate::global::Token, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", mint);
+
+    log(LogTag::Pool, "FETCH_INFO", &format!("Fetching token info for {}", mint));
+
+    let response = client.get(&url).timeout(Duration::from_secs(10)).send().await?;
+
+    if !response.status().is_success() {
+        return Err(format!("DexScreener API error: {}", response.status()).into());
+    }
+
+    let response_text = response.text().await?;
+    let api_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+    // Parse the response to create a Token struct
+    if let Some(pairs) = api_response["pairs"].as_array() {
+        if let Some(pair) = pairs.first() {
+            let base_token = &pair["baseToken"];
+
+            // Create a basic Token struct with available information
+            let token = crate::global::Token {
+                mint: mint.to_string(),
+                symbol: base_token["symbol"].as_str().unwrap_or("UNKNOWN").to_string(),
+                name: base_token["name"].as_str().unwrap_or("Unknown Token").to_string(),
+                decimals: base_token["decimals"].as_u64().unwrap_or(9) as u8,
+                chain: "solana".to_string(),
+
+                // Set basic fields
+                logo_url: None,
+                coingecko_id: None,
+                website: None,
+                description: None,
+                tags: Vec::new(),
+                is_verified: false,
+                created_at: None,
+
+                // Price information from DexScreener
+                price_dexscreener_sol: pair["priceNative"].as_str().and_then(|s| s.parse().ok()),
+                price_dexscreener_usd: pair["priceUsd"].as_str().and_then(|s| s.parse().ok()),
+                price_pool_sol: None,
+                price_pool_usd: None,
+                pools: Vec::new(),
+
+                // DexScreener specific fields
+                dex_id: pair["dexId"].as_str().map(|s| s.to_string()),
+                pair_address: pair["pairAddress"].as_str().map(|s| s.to_string()),
+                pair_url: pair["url"].as_str().map(|s| s.to_string()),
+                labels: Vec::new(),
+                fdv: pair["fdv"].as_f64(),
+                market_cap: pair["marketCap"].as_f64(),
+                txns: None, // Would need more complex parsing
+                volume: None, // Would need more complex parsing
+                price_change: None, // Would need more complex parsing
+                liquidity: None, // Would need more complex parsing
+                info: None,
+                boosts: None,
+            };
+
+            log(
+                LogTag::Pool,
+                "FETCH_SUCCESS",
+                &format!(
+                    "Fetched info for {} ({}): {} SOL",
+                    token.symbol,
+                    mint,
+                    token.price_dexscreener_sol.map_or("N/A".to_string(), |p| format!("{:.10}", p))
+                )
+            );
+
+            return Ok(token);
+        }
+    }
+
+    Err("No token data found in DexScreener response".into())
+}
+
+/// Debug function to diagnose why a token price is showing as N/A
+pub fn debug_token_price_lookup(mint: &str) -> String {
+    let mut debug_info = Vec::new();
+
+    // Check validated tokens cache
+    if is_token_validated(mint) {
+        debug_info.push("✓ Token is validated".to_string());
+        if let Some(price) = get_cached_pool_price(mint) {
+            debug_info.push(format!("✓ Cached pool price: {:.10} SOL", price));
+        } else {
+            debug_info.push("✗ No cached pool price".to_string());
+        }
+    } else {
+        debug_info.push("✗ Token not validated".to_string());
+    }
+
+    // Check if recently failed
+    if is_token_recently_failed(mint) {
+        debug_info.push("⚠ Token recently failed to decode".to_string());
+    }
+
+    // Check global token list
+    if let Ok(tokens) = LIST_TOKENS.try_read() {
+        if let Some(token) = tokens.iter().find(|t| t.mint == mint) {
+            debug_info.push("✓ Found in global token list".to_string());
+            debug_info.push(format!("  - DexScreener SOL: {:?}", token.price_dexscreener_sol));
+            debug_info.push(format!("  - Pool SOL: {:?}", token.price_pool_sol));
+            debug_info.push(format!("  - DexScreener USD: {:?}", token.price_dexscreener_usd));
+            debug_info.push(format!("  - Pool USD: {:?}", token.price_pool_usd));
+        } else {
+            debug_info.push("✗ Not found in global token list".to_string());
+        }
+    } else {
+        debug_info.push("✗ Could not read global token list".to_string());
+    }
+
+    debug_info.join("\n")
 }

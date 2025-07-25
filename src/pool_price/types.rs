@@ -2,6 +2,26 @@ use anyhow::Result;
 use serde::{ Deserialize, Serialize };
 use std::time::{ Duration, Instant };
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_pool_prices_enabled;
+
+// =============================================================================
+// POOL DATA STRUCTURES
+// =============================================================================
+
+/// Represents a liquidity pool for a token.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Pool {
+    pub address: String,
+    pub dex: String,
+    pub base_token: String,
+    pub quote_token: String,
+    pub liquidity_usd: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub fee: Option<f64>,
+    pub url: Option<String>,
+    pub price_sol: Option<f64>,
+    pub price_usd: Option<f64>,
+}
 
 // =============================================================================
 // CONSTANTS
@@ -26,11 +46,7 @@ pub const CACHE_EXPIRATION_SECONDS: u64 = 120;
 
 /// Check if debug pool price mode is enabled via command line args
 pub fn is_debug_pool_price_enabled() -> bool {
-    if let Ok(args) = crate::global::CMD_ARGS.lock() {
-        args.contains(&"--debug-pool-price".to_string())
-    } else {
-        false
-    }
+    is_debug_pool_prices_enabled()
 }
 
 /// Helper function for conditional debug logging

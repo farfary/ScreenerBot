@@ -104,3 +104,39 @@ pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> Stri
         }
     }
 }
+
+/// Utility function for hex dump debugging - prints data in hex format with ASCII representation
+pub fn hex_dump_data(
+    data: &[u8],
+    start_offset: usize,
+    length: usize,
+    log_callback: impl Fn(&str, &str)
+) {
+    let end = std::cmp::min(start_offset + length, data.len());
+
+    for chunk_start in (start_offset..end).step_by(16) {
+        let chunk_end = std::cmp::min(chunk_start + 16, end);
+        let chunk = &data[chunk_start..chunk_end];
+
+        // Format offset
+        let offset_str = format!("{:08X}", chunk_start);
+
+        // Format hex bytes
+        let hex_str = chunk
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        // Pad hex string to consistent width (48 chars for 16 bytes)
+        let hex_padded = format!("{:<48}", hex_str);
+
+        // Format ASCII representation
+        let ascii_str: String = chunk
+            .iter()
+            .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+            .collect();
+
+        log_callback("DEBUG", &format!("{}: {} |{}|", offset_str, hex_padded, ascii_str));
+    }
+}
