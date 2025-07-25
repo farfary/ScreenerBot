@@ -1,15 +1,22 @@
-/// Token monitoring system for periodic price updates with rate limiting
+/// Enhanced Token Monitoring System with Priority Queue
+///
+/// This module provides intelligent token monitoring that prioritizes:
+/// 1. Tokens with open positions (highest priority)
+/// 2. High liquidity tokens for new entry detection
+/// 3. Zero or stale price tokens that need updates
+
 use crate::logger::{ log, LogTag };
 use crate::tokens::api::DexScreenerApi;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
+use crate::tokens::price_service::{ get_priority_tokens_safe, update_tokens_prices_safe };
 use crate::tokens::types::*;
 use tokio::time::{ sleep, Duration };
 use tokio::sync::Semaphore;
 use std::sync::Arc;
 
 // =============================================================================
-// CONFIGURATION CONSTANTS
+// ENHANCED CONFIGURATION CONSTANTS
 // =============================================================================
 
 /// Rate limit for DexScreener info API (per minute)
@@ -18,14 +25,20 @@ pub const INFO_RATE_LIMIT: usize = 200;
 /// API calls to use per monitoring cycle (50% of rate limit)
 pub const INFO_CALLS_PER_CYCLE: usize = 100;
 
-/// Monitoring cycle duration in minutes
-pub const CYCLE_DURATION_MINUTES: u64 = 1;
+/// Enhanced monitoring cycle duration in minutes (faster for open positions)
+pub const ENHANCED_CYCLE_DURATION_MINUTES: u64 = 1;
 
 /// Maximum tokens to process per API call
 pub const MAX_TOKENS_PER_BATCH: usize = 30;
 
+/// High liquidity threshold for new entry detection (USD)
+pub const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
+
+/// Maximum number of high liquidity tokens to monitor for new entries
+pub const MAX_NEW_ENTRY_TOKENS: usize = 50;
+
 // =============================================================================
-// TOKEN MONITOR
+// ENHANCED TOKEN MONITOR
 // =============================================================================
 
 pub struct TokenMonitor {
@@ -36,7 +49,7 @@ pub struct TokenMonitor {
 }
 
 impl TokenMonitor {
-    /// Create new token monitor instance
+    /// Create new enhanced token monitor instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let api = DexScreenerApi::new();
         let database = TokenDatabase::new()?;
@@ -50,132 +63,87 @@ impl TokenMonitor {
         })
     }
 
-    /// Start continuous token monitoring loop
-    pub async fn start_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
-        log(LogTag::System, "START", "Token monitor started");
+    /// Start enhanced monitoring loop with priority queue
+    pub async fn start_enhanced_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
+        log(LogTag::System, "START", "Enhanced token monitor started with priority queue");
 
         loop {
             tokio::select! {
                 _ = shutdown.notified() => {
-                    log(LogTag::System, "SHUTDOWN", "Token monitor stopping");
+                    log(LogTag::System, "SHUTDOWN", "Enhanced token monitor stopping");
                     break;
                 }
                 
-                _ = sleep(Duration::from_secs(CYCLE_DURATION_MINUTES * 60)) => {
+                _ = sleep(Duration::from_secs(ENHANCED_CYCLE_DURATION_MINUTES * 60)) => {
                     self.current_cycle += 1;
                     
                     log(LogTag::System, "MONITOR", 
-                        &format!("Starting monitoring cycle #{}", self.current_cycle));
+                        &format!("Starting enhanced monitoring cycle #{}", self.current_cycle));
                     
-                    if let Err(e) = self.monitor_tokens().await {
+                    if let Err(e) = self.enhanced_monitor_tokens().await {
                         log(LogTag::System, "ERROR", 
-                            &format!("Monitoring cycle failed: {}", e));
+                            &format!("Enhanced monitoring cycle failed: {}", e));
                     }
                 }
             }
         }
 
-        log(LogTag::System, "STOP", "Token monitor stopped");
+        log(LogTag::System, "STOP", "Enhanced token monitor stopped");
     }
 
-    /// Monitor and update token prices
-    async fn monitor_tokens(&mut self) -> Result<(), String> {
-        // Get all tokens from database
-        let all_tokens = self.database
-            .get_all_tokens().await
-            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
+    /// Enhanced monitoring with priority queue system
+    async fn enhanced_monitor_tokens(&mut self) -> Result<(), String> {
+        // Get priority tokens from price service (includes open positions + high liquidity)
+        let priority_mints = get_priority_tokens_safe().await;
 
-        if all_tokens.is_empty() {
-            log(LogTag::System, "MONITOR", "No tokens in database to monitor");
-            return Ok(());
+        if priority_mints.is_empty() {
+            log(LogTag::System, "MONITOR", "No priority tokens to monitor");
+
+            // If no priority tokens, get some high liquidity tokens for new entry detection
+            return self.monitor_for_new_entries().await;
         }
-
-        // Filter out blacklisted tokens
-        let mut tokens_to_check: Vec<ApiToken> = all_tokens
-            .into_iter()
-            .filter(|token| !is_token_blacklisted(&token.mint))
-            .collect();
-
-        if tokens_to_check.is_empty() {
-            log(LogTag::System, "MONITOR", "No non-blacklisted tokens to monitor");
-            return Ok(());
-        }
-
-        // Sort by liquidity (highest first) for prioritization
-        tokens_to_check.sort_by(|a, b| {
-            let liquidity_a = a.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-            let liquidity_b = b.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(0.0);
-            liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Implement 50/50 split: high liquidity vs others
-        let total_tokens = tokens_to_check.len();
-        let high_liquidity_count = std::cmp::min(INFO_CALLS_PER_CYCLE / 2, total_tokens);
-        let remaining_calls = INFO_CALLS_PER_CYCLE - high_liquidity_count;
-
-        let high_liquidity_tokens = tokens_to_check[..high_liquidity_count].to_vec();
-        let other_tokens: Vec<ApiToken> = tokens_to_check[high_liquidity_count..]
-            .iter()
-            .take(remaining_calls)
-            .cloned()
-            .collect();
-
-        // Combine priority tokens (high liquidity first, then others)
-        let priority_tokens: Vec<ApiToken> = high_liquidity_tokens
-            .into_iter()
-            .chain(other_tokens.into_iter())
-            .collect();
 
         log(
             LogTag::System,
             "MONITOR",
-            &format!(
-                "Monitoring {} tokens (from {} total, {} blacklisted)",
-                priority_tokens.len(),
-                total_tokens,
-                total_tokens - tokens_to_check.len()
-            )
+            &format!("Enhanced monitoring {} priority tokens", priority_mints.len())
         );
 
-        // Process tokens in batches
-        self.process_tokens_in_batches(priority_tokens).await?;
+        // Process priority tokens first
+        self.process_priority_tokens(priority_mints).await?;
+
+        // Also check for new entry opportunities with remaining API budget
+        self.monitor_for_new_entries().await?;
 
         log(
             LogTag::System,
             "MONITOR",
-            &format!("Completed monitoring cycle #{}", self.current_cycle)
+            &format!("Enhanced monitoring cycle #{} completed", self.current_cycle)
         );
 
         Ok(())
     }
 
-    /// Process tokens in batches with rate limiting
-    async fn process_tokens_in_batches(&mut self, tokens: Vec<ApiToken>) -> Result<(), String> {
+    /// Process priority tokens (open positions + high priority)
+    async fn process_priority_tokens(&mut self, priority_mints: Vec<String>) -> Result<(), String> {
         let mut processed = 0;
         let mut updated = 0;
         let mut errors = 0;
 
-        for chunk in tokens.chunks(MAX_TOKENS_PER_BATCH) {
+        // Process in batches
+        for chunk in priority_mints.chunks(MAX_TOKENS_PER_BATCH) {
             // Acquire rate limit permit
             let _permit = self.rate_limiter.acquire().await.unwrap();
 
-            let mints: Vec<String> = chunk
-                .iter()
-                .map(|t| t.mint.clone())
-                .collect();
-
-            match self.api.get_tokens_info(&mints).await {
+            match self.api.get_tokens_info(chunk).await {
                 Ok(updated_tokens) => {
-                    // Update database with new token information
+                    // Update database
                     if !updated_tokens.is_empty() {
                         match self.database.update_tokens(&updated_tokens).await {
                             Ok(_) => {
+                                // Update price service cache
+                                update_tokens_prices_safe(chunk).await;
+
                                 // Track liquidity for blacklisting
                                 for token in &updated_tokens {
                                     if let Some(liquidity) = &token.liquidity {
@@ -195,14 +163,14 @@ impl TokenMonitor {
                                 log(
                                     LogTag::System,
                                     "UPDATE",
-                                    &format!("Updated {} tokens", updated_tokens.len())
+                                    &format!("Priority: Updated {} tokens", updated_tokens.len())
                                 );
                             }
                             Err(e) => {
                                 log(
                                     LogTag::System,
                                     "ERROR",
-                                    &format!("Failed to update tokens in database: {}", e)
+                                    &format!("Failed to update priority tokens: {}", e)
                                 );
                                 errors += 1;
                             }
@@ -213,7 +181,7 @@ impl TokenMonitor {
                     log(
                         LogTag::System,
                         "ERROR",
-                        &format!("Failed to fetch token info for batch: {}", e)
+                        &format!("Failed to fetch priority token info: {}", e)
                     );
                     errors += 1;
                 }
@@ -222,15 +190,144 @@ impl TokenMonitor {
             processed += chunk.len();
 
             // Rate limiting delay between batches
-            if processed < tokens.len() {
+            if processed < priority_mints.len() {
                 sleep(Duration::from_millis(500)).await;
             }
         }
 
         log(
             LogTag::System,
-            "STATS",
-            &format!("Processed: {}, Updated: {}, Errors: {}", processed, updated, errors)
+            "PRIORITY",
+            &format!(
+                "Priority tokens - Processed: {}, Updated: {}, Errors: {}",
+                processed,
+                updated,
+                errors
+            )
+        );
+
+        Ok(())
+    }
+
+    /// Monitor high liquidity tokens for new entry opportunities
+    async fn monitor_for_new_entries(&mut self) -> Result<(), String> {
+        // Get high liquidity tokens from database for new entry detection
+        let high_liquidity_tokens = self.database
+            .get_tokens_by_liquidity_threshold(HIGH_LIQUIDITY_THRESHOLD).await
+            .map_err(|e| format!("Failed to get high liquidity tokens: {}", e))?;
+
+        if high_liquidity_tokens.is_empty() {
+            log(LogTag::System, "MONITOR", "No high liquidity tokens for new entry detection");
+            return Ok(());
+        }
+
+        // Filter out blacklisted and prioritize by liquidity
+        let mut new_entry_candidates: Vec<ApiToken> = high_liquidity_tokens
+            .into_iter()
+            .filter(|token| !is_token_blacklisted(&token.mint))
+            .take(MAX_NEW_ENTRY_TOKENS)
+            .collect();
+
+        if new_entry_candidates.is_empty() {
+            log(LogTag::System, "MONITOR", "No valid candidates for new entry detection");
+            return Ok(());
+        }
+
+        // Prioritize tokens with zero or stale prices
+        new_entry_candidates.sort_by(|a, b| {
+            let a_has_price = a.price_sol.is_some() && a.price_sol.unwrap() > 0.0;
+            let b_has_price = b.price_sol.is_some() && b.price_sol.unwrap() > 0.0;
+
+            match (a_has_price, b_has_price) {
+                (false, true) => std::cmp::Ordering::Less, // a needs update more
+                (true, false) => std::cmp::Ordering::Greater, // b needs update more
+                _ => {
+                    // Both have similar price status, sort by liquidity
+                    let a_liq = a.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .unwrap_or(0.0);
+                    let b_liq = b.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .unwrap_or(0.0);
+                    b_liq.partial_cmp(&a_liq).unwrap_or(std::cmp::Ordering::Equal)
+                }
+            }
+        });
+
+        log(
+            LogTag::System,
+            "NEW_ENTRY",
+            &format!(
+                "Monitoring {} high liquidity tokens for new entries",
+                new_entry_candidates.len()
+            )
+        );
+
+        // Process new entry candidates
+        let mut processed = 0;
+        let mut updated = 0;
+
+        for chunk in new_entry_candidates.chunks(MAX_TOKENS_PER_BATCH) {
+            // Check if we still have rate limit budget
+            if self.rate_limiter.available_permits() == 0 {
+                log(
+                    LogTag::System,
+                    "RATE_LIMIT",
+                    "Rate limit reached, skipping remaining new entry checks"
+                );
+                break;
+            }
+
+            let _permit = self.rate_limiter.acquire().await.unwrap();
+
+            let mints: Vec<String> = chunk
+                .iter()
+                .map(|t| t.mint.clone())
+                .collect();
+
+            match self.api.get_tokens_info(&mints).await {
+                Ok(updated_tokens) => {
+                    if !updated_tokens.is_empty() {
+                        if let Err(e) = self.database.update_tokens(&updated_tokens).await {
+                            log(
+                                LogTag::System,
+                                "ERROR",
+                                &format!("Failed to update new entry tokens: {}", e)
+                            );
+                        } else {
+                            // Update price service cache
+                            update_tokens_prices_safe(&mints).await;
+                            updated += updated_tokens.len();
+
+                            log(
+                                LogTag::System,
+                                "NEW_ENTRY",
+                                &format!("Updated {} new entry candidates", updated_tokens.len())
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        &format!("Failed to get new entry token info: {}", e)
+                    );
+                }
+            }
+
+            processed += chunk.len();
+
+            // Rate limiting delay
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        log(
+            LogTag::System,
+            "NEW_ENTRY",
+            &format!("New entry detection - Processed: {}, Updated: {}", processed, updated)
         );
 
         Ok(())
@@ -250,37 +347,41 @@ impl TokenMonitor {
 }
 
 // =============================================================================
-// MONITOR HELPER FUNCTIONS
+// ENHANCED MONITOR HELPER FUNCTIONS
 // =============================================================================
 
-/// Start token monitoring in background task
+/// Start enhanced token monitoring in background task
 pub async fn start_token_monitoring(
     shutdown: Arc<tokio::sync::Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::System, "START", "Token monitoring background task started");
+    log(LogTag::System, "START", "Enhanced token monitoring background task started");
 
     let handle = tokio::spawn(async move {
         let mut monitor = match TokenMonitor::new() {
             Ok(monitor) => monitor,
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("Failed to initialize token monitor: {}", e));
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to initialize enhanced monitor: {}", e)
+                );
                 return;
             }
         };
 
-        monitor.start_monitoring_loop(shutdown).await;
+        monitor.start_enhanced_monitoring_loop(shutdown).await;
     });
 
     Ok(handle)
 }
 
-/// Manual token monitoring trigger (for testing)
+/// Manual enhanced monitoring trigger (for testing)
 pub async fn monitor_tokens_once() -> Result<(), String> {
     let mut monitor = TokenMonitor::new().map_err(|e| format!("Failed to create monitor: {}", e))?;
-    monitor.monitor_tokens().await
+    monitor.enhanced_monitor_tokens().await
 }
 
-/// Get monitoring statistics
+/// Get enhanced monitoring statistics
 pub async fn get_monitoring_stats() -> Result<MonitoringStats, String> {
     let database = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
     let total_tokens = database
@@ -302,7 +403,7 @@ pub async fn get_monitoring_stats() -> Result<MonitoringStats, String> {
     })
 }
 
-/// Monitoring statistics
+/// Enhanced monitoring statistics
 #[derive(Debug, Clone)]
 pub struct MonitoringStats {
     pub total_tokens: usize,
@@ -316,20 +417,20 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_token_monitor_creation() {
+    async fn test_enhanced_monitor_creation() {
         let monitor = TokenMonitor::new();
         assert!(monitor.is_ok());
     }
 
     #[tokio::test]
-    async fn test_manual_monitoring() {
+    async fn test_manual_enhanced_monitoring() {
         let result = monitor_tokens_once().await;
         // Should not fail even if no tokens to monitor
         assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_monitoring_stats() {
+    async fn test_enhanced_monitoring_stats() {
         let result = get_monitoring_stats().await;
         assert!(result.is_ok());
     }

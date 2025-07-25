@@ -26,6 +26,14 @@ async fn main() {
         }
     };
 
+    // Initialize price service for thread-safe price access
+    if let Err(e) = screenerbot::tokens::initialize_price_service().await {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize price service: {}", e));
+        std::process::exit(1);
+    }
+
+    log(LogTag::System, "INFO", "Thread-safe price service initialized successfully");
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_trader = shutdown.clone();
     let shutdown_tokens = shutdown.clone();
@@ -69,6 +77,9 @@ async fn main() {
     tokio::signal::ctrl_c().await.expect("failed to listen for event");
     log(LogTag::System, "INFO", "Shutdown signal received, notifying tasks");
     shutdown.notify_waiters();
+
+    // Cleanup price service on shutdown
+    screenerbot::tokens::cleanup_price_service().await;
 
     // Wait for background tasks to finish with timeout
     let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(30), async {

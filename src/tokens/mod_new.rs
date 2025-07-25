@@ -42,7 +42,7 @@ pub use price_service::{
     get_priority_tokens_safe,
     update_tokens_prices_safe,
     get_price_cache_stats,
-    cleanup_price_service,
+    cleanup_price_cache,
     TokenPriceService,
     PriceCacheEntry,
 };
@@ -268,7 +268,7 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
 
     // Update database with fresh token data
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
-    let mut api = DexScreenerApi::new();
+    let api = DexScreenerApi::new();
 
     // Process tokens in batches
     let batch_size = 30;
@@ -357,7 +357,7 @@ async fn start_cache_cleanup_task(
                 }
                 
                 _ = interval.tick() => {
-                    let removed_count = price_service::cleanup_price_cache().await;
+                    let removed_count = cleanup_price_cache().await;
                     if removed_count > 0 {
                         log(LogTag::System, "CLEANUP", 
                             &format!("Cleaned up {} expired cache entries", removed_count));
@@ -407,19 +407,4 @@ pub async fn get_pool_price(_mint: &str) -> Option<f64> {
 /// Get pricing system statistics
 pub async fn get_pricing_stats() -> String {
     get_price_cache_stats().await
-}
-
-/// Get token from database using safe system (compatibility function)
-pub async fn get_token_from_db(mint: &str) -> Option<Token> {
-    let db = match TokenDatabase::new() {
-        Ok(db) => db,
-        Err(_) => {
-            return None;
-        }
-    };
-
-    match db.get_token_by_mint(mint) {
-        Ok(Some(api_token)) => Some(api_token.into()),
-        _ => None,
-    }
 }

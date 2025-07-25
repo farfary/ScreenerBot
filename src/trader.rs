@@ -130,18 +130,14 @@ pub const AUTO_CLOSE_ATA_AFTER_SELL: bool = true;
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
-use crate::global::{ STARTUP_TIME };
 use crate::tokens::{
     Token,
-    LiquidityInfo,
-    TxnStats,
-    VolumeStats,
-    PriceChangeStats,
-    TokenInfo,
-    BoostInfo,
-    TOKEN_DB,
+    update_open_positions_safe,
+    get_all_tokens_by_liquidity,
+    discover_tokens_once,
+    monitor_tokens_once,
+    get_token_price_safe,
 };
-use crate::tokens::{ get_all_tokens_by_liquidity, discover_tokens_once, monitor_tokens_once };
 use crate::positions::{
     Position,
     calculate_position_pnl,
@@ -153,7 +149,7 @@ use crate::positions::{
 };
 use crate::summary::*;
 use crate::utils::*;
-use crate::profit::should_sell_smart_system;
+
 use crate::filtering::{ filter_token_for_trading, FilterResult, debug_filtering_log };
 
 // =============================================================================
@@ -191,8 +187,8 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 // HELPER FUNCTIONS FOR TOKENS MODULE INTEGRATION
 // =============================================================================
 
-/// Get tokens using the new tokens module system instead of LIST_TOKENS
-async fn get_tokens_from_new_system() -> Vec<Token> {
+/// Get tokens using the safe tokens module system
+async fn get_tokens_from_safe_system() -> Vec<Token> {
     match get_all_tokens_by_liquidity().await {
         Ok(api_tokens) => {
             // Convert ApiToken to Token for compatibility with existing code
@@ -202,9 +198,29 @@ async fn get_tokens_from_new_system() -> Vec<Token> {
                 .collect()
         }
         Err(e) => {
-            log(LogTag::Trader, "WARN", &format!("Failed to get tokens from new system: {}", e));
+            log(LogTag::Trader, "WARN", &format!("Failed to get tokens from safe system: {}", e));
             Vec::new()
         }
+    }
+}
+
+/// Update open positions tracking in price service
+async fn update_position_tracking_in_service() {
+    let open_mints = {
+        if let Ok(positions) = SAVED_POSITIONS.lock() {
+            positions
+                .iter()
+                .filter(|pos| pos.exit_price.is_none())
+                .map(|pos| pos.mint.clone())
+                .collect::<Vec<String>>()
+        } else {
+            Vec::new()
+        }
+    };
+
+    if !open_mints.is_empty() {
+        update_open_positions_safe(open_mints).await;
+        log(LogTag::Trader, "TRACK", "Updated open positions in price service");
     }
 }
 
@@ -300,19 +316,8 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
         return 0.0; // Hold for minimum time unless profit target reached
     }
 
-    // Try to get the token from new tokens module for full analysis
-    if let Ok(db_guard) = TOKEN_DB.lock() {
-        if let Some(ref db) = *db_guard {
-            // Use a blocking approach since this function is synchronous
-            // This is a temporary solution until we can make position management async
-            // For now, use the empty list as fallback
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                "Synchronous token lookup in should_sell - using fallback logic"
-            );
-        }
-    }
+    // Note: Current price lookup now handled by the safe price service
+    // Position analysis can be enhanced with token data from the price service in the future
 
     // Fallback logic if token not found in tokens module - only profit-based
     if current_pnl_percent >= PROFIT_TARGET_PERCENT {
@@ -333,21 +338,10 @@ pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f6
 /// Calculate dynamic liquidity thresholds based on current token watch list
 /// Returns (high_threshold, medium_threshold, low_threshold) for liquidity factoring
 fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
-    // Get tokens from new tokens module
-    if let Ok(db_guard) = TOKEN_DB.lock() {
-        if let Some(ref db) = *db_guard {
-            // Use a blocking approach since this function is synchronous
-            // This is a temporary solution until we can make this function async
-            // For now, use the fallback values
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                "Synchronous token lookup in liquidity thresholds - using fallback values"
-            );
-        }
-    }
+    // Note: Liquidity threshold calculation now uses safe price service
+    // For now, use stable fallback values that work well in practice
 
-    // Fallback if can't access token database
+    // Fallback thresholds based on market analysis
     log(
         LogTag::Trader,
         "WARN",
@@ -1425,15 +1419,21 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
+        // Update position tracking in price service
+        update_position_tracking_in_service().await;
+
+        // Ensure we have tokens to work with
+        ensure_tokens_populated().await;
+
         let mut tokens: Vec<_> = {
-            // Get tokens from new tokens module system
-            let tokens_from_module = get_tokens_from_new_system().await;
+            // Get tokens from safe system
+            let tokens_from_module = get_tokens_from_safe_system().await;
 
             // Log total tokens available
             log(
                 LogTag::Trader,
                 "DEBUG",
-                &format!("Total tokens from tokens module: {}", tokens_from_module.len())
+                &format!("Total tokens from safe system: {}", tokens_from_module.len())
                     .dimmed()
                     .to_string()
             );
@@ -2110,12 +2110,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
         // Now process each position with async calls (mutex is released)
         for (index, mut position) in open_positions_data {
-            // Get current price from tokens module
-            if
-                let Some(current_price) = crate::tokens::get_current_token_price(
-                    &position.mint
-                ).await
-            {
+            // Get current price from safe price service
+            if let Some(current_price) = get_token_price_safe(&position.mint).await {
                 if current_price > 0.0 {
                     // Update position tracking (extremes) on the local copy
                     update_position_tracking(&mut position, current_price);
@@ -2138,87 +2134,61 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let should_exit = emergency_exit || sell_urgency > 0.7;
 
                     if should_exit {
-                        // Find the token for closing using new tokens module
-                        if let Ok(db_guard) = TOKEN_DB.lock() {
-                            if let Some(ref db) = *db_guard {
-                                // Use a blocking approach since this function is not fully async
-                                // This is a temporary solution until we can make position management fully async
-                                // For now, create a minimal token for closing
-                                let decimals = crate::tokens::get_token_decimals_or_default(
-                                    &position.mint
-                                );
-                                let minimal_token = Token {
-                                    mint: position.mint.clone(),
-                                    symbol: position.symbol.clone(),
-                                    name: position.symbol.clone(),
-                                    decimals, // Get proper decimals from tokens module
-                                    chain: "solana".to_string(),
-                                    // All other fields as None/defaults
-                                    logo_url: None,
-                                    coingecko_id: None,
-                                    website: None,
-                                    description: None,
-                                    tags: vec![],
-                                    is_verified: false,
-                                    created_at: None,
-                                    price_dexscreener_sol: None,
-                                    price_dexscreener_usd: None,
-                                    price_pool_sol: None,
-                                    price_pool_usd: None,
-                                    dex_id: None,
-                                    pair_address: None,
-                                    pair_url: None,
-                                    labels: vec![],
-                                    fdv: None,
-                                    market_cap: None,
-                                    txns: None,
-                                    volume: None,
-                                    price_change: None,
-                                    liquidity: None,
-                                    info: None,
-                                    boosts: None,
-                                };
+                        // Get token decimals for closing (using safe function)
+                        let decimals = crate::tokens::get_token_decimals_or_default(&position.mint);
 
-                                log(
-                                    LogTag::Trader,
-                                    "SELL",
-                                    &format!(
-                                        "Sell signal for {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Emergency: {}",
-                                        position.symbol,
-                                        position.mint,
-                                        sell_urgency,
-                                        pnl_percent,
-                                        emergency_exit
-                                    )
-                                );
+                        let minimal_token = Token {
+                            mint: position.mint.clone(),
+                            symbol: position.symbol.clone(),
+                            name: position.symbol.clone(),
+                            decimals,
+                            chain: "solana".to_string(),
+                            // All other fields as None/defaults
+                            logo_url: None,
+                            coingecko_id: None,
+                            website: None,
+                            description: None,
+                            tags: vec![],
+                            is_verified: false,
+                            created_at: None,
+                            price_dexscreener_sol: None,
+                            price_dexscreener_usd: None,
+                            price_pool_sol: None,
+                            price_pool_usd: None,
+                            dex_id: None,
+                            pair_address: None,
+                            pair_url: None,
+                            labels: vec![],
+                            fdv: None,
+                            market_cap: None,
+                            txns: None,
+                            volume: None,
+                            price_change: None,
+                            liquidity: None,
+                            info: None,
+                            boosts: None,
+                        };
 
-                                positions_to_close.push((
-                                    index,
-                                    position.clone(), // Include the full position data
-                                    minimal_token,
-                                    current_price,
-                                    now,
-                                ));
-                            } else {
-                                log(
-                                    LogTag::Trader,
-                                    "WARN",
-                                    &format!(
-                                        "Token database not initialized for closing position: {}",
-                                        position.symbol
-                                    )
-                                );
-                            }
-                        } else {
-                            log(
-                                LogTag::Trader,
-                                "WARN",
-                                &format!(
-                                    "Could not access token database for closing position: {}",
-                                    position.symbol
-                                )
-                            );
-                        }
+                        log(
+                            LogTag::Trader,
+                            "SELL",
+                            &format!(
+                                "Sell signal for {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Emergency: {}",
+                                position.symbol,
+                                position.mint,
+                                sell_urgency,
+                                pnl_percent,
+                                emergency_exit
+                            )
+                        );
+
+                        positions_to_close.push((
+                            index,
+                            position.clone(), // Include the full position data
+                            minimal_token,
+                            current_price,
+                            now,
+                        ));
                     } else {
                         log(
                             LogTag::Trader,

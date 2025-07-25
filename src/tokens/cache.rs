@@ -423,12 +423,11 @@ impl TokenDatabase {
     }
 
     /// Update existing tokens in database
-    pub async fn update_tokens(
-        &self,
-        tokens: &[ApiToken]
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update_tokens(&self, tokens: &[ApiToken]) -> Result<(), String> {
         for token in tokens {
-            self.insert_or_update_token(token)?;
+            self
+                .insert_or_update_token(token)
+                .map_err(|e| format!("Failed to update token: {}", e))?;
         }
 
         log(LogTag::System, "DATABASE", &format!("Updated {} tokens", tokens.len()));
@@ -437,25 +436,20 @@ impl TokenDatabase {
     }
 
     /// Get all tokens from database
-    pub async fn get_all_tokens(&self) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
-        let connection = self.connection
-            .lock()
-            .map_err(
-                |e|
-                    Box::new(
-                        std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Database lock error: {}", e)
-                        )
-                    ) as Box<dyn std::error::Error>
-            )?;
-        let mut stmt = connection.prepare("SELECT * FROM tokens ORDER BY liquidity_usd DESC")?;
+    pub async fn get_all_tokens(&self) -> Result<Vec<ApiToken>, String> {
+        let connection = self.connection.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
-        let token_iter = stmt.query_map([], |row| { Ok(self.row_to_token(row)?) })?;
+        let mut stmt = connection
+            .prepare("SELECT * FROM tokens ORDER BY liquidity_usd DESC")
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let token_iter = stmt
+            .query_map([], |row| { Ok(self.row_to_token(row)?) })
+            .map_err(|e| format!("Failed to execute query: {}", e))?;
 
         let mut tokens = Vec::new();
         for token in token_iter {
-            tokens.push(token?);
+            tokens.push(token.map_err(|e| format!("Failed to parse token: {}", e))?);
         }
 
         Ok(tokens)
@@ -502,6 +496,39 @@ impl TokenDatabase {
         } else {
             Ok(None)
         }
+    }
+
+    /// Get tokens by liquidity threshold for new entry detection
+    pub async fn get_tokens_by_liquidity_threshold(
+        &self,
+        threshold: f64
+    ) -> Result<Vec<ApiToken>, Box<dyn std::error::Error>> {
+        let connection = self.connection
+            .lock()
+            .map_err(
+                |e|
+                    Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Database lock error: {}", e)
+                        )
+                    ) as Box<dyn std::error::Error>
+            )?;
+
+        let mut stmt = connection.prepare(
+            "SELECT * FROM tokens 
+             WHERE liquidity_usd >= ?1 
+             ORDER BY liquidity_usd DESC"
+        )?;
+
+        let rows = stmt.query_map(params![threshold], |row| { Ok(self.row_to_token(row)?) })?;
+
+        let mut tokens = Vec::new();
+        for row in rows {
+            tokens.push(row?);
+        }
+
+        Ok(tokens)
     }
 
     /// Insert or update token in database
