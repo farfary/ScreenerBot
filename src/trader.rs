@@ -1382,20 +1382,41 @@ pub fn validate_pool_price_against_api(pool_price: f64, api_price: f64, symbol: 
 }
 
 /// Get current price for a token from the global token list
-/// Uses the new pool price system for best available prices
+/// Uses DexScreener API as primary source, pool price as validated backup
 /// Non-blocking approach that never locks threads
 pub fn get_current_token_price(mint: &str, is_open_position: bool) -> Option<f64> {
-    // Use the new pool price system to get current price
-    // Note: This function is synchronous but the pool price system runs async in background
-    // For real-time prices, use the async version: pool_price::get_token_price()
+    // Priority system:
+    // 1. DexScreener SOL price (primary, always reliable)
+    // 2. Pool price SOL (secondary, only if validated and cached)
+    // 3. No blocking for pool calculations
 
-    // Fallback to direct token list lookup (non-blocking)
+    // Non-blocking token list lookup
     match LIST_TOKENS.try_read() {
         Ok(tokens) => {
             for token in tokens.iter() {
                 if token.mint == mint {
-                    // Priority: DexScreener SOL > Pool price
-                    return token.price_dexscreener_sol.or(token.price_pool_sol);
+                    // Always prioritize DexScreener price (reliable and fast)
+                    if let Some(dex_price) = token.price_dexscreener_sol {
+                        return Some(dex_price);
+                    }
+
+                    // Only use pool price if it's already calculated and cached
+                    // Don't trigger new calculations here to avoid blocking
+                    if let Some(pool_price) = token.price_pool_sol {
+                        log(
+                            LogTag::Trader,
+                            "POOL",
+                            &format!(
+                                "Using validated pool price for {}: {:.12} SOL",
+                                mint,
+                                pool_price
+                            )
+                        );
+                        return Some(pool_price);
+                    }
+
+                    // No price available
+                    return None;
                 }
             }
             None

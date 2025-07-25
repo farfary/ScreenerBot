@@ -180,6 +180,9 @@ pub async fn display_positions_table() {
         (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
     }; // Lock is released here
 
+    // Log position summary to file
+    log_positions_summary(&open_positions, &closed_positions, total_invested, total_pnl).await;
+
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();
     display_bot_summary(&closed_refs).await;
@@ -637,5 +640,101 @@ fn get_profit_status_emoji(pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> S
         format!("💥 {}", base_status) // Major loss
     } else {
         format!("☠️ {}", base_status) // Devastating loss
+    }
+}
+
+/// Log positions summary to log file in simple format
+async fn log_positions_summary(
+    open_positions: &[Position],
+    closed_positions: &[Position],
+    total_invested: f64,
+    total_pnl: f64
+) {
+    // Log overview
+    log(
+        LogTag::System,
+        "POSITIONS",
+        &format!(
+            "Summary: {} open positions, {} closed positions, {:.6} SOL invested, {:+.6} SOL total P&L",
+            open_positions.len(),
+            closed_positions.len(),
+            total_invested,
+            total_pnl
+        )
+    );
+
+    // Log open positions
+    if !open_positions.is_empty() {
+        log(LogTag::System, "OPEN_POS", &format!("Open positions ({})", open_positions.len()));
+        for position in open_positions {
+            let current_price = get_current_token_price(&position.mint, true);
+            let (pnl_sol, pnl_percent) = if let Some(price) = current_price {
+                calculate_position_pnl(position, Some(price))
+            } else {
+                (0.0, 0.0)
+            };
+
+            let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+            let current_price_str = current_price
+                .map(|p| format!("{:.8}", p))
+                .unwrap_or("N/A".to_string());
+            let duration = format_duration_compact(position.entry_time, Utc::now());
+
+            log(
+                LogTag::System,
+                "OPEN_POS",
+                &format!(
+                    "{} | Entry: {:.8} | Current: {} | Size: {:.6} SOL | P&L: {:+.6} SOL ({:+.2}%) | Duration: {}",
+                    position.symbol,
+                    entry_price,
+                    current_price_str,
+                    position.entry_size_sol,
+                    pnl_sol,
+                    pnl_percent,
+                    duration
+                )
+            );
+        }
+    }
+
+    // Log recent closed positions (last 5)
+    if !closed_positions.is_empty() {
+        let mut sorted_closed = closed_positions.to_vec();
+        sorted_closed.sort_by_key(|p| p.exit_time.unwrap_or(Utc::now()));
+
+        let recent_closed: Vec<_> = sorted_closed.iter().rev().take(5).collect();
+
+        log(
+            LogTag::System,
+            "CLOSED_POS",
+            &format!("Recent closed positions (last {})", recent_closed.len())
+        );
+        for position in recent_closed {
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
+            let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+            let exit_price = position.effective_exit_price.unwrap_or(
+                position.exit_price.unwrap_or(0.0)
+            );
+            let duration = if let Some(exit_time) = position.exit_time {
+                format_duration_compact(position.entry_time, exit_time)
+            } else {
+                "N/A".to_string()
+            };
+
+            log(
+                LogTag::System,
+                "CLOSED_POS",
+                &format!(
+                    "{} | Entry: {:.8} | Exit: {:.8} | Size: {:.6} SOL | P&L: {:+.6} SOL ({:+.2}%) | Duration: {}",
+                    position.symbol,
+                    entry_price,
+                    exit_price,
+                    position.entry_size_sol,
+                    pnl_sol,
+                    pnl_percent,
+                    duration
+                )
+            );
+        }
     }
 }

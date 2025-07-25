@@ -12,9 +12,20 @@ use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::collections::HashMap;
 use tokio::sync::Semaphore;
 use std::time::Duration;
 use tokio::time::timeout;
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/// Debug logging function (conditional based on debug flag)
+fn debug_log(log_type: &str, message: &str) {
+    // For pool price debugging, we use regular log with Pool tag
+    log(LogTag::Pool, log_type, message);
+}
 
 // =============================================================================
 // POOL DATA DECODER
@@ -40,7 +51,56 @@ impl PoolDecoder {
         })
     }
 
-    /// Fetch and decode pool data for multiple pool addresses
+    /// Fetch pool data for multiple pools in batch using get_multiple_accounts
+    pub async fn fetch_multiple_pool_data(
+        &self,
+        pool_addresses: &[Pubkey]
+    ) -> Result<HashMap<Pubkey, PoolAccountData>, Box<dyn std::error::Error + Send + Sync>> {
+        if pool_addresses.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Acquire rate limit permit once for the entire batch
+        let _permit = timeout(Duration::from_secs(30), self.rate_limiter.acquire()).await
+            .map_err(|_| "Timeout waiting for RPC rate limit permit for batch fetch")?
+            .map_err(|_| "Failed to acquire RPC rate limit permit for batch fetch")?;
+
+        debug_log(
+            "BATCH",
+            &format!("Fetching data for {} pools using get_multiple_accounts", pool_addresses.len())
+        );
+
+        // Use get_multiple_accounts for efficient batch fetching
+        let account_infos = self.rpc_client
+            .get_multiple_accounts(pool_addresses)
+            .map_err(|e| format!("Failed to fetch multiple pool accounts: {}", e))?;
+
+        let mut results = HashMap::new();
+
+        for (i, account_info_opt) in account_infos.iter().enumerate() {
+            let pool_address = pool_addresses[i];
+
+            if let Some(account_info) = account_info_opt {
+                let account_data = PoolAccountData {
+                    address: pool_address,
+                    program_id: account_info.owner.to_string(),
+                    dex_name: "Unknown".to_string(), // Will be determined later
+                    account_data: account_info.data.clone(),
+                    liquidity_usd: 0.0, // Will be calculated later
+                };
+                results.insert(pool_address, account_data);
+                debug_log("BATCH", &format!("Successfully fetched pool data for {}", pool_address));
+            } else {
+                debug_log("WARN", &format!("No account data for pool {}", pool_address));
+            }
+        }
+
+        debug_log(
+            "SUCCESS",
+            &format!("Batch fetched {}/{} pool accounts", results.len(), pool_addresses.len())
+        );
+        Ok(results)
+    }
     pub async fn fetch_and_decode_pools(
         &self,
         pool_addresses: &[PoolAddressInfo]
@@ -97,7 +157,7 @@ impl PoolDecoder {
         pool_info: &[PoolAddressInfo]
     ) -> PoolPriceResult<Vec<DecodedPoolData>> {
         // Acquire rate limit permit
-        let _permit = timeout(Duration::from_secs(10), self.rate_limiter.acquire()).await
+        let _permit = timeout(Duration::from_secs(30), self.rate_limiter.acquire()).await
             .map_err(|_|
                 PoolPriceError::RateLimit("Timeout waiting for RPC rate limit permit".to_string())
             )?
@@ -177,7 +237,7 @@ impl PoolDecoder {
     }
 
     /// Decode pool data based on program ID and pool type
-    async fn decode_pool_data(
+    pub async fn decode_pool_data(
         &self,
         address: String,
         program_id: &str,

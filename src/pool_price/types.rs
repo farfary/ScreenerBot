@@ -16,7 +16,7 @@ pub const DEXSCREENER_API_BASE: &str = "https://api.dexscreener.com/latest/dex/t
 
 /// Rate limiting constants
 pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: u32 = 30;
-pub const SOLANA_RPC_RATE_LIMIT_PER_MINUTE: u32 = 100;
+pub const SOLANA_RPC_RATE_LIMIT_PER_MINUTE: u32 = 300;
 
 /// Cache TTL for pool addresses (5 minutes)
 pub const POOL_ADDRESS_CACHE_TTL_SECS: u64 = 300;
