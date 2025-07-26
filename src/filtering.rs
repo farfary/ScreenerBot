@@ -2,7 +2,6 @@
 /// All token filtering logic consolidated into a single function
 /// No structs or models - pure functional approach
 
-use crate::global::*;
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::loss_prevention::should_allow_token_purchase;
@@ -22,9 +21,6 @@ pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24;
 
 /// Cooldown period after closing position before re-entering same token (minutes)
 pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 30;
-
-/// Enable debug filtering logs
-pub const ENABLE_DEBUG_FILTERING_LOGS: bool = true;
 
 // =============================================================================
 // FILTERING RESULT ENUM
@@ -118,11 +114,6 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         return FilterResult::Rejected(reason);
     }
 
-    debug_filtering_log(
-        "APPROVED",
-        &format!("Token {} ({}) passed all filters", token.symbol, token.mint)
-    );
-
     FilterResult::Approved
 }
 
@@ -133,19 +124,12 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 /// Validate basic token metadata
 fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
     if token.symbol.is_empty() {
-        debug_filtering_log("INFO_BLOCK", &format!("Token {} has empty symbol", token.mint));
         return Some(FilterReason::EmptySymbol);
     }
 
     if token.mint.is_empty() {
-        debug_filtering_log("INFO_BLOCK", &format!("Token {} has empty mint", token.symbol));
         return Some(FilterReason::EmptyMint);
     }
-
-    debug_filtering_log(
-        "INFO_OK",
-        &format!("Token {} ({}) basic info validation passed", token.symbol, token.mint)
-    );
 
     None
 }
@@ -153,10 +137,6 @@ fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
 /// Validate token age constraints
 fn validate_token_age(token: &Token) -> Option<FilterReason> {
     let Some(created_at) = token.created_at else {
-        debug_filtering_log(
-            "AGE_BLOCK",
-            &format!("Token {} ({}) has no creation date", token.symbol, token.mint)
-        );
         return Some(FilterReason::NoCreationDate);
     };
 
@@ -165,16 +145,6 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
     let age_hours = token_age.num_hours();
 
     if age_hours < MIN_TOKEN_AGE_HOURS {
-        debug_filtering_log(
-            "AGE_BLOCK",
-            &format!(
-                "Token {} ({}) too young: {} hours old (minimum {} hours required)",
-                token.symbol,
-                token.mint,
-                age_hours,
-                MIN_TOKEN_AGE_HOURS
-            )
-        );
         return Some(FilterReason::TooYoung {
             age_hours,
             min_required: MIN_TOKEN_AGE_HOURS,
@@ -182,26 +152,11 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
     }
 
     if age_hours > MAX_TOKEN_AGE_HOURS {
-        debug_filtering_log(
-            "AGE_BLOCK",
-            &format!(
-                "Token {} ({}) too old: {} hours old (maximum {} hours allowed)",
-                token.symbol,
-                token.mint,
-                age_hours,
-                MAX_TOKEN_AGE_HOURS
-            )
-        );
         return Some(FilterReason::TooOld {
             age_hours,
             max_allowed: MAX_TOKEN_AGE_HOURS,
         });
     }
-
-    debug_filtering_log(
-        "AGE_OK",
-        &format!("Token {} ({}) age acceptable: {} hours old", token.symbol, token.mint, age_hours)
-    );
 
     None
 }
@@ -209,37 +164,14 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
 /// Validate liquidity requirements
 fn validate_liquidity(token: &Token) -> Option<FilterReason> {
     let Some(liquidity) = &token.liquidity else {
-        debug_filtering_log(
-            "LIQUIDITY_BLOCK",
-            &format!("Token {} ({}) has no liquidity data", token.symbol, token.mint)
-        );
         return Some(FilterReason::MissingLiquidityData);
     };
 
     let liquidity_usd = liquidity.usd.unwrap_or(0.0);
 
     if liquidity_usd <= 0.0 {
-        debug_filtering_log(
-            "LIQUIDITY_BLOCK",
-            &format!(
-                "Token {} ({}) has zero or negative liquidity: ${:.2}",
-                token.symbol,
-                token.mint,
-                liquidity_usd
-            )
-        );
         return Some(FilterReason::ZeroLiquidity);
     }
-
-    debug_filtering_log(
-        "LIQUIDITY_OK",
-        &format!(
-            "Token {} ({}) liquidity acceptable: ${:.2}",
-            token.symbol,
-            token.mint,
-            liquidity_usd
-        )
-    );
 
     None
 }
@@ -249,35 +181,12 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
     let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
 
     if current_price <= 0.0 {
-        debug_filtering_log(
-            "PRICE_BLOCK",
-            &format!(
-                "Token {} ({}) has invalid price: {:.12}",
-                token.symbol,
-                token.mint,
-                current_price
-            )
-        );
         return Some(FilterReason::InvalidPrice);
     }
 
     if token.price_dexscreener_sol.is_none() {
-        debug_filtering_log(
-            "PRICE_BLOCK",
-            &format!("Token {} ({}) has no DexScreener SOL price data", token.symbol, token.mint)
-        );
         return Some(FilterReason::MissingPriceData);
     }
-
-    debug_filtering_log(
-        "PRICE_OK",
-        &format!(
-            "Token {} ({}) price validation passed: {:.12} SOL",
-            token.symbol,
-            token.mint,
-            current_price
-        )
-    );
 
     None
 }
@@ -285,9 +194,10 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
 /// Validate position-related constraints
 fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
     let Ok(positions) = SAVED_POSITIONS.lock() else {
-        debug_filtering_log(
-            "LOCK_ERROR",
-            &format!("Could not acquire lock on SAVED_POSITIONS for {}", token.symbol)
+        log(
+            LogTag::Filtering,
+            "ERROR",
+            &format!("Could not acquire lock on positions for {}", token.symbol)
         );
         return Some(FilterReason::LockAcquisitionFailed);
     };
@@ -298,10 +208,6 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
         .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none());
 
     if has_open_position {
-        debug_filtering_log(
-            "POSITION_BLOCK",
-            &format!("Token {} ({}) already has an open position", token.symbol, token.mint)
-        );
         return Some(FilterReason::ExistingOpenPosition);
     }
 
@@ -312,16 +218,6 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
         .count();
 
     if open_positions_count >= MAX_OPEN_POSITIONS {
-        debug_filtering_log(
-            "LIMIT_BLOCK",
-            &format!(
-                "Maximum open positions reached ({}/{}) - blocking {} ({})",
-                open_positions_count,
-                MAX_OPEN_POSITIONS,
-                token.symbol,
-                token.mint
-            )
-        );
         return Some(FilterReason::MaxPositionsReached {
             current: open_positions_count,
             max: MAX_OPEN_POSITIONS,
@@ -338,20 +234,6 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
                 let time_since_close = now - exit_time;
                 if time_since_close <= cooldown_duration {
                     let minutes_ago = time_since_close.num_minutes();
-                    debug_filtering_log(
-                        "COOLDOWN_BLOCK",
-                        &format!(
-                            "Blocking {} ({}) purchase - position closed {} minutes ago (cooldown: {} min)",
-                            token.symbol,
-                            if token.mint.len() >= 8 {
-                                &token.mint[..8]
-                            } else {
-                                &token.mint
-                            },
-                            minutes_ago,
-                            POSITION_CLOSE_COOLDOWN_MINUTES
-                        )
-                    );
                     return Some(FilterReason::RecentlyClosed {
                         minutes_ago,
                         cooldown_minutes: POSITION_CLOSE_COOLDOWN_MINUTES,
@@ -361,37 +243,17 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
         }
     }
 
-    debug_filtering_log(
-        "POSITION_OK",
-        &format!(
-            "Token {} ({}) position constraints passed - no conflicts",
-            token.symbol,
-            token.mint
-        )
-    );
-
     None
 }
 
 /// Validate loss prevention constraints
 fn validate_loss_prevention(token: &Token) -> Option<FilterReason> {
     if !should_allow_token_purchase(&token.mint, &token.symbol) {
-        debug_filtering_log(
-            "LOSS_PREVENTION_BLOCK",
-            &format!("Token {} ({}) blocked by loss prevention system", token.symbol, token.mint)
-        );
-        // Note: The actual loss rate and avg loss values would need to be extracted
-        // from the loss prevention module for more detailed reporting
         return Some(FilterReason::PoorHistoricalPerformance {
             loss_rate: 0.0, // Placeholder - would need actual values
             avg_loss: 0.0, // Placeholder - would need actual values
         });
     }
-
-    debug_filtering_log(
-        "LOSS_PREVENTION_OK",
-        &format!("Token {} ({}) passed loss prevention check", token.symbol, token.mint)
-    );
 
     None
 }
@@ -399,13 +261,6 @@ fn validate_loss_prevention(token: &Token) -> Option<FilterReason> {
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
-
-/// Helper function for conditional debug filtering logs
-pub fn debug_filtering_log(log_type: &str, message: &str) {
-    if ENABLE_DEBUG_FILTERING_LOGS || is_debug_filtering_enabled() {
-        log(LogTag::Trader, log_type, message);
-    }
-}
 
 /// Check if a specific token passes all filters (convenience function)
 pub fn is_token_eligible_for_trading(token: &Token) -> bool {
@@ -451,4 +306,61 @@ pub fn get_filtering_stats(tokens: &[Token]) -> (usize, usize, f64) {
     let pass_rate = if total > 0 { ((eligible as f64) / (total as f64)) * 100.0 } else { 0.0 };
 
     (total, eligible, pass_rate)
+}
+
+/// Log filtering summary statistics
+pub fn log_filtering_summary(tokens: &[Token]) {
+    let (total, eligible, pass_rate) = get_filtering_stats(tokens);
+
+    if total > 0 {
+        log(
+            LogTag::Filtering,
+            "SUMMARY",
+            &format!(
+                "Processed {} tokens: {} eligible ({:.1}% pass rate)",
+                total,
+                eligible,
+                pass_rate
+            )
+        );
+
+        if eligible == 0 && total > 0 {
+            log(LogTag::Filtering, "WARN", "No tokens passed filtering - check filter criteria");
+        }
+    }
+}
+
+/// Log specific filtering error for important cases
+pub fn log_filtering_error(token: &Token, reason: &FilterReason) {
+    let should_log = match reason {
+        FilterReason::LockAcquisitionFailed => true,
+        FilterReason::MaxPositionsReached { .. } => true,
+        _ => false,
+    };
+
+    if should_log {
+        let message = match reason {
+            FilterReason::LockAcquisitionFailed =>
+                format!("Lock acquisition failed for {}", token.symbol),
+            FilterReason::MaxPositionsReached { current, max } =>
+                format!("Max positions reached ({}/{})", current, max),
+            _ => {
+                return;
+            }
+        };
+
+        log(LogTag::Filtering, "ERROR", &message);
+    }
+}
+
+/// Main public interface function that combines filtering with logging
+/// This should be used by the trader instead of filter_token_for_trading directly
+pub fn should_buy_token(token: &Token) -> bool {
+    match filter_token_for_trading(token) {
+        FilterResult::Approved => true,
+        FilterResult::Rejected(reason) => {
+            log_filtering_error(token, &reason);
+            false
+        }
+    }
 }

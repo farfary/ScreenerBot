@@ -349,6 +349,21 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
 
 /// Opens a new buy position for a token with real swap execution
 pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
+    // CRITICAL SAFETY CHECK: Validate price before any trading operations
+    if price <= 0.0 || !price.is_finite() {
+        log(
+            LogTag::Trader,
+            "ERROR",
+            &format!(
+                "REFUSING TO TRADE: Invalid price for {} ({}). Price = {:.10}",
+                token.symbol,
+                token.mint,
+                price
+            )
+        );
+        return;
+    }
+
     // Check if we already have an open position for this token and count open positions
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         if

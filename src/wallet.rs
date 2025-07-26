@@ -1813,6 +1813,23 @@ pub async fn buy_token(
     amount_sol: f64,
     expected_price: Option<f64>
 ) -> Result<SwapResult, SwapError> {
+    // CRITICAL SAFETY CHECK: Validate expected price if provided
+    if let Some(price) = expected_price {
+        if price <= 0.0 || !price.is_finite() {
+            log(
+                LogTag::Wallet,
+                "ERROR",
+                &format!(
+                    "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
+                    token.symbol,
+                    token.mint,
+                    price
+                )
+            );
+            return Err(SwapError::InvalidAmount(format!("Invalid expected price: {:.10}", price)));
+        }
+    }
+
     let wallet_address = get_wallet_address()?;
 
     log(
@@ -2010,6 +2027,27 @@ pub async fn sell_token(
     token_amount: u64, // Amount in token's smallest unit
     expected_sol_output: Option<f64>
 ) -> Result<SwapResult, SwapError> {
+    // CRITICAL SAFETY CHECK: Validate expected SOL output if provided
+    if let Some(expected_sol) = expected_sol_output {
+        if expected_sol <= 0.0 || !expected_sol.is_finite() {
+            log(
+                LogTag::Wallet,
+                "ERROR",
+                &format!(
+                    "❌ REFUSING TO SELL: Invalid expected_sol_output for {} ({}). Expected SOL = {:.10}",
+                    token.symbol,
+                    token.mint,
+                    expected_sol
+                )
+            );
+            return Err(
+                SwapError::InvalidAmount(
+                    format!("Invalid expected SOL output: {:.10}", expected_sol)
+                )
+            );
+        }
+    }
+
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
     let wallet_address = get_wallet_address()?;
 

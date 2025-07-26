@@ -151,7 +151,7 @@ use crate::positions::{
 use crate::summary::*;
 use crate::utils::*;
 
-use crate::filtering::{ filter_token_for_trading, FilterResult, debug_filtering_log };
+use crate::filtering::{ should_buy_token, log_filtering_summary };
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -265,6 +265,21 @@ async fn ensure_tokens_populated() {
 /// NEVER SELL AT LOSS - Only sells at profit or extreme emergency (-99.9% loss)
 /// This function ensures we NEVER sell at a loss under normal trading conditions
 pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
+    // CRITICAL SAFETY CHECK: Validate current price before any sell analysis
+    if current_price <= 0.0 || !current_price.is_finite() {
+        log(
+            LogTag::Trader,
+            "ERROR",
+            &format!(
+                "INVALID PRICE for sell analysis: {} ({}) - Price = {:.10} - CANNOT MAKE SELL DECISION",
+                pos.symbol,
+                pos.mint,
+                current_price
+            )
+        );
+        return 0.0; // Never sell with invalid price data
+    }
+
     // Calculate time held in seconds
     let duration = now - pos.entry_time;
     let time_held_secs: f64 = duration.num_seconds() as f64;
@@ -374,21 +389,18 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
     );
 
     // Use centralized filtering system
-    match filter_token_for_trading(token) {
-        FilterResult::Approved => {
-            debug_trader_log(
-                "SHOULD_BUY_FILTER_OK",
-                &format!("Token {} ({}) passed filtering", token.symbol, token.mint)
-            );
-        }
-        FilterResult::Rejected(reason) => {
-            debug_trader_log(
-                "SHOULD_BUY_FILTER_REJECT",
-                &format!("Token {} ({}) rejected by filter: {:?}", token.symbol, token.mint, reason)
-            );
-            return 0.0;
-        }
+    if !should_buy_token(token) {
+        debug_trader_log(
+            "SHOULD_BUY_FILTER_REJECT",
+            &format!("Token {} ({}) rejected by filtering system", token.symbol, token.mint)
+        );
+        return 0.0;
     }
+
+    debug_trader_log(
+        "SHOULD_BUY_FILTER_OK",
+        &format!("Token {} ({}) passed filtering", token.symbol, token.mint)
+    );
 
     // Additional price validation for dip detection
     if current_price <= 0.0 || prev_price <= 0.0 {
@@ -957,12 +969,23 @@ fn calculate_multi_strategy_urgency(signals: &[DipSignal], token: &Token) -> f64
         _ => 2.0,
     };
 
-    // Check historical data
-    let historical_allowed = is_entry_allowed_by_historical_data(
-        &token.mint,
-        token.price_dexscreener_sol.unwrap_or(0.0)
-    );
-    let historical_factor = if historical_allowed { 1.0 } else { 0.5 };
+    // Check historical data - only if we have a valid price
+    let historical_factor = if let Some(price) = token.price_dexscreener_sol {
+        if price > 0.0 && price.is_finite() {
+            let historical_allowed = is_entry_allowed_by_historical_data(&token.mint, price);
+            if historical_allowed {
+                1.0
+            } else {
+                0.5
+            }
+        } else {
+            // Invalid price - don't allow historical analysis
+            0.0
+        }
+    } else {
+        // No price loaded - don't allow historical analysis
+        0.0
+    };
 
     let final_urgency =
         base_urgency * liquidity_factor * strategy_consensus_bonus * historical_factor;
@@ -1616,10 +1639,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 })
                 .count();
 
-            debug_filtering_log(
-                "TOKEN_COUNT",
-                &format!("Tokens with non-zero liquidity: {}", with_liquidity)
-            );
+            if with_liquidity > 0 {
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    &format!("Processing {} tokens with liquidity", with_liquidity)
+                );
+            }
 
             tokens_from_module
         };
@@ -1698,10 +1724,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
-        debug_filtering_log(
-            "TASK_SPAWN",
-            &format!("Starting to spawn {} token checking tasks", tokens.len())
-        );
+        // Log filtering summary
+        log_filtering_summary(&tokens);
 
         // Process all tokens in parallel with concurrent tasks
         let mut handles = Vec::new();
@@ -1756,6 +1780,20 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 match
                     tokio::time::timeout(Duration::from_secs(30), async {
                         if let Some(current_price) = token.price_dexscreener_sol {
+                            // CRITICAL: Validate price is actually loaded and valid before any trading
+                            if current_price <= 0.0 || !current_price.is_finite() {
+                                debug_trader_log(
+                                    "PRICE_INVALID",
+                                    &format!(
+                                        "Token {} ({}): INVALID PRICE DETECTED - not trading. Price = {:.10}",
+                                        token.symbol,
+                                        token.mint,
+                                        current_price
+                                    )
+                                );
+                                return None;
+                            }
+
                             debug_trader_log(
                                 "PRICE_SOURCE",
                                 &format!(
@@ -1767,14 +1805,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
 
                             // Use centralized filtering system
-                            match filter_token_for_trading(&token) {
-                                FilterResult::Approved => {
-                                    // Token passed all filters, proceed with trading logic
-                                }
-                                FilterResult::Rejected(_) => {
-                                    // Token was filtered out, skip processing
-                                    return None;
-                                }
+                            if !should_buy_token(&token) {
+                                // Token was filtered out, skip processing
+                                return None;
                             }
 
                             let liquidity_usd = token.liquidity
@@ -1943,6 +1976,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                                 return Some((token, current_price, change));
                             }
+                        } else {
+                            // Price is not loaded - do not attempt any trading
+                            debug_trader_log(
+                                "PRICE_NOT_LOADED",
+                                &format!(
+                                    "Token {} ({}): PRICE NOT LOADED - skipping trading. token.price_dexscreener_sol = None",
+                                    token.symbol,
+                                    token.mint
+                                )
+                            );
                         }
                         None
                     }).await
@@ -2353,7 +2396,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         for (index, mut position) in open_positions_data {
             // Get current price from safe price service
             if let Some(current_price) = get_token_price_safe(&position.mint).await {
-                if current_price > 0.0 {
+                if current_price > 0.0 && current_price.is_finite() {
                     // Update position tracking (extremes) on the local copy
                     update_position_tracking(&mut position, current_price);
 
@@ -2452,6 +2495,18 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             saved_position.price_lowest = position.price_lowest;
                         }
                     }
+                } else {
+                    // Price found but invalid (0, negative, or NaN)
+                    log(
+                        LogTag::Trader,
+                        "WARN",
+                        &format!(
+                            "Invalid price for position monitoring: {} ({}) - Price = {:.10}",
+                            position.symbol,
+                            position.mint,
+                            current_price
+                        )
+                    );
                 }
             } else {
                 log(

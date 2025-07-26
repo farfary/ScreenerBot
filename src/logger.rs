@@ -48,6 +48,7 @@ const ENABLE_POOL_LOGS: bool = true;
 const ENABLE_BLACKLIST_LOGS: bool = true;
 const ENABLE_DISCOVERY_LOGS: bool = true;
 const ENABLE_API_LOGS: bool = true;
+const ENABLE_FILTERING_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -71,7 +72,7 @@ const BRACKET_SPACE_WIDTH: usize = 3; // " [" + "] " = 3 chars between each comp
 const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2; // +1 for final space
 
 /// Maximum line length before wrapping
-const MAX_LINE_LENGTH: usize = 155;
+const MAX_LINE_LENGTH: usize = 175;
 
 use chrono::Local;
 use colored::*;
@@ -275,6 +276,7 @@ pub enum LogTag {
     Pool,
     Blacklist,
     Discovery,
+    Filtering,
     Api,
     Other(String),
 }
@@ -289,6 +291,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
             LogTag::Blacklist => format!("{:<8}", "BLACKLIST").bright_red().bold(), // 🚫 Warning red
             LogTag::Discovery => format!("{:<8}", "DISCOVER").bright_white().bold(), // 🔍 Search white
+            LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
             LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
@@ -307,6 +310,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Pool => ENABLE_POOL_LOGS,
         LogTag::Blacklist => ENABLE_BLACKLIST_LOGS,
         LogTag::Discovery => ENABLE_DISCOVERY_LOGS,
+        LogTag::Filtering => ENABLE_FILTERING_LOGS,
         LogTag::Api => ENABLE_API_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
@@ -377,6 +381,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Discovery =>
             format!("{:<width$}", "DISCOVER", width = TAG_WIDTH)
                 .bright_white()
+                .bold(),
+        LogTag::Filtering =>
+            format!("{:<width$}", "FILTER", width = TAG_WIDTH)
+                .bright_yellow()
                 .bold(),
         LogTag::Api =>
             format!("{:<width$}", "API", width = TAG_WIDTH)
@@ -473,6 +481,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Pool => "POOL",
         LogTag::Blacklist => "BLACKLIST",
         LogTag::Discovery => "DISCOVER",
+        LogTag::Filtering => "FILTER",
         LogTag::Api => "API",
         LogTag::Other(ref s) => s,
     };
