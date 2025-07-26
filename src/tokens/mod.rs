@@ -14,7 +14,6 @@ pub mod monitor;
 pub mod cache;
 pub mod types;
 pub mod blacklist;
-pub mod tests;
 pub mod price_service;
 pub mod decimals;
 
@@ -52,14 +51,6 @@ pub use price_service::{
     PriceCacheEntry,
 };
 
-// Re-export decimal caching functions
-// No imports from cache needed - using local function
-pub use tests::{
-    run_token_system_tests,
-    test_discovery_manual,
-    test_monitoring_manual,
-    test_tokens_integration,
-};
 
 // Pool pricing is disabled - use pool module only if explicitly needed
 #[allow(unused_imports)]

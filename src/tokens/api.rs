@@ -1,8 +1,7 @@
 /// DexScreener API integration
-/// Handles all communication with DexScreener API including rate limiting and caching
+/// Handles token information retrieval with rate limiting and caching
 use crate::logger::{ log, LogTag };
 use crate::tokens::types::*;
-use crate::global::read_configs;
 use std::collections::HashMap;
 use std::time::{ Duration, Instant };
 use tokio::sync::Semaphore;
@@ -15,7 +14,6 @@ use chrono::Utc;
 pub struct DexScreenerApi {
     client: reqwest::Client,
     rate_limiter: Arc<Semaphore>,
-    discovery_rate_limiter: Arc<Semaphore>,
     stats: ApiStats,
     last_request_time: Option<Instant>,
 }
@@ -31,7 +29,6 @@ impl DexScreenerApi {
                 .build()
                 .expect("Failed to create HTTP client"),
             rate_limiter: Arc::new(Semaphore::new(300)), // 300 requests per minute
-            discovery_rate_limiter: Arc::new(Semaphore::new(60)), // 60 requests per minute for discovery
             stats: ApiStats::new(),
             last_request_time: None,
         }
@@ -39,20 +36,16 @@ impl DexScreenerApi {
 
     /// Initialize the API client
     pub async fn initialize(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Initializing DexScreener API client...");
+        log(LogTag::Api, "INIT", "Initializing DexScreener API client...");
 
         // Test API connectivity
         match self.test_connectivity().await {
             Ok(_) => {
-                log(LogTag::System, "SUCCESS", "DexScreener API client initialized successfully");
+                log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
                 Ok(())
             }
             Err(e) => {
-                log(
-                    LogTag::System,
-                    "ERROR",
-                    &format!("Failed to initialize DexScreener API: {}", e)
-                );
+                log(LogTag::Api, "ERROR", &format!("Failed to initialize API client: {}", e));
                 Err(e)
             }
         }
@@ -60,12 +53,12 @@ impl DexScreenerApi {
 
     /// Test API connectivity
     async fn test_connectivity(&mut self) -> Result<(), String> {
-        log(LogTag::System, "INFO", "Testing DexScreener API connectivity...");
+        log(LogTag::Api, "TEST", "Testing DexScreener API connectivity...");
 
-        let test_url = "https://api.dexscreener.com/token-boosts/latest/v1";
+        let test_url = "https://api.dexscreener.com/latest/dex/pairs/solana";
         let start_time = Instant::now();
 
-        let permit = self.discovery_rate_limiter
+        let permit = self.rate_limiter
             .clone()
             .acquire_owned().await
             .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
@@ -84,53 +77,30 @@ impl DexScreenerApi {
 
         if success {
             log(
-                LogTag::System,
+                LogTag::Api,
                 "SUCCESS",
-                &format!("DexScreener API test successful ({}ms)", response_time)
+                &format!("API connectivity test passed ({}ms)", response_time)
             );
             Ok(())
         } else {
             let error_msg = format!(
-                "DexScreener API test failed with status: {}",
+                "API connectivity test failed with status: {}",
                 response.status()
             );
-            log(LogTag::System, "ERROR", &error_msg);
+            log(LogTag::Api, "ERROR", &error_msg);
             Err(error_msg)
         }
     }
 
     /// Get token price for a single mint address
     pub async fn get_token_price(&mut self, mint: &str) -> Option<f64> {
-        log(LogTag::Trader, "API", &format!("Fetching price for token: {}", mint));
-
         match self.get_token_data(mint).await {
             Ok(Some(token)) => {
-                if let Some(price) = token.price_sol {
-                    log(
-                        LogTag::Trader,
-                        "API",
-                        &format!("Got price for {}: {:.12} SOL", mint, price)
-                    );
-                    Some(price)
-                } else {
-                    log(
-                        LogTag::Trader,
-                        "WARN",
-                        &format!("No SOL price available for token: {}", mint)
-                    );
-                    None
-                }
+                if let Some(price) = token.price_sol { Some(price) } else { None }
             }
-            Ok(None) => {
-                log(LogTag::Trader, "WARN", &format!("Token not found in DexScreener: {}", mint));
-                None
-            }
+            Ok(None) => None,
             Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!("Failed to fetch token price for {}: {}", mint, e)
-                );
+                log(LogTag::Api, "ERROR", &format!("Failed to fetch price for {}: {}", mint, e));
                 None
             }
         }
@@ -139,10 +109,12 @@ impl DexScreenerApi {
     /// Get token prices for multiple mint addresses (batch)
     pub async fn get_multiple_token_prices(&mut self, mints: &[String]) -> HashMap<String, f64> {
         let mut prices = HashMap::new();
+        let start_time = Instant::now();
+        let mut total_errors = 0;
 
         // Process in chunks of 30 (DexScreener API limit)
-        for chunk in mints.chunks(30) {
-            match self.get_multiple_token_data(chunk).await {
+        for (chunk_idx, chunk) in mints.chunks(30).enumerate() {
+            match self.get_tokens_info(chunk).await {
                 Ok(tokens) => {
                     for token in tokens {
                         if let Some(price) = token.price_sol {
@@ -151,11 +123,21 @@ impl DexScreenerApi {
                     }
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Trader,
-                        "ERROR",
-                        &format!("Failed to fetch batch token prices: {}", e)
-                    );
+                    total_errors += 1;
+                    if total_errors <= 3 {
+                        // Only log first 3 errors to avoid spam
+                        log(
+                            LogTag::Api,
+                            "ERROR",
+                            &format!(
+                                "Batch {} failed (tokens {}-{}): {}",
+                                chunk_idx + 1,
+                                chunk_idx * 30 + 1,
+                                chunk_idx * 30 + chunk.len(),
+                                e
+                            )
+                        );
+                    }
                 }
             }
 
@@ -163,76 +145,46 @@ impl DexScreenerApi {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        log(
-            LogTag::Trader,
-            "API",
-            &format!("Fetched prices for {}/{} tokens", prices.len(), mints.len())
-        );
+        let elapsed = start_time.elapsed().as_millis();
+
+        if total_errors > 0 {
+            log(
+                LogTag::Api,
+                "WARN",
+                &format!(
+                    "Price batch completed with {} errors: {}/{} tokens in {}ms",
+                    total_errors,
+                    prices.len(),
+                    mints.len(),
+                    elapsed
+                )
+            );
+        } else {
+            log(
+                LogTag::Api,
+                "SUCCESS",
+                &format!(
+                    "Price batch completed: {}/{} tokens in {}ms",
+                    prices.len(),
+                    mints.len(),
+                    elapsed
+                )
+            );
+        }
+
         prices
     }
 
     /// Get detailed token data for a single mint
     pub async fn get_token_data(&mut self, mint: &str) -> Result<Option<ApiToken>, String> {
-        let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", mint);
-
-        let start_time = Instant::now();
-
-        // Rate limiting
-        let permit = self.rate_limiter
-            .clone()
-            .acquire_owned().await
-            .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
-
-        let response = self.client
-            .get(&url)
-            .send().await
-            .map_err(|e| format!("HTTP request failed: {}", e))?;
-
-        drop(permit);
-
-        let response_time = start_time.elapsed().as_millis() as f64;
-        let success = response.status() == StatusCode::OK;
-
-        self.stats.record_request(success, response_time);
-        self.last_request_time = Some(start_time);
-
-        if !success {
-            return Err(format!("API returned status: {}", response.status()));
-        }
-
-        let data: serde_json::Value = response
-            .json().await
-            .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
-
-        // Parse response
-        if let Some(pairs_array) = data.as_array() {
-            if let Some(pair_data) = pairs_array.first() {
-                match self.parse_token_from_pair(pair_data) {
-                    Ok(token) => Ok(Some(token)),
-                    Err(e) => {
-                        log(
-                            LogTag::Trader,
-                            "WARN",
-                            &format!("Failed to parse token data for {}: {}", mint, e)
-                        );
-                        Ok(None)
-                    }
-                }
-            } else {
-                Ok(None) // No pairs found
-            }
-        } else {
-            Err("Invalid API response format".to_string())
-        }
+        let tokens = self.get_tokens_info(&[mint.to_string()]).await?;
+        Ok(tokens.into_iter().next())
     }
 
-    /// Get detailed token data for multiple mints (batch)
-    pub async fn get_multiple_token_data(
-        &mut self,
-        mints: &[String]
-    ) -> Result<Vec<ApiToken>, String> {
+    /// Get token information for multiple mint addresses (main function)
+    pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<ApiToken>, String> {
         if mints.is_empty() {
-            return Ok(vec![]);
+            return Ok(Vec::new());
         }
 
         if mints.len() > 30 {
@@ -240,7 +192,7 @@ impl DexScreenerApi {
         }
 
         let mint_list = mints.join(",");
-        let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", mint_list);
+        let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", mint_list);
 
         let start_time = Instant::now();
 
@@ -279,7 +231,7 @@ impl DexScreenerApi {
                     Ok(token) => tokens.push(token),
                     Err(e) => {
                         log(
-                            LogTag::Trader,
+                            LogTag::Api,
                             "WARN",
                             &format!("Failed to parse token from batch: {}", e)
                         );
@@ -287,6 +239,17 @@ impl DexScreenerApi {
                 }
             }
         }
+
+        log(
+            LogTag::Api,
+            "SUCCESS",
+            &format!(
+                "Retrieved info for {}/{} tokens in {}ms",
+                tokens.len(),
+                mints.len(),
+                response_time as u64
+            )
+        );
 
         Ok(tokens)
     }
@@ -512,16 +475,23 @@ impl DexScreenerApi {
         self.stats.clone()
     }
 
-    /// Get discovery endpoints for token finding
-    pub async fn discover_tokens(
+    /// Get token information from specific mints (batch processing for discovery.rs)
+    pub async fn get_multiple_token_data(
         &mut self,
-        source: DiscoverySourceType
-    ) -> Result<Vec<String>, String> {
+        mints: &[String]
+    ) -> Result<Vec<ApiToken>, String> {
+        self.get_tokens_info(mints).await
+    }
+
+    /// Simple discovery endpoint access for discovery.rs (boosts)
+    pub async fn discover_and_fetch_tokens(
+        &mut self,
+        source: DiscoverySourceType,
+        limit: usize
+    ) -> Result<Vec<ApiToken>, String> {
         let url = match source {
             DiscoverySourceType::DexScreenerBoosts =>
                 "https://api.dexscreener.com/token-boosts/latest/v1",
-            DiscoverySourceType::DexScreenerBoostsTop =>
-                "https://api.dexscreener.com/token-boosts/top/v1",
             DiscoverySourceType::DexScreenerProfiles =>
                 "https://api.dexscreener.com/token-profiles/latest/v1",
             _ => {
@@ -529,29 +499,12 @@ impl DexScreenerApi {
             }
         };
 
-        log(LogTag::Monitor, "DISCOVERY", &format!("Discovering tokens from: {:?}", source));
-
-        let start_time = Instant::now();
-
-        // Use discovery rate limiter (60 requests per minute)
-        let permit = self.discovery_rate_limiter
-            .clone()
-            .acquire_owned().await
-            .map_err(|e| format!("Failed to acquire discovery rate limit permit: {}", e))?;
-
         let response = self.client
             .get(url)
             .send().await
             .map_err(|e| format!("Discovery request failed: {}", e))?;
 
-        drop(permit);
-
-        let response_time = start_time.elapsed().as_millis() as f64;
-        let success = response.status() == StatusCode::OK;
-
-        self.stats.record_request(success, response_time);
-
-        if !success {
+        if !response.status().is_success() {
             return Err(format!("Discovery API returned status: {}", response.status()));
         }
 
@@ -560,329 +513,26 @@ impl DexScreenerApi {
             .map_err(|e| format!("Failed to parse discovery response: {}", e))?;
 
         let mut mints = Vec::new();
-
         if let Some(items_array) = data.as_array() {
-            for item in items_array {
+            for item in items_array.iter().take(limit) {
                 if let Some(token_address) = item.get("tokenAddress").and_then(|v| v.as_str()) {
                     if token_address.len() == 44 {
-                        // Valid Solana address length
                         mints.push(token_address.to_string());
                     }
                 }
             }
         }
 
-        log(
-            LogTag::Monitor,
-            "DISCOVERY",
-            &format!("Discovered {} tokens from {:?}", mints.len(), source)
-        );
-        Ok(mints)
-    }
-
-    /// Get trending tokens for discovery
-    pub async fn get_trending_tokens(
-        &mut self,
-        chain: &str,
-        limit: usize
-    ) -> Result<Vec<ApiToken>, String> {
-        let _permit = self.discovery_rate_limiter.acquire().await.unwrap();
-
-        let url = format!("https://api.dexscreener.com/latest/dex/pairs/{}", chain);
-
-        log(LogTag::System, "API", &format!("Fetching trending tokens for {}", chain));
-
-        match self.client.get(&url).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    let text = response.text().await.map_err(|e| e.to_string())?;
-
-                    // Parse response and extract tokens
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
-                            let mut tokens = Vec::new();
-
-                            for pair in pairs.iter().take(limit) {
-                                if let Ok(token) = self.parse_dexscreener_pair_to_token(pair) {
-                                    tokens.push(token);
-                                }
-                            }
-
-                            log(
-                                LogTag::System,
-                                "SUCCESS",
-                                &format!("Found {} trending tokens", tokens.len())
-                            );
-
-                            return Ok(tokens);
-                        }
-                    }
-
-                    Err("Failed to parse trending tokens response".to_string())
-                } else {
-                    Err(format!("API request failed with status: {}", response.status()))
-                }
-            }
-            Err(e) => {
-                log(LogTag::System, "ERROR", &format!("Failed to fetch trending tokens: {}", e));
-                Err(e.to_string())
-            }
-        }
-    }
-
-    /// Get detailed token information for multiple tokens
-    pub async fn get_tokens_info(&mut self, mints: &[String]) -> Result<Vec<ApiToken>, String> {
         if mints.is_empty() {
             return Ok(Vec::new());
         }
 
-        let _permit = self.rate_limiter.acquire().await.unwrap();
-
-        // DexScreener supports up to 30 tokens per request
-        let mints_str = mints.iter().take(30).cloned().collect::<Vec<String>>().join(",");
-
-        let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", mints_str);
-
-        log(LogTag::System, "API", &format!("Fetching info for {} tokens", mints.len()));
-
-        match self.client.get(&url).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    let text = response.text().await.map_err(|e| e.to_string())?;
-
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
-                            let mut tokens = Vec::new();
-
-                            for pair in pairs {
-                                if let Ok(token) = self.parse_dexscreener_pair_to_token(pair) {
-                                    tokens.push(token);
-                                }
-                            }
-
-                            log(
-                                LogTag::System,
-                                "SUCCESS",
-                                &format!("Retrieved info for {} tokens", tokens.len())
-                            );
-
-                            return Ok(tokens);
-                        }
-                    }
-
-                    Err("Failed to parse token info response".to_string())
-                } else {
-                    Err(format!("API request failed with status: {}", response.status()))
-                }
-            }
-            Err(e) => {
-                log(LogTag::System, "ERROR", &format!("Failed to fetch token info: {}", e));
-                Err(e.to_string())
-            }
-        }
+        self.get_tokens_info(&mints).await
     }
 
-    /// Parse DexScreener pair JSON to ApiToken
-    fn parse_dexscreener_pair_to_token(
-        &self,
-        pair: &serde_json::Value
-    ) -> Result<ApiToken, Box<dyn std::error::Error>> {
-        let base_token = pair.get("baseToken");
-        let quote_token = pair.get("quoteToken");
-
-        // Prefer base token for analysis
-        let token_data = if let Some(base) = base_token {
-            if
-                base
-                    .get("symbol")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("") != "SOL"
-            {
-                base
-            } else {
-                quote_token.unwrap_or(base)
-            }
-        } else {
-            return Err("Missing token data".into());
-        };
-
-        let mint = token_data
-            .get("address")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let symbol = token_data
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let name = token_data
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        if mint.is_empty() || symbol.is_empty() {
-            return Err("Missing required token data".into());
-        }
-
-        let price_usd = pair
-            .get("priceUsd")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
-
-        let price_native = pair
-            .get("priceNative")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
-
-        let price_sol = if
-            quote_token.and_then(|q| q.get("symbol")).and_then(|v| v.as_str()) == Some("SOL")
-        {
-            Some(price_native)
-        } else {
-            None
-        };
-
-        let liquidity = if
-            let Some(liquidity_obj) = pair.get("liquidity").and_then(|v| v.as_object())
-        {
-            Some(LiquidityInfo {
-                usd: liquidity_obj.get("usd").and_then(|v| v.as_f64()),
-                base: liquidity_obj.get("base").and_then(|v| v.as_f64()),
-                quote: liquidity_obj.get("quote").and_then(|v| v.as_f64()),
-            })
-        } else {
-            None
-        };
-
-        let volume = if let Some(volume_obj) = pair.get("volume").and_then(|v| v.as_object()) {
-            Some(VolumeStats {
-                h24: volume_obj.get("h24").and_then(|v| v.as_f64()),
-                h6: volume_obj.get("h6").and_then(|v| v.as_f64()),
-                h1: volume_obj.get("h1").and_then(|v| v.as_f64()),
-                m5: volume_obj.get("m5").and_then(|v| v.as_f64()),
-            })
-        } else {
-            None
-        };
-
-        let txns = if let Some(txns_obj) = pair.get("txns").and_then(|v| v.as_object()) {
-            Some(TxnStats {
-                h24: txns_obj
-                    .get("h24")
-                    .and_then(|v| v.as_object())
-                    .map(|h24| TxnPeriod {
-                        buys: h24.get("buys").and_then(|v| v.as_i64()),
-                        sells: h24.get("sells").and_then(|v| v.as_i64()),
-                    }),
-                h6: txns_obj
-                    .get("h6")
-                    .and_then(|v| v.as_object())
-                    .map(|h6| TxnPeriod {
-                        buys: h6.get("buys").and_then(|v| v.as_i64()),
-                        sells: h6.get("sells").and_then(|v| v.as_i64()),
-                    }),
-                h1: txns_obj
-                    .get("h1")
-                    .and_then(|v| v.as_object())
-                    .map(|h1| TxnPeriod {
-                        buys: h1.get("buys").and_then(|v| v.as_i64()),
-                        sells: h1.get("sells").and_then(|v| v.as_i64()),
-                    }),
-                m5: txns_obj
-                    .get("m5")
-                    .and_then(|v| v.as_object())
-                    .map(|m5| TxnPeriod {
-                        buys: m5.get("buys").and_then(|v| v.as_i64()),
-                        sells: m5.get("sells").and_then(|v| v.as_i64()),
-                    }),
-            })
-        } else {
-            None
-        };
-
-        let price_change = if
-            let Some(price_change_obj) = pair.get("priceChange").and_then(|v| v.as_object())
-        {
-            Some(PriceChangeStats {
-                h24: price_change_obj.get("h24").and_then(|v| v.as_f64()),
-                h6: price_change_obj.get("h6").and_then(|v| v.as_f64()),
-                h1: price_change_obj.get("h1").and_then(|v| v.as_f64()),
-                m5: price_change_obj.get("m5").and_then(|v| v.as_f64()),
-            })
-        } else {
-            None
-        };
-
-        Ok(ApiToken {
-            mint,
-            symbol,
-            name,
-            decimals: 9, // Default - will be updated by TokenDiscovery system
-            chain_id: pair["chainId"].as_str().unwrap_or("solana").to_string(),
-            dex_id: pair["dexId"].as_str().unwrap_or("").to_string(),
-            pair_address: pair["pairAddress"].as_str().unwrap_or("").to_string(),
-            pair_url: pair["url"].as_str().map(|s| s.to_string()),
-            price_native,
-            price_usd,
-            price_sol,
-            liquidity,
-            volume,
-            txns,
-            price_change,
-            fdv: pair["fdv"].as_f64(),
-            market_cap: pair["marketCap"].as_f64(),
-            pair_created_at: pair["pairCreatedAt"].as_i64(),
-            boosts: pair["boosts"].as_object().map(|b| BoostInfo {
-                active: b["active"].as_i64(),
-            }),
-            info: pair["info"].as_object().map(|info| TokenInfo {
-                image_url: info["imageUrl"].as_str().map(|s| s.to_string()),
-                websites: info["websites"].as_array().map(|websites| {
-                    websites
-                        .iter()
-                        .filter_map(|w| {
-                            w["url"].as_str().map(|url| WebsiteInfo {
-                                url: url.to_string(),
-                            })
-                        })
-                        .collect()
-                }),
-                socials: info["socials"].as_array().map(|socials| {
-                    socials
-                        .iter()
-                        .filter_map(|s| {
-                            Some(SocialInfo {
-                                platform: s["type"].as_str()?.to_string(),
-                                handle: s["url"].as_str()?.to_string(),
-                            })
-                        })
-                        .collect()
-                }),
-            }),
-            labels: pair
-                .get("labels")
-                .and_then(|v| v.as_array())
-                .map(|labels| {
-                    labels
-                        .iter()
-                        .filter_map(|l| l.as_str().map(|s| s.to_string()))
-                        .collect()
-                }),
-            last_updated: Utc::now(),
-        })
-    }
-
-    /// Get top tokens from DexScreener with optional limit
+    /// Simple top tokens access for discovery.rs
     pub async fn get_top_tokens(&mut self, limit: usize) -> Result<Vec<String>, String> {
-        log(LogTag::Monitor, "TOP_TOKENS", &format!("Fetching top {} tokens", limit));
-
-        // DexScreener doesn't have a simple "top tokens" endpoint
-        // We'll use the latest endpoint as the closest equivalent
-        let url = "https://api.dexscreener.com/latest/dex/tokens";
+        let url = "https://api.dexscreener.com/latest/dex/pairs/solana";
 
         let response = self.client
             .get(url)
@@ -900,7 +550,6 @@ impl DexScreenerApi {
             .map_err(|e| format!("JSON parsing failed: {}", e))?;
 
         let mut mints = Vec::new();
-
         if let Some(pairs) = json.get("pairs").and_then(|v| v.as_array()) {
             for pair in pairs.iter().take(limit) {
                 if let Some(base_token) = pair.get("baseToken") {
@@ -919,28 +568,7 @@ impl DexScreenerApi {
             }
         }
 
-        log(LogTag::Monitor, "TOP_TOKENS", &format!("Found {} top tokens", mints.len()));
         Ok(mints)
-    }
-
-    /// Discover tokens and fetch their detailed information in one call
-    pub async fn discover_and_fetch_tokens(
-        &mut self,
-        source: DiscoverySourceType,
-        limit: usize
-    ) -> Result<Vec<ApiToken>, String> {
-        // First discover the token mints
-        let mints = self.discover_tokens(source).await?;
-
-        // Take only the requested limit
-        let limited_mints: Vec<String> = mints.into_iter().take(limit).collect();
-
-        if limited_mints.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Then fetch detailed information for these tokens
-        self.get_tokens_info(&limited_mints).await
     }
 }
 
