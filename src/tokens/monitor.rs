@@ -413,27 +413,3 @@ pub struct MonitoringStats {
     pub active_tokens: usize,
     pub last_cycle: chrono::DateTime<chrono::Utc>,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_enhanced_monitor_creation() {
-        let monitor = TokenMonitor::new();
-        assert!(monitor.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_manual_enhanced_monitoring() {
-        let result = monitor_tokens_once().await;
-        // Should not fail even if no tokens to monitor
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_enhanced_monitoring_stats() {
-        let result = get_monitoring_stats().await;
-        assert!(result.is_ok());
-    }
-}

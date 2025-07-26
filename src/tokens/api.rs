@@ -192,7 +192,7 @@ impl DexScreenerApi {
         }
 
         let mint_list = mints.join(",");
-        let url = format!("https://api.dexscreener.com/latest/dex/tokens/{}", mint_list);
+        let url = format!("https://api.dexscreener.com/tokens/v1/solana/{}", mint_list);
 
         let start_time = Instant::now();
 
