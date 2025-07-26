@@ -80,7 +80,7 @@ impl TokenBlacklist {
     /// Load blacklist from file
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         if !Path::new(BLACKLIST_FILE).exists() {
-            log(LogTag::System, "INFO", "No blacklist file found, creating new one");
+            log(LogTag::Blacklist, "INFO", "No blacklist file found, creating new one");
             return Ok(Self::new());
         }
 
@@ -88,19 +88,21 @@ impl TokenBlacklist {
             Ok(content) => {
                 match serde_json::from_str::<Self>(&content) {
                     Ok(blacklist) => {
-                        log(
-                            LogTag::System,
-                            "SUCCESS",
-                            &format!(
-                                "Loaded blacklist with {} entries",
-                                blacklist.blacklisted_tokens.len()
-                            )
-                        );
+                        if blacklist.blacklisted_tokens.len() > 0 {
+                            log(
+                                LogTag::Blacklist,
+                                "LOADED",
+                                &format!(
+                                    "Loaded blacklist with {} entries",
+                                    blacklist.blacklisted_tokens.len()
+                                )
+                            );
+                        }
                         Ok(blacklist)
                     }
                     Err(e) => {
                         log(
-                            LogTag::System,
+                            LogTag::Blacklist,
                             "WARN",
                             &format!("Failed to parse blacklist file: {}", e)
                         );
@@ -109,7 +111,7 @@ impl TokenBlacklist {
                 }
             }
             Err(e) => {
-                log(LogTag::System, "WARN", &format!("Failed to read blacklist file: {}", e));
+                log(LogTag::Blacklist, "WARN", &format!("Failed to read blacklist file: {}", e));
                 Ok(Self::new())
             }
         }
@@ -122,11 +124,14 @@ impl TokenBlacklist {
         let json = serde_json::to_string_pretty(self)?;
         fs::write(BLACKLIST_FILE, json)?;
 
-        log(
-            LogTag::System,
-            "SUCCESS",
-            &format!("Saved blacklist with {} entries", self.blacklisted_tokens.len())
-        );
+        // Only log if there are actually blacklisted entries
+        if self.blacklisted_tokens.len() > 0 {
+            log(
+                LogTag::Blacklist,
+                "SAVED",
+                &format!("Saved blacklist with {} entries", self.blacklisted_tokens.len())
+            );
+        }
         Ok(())
     }
 
@@ -138,6 +143,12 @@ impl TokenBlacklist {
     /// Add token to blacklist
     pub fn add_to_blacklist(&mut self, mint: &str, symbol: &str, reason: BlacklistReason) {
         let now = Utc::now();
+
+        let reason_description = match &reason {
+            BlacklistReason::LowLiquidity => "Low Liquidity",
+            BlacklistReason::PoorPerformance => "Poor Performance",
+            BlacklistReason::ManualBlacklist => "Manual",
+        };
 
         let entry = BlacklistEntry {
             mint: mint.to_string(),
@@ -151,7 +162,11 @@ impl TokenBlacklist {
 
         self.blacklisted_tokens.insert(mint.to_string(), entry);
 
-        log(LogTag::System, "BLACKLIST", &format!("Added {} ({}) to blacklist", symbol, mint));
+        log(
+            LogTag::Blacklist,
+            "ADDED",
+            &format!("Blacklisted {} ({}) - {}", symbol, mint, reason_description)
+        );
     }
 
     /// Check and track token liquidity for potential blacklisting
@@ -196,7 +211,7 @@ impl TokenBlacklist {
                 .unwrap_or(0);
 
             log(
-                LogTag::System,
+                LogTag::Blacklist,
                 "TRACK",
                 &format!(
                     "Low liquidity for {} ({}): ${:.2} USD (count: {})",
@@ -221,8 +236,8 @@ impl TokenBlacklist {
     pub fn remove_from_blacklist(&mut self, mint: &str) -> bool {
         if let Some(entry) = self.blacklisted_tokens.remove(mint) {
             log(
-                LogTag::System,
-                "UNBLACKLIST",
+                LogTag::Blacklist,
+                "REMOVED",
                 &format!("Removed {} ({}) from blacklist", entry.symbol, mint)
             );
             true
@@ -262,7 +277,7 @@ impl TokenBlacklist {
         // Remove empty tracking entries
         self.tracking_data.retain(|_, checks| !checks.is_empty());
 
-        log(LogTag::System, "CLEANUP", &format!("Cleaned old blacklist tracking data"));
+        log(LogTag::Blacklist, "CLEANUP", "Cleaned old blacklist tracking data");
     }
 }
 
@@ -286,7 +301,11 @@ pub static TOKEN_BLACKLIST: Lazy<Mutex<TokenBlacklist>> = Lazy::new(|| {
     match TokenBlacklist::load() {
         Ok(blacklist) => Mutex::new(blacklist),
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to load blacklist, using empty: {}", e));
+            log(
+                LogTag::Blacklist,
+                "ERROR",
+                &format!("Failed to load blacklist, using empty: {}", e)
+            );
             Mutex::new(TokenBlacklist::new())
         }
     }
@@ -301,7 +320,7 @@ pub fn is_token_blacklisted(mint: &str) -> bool {
     match TOKEN_BLACKLIST.try_lock() {
         Ok(blacklist) => blacklist.is_blacklisted(mint),
         Err(_) => {
-            log(LogTag::System, "WARN", "Could not acquire blacklist lock for check");
+            log(LogTag::Blacklist, "WARN", "Could not acquire blacklist lock for check");
             false // Assume not blacklisted if can't check
         }
     }
@@ -323,19 +342,21 @@ pub fn check_and_track_liquidity(
                 token_age_hours
             );
 
-            // Save after tracking
-            if let Err(e) = blacklist.save() {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Failed to save blacklist after tracking: {}", e)
-                );
+            // Only save if something was actually blacklisted (result is false)
+            if !result {
+                if let Err(e) = blacklist.save() {
+                    log(
+                        LogTag::Blacklist,
+                        "WARN",
+                        &format!("Failed to save blacklist after adding entry: {}", e)
+                    );
+                }
             }
 
             result
         }
         Err(_) => {
-            log(LogTag::System, "WARN", "Could not acquire blacklist lock for tracking");
+            log(LogTag::Blacklist, "WARN", "Could not acquire blacklist lock for tracking");
             true // Assume allowed if can't track
         }
     }
@@ -346,7 +367,7 @@ pub fn get_blacklist_stats() -> Option<BlacklistStats> {
     match TOKEN_BLACKLIST.try_lock() {
         Ok(blacklist) => Some(blacklist.get_stats()),
         Err(_) => {
-            log(LogTag::System, "WARN", "Could not acquire blacklist lock for stats");
+            log(LogTag::Blacklist, "WARN", "Could not acquire blacklist lock for stats");
             None
         }
     }
@@ -360,7 +381,7 @@ pub fn add_to_blacklist_manual(mint: &str, symbol: &str) -> bool {
 
             if let Err(e) = blacklist.save() {
                 log(
-                    LogTag::System,
+                    LogTag::Blacklist,
                     "WARN",
                     &format!("Failed to save blacklist after manual addition: {}", e)
                 );
@@ -370,7 +391,7 @@ pub fn add_to_blacklist_manual(mint: &str, symbol: &str) -> bool {
             }
         }
         Err(_) => {
-            log(LogTag::System, "WARN", "Could not acquire blacklist lock for manual addition");
+            log(LogTag::Blacklist, "WARN", "Could not acquire blacklist lock for manual addition");
             false
         }
     }

@@ -6,7 +6,6 @@ pub mod wallet;
 pub mod transactions;
 pub mod summary;
 pub mod positions;
-pub mod types;
 pub mod tokens;
 pub mod profit;
 pub mod loss_prevention;

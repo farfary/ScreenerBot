@@ -45,6 +45,7 @@ const ENABLE_TRADER_LOGS: bool = true;
 const ENABLE_WALLET_LOGS: bool = true;
 const ENABLE_SYSTEM_LOGS: bool = true;
 const ENABLE_POOL_LOGS: bool = true;
+const ENABLE_BLACKLIST_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -270,6 +271,7 @@ pub enum LogTag {
     Wallet,
     System,
     Pool,
+    Blacklist,
     Other(String),
 }
 
@@ -281,6 +283,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Wallet => format!("{:<8}", "WALLET").bright_magenta().bold(), // 💜 Rich purple for wealth
             LogTag::System => format!("{:<8}", "SYSTEM").bright_yellow().bold(), // ⚙️ Mechanical yellow
             LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
+            LogTag::Blacklist => format!("{:<8}", "BLACKLIST").bright_red().bold(), // 🚫 Warning red
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -296,6 +299,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Wallet => ENABLE_WALLET_LOGS,
         LogTag::System => ENABLE_SYSTEM_LOGS,
         LogTag::Pool => ENABLE_POOL_LOGS,
+        LogTag::Blacklist => ENABLE_BLACKLIST_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -357,6 +361,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Pool =>
             format!("{:<width$}", "POOL", width = TAG_WIDTH)
                 .bright_blue()
+                .bold(),
+        LogTag::Blacklist =>
+            format!("{:<width$}", "BLACKLIST", width = TAG_WIDTH)
+                .bright_red()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
@@ -447,6 +455,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Wallet => "WALLET",
         LogTag::System => "SYSTEM",
         LogTag::Pool => "POOL",
+        LogTag::Blacklist => "BLACKLIST",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);
