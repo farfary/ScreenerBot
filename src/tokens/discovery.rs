@@ -7,6 +7,67 @@ use crate::tokens::decimals::get_token_decimals_from_chain;
 use std::collections::HashSet;
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
+use serde::{ Deserialize, Serialize };
+
+// =============================================================================
+// RUGCHECK API RESPONSE STRUCTURES
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugCheckTrendingItem {
+    pub mint: String,
+    pub vote_count: u32,
+    pub up_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugCheckVerifiedItem {
+    pub mint: String,
+    pub payer: String,
+    pub name: String,
+    pub symbol: String,
+    pub description: String,
+    pub jup_verified: bool,
+    pub jup_strict: bool,
+    pub links: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugCheckRecentMetadata {
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+    pub mutable: bool,
+    #[serde(rename = "updateAuthority")]
+    pub update_authority: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugCheckRecentItem {
+    pub mint: String,
+    pub metadata: RugCheckRecentMetadata,
+    pub user_visits: u32,
+    pub visits: u32,
+    pub score: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RugCheckNewTokenItem {
+    pub mint: String,
+    pub decimals: u8,
+    pub symbol: String,
+    pub creator: String,
+    #[serde(rename = "mintAuthority")]
+    pub mint_authority: String,
+    #[serde(rename = "freezeAuthority")]
+    pub freeze_authority: String,
+    pub program: String,
+    #[serde(rename = "createAt")]
+    pub create_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+    pub events: Option<serde_json::Value>,
+}
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -31,7 +92,10 @@ pub enum DiscoverySource {
     DexScreener {
         chain: String,
     },
-    RugCheck,
+    RugCheckTrending,
+    RugCheckVerified,
+    RugCheckRecent,
+    RugCheckNewTokens,
     TrendingBots,
 }
 
@@ -62,7 +126,11 @@ impl TokenDiscovery {
         let database = TokenDatabase::new()?;
 
         let sources = vec![
-            DiscoverySource::DexScreener { chain: "solana".to_string() }
+            DiscoverySource::DexScreener { chain: "solana".to_string() },
+            DiscoverySource::RugCheckTrending,
+            DiscoverySource::RugCheckVerified,
+            DiscoverySource::RugCheckRecent,
+            DiscoverySource::RugCheckNewTokens
             // Add more sources as needed
         ];
 
@@ -172,7 +240,18 @@ impl TokenDiscovery {
             DiscoverySource::DexScreener { chain } => {
                 self.discover_from_dexscreener(chain, now, existing_mints).await
             }
-            DiscoverySource::RugCheck => { self.discover_from_rugcheck(now, existing_mints).await }
+            DiscoverySource::RugCheckTrending => {
+                self.discover_from_rugcheck_trending(now, existing_mints).await
+            }
+            DiscoverySource::RugCheckVerified => {
+                self.discover_from_rugcheck_verified(now, existing_mints).await
+            }
+            DiscoverySource::RugCheckRecent => {
+                self.discover_from_rugcheck_recent(now, existing_mints).await
+            }
+            DiscoverySource::RugCheckNewTokens => {
+                self.discover_from_rugcheck_new_tokens(now, existing_mints).await
+            }
             DiscoverySource::TrendingBots => {
                 self.discover_from_trending_bots(now, existing_mints).await
             }
@@ -313,20 +392,289 @@ impl TokenDiscovery {
         })
     }
 
-    /// Discover tokens from RugCheck (placeholder)
-    async fn discover_from_rugcheck(
+    /// Discover tokens from RugCheck Trending API
+    async fn discover_from_rugcheck_trending(
         &mut self,
         timestamp: chrono::DateTime<chrono::Utc>,
-        _existing_mints: &HashSet<String>
+        existing_mints: &HashSet<String>
     ) -> Result<DiscoveryResult, String> {
-        // TODO: Implement RugCheck API integration
-        Ok(DiscoveryResult {
-            source: "RugCheck".to_string(),
-            new_tokens: Vec::new(),
-            timestamp,
-            success: false,
-            error: Some("Not implemented yet".to_string()),
-        })
+        let source = "RugCheck-Trending".to_string();
+        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck trending discovery"));
+
+        match self.fetch_rugcheck_trending().await {
+            Ok(trending_items) => {
+                let new_mints: Vec<String> = trending_items
+                    .into_iter()
+                    .map(|item| item.mint)
+                    .filter(|mint| !existing_mints.contains(mint))
+                    .collect();
+
+                log(
+                    LogTag::System,
+                    "DISCOVERY",
+                    &format!("Found {} new mints from RugCheck trending", new_mints.len())
+                );
+
+                // Fetch full token data from DexScreener for these mints
+                let new_tokens = if !new_mints.is_empty() {
+                    match self.api.get_multiple_token_data(&new_mints).await {
+                        Ok(tokens) => {
+                            log(
+                                LogTag::System,
+                                "SUCCESS",
+                                &format!(
+                                    "Fetched details for {} RugCheck trending tokens",
+                                    tokens.len()
+                                )
+                            );
+                            tokens
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::System,
+                                "WARN",
+                                &format!("Failed to fetch token details from DexScreener: {}", e)
+                            );
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens,
+                    timestamp,
+                    success: true,
+                    error: None,
+                })
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("RugCheck trending discovery failed: {}", e));
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens: Vec::new(),
+                    timestamp,
+                    success: false,
+                    error: Some(e),
+                })
+            }
+        }
+    }
+
+    /// Discover tokens from RugCheck Verified API
+    async fn discover_from_rugcheck_verified(
+        &mut self,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
+        let source = "RugCheck-Verified".to_string();
+        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck verified discovery"));
+
+        match self.fetch_rugcheck_verified().await {
+            Ok(verified_items) => {
+                let new_mints: Vec<String> = verified_items
+                    .into_iter()
+                    .map(|item| item.mint)
+                    .filter(|mint| !existing_mints.contains(mint))
+                    .collect();
+
+                log(
+                    LogTag::System,
+                    "DISCOVERY",
+                    &format!("Found {} new mints from RugCheck verified", new_mints.len())
+                );
+
+                // Fetch full token data from DexScreener for these mints
+                let new_tokens = if !new_mints.is_empty() {
+                    match self.api.get_multiple_token_data(&new_mints).await {
+                        Ok(tokens) => {
+                            log(
+                                LogTag::System,
+                                "SUCCESS",
+                                &format!(
+                                    "Fetched details for {} RugCheck verified tokens",
+                                    tokens.len()
+                                )
+                            );
+                            tokens
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::System,
+                                "WARN",
+                                &format!("Failed to fetch token details from DexScreener: {}", e)
+                            );
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens,
+                    timestamp,
+                    success: true,
+                    error: None,
+                })
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("RugCheck verified discovery failed: {}", e));
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens: Vec::new(),
+                    timestamp,
+                    success: false,
+                    error: Some(e),
+                })
+            }
+        }
+    }
+
+    /// Discover tokens from RugCheck Recent API
+    async fn discover_from_rugcheck_recent(
+        &mut self,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
+        let source = "RugCheck-Recent".to_string();
+        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck recent discovery"));
+
+        match self.fetch_rugcheck_recent().await {
+            Ok(recent_items) => {
+                let new_mints: Vec<String> = recent_items
+                    .into_iter()
+                    .map(|item| item.mint)
+                    .filter(|mint| !existing_mints.contains(mint))
+                    .collect();
+
+                log(
+                    LogTag::System,
+                    "DISCOVERY",
+                    &format!("Found {} new mints from RugCheck recent", new_mints.len())
+                );
+
+                // Fetch full token data from DexScreener for these mints
+                let new_tokens = if !new_mints.is_empty() {
+                    match self.api.get_multiple_token_data(&new_mints).await {
+                        Ok(tokens) => {
+                            log(
+                                LogTag::System,
+                                "SUCCESS",
+                                &format!(
+                                    "Fetched details for {} RugCheck recent tokens",
+                                    tokens.len()
+                                )
+                            );
+                            tokens
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::System,
+                                "WARN",
+                                &format!("Failed to fetch token details from DexScreener: {}", e)
+                            );
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens,
+                    timestamp,
+                    success: true,
+                    error: None,
+                })
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("RugCheck recent discovery failed: {}", e));
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens: Vec::new(),
+                    timestamp,
+                    success: false,
+                    error: Some(e),
+                })
+            }
+        }
+    }
+
+    /// Discover tokens from RugCheck New Tokens API
+    async fn discover_from_rugcheck_new_tokens(
+        &mut self,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        existing_mints: &HashSet<String>
+    ) -> Result<DiscoveryResult, String> {
+        let source = "RugCheck-NewTokens".to_string();
+        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck new tokens discovery"));
+
+        match self.fetch_rugcheck_new_tokens().await {
+            Ok(new_token_items) => {
+                let new_mints: Vec<String> = new_token_items
+                    .into_iter()
+                    .map(|item| item.mint)
+                    .filter(|mint| !existing_mints.contains(mint))
+                    .collect();
+
+                log(
+                    LogTag::System,
+                    "DISCOVERY",
+                    &format!("Found {} new mints from RugCheck new tokens", new_mints.len())
+                );
+
+                // Fetch full token data from DexScreener for these mints
+                let new_tokens = if !new_mints.is_empty() {
+                    match self.api.get_multiple_token_data(&new_mints).await {
+                        Ok(tokens) => {
+                            log(
+                                LogTag::System,
+                                "SUCCESS",
+                                &format!("Fetched details for {} RugCheck new tokens", tokens.len())
+                            );
+                            tokens
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::System,
+                                "WARN",
+                                &format!("Failed to fetch token details from DexScreener: {}", e)
+                            );
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens,
+                    timestamp,
+                    success: true,
+                    error: None,
+                })
+            }
+            Err(e) => {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("RugCheck new tokens discovery failed: {}", e)
+                );
+                Ok(DiscoveryResult {
+                    source,
+                    new_tokens: Vec::new(),
+                    timestamp,
+                    success: false,
+                    error: Some(e),
+                })
+            }
+        }
     }
 
     /// Discover tokens from trending bots (placeholder)
@@ -434,6 +782,98 @@ impl TokenDiscovery {
         );
 
         tokens
+    }
+
+    // =============================================================================
+    // RUGCHECK API CLIENT METHODS
+    // =============================================================================
+
+    /// Fetch trending tokens from RugCheck API
+    pub async fn fetch_rugcheck_trending(&self) -> Result<Vec<RugCheckTrendingItem>, String> {
+        let url = "https://api.rugcheck.xyz/v1/stats/trending";
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(url)
+            .header("accept", "application/json")
+            .send().await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("API returned status: {}", response.status()));
+        }
+
+        let items: Vec<RugCheckTrendingItem> = response
+            .json().await
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        Ok(items)
+    }
+
+    /// Fetch verified tokens from RugCheck API
+    pub async fn fetch_rugcheck_verified(&self) -> Result<Vec<RugCheckVerifiedItem>, String> {
+        let url = "https://api.rugcheck.xyz/v1/stats/verified";
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(url)
+            .header("accept", "application/json")
+            .send().await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("API returned status: {}", response.status()));
+        }
+
+        let items: Vec<RugCheckVerifiedItem> = response
+            .json().await
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        Ok(items)
+    }
+
+    /// Fetch recent tokens from RugCheck API
+    pub async fn fetch_rugcheck_recent(&self) -> Result<Vec<RugCheckRecentItem>, String> {
+        let url = "https://api.rugcheck.xyz/v1/stats/recent";
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(url)
+            .header("accept", "application/json")
+            .send().await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("API returned status: {}", response.status()));
+        }
+
+        let items: Vec<RugCheckRecentItem> = response
+            .json().await
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        Ok(items)
+    }
+
+    /// Fetch new tokens from RugCheck API
+    pub async fn fetch_rugcheck_new_tokens(&self) -> Result<Vec<RugCheckNewTokenItem>, String> {
+        let url = "https://api.rugcheck.xyz/v1/stats/new_tokens";
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(url)
+            .header("accept", "application/json")
+            .send().await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("API returned status: {}", response.status()));
+        }
+
+        let items: Vec<RugCheckNewTokenItem> = response
+            .json().await
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        Ok(items)
     }
 }
 
