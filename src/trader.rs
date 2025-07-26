@@ -130,6 +130,7 @@ pub const AUTO_CLOSE_ATA_AFTER_SELL: bool = true;
 
 use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_trader_enabled;
 use crate::tokens::{
     Token,
     update_open_positions_safe,
@@ -183,12 +184,19 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 // DEBUG LOGGING CONFIGURATION
 // =============================================================================
 
+/// Helper function for conditional debug trader logs
+pub fn debug_trader_log(log_type: &str, message: &str) {
+    if is_debug_trader_enabled() {
+        log(LogTag::Trader, log_type, message);
+    }
+}
+
 // =============================================================================
 // HELPER FUNCTIONS FOR TOKENS MODULE INTEGRATION
 // =============================================================================
 
 /// Get tokens using the safe tokens module system
-async fn get_tokens_from_safe_system() -> Vec<Token> {
+pub async fn get_tokens_from_safe_system() -> Vec<Token> {
     match get_all_tokens_by_liquidity().await {
         Ok(api_tokens) => {
             // Convert ApiToken to Token for compatibility with existing code
@@ -354,32 +362,90 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
 /// Uses 5 different strategies to identify dips from -5% to -30%
 /// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
 pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
+    debug_trader_log(
+        "SHOULD_BUY_START",
+        &format!(
+            "Checking buy signal for {} ({}): current={:.10}, prev={:.10}",
+            token.symbol,
+            token.mint,
+            current_price,
+            prev_price
+        )
+    );
+
     // Use centralized filtering system
     match filter_token_for_trading(token) {
         FilterResult::Approved => {
-            // Token passed all filters, proceed with dip detection
+            debug_trader_log(
+                "SHOULD_BUY_FILTER_OK",
+                &format!("Token {} ({}) passed filtering", token.symbol, token.mint)
+            );
         }
-        FilterResult::Rejected(_) => {
-            // Token was filtered out, return 0.0 (no buy signal)
+        FilterResult::Rejected(reason) => {
+            debug_trader_log(
+                "SHOULD_BUY_FILTER_REJECT",
+                &format!("Token {} ({}) rejected by filter: {:?}", token.symbol, token.mint, reason)
+            );
             return 0.0;
         }
     }
 
     // Additional price validation for dip detection
     if current_price <= 0.0 || prev_price <= 0.0 {
+        debug_trader_log(
+            "SHOULD_BUY_PRICE_INVALID",
+            &format!(
+                "Token {} ({}) has invalid prices: current={:.10}, prev={:.10}",
+                token.symbol,
+                token.mint,
+                current_price,
+                prev_price
+            )
+        );
         return 0.0;
     }
+
+    // Calculate price change percentage
+    let price_change_percent = ((current_price - prev_price) / prev_price) * 100.0;
+    debug_trader_log(
+        "SHOULD_BUY_PRICE_CHANGE",
+        &format!(
+            "Token {} ({}) price change: {:.2}%",
+            token.symbol,
+            token.mint,
+            price_change_percent
+        )
+    );
 
     // Run all 5 dip detection strategies
     let dip_signals = run_multi_strategy_dip_detection(token, current_price, prev_price);
 
+    debug_trader_log(
+        "SHOULD_BUY_STRATEGIES",
+        &format!(
+            "Token {} ({}) triggered {} strategies",
+            token.symbol,
+            token.mint,
+            dip_signals.len()
+        )
+    );
+
     // If no strategies triggered, no buy signal
     if dip_signals.is_empty() {
+        debug_trader_log(
+            "SHOULD_BUY_NO_SIGNALS",
+            &format!("Token {} ({}) no dip strategies triggered", token.symbol, token.mint)
+        );
         return 0.0;
     }
 
     // Calculate final urgency based on multiple strategy consensus
     let final_urgency = calculate_multi_strategy_urgency(&dip_signals, token);
+
+    debug_trader_log(
+        "SHOULD_BUY_FINAL_URGENCY",
+        &format!("Token {} ({}) final urgency: {:.3}", token.symbol, token.mint, final_urgency)
+    );
 
     if final_urgency > 0.0 {
         log(
@@ -454,10 +520,41 @@ fn strategy_immediate_drop_detection(
     let change = (current_price - prev_price) / prev_price;
     let percent_change = change * 100.0;
 
+    debug_trader_log(
+        "STRATEGY_IMMEDIATE_DROP",
+        &format!(
+            "Token {} ({}): price change {:.2}% (current={:.10}, prev={:.10})",
+            token.symbol,
+            token.mint,
+            percent_change,
+            current_price,
+            prev_price
+        )
+    );
+
     // Base threshold: -5% to -30% (inclusive bounds)
     if percent_change > -5.0 || percent_change < -30.0 {
+        debug_trader_log(
+            "STRATEGY_IMMEDIATE_DROP_RANGE",
+            &format!(
+                "Token {} ({}): {:.2}% change outside -5% to -30% range",
+                token.symbol,
+                token.mint,
+                percent_change
+            )
+        );
         return None;
     }
+
+    debug_trader_log(
+        "STRATEGY_IMMEDIATE_DROP_IN_RANGE",
+        &format!(
+            "Token {} ({}): {:.2}% change in valid range, analyzing volatility",
+            token.symbol,
+            token.mint,
+            percent_change
+        )
+    );
 
     // Analyze token volatility to adjust thresholds
     let volatility_analysis = analyze_token_volatility_patterns(&token.mint, current_price);
@@ -466,6 +563,19 @@ fn strategy_immediate_drop_detection(
     let volatility_scale = f64::max(volatility_analysis.volatility_scale, 5.0);
     let adjusted_min_drop = f64::min(-5.0, -volatility_scale * 0.8);
     let adjusted_max_drop = f64::max(-30.0, -volatility_scale * 4.0); // Increased multiplier
+
+    debug_trader_log(
+        "STRATEGY_IMMEDIATE_DROP_VOLATILITY",
+        &format!(
+            "Token {} ({}): volatility_scale={:.1}, adjusted_range=[{:.2}%, {:.2}%], is_in_dip={}",
+            token.symbol,
+            token.mint,
+            volatility_scale,
+            adjusted_min_drop,
+            adjusted_max_drop,
+            volatility_analysis.is_in_dip
+        )
+    );
 
     if percent_change <= adjusted_min_drop && percent_change >= adjusted_max_drop {
         // Calculate urgency based on drop magnitude and volatility
@@ -478,6 +588,18 @@ fn strategy_immediate_drop_detection(
         let urgency = base_urgency * volatility_multiplier;
         let confidence = if volatility_analysis.is_in_dip { 0.9 } else { 0.7 };
 
+        debug_trader_log(
+            "STRATEGY_IMMEDIATE_DROP_TRIGGERED",
+            &format!(
+                "Token {} ({}): SIGNAL TRIGGERED! urgency={:.3}, confidence={:.2}, drop_magnitude={:.2}",
+                token.symbol,
+                token.mint,
+                urgency,
+                confidence,
+                drop_magnitude
+            )
+        );
+
         return Some(DipSignal {
             strategy_name: "ImmediateDrop".to_string(),
             urgency,
@@ -485,6 +607,16 @@ fn strategy_immediate_drop_detection(
             confidence,
             details: format!("Drop: {:.1}%, Vol Scale: {:.1}%", percent_change, volatility_scale),
         });
+    } else {
+        debug_trader_log(
+            "STRATEGY_IMMEDIATE_DROP_VOLATILITY_FILTER",
+            &format!(
+                "Token {} ({}): {:.2}% change filtered out by volatility adjustment",
+                token.symbol,
+                token.mint,
+                percent_change
+            )
+        );
     }
 
     None
@@ -1438,6 +1570,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     .to_string()
             );
 
+            // Add debug info about token prices and update times
+            debug_trader_log(
+                "TOKEN_PRICE_DEBUG",
+                &format!(
+                    "DEBUG: First 3 tokens price info - {} tokens total",
+                    tokens_from_module.len()
+                )
+            );
+            
+            for (i, token) in tokens_from_module.iter().take(3).enumerate() {
+                debug_trader_log(
+                    "TOKEN_PRICE_SAMPLE",
+                    &format!(
+                        "Token {}: {} ({}) - price_dexscreener_sol={:?}",
+                        i + 1,
+                        token.symbol,
+                        token.mint,
+                        token.price_dexscreener_sol
+                    )
+                );
+            }
+
             // Include all tokens - we want to trade on existing tokens with updated info
             // The discovery system ensures tokens are updated with fresh data before trading
             log(
@@ -1602,6 +1756,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 match
                     tokio::time::timeout(Duration::from_secs(30), async {
                         if let Some(current_price) = token.price_dexscreener_sol {
+                            debug_trader_log(
+                                "PRICE_SOURCE",
+                                &format!(
+                                    "Token {} ({}): current price from token.price_dexscreener_sol = {:.10}",
+                                    token.symbol,
+                                    token.mint,
+                                    current_price
+                                )
+                            );
+                            
                             // Use centralized filtering system
                             match filter_token_for_trading(&token) {
                                 FilterResult::Approved => {
@@ -1661,15 +1825,92 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 Ok(Ok(mut last_prices)) => {
                                     if let Some(&prev_price) = last_prices.get(&token.mint) {
                                         if prev_price > 0.0 {
+                                            debug_trader_log(
+                                                "TOKEN_CHECK_PRICES",
+                                                &format!(
+                                                    "Token {} ({}): checking buy signal with current={:.10}, prev={:.10}",
+                                                    token.symbol,
+                                                    token.mint,
+                                                    current_price,
+                                                    prev_price
+                                                )
+                                            );
+
+                                            // Check if prices are identical (indicating no price update)
+                                            if (current_price - prev_price).abs() < 0.000000000001 {
+                                                debug_trader_log(
+                                                    "PRICE_UPDATE_ISSUE",
+                                                    &format!(
+                                                        "Token {} ({}): IDENTICAL PRICES detected! Current={:.10} == Prev={:.10} - No price movement detected, this indicates price cache not updating",
+                                                        token.symbol,
+                                                        token.mint,
+                                                        current_price,
+                                                        prev_price
+                                                    )
+                                                );
+                                            }
+
                                             // Use the new should_buy function
                                             buy_urgency = should_buy(
                                                 &token,
                                                 current_price,
                                                 prev_price
                                             );
+
+                                            debug_trader_log(
+                                                "TOKEN_CHECK_RESULT",
+                                                &format!(
+                                                    "Token {} ({}): buy urgency result: {:.3}",
+                                                    token.symbol,
+                                                    token.mint,
+                                                    buy_urgency
+                                                )
+                                            );
+                                        } else {
+                                            debug_trader_log(
+                                                "TOKEN_CHECK_INVALID_PREV",
+                                                &format!(
+                                                    "Token {} ({}): invalid prev_price: {:.10}",
+                                                    token.symbol,
+                                                    token.mint,
+                                                    prev_price
+                                                )
+                                            );
                                         }
+                                    } else {
+                                        debug_trader_log(
+                                            "TOKEN_CHECK_NO_PREV",
+                                            &format!(
+                                                "Token {} ({}): no previous price available",
+                                                token.symbol,
+                                                token.mint
+                                            )
+                                        );
                                     }
+                                    
+                                    // Add debug info before updating price
+                                    debug_trader_log(
+                                        "PRICE_UPDATE_BEFORE",
+                                        &format!(
+                                            "Token {} ({}): BEFORE UPDATE - old_price_in_cache={:.10}, new_current_price={:.10}",
+                                            token.symbol,
+                                            token.mint,
+                                            last_prices.get(&token.mint).copied().unwrap_or(0.0),
+                                            current_price
+                                        )
+                                    );
+                                    
                                     last_prices.insert(token.mint.clone(), current_price);
+                                    
+                                    debug_trader_log(
+                                        "PRICE_UPDATE_AFTER",
+                                        &format!(
+                                            "Token {} ({}): AFTER UPDATE - cache now contains: {:.10}",
+                                            token.symbol,
+                                            token.mint,
+                                            current_price
+                                        )
+                                    );
                                 }
                                 Ok(Err(_)) | Err(_) => {
                                     // If we can't get the lock within 500ms, just log and continue

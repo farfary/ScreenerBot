@@ -20,22 +20,22 @@ use std::sync::Arc;
 // =============================================================================
 
 /// Rate limit for DexScreener info API (per minute)
-pub const INFO_RATE_LIMIT: usize = 200;
+pub const INFO_RATE_LIMIT: usize = 300;
 
-/// API calls to use per monitoring cycle (50% of rate limit)
-pub const INFO_CALLS_PER_CYCLE: usize = 100;
+/// API calls to use per monitoring cycle (80% of rate limit for aggressive monitoring)
+pub const INFO_CALLS_PER_CYCLE: usize = 240;
 
-/// Enhanced monitoring cycle duration in minutes (faster for open positions)
+/// Enhanced monitoring cycle duration in minutes (faster for comprehensive monitoring)
 pub const ENHANCED_CYCLE_DURATION_MINUTES: u64 = 1;
 
-/// Maximum tokens to process per API call
+/// Maximum tokens to process per API call (DexScreener supports up to 30)
 pub const MAX_TOKENS_PER_BATCH: usize = 30;
 
-/// High liquidity threshold for new entry detection (USD)
+/// High liquidity threshold for prioritization (USD)
 pub const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
 
-/// Maximum number of high liquidity tokens to monitor for new entries
-pub const MAX_NEW_ENTRY_TOKENS: usize = 50;
+/// Maximum number of tokens to monitor per cycle (increased for comprehensive coverage)
+pub const MAX_TOKENS_PER_CYCLE: usize = 240;
 
 // =============================================================================
 // ENHANCED TOKEN MONITOR
@@ -225,7 +225,7 @@ impl TokenMonitor {
         let mut new_entry_candidates: Vec<ApiToken> = high_liquidity_tokens
             .into_iter()
             .filter(|token| !is_token_blacklisted(&token.mint))
-            .take(MAX_NEW_ENTRY_TOKENS)
+            .take(MAX_TOKENS_PER_CYCLE) // Use comprehensive monitoring limit
             .collect();
 
         if new_entry_candidates.is_empty() {

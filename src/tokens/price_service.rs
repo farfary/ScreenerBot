@@ -150,7 +150,7 @@ impl TokenPriceService {
         );
     }
 
-    /// Get priority tokens for monitoring (open positions + high liquidity)
+    /// Get priority tokens for monitoring (open positions + ALL tradeable tokens)
     pub async fn get_priority_tokens_for_monitoring(&self) -> Result<Vec<String>, String> {
         let mut priority_mints = Vec::new();
 
@@ -160,17 +160,24 @@ impl TokenPriceService {
             priority_mints.extend(positions.clone());
         }
 
-        // Get high liquidity tokens for new entry detection
-        let high_liquidity_tokens = self.database
-            .get_tokens_by_liquidity_threshold(HIGH_LIQUIDITY_THRESHOLD).await
-            .map_err(|e| format!("Failed to get high liquidity tokens: {}", e))?;
+        // Get ALL tokens that are not blacklisted for comprehensive monitoring
+        // This ensures the trader has fresh prices for all potential trading candidates
+        let all_tokens = self.database
+            .get_all_tokens().await
+            .map_err(|e| format!("Failed to get all tokens from database: {}", e))?;
 
-        // Add high liquidity tokens (limited to reasonable number)
-        let additional_tokens: Vec<String> = high_liquidity_tokens
+        // Add all non-blacklisted tokens with some liquidity
+        let additional_tokens: Vec<String> = all_tokens
             .into_iter()
             .filter(|token| !is_token_blacklisted(&token.mint))
             .filter(|token| !priority_mints.contains(&token.mint))
-            .take(50) // Limit to 50 additional tokens
+            .filter(|token| {
+                // Include tokens with any liquidity > $100 (very low threshold)
+                token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0) > 100.0
+            })
             .map(|token| token.mint)
             .collect();
 
@@ -179,7 +186,7 @@ impl TokenPriceService {
         log(
             LogTag::Trader,
             "MONITOR",
-            &format!("Priority tokens for monitoring: {} total", priority_mints.len())
+            &format!("Priority tokens for monitoring: {} total (includes all tradeable tokens)", priority_mints.len())
         );
 
         Ok(priority_mints)

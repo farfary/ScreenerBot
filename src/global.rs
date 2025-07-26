@@ -48,6 +48,15 @@ pub fn is_debug_pool_prices_enabled() -> bool {
     }
 }
 
+/// Check if debug trader mode is enabled via command line args
+pub fn is_debug_trader_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-trader".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {

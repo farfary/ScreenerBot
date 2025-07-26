@@ -52,7 +52,7 @@ const ENABLE_ERROR_LOGS: bool = true;
 const ENABLE_WARN_LOGS: bool = true;
 const ENABLE_SUCCESS_LOGS: bool = true;
 const ENABLE_INFO_LOGS: bool = true;
-const ENABLE_DEBUG_LOGS: bool = false; // Disabled by default - too verbose
+const ENABLE_DEBUG_LOGS: bool = true; // Enable debug logs to see monitoring activity
 const ENABLE_PROFIT_LOGS: bool = true;
 const ENABLE_LOSS_LOGS: bool = true;
 const ENABLE_BUY_LOGS: bool = true;
@@ -63,7 +63,7 @@ const ENABLE_GENERAL_LOGS: bool = true; // For any log type not specifically lis
 
 /// Log format character widths (hardcoded for precise alignment)
 const TAG_WIDTH: usize = 8; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
-const LOG_TYPE_WIDTH: usize = 16; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
+const LOG_TYPE_WIDTH: usize = 30; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
 const BRACKET_SPACE_WIDTH: usize = 3; // " [" + "] " = 3 chars between each component
 const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2; // +1 for final space
 
