@@ -7,9 +7,6 @@ use chrono::{ DateTime, Utc };
 use serde::{ Serialize, Deserialize };
 use std::fs;
 use std::path::Path;
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 use std::sync::{ Arc, Mutex };
 
 /// Price cache entry
@@ -551,7 +548,7 @@ impl TokenDatabase {
             )?;
         connection.execute(
             "INSERT OR REPLACE INTO tokens (
-                mint, symbol, name, chain_id, dex_id, pair_address, pair_url,
+                mint, symbol, name, decimals, chain_id, dex_id, pair_address, pair_url,
                 price_native, price_usd, price_sol,
                 liquidity_usd, liquidity_base, liquidity_quote,
                 volume_h24, volume_h6, volume_h1, volume_m5,
@@ -562,12 +559,13 @@ impl TokenDatabase {
                 info_image_url, labels, last_updated
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36
+                ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37
             )",
             params![
                 token.mint,
                 token.symbol,
                 token.name,
+                token.decimals,
                 token.chain_id,
                 token.dex_id,
                 token.pair_address,
@@ -632,6 +630,7 @@ impl TokenDatabase {
             mint: row.get("mint")?,
             symbol: row.get("symbol")?,
             name: row.get("name")?,
+            decimals: row.get("decimals").unwrap_or(9), // Default to 9 if not found
             chain_id: row.get("chain_id")?,
             dex_id: row.get("dex_id")?,
             pair_address: row.get("pair_address")?,
@@ -723,356 +722,4 @@ pub struct DatabaseStats {
     pub total_tokens: usize,
     pub tokens_with_liquidity: usize,
     pub last_updated: chrono::DateTime<chrono::Utc>,
-}
-
-// =============================================================================
-// DECIMAL CACHING FUNCTIONALITY
-// =============================================================================
-
-/// Extract decimals from a mint account's data
-fn extract_decimals_from_mint_account(
-    account_data: &[u8]
-) -> Result<u8, Box<dyn std::error::Error>> {
-    // Solana mint account layout:
-    // - mint_authority: 36 bytes (32 bytes pubkey + 4 bytes COption)
-    // - supply: 8 bytes
-    // - decimals: 1 byte
-    // - is_initialized: 1 byte
-    // - freeze_authority: 36 bytes (32 bytes pubkey + 4 bytes COption)
-
-    if account_data.len() < 82 {
-        return Err("Invalid mint account data length".into());
-    }
-
-    // Decimals is at offset 44 (36 + 8)
-    let decimals = account_data[44];
-    Ok(decimals)
-}
-
-/// Get token decimals from database cache, returns None if not cached
-/// This function creates its own database connection to avoid threading issues
-pub fn get_token_decimals_cached(mint: &str) -> Option<u8> {
-    // Create a temporary database connection to avoid threading issues
-    if let Ok(connection) = Connection::open("tokens.db") {
-        if let Ok(mut stmt) = connection.prepare("SELECT decimals FROM tokens WHERE mint = ?1") {
-            if
-                let Ok(decimals) = stmt.query_row([mint], |row| {
-                    let decimals: i64 = row.get(0)?;
-                    Ok(decimals as u8)
-                })
-            {
-                return Some(decimals);
-            }
-        }
-    }
-    None
-}
-
-/// Update token decimals in the database
-fn update_token_decimals_sync(
-    db: &TokenDatabase,
-    mint: &str,
-    decimals: u8
-) -> Result<(), Box<dyn std::error::Error>> {
-    let connection = db.connection
-        .lock()
-        .map_err(
-            |e|
-                Box::new(
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Database lock error: {}", e)
-                    )
-                ) as Box<dyn std::error::Error>
-        )?;
-
-    // First try to update existing record
-    let updated = connection.execute(
-        "UPDATE tokens SET decimals = ?1 WHERE mint = ?2",
-        params![decimals as i64, mint]
-    )?;
-
-    // If no existing record, insert a minimal record
-    if updated == 0 {
-        connection.execute(
-            "INSERT OR IGNORE INTO tokens (mint, symbol, name, decimals, chain_id, price_native, price_usd, last_updated) 
-             VALUES (?1, ?2, ?3, ?4, 'solana', 0.0, 0.0, ?5)",
-            params![
-                mint,
-                format!("{}...{}", &mint[..4], &mint[mint.len() - 4..]),
-                "Unknown Token",
-                decimals as i64,
-                chrono::Utc::now().to_rfc3339()
-            ]
-        )?;
-    }
-    Ok(())
-}
-
-/// Update token decimals in the database (sync version with own connection)
-pub fn update_token_decimals_sync_standalone(
-    mint: &str,
-    decimals: u8
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Create a temporary database connection to avoid threading issues
-    if let Ok(connection) = Connection::open("tokens.db") {
-        // First try to update existing record
-        connection.execute(
-            "UPDATE tokens SET decimals = ?1 WHERE mint = ?2",
-            params![decimals as i64, mint]
-        )?;
-
-        // If no rows were updated, insert a new record
-        connection.execute(
-            "INSERT OR IGNORE INTO tokens (mint, symbol, name, decimals, chain_id, price_native, price_usd, last_updated) 
-             VALUES (?1, ?2, ?3, ?4, 'solana', 0.0, 0.0, datetime('now'))",
-            params![
-                mint,
-                "UNKNOWN", // placeholder symbol
-                "UNKNOWN", // placeholder name
-                decimals as i64
-            ]
-        )?;
-    }
-    Ok(())
-}
-
-/// Fetch decimals for multiple mints using getMultipleAccounts RPC call
-/// Updates the database cache
-pub async fn fetch_or_cache_decimals(
-    rpc_client: &RpcClient,
-    mints: &[String]
-) -> Result<std::collections::HashMap<String, u8>, Box<dyn std::error::Error>> {
-    use std::collections::HashMap;
-
-    let mut result = HashMap::new();
-    let mut mints_to_fetch = Vec::new();
-
-    // Check database cache first
-    for mint in mints {
-        if let Some(decimals) = get_token_decimals_cached(mint) {
-            result.insert(mint.clone(), decimals);
-        } else {
-            mints_to_fetch.push(mint.clone());
-        }
-    }
-
-    if mints_to_fetch.is_empty() {
-        return Ok(result);
-    }
-
-    log(
-        LogTag::Monitor,
-        "INFO",
-        &format!("Fetching decimals for {} new mints from chain", mints_to_fetch.len())
-    );
-
-    // Convert mint strings to Pubkeys
-    let mut valid_mints = Vec::new();
-    let mut pubkeys = Vec::new();
-
-    for mint_str in &mints_to_fetch {
-        match Pubkey::from_str(mint_str) {
-            Ok(pubkey) => {
-                valid_mints.push(mint_str.clone());
-                pubkeys.push(pubkey);
-            }
-            Err(e) => {
-                log(LogTag::Monitor, "WARN", &format!("Invalid mint address {}: {}", mint_str, e));
-                // Use default decimals of 9 for invalid addresses
-                result.insert(mint_str.clone(), 9);
-                if let Err(e) = update_token_decimals_sync_standalone(mint_str, 9) {
-                    log(
-                        LogTag::Monitor,
-                        "WARN",
-                        &format!("Failed to cache decimals for {}: {}", mint_str, e)
-                    );
-                }
-            }
-        }
-    }
-
-    if pubkeys.is_empty() {
-        return Ok(result);
-    }
-
-    // Fetch multiple accounts in batches (max 100 per request)
-    const BATCH_SIZE: usize = 100;
-    let mut processed_valid_mints = 0;
-
-    for chunk in pubkeys.chunks(BATCH_SIZE) {
-        let chunk_mints: Vec<String> = valid_mints
-            .iter()
-            .skip(processed_valid_mints)
-            .take(chunk.len())
-            .cloned()
-            .collect();
-
-        match rpc_client.get_multiple_accounts(chunk) {
-            Ok(accounts) => {
-                for (i, account_opt) in accounts.iter().enumerate() {
-                    let mint_str = &chunk_mints[i];
-
-                    match account_opt {
-                        Some(account) => {
-                            match extract_decimals_from_mint_account(&account.data) {
-                                Ok(decimals) => {
-                                    result.insert(mint_str.clone(), decimals);
-                                    if
-                                        let Err(e) = update_token_decimals_sync_standalone(
-                                            mint_str,
-                                            decimals
-                                        )
-                                    {
-                                        log(
-                                            LogTag::Monitor,
-                                            "WARN",
-                                            &format!(
-                                                "Failed to cache decimals for {}: {}",
-                                                mint_str,
-                                                e
-                                            )
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    log(
-                                        LogTag::Monitor,
-                                        "WARN",
-                                        &format!(
-                                            "Failed to parse mint account for {}: {}, using default 9",
-                                            mint_str,
-                                            e
-                                        )
-                                    );
-                                    result.insert(mint_str.clone(), 9);
-                                    if
-                                        let Err(e) = update_token_decimals_sync_standalone(
-                                            mint_str,
-                                            9
-                                        )
-                                    {
-                                        log(
-                                            LogTag::Monitor,
-                                            "WARN",
-                                            &format!(
-                                                "Failed to cache decimals for {}: {}",
-                                                mint_str,
-                                                e
-                                            )
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            log(
-                                LogTag::Monitor,
-                                "WARN",
-                                &format!("Mint account not found for {}, using default 9", mint_str)
-                            );
-                            result.insert(mint_str.clone(), 9);
-                            if let Err(e) = update_token_decimals_sync_standalone(mint_str, 9) {
-                                log(
-                                    LogTag::Monitor,
-                                    "WARN",
-                                    &format!("Failed to cache decimals for {}: {}", mint_str, e)
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Monitor,
-                    "ERROR",
-                    &format!("Failed to fetch mint accounts: {}, using default 9 for all", e)
-                );
-                // Fallback to default decimals for this batch
-                for mint_str in &chunk_mints {
-                    result.insert(mint_str.clone(), 9);
-                    if let Err(e) = update_token_decimals_sync_standalone(mint_str, 9) {
-                        log(
-                            LogTag::Monitor,
-                            "WARN",
-                            &format!("Failed to cache decimals for {}: {}", mint_str, e)
-                        );
-                    }
-                }
-            }
-        }
-
-        // Increment the counter for the next batch
-        processed_valid_mints += chunk.len();
-    }
-
-    Ok(result)
-}
-
-/// Fetch decimals for a single mint from RPC and cache it
-/// This is the centralized function that MUST be used for all decimal fetching
-/// Returns the actual decimals from chain, never defaults
-pub async fn fetch_token_decimals_from_chain(
-    rpc_client: &RpcClient,
-    mint: &str
-) -> Result<u8, Box<dyn std::error::Error>> {
-    // Check cache first
-    if let Some(cached_decimals) = get_token_decimals_cached(mint) {
-        return Ok(cached_decimals);
-    }
-
-    log(LogTag::Monitor, "DECIMALS", &format!("Fetching decimals for {} from chain", mint));
-
-    // Parse mint string to Pubkey
-    let pubkey = Pubkey::from_str(mint).map_err(|e|
-        format!("Invalid mint address {}: {}", mint, e)
-    )?;
-
-    // Fetch account data
-    match rpc_client.get_account(&pubkey) {
-        Ok(account) => {
-            match extract_decimals_from_mint_account(&account.data) {
-                Ok(decimals) => {
-                    // Cache the result
-                    if let Err(e) = update_token_decimals_sync_standalone(mint, decimals) {
-                        log(
-                            LogTag::Monitor,
-                            "WARN",
-                            &format!("Failed to cache decimals for {}: {}", mint, e)
-                        );
-                    }
-
-                    log(
-                        LogTag::Monitor,
-                        "SUCCESS",
-                        &format!("Fetched decimals for {}: {}", mint, decimals)
-                    );
-
-                    Ok(decimals)
-                }
-                Err(e) => {
-                    Err(format!("Failed to parse mint account for {}: {}", mint, e).into())
-                }
-            }
-        }
-        Err(e) => { Err(format!("Failed to fetch mint account for {}: {}", mint, e).into()) }
-    }
-}
-
-/// Get token decimals with guaranteed chain lookup and caching
-/// This function NEVER uses defaults and always gets the actual decimals
-/// Use this for all price calculations to avoid slippage errors
-pub async fn get_token_decimals_guaranteed(mint: &str) -> Result<u8, Box<dyn std::error::Error>> {
-    // Check cache first
-    if let Some(cached_decimals) = get_token_decimals_cached(mint) {
-        return Ok(cached_decimals);
-    }
-
-    // Create RPC client to fetch from chain
-    let configs = crate::global::read_configs("configs.json")?;
-    let rpc_client = solana_client::rpc_client::RpcClient::new(configs.rpc_url);
-
-    // Fetch from chain and cache
-    fetch_token_decimals_from_chain(&rpc_client, mint).await
 }

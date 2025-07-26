@@ -22,20 +22,22 @@ use std::sync::Arc;
 /// Rate limit for DexScreener info API (per minute)
 pub const INFO_RATE_LIMIT: usize = 300;
 
-/// API calls to use per monitoring cycle (80% of rate limit for aggressive monitoring)
-pub const INFO_CALLS_PER_CYCLE: usize = 240;
+/// API calls to use per monitoring cycle (conservative for 5-second intervals)
+/// With 5-second cycles, we have 720 cycles per hour, so 20 calls per cycle = 1440 calls/hour
+/// This is well within the 300 calls/minute (18,000 calls/hour) rate limit
+pub const INFO_CALLS_PER_CYCLE: usize = 20;
 
-/// Enhanced monitoring cycle duration in minutes (faster for comprehensive monitoring)
-pub const ENHANCED_CYCLE_DURATION_MINUTES: u64 = 1;
+/// Enhanced monitoring cycle duration in seconds (5 seconds for real-time price updates)
+pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 5;
 
-/// Maximum tokens to process per API call (DexScreener supports up to 30)
-pub const MAX_TOKENS_PER_BATCH: usize = 30;
+/// Maximum tokens to process per API call (reduced for frequent updates)
+pub const MAX_TOKENS_PER_BATCH: usize = 20;
 
 /// High liquidity threshold for prioritization (USD)
 pub const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
 
-/// Maximum number of tokens to monitor per cycle (increased for comprehensive coverage)
-pub const MAX_TOKENS_PER_CYCLE: usize = 240;
+/// Maximum number of tokens to monitor per cycle (reduced for 5-second intervals)
+pub const MAX_TOKENS_PER_CYCLE: usize = 20;
 
 // =============================================================================
 // ENHANCED TOKEN MONITOR
@@ -63,9 +65,9 @@ impl TokenMonitor {
         })
     }
 
-    /// Start enhanced monitoring loop with priority queue
+    /// Start enhanced monitoring loop with priority queue (5-second intervals)
     pub async fn start_enhanced_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
-        log(LogTag::System, "START", "Enhanced token monitor started with priority queue");
+        log(LogTag::System, "START", "Enhanced token monitor started with 5-second price updates");
 
         loop {
             tokio::select! {
@@ -74,7 +76,7 @@ impl TokenMonitor {
                     break;
                 }
                 
-                _ = sleep(Duration::from_secs(ENHANCED_CYCLE_DURATION_MINUTES * 60)) => {
+                _ = sleep(Duration::from_secs(ENHANCED_CYCLE_DURATION_SECONDS)) => {
                     self.current_cycle += 1;
                     
                     log(LogTag::System, "MONITOR", 
@@ -189,9 +191,9 @@ impl TokenMonitor {
 
             processed += chunk.len();
 
-            // Rate limiting delay between batches
+            // Rate limiting delay between batches (reduced for faster updates)
             if processed < priority_mints.len() {
-                sleep(Duration::from_millis(500)).await;
+                sleep(Duration::from_millis(100)).await;
             }
         }
 
@@ -320,8 +322,8 @@ impl TokenMonitor {
 
             processed += chunk.len();
 
-            // Rate limiting delay
-            sleep(Duration::from_millis(500)).await;
+            // Rate limiting delay (reduced for faster updates)
+            sleep(Duration::from_millis(100)).await;
         }
 
         log(

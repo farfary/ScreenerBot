@@ -1578,7 +1578,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     tokens_from_module.len()
                 )
             );
-            
+
             for (i, token) in tokens_from_module.iter().take(3).enumerate() {
                 debug_trader_log(
                     "TOKEN_PRICE_SAMPLE",
@@ -1765,7 +1765,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     current_price
                                 )
                             );
-                            
+
                             // Use centralized filtering system
                             match filter_token_for_trading(&token) {
                                 FilterResult::Approved => {
@@ -1887,7 +1887,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                             )
                                         );
                                     }
-                                    
+
                                     // Add debug info before updating price
                                     debug_trader_log(
                                         "PRICE_UPDATE_BEFORE",
@@ -1899,9 +1899,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                             current_price
                                         )
                                     );
-                                    
+
                                     last_prices.insert(token.mint.clone(), current_price);
-                                    
+
                                     debug_trader_log(
                                         "PRICE_UPDATE_AFTER",
                                         &format!(
@@ -2375,8 +2375,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let should_exit = emergency_exit || sell_urgency > 0.7;
 
                     if should_exit {
-                        // Get token decimals for closing (using safe function)
-                        let decimals = crate::tokens::get_token_decimals_or_default(&position.mint);
+                        // Get token decimals for closing (using async function)
+                        let decimals = crate::tokens::get_token_decimals(&position.mint).await;
 
                         let minimal_token = Token {
                             mint: position.mint.clone(),

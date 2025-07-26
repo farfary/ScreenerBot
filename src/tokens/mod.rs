@@ -6,7 +6,6 @@
 use crate::logger::{ log, LogTag };
 use std::sync::Arc;
 use tokio::sync::Notify;
-use std::error::Error;
 
 pub mod api;
 pub mod pool;
@@ -17,6 +16,7 @@ pub mod types;
 pub mod blacklist;
 pub mod tests;
 pub mod price_service;
+pub mod decimals;
 
 // Re-export main types and functions
 pub use types::*;
@@ -29,6 +29,11 @@ pub use monitor::{
     get_monitoring_stats,
 };
 pub use cache::{ PriceCache, PriceCacheStats, TokenDatabase, DatabaseStats };
+pub use decimals::{
+    get_token_decimals_from_chain,
+    batch_fetch_token_decimals,
+    get_cached_decimals,
+};
 pub use blacklist::{
     TokenBlacklist,
     is_token_blacklisted,
@@ -48,12 +53,7 @@ pub use price_service::{
 };
 
 // Re-export decimal caching functions
-pub use cache::{
-    get_token_decimals_cached,
-    fetch_or_cache_decimals,
-    fetch_token_decimals_from_chain,
-    get_token_decimals_guaranteed,
-};
+// No imports from cache needed - using local function
 pub use tests::{
     run_token_system_tests,
     test_discovery_manual,
@@ -76,8 +76,8 @@ pub const ENABLE_POOL_PRICES: bool = false;
 pub const USE_DEXSCREENER_PRIMARY: bool = true;
 
 /// Rate limits for DexScreener API
-pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 300; // 300 requests per minute for tokens
-pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 60; // 60 requests per minute for discovery
+pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 250; // 300 requests per minute for tokens
+pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 50; // 60 requests per minute for discovery
 
 /// Batch size for API calls
 pub const MAX_TOKENS_PER_BATCH: usize = 30; // DexScreener supports up to 30 tokens per call
@@ -186,17 +186,25 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 // SAFE TOKEN ACCESS FUNCTIONS
 // =============================================================================
 
-/// Get token decimals (safe fallback to default 9 if not found)
-/// DEPRECATED: Use get_token_decimals_guaranteed for accurate decimals
-pub fn get_token_decimals_or_default(mint: &str) -> u8 {
-    cache::get_token_decimals_cached(mint).unwrap_or(9)
+/// Get token decimals from blockchain with caching
+pub async fn get_token_decimals(mint: &str) -> u8 {
+    match get_token_decimals_from_chain(mint).await {
+        Ok(decimals) => decimals,
+        Err(e) => {
+            log(
+                LogTag::System,
+                "WARN",
+                &format!("Failed to get decimals for {}: {}, using default (9)", mint, e)
+            );
+            9 // Fallback to default
+        }
+    }
 }
 
-/// Get token decimals with guaranteed chain lookup (async version)
-/// This function NEVER uses defaults and always gets actual decimals from chain
-/// Use this for all price calculations to avoid slippage errors
-pub async fn get_token_decimals_async(mint: &str) -> Result<u8, Box<dyn std::error::Error>> {
-    cache::get_token_decimals_guaranteed(mint).await
+/// Get token decimals synchronously (cache-only, no RPC calls)
+/// Returns cached decimals if available, otherwise returns default (9)
+pub fn get_token_decimals_sync(mint: &str) -> u8 {
+    get_cached_decimals(mint).unwrap_or(9)
 }
 
 /// Get current token price using thread-safe price service
@@ -236,10 +244,10 @@ pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
 pub async fn start_enhanced_monitoring(
     shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::System, "START", "Starting enhanced token monitoring with priority system");
+    log(LogTag::System, "START", "Starting enhanced token monitoring with 5-second price updates");
 
     let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60)); // Every minute
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // Every 5 seconds
 
         loop {
             tokio::select! {
@@ -283,8 +291,8 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
     let mut api = DexScreenerApi::new();
 
-    // Process tokens in batches
-    let batch_size = 30;
+    // Process tokens in batches (smaller batch size for 5-second intervals)
+    let batch_size = 10;
     let mut total_updated = 0;
 
     for chunk in priority_mints.chunks(batch_size) {
@@ -318,8 +326,8 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
             }
         }
 
-        // Rate limiting between batches
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        // Rate limiting between batches (reduced for faster updates)
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
     log(

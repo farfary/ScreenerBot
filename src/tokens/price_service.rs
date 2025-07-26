@@ -17,8 +17,8 @@ use chrono::{ DateTime, Utc, Duration };
 // PRICE SERVICE CONFIGURATION
 // =============================================================================
 
-/// Maximum age for cached prices (in minutes)
-const PRICE_CACHE_MAX_AGE_MINUTES: i64 = 5;
+/// Maximum age for cached prices (in seconds for real-time updates)
+const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 10;
 
 /// Priority boost for tokens with open positions (higher priority)
 const OPEN_POSITION_PRIORITY: i32 = 100;
@@ -47,7 +47,7 @@ pub struct PriceCacheEntry {
 impl PriceCacheEntry {
     pub fn is_expired(&self) -> bool {
         let age = Utc::now() - self.last_updated;
-        age > Duration::minutes(PRICE_CACHE_MAX_AGE_MINUTES)
+        age > Duration::seconds(PRICE_CACHE_MAX_AGE_SECONDS)
     }
 
     pub fn from_api_token(token: &ApiToken, priority: i32) -> Self {
@@ -186,7 +186,10 @@ impl TokenPriceService {
         log(
             LogTag::Trader,
             "MONITOR",
-            &format!("Priority tokens for monitoring: {} total (includes all tradeable tokens)", priority_mints.len())
+            &format!(
+                "Priority tokens for monitoring: {} total (includes all tradeable tokens)",
+                priority_mints.len()
+            )
         );
 
         Ok(priority_mints)

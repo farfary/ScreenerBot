@@ -9,6 +9,7 @@ pub struct ApiToken {
     pub mint: String,
     pub symbol: String,
     pub name: String,
+    pub decimals: u8,
     pub chain_id: String,
     pub dex_id: String,
     pub pair_address: String,
@@ -195,7 +196,7 @@ impl From<ApiToken> for Token {
             mint: api_token.mint,
             symbol: api_token.symbol,
             name: api_token.name,
-            decimals: 9, // Default for most Solana tokens
+            decimals: api_token.decimals, // Use actual decimals from blockchain
             chain: "solana".to_string(),
 
             logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
@@ -255,6 +256,7 @@ impl From<Token> for ApiToken {
             mint: token.mint,
             symbol: token.symbol,
             name: token.name,
+            decimals: token.decimals,
             chain_id: token.chain,
             dex_id: token.dex_id.unwrap_or_default(),
             pair_address: token.pair_address.unwrap_or_default(),

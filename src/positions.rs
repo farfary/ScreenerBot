@@ -44,8 +44,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // For closed positions: actual transaction-based calculation
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from tokens module database
-            let token_decimals = crate::tokens::get_token_decimals_or_default(&position.mint);
+            // Get token decimals from cache (synchronous)
+            let token_decimals = crate::tokens::get_token_decimals_sync(&position.mint);
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let entry_cost = position.entry_size_sol;
@@ -75,8 +75,8 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
-            // Get token decimals from tokens module database
-            let token_decimals = crate::tokens::get_token_decimals_or_default(&position.mint);
+            // Get token decimals from cache (synchronous)
+            let token_decimals = crate::tokens::get_token_decimals_sync(&position.mint);
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let current_value = ui_token_amount * current;

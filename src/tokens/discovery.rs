@@ -3,6 +3,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::api::DexScreenerApi;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::types::*;
+use crate::tokens::decimals::get_token_decimals_from_chain;
 use std::collections::HashSet;
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
@@ -102,7 +103,12 @@ impl TokenDiscovery {
 
                         // Save new tokens to database
                         if !result.new_tokens.is_empty() {
-                            if let Err(e) = self.database.add_tokens(&result.new_tokens).await {
+                            // First, fetch decimals for the new tokens
+                            let tokens_with_decimals = self.fetch_decimals_for_tokens(
+                                result.new_tokens.clone()
+                            ).await;
+
+                            if let Err(e) = self.database.add_tokens(&tokens_with_decimals).await {
                                 log(
                                     LogTag::System,
                                     "ERROR",
@@ -113,8 +119,8 @@ impl TokenDiscovery {
                                     LogTag::System,
                                     "SUCCESS",
                                     &format!(
-                                        "Saved {} new tokens to database",
-                                        result.new_tokens.len()
+                                        "Saved {} new tokens to database with accurate decimals",
+                                        tokens_with_decimals.len()
                                     )
                                 );
                             }
@@ -373,6 +379,61 @@ impl TokenDiscovery {
         }
 
         log(LogTag::System, "STOP", "Token discovery manager stopped");
+    }
+
+    /// Fetch decimals for new tokens before adding to database
+    async fn fetch_decimals_for_tokens(&self, mut tokens: Vec<ApiToken>) -> Vec<ApiToken> {
+        log(
+            LogTag::System,
+            "DECIMALS",
+            &format!("Fetching decimals for {} tokens...", tokens.len())
+        );
+
+        let mut updated_count = 0;
+
+        for token in &mut tokens {
+            match get_token_decimals_from_chain(&token.mint).await {
+                Ok(decimals) => {
+                    if decimals != token.decimals {
+                        log(
+                            LogTag::System,
+                            "DECIMALS",
+                            &format!(
+                                "Updated {} decimals: {} -> {}",
+                                token.symbol,
+                                token.decimals,
+                                decimals
+                            )
+                        );
+                        token.decimals = decimals;
+                        updated_count += 1;
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        &format!(
+                            "Failed to fetch decimals for {}: {}, keeping default ({})",
+                            token.symbol,
+                            e,
+                            token.decimals
+                        )
+                    );
+                }
+            }
+
+            // Small delay to avoid rate limiting
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
+
+        log(
+            LogTag::System,
+            "SUCCESS",
+            &format!("Updated decimals for {}/{} tokens", updated_count, tokens.len())
+        );
+
+        tokens
     }
 }
 

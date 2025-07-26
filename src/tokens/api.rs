@@ -387,6 +387,7 @@ impl DexScreenerApi {
             mint,
             symbol,
             name,
+            decimals: 9, // Default - will be updated by TokenDiscovery system
             chain_id,
             dex_id,
             pair_address,
@@ -820,6 +821,7 @@ impl DexScreenerApi {
             mint,
             symbol,
             name,
+            decimals: 9, // Default - will be updated by TokenDiscovery system
             chain_id: pair["chainId"].as_str().unwrap_or("solana").to_string(),
             dex_id: pair["dexId"].as_str().unwrap_or("").to_string(),
             pair_address: pair["pairAddress"].as_str().unwrap_or("").to_string(),

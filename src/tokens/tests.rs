@@ -71,6 +71,7 @@ mod tests {
             mint: "test_mint".to_string(),
             symbol: "TEST".to_string(),
             name: "Test Token".to_string(),
+            decimals: 6, // Test with different decimals
             chain_id: "solana".to_string(),
             dex_id: "raydium".to_string(),
             pair_address: "test_pair".to_string(),
