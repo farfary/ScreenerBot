@@ -145,13 +145,13 @@ impl TokenDiscovery {
     pub async fn discover_new_tokens(&mut self) -> Result<Vec<DiscoveryResult>, String> {
         let mut results = Vec::new();
 
-        log(LogTag::System, "DISCOVERY", "Starting token discovery cycle");
+        log(LogTag::Discovery, "START", "Starting token discovery cycle");
 
         // Get existing token mints from database to avoid duplicates
         let existing_mints = self.get_existing_mints().await?;
         log(
-            LogTag::System,
-            "DISCOVERY",
+            LogTag::Discovery,
+            "INFO",
             &format!("Found {} existing tokens in database", existing_mints.len())
         );
 
@@ -160,7 +160,7 @@ impl TokenDiscovery {
                 Ok(result) => {
                     if result.success {
                         log(
-                            LogTag::System,
+                            LogTag::Discovery,
                             "SUCCESS",
                             &format!(
                                 "Discovered {} new tokens from {}",
@@ -178,13 +178,13 @@ impl TokenDiscovery {
 
                             if let Err(e) = self.database.add_tokens(&tokens_with_decimals).await {
                                 log(
-                                    LogTag::System,
+                                    LogTag::Discovery,
                                     "ERROR",
                                     &format!("Failed to save tokens to database: {}", e)
                                 );
                             } else {
                                 log(
-                                    LogTag::System,
+                                    LogTag::Discovery,
                                     "SUCCESS",
                                     &format!(
                                         "Saved {} new tokens to database with accurate decimals",
@@ -195,7 +195,7 @@ impl TokenDiscovery {
                         }
                     } else {
                         log(
-                            LogTag::System,
+                            LogTag::Discovery,
                             "WARN",
                             &format!(
                                 "Discovery failed for {}: {}",
@@ -208,7 +208,7 @@ impl TokenDiscovery {
                 }
                 Err(e) => {
                     log(
-                        LogTag::System,
+                        LogTag::Discovery,
                         "ERROR",
                         &format!("Discovery error for {:?}: {}", source, e)
                     );
@@ -220,8 +220,8 @@ impl TokenDiscovery {
         }
 
         log(
-            LogTag::System,
-            "DISCOVERY",
+            LogTag::Discovery,
+            "INFO",
             &format!("Completed discovery cycle with {} sources", results.len())
         );
 
@@ -267,7 +267,7 @@ impl TokenDiscovery {
     ) -> Result<DiscoveryResult, String> {
         let source = format!("DexScreener-{}", chain);
 
-        log(LogTag::System, "DISCOVERY", &format!("Starting DexScreener discovery for {}", chain));
+        log(LogTag::Discovery, "START", &format!("Starting DexScreener discovery for {}", chain));
 
         let mut all_new_tokens = Vec::new();
 
@@ -285,14 +285,14 @@ impl TokenDiscovery {
                     .collect();
 
                 log(
-                    LogTag::System,
-                    "DISCOVERY",
+                    LogTag::Discovery,
+                    "INFO",
                     &format!("Found {} new tokens from boosts", new_boost_tokens.len())
                 );
                 all_new_tokens.extend(new_boost_tokens);
             }
             Err(e) => {
-                log(LogTag::System, "WARN", &format!("Boost discovery failed: {}", e));
+                log(LogTag::Discovery, "WARN", &format!("Boost discovery failed: {}", e));
             }
         }
 
@@ -310,14 +310,14 @@ impl TokenDiscovery {
                     .collect();
 
                 log(
-                    LogTag::System,
-                    "DISCOVERY",
+                    LogTag::Discovery,
+                    "INFO",
                     &format!("Found {} new tokens from profiles", new_profile_tokens.len())
                 );
                 all_new_tokens.extend(new_profile_tokens);
             }
             Err(e) => {
-                log(LogTag::System, "WARN", &format!("Profile discovery failed: {}", e));
+                log(LogTag::Discovery, "WARN", &format!("Profile discovery failed: {}", e));
             }
         }
 
@@ -331,8 +331,8 @@ impl TokenDiscovery {
 
                 if !new_top_mints.is_empty() {
                     log(
-                        LogTag::System,
-                        "DISCOVERY",
+                        LogTag::Discovery,
+                        "INFO",
                         &format!(
                             "Found {} new top tokens, fetching details...",
                             new_top_mints.len()
@@ -343,7 +343,7 @@ impl TokenDiscovery {
                     match self.api.get_multiple_token_data(&new_top_mints).await {
                         Ok(top_tokens) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "SUCCESS",
                                 &format!("Fetched details for {} top tokens", top_tokens.len())
                             );
@@ -351,7 +351,7 @@ impl TokenDiscovery {
                         }
                         Err(e) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "WARN",
                                 &format!("Failed to fetch top token details: {}", e)
                             );
@@ -360,7 +360,7 @@ impl TokenDiscovery {
                 }
             }
             Err(e) => {
-                log(LogTag::System, "WARN", &format!("Top tokens discovery failed: {}", e));
+                log(LogTag::Discovery, "WARN", &format!("Top tokens discovery failed: {}", e));
             }
         }
 
@@ -375,8 +375,8 @@ impl TokenDiscovery {
         }
 
         log(
-            LogTag::System,
-            "DISCOVERY",
+            LogTag::Discovery,
+            "SUCCESS",
             &format!(
                 "DexScreener discovery completed: {} unique new tokens found",
                 unique_tokens.len()
@@ -399,7 +399,7 @@ impl TokenDiscovery {
         existing_mints: &HashSet<String>
     ) -> Result<DiscoveryResult, String> {
         let source = "RugCheck-Trending".to_string();
-        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck trending discovery"));
+        log(LogTag::Discovery, "START", "Starting RugCheck trending discovery");
 
         match self.fetch_rugcheck_trending().await {
             Ok(trending_items) => {
@@ -410,8 +410,8 @@ impl TokenDiscovery {
                     .collect();
 
                 log(
-                    LogTag::System,
-                    "DISCOVERY",
+                    LogTag::Discovery,
+                    "INFO",
                     &format!("Found {} new mints from RugCheck trending", new_mints.len())
                 );
 
@@ -420,7 +420,7 @@ impl TokenDiscovery {
                     match self.api.get_multiple_token_data(&new_mints).await {
                         Ok(tokens) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "SUCCESS",
                                 &format!(
                                     "Fetched details for {} RugCheck trending tokens",
@@ -431,7 +431,7 @@ impl TokenDiscovery {
                         }
                         Err(e) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "WARN",
                                 &format!("Failed to fetch token details from DexScreener: {}", e)
                             );
@@ -451,7 +451,11 @@ impl TokenDiscovery {
                 })
             }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("RugCheck trending discovery failed: {}", e));
+                log(
+                    LogTag::Discovery,
+                    "ERROR",
+                    &format!("RugCheck trending discovery failed: {}", e)
+                );
                 Ok(DiscoveryResult {
                     source,
                     new_tokens: Vec::new(),
@@ -470,7 +474,7 @@ impl TokenDiscovery {
         existing_mints: &HashSet<String>
     ) -> Result<DiscoveryResult, String> {
         let source = "RugCheck-Verified".to_string();
-        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck verified discovery"));
+        log(LogTag::Discovery, "START", "Starting RugCheck verified discovery");
 
         match self.fetch_rugcheck_verified().await {
             Ok(verified_items) => {
@@ -481,8 +485,8 @@ impl TokenDiscovery {
                     .collect();
 
                 log(
-                    LogTag::System,
-                    "DISCOVERY",
+                    LogTag::Discovery,
+                    "INFO",
                     &format!("Found {} new mints from RugCheck verified", new_mints.len())
                 );
 
@@ -491,7 +495,7 @@ impl TokenDiscovery {
                     match self.api.get_multiple_token_data(&new_mints).await {
                         Ok(tokens) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "SUCCESS",
                                 &format!(
                                     "Fetched details for {} RugCheck verified tokens",
@@ -502,7 +506,7 @@ impl TokenDiscovery {
                         }
                         Err(e) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "WARN",
                                 &format!("Failed to fetch token details from DexScreener: {}", e)
                             );
@@ -522,7 +526,11 @@ impl TokenDiscovery {
                 })
             }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("RugCheck verified discovery failed: {}", e));
+                log(
+                    LogTag::Discovery,
+                    "ERROR",
+                    &format!("RugCheck verified discovery failed: {}", e)
+                );
                 Ok(DiscoveryResult {
                     source,
                     new_tokens: Vec::new(),
@@ -541,7 +549,7 @@ impl TokenDiscovery {
         existing_mints: &HashSet<String>
     ) -> Result<DiscoveryResult, String> {
         let source = "RugCheck-Recent".to_string();
-        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck recent discovery"));
+        log(LogTag::Discovery, "START", "Starting RugCheck recent discovery");
 
         match self.fetch_rugcheck_recent().await {
             Ok(recent_items) => {
@@ -552,8 +560,8 @@ impl TokenDiscovery {
                     .collect();
 
                 log(
-                    LogTag::System,
-                    "DISCOVERY",
+                    LogTag::Discovery,
+                    "INFO",
                     &format!("Found {} new mints from RugCheck recent", new_mints.len())
                 );
 
@@ -562,7 +570,7 @@ impl TokenDiscovery {
                     match self.api.get_multiple_token_data(&new_mints).await {
                         Ok(tokens) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "SUCCESS",
                                 &format!(
                                     "Fetched details for {} RugCheck recent tokens",
@@ -573,7 +581,7 @@ impl TokenDiscovery {
                         }
                         Err(e) => {
                             log(
-                                LogTag::System,
+                                LogTag::Discovery,
                                 "WARN",
                                 &format!("Failed to fetch token details from DexScreener: {}", e)
                             );
@@ -593,7 +601,11 @@ impl TokenDiscovery {
                 })
             }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("RugCheck recent discovery failed: {}", e));
+                log(
+                    LogTag::Discovery,
+                    "ERROR",
+                    &format!("RugCheck recent discovery failed: {}", e)
+                );
                 Ok(DiscoveryResult {
                     source,
                     new_tokens: Vec::new(),
@@ -612,7 +624,7 @@ impl TokenDiscovery {
         existing_mints: &HashSet<String>
     ) -> Result<DiscoveryResult, String> {
         let source = "RugCheck-NewTokens".to_string();
-        log(LogTag::System, "DISCOVERY", &format!("Starting RugCheck new tokens discovery"));
+        log(LogTag::Discovery, "START", "Starting RugCheck new tokens discovery");
 
         match self.fetch_rugcheck_new_tokens().await {
             Ok(new_token_items) => {
@@ -623,8 +635,8 @@ impl TokenDiscovery {
                     .collect();
 
                 log(
-                    LogTag::System,
-                    "DISCOVERY",
+                    LogTag::Discovery,
+                    "INFO",
                     &format!("Found {} new mints from RugCheck new tokens", new_mints.len())
                 );
 
@@ -662,7 +674,7 @@ impl TokenDiscovery {
             }
             Err(e) => {
                 log(
-                    LogTag::System,
+                    LogTag::Discovery,
                     "ERROR",
                     &format!("RugCheck new tokens discovery failed: {}", e)
                 );
@@ -708,32 +720,32 @@ impl TokenDiscovery {
 
     /// Start continuous discovery loop
     pub async fn start_discovery_loop(&mut self, shutdown: std::sync::Arc<tokio::sync::Notify>) {
-        log(LogTag::System, "START", "Token discovery manager started");
+        log(LogTag::Discovery, "START", "Token discovery manager started");
 
         loop {
             tokio::select! {
                 _ = shutdown.notified() => {
-                    log(LogTag::System, "SHUTDOWN", "Token discovery manager stopping");
+                    log(LogTag::Discovery, "SHUTDOWN", "Token discovery manager stopping");
                     break;
                 }
                 
                 _ = sleep(Duration::from_secs(DISCOVERY_CYCLE_MINUTES * 60)) => {
                     if let Err(e) = self.discover_new_tokens().await {
-                        log(LogTag::System, "ERROR", 
+                        log(LogTag::Discovery, "ERROR", 
                             &format!("Discovery cycle failed: {}", e));
                     }
                 }
             }
         }
 
-        log(LogTag::System, "STOP", "Token discovery manager stopped");
+        log(LogTag::Discovery, "STOP", "Token discovery manager stopped");
     }
 
     /// Fetch decimals for new tokens before adding to database
     async fn fetch_decimals_for_tokens(&self, mut tokens: Vec<ApiToken>) -> Vec<ApiToken> {
         log(
-            LogTag::System,
-            "DECIMALS",
+            LogTag::Discovery,
+            "INFO",
             &format!("Fetching decimals for {} tokens...", tokens.len())
         );
 
@@ -744,8 +756,8 @@ impl TokenDiscovery {
                 Ok(decimals) => {
                     if decimals != token.decimals {
                         log(
-                            LogTag::System,
-                            "DECIMALS",
+                            LogTag::Discovery,
+                            "INFO",
                             &format!(
                                 "Updated {} decimals: {} -> {}",
                                 token.symbol,
@@ -759,7 +771,7 @@ impl TokenDiscovery {
                 }
                 Err(e) => {
                     log(
-                        LogTag::System,
+                        LogTag::Discovery,
                         "WARN",
                         &format!(
                             "Failed to fetch decimals for {}: {}, keeping default ({})",
@@ -776,7 +788,7 @@ impl TokenDiscovery {
         }
 
         log(
-            LogTag::System,
+            LogTag::Discovery,
             "SUCCESS",
             &format!("Updated decimals for {}/{} tokens", updated_count, tokens.len())
         );
