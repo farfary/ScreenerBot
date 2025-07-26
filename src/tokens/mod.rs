@@ -48,7 +48,12 @@ pub use price_service::{
 };
 
 // Re-export decimal caching functions
-pub use cache::{ get_token_decimals_cached, fetch_or_cache_decimals };
+pub use cache::{
+    get_token_decimals_cached,
+    fetch_or_cache_decimals,
+    fetch_token_decimals_from_chain,
+    get_token_decimals_guaranteed,
+};
 pub use tests::{
     run_token_system_tests,
     test_discovery_manual,
@@ -182,8 +187,16 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 // =============================================================================
 
 /// Get token decimals (safe fallback to default 9 if not found)
+/// DEPRECATED: Use get_token_decimals_guaranteed for accurate decimals
 pub fn get_token_decimals_or_default(mint: &str) -> u8 {
     cache::get_token_decimals_cached(mint).unwrap_or(9)
+}
+
+/// Get token decimals with guaranteed chain lookup (async version)
+/// This function NEVER uses defaults and always gets actual decimals from chain
+/// Use this for all price calculations to avoid slippage errors
+pub async fn get_token_decimals_async(mint: &str) -> Result<u8, Box<dyn std::error::Error>> {
+    cache::get_token_decimals_guaranteed(mint).await
 }
 
 /// Get current token price using thread-safe price service

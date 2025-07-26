@@ -1,5 +1,5 @@
 use crate::global::{ read_configs };
-use crate::tokens::{ Token, get_token_decimals_or_default };
+use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
 
@@ -1544,7 +1544,8 @@ pub async fn execute_swap_with_quote(
             &format!("Final - Parsed output_amount_raw: {}", output_amount_raw)
         );
 
-        let token_decimals = token.decimals as u32;
+        // CRITICAL FIX: Use actual token decimals from quote response, not token struct
+        let token_decimals = swap_data.quote.out_decimals as u32;
         let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
 
         let actual_price_per_token = if output_tokens > 0.0 {
@@ -1557,7 +1558,7 @@ pub async fn execute_swap_with_quote(
             LogTag::Trader,
             "DEBUG",
             &format!(
-                "Final price calc debug: raw_amount={}, decimals={}, output_tokens={:.12}, actual_price={:.12}",
+                "Final price calc debug: raw_amount={}, decimals={} (from quote), output_tokens={:.12}, actual_price={:.12}",
                 output_amount_raw,
                 token_decimals,
                 output_tokens,
@@ -1723,7 +1724,8 @@ pub async fn execute_swap(
         // Calculate the actual price per token from the quote
         let input_sol = request.amount_sol;
         let output_amount_raw = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
-        let token_decimals = token.decimals as u32;
+        // CRITICAL FIX: Use actual token decimals from quote response, not token struct
+        let token_decimals = swap_data.quote.out_decimals as u32;
         let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
 
         let actual_price_per_token = if output_tokens > 0.0 {
@@ -1922,7 +1924,8 @@ pub async fn buy_token(
             &format!("🔢 Parsed output_amount_raw: {}", output_amount_raw)
         );
 
-        let token_decimals = token.decimals as u32;
+        // CRITICAL FIX: Use the actual token decimals from the quote response, not from token struct
+        let token_decimals = swap_data.quote.out_decimals as u32;
         let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
         let current_price = if output_tokens > 0.0 { amount_sol / output_tokens } else { 0.0 };
 
@@ -1930,7 +1933,7 @@ pub async fn buy_token(
             LogTag::Wallet,
             "DEBUG",
             &format!(
-                "🧮 Price calculation: raw_amount={}, decimals={}, output_tokens={:.12}, current_price={:.12}",
+                "🧮 Price calculation: raw_amount={}, decimals={} (from quote), output_tokens={:.12}, current_price={:.12}",
                 output_amount_raw,
                 token_decimals,
                 output_tokens,

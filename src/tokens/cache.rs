@@ -1009,3 +1009,70 @@ pub async fn fetch_or_cache_decimals(
 
     Ok(result)
 }
+
+/// Fetch decimals for a single mint from RPC and cache it
+/// This is the centralized function that MUST be used for all decimal fetching
+/// Returns the actual decimals from chain, never defaults
+pub async fn fetch_token_decimals_from_chain(
+    rpc_client: &RpcClient,
+    mint: &str
+) -> Result<u8, Box<dyn std::error::Error>> {
+    // Check cache first
+    if let Some(cached_decimals) = get_token_decimals_cached(mint) {
+        return Ok(cached_decimals);
+    }
+
+    log(LogTag::Monitor, "DECIMALS", &format!("Fetching decimals for {} from chain", mint));
+
+    // Parse mint string to Pubkey
+    let pubkey = Pubkey::from_str(mint).map_err(|e|
+        format!("Invalid mint address {}: {}", mint, e)
+    )?;
+
+    // Fetch account data
+    match rpc_client.get_account(&pubkey) {
+        Ok(account) => {
+            match extract_decimals_from_mint_account(&account.data) {
+                Ok(decimals) => {
+                    // Cache the result
+                    if let Err(e) = update_token_decimals_sync_standalone(mint, decimals) {
+                        log(
+                            LogTag::Monitor,
+                            "WARN",
+                            &format!("Failed to cache decimals for {}: {}", mint, e)
+                        );
+                    }
+
+                    log(
+                        LogTag::Monitor,
+                        "SUCCESS",
+                        &format!("Fetched decimals for {}: {}", mint, decimals)
+                    );
+
+                    Ok(decimals)
+                }
+                Err(e) => {
+                    Err(format!("Failed to parse mint account for {}: {}", mint, e).into())
+                }
+            }
+        }
+        Err(e) => { Err(format!("Failed to fetch mint account for {}: {}", mint, e).into()) }
+    }
+}
+
+/// Get token decimals with guaranteed chain lookup and caching
+/// This function NEVER uses defaults and always gets the actual decimals
+/// Use this for all price calculations to avoid slippage errors
+pub async fn get_token_decimals_guaranteed(mint: &str) -> Result<u8, Box<dyn std::error::Error>> {
+    // Check cache first
+    if let Some(cached_decimals) = get_token_decimals_cached(mint) {
+        return Ok(cached_decimals);
+    }
+
+    // Create RPC client to fetch from chain
+    let configs = crate::global::read_configs("configs.json")?;
+    let rpc_client = solana_client::rpc_client::RpcClient::new(configs.rpc_url);
+
+    // Fetch from chain and cache
+    fetch_token_decimals_from_chain(&rpc_client, mint).await
+}
