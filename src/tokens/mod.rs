@@ -51,7 +51,6 @@ pub use price_service::{
     PriceCacheEntry,
 };
 
-
 // Pool pricing is disabled - use pool module only if explicitly needed
 #[allow(unused_imports)]
 pub use pool::{ PoolPriceCalculator, get_token_price_from_pools };
@@ -302,7 +301,7 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
                     total_updated += updated_count;
 
                     log(
-                        LogTag::System,
+                        LogTag::Monitor,
                         "UPDATE",
                         &format!("Updated {} tokens in priority batch", updated_count)
                     );
@@ -310,7 +309,7 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
             }
             Err(e) => {
                 log(
-                    LogTag::System,
+                    LogTag::Monitor,
                     "WARN",
                     &format!("Failed to get token info for priority batch: {}", e)
                 );
@@ -322,7 +321,7 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
     }
 
     log(
-        LogTag::System,
+        LogTag::Monitor,
         "MONITOR",
         &format!("Enhanced monitoring cycle complete: {} tokens updated", total_updated)
     );
@@ -380,40 +379,6 @@ async fn start_cache_cleanup_task(
     });
 
     Ok(handle)
-}
-
-// =============================================================================
-// DEPRECATED FUNCTIONS (kept for compatibility)
-// =============================================================================
-
-/// DEPRECATED: Use get_token_price_safe instead
-#[deprecated(note = "Use get_token_price_safe for thread-safe access")]
-pub async fn get_token_price(mint: &str) -> Option<f64> {
-    get_token_price_safe(mint).await
-}
-
-/// DEPRECATED: Use initialize_tokens_system instead
-#[deprecated(note = "Use initialize_tokens_system which includes price service")]
-pub fn initialize_token_database() -> Result<(), Box<dyn std::error::Error>> {
-    log(
-        LogTag::System,
-        "WARN",
-        "initialize_token_database is deprecated - use initialize_tokens_system"
-    );
-    Ok(())
-}
-
-/// DEPRECATED: Direct database access removed for thread safety
-#[deprecated(note = "Use price service methods instead")]
-pub async fn get_api_price(_mint: &str) -> Option<f64> {
-    log(LogTag::System, "WARN", "get_api_price is deprecated - use price service");
-    None
-}
-
-/// DEPRECATED: Pool prices disabled
-#[deprecated(note = "Pool prices are disabled")]
-pub async fn get_pool_price(_mint: &str) -> Option<f64> {
-    None
 }
 
 /// Get pricing system statistics

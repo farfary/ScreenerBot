@@ -18,7 +18,7 @@ use chrono::{ DateTime, Utc, Duration };
 // =============================================================================
 
 /// Maximum age for cached prices (in seconds for real-time updates)
-const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 10;
+const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 5;
 
 /// Priority boost for tokens with open positions (higher priority)
 const OPEN_POSITION_PRIORITY: i32 = 100;
@@ -27,7 +27,7 @@ const OPEN_POSITION_PRIORITY: i32 = 100;
 const HIGH_LIQUIDITY_PRIORITY: i32 = 50;
 
 /// Minimum liquidity threshold for high priority (in USD)
-const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
+const HIGH_LIQUIDITY_THRESHOLD: f64 = 2000.0;
 
 // =============================================================================
 // PRICE CACHE ENTRY
@@ -51,8 +51,13 @@ impl PriceCacheEntry {
     }
 
     pub fn from_api_token(token: &ApiToken, priority: i32) -> Self {
+        // Safety check: only store valid positive prices
+        let price_sol = token.price_sol.and_then(|p| {
+            if p > 0.0 && p.is_finite() { Some(p) } else { None }
+        });
+
         Self {
-            price_sol: token.price_sol,
+            price_sol,
             price_usd: Some(token.price_usd),
             liquidity_usd: token.liquidity.as_ref().and_then(|l| l.usd),
             volume_24h: token.volume.as_ref().and_then(|v| v.h24),
@@ -107,7 +112,12 @@ impl TokenPriceService {
 
         if let Some(entry) = cache.get(mint) {
             if !entry.is_expired() {
-                return entry.price_sol;
+                // Safety check: only return positive, finite prices
+                if let Some(price) = entry.price_sol {
+                    if price > 0.0 && price.is_finite() {
+                        return Some(price);
+                    }
+                }
             }
         }
 
@@ -128,11 +138,8 @@ impl TokenPriceService {
             let mut cache = self.price_cache.write().await;
             cache.insert(mint.to_string(), entry);
 
-            log(
-                LogTag::Trader,
-                "PRICE",
-                &format!("Updated price for {}: {:?} SOL", token.symbol, token.price_sol)
-            );
+            // Only log individual price updates in debug mode to reduce noise
+            // Normal operation should be quiet for individual token updates
         }
 
         Ok(())
@@ -216,7 +223,14 @@ impl TokenPriceService {
             }
         }
 
-        log(LogTag::Trader, "UPDATE", &format!("Updated {} token prices in cache", updated_count));
+        // Only log summary for significant updates or errors
+        if updated_count > 0 && mints.len() > 20 {
+            log(
+                LogTag::Monitor,
+                "UPDATE",
+                &format!("Updated {} token prices in cache", updated_count)
+            );
+        }
 
         Ok(updated_count)
     }

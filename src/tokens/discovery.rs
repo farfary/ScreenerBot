@@ -320,10 +320,24 @@ impl TokenDiscovery {
     }
 
     /// Main discovery function - calls all APIs, combines mints, fetches decimals and token info
-    pub async fn discover_new_tokens(&mut self) -> Result<(), String> {
+    pub async fn discover_new_tokens(
+        &mut self,
+        shutdown: Option<Arc<tokio::sync::Notify>>
+    ) -> Result<(), String> {
+        use crate::utils::check_shutdown_or_delay;
+        use tokio::time::Duration;
+
         log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
 
         let mut all_mints = Vec::new();
+
+        // Check for shutdown before starting
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before starting");
+                return Ok(());
+            }
+        }
 
         // Fetch latest token profiles
         match fetch_dexscreener_latest_token_profiles().await {
@@ -340,6 +354,14 @@ impl TokenDiscovery {
             }
         }
 
+        // Check for shutdown before next API call
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after token profiles");
+                return Ok(());
+            }
+        }
+
         // Fetch latest boosted tokens
         match fetch_dexscreener_latest_boosted_tokens().await {
             Ok(mints) => {
@@ -352,6 +374,14 @@ impl TokenDiscovery {
             }
             Err(e) => {
                 log(LogTag::Discovery, "ERROR", &format!("Failed to fetch boosted tokens: {}", e));
+            }
+        }
+
+        // Check for shutdown before next API call
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after boosted tokens");
+                return Ok(());
             }
         }
 
@@ -374,6 +404,14 @@ impl TokenDiscovery {
             }
         }
 
+        // Check for shutdown before next API call
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after top boosts");
+                return Ok(());
+            }
+        }
+
         // Fetch new tokens from RugCheck
         match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
@@ -386,6 +424,14 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch new tokens from RugCheck: {}", e)
                 );
+            }
+        }
+
+        // Check for shutdown before next API call
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck new");
+                return Ok(());
             }
         }
 
@@ -408,6 +454,14 @@ impl TokenDiscovery {
             }
         }
 
+        // Check for shutdown before next API call
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck viewed");
+                return Ok(());
+            }
+        }
+
         // Fetch trending tokens from RugCheck
         match fetch_rugcheck_trending().await {
             Ok(mints) => {
@@ -427,6 +481,14 @@ impl TokenDiscovery {
             }
         }
 
+        // Check for shutdown before next API call
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck trending");
+                return Ok(());
+            }
+        }
+
         // Fetch verified tokens from RugCheck
         match fetch_rugcheck_verified().await {
             Ok(mints) => {
@@ -443,6 +505,14 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch verified tokens from RugCheck: {}", e)
                 );
+            }
+        }
+
+        // Check for shutdown before processing mints
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck verified");
+                return Ok(());
             }
         }
 
@@ -468,12 +538,32 @@ impl TokenDiscovery {
             return Ok(());
         }
 
+        // Check for shutdown before batch processing
+        if let Some(shutdown) = &shutdown {
+            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before batch processing");
+                return Ok(());
+            }
+        }
+
         // Process tokens in batches to avoid overwhelming APIs
         let batch_size = 30; // DexScreener API limit
         let mut total_processed = 0;
         let mut total_added = 0;
 
         for (batch_index, batch) in all_mints.chunks(batch_size).enumerate() {
+            // Check for shutdown before each batch
+            if let Some(shutdown) = &shutdown {
+                if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
+                    log(
+                        LogTag::Discovery,
+                        "SHUTDOWN",
+                        &format!("Discovery cancelled during batch {}", batch_index + 1)
+                    );
+                    return Ok(());
+                }
+            }
+
             log(
                 LogTag::Discovery,
                 "BATCH",
@@ -569,7 +659,7 @@ impl TokenDiscovery {
                 }
                 
                 _ = sleep(Duration::from_secs(DISCOVERY_CYCLE_SECONDS)) => {
-                    if let Err(e) = self.discover_new_tokens().await {
+                    if let Err(e) = self.discover_new_tokens(Some(shutdown.clone())).await {
                         log(LogTag::Discovery, "ERROR", &format!("Discovery cycle failed: {}", e));
                     }
                 }
@@ -610,5 +700,5 @@ pub async fn discover_tokens_once() -> Result<(), String> {
     let mut discovery = TokenDiscovery::new().map_err(|e|
         format!("Failed to create discovery: {}", e)
     )?;
-    discovery.discover_new_tokens().await
+    discovery.discover_new_tokens(None).await
 }

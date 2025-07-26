@@ -57,7 +57,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 5;
+pub const MAX_OPEN_POSITIONS: usize = 50;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.001;
@@ -1570,7 +1570,7 @@ pub fn is_entry_allowed_by_historical_data(mint: &str, current_price: f64) -> bo
 
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
-    loop {
+    'outer: loop {
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
@@ -1738,7 +1738,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Check for shutdown before spawning tasks
             if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
                 log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
-                return;
+                break 'outer;
             }
 
             // Get permit from semaphore to limit concurrency with timeout

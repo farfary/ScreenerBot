@@ -22,6 +22,21 @@ pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(||
 /// For closed positions with sol_received, uses actual SOL invested vs SOL received
 /// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
 pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
+    // Safety check: validate position has valid entry price
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        // Invalid entry price - return neutral P&L to avoid triggering emergency exits
+        return (0.0, 0.0);
+    }
+
+    // For open positions, validate current price if provided
+    if let Some(current) = current_price {
+        if current <= 0.0 || !current.is_finite() {
+            // Invalid current price - return neutral P&L to avoid false emergency signals
+            return (0.0, 0.0);
+        }
+    }
+
     // For closed positions, prioritize sol_received for most accurate P&L
     if let (Some(_), Some(sol_received)) = (position.exit_price, position.sol_received) {
         // Use actual SOL invested vs SOL received for closed positions

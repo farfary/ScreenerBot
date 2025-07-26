@@ -67,12 +67,12 @@ impl TokenMonitor {
 
     /// Start enhanced monitoring loop with priority queue (5-second intervals)
     pub async fn start_enhanced_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
-        log(LogTag::System, "START", "Enhanced token monitor started with 5-second price updates");
+        log(LogTag::Monitor, "START", "Enhanced token monitor started with 5-second price updates");
 
         loop {
             tokio::select! {
                 _ = shutdown.notified() => {
-                    log(LogTag::System, "SHUTDOWN", "Enhanced token monitor stopping");
+                    log(LogTag::Monitor, "SHUTDOWN", "Enhanced token monitor stopping");
                     break;
                 }
                 
@@ -90,7 +90,7 @@ impl TokenMonitor {
             }
         }
 
-        log(LogTag::System, "STOP", "Enhanced token monitor stopped");
+        log(LogTag::Monitor, "STOP", "Enhanced token monitor stopped");
     }
 
     /// Enhanced monitoring with priority queue system
@@ -162,15 +162,21 @@ impl TokenMonitor {
                                 }
 
                                 updated += updated_tokens.len();
-                                log(
-                                    LogTag::System,
-                                    "UPDATE",
-                                    &format!("Priority: Updated {} tokens", updated_tokens.len())
-                                );
+                                // Only log significant batch updates to reduce noise
+                                if updated_tokens.len() > 10 {
+                                    log(
+                                        LogTag::Monitor,
+                                        "UPDATE",
+                                        &format!(
+                                            "Priority: Updated {} tokens",
+                                            updated_tokens.len()
+                                        )
+                                    );
+                                }
                             }
                             Err(e) => {
                                 log(
-                                    LogTag::System,
+                                    LogTag::Monitor,
                                     "ERROR",
                                     &format!("Failed to update priority tokens: {}", e)
                                 );
@@ -181,7 +187,7 @@ impl TokenMonitor {
                 }
                 Err(e) => {
                     log(
-                        LogTag::System,
+                        LogTag::Monitor,
                         "ERROR",
                         &format!("Failed to fetch priority token info: {}", e)
                     );
@@ -197,16 +203,19 @@ impl TokenMonitor {
             }
         }
 
-        log(
-            LogTag::System,
-            "PRIORITY",
-            &format!(
-                "Priority tokens - Processed: {}, Updated: {}, Errors: {}",
-                processed,
-                updated,
-                errors
-            )
-        );
+        // Only log summary if there were significant updates or errors
+        if updated > 50 || errors > 0 {
+            log(
+                LogTag::Monitor,
+                "PRIORITY",
+                &format!(
+                    "Priority tokens - Processed: {}, Updated: {}, Errors: {}",
+                    processed,
+                    updated,
+                    errors
+                )
+            );
+        }
 
         Ok(())
     }
@@ -294,7 +303,7 @@ impl TokenMonitor {
                     if !updated_tokens.is_empty() {
                         if let Err(e) = self.database.update_tokens(&updated_tokens).await {
                             log(
-                                LogTag::System,
+                                LogTag::Monitor,
                                 "ERROR",
                                 &format!("Failed to update new entry tokens: {}", e)
                             );
@@ -303,17 +312,23 @@ impl TokenMonitor {
                             update_tokens_prices_safe(&mints).await;
                             updated += updated_tokens.len();
 
-                            log(
-                                LogTag::System,
-                                "NEW_ENTRY",
-                                &format!("Updated {} new entry candidates", updated_tokens.len())
-                            );
+                            // Only log significant updates to reduce noise
+                            if updated_tokens.len() > 10 {
+                                log(
+                                    LogTag::Monitor,
+                                    "NEW_ENTRY",
+                                    &format!(
+                                        "Updated {} new entry candidates",
+                                        updated_tokens.len()
+                                    )
+                                );
+                            }
                         }
                     }
                 }
                 Err(e) => {
                     log(
-                        LogTag::System,
+                        LogTag::Monitor,
                         "WARN",
                         &format!("Failed to get new entry token info: {}", e)
                     );
@@ -326,11 +341,14 @@ impl TokenMonitor {
             sleep(Duration::from_millis(100)).await;
         }
 
-        log(
-            LogTag::System,
-            "NEW_ENTRY",
-            &format!("New entry detection - Processed: {}, Updated: {}", processed, updated)
-        );
+        // Only log summary if there were significant updates or processes
+        if updated > 20 || processed > 100 {
+            log(
+                LogTag::Monitor,
+                "NEW_ENTRY",
+                &format!("New entry detection - Processed: {}, Updated: {}", processed, updated)
+            );
+        }
 
         Ok(())
     }
@@ -356,7 +374,7 @@ impl TokenMonitor {
 pub async fn start_token_monitoring(
     shutdown: Arc<tokio::sync::Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::System, "START", "Enhanced token monitoring background task started");
+    log(LogTag::Monitor, "START", "Enhanced token monitoring background task started");
 
     let handle = tokio::spawn(async move {
         let mut monitor = match TokenMonitor::new() {

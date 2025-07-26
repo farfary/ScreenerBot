@@ -17,9 +17,9 @@ use serde::{ Serialize, Deserialize };
 // 📊 DURATION-BASED PROFIT TARGETS (MINUTES)
 const ULTRA_FAST_MINUTES: f64 = 1.0; // 1 minute - lightning fast
 const VERY_FAST_MINUTES: f64 = 5.0; // 5 minutes - very fast
-const FAST_MINUTES: f64 = 15.0; // 15 minutes - fast
-const MEDIUM_MINUTES: f64 = 30.0; // 30 minutes - medium
-const SLOW_MINUTES: f64 = 60.0; // 60 minutes - 1 hour max
+const FAST_MINUTES: f64 = 10.0; // 15 minutes - fast
+const MEDIUM_MINUTES: f64 = 20.0; // 30 minutes - medium
+const SLOW_MINUTES: f64 = 30.0; // 60 minutes - 1 hour max
 
 // 🚀 PROFIT TARGETS BY SPEED (PERCENTAGE)
 const ULTRA_FAST_PROFIT: f64 = 20.0; // 20% in 1 minute = ultra fast sell
@@ -41,9 +41,9 @@ const BREAKEVEN_THRESHOLD: f64 = 0.0; // Never sell below breakeven
 const MINIMUM_PROFIT_TO_CONSIDER: f64 = 0.1; // 0.1% minimum to consider selling
 
 // 📈 PRICE TRACKING THRESHOLDS
-const SIGNIFICANT_DIP_PERCENT: f64 = 10.0; // 10% dip from peak = warning
-const MAJOR_DIP_PERCENT: f64 = 20.0; // 20% dip from peak = concern
-const CRITICAL_DIP_PERCENT: f64 = 30.0; // 30% dip from peak = urgent
+const SIGNIFICANT_DIP_PERCENT: f64 = 3.0; // 10% dip from peak = warning
+const MAJOR_DIP_PERCENT: f64 = 6.0; // 20% dip from peak = concern
+const CRITICAL_DIP_PERCENT: f64 = 9.0; // 30% dip from peak = urgent
 
 // 🕐 TIME PRESSURE SCALING
 const TIME_PRESSURE_START: f64 = 45.0; // Start time pressure at 45 minutes

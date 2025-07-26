@@ -11,12 +11,6 @@ async fn main() {
 
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
-    // Initialize token database
-    if let Err(e) = screenerbot::tokens::initialize_token_database() {
-        log(LogTag::System, "ERROR", &format!("Failed to initialize token database: {}", e));
-        std::process::exit(1);
-    }
-
     // Initialize tokens system
     let mut tokens_system = match screenerbot::tokens::initialize_tokens_system().await {
         Ok(system) => system,
@@ -82,7 +76,7 @@ async fn main() {
     screenerbot::tokens::cleanup_price_service().await;
 
     // Wait for background tasks to finish with timeout
-    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         // Wait for trader task
         let _ = trader_handle.await;
 

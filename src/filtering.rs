@@ -14,13 +14,13 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // =============================================================================
 
 /// Minimum token age in hours before trading
-pub const MIN_TOKEN_AGE_HOURS: i64 = 12;
+pub const MIN_TOKEN_AGE_HOURS: i64 = 4;
 
 /// Maximum token age in hours (effectively unlimited)
 pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24;
 
 /// Cooldown period after closing position before re-entering same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 30;
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60;
 
 // =============================================================================
 // FILTERING RESULT ENUM

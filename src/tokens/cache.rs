@@ -427,8 +427,10 @@ impl TokenDatabase {
                 .map_err(|e| format!("Failed to update token: {}", e))?;
         }
 
-        log(LogTag::System, "DATABASE", &format!("Updated {} tokens", tokens.len()));
-
+        // Only log on errors or significant updates (> 50 tokens)
+        if tokens.len() > 50 {
+            log(LogTag::System, "DATABASE", &format!("Updated {} tokens", tokens.len()));
+        }
         Ok(())
     }
 
