@@ -86,10 +86,6 @@ pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
 /// This is the base target for short-term positions (< 2 hours)
 pub const PROFIT_TARGET_PERCENT: f64 = 5.0;
 
-/// Emergency stop loss (set to -99.9% to effectively disable loss selling)
-/// NEVER SELL AT LOSS POLICY: Only extreme emergency exit at -99.9%
-pub const EMERGENCY_STOP_LOSS_PERCENT: f64 = -99.9;
-
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------
@@ -2189,11 +2185,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         current_price
                     );
 
-                    // Emergency exit conditions (keep original logic for safety)
-                    let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
-
-                    // Urgency-based exit (sell if urgency > 70% or emergency)
-                    let should_exit = emergency_exit || sell_urgency > 0.7;
+                    // Use profit system decision only - no duplicate emergency checks
+                    let should_exit = sell_urgency > 0.7;
 
                     if is_debug_trader_enabled() {
                         debug_trader_log(
@@ -2253,7 +2246,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 position.mint,
                                 sell_urgency,
                                 pnl_percent,
-                                emergency_exit
+                                sell_urgency >= 1.0 // Emergency is when urgency is 1.0 (from profit.rs)
                             )
                         );
 

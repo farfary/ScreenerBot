@@ -36,7 +36,7 @@ const SPEED_BONUS_FAST: f64 = 1.5; // 1.5x urgency for fast profits
 const SPEED_BONUS_MEDIUM: f64 = 1.2; // 1.2x urgency for medium profits
 
 // 🔒 ZERO-LOSS PROTECTION
-const EMERGENCY_EXIT_THRESHOLD: f64 = -50.0; // Only sell at -99% for emergency
+pub const STOP_LOSS_PERCENT: f64 = -99.0; // Only sell at -99% for emergency stop loss
 const BREAKEVEN_THRESHOLD: f64 = 0.0; // Never sell below breakeven
 const MINIMUM_PROFIT_TO_CONSIDER: f64 = 0.1; // 0.1% minimum to consider selling
 
@@ -121,7 +121,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
     // ABSOLUTE RULE: NEVER SELL AT LOSS (except emergency -99%)
     if current_profit_percent <= BREAKEVEN_THRESHOLD {
-        if current_profit_percent <= EMERGENCY_EXIT_THRESHOLD {
+        if current_profit_percent <= STOP_LOSS_PERCENT {
             if is_debug_profit_enabled() {
                 log(
                     LogTag::Trader,
@@ -130,7 +130,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
                         "🚨 EMERGENCY EXIT TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
                         position.symbol,
                         current_profit_percent,
-                        EMERGENCY_EXIT_THRESHOLD
+                        STOP_LOSS_PERCENT
                     )
                 );
             }
