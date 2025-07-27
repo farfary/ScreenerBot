@@ -36,9 +36,9 @@ const SPEED_BONUS_FAST: f64 = 1.5; // 1.5x urgency for fast profits
 const SPEED_BONUS_MEDIUM: f64 = 1.2; // 1.2x urgency for medium profits
 
 // 🔒 ZERO-LOSS PROTECTION
-pub const STOP_LOSS_PERCENT: f64 = -50.0; // Only sell at -99% for emergency stop loss
-const BREAKEVEN_THRESHOLD: f64 = -30.0; // Never sell below breakeven
-const MINIMUM_PROFIT_TO_CONSIDER: f64 = 0.1; // 0.1% minimum to consider selling
+pub const STOP_LOSS_PERCENT: f64 = -99.0; // Only sell at -99% for emergency stop loss
+const BREAKEVEN_THRESHOLD: f64 = -99.0; // Never sell below breakeven
+const MINIMUM_PROFIT_TO_CONSIDER: f64 = 1.0; // 0.1% minimum to consider selling
 
 // 📈 PRICE TRACKING THRESHOLDS
 const CRITICAL_DIP_PERCENT: f64 = 9.0; // 30% dip from peak = urgent
