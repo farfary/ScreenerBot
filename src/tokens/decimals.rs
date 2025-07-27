@@ -9,11 +9,78 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use std::sync::{ Arc, Mutex };
 use once_cell::sync::Lazy;
+use std::fs;
+use std::path::Path;
+use serde::{ Serialize, Deserialize };
+
+const CACHE_FILE_NAME: &str = "decimal_cache.json";
+
+#[derive(Serialize, Deserialize)]
+struct DecimalCacheData {
+    decimals: HashMap<String, u8>,
+}
 
 // Cache for token decimals to avoid repeated RPC calls
 static DECIMAL_CACHE: Lazy<Arc<Mutex<HashMap<String, u8>>>> = Lazy::new(|| {
-    Arc::new(Mutex::new(HashMap::new()))
+    Arc::new(Mutex::new(load_cache_from_disk()))
 });
+
+/// Load decimal cache from disk
+fn load_cache_from_disk() -> HashMap<String, u8> {
+    if Path::new(CACHE_FILE_NAME).exists() {
+        match fs::read_to_string(CACHE_FILE_NAME) {
+            Ok(content) => {
+                match serde_json::from_str::<DecimalCacheData>(&content) {
+                    Ok(cache_data) => {
+                        log(
+                            LogTag::System,
+                            "CACHE",
+                            &format!(
+                                "Loaded {} decimal entries from cache file",
+                                cache_data.decimals.len()
+                            )
+                        );
+                        return cache_data.decimals;
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "WARN",
+                            &format!("Failed to parse decimal cache file: {}", e)
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Failed to read decimal cache file: {}", e));
+            }
+        }
+    }
+
+    HashMap::new()
+}
+
+/// Save decimal cache to disk
+fn save_cache_to_disk(cache: &HashMap<String, u8>) {
+    let cache_data = DecimalCacheData {
+        decimals: cache.clone(),
+    };
+
+    match serde_json::to_string_pretty(&cache_data) {
+        Ok(json) => {
+            if let Err(e) = fs::write(CACHE_FILE_NAME, json) {
+                log(
+                    LogTag::System,
+                    "ERROR",
+                    &format!("Failed to save decimal cache to disk: {}", e)
+                );
+            }
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to serialize decimal cache: {}", e));
+        }
+    }
+}
 
 /// Get token decimals from Solana blockchain with caching
 pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
@@ -23,8 +90,6 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
             return Ok(decimals);
         }
     }
-
-    log(LogTag::System, "DECIMALS", &format!("Fetching decimals for token: {}", mint));
 
     // Use the batch function for single token (more efficient than separate implementation)
     let results = batch_fetch_token_decimals(&[mint.to_string()]).await;
@@ -141,10 +206,43 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         return invalid_results;
     }
 
+    // Check which tokens are not in cache (only fetch uncached ones)
+    let mut uncached_mints = Vec::new();
+    let mut cached_results = Vec::new();
+
+    if let Ok(cache) = DECIMAL_CACHE.lock() {
+        for (mint_str, pubkey) in &valid_mints {
+            if let Some(&decimals) = cache.get(mint_str) {
+                cached_results.push((mint_str.clone(), Ok(decimals)));
+            } else {
+                uncached_mints.push((mint_str.clone(), *pubkey));
+            }
+        }
+    } else {
+        uncached_mints = valid_mints.clone();
+    }
+
+    // Only log and fetch if there are uncached tokens
+    if uncached_mints.is_empty() {
+        // Return all cached results in original order
+        let mut all_results = Vec::new();
+        for (mint_str, _) in &valid_mints {
+            if let Some(cached_result) = cached_results.iter().find(|(m, _)| m == mint_str) {
+                all_results.push(cached_result.clone());
+            }
+        }
+        all_results.extend(invalid_results);
+        return all_results;
+    }
+
     log(
         LogTag::System,
         "DECIMALS",
-        &format!("Batch fetching decimals for {} tokens", valid_mints.len())
+        &format!(
+            "Fetching decimals for {} new tokens (cached: {})",
+            uncached_mints.len(),
+            cached_results.len()
+        )
     );
 
     // Load RPC configuration
@@ -164,12 +262,9 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
     let mut rpc_urls = vec![config.rpc_url.clone()];
     rpc_urls.extend(config.rpc_fallbacks.clone());
 
-    let _pubkeys: Vec<Pubkey> = valid_mints
-        .iter()
-        .map(|(_, pubkey)| *pubkey)
-        .collect();
-    let mut results = Vec::new();
-    let mut remaining_mints = valid_mints.clone();
+    let mut fetch_results = Vec::new();
+    let mut remaining_mints = uncached_mints.clone();
+    let mut new_cache_entries = HashMap::new();
 
     // Try each RPC endpoint until we get results
     for rpc_url in &rpc_urls {
@@ -191,12 +286,8 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
 
                     match decimals_result {
                         Ok(decimals) => {
-                            // Cache the successful result
-                            if let Ok(mut cache) = DECIMAL_CACHE.lock() {
-                                cache.insert(mint_str.clone(), *decimals);
-                            }
-
-                            results.push((mint_str.clone(), Ok(*decimals)));
+                            new_cache_entries.insert(mint_str.clone(), *decimals);
+                            fetch_results.push((mint_str.clone(), Ok(*decimals)));
                             successful_indices.push(i);
                         }
                         Err(e) => {
@@ -219,15 +310,17 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                     remaining_mints.remove(index);
                 }
 
-                log(
-                    LogTag::System,
-                    "SUCCESS",
-                    &format!(
-                        "Successfully fetched {} decimals from {}",
-                        successful_indices.len(),
-                        rpc_url
-                    )
-                );
+                if !successful_indices.is_empty() {
+                    log(
+                        LogTag::System,
+                        "SUCCESS",
+                        &format!(
+                            "Fetched {} new decimal entries from {}",
+                            successful_indices.len(),
+                            rpc_url
+                        )
+                    );
+                }
             }
             Err(e) => {
                 log(LogTag::System, "WARN", &format!("Batch fetch failed from {}: {}", rpc_url, e));
@@ -235,7 +328,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         }
     }
 
-    // For any remaining failed mints, add default decimals and cache them
+    // For any remaining failed mints, add default decimals
     for (mint_str, _) in remaining_mints {
         log(
             LogTag::System,
@@ -243,18 +336,54 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
             &format!("All RPC endpoints failed for token {}, using default decimals (9)", mint_str)
         );
 
-        // Cache the default value to avoid repeated failures
-        if let Ok(mut cache) = DECIMAL_CACHE.lock() {
-            cache.insert(mint_str.clone(), 9);
-        }
+        new_cache_entries.insert(mint_str.clone(), 9);
+        fetch_results.push((mint_str, Ok(9))); // Default fallback
+    }
 
-        results.push((mint_str, Ok(9))); // Default fallback
+    // Update cache and save to disk if we have new entries
+    if !new_cache_entries.is_empty() {
+        if let Ok(mut cache) = DECIMAL_CACHE.lock() {
+            let old_size = cache.len();
+            cache.extend(new_cache_entries);
+            let new_size = cache.len();
+
+            // Save to disk
+            save_cache_to_disk(&cache);
+
+            log(
+                LogTag::System,
+                "CACHE",
+                &format!(
+                    "Updated decimal cache: {} → {} entries (+{})",
+                    old_size,
+                    new_size,
+                    new_size - old_size
+                )
+            );
+        }
+    }
+
+    // Combine cached and fetched results in original order
+    let mut all_results = Vec::new();
+    for (mint_str, _) in &valid_mints {
+        // Check if this mint was cached
+        if let Some(cached_result) = cached_results.iter().find(|(m, _)| m == mint_str) {
+            all_results.push(cached_result.clone());
+        } else {
+            // Find in fetch results
+            if let Some(fetch_result) = fetch_results.iter().find(|(m, _)| m == mint_str) {
+                all_results.push(fetch_result.clone());
+            } else {
+                // This shouldn't happen, but handle gracefully
+                all_results.push((mint_str.clone(), Err("Failed to fetch decimals".to_string())));
+            }
+        }
     }
 
     // Add back the invalid mint results
-    results.extend(invalid_results);
+    all_results.extend(invalid_results);
 
-    results
+    all_results
 }
 
 /// Get decimals from cache only (no RPC call)
@@ -289,17 +418,11 @@ pub async fn get_multiple_token_decimals_from_chain(
     // If some mints are not cached, fetch them in batch
     let mut batch_results = Vec::new();
     if !uncached_mints.is_empty() {
-        log(
-            LogTag::System,
-            "DECIMALS",
-            &format!("Batch fetching decimals for {} uncached tokens", uncached_mints.len())
-        );
         batch_results = batch_fetch_token_decimals(&uncached_mints).await;
     }
 
     // Combine cached and fetched results in original order
     let mut all_results = Vec::new();
-    let _batch_index = 0;
 
     for mint in mints {
         // Check if this mint was cached
@@ -323,6 +446,8 @@ pub async fn get_multiple_token_decimals_from_chain(
 pub fn clear_decimals_cache() {
     if let Ok(mut cache) = DECIMAL_CACHE.lock() {
         cache.clear();
+        save_cache_to_disk(&cache);
+        log(LogTag::System, "CACHE", "Cleared decimal cache and saved to disk");
     }
 }
 
@@ -334,5 +459,12 @@ pub fn get_cache_stats() -> (usize, usize) {
         (size, capacity)
     } else {
         (0, 0)
+    }
+}
+
+/// Force save current cache to disk (useful for shutdown)
+pub fn save_decimal_cache() {
+    if let Ok(cache) = DECIMAL_CACHE.lock() {
+        save_cache_to_disk(&cache);
     }
 }

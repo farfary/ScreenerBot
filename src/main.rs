@@ -81,6 +81,9 @@ async fn main() {
     // Cleanup price service on shutdown
     screenerbot::tokens::cleanup_price_service().await;
 
+    // Save decimal cache to disk on shutdown
+    screenerbot::tokens::decimals::save_decimal_cache();
+
     // Wait for background tasks to finish with timeout
     let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         // Wait for trader task
