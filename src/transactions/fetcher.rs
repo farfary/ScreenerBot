@@ -685,37 +685,3 @@ impl TaskFetcher {
         Ok(results)
     }
 }
-
-/// Legacy compatibility functions
-pub async fn get_recent_signatures_with_fallback(
-    client: &reqwest::Client,
-    wallet_address: &str,
-    configs: &Configs,
-    limit: usize
-) -> Result<Vec<SignatureInfo>, String> {
-    let fetcher = TransactionFetcher::new(configs.clone(), None)?;
-    fetcher.get_recent_signatures(wallet_address, limit).await
-}
-
-pub async fn get_transactions_with_cache_and_fallback(
-    client: &reqwest::Client,
-    signatures: &[SignatureInfo],
-    configs: &Configs,
-    max_transactions: Option<usize>
-) -> Vec<(SignatureInfo, TransactionResult)> {
-    match TransactionFetcher::new(configs.clone(), None) {
-        Ok(fetcher) => {
-            match fetcher.batch_fetch_transactions(signatures, max_transactions).await {
-                Ok(results) => results,
-                Err(e) => {
-                    log(LogTag::System, "ERROR", &format!("Batch fetch failed: {}", e));
-                    Vec::new()
-                }
-            }
-        }
-        Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to create fetcher: {}", e));
-            Vec::new()
-        }
-    }
-}
