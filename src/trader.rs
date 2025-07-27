@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 50;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.002;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -259,104 +259,6 @@ async fn ensure_tokens_populated() {
 }
 
 /// Helper function for regular trader logging (always visible)
-
-/// Determines if a position should be sold based on P&L, time, and token analysis
-/// Returns urgency score from 0.0 (don't sell) to 1.0 (sell immediately)
-/// NEVER SELL AT LOSS - Only sells at profit or extreme emergency (-99.9% loss)
-/// This function ensures we NEVER sell at a loss under normal trading conditions
-pub fn should_sell(pos: &Position, current_price: f64, now: DateTime<Utc>) -> f64 {
-    // CRITICAL SAFETY CHECK: Validate current price before any sell analysis
-    if current_price <= 0.0 || !current_price.is_finite() {
-        log(
-            LogTag::Trader,
-            "ERROR",
-            &format!(
-                "INVALID PRICE for sell analysis: {} ({}) - Price = {:.10} - CANNOT MAKE SELL DECISION",
-                pos.symbol,
-                pos.mint,
-                current_price
-            )
-        );
-        return 0.0; // Never sell with invalid price data
-    }
-
-    // Calculate time held in seconds
-    let duration = now - pos.entry_time;
-    let time_held_secs: f64 = duration.num_seconds() as f64;
-
-    // BULLETPROOF PROTECTION: Check simple price relationship FIRST
-    let entry_price = pos.effective_entry_price.unwrap_or(pos.entry_price);
-    let simple_price_change_percent = ((current_price - entry_price) / entry_price) * 100.0;
-
-    // ABSOLUTE RULE: If simple price check shows loss, NEVER SELL (regardless of P&L calculation)
-    if simple_price_change_percent < 0.0 {
-        log(
-            LogTag::Trader,
-            "HOLD",
-            &format!(
-                "HOLDING {} - Simple price check: {:.2}% loss - NEVER SELL AT LOSS",
-                pos.symbol,
-                simple_price_change_percent
-            )
-        );
-        return 0.0; // NEVER sell when price is below entry
-    }
-
-    // Secondary check: Calculate P&L for additional validation
-    let (_, current_pnl_percent) = calculate_position_pnl(pos, Some(current_price));
-
-    // Only allow emergency exit if BOTH price AND P&L show extreme loss
-    if current_pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT && simple_price_change_percent <= -99.0 {
-        log(
-            LogTag::Trader,
-            "EMERGENCY",
-            &format!(
-                "EXTREME EMERGENCY: {} - Price: {:.2}%, P&L: {:.2}% - emergency exit",
-                pos.symbol,
-                simple_price_change_percent,
-                current_pnl_percent
-            )
-        );
-        return 1.0; // Emergency exit only when BOTH checks confirm extreme loss
-    }
-
-    // Additional P&L based protection (backup)
-    if current_pnl_percent < 0.0 {
-        log(
-            LogTag::Trader,
-            "HOLD",
-            &format!(
-                "HOLDING {} - P&L shows {:.2}% loss - NEVER SELL AT LOSS",
-                pos.symbol,
-                current_pnl_percent
-            )
-        );
-        return 0.0; // NEVER sell at loss
-    }
-
-    // Don't sell too early unless we have significant profit
-    if time_held_secs < MIN_POSITION_HOLD_TIME_SECS && current_pnl_percent < PROFIT_TARGET_PERCENT {
-        return 0.0; // Hold for minimum time unless profit target reached
-    }
-
-    // Note: Current price lookup now handled by the safe price service
-    // Position analysis can be enhanced with token data from the price service in the future
-
-    // Fallback logic if token not found in tokens module - only profit-based
-    if current_pnl_percent >= PROFIT_TARGET_PERCENT {
-        return 0.8; // Take profit at target
-    }
-
-    // Time decay factor for profitable positions only
-    if current_pnl_percent > 0.0 && time_held_secs > TIME_DECAY_START_SECS {
-        let decay_duration = MAX_POSITION_HOLD_TIME_SECS - TIME_DECAY_START_SECS;
-        let excess_time = time_held_secs - TIME_DECAY_START_SECS;
-        let time_decay = excess_time / decay_duration;
-        return f64::min(time_decay * 0.4, 0.6); // Gentle time pressure for profits
-    }
-
-    0.0 // Hold otherwise
-}
 
 /// Calculate dynamic liquidity thresholds based on current token watch list
 /// Returns (high_threshold, medium_threshold, low_threshold) for liquidity factoring
@@ -2408,14 +2310,30 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     let now = Utc::now();
 
-                    // Calculate sell urgency using the advanced mathematical model
-                    let sell_urgency = should_sell(&position, current_price, now);
+                    // Calculate sell urgency using the unified profit system
+                    let (sell_urgency, sell_reason) = crate::profit::should_sell(
+                        &position,
+                        current_price
+                    );
 
                     // Emergency exit conditions (keep original logic for safety)
                     let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
 
                     // Urgency-based exit (sell if urgency > 70% or emergency)
                     let should_exit = emergency_exit || sell_urgency > 0.7;
+
+                    if is_debug_trader_enabled() {
+                        debug_trader_log(
+                            "SELL_ANALYSIS",
+                            &format!(
+                                "{} | Urgency: {:.2} | Reason: {} | Exit: {}",
+                                position.symbol,
+                                sell_urgency,
+                                sell_reason,
+                                should_exit
+                            )
+                        );
+                    }
 
                     if should_exit {
                         // Get token decimals for closing (using async function)

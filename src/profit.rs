@@ -54,6 +54,459 @@ const FORCE_SELL_TIME_MINUTES: f64 = 60.0; // Force sell after 1 hour (60 minute
 const FORCE_SELL_MIN_PROFIT: f64 = 5.0; // Minimum 5% profit required for force sell
 
 // ================================================================================================
+// 🎯 UNIFIED SHOULD_SELL FUNCTION - THE ONE AND ONLY
+// ================================================================================================
+
+/// THE SINGLE SHOULD_SELL FUNCTION
+/// Zero-loss protection with emergency exit only at -99%
+/// Speed-based profit targets: faster = sell sooner
+/// Duration scaling: 1min to 1h optimal trade window
+/// Profit scaling: 0% to 1000% based on speed achieved
+///
+/// Parameters:
+/// - position: The position to analyze
+/// - current_price: Current token price
+///
+/// Returns: (urgency_score, reason_string)
+/// - urgency_score: 0.0 = don't sell, 1.0 = sell immediately
+/// - reason_string: Human-readable explanation of the decision
+pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🔍 INPUT VALIDATION & SAFETY CHECKS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // CRITICAL SAFETY CHECK: Validate current price before any sell analysis
+    if current_price <= 0.0 || !current_price.is_finite() {
+        log(
+            LogTag::Trader,
+            "ERROR",
+            &format!(
+                "INVALID PRICE for sell analysis: {} ({}) - Price = {:.10} - CANNOT MAKE SELL DECISION",
+                position.symbol,
+                position.mint,
+                current_price
+            )
+        );
+        return (0.0, format!("❌ INVALID PRICE: {:.10}", current_price));
+    }
+
+    // Calculate basic parameters
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    let now = Utc::now();
+    let duration = now - position.entry_time;
+    let time_held_seconds = duration.num_seconds() as f64;
+    let minutes_held = time_held_seconds / 60.0;
+    let current_profit_percent = ((current_price - entry_price) / entry_price) * 100.0;
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🔍 DEBUG LOGGING (if enabled)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if is_debug_profit_enabled() {
+        log(
+            LogTag::Trader,
+            "🔍 PROFIT-DEBUG",
+            &format!(
+                "Analyzing {} | Price: {:.8} → {:.8} | Profit: {:.2}% | Time: {:.1}m",
+                position.symbol,
+                entry_price,
+                current_price,
+                current_profit_percent,
+                minutes_held
+            )
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🛡️ ZERO-LOSS PROTECTION SYSTEM
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // ABSOLUTE RULE: NEVER SELL AT LOSS (except emergency -99%)
+    if current_profit_percent <= BREAKEVEN_THRESHOLD {
+        if current_profit_percent <= EMERGENCY_EXIT_THRESHOLD {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Trader,
+                    "🔍 PROFIT-DEBUG",
+                    &format!(
+                        "🚨 EMERGENCY EXIT TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
+                        position.symbol,
+                        current_profit_percent,
+                        EMERGENCY_EXIT_THRESHOLD
+                    )
+                );
+            }
+            log(
+                LogTag::Trader,
+                "🚨 EMERGENCY",
+                &format!(
+                    "EMERGENCY EXIT: {} at {:.2}% - EXTREME LOSS",
+                    position.symbol,
+                    current_profit_percent
+                )
+            );
+            return (1.0, format!("🚨 EMERGENCY EXIT: {:.1}% loss", current_profit_percent));
+        }
+
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "🔒 ZERO-LOSS PROTECTION ACTIVE: {} at {:.2}% (breakeven: {:.0}%) - HOLDING",
+                    position.symbol,
+                    current_profit_percent,
+                    BREAKEVEN_THRESHOLD
+                )
+            );
+        }
+        log(
+            LogTag::Trader,
+            "🔒 HOLD",
+            &format!(
+                "ZERO-LOSS PROTECTION: {} at {:.2}% - NEVER SELL AT LOSS",
+                position.symbol,
+                current_profit_percent
+            )
+        );
+        return (0.0, format!("🔒 HOLD: {:.2}% - NO LOSS SALES", current_profit_percent));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🚀 EXTREME PROFIT PROTECTION (INSTANT SELLS)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if current_profit_percent >= EXTREME_PROFIT {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "💎 EXTREME PROFIT REACHED: {} at {:.1}% (threshold: {:.0}%) in {:.1}m - INSTANT SELL",
+                    position.symbol,
+                    current_profit_percent,
+                    EXTREME_PROFIT,
+                    minutes_held
+                )
+            );
+        }
+        log(
+            LogTag::Trader,
+            "💎 EXTREME",
+            &format!(
+                "EXTREME PROFIT: {} at {:.1}% in {:.1}m - INSTANT SELL",
+                position.symbol,
+                current_profit_percent,
+                minutes_held
+            )
+        );
+        return (
+            0.99,
+            format!(
+                "💎 EXTREME: {:.0}% in {:.1}m - INSTANT SELL",
+                current_profit_percent,
+                minutes_held
+            ),
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ⏰ FORCE SELL AFTER 1 HOUR (60+ MINUTES) WITH 5%+ PROFIT
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if minutes_held >= FORCE_SELL_TIME_MINUTES && current_profit_percent >= FORCE_SELL_MIN_PROFIT {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "⏰ FORCE SELL TRIGGERED: {} held {:.0}m (limit: {:.0}m) with {:.1}% profit (min: {:.0}%)",
+                    position.symbol,
+                    minutes_held,
+                    FORCE_SELL_TIME_MINUTES,
+                    current_profit_percent,
+                    FORCE_SELL_MIN_PROFIT
+                )
+            );
+        }
+        log(
+            LogTag::Trader,
+            "⏰ FORCE",
+            &format!(
+                "FORCE SELL: {} at {:.1}% after {:.0}m - MANDATORY EXIT",
+                position.symbol,
+                current_profit_percent,
+                minutes_held
+            )
+        );
+        return (
+            0.95,
+            format!(
+                "⏰ FORCE SELL: {:.1}% after {:.0}m - NO MORE WAITING",
+                current_profit_percent,
+                minutes_held
+            ),
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 📊 TOKEN DATA RETRIEVAL (ASYNC WORKAROUND - TODO: Make this async)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // NOTE: For now, we'll implement core logic without token data
+    // TODO: In future iterations, make this function async to properly fetch token data
+
+    // Continue with core profit logic based on price and time analysis
+    // This ensures the function works even without detailed token data
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ⚡ SPEED-BASED PROFIT TARGETS (WITHOUT TOKEN DATA FOR NOW)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    let mut base_urgency = 0.0;
+    let mut reason = String::new();
+
+    if is_debug_profit_enabled() {
+        log(
+            LogTag::Trader,
+            "🔍 PROFIT-DEBUG",
+            &format!(
+                "Speed Analysis: {} | {:.1}m | Ultra<{:.0}m ({:.0}%) | VFast<{:.0}m ({:.0}%) | Fast<{:.0}m ({:.0}%) | Med<{:.0}m ({:.0}%) | Slow<{:.0}m ({:.0}%)",
+                position.symbol,
+                minutes_held,
+                ULTRA_FAST_MINUTES,
+                ULTRA_FAST_PROFIT,
+                VERY_FAST_MINUTES,
+                VERY_FAST_PROFIT,
+                FAST_MINUTES,
+                FAST_PROFIT,
+                MEDIUM_MINUTES,
+                MEDIUM_PROFIT,
+                SLOW_MINUTES,
+                SLOW_PROFIT
+            )
+        );
+    }
+
+    // Ultra-fast profits (< 1 minute)
+    if minutes_held <= ULTRA_FAST_MINUTES && current_profit_percent >= ULTRA_FAST_PROFIT {
+        base_urgency = 0.9;
+        reason = format!("⚡ ULTRA-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "⚡ ULTRA-FAST TARGET HIT: {} urgency={:.1}",
+                    position.symbol,
+                    base_urgency
+                )
+            );
+        }
+    } else if
+        // Very fast profits (1-5 minutes)
+        minutes_held <= VERY_FAST_MINUTES &&
+        current_profit_percent >= VERY_FAST_PROFIT
+    {
+        base_urgency = 0.8;
+        reason = format!("🚀 VERY-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!("🚀 VERY-FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
+            );
+        }
+    } else if
+        // Fast profits (5-15 minutes)
+        minutes_held <= FAST_MINUTES &&
+        current_profit_percent >= FAST_PROFIT
+    {
+        base_urgency = 0.7;
+        reason = format!("🔥 FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!("🔥 FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
+            );
+        }
+    } else if
+        // Medium profits (15-30 minutes)
+        minutes_held <= MEDIUM_MINUTES &&
+        current_profit_percent >= MEDIUM_PROFIT
+    {
+        base_urgency = 0.6;
+        reason = format!("📈 MEDIUM: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!("📈 MEDIUM TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
+            );
+        }
+    } else if
+        // Slow profits (30-60 minutes)
+        minutes_held <= SLOW_MINUTES &&
+        current_profit_percent >= SLOW_PROFIT
+    {
+        base_urgency = 0.5;
+        reason = format!("🐌 SLOW: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!("🐌 SLOW TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
+            );
+        }
+    } else if is_debug_profit_enabled() {
+        // Debug why no speed target was hit
+        let target_profit = get_target_profit_for_duration(minutes_held);
+        log(
+            LogTag::Trader,
+            "🔍 PROFIT-DEBUG",
+            &format!(
+                "❌ NO SPEED TARGET: {} has {:.1}% profit but needs {:.0}% for {:.1}m duration",
+                position.symbol,
+                current_profit_percent,
+                target_profit,
+                minutes_held
+            )
+        );
+    }
+
+    // If we have a base urgency, return it
+    if base_urgency > 0.0 {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "✅ SELL DECISION: {} | Urgency: {:.2} | Reason: {}",
+                    position.symbol,
+                    base_urgency,
+                    reason
+                )
+            );
+        }
+        return (base_urgency, reason);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ⏰ TIME PRESSURE SYSTEM (45+ minutes)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if minutes_held >= TIME_PRESSURE_START && current_profit_percent > MINIMUM_PROFIT_TO_CONSIDER {
+        let time_pressure =
+            ((minutes_held - TIME_PRESSURE_START) / (SLOW_MINUTES - TIME_PRESSURE_START)) *
+            MAX_TIME_PRESSURE;
+        let pressure_urgency = time_pressure.min(MAX_TIME_PRESSURE);
+
+        // Add profit scaling to time pressure
+        let profit_scaling = (current_profit_percent / 100.0).min(1.0) * 0.3;
+        let final_urgency = (pressure_urgency + profit_scaling).min(0.8);
+
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "⏰ TIME PRESSURE: {} | {:.1}m > {:.0}m | Pressure: {:.2} | Profit Scale: {:.2} | Final: {:.2}",
+                    position.symbol,
+                    minutes_held,
+                    TIME_PRESSURE_START,
+                    pressure_urgency,
+                    profit_scaling,
+                    final_urgency
+                )
+            );
+        }
+
+        if final_urgency > 0.3 {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Trader,
+                    "🔍 PROFIT-DEBUG",
+                    &format!(
+                        "⏰ TIME PRESSURE SELL: {} urgency {:.2}",
+                        position.symbol,
+                        final_urgency
+                    )
+                );
+            }
+            return (
+                final_urgency,
+                format!(
+                    "⏰ TIME PRESSURE: {:.1}% profit in {:.1}m",
+                    current_profit_percent,
+                    minutes_held
+                ),
+            );
+        } else if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "⏰ TIME PRESSURE TOO LOW: {} urgency {:.2} < 0.3",
+                    position.symbol,
+                    final_urgency
+                )
+            );
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🔄 DEFAULT HOLDING PATTERN
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if current_profit_percent > MINIMUM_PROFIT_TO_CONSIDER {
+        // Calculate target profit for current duration
+        let target_profit = get_target_profit_for_duration(minutes_held);
+
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Trader,
+                "🔍 PROFIT-DEBUG",
+                &format!(
+                    "📊 HOLDING: {} | Current: {:.2}% | Target: {:.0}% | Time: {:.1}m | Minimum: {:.1}%",
+                    position.symbol,
+                    current_profit_percent,
+                    target_profit,
+                    minutes_held,
+                    MINIMUM_PROFIT_TO_CONSIDER
+                )
+            );
+        }
+
+        return (
+            0.1,
+            format!(
+                "📊 HOLD: {:.1}% profit (target: {:.0}%) in {:.1}m",
+                current_profit_percent,
+                target_profit,
+                minutes_held
+            ),
+        );
+    }
+
+    if is_debug_profit_enabled() {
+        log(
+            LogTag::Trader,
+            "🔍 PROFIT-DEBUG",
+            &format!(
+                "⏳ WAITING: {} | Profit: {:.2}% < minimum {:.1}% | Time: {:.1}m",
+                position.symbol,
+                current_profit_percent,
+                MINIMUM_PROFIT_TO_CONSIDER,
+                minutes_held
+            )
+        );
+    }
+
+    (0.0, format!("⏳ WAIT: {:.2}% in {:.1}m", current_profit_percent, minutes_held))
+}
+
+// ================================================================================================
 // 📊 PRICE TRACKING SYSTEM
 // ================================================================================================
 
@@ -235,518 +688,7 @@ pub fn analyze_momentum(
     }
 }
 
-// ================================================================================================
-// 🎯 MAIN PROFIT DECISION ENGINE
-// ================================================================================================
-
-/// NEW GENERATION PROFIT SYSTEM
-/// Zero-loss protection with emergency exit only at -99%
-/// Speed-based profit targets: faster = sell sooner
-/// Duration scaling: 1min to 1h optimal trade window
-/// Profit scaling: 0% to 1000% based on speed achieved
-pub fn should_sell_next_gen(
-    position: &Position,
-    token: &Token,
-    current_price: f64,
-    time_held_seconds: f64,
-    price_tracker: &PriceTracker
-) -> (f64, String) {
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-    let minutes_held = time_held_seconds / 60.0;
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🔍 DEBUG PROFIT LOGGING
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    let current_profit_percent = ((current_price - entry_price) / entry_price) * 100.0;
-
-    if is_debug_profit_enabled() {
-        log(
-            LogTag::Trader,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "Analyzing {} | Price: {:.8} → {:.8} | Profit: {:.2}% | Time: {:.1}m | Peak: {:.2}% | Dip: {:.1}%",
-                position.symbol,
-                entry_price,
-                current_price,
-                current_profit_percent,
-                minutes_held,
-                price_tracker.get_peak_profit_percent(),
-                price_tracker.dip_from_peak_percent
-            )
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🛡️ ZERO-LOSS PROTECTION SYSTEM
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    let current_profit_percent = ((current_price - entry_price) / entry_price) * 100.0;
-
-    // ABSOLUTE RULE: NEVER SELL AT LOSS (except emergency -99%)
-    if current_profit_percent <= BREAKEVEN_THRESHOLD {
-        if current_profit_percent <= EMERGENCY_EXIT_THRESHOLD {
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Trader,
-                    "� PROFIT-DEBUG",
-                    &format!(
-                        "�🚨 EMERGENCY EXIT TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
-                        position.symbol,
-                        current_profit_percent,
-                        EMERGENCY_EXIT_THRESHOLD
-                    )
-                );
-            }
-            log(
-                LogTag::Trader,
-                "🚨 EMERGENCY",
-                &format!(
-                    "EMERGENCY EXIT: {} at {:.2}% - EXTREME LOSS",
-                    position.symbol,
-                    current_profit_percent
-                )
-            );
-            return (1.0, format!("🚨 EMERGENCY EXIT: {:.1}% loss", current_profit_percent));
-        }
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "🔒 ZERO-LOSS PROTECTION ACTIVE: {} at {:.2}% (breakeven: {:.0}%) - HOLDING",
-                    position.symbol,
-                    current_profit_percent,
-                    BREAKEVEN_THRESHOLD
-                )
-            );
-        }
-        log(
-            LogTag::Trader,
-            "🔒 HOLD",
-            &format!(
-                "ZERO-LOSS PROTECTION: {} at {:.2}% - NEVER SELL AT LOSS",
-                position.symbol,
-                current_profit_percent
-            )
-        );
-        return (0.0, format!("🔒 HOLD: {:.2}% - NO LOSS SALES", current_profit_percent));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🚀 EXTREME PROFIT PROTECTION (INSTANT SELLS)
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if current_profit_percent >= EXTREME_PROFIT {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "💎 EXTREME PROFIT REACHED: {} at {:.1}% (threshold: {:.0}%) in {:.1}m - INSTANT SELL",
-                    position.symbol,
-                    current_profit_percent,
-                    EXTREME_PROFIT,
-                    minutes_held
-                )
-            );
-        }
-        log(
-            LogTag::Trader,
-            "💎 EXTREME",
-            &format!(
-                "EXTREME PROFIT: {} at {:.1}% in {:.1}m - INSTANT SELL",
-                position.symbol,
-                current_profit_percent,
-                minutes_held
-            )
-        );
-        return (
-            0.99,
-            format!(
-                "💎 EXTREME: {:.0}% in {:.1}m - INSTANT SELL",
-                current_profit_percent,
-                minutes_held
-            ),
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ FORCE SELL AFTER 1 HOUR (60+ MINUTES) WITH 5%+ PROFIT
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if minutes_held >= FORCE_SELL_TIME_MINUTES && current_profit_percent >= FORCE_SELL_MIN_PROFIT {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⏰ FORCE SELL TRIGGERED: {} held {:.0}m (limit: {:.0}m) with {:.1}% profit (min: {:.0}%)",
-                    position.symbol,
-                    minutes_held,
-                    FORCE_SELL_TIME_MINUTES,
-                    current_profit_percent,
-                    FORCE_SELL_MIN_PROFIT
-                )
-            );
-        }
-        log(
-            LogTag::Trader,
-            "⏰ FORCE",
-            &format!(
-                "FORCE SELL: {} at {:.1}% after {:.0}m - MANDATORY EXIT",
-                position.symbol,
-                current_profit_percent,
-                minutes_held
-            )
-        );
-        return (
-            0.95,
-            format!(
-                "⏰ FORCE SELL: {:.1}% after {:.0}m - NO MORE WAITING",
-                current_profit_percent,
-                minutes_held
-            ),
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⚡ SPEED-BASED PROFIT TARGETS
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    let momentum = analyze_momentum(price_tracker, token, minutes_held);
-    let mut base_urgency = 0.0;
-    let mut reason = String::new();
-
-    if is_debug_profit_enabled() {
-        log(
-            LogTag::Trader,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "Speed Analysis: {} | {:.1}m | Ultra<{:.0}m ({:.0}%) | VFast<{:.0}m ({:.0}%) | Fast<{:.0}m ({:.0}%) | Med<{:.0}m ({:.0}%) | Slow<{:.0}m ({:.0}%)",
-                position.symbol,
-                minutes_held,
-                ULTRA_FAST_MINUTES,
-                ULTRA_FAST_PROFIT,
-                VERY_FAST_MINUTES,
-                VERY_FAST_PROFIT,
-                FAST_MINUTES,
-                FAST_PROFIT,
-                MEDIUM_MINUTES,
-                MEDIUM_PROFIT,
-                SLOW_MINUTES,
-                SLOW_PROFIT
-            )
-        );
-    }
-
-    // Ultra-fast profits (< 1 minute)
-    if minutes_held <= ULTRA_FAST_MINUTES && current_profit_percent >= ULTRA_FAST_PROFIT {
-        base_urgency = 0.9;
-        reason = format!("⚡ ULTRA-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⚡ ULTRA-FAST TARGET HIT: {} urgency={:.1}",
-                    position.symbol,
-                    base_urgency
-                )
-            );
-        }
-    } else if
-        // Very fast profits (1-5 minutes)
-        minutes_held <= VERY_FAST_MINUTES &&
-        current_profit_percent >= VERY_FAST_PROFIT
-    {
-        base_urgency = 0.8;
-        reason = format!("🚀 VERY-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!("🚀 VERY-FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if
-        // Fast profits (5-15 minutes)
-        minutes_held <= FAST_MINUTES &&
-        current_profit_percent >= FAST_PROFIT
-    {
-        base_urgency = 0.7;
-        reason = format!("🔥 FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!("🔥 FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if
-        // Medium profits (15-30 minutes)
-        minutes_held <= MEDIUM_MINUTES &&
-        current_profit_percent >= MEDIUM_PROFIT
-    {
-        base_urgency = 0.6;
-        reason = format!("📈 MEDIUM: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!("📈 MEDIUM TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if
-        // Slow profits (30-60 minutes)
-        minutes_held <= SLOW_MINUTES &&
-        current_profit_percent >= SLOW_PROFIT
-    {
-        base_urgency = 0.5;
-        reason = format!("🐌 SLOW: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!("🐌 SLOW TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if is_debug_profit_enabled() {
-        // Debug why no speed target was hit
-        let target_profit = get_target_profit_for_duration(minutes_held);
-        log(
-            LogTag::Trader,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "❌ NO SPEED TARGET: {} has {:.1}% profit but needs {:.0}% for {:.1}m duration",
-                position.symbol,
-                current_profit_percent,
-                target_profit,
-                minutes_held
-            )
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 📊 MOMENTUM & DIP ANALYSIS
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if base_urgency > 0.0 {
-        let mut final_urgency = base_urgency;
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "Momentum Analysis: {} | Strong: {} | Fading: {} | Critical Dip: {} | Modifier: {:.1}x",
-                    position.symbol,
-                    momentum.is_momentum_strong,
-                    momentum.is_momentum_fading,
-                    momentum.is_critical_dip,
-                    momentum.urgency_modifier
-                )
-            );
-        }
-
-        // Apply speed bonus
-        final_urgency *= momentum.urgency_modifier;
-
-        // Critical dip from peak = higher urgency
-        if momentum.is_critical_dip {
-            final_urgency += 0.2;
-            reason = format!("{} + CRITICAL DIP {:.1}%", reason, momentum.dip_from_peak_percent);
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Trader,
-                    "🔍 PROFIT-DEBUG",
-                    &format!(
-                        "🔴 CRITICAL DIP: {} +0.2 urgency (dip: {:.1}%)",
-                        position.symbol,
-                        momentum.dip_from_peak_percent
-                    )
-                );
-            }
-        } else if
-            // Major dip = medium urgency boost
-            momentum.dip_from_peak_percent > MAJOR_DIP_PERCENT
-        {
-            final_urgency += 0.15;
-            reason = format!("{} + MAJOR DIP {:.1}%", reason, momentum.dip_from_peak_percent);
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Trader,
-                    "🔍 PROFIT-DEBUG",
-                    &format!(
-                        "🟠 MAJOR DIP: {} +0.15 urgency (dip: {:.1}%)",
-                        position.symbol,
-                        momentum.dip_from_peak_percent
-                    )
-                );
-            }
-        } else if
-            // Significant dip = small urgency boost
-            momentum.dip_from_peak_percent > SIGNIFICANT_DIP_PERCENT
-        {
-            final_urgency += 0.1;
-            reason = format!("{} + DIP {:.1}%", reason, momentum.dip_from_peak_percent);
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Trader,
-                    "🔍 PROFIT-DEBUG",
-                    &format!(
-                        "🟡 SIGNIFICANT DIP: {} +0.1 urgency (dip: {:.1}%)",
-                        position.symbol,
-                        momentum.dip_from_peak_percent
-                    )
-                );
-            }
-        }
-
-        // Fading momentum = urgency boost
-        if momentum.is_momentum_fading {
-            final_urgency += 0.15;
-            reason = format!("{} + FADING", reason);
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Trader,
-                    "🔍 PROFIT-DEBUG",
-                    &format!("📉 FADING MOMENTUM: {} +0.15 urgency", position.symbol)
-                );
-            }
-        }
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "✅ SELL DECISION: {} | Base: {:.2} → Final: {:.2} | Reason: {}",
-                    position.symbol,
-                    base_urgency,
-                    final_urgency.min(0.99),
-                    reason
-                )
-            );
-        }
-
-        return (final_urgency.min(0.99), reason);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ TIME PRESSURE SYSTEM (45+ minutes)
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if minutes_held >= TIME_PRESSURE_START && current_profit_percent > MINIMUM_PROFIT_TO_CONSIDER {
-        let time_pressure =
-            ((minutes_held - TIME_PRESSURE_START) / (SLOW_MINUTES - TIME_PRESSURE_START)) *
-            MAX_TIME_PRESSURE;
-        let pressure_urgency = time_pressure.min(MAX_TIME_PRESSURE);
-
-        // Add profit scaling to time pressure
-        let profit_scaling = (current_profit_percent / 100.0).min(1.0) * 0.3;
-        let final_urgency = (pressure_urgency + profit_scaling).min(0.8);
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⏰ TIME PRESSURE: {} | {:.1}m > {:.0}m | Pressure: {:.2} | Profit Scale: {:.2} | Final: {:.2}",
-                    position.symbol,
-                    minutes_held,
-                    TIME_PRESSURE_START,
-                    pressure_urgency,
-                    profit_scaling,
-                    final_urgency
-                )
-            );
-        }
-
-        if final_urgency > 0.3 {
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Trader,
-                    "🔍 PROFIT-DEBUG",
-                    &format!(
-                        "⏰ TIME PRESSURE SELL: {} urgency {:.2}",
-                        position.symbol,
-                        final_urgency
-                    )
-                );
-            }
-            return (
-                final_urgency,
-                format!(
-                    "⏰ TIME PRESSURE: {:.1}% profit in {:.1}m",
-                    current_profit_percent,
-                    minutes_held
-                ),
-            );
-        } else if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⏰ TIME PRESSURE TOO LOW: {} urgency {:.2} < 0.3",
-                    position.symbol,
-                    final_urgency
-                )
-            );
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🔄 DEFAULT HOLDING PATTERN
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if current_profit_percent > MINIMUM_PROFIT_TO_CONSIDER {
-        // Calculate target profit for current duration
-        let target_profit = get_target_profit_for_duration(minutes_held);
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Trader,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "📊 HOLDING: {} | Current: {:.2}% | Target: {:.0}% | Time: {:.1}m | Minimum: {:.1}%",
-                    position.symbol,
-                    current_profit_percent,
-                    target_profit,
-                    minutes_held,
-                    MINIMUM_PROFIT_TO_CONSIDER
-                )
-            );
-        }
-
-        return (
-            0.1,
-            format!(
-                "📊 HOLD: {:.1}% profit (target: {:.0}%) in {:.1}m",
-                current_profit_percent,
-                target_profit,
-                minutes_held
-            ),
-        );
-    }
-
-    if is_debug_profit_enabled() {
-        log(
-            LogTag::Trader,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "⏳ WAITING: {} | Profit: {:.2}% < minimum {:.1}% | Time: {:.1}m",
-                position.symbol,
-                current_profit_percent,
-                MINIMUM_PROFIT_TO_CONSIDER,
-                minutes_held
-            )
-        );
-    }
-
-    (0.0, format!("⏳ WAIT: {:.2}% in {:.1}m", current_profit_percent, minutes_held))
-}
+/// Calculate target profit based on time held
 
 /// Calculate target profit based on time held
 fn get_target_profit_for_duration(minutes_held: f64) -> f64 {
@@ -758,34 +700,4 @@ fn get_target_profit_for_duration(minutes_held: f64) -> f64 {
         x if x <= SLOW_MINUTES => SLOW_PROFIT,
         _ => SLOW_PROFIT * 1.5, // Higher target for very slow trades
     }
-}
-
-// ================================================================================================
-// 🔄 COMPATIBILITY LAYER
-// ================================================================================================
-
-/// Legacy compatibility function - wraps the new system
-pub fn should_sell_dynamic(
-    position: &Position,
-    token: &Token,
-    current_price: f64,
-    time_held_seconds: f64
-) -> (f64, String) {
-    // Create basic price tracker for legacy compatibility
-    let mut tracker = PriceTracker::new(
-        position.effective_entry_price.unwrap_or(position.entry_price)
-    );
-    tracker.update(current_price);
-
-    should_sell_next_gen(position, token, current_price, time_held_seconds, &tracker)
-}
-
-/// Legacy compatibility function
-pub fn should_sell_smart_system(
-    position: &Position,
-    token: &Token,
-    current_price: f64,
-    time_held_seconds: f64
-) -> (f64, String) {
-    should_sell_dynamic(position, token, current_price, time_held_seconds)
 }
