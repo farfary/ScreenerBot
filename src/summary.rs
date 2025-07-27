@@ -148,41 +148,40 @@ pub async fn display_positions_table() {
     // The new pool price system runs in background and continuously updates prices
     // for open positions, so we don't need to refresh them here
 
-    let (open_positions, closed_positions, _open_count, _closed_count, total_invested, total_pnl) =
-        {
-            let all_positions = SAVED_POSITIONS.lock().unwrap();
+    let (open_positions, closed_positions, _open_count, _closed_count, total_invested, total_pnl) = {
+        let all_positions = SAVED_POSITIONS.lock().unwrap();
 
-            // Separate open and closed positions
-            let open_positions: Vec<Position> = all_positions
-                .iter()
-                .filter(|p| p.exit_time.is_none())
-                .cloned()
-                .collect();
-            let closed_positions: Vec<Position> = all_positions
-                .iter()
-                .filter(|p| p.exit_time.is_some())
-                .cloned()
-                .collect();
+        // Separate open and closed positions
+        let open_positions: Vec<Position> = all_positions
+            .iter()
+            .filter(|p| p.exit_time.is_none())
+            .cloned()
+            .collect();
+        let closed_positions: Vec<Position> = all_positions
+            .iter()
+            .filter(|p| p.exit_time.is_some())
+            .cloned()
+            .collect();
 
-            let open_count = open_positions.len();
-            let closed_count = closed_positions.len();
-            let total_invested: f64 = open_positions
-                .iter()
-                .map(|p| p.entry_size_sol)
-                .sum();
-            let total_pnl: f64 = closed_positions
-                .iter()
-                .map(|p| {
-                    let (pnl_sol, _) = calculate_position_pnl(p, None);
-                    pnl_sol
-                })
-                .sum();
+        let open_count = open_positions.len();
+        let closed_count = closed_positions.len();
+        let total_invested: f64 = open_positions
+            .iter()
+            .map(|p| p.entry_size_sol)
+            .sum();
+        let total_pnl: f64 = closed_positions
+            .iter()
+            .map(|p| {
+                let (pnl_sol, _) = calculate_position_pnl(p, None);
+                pnl_sol
+            })
+            .sum();
 
-            (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
-        }; // Lock is released here
+        (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
+    }; // Lock is released here
 
     // Log position summary to file
-    log_positions_summary(&open_positions, &closed_positions, total_invested, total_pnl).await;
+    // log_positions_summary(&open_positions, &closed_positions, total_invested, total_pnl).await;
 
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();

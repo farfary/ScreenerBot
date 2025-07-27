@@ -158,15 +158,6 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
                 )
             );
         }
-        log(
-            LogTag::Trader,
-            "🔒 HOLD",
-            &format!(
-                "ZERO-LOSS PROTECTION: {} at {:.2}% - NEVER SELL AT LOSS",
-                position.symbol,
-                current_profit_percent
-            )
-        );
         return (0.0, format!("🔒 HOLD: {:.2}% - NO LOSS SALES", current_profit_percent));
     }
 

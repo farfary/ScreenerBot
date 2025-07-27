@@ -2258,18 +2258,18 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             now,
                         ));
                     } else {
-                        log(
-                            LogTag::Trader,
-                            "HOLD",
-                            &format!(
-                                "Holding {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Price: {:.12}",
-                                position.symbol,
-                                position.mint,
-                                sell_urgency,
-                                pnl_percent,
-                                current_price
-                            )
-                        );
+                        // log(
+                        //     LogTag::Trader,
+                        //     "HOLD",
+                        //     &format!(
+                        //         "Holding {} ({}) - Urgency: {:.2}, P&L: {:.2}%, Price: {:.12}",
+                        //         position.symbol,
+                        //         position.mint,
+                        //         sell_urgency,
+                        //         pnl_percent,
+                        //         current_price
+                        //     )
+                        // );
                     }
 
                     // Update the position in the global list with tracking data

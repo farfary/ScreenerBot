@@ -399,9 +399,6 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
         position.price_lowest = entry_price;
     }
 
-    let old_high = position.price_highest;
-    let old_low = position.price_lowest;
-
     // Update running extremes
     if current_price > position.price_highest {
         position.price_highest = current_price;
@@ -410,23 +407,7 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
         position.price_lowest = current_price;
     }
 
-    // Log the transition
-    log(
-        LogTag::Trader,
-        "DEBUG",
-        &format!(
-            "Track {}: entry={:.6}, current={:.6}, high={:.6}->{:.6}, low={:.6}->{:.6}",
-            position.symbol,
-            entry_price,
-            current_price,
-            old_high,
-            position.price_highest,
-            old_low,
-            position.price_lowest
-        )
-            .dimmed()
-            .to_string()
-    );
+    // Track position extremes without logging
 }
 
 /// Opens a new buy position for a token with real swap execution
