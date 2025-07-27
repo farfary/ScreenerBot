@@ -41,8 +41,6 @@ const BREAKEVEN_THRESHOLD: f64 = 0.0; // Never sell below breakeven
 const MINIMUM_PROFIT_TO_CONSIDER: f64 = 0.1; // 0.1% minimum to consider selling
 
 // 📈 PRICE TRACKING THRESHOLDS
-const SIGNIFICANT_DIP_PERCENT: f64 = 3.0; // 10% dip from peak = warning
-const MAJOR_DIP_PERCENT: f64 = 6.0; // 20% dip from peak = concern
 const CRITICAL_DIP_PERCENT: f64 = 9.0; // 30% dip from peak = urgent
 
 // 🕐 TIME PRESSURE SCALING

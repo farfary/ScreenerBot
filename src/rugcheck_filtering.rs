@@ -7,13 +7,12 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::{
     get_token_rugcheck_risk_assessment,
     RugcheckRiskLevel,
-    RugcheckRiskAssessment,
     Token,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::collections::HashMap;
-use chrono::{ DateTime, Utc, Duration };
+use chrono::{ DateTime, Utc };
 
 // ===== RUGCHECK CACHE FOR SYNC ACCESS =====
 

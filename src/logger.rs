@@ -456,9 +456,6 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
                 .bold(),
     };
 
-    // Fixed-width log label
-    let msg = message.bright_white();
-
     // Build the base log line with strict discipline
     let base_line = format!("{}[{}] [{}] ", prefix, tag_str, log_type_str);
 

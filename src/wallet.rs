@@ -909,9 +909,6 @@ pub async fn calculate_effective_price(
         // The actual SOL used for swap is roughly: total_change - transaction_fees - priority_fees
         // But since we can't determine all fee components, we'll calculate based on expected ratios
 
-        // Use token output change and convert to UI amount
-        let token_ui_amount = (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
-
         // CORRECT APPROACH: Exclude ATA rent and transaction fees from effective price calculation
         // ATA rent is ~2,039,280 lamports (0.00203928 SOL) and is reclaimable when closing ATA
         let estimated_trade_sol = {
@@ -1042,8 +1039,6 @@ pub async fn calculate_effective_price_with_ata_detection(
 
     // Calculate effective price using cleaned amounts
     let (sol_for_price_calc, token_change_raw, token_decimals) = if input_mint == SOL_MINT {
-        // SOL -> Token swap (buy)
-        let token_ui_amount = (actual_output_change as f64) / (10_f64).powi(output_decimals as i32);
 
         // For buy transactions, estimate trade SOL by excluding fees and ATA rent
         let estimated_trade_sol = {
@@ -1102,8 +1097,8 @@ pub async fn calculate_effective_price_with_ata_detection(
 /// Extract exact SOL transfer amount from transaction instructions
 /// This provides the most accurate SOL received amount, excluding fees and rent
 pub fn extract_sol_transfer_from_instructions(
-    transaction: &TransactionDetails,
-    wallet_address: &str
+    _transaction: &TransactionDetails,
+    _wallet_address: &str
 ) -> Option<f64> {
     // Note: The TransactionDetails from wallet.rs doesn't have inner_instructions
     // This function needs to be enhanced to work with the proper transaction format
@@ -2238,7 +2233,7 @@ pub async fn sell_token(
     );
 
     // Calculate effective price from actual balance changes
-    let (effective_price, actual_input_change, actual_output_change, quote_vs_actual_diff) =
+    let (_effective_price, _actual_input_change, actual_output_change, _quote_vs_actual_diff) =
         calculate_effective_price(
             &reqwest::Client::new(),
             &transaction_signature,
@@ -2540,7 +2535,6 @@ pub fn validate_price_near_expected(
 /// This reclaims the rent SOL (~0.002 SOL) from empty token accounts
 /// Supports both regular SPL tokens and Token-2022 tokens
 pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     log(LogTag::Trader, "ATA", &format!("Attempting to close token account for mint: {}", mint));
 

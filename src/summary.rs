@@ -148,7 +148,7 @@ pub async fn display_positions_table() {
     // The new pool price system runs in background and continuously updates prices
     // for open positions, so we don't need to refresh them here
 
-    let (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl) = {
+    let (open_positions, closed_positions, _open_count, _closed_count, total_invested, total_pnl) = {
         let all_positions = SAVED_POSITIONS.lock().unwrap();
 
         // Separate open and closed positions
@@ -628,7 +628,7 @@ impl OpenPositionDisplay {
 }
 
 /// Generate profit-based status emoji for positions
-fn get_profit_status_emoji(pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
+fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
     let base_status = if is_closed { "CLOSED" } else { "OPEN" };
 
     if pnl_percent >= 50.0 {

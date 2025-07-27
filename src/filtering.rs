@@ -554,8 +554,6 @@ pub fn log_filtering_summary(tokens: &[Token]) {
     // Create a simple key for summary logs that changes every LOG_COOLDOWN_MINUTES
     // This ensures we don't spam summaries too often
     let now = Utc::now();
-    let time_bucket = now.timestamp() / (LOG_COOLDOWN_MINUTES * 60);
-    let summary_key = format!("summary_{}", time_bucket);
 
     if let Ok(mut cooldowns) = TOKEN_LOG_COOLDOWNS.lock() {
         let last_summary = cooldowns.get("summary_log").cloned();

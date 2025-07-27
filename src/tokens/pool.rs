@@ -1,8 +1,6 @@
 /// Pool price calculation system (optional/configurable)
 /// This module provides pool-based price calculations as a fallback to API prices
 use crate::logger::{ log, LogTag };
-use crate::tokens::types::*;
-use crate::global::read_configs;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -147,7 +145,6 @@ impl PoolPriceCalculator {
 
         drop(permit);
 
-        let calculation_time = start_time.elapsed().as_millis() as f64;
 
         // Record statistics (in a real implementation)
         // self.stats.record_calculation(result.is_some(), calculation_time);

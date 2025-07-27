@@ -93,17 +93,6 @@ async fn batch_fetch_decimals_from_rpc(
     Ok(all_results)
 }
 
-/// Fetch token decimals for a single mint using batch function
-async fn fetch_decimals_from_rpc(rpc_url: &str, mint_pubkey: &Pubkey) -> Result<u8, String> {
-    let results = batch_fetch_decimals_from_rpc(rpc_url, &[*mint_pubkey]).await?;
-
-    if let Some((_, result)) = results.first() {
-        result.clone()
-    } else {
-        Err("No results returned from batch fetch".to_string())
-    }
-}
-
 /// Parse SPL Token mint data to extract decimals
 fn parse_spl_token_mint(data: &[u8]) -> Result<u8, String> {
     if data.len() < Mint::LEN {

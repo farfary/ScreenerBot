@@ -31,6 +31,10 @@ path = "src/main.rs"
 name = "tool_sell_all_and_close_atas"
 path = "src/bin/tool_sell_all_and_close_atas.rs"
 
+[[bin]]
+name = "test_rugcheck"
+path = "src/bin/test_rugcheck.rs"
+
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }

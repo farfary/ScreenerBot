@@ -160,7 +160,7 @@ impl DexScreenerApi {
                     elapsed
                 )
             );
-        } else if is_debug_api_enabled() {
+        } else {
             log(
                 LogTag::Api,
                 "SUCCESS",

@@ -314,7 +314,7 @@ impl TokenMonitor {
                             updated += updated_tokens.len();
 
                             // Only log significant updates to reduce noise
-                            if updated_tokens.len() > 10 && is_debug_monitor_enabled() {
+                            if updated_tokens.len() > 10 {
                                 log(
                                     LogTag::Monitor,
                                     "NEW_ENTRY",

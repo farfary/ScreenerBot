@@ -1208,110 +1208,8 @@ fn is_genuine_dip(
     true
 }
 
-/// Checks if the current dip is consistent with the token's historical volatility patterns
-fn is_dip_consistent_with_patterns(analysis: &VolatilityAnalysis, drop_magnitude: f64) -> bool {
-    // If we don't have enough data, allow the trade
-    if analysis.average_move_size <= 0.0 || analysis.volatility_scale <= 0.0 {
-        return true;
-    }
 
-    // Be more lenient with the drop size requirements
-    // Check if drop is at least 25% of average move size (reduced from 50%)
-    let min_drop = analysis.average_move_size * 0.25;
-    // Allow up to 5x the average move (increased from 3x)
-    let max_drop = analysis.average_move_size * 5.0;
 
-    if drop_magnitude < min_drop {
-        return false; // Still reject if drop is too small
-    }
-
-    if drop_magnitude > max_drop {
-        // For very large drops, be more careful but don't completely reject
-        return analysis.volatility_score < 0.8; // Only reject if also highly volatile
-    }
-
-    // More lenient scale adjustment
-    let scale_adjusted_drop = drop_magnitude / analysis.volatility_scale;
-    // Allow drops from 0.3x to 3.0x the volatility scale (more permissive)
-    if scale_adjusted_drop < 0.3 || scale_adjusted_drop > 3.0 {
-        return false;
-    }
-
-    true
-}
-
-/// Calculates volatility-adjusted urgency score
-fn calculate_volatility_adjusted_urgency(
-    drop_magnitude: f64,
-    analysis: &VolatilityAnalysis
-) -> f64 {
-    // More generous base urgency calculation
-    let base_urgency = f64::min(drop_magnitude / MIN_DIP_THRESHOLD_PERCENT, 3.0) * 0.8; // Increased multiplier
-
-    // Less punitive volatility adjustment
-    let volatility_multiplier = if analysis.volatility_scale > 0.0 {
-        // Make volatility less punitive
-        1.0 / (1.0 + analysis.volatility_score * 0.3) // Reduced from 0.5
-    } else {
-        1.0
-    };
-
-    // More generous support level proximity bonus
-    let support_bonus = if let Some(support) = analysis.support_level {
-        // More lenient support detection and bigger bonus
-        let distance_to_support = (drop_magnitude - support.abs()) / support.abs();
-        if distance_to_support.abs() < 0.2 {
-            // Increased from 0.1 (within 20% of support)
-            1.5 // Increased bonus
-        } else if distance_to_support.abs() < 0.3 {
-            // Additional tier
-            1.3
-        } else {
-            1.0
-        }
-    } else {
-        1.1 // Small bonus even without support data
-    };
-
-    // Ensure minimum urgency for legitimate drops
-    let result = base_urgency * volatility_multiplier * support_bonus;
-    f64::max(result, drop_magnitude * 0.5) // Minimum urgency floor
-}
-
-/// Calculates dip quality multiplier based on technical analysis
-fn calculate_dip_quality_multiplier(analysis: &VolatilityAnalysis) -> f64 {
-    let mut multiplier = 1.2; // Start with higher base
-
-    // More generous momentum bonus
-    let downward_moves = analysis.recent_moves
-        .iter()
-        .filter(|&m| *m < 0.0)
-        .count();
-    if !analysis.recent_moves.is_empty() {
-        let momentum_bonus = ((downward_moves as f64) / (analysis.recent_moves.len() as f64)) * 0.5; // Increased
-        multiplier += momentum_bonus;
-    }
-
-    // Generous bonus for being near support level
-    if analysis.support_level.is_some() {
-        multiplier += 0.3; // Increased from 0.2
-    }
-
-    // Less punitive volatility penalty
-    if analysis.volatility_score > 0.8 {
-        // Only penalize very high volatility
-        multiplier *= 0.9; // Less penalty
-    }
-
-    // Bigger bonus for moderate volatility
-    if analysis.volatility_score > 0.2 && analysis.volatility_score < 0.7 {
-        // Wider range
-        multiplier += 0.2; // Increased bonus
-    }
-
-    // More generous range
-    f64::max(0.8, f64::min(multiplier, 2.0)) // Increased from 0.5-1.5 to 0.8-2.0
-}
 
 /// Helper function to calculate moving average
 fn calculate_moving_average(prices: &[f64], period: usize) -> Option<f64> {
@@ -1667,8 +1565,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
             // Clone necessary variables for the task
             let token = token.clone();
-            let index = index; // Capture the index
-            let total = total_tokens; // Capture the total
 
             // Spawn a new task for this token with overall timeout
             let handle = tokio::spawn(async move {
@@ -1929,10 +1825,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
             let mut opportunities = Vec::new();
 
-            // Collect all opportunities in the order they complete
-            let mut completed = 0;
-            let total_handles = handles.len();
-
             for handle in handles {
                 // Skip any tasks that failed or if shutdown signal received
                 if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
@@ -1968,23 +1860,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         log(LogTag::Trader, "WARN", "Token check task timed out after 5 seconds");
                     }
                 }
-
-                completed += 1;
             }
-
-            // Log summary of token check completion
-            log(
-                LogTag::Trader,
-                "INFO",
-                &format!(
-                    "Token check completed: {}/{} tokens processed, {} opportunities found",
-                    completed,
-                    total_handles,
-                    opportunities.len()
-                )
-                    .dimmed()
-                    .to_string()
-            );
 
             opportunities
         }).await;
@@ -2311,10 +2187,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let now = Utc::now();
 
                     // Calculate sell urgency using the unified profit system
-                    let (sell_urgency, sell_reason) = crate::profit::should_sell(
-                        &position,
-                        current_price
-                    );
+                    let (sell_urgency, sell_reason) = crate::profit::should_sell(&position, current_price);
 
                     // Emergency exit conditions (keep original logic for safety)
                     let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
@@ -2563,9 +2436,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             // Increased timeout to 60 seconds to accommodate multiple 15-second sell operations
             let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
                 let mut completed_positions = Vec::new();
-                let mut completed = 0;
-                let total_handles = handles.len();
-
+                
                 for handle in handles {
                     // Skip if shutdown signal received
                     if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
@@ -2600,17 +2471,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         Err(_) => {
                             log(LogTag::Trader, "WARN", "Sell task timed out after 60 seconds");
                         }
-                    }
-
-                    completed += 1;
-                    if completed % 2 == 0 || completed == total_handles {
-                        log(
-                            LogTag::Trader,
-                            "INFO",
-                            &format!("Completed {}/{} sell operations", completed, total_handles)
-                                .dimmed()
-                                .to_string()
-                        );
                     }
                 }
 

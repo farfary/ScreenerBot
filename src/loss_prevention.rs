@@ -1,5 +1,5 @@
 /// Loss prevention system to analyze token history and prevent buying tokens with poor performance
-use crate::positions::{ Position, calculate_position_pnl, SAVED_POSITIONS };
+use crate::positions::{ calculate_position_pnl, SAVED_POSITIONS };
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_loss_prevention_enabled;
 use std::collections::HashMap;

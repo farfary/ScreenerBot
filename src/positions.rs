@@ -1,6 +1,5 @@
 use crate::trader::*;
 use crate::logger::{ log, LogTag };
-use crate::global::*;
 use crate::tokens::Token;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };

@@ -556,7 +556,7 @@ async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccoun
 
                                 for account in accounts {
                                     if
-                                        let (Some(pubkey), Some(account_data)) = (
+                                        let (Some(_pubkey), Some(account_data)) = (
                                             account.get("pubkey"),
                                             account.get("account"),
                                         )

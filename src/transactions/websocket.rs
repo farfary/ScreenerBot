@@ -1,7 +1,6 @@
 // transactions/websocket.rs - Real-time transaction sync via WebSocket
 use super::types::*;
 use super::cache::TransactionDatabase;
-use super::fetcher::{ TransactionFetcher, get_transactions_with_cache_and_fallback };
 use crate::logger::{ log, LogTag };
 use serde_json;
 use tokio_tungstenite::{ connect_async, tungstenite::protocol::Message };
