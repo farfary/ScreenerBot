@@ -1079,37 +1079,3 @@ impl TransactionAnalyzer {
         debug_info.join("\n")
     }
 }
-
-/// Legacy compatibility functions
-pub fn is_swap_transaction(transaction: &TransactionResult) -> bool {
-    let analyzer = TransactionAnalyzer::new();
-    analyzer.is_swap_transaction(transaction)
-}
-
-pub fn find_swap_program(
-    message: &solana_transaction_status::UiMessage,
-    program_interactions: &[ProgramInteraction]
-) -> String {
-    // Find first known DEX program
-    for interaction in program_interactions {
-        if interaction.is_known_dex {
-            return interaction.program_id.clone();
-        }
-    }
-
-    // Fallback to first program if no DEX found
-    if let solana_transaction_status::UiMessage::Raw(raw_message) = message {
-        if
-            let Some(first_program) = raw_message.account_keys.get(
-                raw_message.instructions
-                    .get(0)
-                    .map(|i| i.program_id_index as usize)
-                    .unwrap_or(0)
-            )
-        {
-            return first_program.clone();
-        }
-    }
-
-    "Unknown".to_string()
-}

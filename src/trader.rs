@@ -1208,9 +1208,6 @@ fn is_genuine_dip(
     true
 }
 
-
-
-
 /// Helper function to calculate moving average
 fn calculate_moving_average(prices: &[f64], period: usize) -> Option<f64> {
     if prices.len() < period {
@@ -2187,7 +2184,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let now = Utc::now();
 
                     // Calculate sell urgency using the unified profit system
-                    let (sell_urgency, sell_reason) = crate::profit::should_sell(&position, current_price);
+                    let (sell_urgency, sell_reason) = crate::profit::should_sell(
+                        &position,
+                        current_price
+                    );
 
                     // Emergency exit conditions (keep original logic for safety)
                     let emergency_exit = pnl_percent <= EMERGENCY_STOP_LOSS_PERCENT;
@@ -2377,15 +2377,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         Some(exit_price)
                     );
                     if final_pnl_percent < 0.0 && final_pnl_percent > -99.0 {
-                        log(
-                            LogTag::Trader,
-                            "ABORT",
-                            &format!(
-                                "ABORTING SELL for {} - would sell at {:.2}% loss. NEVER SELL AT LOSS!",
-                                token_symbol,
-                                final_pnl_percent
-                            )
-                        );
                         return None; // Abort the sale
                     }
 
@@ -2436,7 +2427,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             // Increased timeout to 60 seconds to accommodate multiple 15-second sell operations
             let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
                 let mut completed_positions = Vec::new();
-                
+
                 for handle in handles {
                     // Skip if shutdown signal received
                     if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
