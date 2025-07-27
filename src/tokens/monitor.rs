@@ -31,6 +31,9 @@ pub const INFO_CALLS_PER_CYCLE: usize = 30;
 /// Enhanced monitoring cycle duration in seconds (5 seconds for real-time price updates)
 pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 5;
 
+/// Database cleanup interval in seconds (1 minute)
+pub const CLEANUP_INTERVAL_SECONDS: u64 = 60;
+
 /// Maximum tokens to process per API call (reduced for frequent updates)
 pub const MAX_TOKENS_PER_BATCH: usize = 30;
 
@@ -49,6 +52,7 @@ pub struct TokenMonitor {
     database: TokenDatabase,
     rate_limiter: Arc<Semaphore>,
     current_cycle: usize,
+    last_cleanup: std::time::Instant,
 }
 
 impl TokenMonitor {
@@ -63,6 +67,7 @@ impl TokenMonitor {
             database,
             rate_limiter,
             current_cycle: 0,
+            last_cleanup: std::time::Instant::now(),
         })
     }
 
@@ -96,6 +101,9 @@ impl TokenMonitor {
 
     /// Enhanced monitoring with priority queue system
     async fn enhanced_monitor_tokens(&mut self) -> Result<(), String> {
+        // Check if it's time for database cleanup (every 1 minute)
+        let should_cleanup = self.last_cleanup.elapsed().as_secs() >= CLEANUP_INTERVAL_SECONDS;
+
         // Get priority tokens from price service (includes open positions + high liquidity)
         let priority_mints = get_priority_tokens_safe().await;
 
@@ -103,20 +111,26 @@ impl TokenMonitor {
             log(LogTag::System, "MONITOR", "No priority tokens to monitor");
 
             // If no priority tokens, get some high liquidity tokens for new entry detection
-            return self.monitor_for_new_entries().await;
+            self.monitor_for_new_entries().await?;
+        } else {
+            log(
+                LogTag::System,
+                "MONITOR",
+                &format!("Enhanced monitoring {} priority tokens", priority_mints.len())
+            );
+
+            // Process priority tokens first
+            self.process_priority_tokens(priority_mints).await?;
+
+            // Also check for new entry opportunities with remaining API budget
+            self.monitor_for_new_entries().await?;
         }
 
-        log(
-            LogTag::System,
-            "MONITOR",
-            &format!("Enhanced monitoring {} priority tokens", priority_mints.len())
-        );
-
-        // Process priority tokens first
-        self.process_priority_tokens(priority_mints).await?;
-
-        // Also check for new entry opportunities with remaining API budget
-        self.monitor_for_new_entries().await?;
+        // Perform database cleanup after token data has been updated
+        if should_cleanup {
+            self.cleanup_database().await?;
+            self.last_cleanup = std::time::Instant::now();
+        }
 
         log(
             LogTag::System,
@@ -364,6 +378,36 @@ impl TokenMonitor {
             // If no creation time, assume very old
             24 * 7 // 7 days
         }
+    }
+
+    /// Cleanup database tokens with zero liquidity
+    /// This runs every minute after token data has been updated
+    async fn cleanup_database(&mut self) -> Result<(), String> {
+        log(LogTag::System, "CLEANUP", "Starting database cleanup for zero liquidity tokens");
+
+        match self.database.cleanup_zero_liquidity_tokens().await {
+            Ok(deleted_count) => {
+                if deleted_count > 0 {
+                    log(
+                        LogTag::System,
+                        "CLEANUP",
+                        &format!("Database cleanup completed: {} tokens removed", deleted_count)
+                    );
+                } else {
+                    log(
+                        LogTag::System,
+                        "CLEANUP",
+                        "Database cleanup completed: No tokens to remove"
+                    );
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("Database cleanup failed: {}", e));
+                return Err(format!("Database cleanup failed: {}", e));
+            }
+        }
+
+        Ok(())
     }
 }
 

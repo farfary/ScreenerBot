@@ -36,15 +36,15 @@ const SPEED_BONUS_FAST: f64 = 1.5; // 1.5x urgency for fast profits
 const SPEED_BONUS_MEDIUM: f64 = 1.2; // 1.2x urgency for medium profits
 
 // 🔒 ZERO-LOSS PROTECTION
-pub const STOP_LOSS_PERCENT: f64 = -99.0; // Only sell at -99% for emergency stop loss
-const BREAKEVEN_THRESHOLD: f64 = 0.0; // Never sell below breakeven
+pub const STOP_LOSS_PERCENT: f64 = -50.0; // Only sell at -99% for emergency stop loss
+const BREAKEVEN_THRESHOLD: f64 = -30.0; // Never sell below breakeven
 const MINIMUM_PROFIT_TO_CONSIDER: f64 = 0.1; // 0.1% minimum to consider selling
 
 // 📈 PRICE TRACKING THRESHOLDS
 const CRITICAL_DIP_PERCENT: f64 = 9.0; // 30% dip from peak = urgent
 
 // 🕐 TIME PRESSURE SCALING
-const TIME_PRESSURE_START: f64 = 45.0; // Start time pressure at 45 minutes
+const TIME_PRESSURE_START: f64 = 20.0; // Start time pressure at 45 minutes
 const MAX_TIME_PRESSURE: f64 = 0.6; // Maximum urgency from time alone
 
 // ⏰ MANDATORY FORCE SELL RULES
@@ -76,7 +76,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
     // CRITICAL SAFETY CHECK: Validate current price before any sell analysis
     if current_price <= 0.0 || !current_price.is_finite() {
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "ERROR",
             &format!(
                 "INVALID PRICE for sell analysis: {} ({}) - Price = {:.10} - CANNOT MAKE SELL DECISION",
@@ -102,7 +102,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
     if is_debug_profit_enabled() {
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "🔍 PROFIT-DEBUG",
             &format!(
                 "Analyzing {} | Price: {:.8} → {:.8} | Profit: {:.2}% | Time: {:.1}m",
@@ -124,7 +124,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         if current_profit_percent <= STOP_LOSS_PERCENT {
             if is_debug_profit_enabled() {
                 log(
-                    LogTag::Trader,
+                    LogTag::Profit,
                     "🔍 PROFIT-DEBUG",
                     &format!(
                         "🚨 EMERGENCY EXIT TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
@@ -135,7 +135,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
                 );
             }
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🚨 EMERGENCY",
                 &format!(
                     "EMERGENCY EXIT: {} at {:.2}% - EXTREME LOSS",
@@ -148,7 +148,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "🔒 ZERO-LOSS PROTECTION ACTIVE: {} at {:.2}% (breakeven: {:.0}%) - HOLDING",
@@ -168,7 +168,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
     if current_profit_percent >= EXTREME_PROFIT {
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "💎 EXTREME PROFIT REACHED: {} at {:.1}% (threshold: {:.0}%) in {:.1}m - INSTANT SELL",
@@ -180,7 +180,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
             );
         }
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "💎 EXTREME",
             &format!(
                 "EXTREME PROFIT: {} at {:.1}% in {:.1}m - INSTANT SELL",
@@ -206,7 +206,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
     if minutes_held >= FORCE_SELL_TIME_MINUTES && current_profit_percent >= FORCE_SELL_MIN_PROFIT {
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "⏰ FORCE SELL TRIGGERED: {} held {:.0}m (limit: {:.0}m) with {:.1}% profit (min: {:.0}%)",
@@ -219,7 +219,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
             );
         }
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "⏰ FORCE",
             &format!(
                 "FORCE SELL: {} at {:.1}% after {:.0}m - MANDATORY EXIT",
@@ -257,7 +257,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
     if is_debug_profit_enabled() {
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "🔍 PROFIT-DEBUG",
             &format!(
                 "Speed Analysis: {} | {:.1}m | Ultra<{:.0}m ({:.0}%) | VFast<{:.0}m ({:.0}%) | Fast<{:.0}m ({:.0}%) | Med<{:.0}m ({:.0}%) | Slow<{:.0}m ({:.0}%)",
@@ -283,7 +283,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         reason = format!("⚡ ULTRA-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "⚡ ULTRA-FAST TARGET HIT: {} urgency={:.1}",
@@ -301,7 +301,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         reason = format!("🚀 VERY-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!("🚀 VERY-FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
             );
@@ -315,7 +315,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         reason = format!("🔥 FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!("🔥 FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
             );
@@ -329,7 +329,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         reason = format!("📈 MEDIUM: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!("📈 MEDIUM TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
             );
@@ -343,7 +343,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         reason = format!("🐌 SLOW: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!("🐌 SLOW TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
             );
@@ -352,7 +352,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         // Debug why no speed target was hit
         let target_profit = get_target_profit_for_duration(minutes_held);
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "🔍 PROFIT-DEBUG",
             &format!(
                 "❌ NO SPEED TARGET: {} has {:.1}% profit but needs {:.0}% for {:.1}m duration",
@@ -368,7 +368,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
     if base_urgency > 0.0 {
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "✅ SELL DECISION: {} | Urgency: {:.2} | Reason: {}",
@@ -397,7 +397,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "⏰ TIME PRESSURE: {} | {:.1}m > {:.0}m | Pressure: {:.2} | Profit Scale: {:.2} | Final: {:.2}",
@@ -414,7 +414,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
         if final_urgency > 0.3 {
             if is_debug_profit_enabled() {
                 log(
-                    LogTag::Trader,
+                    LogTag::Profit,
                     "🔍 PROFIT-DEBUG",
                     &format!(
                         "⏰ TIME PRESSURE SELL: {} urgency {:.2}",
@@ -433,7 +433,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
             );
         } else if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "⏰ TIME PRESSURE TOO LOW: {} urgency {:.2} < 0.3",
@@ -454,7 +454,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "📊 HOLDING: {} | Current: {:.2}% | Target: {:.0}% | Time: {:.1}m | Minimum: {:.1}%",
@@ -480,7 +480,7 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
 
     if is_debug_profit_enabled() {
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "🔍 PROFIT-DEBUG",
             &format!(
                 "⏳ WAITING: {} | Profit: {:.2}% < minimum {:.1}% | Time: {:.1}m",
@@ -619,7 +619,7 @@ pub fn analyze_momentum(
 
         if is_debug_profit_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
                     "Momentum Data: 5m: {:.1}% | 1h: {:.1}% | Strong: {} (5m>5% && 1h>10%) | Fading: {} (5m<1% && profit>10%)",
@@ -632,7 +632,7 @@ pub fn analyze_momentum(
         }
     } else if is_debug_profit_enabled() {
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "🔍 PROFIT-DEBUG",
             "No price change data available for momentum analysis"
         );
@@ -652,7 +652,7 @@ pub fn analyze_momentum(
 
     if is_debug_profit_enabled() {
         log(
-            LogTag::Trader,
+            LogTag::Profit,
             "🔍 PROFIT-DEBUG",
             &format!(
                 "Speed Category: {:?} | Modifier: {:.1}x | Critical Dip: {} (>{:.0}%)",

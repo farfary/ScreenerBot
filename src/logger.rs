@@ -50,6 +50,7 @@ const ENABLE_DISCOVERY_LOGS: bool = true;
 const ENABLE_API_LOGS: bool = true;
 const ENABLE_FILTERING_LOGS: bool = true;
 const ENABLE_RUGCHECK_LOGS: bool = true;
+const ENABLE_PROFIT_TAG_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -280,6 +281,7 @@ pub enum LogTag {
     Filtering,
     Api,
     Rugcheck,
+    Profit,
     Other(String),
 }
 
@@ -287,7 +289,7 @@ impl std::fmt::Display for LogTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tag_str = match self {
             LogTag::Monitor => format!("{:<8}", "MONITOR").bright_cyan().bold(), // 👁️ Watchful blue
-            LogTag::Trader => format!("{:<8}", "TRADER").bright_green().bold(), // 💰 Money green
+            LogTag::Trader => format!("{:<8}", "TRADER").bright_cyan().bold(), // 💰 Money green
             LogTag::Wallet => format!("{:<8}", "WALLET").bright_magenta().bold(), // 💜 Rich purple for wealth
             LogTag::System => format!("{:<8}", "SYSTEM").bright_yellow().bold(), // ⚙️ Mechanical yellow
             LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
@@ -296,6 +298,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
             LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
             LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
+            LogTag::Profit => format!("{:<8}", "PROFIT").bright_green().bold(), // 💲 Profit green
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -316,6 +319,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Filtering => ENABLE_FILTERING_LOGS,
         LogTag::Api => ENABLE_API_LOGS,
         LogTag::Rugcheck => ENABLE_RUGCHECK_LOGS,
+        LogTag::Profit => ENABLE_PROFIT_TAG_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -397,6 +401,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Rugcheck =>
             format!("{:<width$}", "RUGCHECK", width = TAG_WIDTH)
                 .bright_red()
+                .bold(),
+        LogTag::Profit =>
+            format!("{:<width$}", "PROFIT", width = TAG_WIDTH)
+                .bright_green()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
@@ -489,6 +497,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Filtering => "FILTER",
         LogTag::Api => "API",
         LogTag::Rugcheck => "RUGCHECK",
+        LogTag::Profit => "PROFIT",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);

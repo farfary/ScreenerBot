@@ -619,7 +619,7 @@ impl TokenDatabase {
         let last_updated_str: String = row.get("last_updated")?;
         let last_updated = chrono::DateTime
             ::parse_from_rfc3339(&last_updated_str)
-            .map_err(|e|
+            .map_err(|_e|
                 rusqlite::Error::InvalidColumnType(
                     0,
                     "last_updated".to_string(),
@@ -715,6 +715,136 @@ impl TokenDatabase {
             tokens_with_liquidity: tokens_with_liquidity as usize,
             last_updated: chrono::Utc::now(),
         })
+    }
+
+    /// Cleanup tokens with zero liquidity from the database
+    /// Only removes tokens that have zero liquidity AND are older than 1 hour
+    /// This should only be called after fetching and updating latest token data
+    pub async fn cleanup_zero_liquidity_tokens(&self) -> Result<usize, Box<dyn std::error::Error>> {
+        let connection = self.connection
+            .lock()
+            .map_err(
+                |_e|
+                    Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Database lock error".to_string()
+                        )
+                    ) as Box<dyn std::error::Error>
+            )?;
+
+        // Calculate cutoff time (1 hour ago)
+        let one_hour_ago = chrono::Utc::now() - chrono::Duration::hours(1);
+        let one_hour_ago_str = one_hour_ago.to_rfc3339();
+
+        // Get tokens with zero liquidity that are older than 1 hour
+        let mut stmt = connection.prepare(
+            "SELECT mint, symbol, last_updated FROM tokens 
+             WHERE (liquidity_usd IS NULL OR liquidity_usd <= 0.0)
+             AND last_updated < ?1
+             ORDER BY last_updated ASC"
+        )?;
+
+        let token_rows = stmt.query_map([&one_hour_ago_str], |row| {
+            Ok((
+                row.get::<_, String>("mint")?,
+                row.get::<_, String>("symbol")?,
+                row.get::<_, String>("last_updated")?,
+            ))
+        })?;
+
+        let mut tokens_to_check = Vec::new();
+        for row in token_rows {
+            tokens_to_check.push(row?);
+        }
+
+        if tokens_to_check.is_empty() {
+            return Ok(0);
+        }
+
+        log(
+            LogTag::System,
+            "CLEANUP",
+            &format!("Found {} tokens with zero liquidity older than 1 hour", tokens_to_check.len())
+        );
+
+        // Check which tokens have open positions - we must not delete these
+        let mut tokens_to_delete = Vec::new();
+        for (mint, symbol, last_updated) in tokens_to_check {
+            // Check if this token has an open position
+            if !self.has_open_position(&mint) {
+                tokens_to_delete.push((mint, symbol, last_updated));
+            }
+        }
+
+        if tokens_to_delete.is_empty() {
+            log(
+                LogTag::System,
+                "CLEANUP",
+                "No tokens eligible for deletion (all have open positions)"
+            );
+            return Ok(0);
+        }
+
+        // Delete tokens that have zero liquidity, are old enough, and have no open positions
+        let mut deleted_count = 0;
+        for (mint, symbol, last_updated) in &tokens_to_delete {
+            match connection.execute("DELETE FROM tokens WHERE mint = ?1", params![mint]) {
+                Ok(rows_affected) => {
+                    if rows_affected > 0 {
+                        deleted_count += 1;
+                        log(
+                            LogTag::System,
+                            "CLEANUP",
+                            &format!(
+                                "Deleted stale zero liquidity token: {} ({}) - last updated: {}",
+                                symbol,
+                                mint,
+                                last_updated
+                            )
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!("Failed to delete token {}: {}", mint, e)
+                    );
+                }
+            }
+        }
+
+        if deleted_count > 0 {
+            log(
+                LogTag::System,
+                "CLEANUP",
+                &format!("Database cleanup: Removed {} stale tokens with zero liquidity (>1h old)", deleted_count)
+            );
+        } else {
+            log(LogTag::System, "CLEANUP", "Database cleanup: No stale tokens removed");
+        }
+
+        Ok(deleted_count)
+    }
+
+    /// Check if a token has an open position
+    /// This prevents deletion of tokens that we currently hold
+    fn has_open_position(&self, mint: &str) -> bool {
+        // Import the positions module to check for open positions
+        use crate::positions::SAVED_POSITIONS;
+
+        if let Ok(positions) = SAVED_POSITIONS.lock() {
+            // A position is open if it's a buy position without an exit price
+            return positions
+                .iter()
+                .any(
+                    |pos| pos.mint == mint && pos.position_type == "buy" && pos.exit_price.is_none()
+                );
+        }
+
+        // If we can't check positions, err on the side of caution
+        false
     }
 }
 
