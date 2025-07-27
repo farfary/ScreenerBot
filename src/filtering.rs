@@ -65,6 +65,10 @@ pub enum FilterReason {
         avg_loss: f64,
     },
 
+    // Account/Token status issues
+    AccountFrozen,
+    TokenAccountFrozen,
+
     // Trading requirements
     LockAcquisitionFailed,
 }

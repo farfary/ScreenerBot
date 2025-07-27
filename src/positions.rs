@@ -10,12 +10,80 @@ use std::sync::{ Arc as StdArc, Mutex as StdMutex };
 use chrono::{ Utc, DateTime };
 use serde::{ Serialize, Deserialize };
 use colored::Colorize;
+use std::collections::HashMap;
 
 /// Static global: saved positions
 pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(|| {
     let positions = load_positions_from_file();
     StdArc::new(StdMutex::new(positions))
 });
+
+/// Static global: frozen account cooldown tracking
+/// Maps mint address to timestamp when sell failed due to frozen account
+static FROZEN_ACCOUNT_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(
+    || { StdArc::new(StdMutex::new(HashMap::new())) }
+);
+
+/// Cooldown duration for frozen account errors (15 minutes)
+const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
+
+/// Checks if a mint is currently in cooldown due to frozen account error
+fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
+    if let Ok(cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
+        if let Some(cooldown_time) = cooldowns.get(mint) {
+            let now = Utc::now();
+            let minutes_since_cooldown = (now - *cooldown_time).num_minutes();
+            if minutes_since_cooldown < FROZEN_ACCOUNT_COOLDOWN_MINUTES {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Adds a mint to frozen account cooldown tracking
+fn add_mint_to_frozen_cooldown(mint: &str) {
+    if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
+        cooldowns.insert(mint.to_string(), Utc::now());
+        log(
+            LogTag::Trader,
+            "COOLDOWN",
+            &format!(
+                "Added {} to frozen account cooldown for {} minutes",
+                mint,
+                FROZEN_ACCOUNT_COOLDOWN_MINUTES
+            )
+        );
+    }
+}
+
+/// Removes expired cooldowns and returns remaining time for a mint
+fn get_remaining_cooldown_minutes(mint: &str) -> Option<i64> {
+    if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
+        if let Some(cooldown_time) = cooldowns.get(mint) {
+            let now = Utc::now();
+            let minutes_since_cooldown = (now - *cooldown_time).num_minutes();
+            if minutes_since_cooldown >= FROZEN_ACCOUNT_COOLDOWN_MINUTES {
+                // Cooldown expired, remove it
+                cooldowns.remove(mint);
+                None
+            } else {
+                Some(FROZEN_ACCOUNT_COOLDOWN_MINUTES - minutes_since_cooldown)
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Checks if an error is a frozen account error (error code 0x11)
+fn is_frozen_account_error(error_msg: &str) -> bool {
+    error_msg.contains("custom program error: 0x11") ||
+        error_msg.contains("Account is frozen") ||
+        error_msg.contains("Error: Account is frozen")
+}
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
@@ -518,6 +586,22 @@ pub async fn close_position(
     exit_price: f64,
     exit_time: DateTime<Utc>
 ) -> bool {
+    // Check if this mint is in frozen account cooldown
+    if is_mint_in_frozen_cooldown(&position.mint) {
+        if let Some(remaining_minutes) = get_remaining_cooldown_minutes(&position.mint) {
+            log(
+                LogTag::Trader,
+                "COOLDOWN",
+                &format!(
+                    "Skipping sell for {} - frozen account cooldown active ({} minutes remaining)",
+                    position.symbol,
+                    remaining_minutes
+                )
+            );
+            return false; // Skip this sell attempt
+        }
+    }
+
     // Only attempt to sell if we have tokens from the buy transaction
     if let Some(stored_token_amount) = position.token_amount {
         // Check if we actually have tokens to sell
@@ -801,8 +885,37 @@ pub async fn close_position(
                 return true; // Successfully closed
             }
             Err(e) => {
-                // Check if this is an insufficient balance error
+                // Check if this is a frozen account error (error code 0x11)
                 let error_msg = format!("{}", e);
+                if is_frozen_account_error(&error_msg) {
+                    log(
+                        LogTag::Trader,
+                        "FROZEN",
+                        &format!(
+                            "Frozen account error detected for {} ({}): {}",
+                            position.symbol,
+                            position.mint,
+                            error_msg
+                        )
+                    );
+
+                    // Add to cooldown tracking
+                    add_mint_to_frozen_cooldown(&position.mint);
+
+                    log(
+                        LogTag::Trader,
+                        "COOLDOWN",
+                        &format!(
+                            "Added {} to {} minute cooldown due to frozen account error",
+                            position.symbol,
+                            FROZEN_ACCOUNT_COOLDOWN_MINUTES
+                        )
+                    );
+
+                    return false; // Don't close position, will retry after cooldown
+                }
+
+                // Check if this is an insufficient balance error
                 if error_msg.contains("Insufficient") && error_msg.contains("balance") {
                     log(
                         LogTag::Trader,
@@ -852,4 +965,31 @@ pub fn get_open_positions_count() -> usize {
     } else {
         0
     }
+}
+
+/// Gets active frozen account cooldowns for display
+pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
+    let mut active_cooldowns = Vec::new();
+
+    if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
+        let now = Utc::now();
+        let mut expired_mints = Vec::new();
+
+        for (mint, cooldown_time) in cooldowns.iter() {
+            let minutes_since_cooldown = (now - *cooldown_time).num_minutes();
+            if minutes_since_cooldown >= FROZEN_ACCOUNT_COOLDOWN_MINUTES {
+                expired_mints.push(mint.clone());
+            } else {
+                let remaining_minutes = FROZEN_ACCOUNT_COOLDOWN_MINUTES - minutes_since_cooldown;
+                active_cooldowns.push((mint.clone(), remaining_minutes));
+            }
+        }
+
+        // Remove expired cooldowns
+        for mint in expired_mints {
+            cooldowns.remove(&mint);
+        }
+    }
+
+    active_cooldowns
 }

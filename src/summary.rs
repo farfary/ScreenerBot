@@ -408,6 +408,16 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     config_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", config_table);
 
+    // Display frozen account cooldowns if any exist
+    let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
+    if !active_cooldowns.is_empty() {
+        println!("\n🧊 Frozen Account Cooldowns");
+        for (mint, remaining_minutes) in active_cooldowns {
+            let short_mint = format!("{}...", &mint[..8]);
+            println!("  🔒 {} - {} minutes remaining", short_mint, remaining_minutes);
+        }
+    }
+
     // Display additional insights
     display_trading_insights(closed_positions, total_pnl, win_rate, profit_factor);
     println!("");
