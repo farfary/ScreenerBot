@@ -49,6 +49,7 @@ const ENABLE_BLACKLIST_LOGS: bool = true;
 const ENABLE_DISCOVERY_LOGS: bool = true;
 const ENABLE_API_LOGS: bool = true;
 const ENABLE_FILTERING_LOGS: bool = true;
+const ENABLE_RUGCHECK_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -278,6 +279,7 @@ pub enum LogTag {
     Discovery,
     Filtering,
     Api,
+    Rugcheck,
     Other(String),
 }
 
@@ -293,6 +295,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Discovery => format!("{:<8}", "DISCOVER").bright_white().bold(), // 🔍 Search white
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
             LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
+            LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -312,6 +315,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Discovery => ENABLE_DISCOVERY_LOGS,
         LogTag::Filtering => ENABLE_FILTERING_LOGS,
         LogTag::Api => ENABLE_API_LOGS,
+        LogTag::Rugcheck => ENABLE_RUGCHECK_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -389,6 +393,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Api =>
             format!("{:<width$}", "API", width = TAG_WIDTH)
                 .bright_purple()
+                .bold(),
+        LogTag::Rugcheck =>
+            format!("{:<width$}", "RUGCHECK", width = TAG_WIDTH)
+                .bright_red()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
@@ -483,6 +491,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Discovery => "DISCOVER",
         LogTag::Filtering => "FILTER",
         LogTag::Api => "API",
+        LogTag::Rugcheck => "RUGCHECK",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);

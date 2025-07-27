@@ -6,6 +6,7 @@
 /// 3. Zero or stale price tokens that need updates
 
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_monitor_enabled;
 use crate::tokens::api::DexScreenerApi;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
@@ -25,19 +26,19 @@ pub const INFO_RATE_LIMIT: usize = 300;
 /// API calls to use per monitoring cycle (conservative for 5-second intervals)
 /// With 5-second cycles, we have 720 cycles per hour, so 20 calls per cycle = 1440 calls/hour
 /// This is well within the 300 calls/minute (18,000 calls/hour) rate limit
-pub const INFO_CALLS_PER_CYCLE: usize = 20;
+pub const INFO_CALLS_PER_CYCLE: usize = 30;
 
 /// Enhanced monitoring cycle duration in seconds (5 seconds for real-time price updates)
 pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 5;
 
 /// Maximum tokens to process per API call (reduced for frequent updates)
-pub const MAX_TOKENS_PER_BATCH: usize = 20;
+pub const MAX_TOKENS_PER_BATCH: usize = 30;
 
 /// High liquidity threshold for prioritization (USD)
 pub const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
 
 /// Maximum number of tokens to monitor per cycle (reduced for 5-second intervals)
-pub const MAX_TOKENS_PER_CYCLE: usize = 20;
+pub const MAX_TOKENS_PER_CYCLE: usize = 30;
 
 // =============================================================================
 // ENHANCED TOKEN MONITOR
@@ -163,7 +164,7 @@ impl TokenMonitor {
 
                                 updated += updated_tokens.len();
                                 // Only log significant batch updates to reduce noise
-                                if updated_tokens.len() > 10 {
+                                if updated_tokens.len() > 10 && is_debug_monitor_enabled() {
                                     log(
                                         LogTag::Monitor,
                                         "UPDATE",
@@ -313,7 +314,7 @@ impl TokenMonitor {
                             updated += updated_tokens.len();
 
                             // Only log significant updates to reduce noise
-                            if updated_tokens.len() > 10 {
+                            if updated_tokens.len() > 10 && is_debug_monitor_enabled() {
                                 log(
                                     LogTag::Monitor,
                                     "NEW_ENTRY",

@@ -1,6 +1,7 @@
 /// DexScreener API integration
 /// Handles token information retrieval with rate limiting and caching
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_api_enabled;
 use crate::tokens::types::*;
 use std::collections::HashMap;
 use std::time::{ Duration, Instant };
@@ -159,7 +160,7 @@ impl DexScreenerApi {
                     elapsed
                 )
             );
-        } else {
+        } else if is_debug_api_enabled() {
             log(
                 LogTag::Api,
                 "SUCCESS",
@@ -240,16 +241,18 @@ impl DexScreenerApi {
             }
         }
 
-        log(
-            LogTag::Api,
-            "SUCCESS",
-            &format!(
-                "Retrieved info for {}/{} tokens in {}ms",
-                tokens.len(),
-                mints.len(),
-                response_time as u64
-            )
-        );
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "SUCCESS",
+                &format!(
+                    "Retrieved info for {}/{} tokens in {}ms",
+                    tokens.len(),
+                    mints.len(),
+                    response_time as u64
+                )
+            );
+        }
 
         Ok(tokens)
     }

@@ -4,9 +4,11 @@
 
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_filtering_enabled;
 use crate::loss_prevention::should_allow_token_purchase;
 use crate::positions::SAVED_POSITIONS;
 use crate::trader::MAX_OPEN_POSITIONS;
+use crate::rugcheck_filtering::enhanced_filter_token_rugcheck;
 use chrono::{ Duration as ChronoDuration, Utc };
 
 // =============================================================================
@@ -14,7 +16,7 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // =============================================================================
 
 /// Minimum token age in hours before trading
-pub const MIN_TOKEN_AGE_HOURS: i64 = 4;
+pub const MIN_TOKEN_AGE_HOURS: i64 = 1;
 
 /// Maximum token age in hours (effectively unlimited)
 pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24;
@@ -69,6 +71,12 @@ pub enum FilterReason {
     AccountFrozen,
     TokenAccountFrozen,
 
+    // Rugcheck security risks
+    RugcheckRisk {
+        risk_level: String,
+        reasons: Vec<String>,
+    },
+
     // Trading requirements
     LockAcquisitionFailed,
 }
@@ -88,34 +96,93 @@ pub enum FilterResult {
 /// Returns FilterResult::Approved if token passes all filters
 /// Returns FilterResult::Rejected(reason) if token fails any filter
 pub fn filter_token_for_trading(token: &Token) -> FilterResult {
-    // 1. Basic metadata validation
+    // 1. RUGCHECK SECURITY VALIDATION (FIRST - HIGHEST PRIORITY)
+    if let Some(reason) = validate_rugcheck_risks(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Security risk - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+
+    // 2. Basic metadata validation
     if let Some(reason) = validate_basic_token_info(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Invalid metadata - {:?}", token.symbol, reason)
+            );
+        }
         return FilterResult::Rejected(reason);
     }
 
-    // 2. Age validation
+    // 3. Age validation
     if let Some(reason) = validate_token_age(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Age constraint - {:?}", token.symbol, reason)
+            );
+        }
         return FilterResult::Rejected(reason);
     }
 
-    // 3. Liquidity validation
+    // 4. Liquidity validation
     if let Some(reason) = validate_liquidity(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Liquidity issue - {:?}", token.symbol, reason)
+            );
+        }
         return FilterResult::Rejected(reason);
     }
 
-    // 4. Price validation
+    // 5. Price validation
     if let Some(reason) = validate_price_data(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Price data issue - {:?}", token.symbol, reason)
+            );
+        }
         return FilterResult::Rejected(reason);
     }
 
-    // 5. Position-related validation
+    // 6. Position-related validation
     if let Some(reason) = validate_position_constraints(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Position constraint - {:?}", token.symbol, reason)
+            );
+        }
         return FilterResult::Rejected(reason);
     }
 
-    // 6. Loss prevention check
+    // 7. Loss prevention check
     if let Some(reason) = validate_loss_prevention(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT",
+                &format!("{}: Loss prevention - {:?}", token.symbol, reason)
+            );
+        }
         return FilterResult::Rejected(reason);
+    }
+
+    // Token passed all filters
+    if is_debug_filtering_enabled() {
+        log(LogTag::Filtering, "APPROVE", &format!("{}: Passed all filters", token.symbol));
     }
 
     FilterResult::Approved
@@ -124,6 +191,32 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 // =============================================================================
 // INDIVIDUAL FILTER FUNCTIONS
 // =============================================================================
+
+/// Validate rugcheck security risks (HIGHEST PRIORITY - RUNS FIRST)
+fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
+    // Use enhanced filtering with cached rugcheck data
+    if let Some(risk_message) = enhanced_filter_token_rugcheck(token) {
+        // Parse risk level from message
+        let risk_level = if risk_message.starts_with("RUGCHECK-CRITICAL") {
+            "CRITICAL".to_string()
+        } else if risk_message.starts_with("RUGCHECK-DANGEROUS") {
+            "DANGEROUS".to_string()
+        } else if risk_message.contains("FREEZE-AUTHORITY") {
+            "HIGH".to_string()
+        } else if risk_message.contains("SCAM-INDICATOR") {
+            "CRITICAL".to_string()
+        } else {
+            "MEDIUM".to_string()
+        };
+
+        return Some(FilterReason::RugcheckRisk {
+            risk_level,
+            reasons: vec![risk_message],
+        });
+    }
+
+    None
+}
 
 /// Validate basic token metadata
 fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
@@ -292,6 +385,11 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
         }
     }
 
+    // Log detailed breakdown only in debug mode
+    if is_debug_filtering_enabled() && !tokens.is_empty() {
+        log_filtering_breakdown(&rejected);
+    }
+
     (eligible, rejected)
 }
 
@@ -332,6 +430,38 @@ pub fn log_filtering_summary(tokens: &[Token]) {
             log(LogTag::Filtering, "WARN", "No tokens passed filtering - check filter criteria");
         }
     }
+}
+
+/// Log detailed breakdown of rejection reasons (debug mode only)
+fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
+    if rejected.is_empty() {
+        return;
+    }
+
+    use std::collections::HashMap;
+    let mut reason_counts: HashMap<String, usize> = HashMap::new();
+
+    for (_, reason) in rejected {
+        let reason_type = match reason {
+            FilterReason::EmptySymbol | FilterReason::EmptyMint => "Invalid Metadata",
+            FilterReason::InvalidPrice | FilterReason::MissingPriceData => "Price Issues",
+            FilterReason::ZeroLiquidity | FilterReason::MissingLiquidityData => "Liquidity Issues",
+            | FilterReason::TooYoung { .. }
+            | FilterReason::TooOld { .. }
+            | FilterReason::NoCreationDate => "Age Constraints",
+            | FilterReason::ExistingOpenPosition
+            | FilterReason::RecentlyClosed { .. }
+            | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
+            FilterReason::PoorHistoricalPerformance { .. } => "Loss Prevention",
+            FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
+            FilterReason::RugcheckRisk { .. } => "Security Risks",
+            FilterReason::LockAcquisitionFailed => "System Errors",
+        };
+
+        *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
+    }
+
+    log(LogTag::Filtering, "DEBUG", &format!("Rejection breakdown: {:?}", reason_counts));
 }
 
 /// Log specific filtering error for important cases

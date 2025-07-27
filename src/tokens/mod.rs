@@ -4,6 +4,7 @@
 /// using a centralized price service instead of direct database access.
 
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_monitor_enabled;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
@@ -16,6 +17,8 @@ pub mod types;
 pub mod blacklist;
 pub mod price_service;
 pub mod decimals;
+pub mod rugcheck;
+pub mod rugcheck_service;
 
 // Re-export main types and functions
 pub use types::*;
@@ -39,6 +42,21 @@ pub use blacklist::{
     check_and_track_liquidity,
     get_blacklist_stats,
 };
+pub use rugcheck::{
+    update_all_tokens_rugcheck_data,
+    update_rugcheck_data_for_mints,
+    get_token_rugcheck_data,
+};
+pub use rugcheck_service::{
+    SmartRugcheckService,
+    RugcheckRiskLevel,
+    RugcheckRiskAssessment,
+    get_token_rugcheck_risk_assessment,
+    should_filter_token_rugcheck,
+    is_freeze_authority_safe,
+    has_lp_unlocked_risk,
+    get_rugcheck_risk_level,
+};
 pub use price_service::{
     initialize_price_service,
     get_token_price_safe,
@@ -50,6 +68,7 @@ pub use price_service::{
     TokenPriceService,
     PriceCacheEntry,
 };
+pub use rugcheck::{ RugcheckService, RugcheckResponse };
 
 // Pool pricing is disabled - use pool module only if explicitly needed
 #[allow(unused_imports)]
@@ -300,11 +319,13 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
                     let updated_count = update_tokens_prices_safe(chunk).await;
                     total_updated += updated_count;
 
-                    log(
-                        LogTag::Monitor,
-                        "UPDATE",
-                        &format!("Updated {} tokens in priority batch", updated_count)
-                    );
+                    if is_debug_monitor_enabled() {
+                        log(
+                            LogTag::Monitor,
+                            "UPDATE",
+                            &format!("Updated {} tokens in priority batch", updated_count)
+                        );
+                    }
                 }
             }
             Err(e) => {

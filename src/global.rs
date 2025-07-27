@@ -57,6 +57,29 @@ pub fn is_debug_trader_enabled() -> bool {
     }
 }
 
+/// Check if debug API mode is enabled via command line args
+pub fn is_debug_api_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() { args.contains(&"--debug-api".to_string()) } else { false }
+}
+
+/// Check if debug monitor mode is enabled via command line args
+pub fn is_debug_monitor_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-monitor".to_string())
+    } else {
+        false
+    }
+}
+
+/// Check if debug discovery mode is enabled via command line args
+pub fn is_debug_discovery_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-discovery".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {

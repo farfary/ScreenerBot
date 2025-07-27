@@ -5,6 +5,7 @@
 /// database access and provides a clean API for price lookups.
 
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_monitor_enabled;
 use crate::tokens::types::ApiToken;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::is_token_blacklisted;
@@ -24,7 +25,7 @@ const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 5;
 const OPEN_POSITION_PRIORITY: i32 = 100;
 
 /// Priority boost for high liquidity tokens
-const HIGH_LIQUIDITY_PRIORITY: i32 = 50;
+const HIGH_LIQUIDITY_PRIORITY: i32 = 100;
 
 /// Minimum liquidity threshold for high priority (in USD)
 const HIGH_LIQUIDITY_THRESHOLD: f64 = 2000.0;
@@ -224,7 +225,7 @@ impl TokenPriceService {
         }
 
         // Only log summary for significant updates or errors
-        if updated_count > 0 && mints.len() > 20 {
+        if updated_count > 0 && mints.len() > 20 && is_debug_monitor_enabled() {
             log(
                 LogTag::Monitor,
                 "UPDATE",

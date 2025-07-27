@@ -32,6 +32,12 @@ async fn main() {
     let shutdown_trader = shutdown.clone();
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
+    let shutdown_rugcheck = shutdown.clone();
+
+    // Start rugcheck cache service
+    let rugcheck_handle =
+        screenerbot::rugcheck_filtering::start_rugcheck_cache_service(shutdown_rugcheck).await;
+    log(LogTag::System, "INFO", "Rugcheck cache service started");
 
     // Start tokens system background tasks
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
@@ -79,6 +85,9 @@ async fn main() {
     let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         // Wait for trader task
         let _ = trader_handle.await;
+
+        // Wait for rugcheck cache task
+        let _ = rugcheck_handle.await;
 
         // Wait for tokens system tasks
         for handle in tokens_handles {

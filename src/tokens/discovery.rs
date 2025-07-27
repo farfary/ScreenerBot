@@ -1,5 +1,6 @@
 /// Base token discovery system structure
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_discovery_enabled;
 use crate::tokens::api::DexScreenerApi;
 use crate::tokens::cache::TokenDatabase;
 use tokio::time::{ sleep, Duration };
@@ -11,7 +12,9 @@ use std::sync::Arc;
 
 /// Fetch latest token profiles from DexScreener API and extract Solana mint addresses
 pub async fn fetch_dexscreener_latest_token_profiles() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching latest token profiles from DexScreener");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching latest token profiles from DexScreener");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -47,13 +50,17 @@ pub async fn fetch_dexscreener_latest_token_profiles() -> Result<Vec<String>, St
         }
     }
 
-    log(LogTag::Discovery, "EXTRACTED", &format!("Found {} Solana mints", mints.len()));
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "EXTRACTED", &format!("Found {} Solana mints", mints.len()));
+    }
     Ok(mints)
 }
 
 /// Fetch latest boosted tokens from DexScreener API and extract Solana mint addresses
 pub async fn fetch_dexscreener_latest_boosted_tokens() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching latest boosted tokens from DexScreener");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching latest boosted tokens from DexScreener");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -89,13 +96,17 @@ pub async fn fetch_dexscreener_latest_boosted_tokens() -> Result<Vec<String>, St
         }
     }
 
-    log(LogTag::Discovery, "EXTRACTED", &format!("Found {} Solana boosted mints", mints.len()));
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "EXTRACTED", &format!("Found {} Solana boosted mints", mints.len()));
+    }
     Ok(mints)
 }
 
 /// Fetch tokens with most active boosts from DexScreener API and extract Solana mint addresses
 pub async fn fetch_dexscreener_tokens_with_most_active_boosts() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching tokens with most active boosts from DexScreener");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching tokens with most active boosts from DexScreener");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -131,13 +142,21 @@ pub async fn fetch_dexscreener_tokens_with_most_active_boosts() -> Result<Vec<St
         }
     }
 
-    log(LogTag::Discovery, "EXTRACTED", &format!("Found {} Solana top boosted mints", mints.len()));
+    if is_debug_discovery_enabled() {
+        log(
+            LogTag::Discovery,
+            "EXTRACTED",
+            &format!("Found {} Solana top boosted mints", mints.len())
+        );
+    }
     Ok(mints)
 }
 
 /// Fetch new tokens from RugCheck API and extract Solana mint addresses
 pub async fn fetch_rugcheck_new_tokens() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching new tokens from RugCheck");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching new tokens from RugCheck");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -166,17 +185,21 @@ pub async fn fetch_rugcheck_new_tokens() -> Result<Vec<String>, String> {
         }
     }
 
-    log(
-        LogTag::Discovery,
-        "EXTRACTED",
-        &format!("Found {} Solana new token mints from RugCheck", mints.len())
-    );
+    if is_debug_discovery_enabled() {
+        log(
+            LogTag::Discovery,
+            "EXTRACTED",
+            &format!("Found {} Solana new token mints from RugCheck", mints.len())
+        );
+    }
     Ok(mints)
 }
 
 /// Fetch most viewed tokens from RugCheck API and extract Solana mint addresses
 pub async fn fetch_rugcheck_most_viewed() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching most viewed tokens from RugCheck");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching most viewed tokens from RugCheck");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -205,17 +228,21 @@ pub async fn fetch_rugcheck_most_viewed() -> Result<Vec<String>, String> {
         }
     }
 
-    log(
-        LogTag::Discovery,
-        "EXTRACTED",
-        &format!("Found {} Solana most viewed token mints from RugCheck", mints.len())
-    );
+    if is_debug_discovery_enabled() {
+        log(
+            LogTag::Discovery,
+            "EXTRACTED",
+            &format!("Found {} Solana most viewed token mints from RugCheck", mints.len())
+        );
+    }
     Ok(mints)
 }
 
 /// Fetch trending tokens from RugCheck API and extract Solana mint addresses
 pub async fn fetch_rugcheck_trending() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching trending tokens from RugCheck");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching trending tokens from RugCheck");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -244,17 +271,21 @@ pub async fn fetch_rugcheck_trending() -> Result<Vec<String>, String> {
         }
     }
 
-    log(
-        LogTag::Discovery,
-        "EXTRACTED",
-        &format!("Found {} Solana trending token mints from RugCheck", mints.len())
-    );
+    if is_debug_discovery_enabled() {
+        log(
+            LogTag::Discovery,
+            "EXTRACTED",
+            &format!("Found {} Solana trending token mints from RugCheck", mints.len())
+        );
+    }
     Ok(mints)
 }
 
 /// Fetch verified tokens from RugCheck API and extract Solana mint addresses
 pub async fn fetch_rugcheck_verified() -> Result<Vec<String>, String> {
-    log(LogTag::Discovery, "API", "Fetching verified tokens from RugCheck");
+    if is_debug_discovery_enabled() {
+        log(LogTag::Discovery, "API", "Fetching verified tokens from RugCheck");
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -283,11 +314,13 @@ pub async fn fetch_rugcheck_verified() -> Result<Vec<String>, String> {
         }
     }
 
-    log(
-        LogTag::Discovery,
-        "EXTRACTED",
-        &format!("Found {} Solana verified token mints from RugCheck", mints.len())
-    );
+    if is_debug_discovery_enabled() {
+        log(
+            LogTag::Discovery,
+            "EXTRACTED",
+            &format!("Found {} Solana verified token mints from RugCheck", mints.len())
+        );
+    }
     Ok(mints)
 }
 
@@ -327,14 +360,18 @@ impl TokenDiscovery {
         use crate::utils::check_shutdown_or_delay;
         use tokio::time::Duration;
 
-        log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
+        if is_debug_discovery_enabled() {
+            log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
+        }
 
         let mut all_mints = Vec::new();
 
         // Check for shutdown before starting
         if let Some(shutdown) = &shutdown {
             if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before starting");
+                if is_debug_discovery_enabled() {
+                    log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before starting");
+                }
                 return Ok(());
             }
         }
@@ -342,11 +379,13 @@ impl TokenDiscovery {
         // Fetch latest token profiles
         match fetch_dexscreener_latest_token_profiles().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("DexScreener profiles: {} mints", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("DexScreener profiles: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -365,11 +404,13 @@ impl TokenDiscovery {
         // Fetch latest boosted tokens
         match fetch_dexscreener_latest_boosted_tokens().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("DexScreener boosted: {} mints", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("DexScreener boosted: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -388,11 +429,13 @@ impl TokenDiscovery {
         // Fetch tokens with most active boosts
         match fetch_dexscreener_tokens_with_most_active_boosts().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("DexScreener top boosts: {} mints", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("DexScreener top boosts: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -415,7 +458,13 @@ impl TokenDiscovery {
         // Fetch new tokens from RugCheck
         match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
-                log(LogTag::Discovery, "SUCCESS", &format!("RugCheck new: {} mints", mints.len()));
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck new: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -438,11 +487,13 @@ impl TokenDiscovery {
         // Fetch most viewed tokens from RugCheck
         match fetch_rugcheck_most_viewed().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck viewed: {} mints", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck viewed: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -465,11 +516,13 @@ impl TokenDiscovery {
         // Fetch trending tokens from RugCheck
         match fetch_rugcheck_trending().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck trending: {} mints", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck trending: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -492,11 +545,13 @@ impl TokenDiscovery {
         // Fetch verified tokens from RugCheck
         match fetch_rugcheck_verified().await {
             Ok(mints) => {
-                log(
-                    LogTag::Discovery,
-                    "SUCCESS",
-                    &format!("RugCheck verified: {} mints", mints.len())
-                );
+                if is_debug_discovery_enabled() {
+                    log(
+                        LogTag::Discovery,
+                        "SUCCESS",
+                        &format!("RugCheck verified: {} mints", mints.len())
+                    );
+                }
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -579,31 +634,59 @@ impl TokenDiscovery {
             match self.api.get_tokens_info(batch).await {
                 Ok(tokens) => {
                     if !tokens.is_empty() {
+                        // Check for new tokens before adding to database (for first-seen logging)
+                        let mut new_tokens = Vec::new();
+                        let mut existing_tokens = Vec::new();
+
+                        if is_debug_discovery_enabled() {
+                            for token in &tokens {
+                                match self.database.get_token_by_mint(&token.mint) {
+                                    Ok(Some(_)) => existing_tokens.push(token),
+                                    Ok(None) => new_tokens.push(token),
+                                    Err(_) => new_tokens.push(token), // Assume new if check fails
+                                }
+                            }
+                        }
+
                         // Add tokens to database
                         match self.database.add_tokens(&tokens).await {
                             Ok(_) => {
                                 total_added += tokens.len();
-                                log(
-                                    LogTag::Discovery,
-                                    "DATABASE",
-                                    &format!("Added {} tokens to database", tokens.len())
-                                );
 
-                                // Log some token details
-                                for token in &tokens {
+                                if is_debug_discovery_enabled() {
                                     log(
                                         LogTag::Discovery,
-                                        "TOKEN",
-                                        &format!(
-                                            "{} ({}) - Liquidity: ${:.0}",
-                                            token.symbol,
-                                            &token.mint[..8],
-                                            token.liquidity
-                                                .as_ref()
-                                                .and_then(|l| l.usd)
-                                                .unwrap_or(0.0)
-                                        )
+                                        "DATABASE",
+                                        &format!("Added {} tokens to database", tokens.len())
                                     );
+
+                                    // Log only first-seen tokens
+                                    for token in &new_tokens {
+                                        log(
+                                            LogTag::Discovery,
+                                            "NEW",
+                                            &format!(
+                                                "{} ({}) - Liquidity: ${:.0}",
+                                                token.symbol,
+                                                &token.mint[..8],
+                                                token.liquidity
+                                                    .as_ref()
+                                                    .and_then(|l| l.usd)
+                                                    .unwrap_or(0.0)
+                                            )
+                                        );
+                                    }
+
+                                    if !existing_tokens.is_empty() {
+                                        log(
+                                            LogTag::Discovery,
+                                            "DEBUG",
+                                            &format!(
+                                                "Skipped {} already known tokens",
+                                                existing_tokens.len()
+                                            )
+                                        );
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -615,7 +698,13 @@ impl TokenDiscovery {
                             }
                         }
                     } else {
-                        log(LogTag::Discovery, "WARN", "No token data returned from API for batch");
+                        if is_debug_discovery_enabled() {
+                            log(
+                                LogTag::Discovery,
+                                "WARN",
+                                "No token data returned from API for batch"
+                            );
+                        }
                     }
                 }
                 Err(e) => {

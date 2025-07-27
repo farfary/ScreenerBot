@@ -725,3 +725,441 @@ pub struct DatabaseStats {
     pub tokens_with_liquidity: usize,
     pub last_updated: chrono::DateTime<chrono::Utc>,
 }
+
+impl TokenDatabase {
+    /// Initialize rugcheck table in the database
+    pub fn initialize_rugcheck_table(&self) -> Result<(), rusqlite::Error> {
+        let connection = self.connection
+            .lock()
+            .map_err(|_|
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            )?;
+
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS rugcheck_data (
+                mint TEXT PRIMARY KEY,
+                token_program TEXT,
+                creator TEXT,
+                creator_balance INTEGER,
+                
+                -- Token Info
+                token_mint_authority TEXT,
+                token_supply INTEGER,
+                token_decimals INTEGER,
+                token_is_initialized BOOLEAN,
+                token_freeze_authority TEXT,
+                
+                -- Token Meta
+                token_meta_name TEXT,
+                token_meta_symbol TEXT,
+                token_meta_uri TEXT,
+                token_meta_mutable BOOLEAN,
+                token_meta_update_authority TEXT,
+                
+                -- Risk Analysis
+                score INTEGER,
+                score_normalised INTEGER,
+                rugged BOOLEAN,
+                token_type TEXT,
+                
+                -- File Meta
+                file_meta_description TEXT,
+                file_meta_name TEXT,
+                file_meta_symbol TEXT,
+                file_meta_image TEXT,
+                
+                -- Market Data
+                total_market_liquidity REAL,
+                total_stable_liquidity REAL,
+                total_lp_providers INTEGER,
+                total_holders INTEGER,
+                price REAL,
+                
+                -- Transfer Fee
+                transfer_fee_pct REAL,
+                transfer_fee_max_amount INTEGER,
+                transfer_fee_authority TEXT,
+                
+                -- Analysis Info
+                graph_insiders_detected INTEGER,
+                detected_at TEXT,
+                
+                -- JSON Fields (for complex nested data)
+                token_extensions TEXT,
+                top_holders_json TEXT,
+                freeze_authority_json TEXT,
+                mint_authority_json TEXT,
+                risks_json TEXT,
+                locker_owners_json TEXT,
+                lockers_json TEXT,
+                markets_json TEXT,
+                known_accounts_json TEXT,
+                events_json TEXT,
+                verification_json TEXT,
+                insider_networks_json TEXT,
+                creator_tokens_json TEXT,
+                launchpad_json TEXT,
+                
+                -- Metadata
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            []
+        )?;
+
+        // Create indexes for better performance
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rugcheck_score ON rugcheck_data(score DESC)",
+            []
+        )?;
+
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rugcheck_rugged ON rugcheck_data(rugged)",
+            []
+        )?;
+
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_rugcheck_updated ON rugcheck_data(updated_at)",
+            []
+        )?;
+
+        Ok(())
+    }
+
+    /// Store rugcheck data in the database
+    pub fn store_rugcheck_data(
+        &self,
+        data: &super::rugcheck::RugcheckResponse
+    ) -> Result<(), rusqlite::Error> {
+        let connection = self.connection
+            .lock()
+            .map_err(|_|
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            )?;
+
+        // Serialize complex fields to JSON
+        let token_extensions_json = data.token_extensions
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let top_holders_json = data.top_holders
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let freeze_authority_json = data.freeze_authority
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let mint_authority_json = data.mint_authority
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let risks_json = data.risks
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let locker_owners_json = data.locker_owners
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let lockers_json = data.lockers
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let markets_json = data.markets
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let known_accounts_json = data.known_accounts
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let events_json = data.events
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let verification_json = data.verification
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let insider_networks_json = data.insider_networks
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let creator_tokens_json = data.creator_tokens
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        let launchpad_json = data.launchpad
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_default())
+            .unwrap_or_default();
+
+        connection.execute(
+            "INSERT OR REPLACE INTO rugcheck_data (
+                mint, token_program, creator, creator_balance,
+                token_mint_authority, token_supply, token_decimals, token_is_initialized, token_freeze_authority,
+                token_meta_name, token_meta_symbol, token_meta_uri, token_meta_mutable, token_meta_update_authority,
+                score, score_normalised, rugged, token_type,
+                file_meta_description, file_meta_name, file_meta_symbol, file_meta_image,
+                total_market_liquidity, total_stable_liquidity, total_lp_providers, total_holders, price,
+                transfer_fee_pct, transfer_fee_max_amount, transfer_fee_authority,
+                graph_insiders_detected, detected_at,
+                token_extensions, top_holders_json, freeze_authority_json, mint_authority_json,
+                risks_json, locker_owners_json, lockers_json, markets_json, known_accounts_json,
+                events_json, verification_json, insider_networks_json, creator_tokens_json, launchpad_json,
+                updated_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+                ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34,
+                ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, datetime('now')
+            )",
+            params![
+                data.mint,
+                data.token_program,
+                data.creator,
+                data.creator_balance,
+
+                // Token info
+                data.token.as_ref().and_then(|t| t.mint_authority.as_ref()),
+                data.token.as_ref().and_then(|t| t.supply),
+                data.token.as_ref().and_then(|t| t.decimals),
+                data.token.as_ref().and_then(|t| t.is_initialized),
+                data.token.as_ref().and_then(|t| t.freeze_authority.as_ref()),
+
+                // Token meta
+                data.token_meta.as_ref().and_then(|m| m.name.as_ref()),
+                data.token_meta.as_ref().and_then(|m| m.symbol.as_ref()),
+                data.token_meta.as_ref().and_then(|m| m.uri.as_ref()),
+                data.token_meta.as_ref().and_then(|m| m.mutable),
+                data.token_meta.as_ref().and_then(|m| m.update_authority.as_ref()),
+
+                // Risk analysis
+                data.score,
+                data.score_normalised,
+                data.rugged,
+                data.token_type,
+
+                // File meta
+                data.file_meta.as_ref().and_then(|f| f.description.as_ref()),
+                data.file_meta.as_ref().and_then(|f| f.name.as_ref()),
+                data.file_meta.as_ref().and_then(|f| f.symbol.as_ref()),
+                data.file_meta.as_ref().and_then(|f| f.image.as_ref()),
+
+                // Market data
+                data.total_market_liquidity,
+                data.total_stable_liquidity,
+                data.total_lp_providers,
+                data.total_holders,
+                data.price,
+
+                // Transfer fee
+                data.transfer_fee.as_ref().and_then(|f| f.pct),
+                data.transfer_fee.as_ref().and_then(|f| f.max_amount),
+                data.transfer_fee.as_ref().and_then(|f| f.authority.as_ref()),
+
+                // Analysis info
+                data.graph_insiders_detected,
+                data.detected_at,
+
+                // JSON fields
+                token_extensions_json,
+                top_holders_json,
+                freeze_authority_json,
+                mint_authority_json,
+                risks_json,
+                locker_owners_json,
+                lockers_json,
+                markets_json,
+                known_accounts_json,
+                events_json,
+                verification_json,
+                insider_networks_json,
+                creator_tokens_json,
+                launchpad_json
+            ]
+        )?;
+
+        Ok(())
+    }
+
+    /// Get rugcheck data for a specific token
+    pub fn get_rugcheck_data(
+        &self,
+        mint: &str
+    ) -> Result<Option<super::rugcheck::RugcheckResponse>, rusqlite::Error> {
+        let connection = self.connection
+            .lock()
+            .map_err(|_|
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            )?;
+
+        let mut stmt = connection.prepare("SELECT * FROM rugcheck_data WHERE mint = ?1")?;
+
+        let mut rows = stmt.query_map(params![mint], |row| {
+            Ok(self.row_to_rugcheck_response(row)?)
+        })?;
+
+        if let Some(row) = rows.next() {
+            Ok(Some(row?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Convert database row to RugcheckResponse
+    fn row_to_rugcheck_response(
+        &self,
+        row: &rusqlite::Row
+    ) -> Result<super::rugcheck::RugcheckResponse, rusqlite::Error> {
+        use super::rugcheck::*;
+
+        // Parse JSON fields
+        let token_extensions: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("token_extensions")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let top_holders: Option<Vec<Holder>> = row
+            .get::<_, Option<String>>("top_holders_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let freeze_authority: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("freeze_authority_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let mint_authority: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("mint_authority_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let risks: Option<Vec<Risk>> = row
+            .get::<_, Option<String>>("risks_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let locker_owners: Option<HashMap<String, serde_json::Value>> = row
+            .get::<_, Option<String>>("locker_owners_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let lockers: Option<HashMap<String, serde_json::Value>> = row
+            .get::<_, Option<String>>("lockers_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let markets: Option<Vec<Market>> = row
+            .get::<_, Option<String>>("markets_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let known_accounts: Option<HashMap<String, KnownAccount>> = row
+            .get::<_, Option<String>>("known_accounts_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let events: Option<Vec<Event>> = row
+            .get::<_, Option<String>>("events_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let verification: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("verification_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let insider_networks: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("insider_networks_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let creator_tokens: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("creator_tokens_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        let launchpad: Option<serde_json::Value> = row
+            .get::<_, Option<String>>("launchpad_json")?
+            .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
+
+        // Build TokenInfo
+        let token = Some(TokenInfo {
+            mint_authority: row.get("token_mint_authority")?,
+            supply: row.get("token_supply")?,
+            decimals: row.get("token_decimals")?,
+            is_initialized: row.get("token_is_initialized")?,
+            freeze_authority: row.get("token_freeze_authority")?,
+        });
+
+        // Build TokenMeta
+        let token_meta = Some(TokenMeta {
+            name: row.get("token_meta_name")?,
+            symbol: row.get("token_meta_symbol")?,
+            uri: row.get("token_meta_uri")?,
+            mutable: row.get("token_meta_mutable")?,
+            update_authority: row.get("token_meta_update_authority")?,
+        });
+
+        // Build FileMeta
+        let file_meta = Some(FileMeta {
+            description: row.get("file_meta_description")?,
+            name: row.get("file_meta_name")?,
+            symbol: row.get("file_meta_symbol")?,
+            image: row.get("file_meta_image")?,
+        });
+
+        // Build TransferFee
+        let transfer_fee = Some(TransferFee {
+            pct: row.get("transfer_fee_pct")?,
+            max_amount: row.get("transfer_fee_max_amount")?,
+            authority: row.get("transfer_fee_authority")?,
+        });
+
+        Ok(RugcheckResponse {
+            mint: row.get("mint")?,
+            token_program: row.get("token_program")?,
+            creator: row.get("creator")?,
+            creator_balance: row.get("creator_balance")?,
+            token,
+            token_extensions,
+            token_meta,
+            top_holders,
+            freeze_authority,
+            mint_authority,
+            risks,
+            score: row.get("score")?,
+            score_normalised: row.get("score_normalised")?,
+            file_meta,
+            locker_owners,
+            lockers,
+            markets,
+            total_market_liquidity: row.get("total_market_liquidity")?,
+            total_stable_liquidity: row.get("total_stable_liquidity")?,
+            total_lp_providers: row.get("total_lp_providers")?,
+            total_holders: row.get("total_holders")?,
+            price: row.get("price")?,
+            rugged: row.get("rugged")?,
+            token_type: row.get("token_type")?,
+            transfer_fee,
+            known_accounts,
+            events,
+            verification,
+            graph_insiders_detected: row.get("graph_insiders_detected")?,
+            insider_networks,
+            detected_at: row.get("detected_at")?,
+            creator_tokens,
+            launchpad,
+        })
+    }
+}

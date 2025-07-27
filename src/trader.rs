@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 50;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.002;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -110,7 +110,7 @@ pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
 // -----------------------------------------------------------------------------
 
 /// Summary display refresh interval (seconds)
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 3;
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 15;
 
 /// New entry signals check interval (seconds)
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
