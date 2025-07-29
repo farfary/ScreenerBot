@@ -30,6 +30,9 @@ use screenerbot::wallet::{ get_wallet_address, sell_token, close_token_account, 
 use reqwest;
 use serde_json;
 use std::env;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use futures::stream::{ self, StreamExt };
 
 /// SOL token mint address (native Solana)
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -47,6 +50,12 @@ struct TokenAccount {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let dry_run = args.contains(&"--dry-run".to_string()) || args.contains(&"-d".to_string());
+
+    log(
+        LogTag::System,
+        "TOOL_START",
+        &format!("Starting wallet cleanup tool (dry_run: {})", dry_run)
+    );
 
     println!("⚠️  WALLET CLEANUP UTILITY ⚠️");
     println!("===============================");
@@ -142,176 +151,322 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Step 2: Sell all tokens with balances > 0
-    let mut sell_results = Vec::new();
-    let mut successful_sells = 0;
-    let mut failed_sells = 0;
-
     println!("\n💰 Starting token sales{}...", if dry_run { " (DRY RUN)" } else { "" });
+    log(
+        LogTag::System,
+        "SELL_START",
+        &format!("Starting token sales for {} accounts", token_accounts.len())
+    );
 
-    for account in &token_accounts {
-        if account.balance == 0 {
-            println!("⏭️  Skipping {} - zero balance", account.mint[..8].to_string() + "...");
-            continue;
-        }
+    // Filter accounts for selling (skip zero balance and SOL)
+    let sellable_accounts: Vec<_> = token_accounts
+        .iter()
+        .filter(|account| {
+            if account.balance == 0 {
+                println!("⏭️  Skipping {} - zero balance", account.mint[..8].to_string() + "...");
+                log(
+                    LogTag::System,
+                    "SKIP_ZERO",
+                    &format!("Skipping zero balance token: {}", account.mint)
+                );
+                return false;
+            }
 
-        // Skip SOL (native token) - can't sell SOL for SOL
-        if account.mint == SOL_MINT {
-            println!("⏭️  Skipping SOL (native token)");
-            continue;
-        }
+            if account.mint == SOL_MINT {
+                println!("⏭️  Skipping SOL (native token)");
+                log(LogTag::System, "SKIP_SOL", "Skipping SOL (native token)");
+                return false;
+            }
 
-        if dry_run {
-            println!(
-                "🔄 Would sell {:.6} tokens of {}",
-                account.ui_amount,
-                account.mint[..8].to_string() + "..."
-            );
-            sell_results.push((account.clone(), true, None));
-            successful_sells += 1;
-            continue;
-        }
+            true
+        })
+        .collect();
 
-        println!(
-            "🔄 Selling {:.6} tokens of {}...",
-            account.ui_amount,
-            account.mint[..8].to_string() + "..."
-        );
+    log(
+        LogTag::System,
+        "SELL_FILTER",
+        &format!(
+            "Filtered {} sellable accounts from {} total",
+            sellable_accounts.len(),
+            token_accounts.len()
+        )
+    );
 
-        // Create a minimal Token struct for the sell operation
-        let token = Token {
-            mint: account.mint.clone(),
-            symbol: format!("TOKEN_{}", &account.mint[..8]),
-            name: format!("Unknown Token {}", &account.mint[..8]),
-            chain: "solana".to_string(),
+    // Process selling with 3 concurrent tasks
+    let sell_semaphore = Arc::new(Semaphore::new(3));
+    let sell_results: Vec<_> = stream
+        ::iter(sellable_accounts.iter())
+        .map(|account| {
+            let semaphore = sell_semaphore.clone();
+            let account = (*account).clone();
+            async move {
+                let _permit = semaphore.acquire().await.unwrap();
 
-            // Set all optional fields to defaults
-            logo_url: None,
-            coingecko_id: None,
-            website: None,
-            description: None,
-            tags: vec![],
-            is_verified: false,
-            created_at: None,
-            price_dexscreener_sol: None,
-            price_dexscreener_usd: None,
-            price_pool_sol: None,
-            price_pool_usd: None,
-
-            dex_id: None,
-            pair_address: None,
-            pair_url: None,
-            labels: vec![],
-            fdv: None,
-            market_cap: None,
-            txns: None,
-            volume: None,
-            price_change: None,
-            liquidity: None,
-            info: None,
-            boosts: None,
-        };
-
-        // Attempt to sell all tokens
-        match sell_token(&token, account.balance, None).await {
-            Ok(swap_result) => {
-                if swap_result.success {
-                    // Calculate SOL output from actual_output_change and decimals
-                    let sol_output = if let Some(output_change) = swap_result.actual_output_change {
-                        (output_change as f64) / 1_000_000_000.0 // Convert lamports to SOL
-                    } else {
-                        0.0
-                    };
-
+                if dry_run {
                     println!(
-                        "✅ Successfully sold {} for {:.6} SOL",
-                        account.mint[..8].to_string() + "...",
-                        sol_output
+                        "🔄 Would sell {:.6} tokens of {}",
+                        account.ui_amount,
+                        account.mint[..8].to_string() + "..."
                     );
-                    sell_results.push((account.clone(), true, None));
-                    successful_sells += 1;
-                } else {
-                    println!(
-                        "❌ Sell failed for {}: {}",
-                        account.mint[..8].to_string() + "...",
-                        swap_result.error.as_deref().unwrap_or("Unknown error")
+                    log(
+                        LogTag::System,
+                        "DRY_SELL",
+                        &format!("Would sell {} tokens of {}", account.ui_amount, account.mint)
                     );
-                    sell_results.push((account.clone(), false, swap_result.error.clone()));
-                    failed_sells += 1;
+                    return (account, true, None);
+                }
+
+                println!(
+                    "🔄 Selling {:.6} tokens of {}...",
+                    account.ui_amount,
+                    account.mint[..8].to_string() + "..."
+                );
+                log(
+                    LogTag::System,
+                    "SELL_START",
+                    &format!(
+                        "Starting sell for token: {} ({:.6} tokens)",
+                        account.mint,
+                        account.ui_amount
+                    )
+                );
+
+                // Create a minimal Token struct for the sell operation
+                let token = Token {
+                    mint: account.mint.clone(),
+                    symbol: format!("TOKEN_{}", &account.mint[..8]),
+                    name: format!("Unknown Token {}", &account.mint[..8]),
+                    chain: "solana".to_string(),
+
+                    // Set all optional fields to defaults
+                    logo_url: None,
+                    coingecko_id: None,
+                    website: None,
+                    description: None,
+                    tags: vec![],
+                    is_verified: false,
+                    created_at: None,
+                    price_dexscreener_sol: None,
+                    price_dexscreener_usd: None,
+                    price_pool_sol: None,
+                    price_pool_usd: None,
+
+                    dex_id: None,
+                    pair_address: None,
+                    pair_url: None,
+                    labels: vec![],
+                    fdv: None,
+                    market_cap: None,
+                    txns: None,
+                    volume: None,
+                    price_change: None,
+                    liquidity: None,
+                    info: None,
+                    boosts: None,
+                };
+
+                // Attempt to sell all tokens
+                match sell_token(&token, account.balance, None).await {
+                    Ok(swap_result) => {
+                        if swap_result.success {
+                            // Calculate SOL output from actual_output_change and decimals
+                            let sol_output = if
+                                let Some(output_change) = swap_result.actual_output_change
+                            {
+                                (output_change as f64) / 1_000_000_000.0 // Convert lamports to SOL
+                            } else {
+                                0.0
+                            };
+
+                            println!(
+                                "✅ Successfully sold {} for {:.6} SOL",
+                                account.mint[..8].to_string() + "...",
+                                sol_output
+                            );
+                            log(
+                                LogTag::System,
+                                "SELL_SUCCESS",
+                                &format!(
+                                    "Successfully sold {} for {:.6} SOL",
+                                    account.mint,
+                                    sol_output
+                                )
+                            );
+                            (account, true, None)
+                        } else {
+                            let error_msg = swap_result.error.as_deref().unwrap_or("Unknown error");
+                            println!(
+                                "❌ Sell failed for {}: {}",
+                                account.mint[..8].to_string() + "...",
+                                error_msg
+                            );
+                            log(
+                                LogTag::System,
+                                "SELL_FAILED",
+                                &format!("Sell failed for {}: {}", account.mint, error_msg)
+                            );
+                            (account, false, swap_result.error.clone())
+                        }
+                    }
+                    Err(e) => {
+                        println!(
+                            "❌ Sell error for {}: {}",
+                            account.mint[..8].to_string() + "...",
+                            e
+                        );
+                        log(
+                            LogTag::System,
+                            "SELL_ERROR",
+                            &format!("Sell error for {}: {}", account.mint, e)
+                        );
+                        (account, false, Some(e.to_string()))
+                    }
                 }
             }
-            Err(e) => {
-                println!("❌ Sell error for {}: {}", account.mint[..8].to_string() + "...", e);
-                sell_results.push((account.clone(), false, Some(e.to_string())));
-                failed_sells += 1;
-            }
-        }
+        })
+        .buffer_unordered(3) // Process up to 3 concurrent sells
+        .collect().await;
 
-        // Small delay between sales to avoid rate limiting
-        if !dry_run {
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-        }
-    }
+    let successful_sells = sell_results
+        .iter()
+        .filter(|(_, success, _)| *success)
+        .count();
+    let failed_sells = sell_results
+        .iter()
+        .filter(|(_, success, _)| !*success)
+        .count();
 
     println!("\n📈 Sales Summary:");
     println!("  ✅ Successful sells: {}", successful_sells);
     println!("  ❌ Failed sells: {}", failed_sells);
+    log(
+        LogTag::System,
+        "SELL_SUMMARY",
+        &format!("Sales completed: {} success, {} failed", successful_sells, failed_sells)
+    );
 
     // Step 3: Close all ATAs
     println!("\n🔒 Starting ATA cleanup{}...", if dry_run { " (DRY RUN)" } else { "" });
+    log(
+        LogTag::System,
+        "ATA_START",
+        &format!("Starting ATA cleanup for {} accounts", token_accounts.len())
+    );
 
-    let mut close_results = Vec::new();
-    let mut successful_closes = 0;
-    let mut failed_closes = 0;
-
-    for account in &token_accounts {
-        // Skip SOL accounts
-        if account.mint == SOL_MINT {
-            continue;
-        }
-
-        if dry_run {
-            println!("🔄 Would close ATA for {}", account.mint[..8].to_string() + "...");
-            close_results.push((account.clone(), true, Some("DRY_RUN_TX".to_string())));
-            successful_closes += 1;
-            continue;
-        }
-
-        println!("🔄 Closing ATA for {}...", account.mint[..8].to_string() + "...");
-
-        match close_token_account(&account.mint, &wallet_address).await {
-            Ok(signature) => {
-                println!(
-                    "✅ Successfully closed ATA for {}. TX: {}",
-                    account.mint[..8].to_string() + "...",
-                    signature
-                );
-                close_results.push((account.clone(), true, Some(signature)));
-                successful_closes += 1;
+    // Filter accounts for ATA closing (skip SOL)
+    let closable_accounts: Vec<_> = token_accounts
+        .iter()
+        .filter(|account| {
+            if account.mint == SOL_MINT {
+                log(LogTag::System, "SKIP_SOL_ATA", "Skipping SOL account for ATA closing");
+                return false;
             }
-            Err(e) => {
-                println!(
-                    "❌ Failed to close ATA for {}: {}",
-                    account.mint[..8].to_string() + "...",
-                    e
-                );
-                close_results.push((account.clone(), false, None));
-                failed_closes += 1;
-            }
-        }
+            true
+        })
+        .collect();
 
-        // Small delay between ATA closes
-        if !dry_run {
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-        }
-    }
+    log(
+        LogTag::System,
+        "ATA_FILTER",
+        &format!(
+            "Filtered {} closable accounts from {} total",
+            closable_accounts.len(),
+            token_accounts.len()
+        )
+    );
+
+    // Process ATA closing with 3 concurrent tasks
+    let close_semaphore = Arc::new(Semaphore::new(3));
+    let close_results: Vec<_> = stream
+        ::iter(closable_accounts.iter())
+        .map(|account| {
+            let semaphore = close_semaphore.clone();
+            let account = (*account).clone();
+            let wallet_address = wallet_address.clone();
+            async move {
+                let _permit = semaphore.acquire().await.unwrap();
+
+                if dry_run {
+                    println!("🔄 Would close ATA for {}", account.mint[..8].to_string() + "...");
+                    log(
+                        LogTag::System,
+                        "DRY_ATA",
+                        &format!("Would close ATA for token: {}", account.mint)
+                    );
+                    return (account, true, Some("DRY_RUN_TX".to_string()));
+                }
+
+                println!("🔄 Closing ATA for {}...", account.mint[..8].to_string() + "...");
+                log(
+                    LogTag::System,
+                    "ATA_START",
+                    &format!("Starting ATA close for token: {}", account.mint)
+                );
+
+                match close_token_account(&account.mint, &wallet_address).await {
+                    Ok(signature) => {
+                        println!(
+                            "✅ Successfully closed ATA for {}. TX: {}",
+                            account.mint[..8].to_string() + "...",
+                            signature
+                        );
+                        log(
+                            LogTag::System,
+                            "ATA_SUCCESS",
+                            &format!(
+                                "Successfully closed ATA for {}. TX: {}",
+                                account.mint,
+                                signature
+                            )
+                        );
+                        (account, true, Some(signature))
+                    }
+                    Err(e) => {
+                        println!(
+                            "❌ Failed to close ATA for {}: {}",
+                            account.mint[..8].to_string() + "...",
+                            e
+                        );
+                        log(
+                            LogTag::System,
+                            "ATA_FAILED",
+                            &format!("Failed to close ATA for {}: {}", account.mint, e)
+                        );
+                        (account, false, None)
+                    }
+                }
+            }
+        })
+        .buffer_unordered(3) // Process up to 3 concurrent ATA closes
+        .collect().await;
+
+    let successful_closes = close_results
+        .iter()
+        .filter(|(_, success, _)| *success)
+        .count();
+    let failed_closes = close_results
+        .iter()
+        .filter(|(_, success, _)| !*success)
+        .count();
 
     println!("\n🔒 ATA Cleanup Summary:");
     println!("  ✅ Successful closes: {}", successful_closes);
     println!("  ❌ Failed closes: {}", failed_closes);
+    log(
+        LogTag::System,
+        "ATA_SUMMARY",
+        &format!("ATA cleanup completed: {} success, {} failed", successful_closes, failed_closes)
+    );
 
     // Step 4: Final summary and cleanup report
     println!("\n🎯 FINAL CLEANUP REPORT{}", if dry_run { " (DRY RUN)" } else { "" });
     println!("========================");
+    log(
+        LogTag::System,
+        "FINAL_REPORT",
+        &format!("Final cleanup report: {} accounts found", token_accounts.len())
+    );
+
     println!("📊 Token Accounts Found: {}", token_accounts.len());
     if dry_run {
         println!("💰 Would Sell - Success: {} | Failed: {}", successful_sells, failed_sells);
@@ -327,12 +482,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if failed_sells > 0 {
         println!("\n❌ FAILED SELLS:");
+        log(LogTag::System, "FAILED_SELLS", &format!("Found {} failed sells", failed_sells));
         for (account, success, error) in &sell_results {
-            if !success {
-                println!(
-                    "  🪙 {} - {}",
-                    account.mint[..8].to_string() + "...",
-                    error.as_deref().unwrap_or("Unknown error")
+            if !*success {
+                let error_msg = error.as_deref().unwrap_or("Unknown error");
+                println!("  🪙 {} - {}", account.mint[..8].to_string() + "...", error_msg);
+                log(
+                    LogTag::System,
+                    "SELL_FAIL_DETAIL",
+                    &format!("Failed sell for {}: {}", account.mint, error_msg)
                 );
             }
         }
@@ -340,9 +498,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if failed_closes > 0 {
         println!("\n❌ FAILED ATA CLOSES:");
+        log(LogTag::System, "FAILED_CLOSES", &format!("Found {} failed ATA closes", failed_closes));
         for (account, success, _) in &close_results {
-            if !success {
+            if !*success {
                 println!("  🪙 {}", account.mint[..8].to_string() + "...");
+                log(
+                    LogTag::System,
+                    "CLOSE_FAIL_DETAIL",
+                    &format!("Failed ATA close for {}", account.mint)
+                );
             }
         }
     }
@@ -353,31 +517,76 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "\n💎 Estimated rent SOL that would be reclaimed: {:.6} SOL",
             estimated_rent_reclaimed
         );
+        log(
+            LogTag::System,
+            "ESTIMATED_RENT",
+            &format!("Would reclaim {:.6} SOL in rent", estimated_rent_reclaimed)
+        );
     } else {
         println!("\n💎 Estimated rent SOL reclaimed: {:.6} SOL", estimated_rent_reclaimed);
+        log(
+            LogTag::System,
+            "RECLAIMED_RENT",
+            &format!("Reclaimed {:.6} SOL in rent", estimated_rent_reclaimed)
+        );
     }
 
-    if
-        successful_sells == token_accounts.len() - 1 &&
-        successful_closes == token_accounts.len() - 1
-    {
-        // -1 because we skip SOL accounts
+    // Calculate expected vs actual counts, accounting for SOL being skipped
+    let sol_accounts = token_accounts
+        .iter()
+        .filter(|a| a.mint == SOL_MINT)
+        .count();
+    let expected_operations = token_accounts.len() - sol_accounts;
+
+    if successful_sells == expected_operations && successful_closes == expected_operations {
+        // All operations successful
         if dry_run {
             println!("\n🎉 DRY RUN COMPLETE! All tokens would be sold and ATAs closed.");
+            log(
+                LogTag::System,
+                "DRY_RUN_COMPLETE",
+                "All operations would succeed - dry run complete"
+            );
         } else {
             println!("\n🎉 WALLET CLEANUP COMPLETE! All tokens sold and ATAs closed.");
+            log(LogTag::System, "CLEANUP_COMPLETE", "All tokens sold and ATAs closed successfully");
         }
     } else {
         if dry_run {
             println!("\n⚠️  Dry run completed with some potential failures. See details above.");
+            log(
+                LogTag::System,
+                "DRY_RUN_ISSUES",
+                &format!(
+                    "Dry run completed with issues: {} sell failures, {} close failures",
+                    failed_sells,
+                    failed_closes
+                )
+            );
         } else {
             println!("\n⚠️  Cleanup completed with some failures. See details above.");
+            log(
+                LogTag::System,
+                "CLEANUP_ISSUES",
+                &format!(
+                    "Cleanup completed with issues: {} sell failures, {} close failures",
+                    failed_sells,
+                    failed_closes
+                )
+            );
         }
     }
 
     if dry_run {
         println!("\n💡 To execute these operations for real, run without --dry-run flag.");
+        log(LogTag::System, "DRY_RUN_HINT", "To execute for real, run without --dry-run flag");
     }
+
+    log(
+        LogTag::System,
+        "TOOL_COMPLETE",
+        &format!("Tool execution finished: {} total accounts processed", token_accounts.len())
+    );
 
     Ok(())
 }

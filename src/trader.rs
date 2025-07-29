@@ -148,6 +148,7 @@ use crate::summary::*;
 use crate::utils::*;
 
 use crate::filtering::{ should_buy_token, log_filtering_summary };
+use crate::tokens::get_token_rugcheck_data_safe;
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -1640,39 +1641,152 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Check for entry opportunity using should_buy function
                             let mut buy_urgency = 0.0;
 
-                            // Use timeout for last prices mutex
-                            match
-                                tokio::time::timeout(Duration::from_millis(5000), async {
-                                    LAST_PRICES.try_lock()
-                                }).await
-                            {
-                                Ok(Ok(mut last_prices)) => {
-                                    if let Some(&prev_price) = last_prices.get(&token.mint) {
-                                        if prev_price > 0.0 {
-                                            debug_trader_log(
-                                                "TOKEN_CHECK_PRICES",
-                                                &format!(
-                                                    "Token {} ({}): checking buy signal with current={:.10}, prev={:.10}",
-                                                    token.symbol,
-                                                    token.mint,
-                                                    current_price,
-                                                    prev_price
-                                                )
-                                            );
+                            // First, get the previous price and release the lock
+                            let prev_price = {
+                                match
+                                    tokio::time::timeout(Duration::from_millis(5000), async {
+                                        LAST_PRICES.try_lock()
+                                    }).await
+                                {
+                                    Ok(Ok(last_prices)) => { last_prices.get(&token.mint).copied() }
+                                    _ => None,
+                                }
+                            };
 
-                                            // Check if prices are identical (indicating no price update)
-                                            if (current_price - prev_price).abs() < 0.000000000001 {
+                            if let Some(prev_price) = prev_price {
+                                if prev_price > 0.0 {
+                                    debug_trader_log(
+                                        "TOKEN_CHECK_PRICES",
+                                        &format!(
+                                            "Token {} ({}): checking buy signal with current={:.10}, prev={:.10}",
+                                            token.symbol,
+                                            token.mint,
+                                            current_price,
+                                            prev_price
+                                        )
+                                    );
+
+                                    // Check if prices are identical (indicating no price update)
+                                    if (current_price - prev_price).abs() < 0.000000000001 {
+                                        debug_trader_log(
+                                            "PRICE_UPDATE_ISSUE",
+                                            &format!(
+                                                "Token {} ({}): IDENTICAL PRICES detected! Current={:.10} == Prev={:.10} - No price movement detected, this indicates price cache not updating",
+                                                token.symbol,
+                                                token.mint,
+                                                current_price,
+                                                prev_price
+                                            )
+                                        );
+                                    }
+
+                                    // Rugcheck safety validation - block rugged or high-risk tokens
+                                    match get_token_rugcheck_data_safe(&token.mint).await {
+                                        Ok(Some(rugcheck_data)) => {
+                                            // Block tokens that are detected as rugged
+                                            if rugcheck_data.rugged.unwrap_or(false) {
                                                 debug_trader_log(
-                                                    "PRICE_UPDATE_ISSUE",
+                                                    "RUGCHECK_REJECT_RUGGED",
                                                     &format!(
-                                                        "Token {} ({}): IDENTICAL PRICES detected! Current={:.10} == Prev={:.10} - No price movement detected, this indicates price cache not updating",
+                                                        "Token {} ({}) rejected - detected as rugged",
                                                         token.symbol,
-                                                        token.mint,
-                                                        current_price,
-                                                        prev_price
+                                                        token.mint
                                                     )
                                                 );
+                                                buy_urgency = 0.0;
+                                            } else {
+                                                // Block tokens with very low rugcheck scores
+                                                let rugcheck_score = rugcheck_data.score_normalised
+                                                    .or(rugcheck_data.score)
+                                                    .unwrap_or(50);
+
+                                                if rugcheck_score < 20 {
+                                                    debug_trader_log(
+                                                        "RUGCHECK_REJECT_LOW_SCORE",
+                                                        &format!(
+                                                            "Token {} ({}) rejected - low rugcheck score: {}",
+                                                            token.symbol,
+                                                            token.mint,
+                                                            rugcheck_score
+                                                        )
+                                                    );
+                                                    buy_urgency = 0.0;
+                                                } else if
+                                                    // Block tokens with critical risks
+                                                    let Some(risks) = &rugcheck_data.risks
+                                                {
+                                                    let critical_risks = risks
+                                                        .iter()
+                                                        .filter(|r| {
+                                                            r.level
+                                                                .as_ref()
+                                                                .map(
+                                                                    |l|
+                                                                        l.to_lowercase() ==
+                                                                        "critical"
+                                                                )
+                                                                .unwrap_or(false)
+                                                        })
+                                                        .count();
+
+                                                    if critical_risks > 0 {
+                                                        debug_trader_log(
+                                                            "RUGCHECK_REJECT_CRITICAL",
+                                                            &format!(
+                                                                "Token {} ({}) rejected - {} critical risks detected",
+                                                                token.symbol,
+                                                                token.mint,
+                                                                critical_risks
+                                                            )
+                                                        );
+                                                        buy_urgency = 0.0;
+                                                    } else {
+                                                        // Use the new should_buy function
+                                                        buy_urgency = should_buy(
+                                                            &token,
+                                                            current_price,
+                                                            prev_price
+                                                        );
+
+                                                        debug_trader_log(
+                                                            "RUGCHECK_OK",
+                                                            &format!(
+                                                                "Token {} ({}) passed rugcheck validation (score: {})",
+                                                                token.symbol,
+                                                                token.mint,
+                                                                rugcheck_score
+                                                            )
+                                                        );
+                                                    }
+                                                } else {
+                                                    // Use the new should_buy function
+                                                    buy_urgency = should_buy(
+                                                        &token,
+                                                        current_price,
+                                                        prev_price
+                                                    );
+
+                                                    debug_trader_log(
+                                                        "RUGCHECK_OK",
+                                                        &format!(
+                                                            "Token {} ({}) passed rugcheck validation (score: {})",
+                                                            token.symbol,
+                                                            token.mint,
+                                                            rugcheck_score
+                                                        )
+                                                    );
+                                                }
                                             }
+                                        }
+                                        Ok(None) => {
+                                            debug_trader_log(
+                                                "RUGCHECK_MISSING",
+                                                &format!(
+                                                    "Token {} ({}) has no rugcheck data - proceeding with caution",
+                                                    token.symbol,
+                                                    token.mint
+                                                )
+                                            );
 
                                             // Use the new should_buy function
                                             buy_urgency = should_buy(
@@ -1680,38 +1794,65 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                 current_price,
                                                 prev_price
                                             );
-
+                                        }
+                                        Err(e) => {
                                             debug_trader_log(
-                                                "TOKEN_CHECK_RESULT",
+                                                "RUGCHECK_ERROR",
                                                 &format!(
-                                                    "Token {} ({}): buy urgency result: {:.3}",
+                                                    "Token {} ({}) rugcheck error: {} - proceeding with caution",
                                                     token.symbol,
                                                     token.mint,
-                                                    buy_urgency
+                                                    e
                                                 )
                                             );
-                                        } else {
-                                            debug_trader_log(
-                                                "TOKEN_CHECK_INVALID_PREV",
-                                                &format!(
-                                                    "Token {} ({}): invalid prev_price: {:.10}",
-                                                    token.symbol,
-                                                    token.mint,
-                                                    prev_price
-                                                )
+
+                                            // Use the new should_buy function
+                                            buy_urgency = should_buy(
+                                                &token,
+                                                current_price,
+                                                prev_price
                                             );
                                         }
-                                    } else {
-                                        debug_trader_log(
-                                            "TOKEN_CHECK_NO_PREV",
-                                            &format!(
-                                                "Token {} ({}): no previous price available",
-                                                token.symbol,
-                                                token.mint
-                                            )
-                                        );
                                     }
 
+                                    debug_trader_log(
+                                        "TOKEN_CHECK_RESULT",
+                                        &format!(
+                                            "Token {} ({}): buy urgency result: {:.3}",
+                                            token.symbol,
+                                            token.mint,
+                                            buy_urgency
+                                        )
+                                    );
+                                } else {
+                                    debug_trader_log(
+                                        "TOKEN_CHECK_INVALID_PREV",
+                                        &format!(
+                                            "Token {} ({}): invalid prev_price: {:.10}",
+                                            token.symbol,
+                                            token.mint,
+                                            prev_price
+                                        )
+                                    );
+                                }
+                            } else {
+                                debug_trader_log(
+                                    "TOKEN_CHECK_NO_PREV",
+                                    &format!(
+                                        "Token {} ({}): no previous price available",
+                                        token.symbol,
+                                        token.mint
+                                    )
+                                );
+                            }
+
+                            // Update price in cache
+                            match
+                                tokio::time::timeout(Duration::from_millis(500), async {
+                                    LAST_PRICES.try_lock()
+                                }).await
+                            {
+                                Ok(Ok(mut last_prices)) => {
                                     // Add debug info before updating price
                                     debug_trader_log(
                                         "PRICE_UPDATE_BEFORE",
@@ -2183,7 +2324,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let (sell_urgency, sell_reason) = crate::profit::should_sell(
                         &position,
                         current_price
-                    );
+                    ).await;
 
                     // Use profit system decision only - no duplicate emergency checks
                     let should_exit = sell_urgency > 0.7;

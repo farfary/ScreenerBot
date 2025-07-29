@@ -159,7 +159,7 @@ fn get_random_transaction_rpc(configs: &crate::global::Configs) -> String {
 
     if configs.rpc_fallbacks.is_empty() {
         // If no fallbacks, use main RPC as last resort
-        log(LogTag::Trader, "WARN", "No RPC fallbacks configured, using main RPC for transaction");
+        log(LogTag::Wallet, "WARN", "No RPC fallbacks configured, using main RPC for transaction");
         return configs.rpc_url.clone();
     }
 
@@ -167,11 +167,11 @@ fn get_random_transaction_rpc(configs: &crate::global::Configs) -> String {
     let mut rng = rand::thread_rng();
     match configs.rpc_fallbacks.choose(&mut rng) {
         Some(rpc) => {
-            log(LogTag::Trader, "RPC", &format!("Selected random transaction RPC: {}", rpc));
+            log(LogTag::Wallet, "RPC", &format!("Selected random transaction RPC: {}", rpc));
             rpc.clone()
         }
         None => {
-            log(LogTag::Trader, "WARN", "Failed to select random RPC, using main RPC");
+            log(LogTag::Wallet, "WARN", "Failed to select random RPC, using main RPC");
             configs.rpc_url.clone()
         }
     }
@@ -388,7 +388,7 @@ pub async fn sign_and_send_transaction(
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SIGN",
         &format!(
             "Signing transaction with wallet (length: {} bytes)",
@@ -440,7 +440,7 @@ pub async fn sign_and_send_transaction(
         )?;
     let signed_transaction_base64 = general_purpose::STANDARD.encode(&signed_transaction_bytes);
 
-    log(LogTag::Trader, "SEND", &format!("Sending signed transaction to RPC: {}", rpc_url));
+    log(LogTag::Wallet, "SEND", &format!("Sending signed transaction to RPC: {}", rpc_url));
 
     // Send the signed transaction
     let client = reqwest::Client::new();
@@ -467,7 +467,7 @@ pub async fn sign_and_send_transaction(
         match send_rpc_request(&client, rpc_url, &rpc_payload).await {
             Ok(tx_sig) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "SUCCESS",
                     &format!("Transaction sent successfully via selected RPC: {}", tx_sig)
                 );
@@ -475,7 +475,7 @@ pub async fn sign_and_send_transaction(
             }
             Err(e) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "ERROR",
                     &format!("Selected RPC {} failed: {}, trying other fallbacks...", rpc_url, e)
                 );
@@ -492,7 +492,7 @@ pub async fn sign_and_send_transaction(
         match send_rpc_request(&client, fallback_rpc, &rpc_payload).await {
             Ok(tx_sig) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "SUCCESS",
                     &format!("Transaction sent via fallback RPC: {}", tx_sig)
                 );
@@ -500,7 +500,7 @@ pub async fn sign_and_send_transaction(
             }
             Err(e) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "ERROR",
                     &format!("Fallback RPC {} failed: {}", fallback_rpc, e)
                 );
@@ -511,18 +511,18 @@ pub async fn sign_and_send_transaction(
 
     // Try main RPC as a last resort, only if all fallbacks failed and it's not the same as our rpc_url
     if rpc_url != &configs.rpc_url {
-        log(LogTag::Trader, "WARN", "All fallbacks failed, trying main RPC as last resort");
+        log(LogTag::Wallet, "WARN", "All fallbacks failed, trying main RPC as last resort");
         match send_rpc_request(&client, &configs.rpc_url, &rpc_payload).await {
             Ok(tx_sig) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "SUCCESS",
                     &format!("Transaction sent via main RPC: {}", tx_sig)
                 );
                 return Ok(tx_sig);
             }
             Err(e) => {
-                log(LogTag::Trader, "ERROR", &format!("Main RPC failed: {}", e));
+                log(LogTag::Wallet, "ERROR", &format!("Main RPC failed: {}", e));
                 _last_error = Some(e);
             }
         }
@@ -569,7 +569,7 @@ pub fn detect_and_separate_ata_rent(
 
     if has_ata_close_instruction {
         ata_close_detected = true;
-        log(LogTag::Trader, "ATA_DETECT", "ATA close detected in transaction logs");
+        log(LogTag::Wallet, "ATA_DETECT", "ATA close detected in transaction logs");
     }
 
     // Method 2: Check for accounts with negative balance changes (account closures)
@@ -594,7 +594,7 @@ pub fn detect_and_separate_ata_rent(
                         closed_amount <= ATA_RENT_LAMPORTS + ATA_RENT_TOLERANCE
                     {
                         log(
-                            LogTag::Trader,
+                            LogTag::Wallet,
                             "ATA_DETECT",
                             &format!("ATA account closure detected: {} lamports closed, matches rent pattern", closed_amount)
                         );
@@ -612,7 +612,7 @@ pub fn detect_and_separate_ata_rent(
         let likely_includes_ata_rent = detect_ata_rent_pattern(actual_output_change);
         if likely_includes_ata_rent {
             ata_close_detected = true;
-            log(LogTag::Trader, "ATA_DETECT", "ATA rent detected by pattern analysis");
+            log(LogTag::Wallet, "ATA_DETECT", "ATA rent detected by pattern analysis");
         }
     }
 
@@ -621,7 +621,7 @@ pub fn detect_and_separate_ata_rent(
         let suspicious_amount = check_suspicious_ata_amounts(actual_output_change);
         if suspicious_amount {
             ata_close_detected = true;
-            log(LogTag::Trader, "ATA_DETECT", "ATA rent detected by suspicious amount pattern");
+            log(LogTag::Wallet, "ATA_DETECT", "ATA rent detected by suspicious amount pattern");
         }
     }
 
@@ -632,7 +632,7 @@ pub fn detect_and_separate_ata_rent(
         }
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "ATA_DETECT",
             &format!(
                 "ATA close detected - total_sol: {:.6}, ata_rent: {:.6}, trade_only: {:.6}",
@@ -832,7 +832,7 @@ pub async fn calculate_effective_price(
     configs: &crate::global::Configs
 ) -> Result<(f64, u64, u64, f64), SwapError> {
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "ANALYZE",
         &format!("Calculating effective price for transaction: {}", transaction_signature)
     );
@@ -853,7 +853,7 @@ pub async fn calculate_effective_price(
                 Ok(details) => {
                     transaction_details = Some(details);
                     log(
-                        LogTag::Trader,
+                        LogTag::Wallet,
                         "SUCCESS",
                         &format!(
                             "Got transaction details from RPC {} on attempt {}",
@@ -865,7 +865,7 @@ pub async fn calculate_effective_price(
                 }
                 Err(e) => {
                     log(
-                        LogTag::Trader,
+                        LogTag::Wallet,
                         "RETRY",
                         &format!("RPC {} attempt {} failed: {}", rpc_idx + 1, attempt, e)
                     );
@@ -939,7 +939,7 @@ pub async fn calculate_effective_price(
     let effective_price = if token_amount > 0.0 { sol_for_price_calc / token_amount } else { 0.0 };
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "EFFECTIVE",
         &format!(
             "EffPrice: {:.15} SOL/token (trade_sol={:.12}, token_ui={:.12}, total_change={:.12}, ata_rent_excluded={:.12})",
@@ -967,7 +967,7 @@ pub async fn calculate_effective_price_with_ata_detection(
     configs: &crate::global::Configs
 ) -> Result<(f64, u64, u64, f64, bool, u64, u64), SwapError> {
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "ANALYZE",
         &format!("Calculating effective price with ATA detection for transaction: {}", transaction_signature)
     );
@@ -987,7 +987,7 @@ pub async fn calculate_effective_price_with_ata_detection(
             Ok(details) => {
                 transaction_details = Some(details);
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "SUCCESS",
                     &format!(
                         "Got transaction details from RPC {} on attempt {}",
@@ -999,7 +999,7 @@ pub async fn calculate_effective_price_with_ata_detection(
             }
             Err(e) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "WARN",
                     &format!("RPC {} failed on attempt {}: {}", rpc_url, attempt + 1, e)
                 );
@@ -1039,7 +1039,6 @@ pub async fn calculate_effective_price_with_ata_detection(
 
     // Calculate effective price using cleaned amounts
     let (sol_for_price_calc, token_change_raw, token_decimals) = if input_mint == SOL_MINT {
-
         // For buy transactions, estimate trade SOL by excluding fees and ATA rent
         let estimated_trade_sol = {
             let total_sol_lamports = actual_input_change;
@@ -1071,7 +1070,7 @@ pub async fn calculate_effective_price_with_ata_detection(
     let effective_price = if token_amount > 0.0 { sol_for_price_calc / token_amount } else { 0.0 };
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "EFFECTIVE",
         &format!(
             "EffPrice: {:.15} SOL/token (trade_sol={:.12}, token_ui={:.12}, ata_detected={}, ata_rent={:.6})",
@@ -1106,7 +1105,7 @@ pub fn extract_sol_transfer_from_instructions(
     // TODO: Enhance this to parse actual transaction instructions from RPC response
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "INFO",
         "extract_sol_transfer_from_instructions: Transaction instruction parsing not yet implemented for this format"
     );
@@ -1284,7 +1283,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
     );
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "QUOTE",
         &format!(
             "Requesting swap quote: {} SOL {} -> {}",
@@ -1320,7 +1319,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
                     if attempt < 3 && status_code >= 500 {
                         log(
-                            LogTag::Trader,
+                            LogTag::Wallet,
                             "WARNING",
                             &format!("API error on attempt {}: {}, retrying...", attempt, error)
                         );
@@ -1341,7 +1340,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         let error = SwapError::NetworkError(e);
                         if attempt < 3 {
                             log(
-                                LogTag::Trader,
+                                LogTag::Wallet,
                                 "WARNING",
                                 &format!(
                                     "Network error on attempt {}: {}, retrying...",
@@ -1362,7 +1361,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
                 // Log the raw response for debugging
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "DEBUG",
                     &format!("Raw API response: {}", &response_text[..response_text.len().min(500)])
                 );
@@ -1376,7 +1375,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         );
                         if attempt < 3 {
                             log(
-                                LogTag::Trader,
+                                LogTag::Wallet,
                                 "WARNING",
                                 &format!(
                                     "Parse error on attempt {}: {}, retrying...",
@@ -1409,7 +1408,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 match api_response.data {
                     Some(data) => {
                         log(
-                            LogTag::Trader,
+                            LogTag::Wallet,
                             "QUOTE",
                             &format!(
                                 "Quote received: {} -> {} (Impact: {}%, Time: {:.3}s)",
@@ -1425,7 +1424,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         let error = SwapError::InvalidResponse("No data in response".to_string());
                         if attempt < 3 {
                             log(
-                                LogTag::Trader,
+                                LogTag::Wallet,
                                 "WARNING",
                                 &format!("No data on attempt {}, retrying...", attempt)
                             );
@@ -1444,7 +1443,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 let error = SwapError::NetworkError(e);
                 if attempt < 3 {
                     log(
-                        LogTag::Trader,
+                        LogTag::Wallet,
                         "WARNING",
                         &format!("Network error on attempt {}: {}, retrying...", attempt, error)
                     );
@@ -1494,7 +1493,7 @@ pub async fn execute_swap_with_quote(
     let wallet_address = get_wallet_address()?;
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SWAP",
         &format!(
             "Executing swap for {} ({}) - {} SOL {} -> {} (using cached quote)",
@@ -1519,14 +1518,14 @@ pub async fn execute_swap_with_quote(
         let input_sol = amount_sol;
         let output_amount_str = &swap_data.quote.out_amount;
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "DEBUG",
             &format!("Final - Raw out_amount string: '{}'", output_amount_str)
         );
 
         let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "ERROR",
                 &format!("Final - Failed to parse out_amount '{}': {}", output_amount_str, e)
             );
@@ -1534,7 +1533,7 @@ pub async fn execute_swap_with_quote(
         });
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "DEBUG",
             &format!("Final - Parsed output_amount_raw: {}", output_amount_raw)
         );
@@ -1550,7 +1549,7 @@ pub async fn execute_swap_with_quote(
         };
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "DEBUG",
             &format!(
                 "Final price calc debug: raw_amount={}, decimals={} (from quote), output_tokens={:.12}, actual_price={:.12}",
@@ -1564,7 +1563,7 @@ pub async fn execute_swap_with_quote(
         let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "PRICE",
             &format!(
                 "Final price validation: Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
@@ -1595,7 +1594,7 @@ pub async fn execute_swap_with_quote(
     ).await?;
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SIGN",
         &format!("Transaction submitted successfully! TX: {}", transaction_signature)
     );
@@ -1614,7 +1613,7 @@ pub async fn execute_swap_with_quote(
     {
         Ok((effective_price, input_change, output_change, diff)) => {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "SUCCESS",
                 &format!(
                     "Transaction verified successful on-chain. Effective price: {:.12} SOL",
@@ -1625,7 +1624,7 @@ pub async fn execute_swap_with_quote(
         }
         Err(e) => {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "ERROR",
                 &format!("Transaction failed on-chain or verification failed: {}", e)
             );
@@ -1691,7 +1690,7 @@ pub async fn execute_swap(
     };
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SWAP",
         &format!(
             "Executing swap for {} ({}) - {} SOL {} -> {}",
@@ -1732,7 +1731,7 @@ pub async fn execute_swap(
         let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
 
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "PRICE",
             &format!(
                 "Price validation: Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
@@ -1763,7 +1762,7 @@ pub async fn execute_swap(
     ).await?;
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SUCCESS",
         &format!("Swap executed successfully! TX: {}", transaction_signature)
     );
@@ -1779,7 +1778,7 @@ pub async fn execute_swap(
             &selected_rpc, // Use the same randomly selected RPC endpoint
             &configs
         ).await.unwrap_or_else(|e| {
-            log(LogTag::Trader, "WARNING", &format!("Failed to calculate effective price: {}", e));
+            log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
             (0.0, 0, 0, 0.0)
         });
 
@@ -2056,10 +2055,10 @@ pub async fn sell_token(
     }
 
     // Check token balance before swap
-    log(LogTag::Trader, "BALANCE", &format!("Checking {} balance...", token.symbol));
+    log(LogTag::Wallet, "BALANCE", &format!("Checking {} balance...", token.symbol));
     let token_balance = get_token_balance(&wallet_address, &token.mint).await?;
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "BALANCE",
         &format!("Current {} balance: {} tokens", token.symbol, token_balance)
     );
@@ -2079,12 +2078,12 @@ pub async fn sell_token(
 
     // Check current price if expected SOL output is provided
     if let Some(expected_sol) = expected_sol_output {
-        log(LogTag::Trader, "PRICE", "Validating expected SOL output...");
+        log(LogTag::Wallet, "PRICE", "Validating expected SOL output...");
         match get_token_price_sol(&token.mint).await {
             Ok(current_price) => {
                 let estimated_sol_output = current_price * (token_amount as f64);
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "PRICE",
                     &format!(
                         "Estimated SOL output: {:.6} SOL, Expected: {:.6} SOL",
@@ -2107,10 +2106,10 @@ pub async fn sell_token(
                         )
                     );
                 }
-                log(LogTag::Trader, "PRICE", "✅ Price validation passed");
+                log(LogTag::Wallet, "PRICE", "✅ Price validation passed");
             }
             Err(e) => {
-                log(LogTag::Trader, "WARNING", &format!("Could not validate price: {}", e));
+                log(LogTag::Wallet, "WARNING", &format!("Could not validate price: {}", e));
             }
         }
     }
@@ -2125,7 +2124,7 @@ pub async fn sell_token(
     };
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SWAP",
         &format!(
             "Executing sell for {} ({}) - {} tokens -> SOL",
@@ -2149,7 +2148,7 @@ pub async fn sell_token(
     );
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "QUOTE",
         &format!("Requesting sell quote: {} tokens {} -> SOL", token_amount, &token.symbol)
     );
@@ -2190,7 +2189,7 @@ pub async fn sell_token(
     };
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "QUOTE",
         &format!(
             "Sell quote received: {} tokens -> {} SOL (Impact: {}%, Time: {:.3}s)",
@@ -2227,7 +2226,7 @@ pub async fn sell_token(
     ).await?;
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "SUCCESS",
         &format!("Sell executed successfully! TX: {}", transaction_signature)
     );
@@ -2243,7 +2242,7 @@ pub async fn sell_token(
             &configs.rpc_url,
             &configs
         ).await.unwrap_or_else(|e| {
-            log(LogTag::Trader, "WARNING", &format!("Failed to calculate effective price: {}", e));
+            log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
             (0.0, 0, 0, 0.0)
         });
 
@@ -2260,7 +2259,7 @@ pub async fn sell_token(
             Ok(details) => extract_sol_transfer_from_instructions(&details, &wallet_address),
             Err(e) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "INFO",
                     &format!("Could not extract exact SOL from instructions: {}", e)
                 );
@@ -2291,7 +2290,7 @@ pub async fn sell_token(
         &configs
     ).await.unwrap_or_else(|e| {
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "WARNING",
             &format!("Failed to calculate effective price with ATA detection: {}", e)
         );
@@ -2301,7 +2300,7 @@ pub async fn sell_token(
     // Use exact SOL from instructions if available, otherwise use ATA-cleaned amount
     let final_output_change = if let Some(exact_sol) = exact_sol_received {
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "EXACT",
             &format!(
                 "Using exact SOL from instructions: {:.9} SOL (vs ATA-cleaned: {:.9} SOL)",
@@ -2312,7 +2311,7 @@ pub async fn sell_token(
         (exact_sol * (10_f64).powi(9)) as u64
     } else if ata_close_detected {
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "ATA_CLEAN",
             &format!(
                 "Using ATA-cleaned SOL: {:.9} SOL (original: {:.9} SOL, ATA rent: {:.9} SOL)",
@@ -2325,6 +2324,43 @@ pub async fn sell_token(
     } else {
         enhanced_output_change
     };
+
+    // 🧹 AUTOMATIC ATA CLEANUP: Close all empty ATAs after successful sell
+    log(LogTag::Wallet, "ATA", "🧹 Starting automatic ATA cleanup after successful sell...");
+
+    // Wait a moment for the sell transaction to fully settle
+    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
+    match close_all_empty_atas(&wallet_address).await {
+        Ok((closed_count, signatures)) => {
+            if closed_count > 0 {
+                let rent_reclaimed = (closed_count as f64) * 0.00203928; // Approximate ATA rent in SOL
+                log(
+                    LogTag::Wallet,
+                    "ATA",
+                    &format!(
+                        "🎉 ATA cleanup completed! Closed {} empty accounts, reclaimed ~{:.6} SOL",
+                        closed_count,
+                        rent_reclaimed
+                    )
+                );
+
+                // Log signatures for the closed ATAs
+                for (i, sig) in signatures.iter().enumerate() {
+                    log(LogTag::Wallet, "ATA", &format!("ATA close #{}: {}", i + 1, sig));
+                }
+            } else {
+                log(LogTag::Wallet, "ATA", "No empty ATAs found to close");
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::Wallet,
+                "WARNING",
+                &format!("ATA cleanup failed (sell was successful): {}", e)
+            );
+        }
+    }
 
     Ok(SwapResult {
         success: true,
@@ -2351,6 +2387,13 @@ pub async fn sell_token(
             None
         },
     })
+}
+
+/// Public function to manually close all empty ATAs for the configured wallet
+/// This is useful for manual cleanup or when called from other parts of the system
+pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), SwapError> {
+    let wallet_address = get_wallet_address()?;
+    close_all_empty_atas(&wallet_address).await
 }
 
 /// Gets current token price by requesting a small quote
@@ -2418,7 +2461,7 @@ pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, SwapError> {
             }
             Err(e) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "WARNING",
                     &format!("Failed to get balance from {}: {}", rpc_url, e)
                 );
@@ -2509,7 +2552,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
             }
             Err(e) => {
                 log(
-                    LogTag::Trader,
+                    LogTag::Wallet,
                     "WARNING",
                     &format!("Failed to get token balance from {}: {}", rpc_url, e)
                 );
@@ -2531,12 +2574,258 @@ pub fn validate_price_near_expected(
     price_difference <= tolerance_percent
 }
 
+/// Structure to hold token account information
+#[derive(Debug)]
+pub struct TokenAccountInfo {
+    pub account: String,
+    pub mint: String,
+    pub balance: u64,
+    pub is_token_2022: bool,
+}
+
+/// Gets all token accounts for a wallet
+pub async fn get_all_token_accounts(
+    wallet_address: &str
+) -> Result<Vec<TokenAccountInfo>, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    let rpc_payload =
+        serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTokenAccountsByOwner",
+        "params": [
+            wallet_address,
+            {
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            },
+            {
+                "encoding": "jsonParsed"
+            }
+        ]
+    });
+
+    // Also get Token-2022 accounts
+    let rpc_payload_2022 =
+        serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTokenAccountsByOwner",
+        "params": [
+            wallet_address,
+            {
+                "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+            },
+            {
+                "encoding": "jsonParsed"
+            }
+        ]
+    });
+
+    let client = reqwest::Client::new();
+    let mut all_accounts = Vec::new();
+
+    // Try main RPC first, then fallbacks
+    let rpc_endpoints = std::iter
+        ::once(&configs.rpc_url)
+        .chain(configs.rpc_fallbacks.iter())
+        .collect::<Vec<_>>();
+
+    for rpc_url in &rpc_endpoints {
+        // Get SPL Token accounts
+        if
+            let Ok(response) = client
+                .post(*rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                if let Some(result) = rpc_response.get("result") {
+                    if let Some(value) = result.get("value") {
+                        if let Some(accounts) = value.as_array() {
+                            for account in accounts {
+                                if
+                                    let Some(parsed_info) = extract_token_account_info(
+                                        account,
+                                        false
+                                    )
+                                {
+                                    all_accounts.push(parsed_info);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get Token-2022 accounts
+        if
+            let Ok(response) = client
+                .post(*rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload_2022)
+                .send().await
+        {
+            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                if let Some(result) = rpc_response.get("result") {
+                    if let Some(value) = result.get("value") {
+                        if let Some(accounts) = value.as_array() {
+                            for account in accounts {
+                                if
+                                    let Some(parsed_info) = extract_token_account_info(
+                                        account,
+                                        true
+                                    )
+                                {
+                                    all_accounts.push(parsed_info);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // If we got accounts from this RPC, break
+        if !all_accounts.is_empty() {
+            break;
+        }
+    }
+
+    log(
+        LogTag::Wallet,
+        "ATA",
+        &format!("Found {} total token accounts for wallet", all_accounts.len())
+    );
+    Ok(all_accounts)
+}
+
+/// Extracts token account information from RPC response
+fn extract_token_account_info(
+    account: &serde_json::Value,
+    is_token_2022: bool
+) -> Option<TokenAccountInfo> {
+    let pubkey = account.get("pubkey")?.as_str()?;
+    let account_data = account.get("account")?;
+    let parsed = account_data.get("data")?.get("parsed")?;
+    let info = parsed.get("info")?;
+
+    let mint = info.get("mint")?.as_str()?;
+    let token_amount = info.get("tokenAmount")?;
+    let amount_str = token_amount.get("amount")?.as_str()?;
+    let balance = amount_str.parse::<u64>().ok()?;
+
+    Some(TokenAccountInfo {
+        account: pubkey.to_string(),
+        mint: mint.to_string(),
+        balance,
+        is_token_2022,
+    })
+}
+
+/// Closes all empty ATAs (Associated Token Accounts) for a wallet
+/// This reclaims the rent SOL (~0.002 SOL per account) from all empty token accounts
+/// Returns the number of accounts closed and total signatures
+pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<String>), SwapError> {
+    log(LogTag::Wallet, "ATA", "🔍 Checking for empty token accounts to close...");
+
+    // Get all token accounts for the wallet
+    let all_accounts = get_all_token_accounts(wallet_address).await?;
+
+    if all_accounts.is_empty() {
+        log(LogTag::Wallet, "ATA", "No token accounts found in wallet");
+        return Ok((0, vec![]));
+    }
+
+    // Filter for empty accounts (balance = 0)
+    let empty_accounts: Vec<&TokenAccountInfo> = all_accounts
+        .iter()
+        .filter(|account| account.balance == 0)
+        .collect();
+
+    if empty_accounts.is_empty() {
+        log(LogTag::Wallet, "ATA", "No empty token accounts found to close");
+        return Ok((0, vec![]));
+    }
+
+    log(
+        LogTag::Wallet,
+        "ATA",
+        &format!("Found {} empty token accounts to close", empty_accounts.len())
+    );
+
+    let mut signatures = Vec::new();
+    let mut closed_count = 0u32;
+
+    // Close each empty account
+    for account_info in empty_accounts {
+        log(
+            LogTag::Wallet,
+            "ATA",
+            &format!(
+                "Closing empty {} account {} for mint {}",
+                if account_info.is_token_2022 {
+                    "Token-2022"
+                } else {
+                    "SPL Token"
+                },
+                account_info.account,
+                account_info.mint
+            )
+        );
+
+        match
+            close_ata(
+                wallet_address,
+                &account_info.account,
+                &account_info.mint,
+                account_info.is_token_2022
+            ).await
+        {
+            Ok(signature) => {
+                log(
+                    LogTag::Wallet,
+                    "SUCCESS",
+                    &format!("✅ Closed empty ATA {}. TX: {}", account_info.account, signature)
+                );
+                signatures.push(signature);
+                closed_count += 1;
+
+                // Small delay between closures to avoid overwhelming the network
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            }
+            Err(e) => {
+                log(
+                    LogTag::Wallet,
+                    "ERROR",
+                    &format!("❌ Failed to close ATA {}: {}", account_info.account, e)
+                );
+                // Continue with other accounts even if one fails
+            }
+        }
+    }
+
+    let rent_reclaimed = (closed_count as f64) * 0.00203928; // Approximate ATA rent in SOL
+    log(
+        LogTag::Wallet,
+        "ATA",
+        &format!(
+            "🎉 ATA cleanup complete! Closed {} accounts, reclaimed ~{:.6} SOL in rent",
+            closed_count,
+            rent_reclaimed
+        )
+    );
+
+    Ok((closed_count, signatures))
+}
+
 /// Closes the Associated Token Account (ATA) for a given token mint after selling all tokens
 /// This reclaims the rent SOL (~0.002 SOL) from empty token accounts
 /// Supports both regular SPL tokens and Token-2022 tokens
 pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<String, SwapError> {
-
-    log(LogTag::Trader, "ATA", &format!("Attempting to close token account for mint: {}", mint));
+    log(LogTag::Wallet, "ATA", &format!("Attempting to close token account for mint: {}", mint));
 
     // First verify the token balance is actually zero
     match get_token_balance(wallet_address, mint).await {
@@ -2549,14 +2838,14 @@ pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<Str
                 );
             }
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "ATA",
                 &format!("Verified zero balance for {}, proceeding to close ATA", mint)
             );
         }
         Err(e) => {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "WARN",
                 &format!("Could not verify token balance before closing ATA: {}", e)
             );
@@ -2569,7 +2858,7 @@ pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<Str
         Ok(account) => account,
         Err(e) => {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "WARN",
                 &format!("Could not find associated token account for {}: {}", mint, e)
             );
@@ -2577,22 +2866,22 @@ pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<Str
         }
     };
 
-    log(LogTag::Trader, "ATA", &format!("Found token account to close: {}", token_account));
+    log(LogTag::Wallet, "ATA", &format!("Found token account to close: {}", token_account));
 
     // Determine if this is a Token-2022 token by checking the token program
     let is_token_2022 = is_token_2022_mint(mint).await.unwrap_or(false);
 
     if is_token_2022 {
-        log(LogTag::Trader, "ATA", "Detected Token-2022, using Token Extensions program");
+        log(LogTag::Wallet, "ATA", "Detected Token-2022, using Token Extensions program");
     } else {
-        log(LogTag::Trader, "ATA", "Using standard SPL Token program");
+        log(LogTag::Wallet, "ATA", "Using standard SPL Token program");
     }
 
     // Create and send the close account instruction using GMGN API approach
-    match close_ata_via_gmgn(wallet_address, &token_account, mint, is_token_2022).await {
+    match close_ata(wallet_address, &token_account, mint, is_token_2022).await {
         Ok(signature) => {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "SUCCESS",
                 &format!("Successfully closed token account for {}. TX: {}", mint, signature)
             );
@@ -2600,7 +2889,7 @@ pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<Str
         }
         Err(e) => {
             log(
-                LogTag::Trader,
+                LogTag::Wallet,
                 "ERROR",
                 &format!("Failed to close token account for {}: {}", mint, e)
             );
@@ -2734,14 +3023,14 @@ async fn is_token_2022_mint(mint: &str) -> Result<bool, SwapError> {
 }
 
 /// Closes ATA using proper Solana SDK for real ATA closing
-async fn close_ata_via_gmgn(
+async fn close_ata(
     wallet_address: &str,
     token_account: &str,
     mint: &str,
     is_token_2022: bool
 ) -> Result<String, SwapError> {
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "ATA",
         &format!("Closing ATA {} for mint {} using {} program", token_account, mint, if
             is_token_2022
@@ -2755,11 +3044,11 @@ async fn close_ata_via_gmgn(
     // Use proper Solana SDK to build and send close instruction
     match build_and_send_close_instruction(wallet_address, token_account, is_token_2022).await {
         Ok(signature) => {
-            log(LogTag::Trader, "SUCCESS", &format!("ATA closed successfully. TX: {}", signature));
+            log(LogTag::Wallet, "SUCCESS", &format!("ATA closed successfully. TX: {}", signature));
             Ok(signature)
         }
         Err(e) => {
-            log(LogTag::Trader, "ERROR", &format!("Failed to close ATA: {}", e));
+            log(LogTag::Wallet, "ERROR", &format!("Failed to close ATA: {}", e));
             Err(e)
         }
     }
@@ -2810,7 +3099,7 @@ async fn build_and_send_close_instruction(
     };
 
     log(
-        LogTag::Trader,
+        LogTag::Wallet,
         "ATA",
         &format!("Built close instruction for {} account", if is_token_2022 {
             "Token-2022"
@@ -2830,7 +3119,7 @@ async fn build_and_send_close_instruction(
         recent_blockhash
     );
 
-    log(LogTag::Trader, "ATA", "Built and signed close transaction");
+    log(LogTag::Wallet, "ATA", "Built and signed close transaction");
 
     // Send transaction via RPC
     send_close_transaction_via_rpc(&transaction, &configs).await
@@ -2853,7 +3142,7 @@ fn build_token_2022_close_instruction(
 }
 
 /// Gets latest blockhash from Solana RPC
-async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {
+pub async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {
     let client = reqwest::Client::new();
 
     let rpc_payload =
@@ -2894,7 +3183,7 @@ async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, S
 }
 
 /// Sends close transaction via RPC
-async fn send_close_transaction_via_rpc(
+pub async fn send_close_transaction_via_rpc(
     transaction: &Transaction,
     configs: &crate::global::Configs
 ) -> Result<String, SwapError> {
@@ -2925,7 +3214,7 @@ async fn send_close_transaction_via_rpc(
         ]
     });
 
-    log(LogTag::Trader, "ATA", "Sending close transaction to Solana network...");
+    log(LogTag::Wallet, "ATA", "Sending close transaction to Solana network...");
 
     // Try main RPC first, then fallbacks
     let rpc_endpoints = std::iter
@@ -2935,7 +3224,7 @@ async fn send_close_transaction_via_rpc(
 
     for (i, rpc_url) in rpc_endpoints.iter().enumerate() {
         log(
-            LogTag::Trader,
+            LogTag::Wallet,
             "ATA",
             &format!("Trying RPC endpoint {} ({}/{})", rpc_url, i + 1, rpc_endpoints.len())
         );
@@ -2952,7 +3241,7 @@ async fn send_close_transaction_via_rpc(
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(signature) = result.as_str() {
                             log(
-                                LogTag::Trader,
+                                LogTag::Wallet,
                                 "SUCCESS",
                                 &format!(
                                     "Transaction sent successfully via {}: {}",
@@ -2965,7 +3254,7 @@ async fn send_close_transaction_via_rpc(
                     }
                     if let Some(error) = rpc_response.get("error") {
                         log(
-                            LogTag::Trader,
+                            LogTag::Wallet,
                             "ERROR",
                             &format!("RPC error from {}: {:?}", rpc_url, error)
                         );
@@ -2974,7 +3263,7 @@ async fn send_close_transaction_via_rpc(
                 }
             }
             Err(e) => {
-                log(LogTag::Trader, "ERROR", &format!("Network error with {}: {}", rpc_url, e));
+                log(LogTag::Wallet, "ERROR", &format!("Network error with {}: {}", rpc_url, e));
                 continue;
             }
         }

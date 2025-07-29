@@ -868,11 +868,11 @@ impl TokenDatabase {
                 mint TEXT PRIMARY KEY,
                 token_program TEXT,
                 creator TEXT,
-                creator_balance INTEGER,
+                creator_balance TEXT, -- Changed from INTEGER to TEXT to handle large numbers
                 
                 -- Token Info
                 token_mint_authority TEXT,
-                token_supply INTEGER,
+                token_supply TEXT, -- Changed from INTEGER to TEXT to handle large numbers
                 token_decimals INTEGER,
                 token_is_initialized BOOLEAN,
                 token_freeze_authority TEXT,
@@ -905,7 +905,7 @@ impl TokenDatabase {
                 
                 -- Transfer Fee
                 transfer_fee_pct REAL,
-                transfer_fee_max_amount INTEGER,
+                transfer_fee_max_amount TEXT, -- Changed from INTEGER to TEXT to handle large numbers
                 transfer_fee_authority TEXT,
                 
                 -- Analysis Info
@@ -957,7 +957,7 @@ impl TokenDatabase {
     /// Store rugcheck data in the database
     pub fn store_rugcheck_data(
         &self,
-        data: &super::rugcheck::RugcheckResponse
+        data: &crate::tokens::rugcheck::RugcheckResponse
     ) -> Result<(), rusqlite::Error> {
         let connection = self.connection
             .lock()
@@ -1066,7 +1066,7 @@ impl TokenDatabase {
 
                 // Token info
                 data.token.as_ref().and_then(|t| t.mint_authority.as_ref()),
-                data.token.as_ref().and_then(|t| t.supply),
+                data.token.as_ref().and_then(|t| t.supply.as_ref()),
                 data.token.as_ref().and_then(|t| t.decimals),
                 data.token.as_ref().and_then(|t| t.is_initialized),
                 data.token.as_ref().and_then(|t| t.freeze_authority.as_ref()),
@@ -1099,7 +1099,7 @@ impl TokenDatabase {
 
                 // Transfer fee
                 data.transfer_fee.as_ref().and_then(|f| f.pct),
-                data.transfer_fee.as_ref().and_then(|f| f.max_amount),
+                data.transfer_fee.as_ref().and_then(|f| f.max_amount.as_ref()),
                 data.transfer_fee.as_ref().and_then(|f| f.authority.as_ref()),
 
                 // Analysis info
@@ -1131,7 +1131,7 @@ impl TokenDatabase {
     pub fn get_rugcheck_data(
         &self,
         mint: &str
-    ) -> Result<Option<super::rugcheck::RugcheckResponse>, rusqlite::Error> {
+    ) -> Result<Option<crate::tokens::rugcheck::RugcheckResponse>, rusqlite::Error> {
         let connection = self.connection
             .lock()
             .map_err(|_|
@@ -1158,8 +1158,8 @@ impl TokenDatabase {
     fn row_to_rugcheck_response(
         &self,
         row: &rusqlite::Row
-    ) -> Result<super::rugcheck::RugcheckResponse, rusqlite::Error> {
-        use super::rugcheck::*;
+    ) -> Result<crate::tokens::rugcheck::RugcheckResponse, rusqlite::Error> {
+        use crate::tokens::rugcheck::*;
 
         // Parse JSON fields
         let token_extensions: Option<serde_json::Value> = row
@@ -1202,7 +1202,7 @@ impl TokenDatabase {
             .get::<_, Option<String>>("events_json")?
             .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
 
-        let verification: Option<serde_json::Value> = row
+        let verification: Option<crate::tokens::rugcheck::Verification> = row
             .get::<_, Option<String>>("verification_json")?
             .and_then(|s| if s.is_empty() { None } else { serde_json::from_str(&s).ok() });
 

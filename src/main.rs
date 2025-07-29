@@ -32,14 +32,33 @@ async fn main() {
     let shutdown_trader = shutdown.clone();
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
+
+    // Initialize global rugcheck service
+    let database = match screenerbot::tokens::TokenDatabase::new() {
+        Ok(db) => db,
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to create database for rugcheck: {}", e));
+            std::process::exit(1);
+        }
+    };
+
     let shutdown_rugcheck = shutdown.clone();
+    if
+        let Err(e) = screenerbot::tokens::initialize_global_rugcheck_service(
+            database,
+            shutdown_rugcheck
+        ).await
+    {
+        log(
+            LogTag::System,
+            "ERROR",
+            &format!("Failed to initialize global rugcheck service: {}", e)
+        );
+        std::process::exit(1);
+    }
+    log(LogTag::System, "INFO", "Global rugcheck service initialized successfully");
 
-    // Start rugcheck cache service
-    let rugcheck_handle =
-        screenerbot::rugcheck_filtering::start_rugcheck_cache_service(shutdown_rugcheck).await;
-    log(LogTag::System, "INFO", "Rugcheck cache service started");
-
-    // Start tokens system background tasks
+    // Start tokens system background tasks (includes rugcheck service)
     let tokens_handles = match tokens_system.start_background_tasks(shutdown_tokens).await {
         Ok(handles) => handles,
         Err(e) => {
@@ -89,10 +108,7 @@ async fn main() {
         // Wait for trader task
         let _ = trader_handle.await;
 
-        // Wait for rugcheck cache task
-        let _ = rugcheck_handle.await;
-
-        // Wait for tokens system tasks
+        // Wait for tokens system tasks (includes rugcheck service)
         for handle in tokens_handles {
             let _ = handle.await;
         }

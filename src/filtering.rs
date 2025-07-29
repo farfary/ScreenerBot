@@ -3,12 +3,12 @@
 /// No structs or models - pure functional approach
 
 use crate::tokens::Token;
+use crate::tokens::{ TokenDatabase, rugcheck::{ is_token_safe_for_trading, get_high_risk_issues } };
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_filtering_enabled;
 use crate::loss_prevention::should_allow_token_purchase;
 use crate::positions::SAVED_POSITIONS;
 use crate::trader::MAX_OPEN_POSITIONS;
-use crate::rugcheck_filtering::enhanced_filter_token_rugcheck;
 use chrono::{ Duration as ChronoDuration, Utc, DateTime };
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
@@ -96,6 +96,12 @@ pub enum FilterReason {
     RugcheckRisk {
         risk_level: String,
         reasons: Vec<String>,
+    },
+
+    // LP lock security risks
+    LPLockRisk {
+        lock_percentage: f64,
+        minimum_required: f64,
     },
 
     // Trading requirements
@@ -287,25 +293,83 @@ fn validate_price_to_ath(token: &Token) -> Option<FilterReason> {
 
 /// Validate rugcheck security risks (HIGHEST PRIORITY - RUNS FIRST)
 fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
-    // Use enhanced filtering with cached rugcheck data
-    if let Some(risk_message) = enhanced_filter_token_rugcheck(token) {
-        // Parse risk level from message
-        let risk_level = if risk_message.starts_with("RUGCHECK-CRITICAL") {
-            "CRITICAL".to_string()
-        } else if risk_message.starts_with("RUGCHECK-DANGEROUS") {
-            "DANGEROUS".to_string()
-        } else if risk_message.contains("FREEZE-AUTHORITY") {
-            "HIGH".to_string()
-        } else if risk_message.contains("SCAM-INDICATOR") {
-            "CRITICAL".to_string()
+    // Create database connection for rugcheck data lookup
+    let database = match TokenDatabase::new() {
+        Ok(db) => db,
+        Err(e) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "ERROR",
+                    &format!("Failed to connect to database for rugcheck: {}", e)
+                );
+            }
+            return None; // Skip validation if database unavailable
+        }
+    };
+
+    // Get rugcheck data from database
+    let rugcheck_data = match database.get_rugcheck_data(&token.mint) {
+        Ok(Some(data)) => data,
+        Ok(None) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "RUGCHECK_MISSING",
+                    &format!("No rugcheck data for token: {}", token.symbol)
+                );
+            }
+            return None; // No rugcheck data available - let it pass
+        }
+        Err(e) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "ERROR",
+                    &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
+                );
+            }
+            return None; // Database error - let it pass
+        }
+    };
+
+    // Check if token is safe for trading
+    if !is_token_safe_for_trading(&rugcheck_data) {
+        let risk_issues = get_high_risk_issues(&rugcheck_data);
+        let risk_level = if rugcheck_data.rugged.unwrap_or(false) {
+            "CRITICAL"
+        } else if rugcheck_data.score_normalised.unwrap_or(10) < 5 {
+            "HIGH"
         } else {
-            "MEDIUM".to_string()
+            "MEDIUM"
         };
 
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "RUGCHECK_FAIL",
+                &format!(
+                    "Token {} failed rugcheck validation. Risk level: {}, Issues: {:?}",
+                    token.symbol,
+                    risk_level,
+                    risk_issues
+                )
+            );
+        }
+
         return Some(FilterReason::RugcheckRisk {
-            risk_level,
-            reasons: vec![risk_message],
+            risk_level: risk_level.to_string(),
+            reasons: risk_issues,
         });
+    }
+
+    if is_debug_filtering_enabled() {
+        let score = rugcheck_data.score_normalised.unwrap_or(0);
+        log(
+            LogTag::Filtering,
+            "RUGCHECK_PASS",
+            &format!("Token {} passed rugcheck validation (score: {})", token.symbol, score)
+        );
     }
 
     None
@@ -627,6 +691,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
                     FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen =>
                         "Account Issues",
                     FilterReason::RugcheckRisk { .. } => "Security Risks",
+                    FilterReason::LPLockRisk { .. } => "LP Lock Security",
                     FilterReason::LockAcquisitionFailed => "System Errors",
                 };
 

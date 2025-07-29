@@ -1,675 +1,884 @@
 use crate::global::*;
-use crate::tokens::Token;
 use crate::positions::*;
 use crate::logger::{ log, LogTag };
-use chrono::{ DateTime, Utc };
+use crate::tokens::{
+    get_token_rugcheck_data_safe,
+    is_token_safe_for_trading_safe,
+    get_high_risk_issues,
+    TokenDatabase,
+    get_token_price_safe,
+};
+use chrono::Utc;
 use serde::{ Serialize, Deserialize };
 
 // ================================================================================================
-// 🎯 NEXT-GENERATION PROFIT SYSTEM - COMPLETE REWRITE
+// 🎯 NEXT-GENERATION INTELLIGENT PROFIT SYSTEM
 // ================================================================================================
-// Duration-based profit scaling: 1min to 1h trades
-// Tracks highest/lowest prices after entry
-// Stop loss protection at -55% threshold
-// Profits scale from 0% to 1000% based on speed and duration
-// ================================================================================================
-
-// 📊 DURATION-BASED PROFIT TARGETS (MINUTES)
-const ULTRA_FAST_MINUTES: f64 = 1.0; // 1 minute - lightning fast
-const VERY_FAST_MINUTES: f64 = 5.0; // 5 minutes - very fast
-const FAST_MINUTES: f64 = 10.0; // 15 minutes - fast
-const MEDIUM_MINUTES: f64 = 20.0; // 30 minutes - medium
-const SLOW_MINUTES: f64 = 30.0; // 60 minutes - 1 hour max
-
-// 🚀 PROFIT TARGETS BY SPEED (PERCENTAGE)
-const ULTRA_FAST_PROFIT: f64 = 20.0; // 20% in 1 minute = ultra fast sell
-const VERY_FAST_PROFIT: f64 = 50.0; // 50% in 5 minutes = very fast sell
-const FAST_PROFIT: f64 = 100.0; // 100% in 15 minutes = fast sell
-const MEDIUM_PROFIT: f64 = 200.0; // 200% in 30 minutes = medium sell
-const SLOW_PROFIT: f64 = 500.0; // 500% in 60 minutes = slow sell
-const EXTREME_PROFIT: f64 = 1000.0; // 1000% = instant sell regardless of time
-
-// ⚡ SPEED BONUSES (MULTIPLIERS)
-const SPEED_BONUS_ULTRA: f64 = 2.0; // 2x urgency for ultra fast profits
-const SPEED_BONUS_VERY: f64 = 1.8; // 1.8x urgency for very fast profits
-const SPEED_BONUS_FAST: f64 = 1.5; // 1.5x urgency for fast profits
-const SPEED_BONUS_MEDIUM: f64 = 1.2; // 1.2x urgency for medium profits
-
-// 🔒 STOP LOSS PROTECTION - SINGLE UNIFIED THRESHOLD
-pub const STOP_LOSS_PERCENT: f64 = -55.0; // Allow selling below -55% loss
-const MINIMUM_PROFIT_TO_CONSIDER: f64 = 1.0; // 0.1% minimum to consider selling
-
-// 📈 PRICE TRACKING THRESHOLDS
-const CRITICAL_DIP_PERCENT: f64 = 9.0; // 30% dip from peak = urgent
-
-// 🕐 TIME PRESSURE SCALING
-const TIME_PRESSURE_START: f64 = 20.0; // Start time pressure at 45 minutes
-const MAX_TIME_PRESSURE: f64 = 0.6; // Maximum urgency from time alone
-
-// ⏰ MANDATORY FORCE SELL RULES
-const FORCE_SELL_TIME_MINUTES: f64 = 60.0; // Force sell after 1 hour (60 minutes)
-const FORCE_SELL_MIN_PROFIT: f64 = 5.0; // Minimum 5% profit required for force sell
-
-// ================================================================================================
-// 🎯 UNIFIED SHOULD_SELL FUNCTION - THE ONE AND ONLY
+// Risk-based profit scaling with real-time token analysis
+// Combines Rugcheck security data + Token API data + Market momentum
+// Dynamic profit targets: 10% (safe) to 10,000% (dangerous)
+// Time pressure: 10-45 minutes based on safety level
+// Smart exit strategies based on liquidity, volume, and social proof
 // ================================================================================================
 
-/// THE SINGLE SHOULD_SELL FUNCTION
-/// Stop loss protection with -55% threshold
-/// Speed-based profit targets: faster = sell sooner
-/// Duration scaling: 1min to 1h optimal trade window
-/// Profit scaling: 0% to 1000% based on speed achieved
-///
-/// Parameters:
-/// - position: The position to analyze
-/// - current_price: Current token price
-///
-/// Returns: (urgency_score, reason_string)
-/// - urgency_score: 0.0 = don't sell, 1.0 = sell immediately
-/// - reason_string: Human-readable explanation of the decision
-pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🔍 INPUT VALIDATION & SAFETY CHECKS
-    // ═══════════════════════════════════════════════════════════════════════════════════════
+// 🔒 STOP LOSS PROTECTION - UNIVERSAL SAFETY NET
+pub const STOP_LOSS_PERCENT: f64 = -55.0; // Never sell below -55% loss
 
-    // CRITICAL SAFETY CHECK: Validate current price before any sell analysis
-    if current_price <= 0.0 || !current_price.is_finite() {
-        log(
-            LogTag::Profit,
-            "ERROR",
-            &format!(
-                "INVALID PRICE for sell analysis: {} ({}) - Price = {:.10} - CANNOT MAKE SELL DECISION",
-                position.symbol,
-                position.mint,
-                current_price
-            )
-        );
-        return (0.0, format!("❌ INVALID PRICE: {:.10}", current_price));
+// ⏰ MAXIMUM HOLD TIMES BY SAFETY LEVEL (MINUTES)
+const ULTRA_SAFE_MAX_TIME: f64 = 45.0; // Ultra safe tokens
+const SAFE_MAX_TIME: f64 = 30.0; // Safe tokens
+const MEDIUM_MAX_TIME: f64 = 20.0; // Medium risk tokens
+const RISKY_MAX_TIME: f64 = 15.0; // Risky tokens
+const DANGEROUS_MAX_TIME: f64 = 10.0; // Dangerous tokens
+
+// 🎯 BASE PROFIT TARGETS BY SAFETY LEVEL (PERCENTAGE)
+const ULTRA_SAFE_PROFIT_MIN: f64 = 10.0; // 10-30%
+const ULTRA_SAFE_PROFIT_MAX: f64 = 30.0;
+const SAFE_PROFIT_MIN: f64 = 20.0; // 20-60%
+const SAFE_PROFIT_MAX: f64 = 60.0;
+const MEDIUM_PROFIT_MIN: f64 = 30.0; // 30-100%
+const MEDIUM_PROFIT_MAX: f64 = 100.0;
+const RISKY_PROFIT_MIN: f64 = 50.0; // 50-200%
+const RISKY_PROFIT_MAX: f64 = 200.0;
+const DANGEROUS_PROFIT_MIN: f64 = 100.0; // 100-500%
+const DANGEROUS_PROFIT_MAX: f64 = 500.0;
+
+// 🚀 INSTANT SELL THRESHOLDS
+const INSTANT_SELL_PROFIT: f64 = 1000.0; // 1000%+ = instant sell regardless
+const MEGA_PROFIT_THRESHOLD: f64 = 500.0; // 500%+ = very urgent
+
+// 📊 LIQUIDITY THRESHOLDS FOR SAFETY CLASSIFICATION
+const HIGH_LIQUIDITY_THRESHOLD: f64 = 100_000.0;
+const MEDIUM_HIGH_LIQUIDITY_THRESHOLD: f64 = 50_000.0;
+const MEDIUM_LIQUIDITY_THRESHOLD: f64 = 10_000.0;
+const LOW_LIQUIDITY_THRESHOLD: f64 = 2_000.0;
+
+// 🔍 ATH DANGER DETECTION
+const ATH_DANGER_THRESHOLD: f64 = 75.0; // >75% of ATH = dangerous
+
+// ================================================================================================
+// 📊 COMPREHENSIVE TOKEN ANALYSIS DATA
+// ================================================================================================
+
+/// Complete token analysis combining all available data sources
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenAnalysis {
+    // Core identification
+    pub mint: String,
+    pub symbol: String,
+    pub current_price: f64,
+
+    // Safety & Security Analysis
+    pub safety_score: f64, // 0-100 comprehensive safety score
+    pub rugcheck_score: Option<i32>, // Raw rugcheck score
+    pub rugcheck_normalized: Option<i32>, // 0-100 normalized score
+    pub is_rugged: bool,
+    pub freeze_authority_safe: bool,
+    pub lp_unlocked_risk: bool,
+    pub risk_reasons: Vec<String>,
+
+    // Market Data Analysis
+    pub liquidity_usd: f64,
+    pub volume_24h: f64,
+    pub volume_trend: f64, // Current vs average volume
+    pub buy_pressure: f64, // 0-1, higher = more buying
+    pub price_momentum: f64, // Recent price acceleration
+
+    // Legitimacy Indicators
+    pub has_website: bool,
+    pub has_socials: bool,
+    pub has_image: bool,
+    pub verified_labels: usize, // Number of verified labels
+    pub legitimacy_score: f64, // 0-1 legitimacy factor
+
+    // Market Context
+    pub token_age_hours: f64,
+    pub is_near_ath: bool,
+    pub ath_proximity_percent: f64, // How close to ATH (0-100%)
+
+    // Analysis Results
+    pub volatility_factor: f64, // Expected volatility multiplier
+    pub momentum_score: f64, // Momentum-based urgency
+    pub time_pressure_max: f64, // Maximum recommended hold time
+}
+
+/// Risk classification levels
+#[derive(Debug, Clone, PartialEq)]
+pub enum SafetyLevel {
+    UltraSafe, // 90-100 safety score
+    Safe, // 70-89 safety score
+    Medium, // 50-69 safety score
+    Risky, // 30-49 safety score
+    Dangerous, // 0-29 safety score
+}
+
+impl SafetyLevel {
+    fn from_score(score: f64) -> Self {
+        match score {
+            s if s >= 90.0 => SafetyLevel::UltraSafe,
+            s if s >= 70.0 => SafetyLevel::Safe,
+            s if s >= 50.0 => SafetyLevel::Medium,
+            s if s >= 30.0 => SafetyLevel::Risky,
+            _ => SafetyLevel::Dangerous,
+        }
     }
 
-    // Calculate basic parameters
+    fn get_base_profit_range(&self) -> (f64, f64) {
+        match self {
+            SafetyLevel::UltraSafe => (ULTRA_SAFE_PROFIT_MIN, ULTRA_SAFE_PROFIT_MAX),
+            SafetyLevel::Safe => (SAFE_PROFIT_MIN, SAFE_PROFIT_MAX),
+            SafetyLevel::Medium => (MEDIUM_PROFIT_MIN, MEDIUM_PROFIT_MAX),
+            SafetyLevel::Risky => (RISKY_PROFIT_MIN, RISKY_PROFIT_MAX),
+            SafetyLevel::Dangerous => (DANGEROUS_PROFIT_MIN, DANGEROUS_PROFIT_MAX),
+        }
+    }
+
+    fn get_max_hold_time(&self) -> f64 {
+        match self {
+            SafetyLevel::UltraSafe => ULTRA_SAFE_MAX_TIME,
+            SafetyLevel::Safe => SAFE_MAX_TIME,
+            SafetyLevel::Medium => MEDIUM_MAX_TIME,
+            SafetyLevel::Risky => RISKY_MAX_TIME,
+            SafetyLevel::Dangerous => DANGEROUS_MAX_TIME,
+        }
+    }
+}
+
+// ================================================================================================
+// 🧠 INTELLIGENT TOKEN ANALYSIS ENGINE
+// ================================================================================================
+
+/// Analyze token comprehensively using all available data sources
+pub async fn analyze_token_comprehensive(mint: &str) -> Result<TokenAnalysis, String> {
+    // Get token price
+    let current_price = get_token_price_safe(mint).await.ok_or_else(||
+        format!("Failed to get current price for token: {}", mint)
+    )?;
+
+    if current_price <= 0.0 || !current_price.is_finite() {
+        return Err(format!("Invalid current price for token: {}: {}", mint, current_price));
+    }
+
+    // Get token data from database
+    let database = TokenDatabase::new().map_err(|e|
+        format!("Failed to initialize database: {}", e)
+    )?;
+
+    let token_data = database
+        .get_token_by_mint(mint)
+        .map_err(|e| format!("Failed to get token data: {}", e))?
+        .ok_or_else(|| format!("Token not found in database: {}", mint))?;
+
+    // Get rugcheck security analysis
+    let rugcheck_data = get_token_rugcheck_data_safe(mint).await.map_err(|e|
+        format!("Failed to get rugcheck data: {}", e)
+    )?;
+
+    // Extract core security data
+    let (
+        rugcheck_score,
+        rugcheck_normalized,
+        is_rugged,
+        freeze_authority_safe,
+        lp_unlocked_risk,
+        risk_reasons,
+    ) = if let Some(data) = &rugcheck_data {
+        let high_risk_issues = get_high_risk_issues(data);
+        let is_safe = is_token_safe_for_trading_safe(mint).await;
+
+        (
+            data.score,
+            data.score_normalised,
+            data.rugged.unwrap_or(false),
+            data.freeze_authority.is_none() && data.mint_authority.is_none(),
+            false, // Will be determined from market data if available
+            if high_risk_issues.is_empty() {
+                vec!["Token appears safe based on rugcheck analysis".to_string()]
+            } else {
+                high_risk_issues
+            },
+        )
+    } else {
+        (None, None, false, true, false, vec!["No rugcheck data available".to_string()])
+    };
+
+    // Calculate safety score (0-100)
+    let safety_score = calculate_comprehensive_safety_score(
+        &token_data,
+        &rugcheck_data,
+        current_price
+    );
+
+    // Extract market data
+    let liquidity_usd = token_data.liquidity
+        .as_ref()
+        .and_then(|l| l.usd)
+        .unwrap_or(0.0);
+
+    let volume_24h = token_data.volume
+        .as_ref()
+        .and_then(|v| v.h24)
+        .unwrap_or(0.0);
+
+    // Calculate volume trend (current vs historical average)
+    let volume_trend = calculate_volume_trend(&token_data);
+
+    // Calculate buy pressure from transaction data
+    let buy_pressure = calculate_buy_pressure(&token_data);
+
+    // Calculate price momentum
+    let price_momentum = calculate_price_momentum(&token_data);
+
+    // Analyze legitimacy indicators
+    let (has_website, has_socials, has_image, verified_labels) = analyze_legitimacy_indicators(
+        &token_data
+    );
+    let legitimacy_score = calculate_legitimacy_score(
+        has_website,
+        has_socials,
+        has_image,
+        verified_labels
+    );
+
+    // Calculate token age
+    let token_age_hours = calculate_token_age_hours(&token_data);
+
+    // Check ATH proximity (simplified - would need historical data for exact ATH)
+    let (is_near_ath, ath_proximity_percent) = estimate_ath_proximity(&token_data, current_price);
+
+    // Calculate volatility factor based on liquidity
+    let volatility_factor = calculate_volatility_factor(liquidity_usd);
+
+    // Calculate momentum score
+    let momentum_score = calculate_momentum_score(volume_trend, buy_pressure, price_momentum);
+
+    // Determine maximum hold time
+    let safety_level = SafetyLevel::from_score(safety_score);
+    let time_pressure_max = safety_level.get_max_hold_time();
+
+    Ok(TokenAnalysis {
+        mint: mint.to_string(),
+        symbol: token_data.symbol.clone(),
+        current_price,
+        safety_score,
+        rugcheck_score,
+        rugcheck_normalized,
+        is_rugged,
+        freeze_authority_safe,
+        lp_unlocked_risk,
+        risk_reasons,
+        liquidity_usd,
+        volume_24h,
+        volume_trend,
+        buy_pressure,
+        price_momentum,
+        has_website,
+        has_socials,
+        has_image,
+        verified_labels,
+        legitimacy_score,
+        token_age_hours,
+        is_near_ath,
+        ath_proximity_percent,
+        volatility_factor,
+        momentum_score,
+        time_pressure_max,
+    })
+}
+
+/// Calculate comprehensive safety score (0-100)
+fn calculate_comprehensive_safety_score(
+    token_data: &crate::tokens::types::ApiToken,
+    rugcheck_data: &Option<crate::tokens::rugcheck::RugcheckResponse>,
+    _current_price: f64
+) -> f64 {
+    let mut safety_score: f64 = 50.0; // Start with neutral score
+
+    // Rugcheck contribution (40% of total score)
+    if let Some(rugcheck) = rugcheck_data {
+        // Check if token is detected as rugged
+        if rugcheck.rugged.unwrap_or(false) {
+            safety_score = 0.0; // Rugged token = 0 safety
+        } else {
+            // Use normalized score if available (0-100), otherwise use raw score
+            let rugcheck_score = rugcheck.score_normalised.or(rugcheck.score).unwrap_or(50) as f64;
+
+            // Convert rugcheck score (0-100) to our contribution (0-40)
+            let rugcheck_contribution = (rugcheck_score / 100.0) * 40.0;
+
+            // Additional penalty for high-risk items
+            let risk_penalty = if let Some(risks) = &rugcheck.risks {
+                let high_risk_count = risks
+                    .iter()
+                    .filter(|r| {
+                        r.level
+                            .as_ref()
+                            .map(|l| (l.to_lowercase() == "high" || l.to_lowercase() == "critical"))
+                            .unwrap_or(false)
+                    })
+                    .count();
+                (high_risk_count as f64) * 5.0 // -5 points per high/critical risk
+            } else {
+                0.0
+            };
+
+            safety_score = (rugcheck_contribution - risk_penalty).max(0.0);
+        }
+    } else {
+        safety_score = 20.0; // No rugcheck data = lower safety
+    }
+
+    // Liquidity contribution (25% of total score)
+    let liquidity_usd = token_data.liquidity
+        .as_ref()
+        .and_then(|l| l.usd)
+        .unwrap_or(0.0);
+    let liquidity_contribution = match liquidity_usd {
+        l if l >= HIGH_LIQUIDITY_THRESHOLD => 25.0,
+        l if l >= MEDIUM_HIGH_LIQUIDITY_THRESHOLD => 20.0,
+        l if l >= MEDIUM_LIQUIDITY_THRESHOLD => 15.0,
+        l if l >= LOW_LIQUIDITY_THRESHOLD => 10.0,
+        _ => 5.0,
+    };
+    safety_score += liquidity_contribution;
+
+    // Legitimacy contribution (20% of total score)
+    let has_website = token_data.info
+        .as_ref()
+        .and_then(|info| info.websites.as_ref())
+        .map(|w| !w.is_empty())
+        .unwrap_or(false);
+    let has_socials = token_data.info
+        .as_ref()
+        .and_then(|info| info.socials.as_ref())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    let has_image = token_data.info
+        .as_ref()
+        .and_then(|info| info.image_url.as_ref())
+        .is_some();
+
+    let legitimacy_contribution =
+        (if has_website { 7.0 } else { 0.0 }) +
+        (if has_socials { 7.0 } else { 0.0 }) +
+        (if has_image { 6.0 } else { 0.0 });
+    safety_score += legitimacy_contribution;
+
+    // Age contribution (10% of total score)
+    let age_hours = token_data.pair_created_at
+        .map(|timestamp| {
+            let now = Utc::now().timestamp();
+            ((now - timestamp) / 3600) as f64
+        })
+        .unwrap_or(0.0);
+
+    let age_contribution = match age_hours {
+        a if a >= 168.0 => 10.0, // 1 week+
+        a if a >= 72.0 => 8.0, // 3 days+
+        a if a >= 24.0 => 6.0, // 1 day+
+        a if a >= 6.0 => 4.0, // 6 hours+
+        _ => 2.0, // Very new
+    };
+    safety_score += age_contribution;
+
+    // Volume/activity contribution (5% of total score)
+    let volume_24h = token_data.volume
+        .as_ref()
+        .and_then(|v| v.h24)
+        .unwrap_or(0.0);
+    let volume_contribution = if volume_24h > 10000.0 { 5.0 } else { 2.0 };
+    safety_score += volume_contribution;
+
+    safety_score.min(100.0).max(0.0)
+}
+
+/// Calculate volume trend factor
+fn calculate_volume_trend(token_data: &crate::tokens::types::ApiToken) -> f64 {
+    if let Some(volume) = &token_data.volume {
+        let vol_1h = volume.h1.unwrap_or(0.0);
+        let vol_6h = volume.h6.unwrap_or(0.0);
+        let vol_24h = volume.h24.unwrap_or(0.0);
+
+        if vol_24h > 0.0 && vol_6h > 0.0 {
+            // Compare recent volume to average
+            let avg_hourly = vol_24h / 24.0;
+            let recent_hourly = vol_1h;
+
+            if avg_hourly > 0.0 {
+                return (recent_hourly / avg_hourly).min(3.0); // Cap at 3x
+            }
+        }
+    }
+    1.0 // Neutral if no data
+}
+
+/// Calculate buy pressure from transaction data
+fn calculate_buy_pressure(token_data: &crate::tokens::types::ApiToken) -> f64 {
+    if let Some(txns) = &token_data.txns {
+        if let Some(h1) = &txns.h1 {
+            let buys = h1.buys.unwrap_or(0) as f64;
+            let sells = h1.sells.unwrap_or(0) as f64;
+            let total = buys + sells;
+
+            if total > 0.0 {
+                return buys / total; // 0-1 ratio
+            }
+        }
+    }
+    0.5 // Neutral if no data
+}
+
+/// Calculate price momentum
+fn calculate_price_momentum(token_data: &crate::tokens::types::ApiToken) -> f64 {
+    if let Some(price_change) = &token_data.price_change {
+        let change_1h = price_change.h1.unwrap_or(0.0);
+        let change_6h = price_change.h6.unwrap_or(0.0);
+
+        // Acceleration = short term change vs longer term
+        if change_6h != 0.0 {
+            return (change_1h / change_6h).abs().min(3.0);
+        }
+
+        return change_1h.abs() / 100.0; // Direct momentum
+    }
+    0.0 // No momentum if no data
+}
+
+/// Analyze legitimacy indicators
+fn analyze_legitimacy_indicators(
+    token_data: &crate::tokens::types::ApiToken
+) -> (bool, bool, bool, usize) {
+    let has_website = token_data.info
+        .as_ref()
+        .and_then(|info| info.websites.as_ref())
+        .map(|w| !w.is_empty())
+        .unwrap_or(false);
+
+    let has_socials = token_data.info
+        .as_ref()
+        .and_then(|info| info.socials.as_ref())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+
+    let has_image = token_data.info
+        .as_ref()
+        .and_then(|info| info.image_url.as_ref())
+        .is_some();
+
+    let verified_labels = token_data.labels
+        .as_ref()
+        .map(|labels| labels.len())
+        .unwrap_or(0);
+
+    (has_website, has_socials, has_image, verified_labels)
+}
+
+/// Calculate legitimacy score
+fn calculate_legitimacy_score(
+    has_website: bool,
+    has_socials: bool,
+    has_image: bool,
+    verified_labels: usize
+) -> f64 {
+    let mut score = 0.0;
+
+    if has_website {
+        score += 0.3;
+    }
+    if has_socials {
+        score += 0.3;
+    }
+    if has_image {
+        score += 0.2;
+    }
+    score += ((verified_labels as f64) * 0.05).min(0.2); // Up to 0.2 for labels
+
+    score.min(1.0)
+}
+
+/// Calculate token age in hours
+fn calculate_token_age_hours(token_data: &crate::tokens::types::ApiToken) -> f64 {
+    token_data.pair_created_at
+        .map(|timestamp| {
+            let now = Utc::now().timestamp();
+            ((now - timestamp) / 3600) as f64
+        })
+        .unwrap_or(0.0)
+}
+
+/// Estimate ATH proximity (simplified without historical data)
+fn estimate_ath_proximity(
+    token_data: &crate::tokens::types::ApiToken,
+    _current_price: f64
+) -> (bool, f64) {
+    // Use price change data to estimate if we're near recent highs
+    if let Some(price_change) = &token_data.price_change {
+        let change_24h = price_change.h24.unwrap_or(0.0);
+
+        // If we're up significantly in 24h, we might be near highs
+        if change_24h > 100.0 {
+            // >100% gain in 24h
+            let proximity = ((change_24h / 200.0) * 100.0).min(95.0); // Estimate proximity
+            return (proximity > ATH_DANGER_THRESHOLD, proximity);
+        }
+    }
+
+    (false, 0.0)
+}
+
+/// Calculate volatility factor based on liquidity
+fn calculate_volatility_factor(liquidity_usd: f64) -> f64 {
+    match liquidity_usd {
+        l if l >= HIGH_LIQUIDITY_THRESHOLD => 0.5, // Low volatility
+        l if l >= MEDIUM_HIGH_LIQUIDITY_THRESHOLD => 0.7, // Medium-low volatility
+        l if l >= MEDIUM_LIQUIDITY_THRESHOLD => 1.0, // Normal volatility
+        l if l >= LOW_LIQUIDITY_THRESHOLD => 1.5, // High volatility
+        _ => 2.0, // Very high volatility
+    }
+}
+
+/// Calculate momentum score for urgency
+fn calculate_momentum_score(volume_trend: f64, buy_pressure: f64, price_momentum: f64) -> f64 {
+    let volume_component = (volume_trend - 1.0).max(0.0).min(1.0); // 0-1
+    let pressure_component = (buy_pressure - 0.5) * 2.0; // -1 to 1, then scale
+    let momentum_component = price_momentum.min(1.0); // 0-1
+
+    // Weighted average
+    (volume_component * 0.4 + pressure_component.abs() * 0.3 + momentum_component * 0.3)
+        .max(0.0)
+        .min(2.0)
+}
+
+// ================================================================================================
+// 🎯 MASTER SHOULD_SELL FUNCTION - THE ONE AND ONLY
+// ================================================================================================
+
+/// THE ULTIMATE SHOULD_SELL FUNCTION
+///
+/// Combines all available data sources for intelligent profit decisions:
+/// - Real-time P&L calculation
+/// - Comprehensive token safety analysis
+/// - Market momentum detection
+/// - Risk-adjusted profit targets
+/// - Time pressure scaling
+/// - ATH proximity warnings
+///
+/// Returns: (urgency_score: 0.0-1.0, detailed_reason: String)
+pub async fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🔍 CRITICAL SAFETY CHECKS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // Validate inputs
+    if current_price <= 0.0 || !current_price.is_finite() {
+        log(LogTag::Profit, "ERROR", &format!("Invalid current price: {}", current_price));
+        return (0.0, "Invalid price data - holding position".to_string());
+    }
+
     let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        log(LogTag::Profit, "ERROR", &format!("Invalid entry price: {}", entry_price));
+        return (0.0, "Invalid entry price - holding position".to_string());
+    }
+
+    // Calculate current P&L
+    let (_pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(current_price));
+
+    // Calculate position duration
     let now = Utc::now();
     let duration = now - position.entry_time;
-    let time_held_seconds = duration.num_seconds() as f64;
-    let minutes_held = time_held_seconds / 60.0;
-    let current_profit_percent = ((current_price - entry_price) / entry_price) * 100.0;
+    let minutes_held = (duration.num_seconds() as f64) / 60.0;
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🔍 DEBUG LOGGING (if enabled)
+    // 🛡️ STOP LOSS PROTECTION - ABSOLUTE PRIORITY
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if pnl_percent <= STOP_LOSS_PERCENT {
+        log(
+            LogTag::Profit,
+            "STOP_LOSS",
+            &format!(
+                "Stop loss triggered: {:.2}% loss (threshold: {:.2}%)",
+                pnl_percent,
+                STOP_LOSS_PERCENT
+            )
+        );
+        return (1.0, format!("STOP LOSS: {:.2}% loss reached", pnl_percent));
+    }
+
+    // Never sell at a loss unless stop loss is triggered
+    if pnl_percent < 0.0 {
+        log(
+            LogTag::Profit,
+            "HOLD_LOSS",
+            &format!("Holding position with {:.2}% loss (above stop loss)", pnl_percent)
+        );
+        return (0.0, format!("Holding at {:.2}% loss (above stop loss)", pnl_percent));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🚀 INSTANT MEGA-PROFIT EXITS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    if pnl_percent >= INSTANT_SELL_PROFIT {
+        log(
+            LogTag::Profit,
+            "MEGA_PROFIT",
+            &format!("Instant sell triggered: {:.2}% profit", pnl_percent)
+        );
+        return (1.0, format!("MEGA PROFIT: {:.2}% - instant sell!", pnl_percent));
+    }
+
+    if pnl_percent >= MEGA_PROFIT_THRESHOLD {
+        log(LogTag::Profit, "LARGE_PROFIT", &format!("Large profit detected: {:.2}%", pnl_percent));
+        return (0.9, format!("LARGE PROFIT: {:.2}% - sell very soon!", pnl_percent));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🧠 COMPREHENSIVE TOKEN ANALYSIS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    let token_analysis = match analyze_token_comprehensive(&position.mint).await {
+        Ok(analysis) => analysis,
+        Err(e) => {
+            log(
+                LogTag::Profit,
+                "WARN",
+                &format!(
+                    "Failed to analyze token {}: {} - using fallback logic",
+                    position.symbol,
+                    e
+                )
+            );
+
+            // Fallback to simple profit logic when analysis fails
+            return fallback_profit_logic(pnl_percent, minutes_held);
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🎯 DYNAMIC PROFIT TARGET CALCULATION
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    let safety_level = SafetyLevel::from_score(token_analysis.safety_score);
+    let (base_min_profit, base_max_profit) = safety_level.get_base_profit_range();
+
+    // Adjust profit targets based on momentum and volatility
+    let momentum_multiplier = 1.0 + token_analysis.momentum_score * 0.5; // Up to 50% increase
+    let volatility_multiplier = token_analysis.volatility_factor; // 0.5x to 2.0x
+
+    let target_min_profit = (base_min_profit / momentum_multiplier) * volatility_multiplier;
+    let target_max_profit = base_max_profit * momentum_multiplier * volatility_multiplier;
+
+    // Calculate profit progression (0.0 to 1.0 based on profit vs targets)
+    let profit_progression = if pnl_percent >= target_max_profit {
+        1.0
+    } else if pnl_percent >= target_min_profit {
+        (pnl_percent - target_min_profit) / (target_max_profit - target_min_profit)
+    } else {
+        0.0
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ⏰ TIME PRESSURE CALCULATION
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    let max_hold_time = token_analysis.time_pressure_max;
+    let time_pressure = (minutes_held / max_hold_time).min(1.0);
+
+    // Additional time pressure for risky tokens
+    let risk_time_pressure = match safety_level {
+        SafetyLevel::Dangerous => time_pressure * 1.5, // 50% more time pressure
+        SafetyLevel::Risky => time_pressure * 1.2, // 20% more time pressure
+        _ => time_pressure,
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🚨 SPECIAL RISK FACTORS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    let mut risk_urgency: f64 = 0.0;
+    let mut risk_reasons = Vec::new();
+
+    // Critical security risks
+    if token_analysis.is_rugged {
+        risk_urgency = 1.0;
+        risk_reasons.push("TOKEN MARKED AS RUGGED".to_string());
+    }
+
+    if !token_analysis.freeze_authority_safe {
+        risk_urgency = risk_urgency.max(0.7);
+        risk_reasons.push("FREEZE AUTHORITY RISK".to_string());
+    }
+
+    if token_analysis.lp_unlocked_risk {
+        risk_urgency = risk_urgency.max(0.6);
+        risk_reasons.push("LP UNLOCK RISK".to_string());
+    }
+
+    // ATH proximity danger
+    if token_analysis.is_near_ath {
+        let ath_urgency = (token_analysis.ath_proximity_percent - ATH_DANGER_THRESHOLD) / 25.0;
+        risk_urgency = risk_urgency.max(ath_urgency * 0.5); // Up to 50% urgency
+        risk_reasons.push(format!("NEAR ATH ({:.1}%)", token_analysis.ath_proximity_percent));
+    }
+
+    // Low liquidity warning
+    if token_analysis.liquidity_usd < LOW_LIQUIDITY_THRESHOLD {
+        risk_urgency = risk_urgency.max(0.3);
+        risk_reasons.push(format!("LOW LIQUIDITY (${:.0})", token_analysis.liquidity_usd));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🧮 FINAL URGENCY CALCULATION
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // Combine all factors with weights
+    let profit_urgency = profit_progression * 0.4; // 40% weight on profit target progress
+    let time_urgency = risk_time_pressure * 0.3; // 30% weight on time pressure
+    let momentum_urgency = (token_analysis.momentum_score / 2.0) * 0.2; // 20% weight on momentum
+    let safety_urgency = (1.0 - token_analysis.safety_score / 100.0) * 0.1; // 10% weight on safety
+
+    let base_urgency = profit_urgency + time_urgency + momentum_urgency + safety_urgency;
+
+    // Apply risk multipliers
+    let final_urgency = (base_urgency + risk_urgency).min(1.0).max(0.0);
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 📝 DETAILED REASON GENERATION
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    let reason = if final_urgency >= 0.8 {
+        format!(
+            "URGENT SELL: {:.1}% profit, {}min held, safety={:.0}/100{}{}",
+            pnl_percent,
+            minutes_held,
+            token_analysis.safety_score,
+            if risk_reasons.is_empty() {
+                ""
+            } else {
+                ", RISKS: "
+            },
+            risk_reasons.join(", ")
+        )
+    } else if final_urgency >= 0.6 {
+        format!(
+            "CONSIDER SELL: {:.1}% profit, {}min held, safety={:.0}/100, targets={:.1}%-{:.1}%",
+            pnl_percent,
+            minutes_held,
+            token_analysis.safety_score,
+            target_min_profit,
+            target_max_profit
+        )
+    } else if final_urgency >= 0.3 {
+        format!(
+            "WATCH CLOSELY: {:.1}% profit, {}min held, target={:.1}%-{:.1}%, safety={:.0}/100",
+            pnl_percent,
+            minutes_held,
+            target_min_profit,
+            target_max_profit,
+            token_analysis.safety_score
+        )
+    } else {
+        format!(
+            "HOLD: {:.1}% profit, {}min held, target={:.1}%-{:.1}%, safety={:.0}/100",
+            pnl_percent,
+            minutes_held,
+            target_min_profit,
+            target_max_profit,
+            token_analysis.safety_score
+        )
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 📊 DEBUG LOGGING (if enabled)
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
     if is_debug_profit_enabled() {
         log(
             LogTag::Profit,
-            "🔍 PROFIT-DEBUG",
+            "ANALYSIS",
             &format!(
-                "Analyzing {} | Price: {:.8} → {:.8} | Profit: {:.2}% | Time: {:.1}m",
+                "Token: {} | Safety: {:.0}/100 | Liquidity: ${:.0} | Momentum: {:.2} | Time: {:.1}/{:.1}min",
                 position.symbol,
-                entry_price,
-                current_price,
-                current_profit_percent,
-                minutes_held
-            )
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🛡️ STOP LOSS PROTECTION SYSTEM - SINGLE UNIFIED THRESHOLD
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    // RULE: Only sell at loss if below -55% threshold
-    if current_profit_percent <= STOP_LOSS_PERCENT {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "🚨 STOP LOSS TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
-                    position.symbol,
-                    current_profit_percent,
-                    STOP_LOSS_PERCENT
-                )
-            );
-        }
-        log(
-            LogTag::Profit,
-            "🚨 STOP_LOSS",
-            &format!(
-                "STOP LOSS: {} at {:.2}% - EXCEEDED THRESHOLD",
-                position.symbol,
-                current_profit_percent
-            )
-        );
-        return (1.0, format!("🚨 STOP LOSS: {:.1}% loss", current_profit_percent));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🚀 EXTREME PROFIT PROTECTION (INSTANT SELLS)
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if current_profit_percent >= EXTREME_PROFIT {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "💎 EXTREME PROFIT REACHED: {} at {:.1}% (threshold: {:.0}%) in {:.1}m - INSTANT SELL",
-                    position.symbol,
-                    current_profit_percent,
-                    EXTREME_PROFIT,
-                    minutes_held
-                )
-            );
-        }
-        log(
-            LogTag::Profit,
-            "💎 EXTREME",
-            &format!(
-                "EXTREME PROFIT: {} at {:.1}% in {:.1}m - INSTANT SELL",
-                position.symbol,
-                current_profit_percent,
-                minutes_held
-            )
-        );
-        return (
-            0.99,
-            format!(
-                "💎 EXTREME: {:.0}% in {:.1}m - INSTANT SELL",
-                current_profit_percent,
-                minutes_held
-            ),
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ FORCE SELL AFTER 1 HOUR (60+ MINUTES) WITH 5%+ PROFIT
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if minutes_held >= FORCE_SELL_TIME_MINUTES && current_profit_percent >= FORCE_SELL_MIN_PROFIT {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⏰ FORCE SELL TRIGGERED: {} held {:.0}m (limit: {:.0}m) with {:.1}% profit (min: {:.0}%)",
-                    position.symbol,
-                    minutes_held,
-                    FORCE_SELL_TIME_MINUTES,
-                    current_profit_percent,
-                    FORCE_SELL_MIN_PROFIT
-                )
-            );
-        }
-        log(
-            LogTag::Profit,
-            "⏰ FORCE",
-            &format!(
-                "FORCE SELL: {} at {:.1}% after {:.0}m - MANDATORY EXIT",
-                position.symbol,
-                current_profit_percent,
-                minutes_held
-            )
-        );
-        return (
-            0.95,
-            format!(
-                "⏰ FORCE SELL: {:.1}% after {:.0}m - NO MORE WAITING",
-                current_profit_percent,
-                minutes_held
-            ),
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 📊 TOKEN DATA RETRIEVAL (ASYNC WORKAROUND - TODO: Make this async)
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    // NOTE: For now, we'll implement core logic without token data
-    // TODO: In future iterations, make this function async to properly fetch token data
-
-    // Continue with core profit logic based on price and time analysis
-    // This ensures the function works even without detailed token data
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⚡ SPEED-BASED PROFIT TARGETS (WITHOUT TOKEN DATA FOR NOW)
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    let mut base_urgency = 0.0;
-    let mut reason = String::new();
-
-    if is_debug_profit_enabled() {
-        log(
-            LogTag::Profit,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "Speed Analysis: {} | {:.1}m | Ultra<{:.0}m ({:.0}%) | VFast<{:.0}m ({:.0}%) | Fast<{:.0}m ({:.0}%) | Med<{:.0}m ({:.0}%) | Slow<{:.0}m ({:.0}%)",
-                position.symbol,
+                token_analysis.safety_score,
+                token_analysis.liquidity_usd,
+                token_analysis.momentum_score,
                 minutes_held,
-                ULTRA_FAST_MINUTES,
-                ULTRA_FAST_PROFIT,
-                VERY_FAST_MINUTES,
-                VERY_FAST_PROFIT,
-                FAST_MINUTES,
-                FAST_PROFIT,
-                MEDIUM_MINUTES,
-                MEDIUM_PROFIT,
-                SLOW_MINUTES,
-                SLOW_PROFIT
+                max_hold_time
             )
         );
-    }
 
-    // Ultra-fast profits (< 1 minute)
-    if minutes_held <= ULTRA_FAST_MINUTES && current_profit_percent >= ULTRA_FAST_PROFIT {
-        base_urgency = 0.9;
-        reason = format!("⚡ ULTRA-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⚡ ULTRA-FAST TARGET HIT: {} urgency={:.1}",
-                    position.symbol,
-                    base_urgency
-                )
-            );
-        }
-    } else if
-        // Very fast profits (1-5 minutes)
-        minutes_held <= VERY_FAST_MINUTES &&
-        current_profit_percent >= VERY_FAST_PROFIT
-    {
-        base_urgency = 0.8;
-        reason = format!("🚀 VERY-FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!("🚀 VERY-FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if
-        // Fast profits (5-15 minutes)
-        minutes_held <= FAST_MINUTES &&
-        current_profit_percent >= FAST_PROFIT
-    {
-        base_urgency = 0.7;
-        reason = format!("🔥 FAST: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!("🔥 FAST TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if
-        // Medium profits (15-30 minutes)
-        minutes_held <= MEDIUM_MINUTES &&
-        current_profit_percent >= MEDIUM_PROFIT
-    {
-        base_urgency = 0.6;
-        reason = format!("📈 MEDIUM: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!("📈 MEDIUM TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if
-        // Slow profits (30-60 minutes)
-        minutes_held <= SLOW_MINUTES &&
-        current_profit_percent >= SLOW_PROFIT
-    {
-        base_urgency = 0.5;
-        reason = format!("🐌 SLOW: {:.0}% in {:.1}m", current_profit_percent, minutes_held);
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!("🐌 SLOW TARGET HIT: {} urgency={:.1}", position.symbol, base_urgency)
-            );
-        }
-    } else if is_debug_profit_enabled() {
-        // Debug why no speed target was hit
-        let target_profit = get_target_profit_for_duration(minutes_held);
         log(
             LogTag::Profit,
-            "🔍 PROFIT-DEBUG",
+            "TARGETS",
             &format!(
-                "❌ NO SPEED TARGET: {} has {:.1}% profit but needs {:.0}% for {:.1}m duration",
-                position.symbol,
-                current_profit_percent,
-                target_profit,
-                minutes_held
-            )
-        );
-    }
-
-    // If we have a base urgency, return it
-    if base_urgency > 0.0 {
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "✅ SELL DECISION: {} | Urgency: {:.2} | Reason: {}",
-                    position.symbol,
-                    base_urgency,
-                    reason
-                )
-            );
-        }
-        return (base_urgency, reason);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ TIME PRESSURE SYSTEM (45+ minutes)
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if minutes_held >= TIME_PRESSURE_START && current_profit_percent > MINIMUM_PROFIT_TO_CONSIDER {
-        let time_pressure =
-            ((minutes_held - TIME_PRESSURE_START) / (SLOW_MINUTES - TIME_PRESSURE_START)) *
-            MAX_TIME_PRESSURE;
-        let pressure_urgency = time_pressure.min(MAX_TIME_PRESSURE);
-
-        // Add profit scaling to time pressure
-        let profit_scaling = (current_profit_percent / 100.0).min(1.0) * 0.3;
-        let final_urgency = (pressure_urgency + profit_scaling).min(0.8);
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⏰ TIME PRESSURE: {} | {:.1}m > {:.0}m | Pressure: {:.2} | Profit Scale: {:.2} | Final: {:.2}",
-                    position.symbol,
-                    minutes_held,
-                    TIME_PRESSURE_START,
-                    pressure_urgency,
-                    profit_scaling,
-                    final_urgency
-                )
-            );
-        }
-
-        if final_urgency > 0.3 {
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Profit,
-                    "🔍 PROFIT-DEBUG",
-                    &format!(
-                        "⏰ TIME PRESSURE SELL: {} urgency {:.2}",
-                        position.symbol,
-                        final_urgency
-                    )
-                );
-            }
-            return (
+                "Profit: {:.1}% | Targets: {:.1}%-{:.1}% | Urgency: {:.3} | Decision: {}",
+                pnl_percent,
+                target_min_profit,
+                target_max_profit,
                 final_urgency,
-                format!(
-                    "⏰ TIME PRESSURE: {:.1}% profit in {:.1}m",
-                    current_profit_percent,
-                    minutes_held
-                ),
-            );
-        } else if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "⏰ TIME PRESSURE TOO LOW: {} urgency {:.2} < 0.3",
-                    position.symbol,
-                    final_urgency
-                )
-            );
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🔄 DEFAULT HOLDING PATTERN
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if current_profit_percent > MINIMUM_PROFIT_TO_CONSIDER {
-        // Calculate target profit for current duration
-        let target_profit = get_target_profit_for_duration(minutes_held);
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "📊 HOLDING: {} | Current: {:.2}% | Target: {:.0}% | Time: {:.1}m | Minimum: {:.1}%",
-                    position.symbol,
-                    current_profit_percent,
-                    target_profit,
-                    minutes_held,
-                    MINIMUM_PROFIT_TO_CONSIDER
-                )
-            );
-        }
-
-        return (
-            0.1,
-            format!(
-                "📊 HOLD: {:.1}% profit (target: {:.0}%) in {:.1}m",
-                current_profit_percent,
-                target_profit,
-                minutes_held
-            ),
-        );
-    }
-
-    if is_debug_profit_enabled() {
-        log(
-            LogTag::Profit,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "⏳ WAITING: {} | Profit: {:.2}% < minimum {:.1}% | Time: {:.1}m",
-                position.symbol,
-                current_profit_percent,
-                MINIMUM_PROFIT_TO_CONSIDER,
-                minutes_held
+                if final_urgency >= 0.6 {
+                    "SELL"
+                } else {
+                    "HOLD"
+                }
             )
         );
     }
 
-    (0.0, format!("⏳ WAIT: {:.2}% in {:.1}m", current_profit_percent, minutes_held))
+    (final_urgency, reason)
 }
 
 // ================================================================================================
-// 📊 PRICE TRACKING SYSTEM
+// 🔧 FALLBACK PROFIT LOGIC (when token analysis fails)
 // ================================================================================================
 
-/// Real-time price tracking for position analysis
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PriceTracker {
-    pub entry_price: f64,
-    pub current_price: f64,
-    pub highest_price: f64, // Highest price since entry
-    pub lowest_price: f64, // Lowest price since entry
-    pub last_update: DateTime<Utc>,
-    pub peak_reached_at: Option<DateTime<Utc>>, // When we hit our peak
-    pub dip_from_peak_percent: f64, // Current dip from peak
-}
-
-impl PriceTracker {
-    pub fn new(entry_price: f64) -> Self {
-        Self {
-            entry_price,
-            current_price: entry_price,
-            highest_price: entry_price,
-            lowest_price: entry_price,
-            last_update: Utc::now(),
-            peak_reached_at: None,
-            dip_from_peak_percent: 0.0,
-        }
-    }
-
-    pub fn update(&mut self, new_price: f64) {
-        self.current_price = new_price;
-        self.last_update = Utc::now();
-
-        // Track new highs
-        if new_price > self.highest_price {
-            self.highest_price = new_price;
-            self.peak_reached_at = Some(Utc::now());
-            self.dip_from_peak_percent = 0.0;
-        } else {
-            // Calculate dip from peak
-            self.dip_from_peak_percent =
-                ((self.highest_price - new_price) / self.highest_price) * 100.0;
-        }
-
-        // Track new lows
-        if new_price < self.lowest_price {
-            self.lowest_price = new_price;
-        }
-    }
-
-    pub fn get_profit_percent(&self) -> f64 {
-        ((self.current_price - self.entry_price) / self.entry_price) * 100.0
-    }
-
-    pub fn get_peak_profit_percent(&self) -> f64 {
-        ((self.highest_price - self.entry_price) / self.entry_price) * 100.0
-    }
-
-    pub fn get_lowest_percent(&self) -> f64 {
-        ((self.lowest_price - self.entry_price) / self.entry_price) * 100.0
-    }
-}
-
-// ================================================================================================
-// 🧠 INTELLIGENT MOMENTUM ANALYZER
-// ================================================================================================
-
-/// Advanced momentum analysis for smart decision making
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MomentumAnalysis {
-    pub profit_percent: f64,
-    pub peak_profit_percent: f64,
-    pub dip_from_peak_percent: f64,
-    pub minutes_held: f64,
-    pub is_momentum_strong: bool,
-    pub is_momentum_fading: bool,
-    pub is_critical_dip: bool,
-    pub speed_category: SpeedCategory,
-    pub urgency_modifier: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SpeedCategory {
-    UltraFast, // < 1 minute
-    VeryFast, // 1-5 minutes
-    Fast, // 5-15 minutes
-    Medium, // 15-30 minutes
-    Slow, // 30-60 minutes
-    TooSlow, // > 60 minutes
-}
-
-/// Analyze token momentum and price action
-pub fn analyze_momentum(
-    tracker: &PriceTracker,
-    token: &Token,
-    minutes_held: f64
-) -> MomentumAnalysis {
-    let profit_percent = tracker.get_profit_percent();
-    let peak_profit_percent = tracker.get_peak_profit_percent();
-    let dip_from_peak_percent = tracker.dip_from_peak_percent;
-
-    // Determine speed category
-    let speed_category = match minutes_held {
-        x if x <= ULTRA_FAST_MINUTES => SpeedCategory::UltraFast,
-        x if x <= VERY_FAST_MINUTES => SpeedCategory::VeryFast,
-        x if x <= FAST_MINUTES => SpeedCategory::Fast,
-        x if x <= MEDIUM_MINUTES => SpeedCategory::Medium,
-        x if x <= SLOW_MINUTES => SpeedCategory::Slow,
-        _ => SpeedCategory::TooSlow,
+/// Simple fallback profit logic when comprehensive analysis fails
+fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> (f64, String) {
+    // Conservative profit targets when we can't analyze the token
+    let target_profit = match minutes_held {
+        m if m < 5.0 => 50.0, // 50% in first 5 minutes
+        m if m < 10.0 => 30.0, // 30% in 5-10 minutes
+        m if m < 20.0 => 20.0, // 20% in 10-20 minutes
+        _ => 15.0, // 15% after 20 minutes
     };
 
-    // Analyze momentum from token data
-    let mut is_momentum_strong = false;
-    let mut is_momentum_fading = false;
+    let time_pressure = (minutes_held / 30.0).min(1.0); // Max 30 minutes
+    let profit_factor = (pnl_percent / target_profit).min(1.0);
 
-    if let Some(price_changes) = &token.price_change {
-        let m5_change = price_changes.m5.unwrap_or(0.0);
-        let h1_change = price_changes.h1.unwrap_or(0.0);
+    let urgency = (profit_factor * 0.6 + time_pressure * 0.4).min(1.0);
 
-        is_momentum_strong = m5_change > 5.0 && h1_change > 10.0;
-        is_momentum_fading = m5_change < 1.0 && profit_percent > 10.0;
-
-        if is_debug_profit_enabled() {
-            log(
-                LogTag::Profit,
-                "🔍 PROFIT-DEBUG",
-                &format!(
-                    "Momentum Data: 5m: {:.1}% | 1h: {:.1}% | Strong: {} (5m>5% && 1h>10%) | Fading: {} (5m<1% && profit>10%)",
-                    m5_change,
-                    h1_change,
-                    is_momentum_strong,
-                    is_momentum_fading
-                )
-            );
-        }
-    } else if is_debug_profit_enabled() {
-        log(
-            LogTag::Profit,
-            "🔍 PROFIT-DEBUG",
-            "No price change data available for momentum analysis"
-        );
-    }
-
-    // Check for critical dip
-    let is_critical_dip = dip_from_peak_percent > CRITICAL_DIP_PERCENT;
-
-    // Calculate urgency modifier based on speed
-    let urgency_modifier = match speed_category {
-        SpeedCategory::UltraFast => SPEED_BONUS_ULTRA,
-        SpeedCategory::VeryFast => SPEED_BONUS_VERY,
-        SpeedCategory::Fast => SPEED_BONUS_FAST,
-        SpeedCategory::Medium => SPEED_BONUS_MEDIUM,
-        _ => 1.0,
-    };
-
-    if is_debug_profit_enabled() {
-        log(
-            LogTag::Profit,
-            "🔍 PROFIT-DEBUG",
-            &format!(
-                "Speed Category: {:?} | Modifier: {:.1}x | Critical Dip: {} (>{:.0}%)",
-                speed_category,
-                urgency_modifier,
-                is_critical_dip,
-                CRITICAL_DIP_PERCENT
-            )
-        );
-    }
-
-    MomentumAnalysis {
-        profit_percent,
-        peak_profit_percent,
-        dip_from_peak_percent,
+    let reason = format!(
+        "FALLBACK: {:.1}% profit, {:.1}min held, target {:.1}% (no token data)",
+        pnl_percent,
         minutes_held,
-        is_momentum_strong,
-        is_momentum_fading,
-        is_critical_dip,
-        speed_category,
-        urgency_modifier,
-    }
+        target_profit
+    );
+
+    (urgency, reason)
 }
 
-/// Calculate target profit based on time held
+// ================================================================================================
+// 🎯 PUBLIC API - BACKWARDS COMPATIBILITY
+// ================================================================================================
 
-/// Calculate target profit based on time held
-fn get_target_profit_for_duration(minutes_held: f64) -> f64 {
-    match minutes_held {
-        x if x <= ULTRA_FAST_MINUTES => ULTRA_FAST_PROFIT,
-        x if x <= VERY_FAST_MINUTES => VERY_FAST_PROFIT,
-        x if x <= FAST_MINUTES => FAST_PROFIT,
-        x if x <= MEDIUM_MINUTES => MEDIUM_PROFIT,
-        x if x <= SLOW_MINUTES => SLOW_PROFIT,
-        _ => SLOW_PROFIT * 1.5, // Higher target for very slow trades
+/// Simple should_sell wrapper for backwards compatibility
+pub async fn should_sell_simple(position: &Position, current_price: f64) -> bool {
+    let (urgency, reason) = should_sell(position, current_price).await;
+
+    let should_sell = urgency >= 0.6; // 60% urgency threshold for selling
+
+    if should_sell {
+        log(LogTag::Profit, "SELL_DECISION", &format!("SELLING {}: {}", position.symbol, reason));
     }
+
+    should_sell
+}
+
+/// Get detailed profit analysis for a position
+pub async fn get_profit_analysis(position: &Position, current_price: f64) -> String {
+    let (urgency, reason) = should_sell(position, current_price).await;
+
+    format!("Urgency: {:.1}% | {}", urgency * 100.0, reason)
 }

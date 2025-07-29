@@ -7,6 +7,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_monitor_enabled;
 use std::sync::Arc;
 use tokio::sync::Notify;
+use std::sync::Mutex;
 
 pub mod api;
 pub mod pool;
@@ -18,7 +19,6 @@ pub mod blacklist;
 pub mod price_service;
 pub mod decimals;
 pub mod rugcheck;
-pub mod rugcheck_service;
 
 // Re-export main types and functions
 pub use types::*;
@@ -43,19 +43,13 @@ pub use blacklist::{
     get_blacklist_stats,
 };
 pub use rugcheck::{
-    update_all_tokens_rugcheck_data,
-    update_rugcheck_data_for_mints,
+    RugcheckService,
+    RugcheckResponse,
     get_token_rugcheck_data,
-};
-pub use rugcheck_service::{
-    SmartRugcheckService,
-    RugcheckRiskLevel,
-    RugcheckRiskAssessment,
-    get_token_rugcheck_risk_assessment,
-    should_filter_token_rugcheck,
-    is_freeze_authority_safe,
-    has_lp_unlocked_risk,
-    get_rugcheck_risk_level,
+    update_new_token_rugcheck_data,
+    is_token_safe_for_trading,
+    get_rugcheck_score,
+    get_high_risk_issues,
 };
 pub use price_service::{
     initialize_price_service,
@@ -68,7 +62,6 @@ pub use price_service::{
     TokenPriceService,
     PriceCacheEntry,
 };
-pub use rugcheck::{ RugcheckService, RugcheckResponse };
 
 // Pool pricing is disabled - use pool module only if explicitly needed
 #[allow(unused_imports)]
@@ -103,6 +96,7 @@ pub struct TokensSystem {
     discovery: TokenDiscovery,
     monitor: TokenMonitor,
     database: TokenDatabase,
+    rugcheck_service: Arc<RugcheckService>,
 }
 
 impl TokensSystem {
@@ -112,12 +106,17 @@ impl TokensSystem {
         let monitor = TokenMonitor::new()?;
         let database = TokenDatabase::new()?;
 
+        // Create rugcheck service with shutdown notify (will be passed later)
+        let shutdown_notify = Arc::new(Notify::new());
+        let rugcheck_service = Arc::new(RugcheckService::new(database.clone(), shutdown_notify));
+
         log(LogTag::System, "INIT", "Tokens system initialized");
 
         Ok(Self {
             discovery,
             monitor,
             database,
+            rugcheck_service,
         })
     }
 
@@ -137,6 +136,19 @@ impl TokensSystem {
         log(LogTag::System, "START", "Starting token monitoring task...");
         let monitor_handle = start_token_monitoring(shutdown.clone()).await?;
         handles.push(monitor_handle);
+
+        // Start rugcheck service
+        log(LogTag::System, "START", "Starting rugcheck background service...");
+        let rugcheck_service = Arc::new(
+            RugcheckService::new(self.database.clone(), shutdown.clone())
+        );
+        let rugcheck_handle = tokio::spawn({
+            let service = rugcheck_service.clone();
+            async move {
+                service.start_background_service().await;
+            }
+        });
+        handles.push(rugcheck_handle);
 
         log(LogTag::System, "SUCCESS", "All tokens system background tasks started");
 
@@ -160,6 +172,11 @@ impl TokensSystem {
             last_monitoring_cycle: monitor_stats.last_cycle,
         })
     }
+
+    /// Get rugcheck service reference
+    pub fn get_rugcheck_service(&self) -> Arc<RugcheckService> {
+        self.rugcheck_service.clone()
+    }
 }
 
 /// Tokens system statistics
@@ -171,6 +188,35 @@ pub struct TokensSystemStats {
     pub blacklisted_tokens: usize,
     pub last_discovery_cycle: chrono::DateTime<chrono::Utc>,
     pub last_monitoring_cycle: chrono::DateTime<chrono::Utc>,
+}
+
+// =============================================================================
+// GLOBAL RUGCHECK SERVICE ACCESS
+// =============================================================================
+
+static GLOBAL_RUGCHECK_SERVICE: Mutex<Option<Arc<RugcheckService>>> = Mutex::new(None);
+
+/// Initialize global rugcheck service
+pub async fn initialize_global_rugcheck_service(
+    database: TokenDatabase,
+    shutdown: Arc<Notify>
+) -> Result<(), String> {
+    let service = Arc::new(RugcheckService::new(database, shutdown));
+
+    // Start background service
+    let service_clone = service.clone();
+    tokio::spawn(async move {
+        service_clone.start_background_service().await;
+    });
+
+    *GLOBAL_RUGCHECK_SERVICE.lock().unwrap() = Some(service);
+    log(LogTag::System, "INIT", "Global rugcheck service initialized");
+    Ok(())
+}
+
+/// Get global rugcheck service instance
+pub fn get_global_rugcheck_service() -> Option<Arc<RugcheckService>> {
+    GLOBAL_RUGCHECK_SERVICE.lock().unwrap().clone()
 }
 
 // =============================================================================
@@ -224,6 +270,67 @@ pub fn get_token_decimals_sync(mint: &str) -> u8 {
     // Return default 9 but log error - in production this should be rare
     9
 }
+
+// =============================================================================
+// RUGCHECK HELPER FUNCTIONS
+// =============================================================================
+
+/// Get rugcheck data for a token using global service
+pub async fn get_token_rugcheck_data_safe(mint: &str) -> Result<Option<RugcheckResponse>, String> {
+    match get_global_rugcheck_service() {
+        Some(service) => service.get_rugcheck_data(mint).await,
+        None => {
+            log(LogTag::Rugcheck, "ERROR", "Global rugcheck service not initialized");
+            Err("Global rugcheck service not initialized".to_string())
+        }
+    }
+}
+
+/// Update rugcheck data for a newly discovered token
+pub async fn update_new_token_rugcheck_data_safe(mint: &str) -> Result<(), String> {
+    match get_global_rugcheck_service() {
+        Some(service) => service.update_token_rugcheck_data(mint).await,
+        None => {
+            log(LogTag::Rugcheck, "ERROR", "Global rugcheck service not initialized");
+            Err("Global rugcheck service not initialized".to_string())
+        }
+    }
+}
+
+/// Check if token is safe for trading based on rugcheck data (auto-fetch if missing)
+pub async fn is_token_safe_for_trading_safe(mint: &str) -> bool {
+    match get_token_rugcheck_data_safe(mint).await {
+        Ok(Some(rugcheck_data)) => is_token_safe_for_trading(&rugcheck_data),
+        Ok(None) => {
+            log(
+                LogTag::Rugcheck,
+                "WARN",
+                &format!("No rugcheck data available after auto-fetch for token: {}", mint)
+            );
+            true // Changed: Allow trading if rugcheck data unavailable (fail-safe approach)
+        }
+        Err(e) => {
+            log(
+                LogTag::Rugcheck,
+                "ERROR",
+                &format!("Failed to get rugcheck data for {}: {}", mint, e)
+            );
+            true // Changed: Allow trading if rugcheck service has errors (fail-safe approach)
+        }
+    }
+}
+
+/// Get rugcheck score for token (0-10 scale)
+pub async fn get_rugcheck_score_safe(mint: &str) -> Option<i32> {
+    match get_token_rugcheck_data_safe(mint).await {
+        Ok(Some(rugcheck_data)) => get_rugcheck_score(&rugcheck_data),
+        _ => None,
+    }
+}
+
+// =============================================================================
+// TOKEN DISCOVERY INTEGRATION
+// =============================================================================
 
 /// Get current token price using thread-safe price service
 pub async fn get_current_token_price(mint: &str) -> Option<f64> {

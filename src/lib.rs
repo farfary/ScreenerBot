@@ -10,4 +10,3 @@ pub mod tokens;
 pub mod profit;
 pub mod loss_prevention;
 pub mod filtering;
-pub mod rugcheck_filtering;
