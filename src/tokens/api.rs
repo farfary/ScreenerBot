@@ -56,7 +56,9 @@ impl DexScreenerApi {
     async fn test_connectivity(&mut self) -> Result<(), String> {
         log(LogTag::Api, "TEST", "Testing DexScreener API connectivity...");
 
-        let test_url = "https://api.dexscreener.com/latest/dex/pairs/solana";
+        // Use the token info endpoint for testing instead
+        let test_url =
+            "https://api.dexscreener.com/tokens/v1/solana/So11111111111111111111111111111111111111112";
         let start_time = Instant::now();
 
         let permit = self.rate_limiter

@@ -1,5 +1,19 @@
 /// Centralized Token Management System - Thread-Safe Edition
-///
+///# Pool pricing is enabled - use pool module for direct on-chain price calculations
+pub use pool::{
+    PoolPriceCalculator,
+    PoolPriceInfo,
+    PoolInfo,
+    RaydiumCpmmPoolData,
+    get_pool_price_from_address,
+    get_pool_price_with_rpc,
+    get_multiple_pool_prices,
+    decoder_raydium_cpmm,
+    get_token_price_from_pools,
+    RAYDIUM_CPMM_PROGRAM_ID,
+    SOL_MINT,
+};
+
 /// This module provides thread-safe access to token data and prices
 /// using a centralized price service instead of direct database access.
 
@@ -63,16 +77,12 @@ pub use price_service::{
     PriceCacheEntry,
 };
 
-// Pool pricing is disabled - use pool module only if explicitly needed
-#[allow(unused_imports)]
-pub use pool::{ PoolPriceCalculator, get_token_price_from_pools };
-
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// Enable/disable pool price calculations globally (DISABLED)
-pub const ENABLE_POOL_PRICES: bool = false;
+/// Enable/disable pool price calculations globally (NOW ENABLED)
+pub const ENABLE_POOL_PRICES: bool = true;
 
 /// Primary price source configuration
 pub const USE_DEXSCREENER_PRIMARY: bool = true;
