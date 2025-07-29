@@ -694,6 +694,85 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     };
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ⏰ CRITICAL TIME-BASED EXIT LOGIC - FAST EXIT FOR LONG POSITIONS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // 🚨 MANDATORY FAST EXIT: 30+ minutes with ANY profit
+    if minutes_held >= 30.0 && pnl_percent > 0.0 {
+        let overtime_factor = (minutes_held - 30.0) / 10.0; // +0.1 urgency per 10 minutes over 30
+        let time_exit_urgency = (0.7 + overtime_factor).min(1.0); // Start at 70% urgency, max 100%
+
+        log(
+            LogTag::Profit,
+            "TIME_EXIT",
+            &format!(
+                "FAST EXIT: Position held {:.1}min (>30min) with {:.2}% profit - urgency: {:.2}",
+                minutes_held,
+                pnl_percent,
+                time_exit_urgency
+            )
+        );
+
+        return (
+            time_exit_urgency,
+            format!(
+                "FAST EXIT: {:.1}min held (>30min) with {:.2}% profit - taking profits now!",
+                minutes_held,
+                pnl_percent
+            ),
+        );
+    }
+
+    // 🔥 SUPER URGENT: 45+ minutes with ANY profit (immediate exit)
+    if minutes_held >= 45.0 && pnl_percent > 0.0 {
+        log(
+            LogTag::Profit,
+            "URGENT_EXIT",
+            &format!(
+                "URGENT EXIT: Position held {:.1}min (>45min) with {:.2}% profit - immediate sell!",
+                minutes_held,
+                pnl_percent
+            )
+        );
+
+        return (
+            1.0,
+            format!(
+                "URGENT EXIT: {:.1}min held (>45min) with {:.2}% profit - immediate sell!",
+                minutes_held,
+                pnl_percent
+            ),
+        );
+    }
+
+    // 💰 EXTENDED PROFIT EXIT: 20+ minutes with decent profit
+    if minutes_held >= 20.0 && pnl_percent >= 15.0 {
+        let extended_urgency = 0.6 + ((minutes_held - 20.0) / 20.0) * 0.3; // 60-90% urgency
+        let profit_boost = ((pnl_percent - 15.0) / 85.0) * 0.2; // Up to +20% for high profits
+        let total_urgency = (extended_urgency + profit_boost).min(1.0);
+
+        log(
+            LogTag::Profit,
+            "EXTENDED_EXIT",
+            &format!(
+                "EXTENDED EXIT: {:.1}min held with {:.2}% profit - urgency: {:.2}",
+                minutes_held,
+                pnl_percent,
+                total_urgency
+            )
+        );
+
+        return (
+            total_urgency,
+            format!(
+                "EXTENDED EXIT: {:.1}min held with {:.2}% profit - taking profits!",
+                minutes_held,
+                pnl_percent
+            ),
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🚨 SPECIAL RISK FACTORS
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
@@ -733,9 +812,21 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     // 🧮 FINAL URGENCY CALCULATION
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    // Combine all factors with weights
-    let profit_urgency = profit_progression * 0.4; // 40% weight on profit target progress
-    let time_urgency = risk_time_pressure * 0.3; // 30% weight on time pressure
+    // Enhanced time pressure for profitable positions
+    let enhanced_time_pressure = if pnl_percent > 0.0 {
+        match minutes_held {
+            m if m >= 25.0 => risk_time_pressure * 1.8, // 80% boost for 25+ minutes
+            m if m >= 20.0 => risk_time_pressure * 1.5, // 50% boost for 20+ minutes
+            m if m >= 15.0 => risk_time_pressure * 1.3, // 30% boost for 15+ minutes
+            _ => risk_time_pressure,
+        }
+    } else {
+        risk_time_pressure
+    };
+
+    // Combine all factors with updated weights (more emphasis on time for profitable positions)
+    let profit_urgency = profit_progression * 0.3; // Reduced from 40% to 30%
+    let time_urgency = enhanced_time_pressure * 0.4; // Increased from 30% to 40%
     let momentum_urgency = (token_analysis.momentum_score / 2.0) * 0.2; // 20% weight on momentum
     let safety_urgency = (1.0 - token_analysis.safety_score / 100.0) * 0.1; // 10% weight on safety
 
@@ -744,13 +835,21 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     // Apply risk multipliers
     let final_urgency = (base_urgency + risk_urgency).min(1.0).max(0.0);
 
+    // Additional urgency boost for profitable positions held too long
+    let final_urgency_with_time_boost = if pnl_percent > 0.0 && minutes_held >= 25.0 {
+        let time_boost = ((minutes_held - 25.0) / 20.0) * 0.3; // Up to 30% boost
+        (final_urgency + time_boost).min(1.0)
+    } else {
+        final_urgency
+    };
+
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // 📝 DETAILED REASON GENERATION
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    let reason = if final_urgency >= 0.8 {
+    let reason = if final_urgency_with_time_boost >= 0.8 {
         format!(
-            "URGENT SELL: {:.1}% profit, {}min held, safety={:.0}/100{}{}",
+            "URGENT SELL: {:.1}% profit, {:.1}min held, safety={:.0}/100{}{}",
             pnl_percent,
             minutes_held,
             token_analysis.safety_score,
@@ -761,18 +860,18 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             },
             risk_reasons.join(", ")
         )
-    } else if final_urgency >= 0.6 {
+    } else if final_urgency_with_time_boost >= 0.6 {
         format!(
-            "CONSIDER SELL: {:.1}% profit, {}min held, safety={:.0}/100, targets={:.1}%-{:.1}%",
+            "CONSIDER SELL: {:.1}% profit, {:.1}min held, safety={:.0}/100, targets={:.1}%-{:.1}%",
             pnl_percent,
             minutes_held,
             token_analysis.safety_score,
             target_min_profit,
             target_max_profit
         )
-    } else if final_urgency >= 0.3 {
+    } else if final_urgency_with_time_boost >= 0.3 {
         format!(
-            "WATCH CLOSELY: {:.1}% profit, {}min held, target={:.1}%-{:.1}%, safety={:.0}/100",
+            "WATCH CLOSELY: {:.1}% profit, {:.1}min held, target={:.1}%-{:.1}%, safety={:.0}/100",
             pnl_percent,
             minutes_held,
             target_min_profit,
@@ -781,7 +880,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         )
     } else {
         format!(
-            "HOLD: {:.1}% profit, {}min held, target={:.1}%-{:.1}%, safety={:.0}/100",
+            "HOLD: {:.1}% profit, {:.1}min held, target={:.1}%-{:.1}%, safety={:.0}/100",
             pnl_percent,
             minutes_held,
             target_min_profit,
@@ -813,12 +912,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             LogTag::Profit,
             "TARGETS",
             &format!(
-                "Profit: {:.1}% | Targets: {:.1}%-{:.1}% | Urgency: {:.3} | Decision: {}",
+                "Profit: {:.1}% | Targets: {:.1}%-{:.1}% | Base Urgency: {:.3} | Time Boost: {:.3} | Decision: {}",
                 pnl_percent,
                 target_min_profit,
                 target_max_profit,
                 final_urgency,
-                if final_urgency >= 0.6 {
+                final_urgency_with_time_boost,
+                if final_urgency_with_time_boost >= 0.6 {
                     "SELL"
                 } else {
                     "HOLD"
@@ -827,7 +927,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         );
     }
 
-    (final_urgency, reason)
+    (final_urgency_with_time_boost, reason)
 }
 
 // ================================================================================================
@@ -836,6 +936,30 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 
 /// Simple fallback profit logic when comprehensive analysis fails
 fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> (f64, String) {
+    // 🚨 MANDATORY TIME-BASED EXITS (even in fallback mode)
+    if minutes_held >= 45.0 && pnl_percent > 0.0 {
+        return (
+            1.0,
+            format!(
+                "FALLBACK URGENT EXIT: {:.1}min held (>45min) with {:.1}% profit - immediate sell!",
+                minutes_held,
+                pnl_percent
+            ),
+        );
+    }
+
+    if minutes_held >= 30.0 && pnl_percent > 0.0 {
+        let overtime_urgency = 0.7 + ((minutes_held - 30.0) / 15.0) * 0.3; // 70-100% urgency
+        return (
+            overtime_urgency.min(1.0),
+            format!(
+                "FALLBACK FAST EXIT: {:.1}min held (>30min) with {:.1}% profit - taking profits!",
+                minutes_held,
+                pnl_percent
+            ),
+        );
+    }
+
     // Conservative profit targets when we can't analyze the token
     let target_profit = match minutes_held {
         m if m < 5.0 => 50.0, // 50% in first 5 minutes
@@ -844,41 +968,30 @@ fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> (f64, String) {
         _ => 15.0, // 15% after 20 minutes
     };
 
-    let time_pressure = (minutes_held / 30.0).min(1.0); // Max 30 minutes
+    // Enhanced time pressure for fallback mode
+    let time_pressure = ((minutes_held / 25.0).min(1.0) * 1.2).min(1.0); // More aggressive, max 25 minutes
     let profit_factor = (pnl_percent / target_profit).min(1.0);
 
-    let urgency = (profit_factor * 0.6 + time_pressure * 0.4).min(1.0);
+    // Add extra urgency for positions held 20+ minutes
+    let time_boost = if minutes_held >= 20.0 && pnl_percent > 0.0 {
+        ((minutes_held - 20.0) / 10.0) * 0.3 // +30% urgency for every 10 minutes over 20
+    } else {
+        0.0
+    };
+
+    let urgency = (profit_factor * 0.5 + time_pressure * 0.5 + time_boost).min(1.0);
 
     let reason = format!(
-        "FALLBACK: {:.1}% profit, {:.1}min held, target {:.1}% (no token data)",
+        "FALLBACK: {:.1}% profit, {:.1}min held, target {:.1}% (no token data){}",
         pnl_percent,
         minutes_held,
-        target_profit
+        target_profit,
+        if minutes_held >= 20.0 && pnl_percent > 0.0 {
+            " - TIME PRESSURE!"
+        } else {
+            ""
+        }
     );
 
     (urgency, reason)
-}
-
-// ================================================================================================
-// 🎯 PUBLIC API - BACKWARDS COMPATIBILITY
-// ================================================================================================
-
-/// Simple should_sell wrapper for backwards compatibility
-pub async fn should_sell_simple(position: &Position, current_price: f64) -> bool {
-    let (urgency, reason) = should_sell(position, current_price).await;
-
-    let should_sell = urgency >= 0.6; // 60% urgency threshold for selling
-
-    if should_sell {
-        log(LogTag::Profit, "SELL_DECISION", &format!("SELLING {}: {}", position.symbol, reason));
-    }
-
-    should_sell
-}
-
-/// Get detailed profit analysis for a position
-pub async fn get_profit_analysis(position: &Position, current_price: f64) -> String {
-    let (urgency, reason) = should_sell(position, current_price).await;
-
-    format!("Urgency: {:.1}% | {}", urgency * 100.0, reason)
 }
