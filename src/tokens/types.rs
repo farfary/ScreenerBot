@@ -1,7 +1,6 @@
 /// Data types for the centralized pricing system
-use serde::{ Serialize, Deserialize };
+use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
-use std::collections::HashMap;
 
 /// Token information from API sources
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,7 +8,7 @@ pub struct ApiToken {
     pub mint: String,
     pub symbol: String,
     pub name: String,
-    pub decimals: u8,
+    // decimals removed - only use decimal_cache.json
     pub chain_id: String,
     pub dex_id: String,
     pub pair_address: String,
@@ -112,7 +111,7 @@ pub struct Token {
     pub mint: String,
     pub symbol: String,
     pub name: String,
-    pub decimals: u8,
+    // decimals removed - only use decimal_cache.json
     pub chain: String,
 
     // Existing fields we need to keep
@@ -196,7 +195,7 @@ impl From<ApiToken> for Token {
             mint: api_token.mint,
             symbol: api_token.symbol,
             name: api_token.name,
-            decimals: api_token.decimals, // Use actual decimals from blockchain
+            // decimals removed - only use decimal_cache.json
             chain: "solana".to_string(),
 
             logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
@@ -256,7 +255,7 @@ impl From<Token> for ApiToken {
             mint: token.mint,
             symbol: token.symbol,
             name: token.name,
-            decimals: token.decimals,
+            // decimals removed - only use decimal_cache.json
             chain_id: token.chain,
             dex_id: token.dex_id.unwrap_or_default(),
             pair_address: token.pair_address.unwrap_or_default(),

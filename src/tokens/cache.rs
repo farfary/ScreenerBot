@@ -342,7 +342,6 @@ impl TokenDatabase {
                 mint TEXT PRIMARY KEY,
                 symbol TEXT NOT NULL,
                 name TEXT NOT NULL,
-                decimals INTEGER DEFAULT 9,
                 chain_id TEXT NOT NULL,
                 dex_id TEXT,
                 pair_address TEXT,
@@ -393,9 +392,6 @@ impl TokenDatabase {
             "CREATE INDEX IF NOT EXISTS idx_tokens_last_updated ON tokens(last_updated)",
             []
         )?;
-
-        // Migration: Add decimals column if it doesn't exist (for existing databases)
-        let _ = connection.execute("ALTER TABLE tokens ADD COLUMN decimals INTEGER DEFAULT 9", []);
 
         // Only log on first initialization - reduce log spam
         static DATABASE_INITIALIZED: std::sync::Once = std::sync::Once::new();
@@ -550,7 +546,7 @@ impl TokenDatabase {
             )?;
         connection.execute(
             "INSERT OR REPLACE INTO tokens (
-                mint, symbol, name, decimals, chain_id, dex_id, pair_address, pair_url,
+                mint, symbol, name, chain_id, dex_id, pair_address, pair_url,
                 price_native, price_usd, price_sol,
                 liquidity_usd, liquidity_base, liquidity_quote,
                 volume_h24, volume_h6, volume_h1, volume_m5,
@@ -560,14 +556,13 @@ impl TokenDatabase {
                 fdv, market_cap, pair_created_at, boosts_active,
                 info_image_url, labels, last_updated
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36
             )",
             params![
                 token.mint,
                 token.symbol,
                 token.name,
-                token.decimals,
                 token.chain_id,
                 token.dex_id,
                 token.pair_address,
@@ -632,7 +627,7 @@ impl TokenDatabase {
             mint: row.get("mint")?,
             symbol: row.get("symbol")?,
             name: row.get("name")?,
-            decimals: row.get("decimals").unwrap_or(9), // Default to 9 if not found
+            // decimals removed - only use decimal_cache.json
             chain_id: row.get("chain_id")?,
             dex_id: row.get("dex_id")?,
             pair_address: row.get("pair_address")?,

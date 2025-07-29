@@ -29,7 +29,7 @@ pub const INFO_RATE_LIMIT: usize = 300;
 pub const INFO_CALLS_PER_CYCLE: usize = 30;
 
 /// Enhanced monitoring cycle duration in seconds (5 seconds for real-time price updates)
-pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 5;
+pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 2;
 
 /// Database cleanup interval in seconds (1 minute)
 pub const CLEANUP_INTERVAL_SECONDS: u64 = 60;
@@ -41,7 +41,7 @@ pub const MAX_TOKENS_PER_BATCH: usize = 30;
 pub const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
 
 /// Maximum number of tokens to monitor per cycle (reduced for 5-second intervals)
-pub const MAX_TOKENS_PER_CYCLE: usize = 30;
+pub const MAX_TOKENS_PER_CYCLE: usize = 150;
 
 // =============================================================================
 // ENHANCED TOKEN MONITOR

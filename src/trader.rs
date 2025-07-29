@@ -1,19 +1,19 @@
 /// ScreenerBot Trading Engine
 ///
 /// ======================================
-/// NEVER SELL AT LOSS PROTECTION SYSTEM
+/// STOP LOSS PROTECTION SYSTEM
 /// ======================================
 ///
-/// This trading bot implements a strict "NEVER SELL AT LOSS" policy with multiple layers of protection:
+/// This trading bot implements a stop loss at -55% with multiple layers of protection:
 ///
-/// 1. **Extreme Emergency Stop Loss Only**: Set at -99.9% (essentially impossible to reach)
-/// 2. **Profit-Only Exit Logic**: All sell decisions only trigger when in profit
-/// 3. **Smart System Validation**: Advanced profit system also enforces no-loss rule
+/// 1. **Stop Loss Threshold**: Set at -55% for controlled risk management
+/// 2. **Profit-First Exit Logic**: All sell decisions prioritize profit taking
+/// 3. **Smart System Validation**: Advanced profit system enforces stop loss rule
 /// 4. **Final Safeguard**: Last-minute validation before any sell execution
-/// 5. **Hold-Forever Strategy**: Any position at a loss is held indefinitely for recovery
+/// 5. **Controlled Loss Strategy**: Positions at loss below -55% are sold to limit damage
 ///
-/// This ensures capital preservation and relies on the principle that crypto tokens
-/// can recover over time, making it better to hold through dips than to realize losses.
+/// This ensures controlled risk management while allowing reasonable loss limits
+/// for positions that don't recover within acceptable timeframes.
 ///
 /// MULTI-STRATEGY DIP DETECTION SYSTEM
 /// ===================================
@@ -57,10 +57,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 75;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.005;
+pub const TRADE_SIZE_SOL: f64 = 0.002;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -94,7 +94,7 @@ pub const PROFIT_TARGET_PERCENT: f64 = 5.0;
 pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 30.0;
 
 /// Maximum hold time extended for longer-term profit taking (48 hours)
-pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 172800.0; // 48 hours
+pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 1.0 * 60.0 * 60.0; // 48 hours
 
 /// Time after which time decay pressure starts - now 2 hours for better patience
 pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
@@ -115,7 +115,7 @@ pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
 pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
 
 /// Price history tracking duration (hours)
-pub const PRICE_HISTORY_DURATION_HOURS: i64 = 24;
+pub const PRICE_HISTORY_DURATION_HOURS: i64 = 2;
 
 // -----------------------------------------------------------------------------
 // Wallet Management Configuration
@@ -1642,7 +1642,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                             // Use timeout for last prices mutex
                             match
-                                tokio::time::timeout(Duration::from_millis(500), async {
+                                tokio::time::timeout(Duration::from_millis(5000), async {
                                     LAST_PRICES.try_lock()
                                 }).await
                             {
@@ -2202,14 +2202,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
 
                     if should_exit {
-                        // Get token decimals for closing (using async function)
-                        let decimals = crate::tokens::get_token_decimals(&position.mint).await;
-
                         let minimal_token = Token {
                             mint: position.mint.clone(),
                             symbol: position.symbol.clone(),
                             name: position.symbol.clone(),
-                            decimals,
                             chain: "solana".to_string(),
                             // All other fields as None/defaults
                             logo_url: None,
@@ -2364,13 +2360,28 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     let mut position = position;
                     let token_symbol = token.symbol.clone();
 
-                    // FINAL SAFEGUARD: Double-check we're not selling at a loss
+                    // FINAL SAFEGUARD: Only allow sales at profit (>0%) or significant loss (<=-55%)
                     let (_, final_pnl_percent) = calculate_position_pnl(
                         &position,
                         Some(exit_price)
                     );
-                    if final_pnl_percent < 0.0 && final_pnl_percent > -99.0 {
-                        return None; // Abort the sale
+
+                    // Block sales only if it's a small loss (between 0% and -55%)
+                    if
+                        final_pnl_percent <= 0.0 &&
+                        final_pnl_percent > crate::profit::STOP_LOSS_PERCENT
+                    {
+                        log(
+                            LogTag::Trader,
+                            "SAFEGUARD",
+                            &format!(
+                                "Blocking sale of {} - P&L {:.2}% is a small loss (between 0% and {:.2}%)",
+                                token_symbol,
+                                final_pnl_percent,
+                                crate::profit::STOP_LOSS_PERCENT
+                            )
+                        );
+                        return None; // Abort the sale - small loss, hold until bigger loss or profit
                     }
 
                     // Wrap the sell operation in a timeout

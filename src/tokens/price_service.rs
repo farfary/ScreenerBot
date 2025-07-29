@@ -5,7 +5,7 @@
 /// database access and provides a clean API for price lookups.
 
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_monitor_enabled;
+use crate::global::is_debug_price_service_enabled;
 use crate::tokens::types::ApiToken;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::is_token_blacklisted;
@@ -22,10 +22,10 @@ use chrono::{ DateTime, Utc, Duration };
 const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 5;
 
 /// Priority boost for tokens with open positions (higher priority)
-const OPEN_POSITION_PRIORITY: i32 = 100;
+const OPEN_POSITION_PRIORITY: i32 = 200;
 
 /// Priority boost for high liquidity tokens
-const HIGH_LIQUIDITY_PRIORITY: i32 = 100;
+const HIGH_LIQUIDITY_PRIORITY: i32 = 10;
 
 /// Minimum liquidity threshold for high priority (in USD)
 const HIGH_LIQUIDITY_THRESHOLD: f64 = 2000.0;
@@ -95,12 +95,31 @@ impl TokenPriceService {
     pub async fn get_token_price(&self, mint: &str) -> Option<f64> {
         // Check cache first
         if let Some(price) = self.get_cached_price(mint).await {
+            if is_debug_price_service_enabled() {
+                log(
+                    LogTag::PriceService,
+                    "DEBUG",
+                    &format!("Cache hit for token {}: ${:.8}", mint, price)
+                );
+            }
             return Some(price);
+        }
+
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "DEBUG",
+                &format!("Cache miss for token {}, requesting update", mint)
+            );
         }
 
         // If not in cache or expired, request update for this specific token
         if let Err(e) = self.update_single_token_price(mint).await {
-            log(LogTag::Trader, "WARN", &format!("Failed to update price for {}: {}", mint, e));
+            log(
+                LogTag::PriceService,
+                "WARN",
+                &format!("Failed to update price for {}: {}", mint, e)
+            );
         }
 
         // Try cache again after update
@@ -139,8 +158,14 @@ impl TokenPriceService {
             let mut cache = self.price_cache.write().await;
             cache.insert(mint.to_string(), entry);
 
-            // Only log individual price updates in debug mode to reduce noise
-            // Normal operation should be quiet for individual token updates
+            // Debug logging for individual price updates
+            if is_debug_price_service_enabled() {
+                log(
+                    LogTag::PriceService,
+                    "DEBUG",
+                    &format!("Updated price for token {}: ${:.8}", mint, token.price_usd)
+                );
+            }
         }
 
         Ok(())
@@ -152,7 +177,7 @@ impl TokenPriceService {
         *positions = mints;
 
         log(
-            LogTag::Trader,
+            LogTag::PriceService,
             "POSITIONS",
             &format!("Updated open positions tracking: {} tokens", positions.len())
         );
@@ -191,14 +216,16 @@ impl TokenPriceService {
 
         priority_mints.extend(additional_tokens);
 
-        log(
-            LogTag::Trader,
-            "MONITOR",
-            &format!(
-                "Priority tokens for monitoring: {} total (includes all tradeable tokens)",
-                priority_mints.len()
-            )
-        );
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "DEBUG",
+                &format!(
+                    "Priority tokens for monitoring: {} total (includes all tradeable tokens)",
+                    priority_mints.len()
+                )
+            );
+        }
 
         Ok(priority_mints)
     }
@@ -224,10 +251,10 @@ impl TokenPriceService {
             }
         }
 
-        // Only log summary for significant updates or errors
-        if updated_count > 0 && mints.len() > 20 && is_debug_monitor_enabled() {
+        // Only log summary for significant updates or debug mode
+        if updated_count > 0 && (mints.len() > 20 || is_debug_price_service_enabled()) {
             log(
-                LogTag::Monitor,
+                LogTag::PriceService,
                 "UPDATE",
                 &format!("Updated {} token prices in cache", updated_count)
             );
@@ -245,6 +272,18 @@ impl TokenPriceService {
             let positions = self.open_positions.read().await;
             if positions.contains(&token.mint) {
                 priority += OPEN_POSITION_PRIORITY;
+
+                if is_debug_price_service_enabled() {
+                    log(
+                        LogTag::PriceService,
+                        "DEBUG",
+                        &format!(
+                            "Token {} has open position, priority +{}",
+                            token.mint,
+                            OPEN_POSITION_PRIORITY
+                        )
+                    );
+                }
             }
         }
 
@@ -252,6 +291,19 @@ impl TokenPriceService {
         if let Some(liquidity) = token.liquidity.as_ref().and_then(|l| l.usd) {
             if liquidity > HIGH_LIQUIDITY_THRESHOLD {
                 priority += HIGH_LIQUIDITY_PRIORITY;
+
+                if is_debug_price_service_enabled() {
+                    log(
+                        LogTag::PriceService,
+                        "DEBUG",
+                        &format!(
+                            "Token {} has high liquidity (${:.2}), priority +{}",
+                            token.mint,
+                            liquidity,
+                            HIGH_LIQUIDITY_PRIORITY
+                        )
+                    );
+                }
             }
         }
 
@@ -268,6 +320,19 @@ impl TokenPriceService {
             .count();
         let valid_entries = total_entries - expired_entries;
 
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "DEBUG",
+                &format!(
+                    "Cache stats: {} total, {} valid, {} expired",
+                    total_entries,
+                    valid_entries,
+                    expired_entries
+                )
+            );
+        }
+
         (total_entries, valid_entries, expired_entries)
     }
 
@@ -282,7 +347,7 @@ impl TokenPriceService {
 
         if removed_count > 0 {
             log(
-                LogTag::Trader,
+                LogTag::PriceService,
                 "CLEANUP",
                 &format!("Removed {} expired price entries from cache", removed_count)
             );
@@ -322,38 +387,35 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
     let mut global_service = PRICE_SERVICE.lock().await;
     *global_service = Some(service);
 
-    log(LogTag::System, "INIT", "Price service initialized successfully");
+    log(LogTag::PriceService, "INIT", "Price service initialized successfully");
 
     Ok(())
 }
 
 /// Get token price using global service (thread-safe API for trader)
 pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
-    if let Ok(service_guard) = PRICE_SERVICE.try_lock() {
-        if let Some(ref service) = *service_guard {
-            return service.get_token_price(mint).await;
-        }
+    let service_guard = PRICE_SERVICE.lock().await;
+    if let Some(ref service) = *service_guard {
+        return service.get_token_price(mint).await;
     }
 
-    log(LogTag::Trader, "WARN", &format!("Price service not available for token: {}", mint));
+    log(LogTag::PriceService, "WARN", &format!("Price service not available for token: {}", mint));
     None
 }
 
 /// Update open positions in global service (called from trader)
 pub async fn update_open_positions_safe(mints: Vec<String>) {
-    if let Ok(service_guard) = PRICE_SERVICE.try_lock() {
-        if let Some(ref service) = *service_guard {
-            service.update_open_positions(mints).await;
-        }
+    let service_guard = PRICE_SERVICE.lock().await;
+    if let Some(ref service) = *service_guard {
+        service.update_open_positions(mints).await;
     }
 }
 
 /// Get priority tokens for monitoring (called from monitor)
 pub async fn get_priority_tokens_safe() -> Vec<String> {
-    if let Ok(service_guard) = PRICE_SERVICE.try_lock() {
-        if let Some(ref service) = *service_guard {
-            return service.get_priority_tokens_for_monitoring().await.unwrap_or_default();
-        }
+    let service_guard = PRICE_SERVICE.lock().await;
+    if let Some(ref service) = *service_guard {
+        return service.get_priority_tokens_for_monitoring().await.unwrap_or_default();
     }
 
     Vec::new()
@@ -361,10 +423,9 @@ pub async fn get_priority_tokens_safe() -> Vec<String> {
 
 /// Update multiple token prices (called from monitor)
 pub async fn update_tokens_prices_safe(mints: &[String]) -> usize {
-    if let Ok(service_guard) = PRICE_SERVICE.try_lock() {
-        if let Some(ref service) = *service_guard {
-            return service.update_tokens_prices(mints).await.unwrap_or(0);
-        }
+    let service_guard = PRICE_SERVICE.lock().await;
+    if let Some(ref service) = *service_guard {
+        return service.update_tokens_prices(mints).await.unwrap_or(0);
     }
 
     0
@@ -372,11 +433,10 @@ pub async fn update_tokens_prices_safe(mints: &[String]) -> usize {
 
 /// Get cache statistics
 pub async fn get_price_cache_stats() -> String {
-    if let Ok(service_guard) = PRICE_SERVICE.try_lock() {
-        if let Some(ref service) = *service_guard {
-            let (total, valid, expired) = service.get_cache_stats().await;
-            return format!("Price Cache: {} total, {} valid, {} expired", total, valid, expired);
-        }
+    let service_guard = PRICE_SERVICE.lock().await;
+    if let Some(ref service) = *service_guard {
+        let (total, valid, expired) = service.get_cache_stats().await;
+        return format!("Price Cache: {} total, {} valid, {} expired", total, valid, expired);
     }
 
     "Price Cache: Not available".to_string()
@@ -384,10 +444,9 @@ pub async fn get_price_cache_stats() -> String {
 
 /// Cleanup expired cache entries
 pub async fn cleanup_price_cache() -> usize {
-    if let Ok(service_guard) = PRICE_SERVICE.try_lock() {
-        if let Some(ref service) = *service_guard {
-            return service.cleanup_expired_entries().await;
-        }
+    let service_guard = PRICE_SERVICE.lock().await;
+    if let Some(ref service) = *service_guard {
+        return service.cleanup_expired_entries().await;
     }
 
     0

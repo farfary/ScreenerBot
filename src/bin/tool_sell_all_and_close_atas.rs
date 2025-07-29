@@ -39,7 +39,6 @@ const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 struct TokenAccount {
     pub mint: String,
     pub balance: u64,
-    pub decimals: u8,
     pub ui_amount: f64,
 }
 
@@ -183,7 +182,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             mint: account.mint.clone(),
             symbol: format!("TOKEN_{}", &account.mint[..8]),
             name: format!("Unknown Token {}", &account.mint[..8]),
-            decimals: account.decimals,
             chain: "solana".to_string(),
 
             // Set all optional fields to defaults
@@ -452,11 +450,6 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
                                                         .and_then(|s| s.parse::<u64>().ok())
                                                         .unwrap_or(0);
 
-                                                    let decimals = token_amount
-                                                        .and_then(|ta| ta.get("decimals"))
-                                                        .and_then(|d| d.as_u64())
-                                                        .unwrap_or(0) as u8;
-
                                                     let ui_amount = token_amount
                                                         .and_then(|ta| ta.get("uiAmount"))
                                                         .and_then(|ua| ua.as_f64())
@@ -466,7 +459,6 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
                                                         token_accounts.push(TokenAccount {
                                                             mint,
                                                             balance,
-                                                            decimals,
                                                             ui_amount,
                                                         });
                                                     }
@@ -577,11 +569,6 @@ async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccoun
                                                         .and_then(|s| s.parse::<u64>().ok())
                                                         .unwrap_or(0);
 
-                                                    let decimals = token_amount
-                                                        .and_then(|ta| ta.get("decimals"))
-                                                        .and_then(|d| d.as_u64())
-                                                        .unwrap_or(0) as u8;
-
                                                     let ui_amount = token_amount
                                                         .and_then(|ta| ta.get("uiAmount"))
                                                         .and_then(|ua| ua.as_f64())
@@ -591,7 +578,6 @@ async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccoun
                                                         token_accounts.push(TokenAccount {
                                                             mint,
                                                             balance,
-                                                            decimals,
                                                             ui_amount,
                                                         });
                                                     }

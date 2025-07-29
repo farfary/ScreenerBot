@@ -48,6 +48,7 @@ const ENABLE_POOL_LOGS: bool = true;
 const ENABLE_BLACKLIST_LOGS: bool = true;
 const ENABLE_DISCOVERY_LOGS: bool = true;
 const ENABLE_API_LOGS: bool = true;
+const ENABLE_PRICE_SERVICE_LOGS: bool = true;
 const ENABLE_FILTERING_LOGS: bool = true;
 const ENABLE_RUGCHECK_LOGS: bool = true;
 const ENABLE_PROFIT_TAG_LOGS: bool = true;
@@ -68,8 +69,8 @@ const ENABLE_PRICE_LOGS: bool = true;
 const ENABLE_GENERAL_LOGS: bool = true; // For any log type not specifically listed above
 
 /// Log format character widths (hardcoded for precise alignment)
-const TAG_WIDTH: usize = 8; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
-const LOG_TYPE_WIDTH: usize = 30; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
+const TAG_WIDTH: usize = 10; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
+const LOG_TYPE_WIDTH: usize = 26; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
 const BRACKET_SPACE_WIDTH: usize = 3; // " [" + "] " = 3 chars between each component
 const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2; // +1 for final space
 
@@ -282,6 +283,7 @@ pub enum LogTag {
     Api,
     Rugcheck,
     Profit,
+    PriceService,
     Other(String),
 }
 
@@ -299,6 +301,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
             LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
             LogTag::Profit => format!("{:<8}", "PROFIT").bright_green().bold(), // 💲 Profit green
+            LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -320,6 +323,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Api => ENABLE_API_LOGS,
         LogTag::Rugcheck => ENABLE_RUGCHECK_LOGS,
         LogTag::Profit => ENABLE_PROFIT_TAG_LOGS,
+        LogTag::PriceService => ENABLE_PRICE_SERVICE_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -404,6 +408,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
                 .bold(),
         LogTag::Profit =>
             format!("{:<width$}", "PROFIT", width = TAG_WIDTH)
+                .bright_green()
+                .bold(),
+        LogTag::PriceService =>
+            format!("{:<width$}", "PRICE", width = TAG_WIDTH)
                 .bright_green()
                 .bold(),
         LogTag::Other(ref s) =>
@@ -498,6 +506,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Api => "API",
         LogTag::Rugcheck => "RUGCHECK",
         LogTag::Profit => "PROFIT",
+        LogTag::PriceService => "PRICE",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);

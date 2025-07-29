@@ -353,7 +353,7 @@ impl DexScreenerApi {
             mint,
             symbol,
             name,
-            decimals: 9, // Default - will be updated by TokenDiscovery system
+            // decimals removed - only use decimal_cache.json
             chain_id,
             dex_id,
             pair_address,

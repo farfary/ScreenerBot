@@ -10,7 +10,7 @@ use serde::{ Serialize, Deserialize };
 // ================================================================================================
 // Duration-based profit scaling: 1min to 1h trades
 // Tracks highest/lowest prices after entry
-// Zero-loss protection with -99% emergency exit
+// Stop loss protection at -55% threshold
 // Profits scale from 0% to 1000% based on speed and duration
 // ================================================================================================
 
@@ -35,9 +35,8 @@ const SPEED_BONUS_VERY: f64 = 1.8; // 1.8x urgency for very fast profits
 const SPEED_BONUS_FAST: f64 = 1.5; // 1.5x urgency for fast profits
 const SPEED_BONUS_MEDIUM: f64 = 1.2; // 1.2x urgency for medium profits
 
-// 🔒 ZERO-LOSS PROTECTION
-pub const STOP_LOSS_PERCENT: f64 = -99.0; // Only sell at -99% for emergency stop loss
-const BREAKEVEN_THRESHOLD: f64 = -99.0; // Never sell below breakeven
+// 🔒 STOP LOSS PROTECTION - SINGLE UNIFIED THRESHOLD
+pub const STOP_LOSS_PERCENT: f64 = -55.0; // Allow selling below -55% loss
 const MINIMUM_PROFIT_TO_CONSIDER: f64 = 1.0; // 0.1% minimum to consider selling
 
 // 📈 PRICE TRACKING THRESHOLDS
@@ -56,7 +55,7 @@ const FORCE_SELL_MIN_PROFIT: f64 = 5.0; // Minimum 5% profit required for force 
 // ================================================================================================
 
 /// THE SINGLE SHOULD_SELL FUNCTION
-/// Zero-loss protection with emergency exit only at -99%
+/// Stop loss protection with -55% threshold
 /// Speed-based profit targets: faster = sell sooner
 /// Duration scaling: 1min to 1h optimal trade window
 /// Profit scaling: 0% to 1000% based on speed achieved
@@ -116,49 +115,33 @@ pub fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🛡️ ZERO-LOSS PROTECTION SYSTEM
+    // 🛡️ STOP LOSS PROTECTION SYSTEM - SINGLE UNIFIED THRESHOLD
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    // ABSOLUTE RULE: NEVER SELL AT LOSS (except emergency -99%)
-    if current_profit_percent <= BREAKEVEN_THRESHOLD {
-        if current_profit_percent <= STOP_LOSS_PERCENT {
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Profit,
-                    "🔍 PROFIT-DEBUG",
-                    &format!(
-                        "🚨 EMERGENCY EXIT TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
-                        position.symbol,
-                        current_profit_percent,
-                        STOP_LOSS_PERCENT
-                    )
-                );
-            }
-            log(
-                LogTag::Profit,
-                "🚨 EMERGENCY",
-                &format!(
-                    "EMERGENCY EXIT: {} at {:.2}% - EXTREME LOSS",
-                    position.symbol,
-                    current_profit_percent
-                )
-            );
-            return (1.0, format!("🚨 EMERGENCY EXIT: {:.1}% loss", current_profit_percent));
-        }
-
+    // RULE: Only sell at loss if below -55% threshold
+    if current_profit_percent <= STOP_LOSS_PERCENT {
         if is_debug_profit_enabled() {
             log(
                 LogTag::Profit,
                 "🔍 PROFIT-DEBUG",
                 &format!(
-                    "🔒 ZERO-LOSS PROTECTION ACTIVE: {} at {:.2}% (breakeven: {:.0}%) - HOLDING",
+                    "🚨 STOP LOSS TRIGGERED: {} at {:.2}% loss (threshold: {:.0}%)",
                     position.symbol,
                     current_profit_percent,
-                    BREAKEVEN_THRESHOLD
+                    STOP_LOSS_PERCENT
                 )
             );
         }
-        return (0.0, format!("🔒 HOLD: {:.2}% - NO LOSS SALES", current_profit_percent));
+        log(
+            LogTag::Profit,
+            "🚨 STOP_LOSS",
+            &format!(
+                "STOP LOSS: {} at {:.2}% - EXCEEDED THRESHOLD",
+                position.symbol,
+                current_profit_percent
+            )
+        );
+        return (1.0, format!("🚨 STOP LOSS: {:.1}% loss", current_profit_percent));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════

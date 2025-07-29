@@ -634,6 +634,88 @@ impl TokenDiscovery {
             match self.api.get_tokens_info(batch).await {
                 Ok(tokens) => {
                     if !tokens.is_empty() {
+                        // Fetch actual decimals from blockchain and ensure they're cached
+                        // This is critical for P&L calculations - decimals must be in cache
+                        let mints: Vec<String> = tokens
+                            .iter()
+                            .map(|t| t.mint.clone())
+                            .collect();
+                        let decimal_results = crate::tokens::decimals::batch_fetch_token_decimals(
+                            &mints
+                        ).await;
+
+                        // Verify all decimals were successfully cached
+                        let mut failed_tokens = Vec::new();
+                        for (mint, decimal_result) in decimal_results.iter() {
+                            match decimal_result {
+                                Ok(_) => {
+                                    if is_debug_discovery_enabled() {
+                                        if
+                                            let Some(token) = tokens
+                                                .iter()
+                                                .find(|t| t.mint == *mint)
+                                        {
+                                            log(
+                                                LogTag::Discovery,
+                                                "DECIMALS",
+                                                &format!(
+                                                    "Cached decimals for {} ({})",
+                                                    token.symbol,
+                                                    &token.mint[..8]
+                                                )
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    // CRITICAL: Never proceed without cached decimals
+                                    // If decimals fetch fails, we should not add this token to watch list
+                                    if let Some(token) = tokens.iter().find(|t| t.mint == *mint) {
+                                        log(
+                                            LogTag::Discovery,
+                                            "ERROR",
+                                            &format!(
+                                                "Failed to fetch decimals for {} ({}): {} - SKIPPING TOKEN",
+                                                token.symbol,
+                                                &token.mint[..8],
+                                                e
+                                            )
+                                        );
+                                        failed_tokens.push(mint.clone());
+                                    }
+                                }
+                            }
+                        }
+
+                        // Filter out tokens with failed decimal fetching
+                        let original_count = tokens.len();
+                        let tokens: Vec<_> = tokens
+                            .into_iter()
+                            .filter(|token| !failed_tokens.contains(&token.mint))
+                            .collect();
+                        let filtered_count = tokens.len();
+
+                        if original_count != filtered_count {
+                            log(
+                                LogTag::Discovery,
+                                "FILTER",
+                                &format!(
+                                    "Removed {} tokens with failed decimal fetching (keeping {} tokens)",
+                                    original_count - filtered_count,
+                                    filtered_count
+                                )
+                            );
+                        }
+
+                        if tokens.is_empty() {
+                            log(
+                                LogTag::Discovery,
+                                "SKIP",
+                                "No tokens remaining after decimal validation"
+                            );
+                            continue;
+                        }
+
                         // Check for new tokens before adding to database (for first-seen logging)
                         let mut new_tokens = Vec::new();
                         let mut existing_tokens = Vec::new();
@@ -648,7 +730,7 @@ impl TokenDiscovery {
                             }
                         }
 
-                        // Add tokens to database
+                        // Add tokens to database (now with correct decimals)
                         match self.database.add_tokens(&tokens).await {
                             Ok(_) => {
                                 total_added += tokens.len();

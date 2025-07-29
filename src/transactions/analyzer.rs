@@ -50,8 +50,8 @@ impl TransactionAnalyzer {
 
         for transfer in transfers.iter_mut() {
             if let Some(token) = crate::tokens::get_token_from_db(&transfer.mint).await {
-                // Update transfer with database information if available
-                transfer.decimals = token.decimals;
+                // Update transfer with decimal cache information
+                transfer.decimals = crate::tokens::get_token_decimals_sync(&transfer.mint);
 
                 // Log enrichment for debugging
                 log(
@@ -147,7 +147,10 @@ impl TransactionAnalyzer {
     }
 
     /// Analyze a transaction to determine its type and extract swap information
-    pub fn analyze_transaction(&self, transaction: &TransactionResult) -> TransactionAnalysis {
+    pub async fn analyze_transaction(
+        &self,
+        transaction: &TransactionResult
+    ) -> TransactionAnalysis {
         let mut analysis = TransactionAnalysis {
             signature: transaction.transaction.signatures.first().cloned().unwrap_or_default(),
             block_time: transaction.block_time,
@@ -178,7 +181,7 @@ impl TransactionAnalyzer {
         analysis.token_transfers = self.extract_token_transfers(transaction);
 
         // Enrich token transfers with database information
-        self.enrich_token_transfers(&mut analysis.token_transfers);
+        self.enrich_token_transfers(&mut analysis.token_transfers).await;
 
         // Calculate SOL balance change
         analysis.sol_balance_change = self.calculate_sol_balance_change(transaction);
@@ -215,7 +218,7 @@ impl TransactionAnalyzer {
         transaction: &TransactionResult
     ) -> TransactionAnalysis {
         // First, do the basic analysis
-        let mut analysis = self.analyze_transaction(transaction);
+        let mut analysis = self.analyze_transaction(transaction).await;
 
         // If this doesn't look like a swap but has DEX interactions and token transfers,
         // try fetching unknown tokens and re-evaluate
@@ -248,7 +251,7 @@ impl TransactionAnalyzer {
                     analysis.token_transfers = self.extract_token_transfers(transaction);
 
                     // Re-enrich with the newly cached token information
-                    self.enrich_token_transfers(&mut analysis.token_transfers);
+                    self.enrich_token_transfers(&mut analysis.token_transfers).await;
 
                     // Re-evaluate swap detection with the new token information
                     if
@@ -361,14 +364,8 @@ impl TransactionAnalyzer {
                             -((pre_amount - post_amount) as i64)
                         };
 
-                        // Get decimals from post_balance if available
-                        let decimals = post_balances
-                            .iter()
-                            .find(
-                                |b| b.account_index.to_string() == account_index && b.mint == mint
-                            )
-                            .map(|b| b.ui_token_amount.decimals)
-                            .unwrap_or(9); // Default to 9 decimals
+                        // Get decimals from decimal cache
+                        let decimals = crate::tokens::get_token_decimals_sync(&mint);
 
                         transfers.push(TokenTransfer {
                             mint: mint.clone(),
@@ -608,7 +605,7 @@ impl TransactionAnalyzer {
     }
 
     /// Categorize multiple transactions
-    pub fn categorize_transactions(
+    pub async fn categorize_transactions(
         &self,
         transactions: &[(SignatureInfo, TransactionResult)]
     ) -> TransactionCategorization {
@@ -623,7 +620,7 @@ impl TransactionAnalyzer {
         };
 
         for (sig_info, transaction) in transactions {
-            let analysis = self.analyze_transaction(transaction);
+            let analysis = self.analyze_transaction(transaction).await;
 
             match analysis.transaction_type {
                 TransactionType::Swap => {
@@ -650,11 +647,11 @@ impl TransactionAnalyzer {
     }
 
     /// Get transaction statistics
-    pub fn get_transaction_stats(
+    pub async fn get_transaction_stats(
         &self,
         transactions: &[(SignatureInfo, TransactionResult)]
     ) -> TransactionStats {
-        let categorization = self.categorize_transactions(transactions);
+        let categorization = self.categorize_transactions(transactions).await;
 
         TransactionStats {
             total: categorization.total_transactions,
@@ -681,18 +678,21 @@ impl TransactionAnalyzer {
     }
 
     /// Enhanced swap detection with multiple criteria
-    pub fn is_swap_transaction(&self, transaction: &TransactionResult) -> bool {
-        let analysis = self.analyze_transaction(transaction);
+    pub async fn is_swap_transaction(&self, transaction: &TransactionResult) -> bool {
+        let analysis = self.analyze_transaction(transaction).await;
         analysis.is_swap
     }
 
     /// Advanced swap detection using multiple heuristics
-    pub fn detect_swaps_advanced(&self, transaction: &TransactionResult) -> Vec<SwapTransaction> {
+    pub async fn detect_swaps_advanced(
+        &self,
+        transaction: &TransactionResult
+    ) -> Vec<SwapTransaction> {
         let mut detected_swaps = Vec::new();
 
         // Method 1: Traditional DEX + bidirectional token analysis
-        if self.is_swap_transaction(transaction) {
-            if let Some(swap_info) = self.analyze_transaction(transaction).swap_info {
+        if self.is_swap_transaction(transaction).await {
+            if let Some(swap_info) = self.analyze_transaction(transaction).await.swap_info {
                 detected_swaps.push(self.create_swap_transaction(transaction, &swap_info));
             }
         }
@@ -1022,8 +1022,8 @@ impl TransactionAnalyzer {
     }
 
     /// Get detailed swap analysis for debugging
-    pub fn debug_transaction_analysis(&self, transaction: &TransactionResult) -> String {
-        let analysis = self.analyze_transaction(transaction);
+    pub async fn debug_transaction_analysis(&self, transaction: &TransactionResult) -> String {
+        let analysis = self.analyze_transaction(transaction).await;
 
         let mut debug_info = vec![
             format!("Transaction Type: {:?}", analysis.transaction_type),

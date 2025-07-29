@@ -445,7 +445,7 @@ pub mod swap_detection {
     use super::*;
 
     /// Find swaps between two specific tokens
-    pub fn find_swaps_between_tokens(
+    pub async fn find_swaps_between_tokens(
         transactions: &[(SignatureInfo, TransactionResult)],
         token_a: &str,
         token_b: &str
@@ -454,7 +454,7 @@ pub mod swap_detection {
         let mut swaps = Vec::new();
 
         for (_, transaction) in transactions {
-            let detected_swaps = analyzer.detect_swaps_advanced(transaction);
+            let detected_swaps = analyzer.detect_swaps_advanced(transaction).await;
 
             for swap in detected_swaps {
                 // Check if this swap involves the target token pair
@@ -472,7 +472,7 @@ pub mod swap_detection {
     }
 
     /// Find all swaps involving a specific token
-    pub fn find_swaps_with_token(
+    pub async fn find_swaps_with_token(
         transactions: &[(SignatureInfo, TransactionResult)],
         token_mint: &str
     ) -> Vec<SwapTransaction> {
@@ -480,7 +480,7 @@ pub mod swap_detection {
         let mut swaps = Vec::new();
 
         for (_, transaction) in transactions {
-            let detected_swaps = analyzer.detect_swaps_advanced(transaction);
+            let detected_swaps = analyzer.detect_swaps_advanced(transaction).await;
 
             for swap in detected_swaps {
                 if swap.input_token.mint == token_mint || swap.output_token.mint == token_mint {
@@ -493,7 +493,7 @@ pub mod swap_detection {
     }
 
     /// Get swap statistics for a specific DEX
-    pub fn get_dex_swap_stats(
+    pub async fn get_dex_swap_stats(
         transactions: &[(SignatureInfo, TransactionResult)],
         dex_name: &str
     ) -> DexSwapStats {
@@ -509,7 +509,7 @@ pub mod swap_detection {
         };
 
         for (_, transaction) in transactions {
-            let detected_swaps = analyzer.detect_swaps_advanced(transaction);
+            let detected_swaps = analyzer.detect_swaps_advanced(transaction).await;
 
             for swap in detected_swaps {
                 if let Some(swap_dex) = &swap.dex_name {
