@@ -291,7 +291,7 @@ impl std::fmt::Display for LogTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tag_str = match self {
             LogTag::Monitor => format!("{:<8}", "MONITOR").bright_cyan().bold(), // 👁️ Watchful blue
-            LogTag::Trader => format!("{:<8}", "TRADER").bright_cyan().bold(), // 💰 Money green
+            LogTag::Trader => format!("{:<8}", "TRADER").bright_blue().bold(), // 💰 Money green
             LogTag::Wallet => format!("{:<8}", "WALLET").bright_magenta().bold(), // 💜 Rich purple for wealth
             LogTag::System => format!("{:<8}", "SYSTEM").bright_yellow().bold(), // ⚙️ Mechanical yellow
             LogTag::Pool => format!("{:<8}", "POOL").bright_blue().bold(), // 🏊 Pool blue
@@ -300,7 +300,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Filtering => format!("{:<8}", "FILTER").bright_yellow().bold(), // 🔄 Filter yellow
             LogTag::Api => format!("{:<8}", "API").bright_purple().bold(), // 🌐 API purple
             LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
-            LogTag::Profit => format!("{:<8}", "PROFIT").bright_green().bold(), // 💲 Profit green
+            LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(), // 💲 Profit green
             LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
