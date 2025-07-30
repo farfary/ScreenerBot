@@ -476,7 +476,8 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         )
     );
 
-    // Execute real buy transaction
+    // Execute real buy transaction with critical operation protection
+    let _guard = crate::trader::CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
     match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
         Ok(swap_result) => {
             // Check if the transaction was actually successful on-chain
@@ -708,7 +709,8 @@ pub async fn close_position(
             )
         );
 
-        // Execute real sell transaction
+        // Execute real sell transaction with critical operation protection
+        let _guard = crate::trader::CriticalOperationGuard::new(&format!("SELL {}", position.symbol));
         match sell_token(token, token_amount, None).await {
             Ok(swap_result) => {
                 // Check if the sell transaction was actually successful on-chain

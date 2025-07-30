@@ -11,6 +11,40 @@ async fn main() {
 
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
+    // Set up emergency shutdown handler (second Ctrl+C will force kill)
+    let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let emergency_shutdown_clone = emergency_shutdown.clone();
+    
+    tokio::spawn(async move {
+        // Wait for second Ctrl+C
+        if tokio::signal::ctrl_c().await.is_ok() {
+            if emergency_shutdown_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                // Check for critical operations before force killing
+                let critical_ops = screenerbot::trader::CriticalOperationGuard::get_active_count();
+                if critical_ops > 0 {
+                    log(
+                        LogTag::System, 
+                        "EMERGENCY", 
+                        &format!("🚨 SECOND Ctrl+C DETECTED BUT {} CRITICAL TRADING OPERATIONS STILL ACTIVE!", critical_ops)
+                    );
+                    log(LogTag::System, "EMERGENCY", "⚠️  FORCE KILL BLOCKED - Would cause financial loss!");
+                    log(LogTag::System, "EMERGENCY", "🔒 Waiting for trading operations to complete...");
+                    log(LogTag::System, "EMERGENCY", "💡 Press Ctrl+C a THIRD time to override (DANGEROUS!)");
+                    
+                    // Wait for third Ctrl+C to override protection
+                    if tokio::signal::ctrl_c().await.is_ok() {
+                        log(LogTag::System, "EMERGENCY", "💀 THIRD Ctrl+C - FORCE KILLING DESPITE ACTIVE OPERATIONS!");
+                        log(LogTag::System, "EMERGENCY", "⚠️  THIS MAY CAUSE FINANCIAL LOSS OR INCOMPLETE TRADES!");
+                        std::process::abort();
+                    }
+                } else {
+                    log(LogTag::System, "EMERGENCY", "Second Ctrl+C detected - FORCE KILLING APPLICATION");
+                    std::process::abort(); // Immediate termination
+                }
+            }
+        }
+    });
+
     // Initialize tokens system
     let mut tokens_system = match screenerbot::tokens::initialize_tokens_system().await {
         Ok(system) => system,
@@ -92,30 +126,94 @@ async fn main() {
         log(LogTag::Trader, "INFO", "Trader task ended");
     });
 
-    log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown");
-    tokio::signal::ctrl_c().await.expect("failed to listen for event");
-    log(LogTag::System, "INFO", "Shutdown signal received, notifying tasks");
+    log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown (press Ctrl+C twice for immediate kill)");
+    
+    // Set up Ctrl+C signal handler with better error handling
+    match tokio::signal::ctrl_c().await {
+        Ok(_) => {
+            emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+            log(LogTag::System, "INFO", "Shutdown signal received, initiating graceful shutdown...");
+            log(LogTag::System, "INFO", "Press Ctrl+C again within 5 seconds to force immediate termination");
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to listen for shutdown signal: {}", e));
+            std::process::exit(1);
+        }
+    }
+    
+    // Notify all tasks to shutdown
     shutdown.notify_waiters();
+    log(LogTag::System, "INFO", "Shutdown notification sent to all background tasks");
 
-    // Cleanup price service on shutdown
-    screenerbot::tokens::cleanup_price_service().await;
+    // CRITICAL PROTECTION: Check for active trading operations
+    let critical_ops_count = screenerbot::trader::CriticalOperationGuard::get_active_count();
+    if critical_ops_count > 0 {
+        log(
+            LogTag::System, 
+            "CRITICAL", 
+            &format!("🚨 WAITING FOR {} CRITICAL TRADING OPERATIONS TO COMPLETE BEFORE SHUTDOWN", critical_ops_count)
+        );
+        log(LogTag::System, "CRITICAL", "⚠️  DO NOT FORCE KILL - Financial operations in progress!");
+        
+        // Wait for critical operations to complete (max 60 seconds)
+        let critical_ops_timeout = std::time::Instant::now();
+        while screenerbot::trader::CriticalOperationGuard::get_active_count() > 0 {
+            if critical_ops_timeout.elapsed() > std::time::Duration::from_secs(60) {
+                log(LogTag::System, "EMERGENCY", "⚠️  CRITICAL OPERATIONS TIMEOUT - Some trades may be incomplete!");
+                break;
+            }
+            
+            let remaining = screenerbot::trader::CriticalOperationGuard::get_active_count();
+            if remaining > 0 {
+                log(
+                    LogTag::System, 
+                    "CRITICAL", 
+                    &format!("🔒 Still waiting for {} critical operations... ({}s elapsed)", 
+                        remaining, 
+                        critical_ops_timeout.elapsed().as_secs()
+                    )
+                );
+            }
+            
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        
+        if screenerbot::trader::CriticalOperationGuard::get_active_count() == 0 {
+            log(LogTag::System, "CRITICAL", "✅ All critical trading operations completed safely");
+        }
+    }
 
-    // Save decimal cache to disk on shutdown
-    screenerbot::tokens::decimals::save_decimal_cache();
+    // Cleanup price service on shutdown (with timeout)
+    let cleanup_result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        screenerbot::tokens::cleanup_price_service().await;
+        screenerbot::tokens::decimals::save_decimal_cache();
+    }).await;
 
-    // Wait for background tasks to finish with timeout
-    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    match cleanup_result {
+        Ok(_) => log(LogTag::System, "INFO", "Cleanup completed successfully"),
+        Err(_) => log(LogTag::System, "WARN", "Cleanup timed out after 3 seconds"),
+    }
+
+    // Wait for background tasks to finish with shorter timeout and better handling
+    log(LogTag::System, "INFO", "Waiting for background tasks to shutdown (max 5 seconds)...");
+    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         // Wait for trader task
-        let _ = trader_handle.await;
+        if let Err(e) = trader_handle.await {
+            log(LogTag::System, "WARN", &format!("Trader task failed to shutdown cleanly: {}", e));
+        }
 
         // Wait for tokens system tasks (includes rugcheck service)
-        for handle in tokens_handles {
-            let _ = handle.await;
+        for (i, handle) in tokens_handles.into_iter().enumerate() {
+            if let Err(e) = handle.await {
+                log(LogTag::System, "WARN", &format!("Tokens task {} failed to shutdown cleanly: {}", i, e));
+            }
         }
 
         // Wait for pricing tasks
-        for handle in pricing_handles {
-            let _ = handle.await;
+        for (i, handle) in pricing_handles.into_iter().enumerate() {
+            if let Err(e) = handle.await {
+                log(LogTag::System, "WARN", &format!("Pricing task {} failed to shutdown cleanly: {}", i, e));
+            }
         }
     });
 
@@ -124,12 +222,11 @@ async fn main() {
             log(LogTag::System, "INFO", "All background tasks finished gracefully. Exiting.");
         }
         Err(_) => {
-            log(LogTag::System, "WARN", "Tasks did not finish within timeout, forcing exit.");
+            log(LogTag::System, "WARN", "Tasks did not finish within 5 second timeout, forcing immediate exit.");
+            // Force immediate termination
+            std::process::abort();
         }
     }
-
-    // Force exit to ensure clean shutdown
-    std::process::exit(0);
 }
 
 // Access CMD_ARGS anywhere via CMD_ARGS.lock().unwrap()

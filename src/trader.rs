@@ -76,7 +76,7 @@ pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
 // -----------------------------------------------------------------------------
 
 /// Minimum price drop percentage to trigger buy signal
-pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
+pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 2.0;
 
 // -----------------------------------------------------------------------------
 // Exit Signal Configuration (Profit Taking)
@@ -165,6 +165,7 @@ use crate::utils::*;
 
 use crate::filtering::{ should_buy_token, log_filtering_summary };
 use crate::tokens::get_token_rugcheck_data_safe;
+use crate::tokens::rugcheck::{ is_token_safe_for_trading, get_high_risk_issues };
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -192,6 +193,53 @@ pub static PRICE_HISTORY_24H: Lazy<
 pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new(|| {
     StdArc::new(StdMutex::new(HashMap::new()))
 });
+
+/// Static global: tracks critical trading operations in progress to prevent force shutdown
+pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = 
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicUsize::new(0)));
+
+// =============================================================================
+// CRITICAL OPERATION PROTECTION
+// =============================================================================
+
+/// RAII guard that increments critical operations counter on creation and decrements on drop
+/// Prevents shutdown while critical trading operations (buy/sell) are in progress
+pub struct CriticalOperationGuard {
+    _phantom: std::marker::PhantomData<()>,
+}
+
+impl CriticalOperationGuard {
+    /// Create a new critical operation guard
+    /// This should be created before any buy/sell operation
+    pub fn new(operation_name: &str) -> Self {
+        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        log(
+            LogTag::Trader,
+            "CRITICAL_OP_START",
+            &format!("🔒 PROTECTED: {} operation started (active operations: {})", operation_name, count + 1)
+        );
+        
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+    
+    /// Get the current number of critical operations in progress
+    pub fn get_active_count() -> usize {
+        CRITICAL_OPERATIONS_IN_PROGRESS.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Drop for CriticalOperationGuard {
+    fn drop(&mut self) {
+        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        log(
+            LogTag::Trader,
+            "CRITICAL_OP_END",
+            &format!("🔓 UNPROTECTED: Critical operation finished (remaining operations: {})", count - 1)
+        );
+    }
+}
 
 // =============================================================================
 // DEBUG LOGGING CONFIGURATION
@@ -1384,6 +1432,9 @@ pub fn is_entry_allowed_by_historical_data(mint: &str, current_price: f64) -> bo
 
 /// Background task to monitor new tokens for entry opportunities
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
+    // Clone shutdown once at the start to avoid borrow checker issues
+    let shutdown = shutdown.clone();
+    
     'outer: loop {
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
@@ -1790,24 +1841,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                 );
                                                 buy_urgency = 0.0;
                                             } else {
-                                                // Block tokens with very low rugcheck scores
+                                                // Use the proper rugcheck safety validation
                                                 let rugcheck_score = rugcheck_data.score_normalised
                                                     .or(rugcheck_data.score)
                                                     .unwrap_or(50);
 
-                                                if rugcheck_score < 20 {
+                                                if !is_token_safe_for_trading(&rugcheck_data) {
+                                                    let high_risk_issues = get_high_risk_issues(
+                                                        &rugcheck_data
+                                                    );
                                                     debug_trader_log(
-                                                        "RUGCHECK_REJECT_LOW_SCORE",
+                                                        "RUGCHECK_REJECT_UNSAFE",
                                                         &format!(
-                                                            "Token {} ({}) rejected - low rugcheck score: {}",
+                                                            "Token {} ({}) rejected - failed safety check (score: {}, issues: {:?})",
                                                             token.symbol,
                                                             token.mint,
-                                                            rugcheck_score
+                                                            rugcheck_score,
+                                                            high_risk_issues
                                                         )
                                                     );
                                                     buy_urgency = 0.0;
                                                 } else if
-                                                    // Block tokens with critical risks
+                                                    // Block tokens with critical risks (additional check)
                                                     let Some(risks) = &rugcheck_data.risks
                                                 {
                                                     let critical_risks = risks
@@ -2254,10 +2309,23 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         }
                     };
 
+                    // Clone shutdown for use in the spawned task
+                    let shutdown_for_task = shutdown.clone();
                     let handle = tokio::spawn(async move {
                         let _permit = permit; // Keep permit alive for duration of task
 
                         let token_symbol = token.symbol.clone();
+
+                        // Check for shutdown before starting buy operation (non-blocking check)
+                        let shutdown_check = tokio::time::timeout(Duration::from_millis(1), shutdown_for_task.notified()).await;
+                        if shutdown_check.is_ok() {
+                            log(
+                                LogTag::Trader,
+                                "SHUTDOWN",
+                                &format!("Skipping buy operation for {} - shutdown in progress", token_symbol)
+                            );
+                            return false;
+                        }
 
                         // Wrap the buy operation in a timeout
                         match
@@ -2397,6 +2465,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
 /// Background task to monitor open positions for exit opportunities
 pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
+    // Clone shutdown once at the start to avoid borrow checker issues
+    let shutdown = shutdown.clone();
+    
     loop {
         // First, collect all open position mints to fetch pool prices in parallel
         let open_position_mints: Vec<String> = {
@@ -2635,6 +2706,8 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
                 };
 
+                // Clone shutdown for use in the spawned sell task
+                let shutdown_for_task = shutdown.clone();
                 // We already have the position from the analysis phase, no need to look it up
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
@@ -2664,6 +2737,17 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             )
                         );
                         return None; // Abort the sale - small loss, hold until bigger loss or profit
+                    }
+
+                    // Check for shutdown before starting sell operation (non-blocking check)
+                    let shutdown_check = tokio::time::timeout(Duration::from_millis(1), shutdown_for_task.notified()).await;
+                    if shutdown_check.is_ok() {
+                        log(
+                            LogTag::Trader,
+                            "SHUTDOWN",
+                            &format!("Skipping sell operation for {} - shutdown in progress", token_symbol)
+                        );
+                        return None;
                     }
 
                     // Wrap the sell operation in a timeout

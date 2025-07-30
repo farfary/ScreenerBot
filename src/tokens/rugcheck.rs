@@ -65,7 +65,7 @@ const RUGCHECK_RATE_LIMIT_DELAY: Duration = Duration::from_millis(5000); // 5 se
 const RUGCHECK_BATCH_SIZE: usize = 1; // Process 1 token at a time for better rate limiting
 const RUGCHECK_REQUEST_TIMEOUT: Duration = Duration::from_secs(45); // Increased timeout
 const RUGCHECK_UPDATE_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
-const RUGCHECK_DATA_EXPIRY: Duration = Duration::from_secs(1800); // 5 minutes
+const RUGCHECK_DATA_EXPIRY: Duration = Duration::from_secs(60 * 60); // 5 minutes
 
 // ===== RUGCHECK API RESPONSE STRUCTURES =====
 
@@ -400,10 +400,32 @@ impl RugcheckService {
         let mut success_count = 0;
         let mut error_count = 0;
 
+        let shutdown_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let shutdown_flag_clone = shutdown_flag.clone();
+        let shutdown_notify_clone = self.shutdown_notify.clone();
+
+        // Spawn a task to watch for shutdown signal
+        tokio::spawn(async move {
+            shutdown_notify_clone.notified().await;
+            shutdown_flag_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+
         for chunk in mints.chunks(RUGCHECK_BATCH_SIZE) {
+            // Check for shutdown signal before processing each batch
+            if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                log(LogTag::Rugcheck, "SHUTDOWN", "Shutdown signal received during batch processing");
+                break;
+            }
+
             // Process batch sequentially to avoid rate limiting
             // Note: Individual fetch_rugcheck_data calls now handle rate limiting
             for mint in chunk {
+                // Check for shutdown signal before each token
+                if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                    log(LogTag::Rugcheck, "SHUTDOWN", "Shutdown signal received during token processing");
+                    break;
+                }
+
                 match self.fetch_and_store_rugcheck_data(mint.clone()).await {
                     Ok(_) => {
                         success_count += 1;

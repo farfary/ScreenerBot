@@ -15,24 +15,108 @@ use std::sync::Mutex;
 use std::collections::HashMap;
 
 // =============================================================================
-// FILTERING CONFIGURATION CONSTANTS
+// FILTERING CONFIGURATION PARAMETERS (CENTRALIZED FOR EASY ACCESS)
+// =============================================================================
+//
+// 🚀 QUICK PARAMETER REFERENCE:
+//   - MIN_TOKEN_AGE_HOURS = 1 (tokens must be at least 1 hour old)
+//   - MAX_TOKEN_AGE_HOURS = 720 (30 days max age)
+//   - POSITION_CLOSE_COOLDOWN_MINUTES = 1440 (24 hour cooldown)
+//   - MAX_PRICE_TO_ATH_PERCENT = 75.0 (must be 25% below ATH)
+//   - MIN_LIQUIDITY_USD = 1000.0 (minimum liquidity requirement)
+//   - MIN_LP_LOCK_PERCENTAGE = 80.0 (minimum LP lock requirement)
+//
+// 🔧 TO ADJUST TRADING BEHAVIOR:
+//   - Make more aggressive: Lower minimums, shorter cooldowns
+//   - Make more conservative: Higher minimums, longer cooldowns
+//   - Adjust risk tolerance: Modify rugcheck and LP lock parameters
+//
 // =============================================================================
 
+// ===== AGE FILTERING PARAMETERS =====
 /// Minimum token age in hours before trading
 pub const MIN_TOKEN_AGE_HOURS: i64 = 1;
 
 /// Maximum token age in hours (effectively unlimited)
-pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24;
+pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24; // 30 days
 
+// ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60;
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
 
+// Note: MAX_OPEN_POSITIONS is imported from trader module above
+
+// ===== PRICE ACTION FILTERING PARAMETERS =====
 /// Maximum allowed percentage from all-time high to allow buying (e.g. 75% means
 /// current price must be at least 25% below ATH)
 pub const MAX_PRICE_TO_ATH_PERCENT: f64 = 75.0;
 
+/// Minimum price in SOL to consider valid
+pub const MIN_VALID_PRICE_SOL: f64 = 0.000000001;
+
+/// Maximum price in SOL to avoid (prevents overflow issues)
+pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
+
+// ===== LIQUIDITY FILTERING PARAMETERS =====
+/// Minimum liquidity in USD required for trading
+pub const MIN_LIQUIDITY_USD: f64 = 1000.0;
+
+/// Preferred minimum liquidity in USD for safer trading
+pub const PREFERRED_MIN_LIQUIDITY_USD: f64 = 5000.0;
+
+// ===== RUGCHECK SECURITY PARAMETERS =====
+/// Minimum normalized rugcheck score to consider (0-100 scale)
+/// Note: Very low scores (0-4) can be GOOD for established tokens
+pub const MIN_RUGCHECK_SCORE_THRESHOLD: i32 = -1; // Allow all scores, let safety function decide
+
+/// Maximum number of high-risk issues to tolerate
+pub const MAX_HIGH_RISK_ISSUES: usize = 1;
+
+/// Maximum number of critical-risk issues to tolerate
+pub const MAX_CRITICAL_RISK_ISSUES: usize = 0;
+
+// ===== LP LOCK SECURITY PARAMETERS =====
+/// Minimum percentage of LP tokens that must be locked
+pub const MIN_LP_LOCK_PERCENTAGE: f64 = 80.0;
+
+/// Minimum percentage for new/risky tokens
+pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 90.0;
+
+// ===== LOGGING AND PERFORMANCE PARAMETERS =====
 /// Cooldown period for token filter logs (minutes)
 pub const LOG_COOLDOWN_MINUTES: i64 = 15;
+
+/// Maximum number of log entries to keep in memory
+pub const MAX_LOG_COOLDOWN_ENTRIES: usize = 1000;
+
+/// Cleanup interval for log cooldown entries (hours)
+pub const LOG_CLEANUP_INTERVAL_HOURS: i64 = 1;
+
+// ===== HISTORICAL PERFORMANCE PARAMETERS =====
+/// Maximum acceptable loss rate for historical performance (0.0-1.0)
+pub const MAX_HISTORICAL_LOSS_RATE: f64 = 0.8; // 80% loss rate
+
+/// Maximum acceptable average loss percentage
+pub const MAX_AVERAGE_LOSS_PERCENTAGE: f64 = 50.0; // 50% average loss
+
+// ===== VALIDATION TIMEOUTS =====
+/// Maximum time to wait for database locks (milliseconds)
+pub const DB_LOCK_TIMEOUT_MS: u64 = 5000;
+
+/// Maximum time to wait for price history locks (milliseconds)
+pub const PRICE_HISTORY_LOCK_TIMEOUT_MS: u64 = 3000;
+
+// =============================================================================
+// END OF FILTERING PARAMETERS
+// =============================================================================
+// 📋 PARAMETER CATEGORIES SUMMARY:
+//   • Age Filtering: Controls token age requirements (1 hour - 30 days)
+//   • Position Management: Prevents conflicts and overexposure
+//   • Price Action: Avoids buying near peaks, validates price ranges
+//   • Liquidity: Ensures sufficient trading volume
+//   • Security: Rugcheck and LP lock safety requirements
+//   • Performance: Logging, timeouts, and system limits
+// =============================================================================
 
 /// Static global: log cooldown tracking by token mint and reason
 static TOKEN_LOG_COOLDOWNS: Lazy<Mutex<HashMap<String, DateTime<Utc>>>> = Lazy::new(|| {
@@ -50,7 +134,19 @@ pub enum FilterReason {
     EmptySymbol,
     EmptyMint,
     InvalidPrice,
+    PriceTooLow {
+        current_price: f64,
+        minimum_price: f64,
+    },
+    PriceTooHigh {
+        current_price: f64,
+        maximum_price: f64,
+    },
     ZeroLiquidity,
+    InsufficientLiquidity {
+        current_usd: f64,
+        minimum_required: f64,
+    },
     MissingLiquidityData,
     MissingPriceData,
 
@@ -427,10 +523,18 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
         return Some(FilterReason::ZeroLiquidity);
     }
 
+    // Apply minimum liquidity requirement
+    if liquidity_usd < MIN_LIQUIDITY_USD {
+        return Some(FilterReason::InsufficientLiquidity {
+            current_usd: liquidity_usd,
+            minimum_required: MIN_LIQUIDITY_USD,
+        });
+    }
+
     None
 }
 
-/// Validate price data availability
+/// Validate price data availability and ranges
 fn validate_price_data(token: &Token) -> Option<FilterReason> {
     let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
 
@@ -440,6 +544,21 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
 
     if token.price_dexscreener_sol.is_none() {
         return Some(FilterReason::MissingPriceData);
+    }
+
+    // Validate price is within acceptable range
+    if current_price < MIN_VALID_PRICE_SOL {
+        return Some(FilterReason::PriceTooLow {
+            current_price,
+            minimum_price: MIN_VALID_PRICE_SOL,
+        });
+    }
+
+    if current_price > MAX_VALID_PRICE_SOL {
+        return Some(FilterReason::PriceTooHigh {
+            current_price,
+            maximum_price: MAX_VALID_PRICE_SOL,
+        });
     }
 
     None
@@ -544,9 +663,10 @@ fn should_log_token_filter(token: &Token, reason_type: &str) -> bool {
         // Update the last logged time
         cooldowns.insert(key, now);
 
-        // Cleanup old entries periodically (every 100 inserts, approximately)
-        if cooldowns.len() % 100 == 0 {
-            cooldowns.retain(|_, timestamp| { now - *timestamp < ChronoDuration::hours(1) });
+        // Cleanup old entries periodically to prevent memory growth
+        if cooldowns.len() % 100 == 0 && cooldowns.len() > MAX_LOG_COOLDOWN_ENTRIES {
+            let cleanup_cutoff = now - ChronoDuration::hours(LOG_CLEANUP_INTERVAL_HOURS);
+            cooldowns.retain(|_, timestamp| *timestamp > cleanup_cutoff);
         }
 
         true
@@ -677,9 +797,13 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             for (_, reason) in rejected {
                 let reason_type = match reason {
                     FilterReason::EmptySymbol | FilterReason::EmptyMint => "Invalid Metadata",
-                    FilterReason::InvalidPrice | FilterReason::MissingPriceData => "Price Issues",
-                    FilterReason::ZeroLiquidity | FilterReason::MissingLiquidityData =>
-                        "Liquidity Issues",
+                    | FilterReason::InvalidPrice
+                    | FilterReason::PriceTooLow { .. }
+                    | FilterReason::PriceTooHigh { .. }
+                    | FilterReason::MissingPriceData => "Price Issues",
+                    | FilterReason::ZeroLiquidity
+                    | FilterReason::InsufficientLiquidity { .. }
+                    | FilterReason::MissingLiquidityData => "Liquidity Issues",
                     | FilterReason::TooYoung { .. }
                     | FilterReason::TooOld { .. }
                     | FilterReason::NoCreationDate => "Age Constraints",
