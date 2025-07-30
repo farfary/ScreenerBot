@@ -230,7 +230,7 @@ async fn main() {
 
     // Cleanup price service on shutdown (with timeout)
     let cleanup_result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        screenerbot::tokens::cleanup_price_service().await;
+        screenerbot::tokens::cleanup_price_cache().await;
         screenerbot::tokens::decimals::save_decimal_cache();
     }).await;
 

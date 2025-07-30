@@ -7,3 +7,4 @@
 .blacklist.json
 .cache_ohlcv/*
 .cache_trades/*
+logs/*

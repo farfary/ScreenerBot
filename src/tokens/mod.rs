@@ -86,12 +86,9 @@ pub use price_service::{
     get_priority_tokens_safe,
     update_tokens_prices_safe,
     get_price_cache_stats,
-    cleanup_price_service,
+    cleanup_price_cache,
     TokenPriceService,
     PriceCacheEntry,
-    // New price service functions
-    init_price_service,
-    get_price_service,
 };
 
 // =============================================================================
@@ -488,14 +485,14 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
                     );
                 } else {
                     // Update price service cache
-                    let updated_count = update_tokens_prices_safe(chunk).await;
-                    total_updated += updated_count;
+                    update_tokens_prices_safe(chunk).await;
+                    total_updated += updated_tokens.len();
 
                     if is_debug_monitor_enabled() {
                         log(
                             LogTag::Monitor,
                             "UPDATE",
-                            &format!("Updated {} tokens in priority batch", updated_count)
+                            &format!("Updated {} tokens in priority batch", updated_tokens.len())
                         );
                     }
                 }

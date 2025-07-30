@@ -11,8 +11,8 @@
 /// - Compare prices: cargo run --bin tool_pool_price -- --token <TOKEN_MINT> --compare-api
 
 use screenerbot::tokens::pool::{ get_pool_service, init_pool_service };
-use screenerbot::tokens::api::get_token_pairs_from_api;
-use screenerbot::tokens::price_service::{ get_price_service, init_price_service };
+use screenerbot::tokens::api::{ get_token_pairs_from_api, init_dexscreener_api };
+use screenerbot::tokens::price_service::{ initialize_price_service };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::rpc::{ init_rpc_client, init_rpc_client_with_url, get_rpc_client };
@@ -138,13 +138,17 @@ async fn main() {
     // Initialize services
     log(LogTag::Pool, "INIT", "Initializing pool and price services...");
 
-    let pool_service = init_pool_service();
-    if let Err(e) = init_price_service() {
-        log(LogTag::Pool, "ERROR", &format!("Failed to initialize price service: {}", e));
+    // Initialize DexScreener API first
+    if let Err(e) = init_dexscreener_api().await {
+        log(LogTag::Pool, "ERROR", &format!("Failed to initialize DexScreener API: {}", e));
         return;
     }
 
-    let price_service = get_price_service();
+    let pool_service = init_pool_service();
+    if let Err(e) = initialize_price_service().await {
+        eprintln!("Failed to initialize price service: {}", e);
+        return;
+    }
 
     // Determine what operation to perform
     if matches.get_flag("test-monitoring") {
@@ -153,7 +157,7 @@ async fn main() {
         if matches.get_flag("test-pools") {
             test_token_pools(token_address).await;
         } else if matches.get_flag("compare-api") {
-            compare_pool_api_prices(pool_service, price_service, token_address).await;
+            compare_pool_api_prices(pool_service, token_address).await;
         } else if let Some(pool_address) = matches.get_one::<String>("pool") {
             if matches.get_flag("debug-detailed") {
                 debug_specific_pool_detailed(pool_address, token_address).await;
@@ -290,7 +294,6 @@ async fn test_token_pools(token_address: &str) {
 /// Compare pool prices with API prices - Enhanced with decimal debugging
 async fn compare_pool_api_prices(
     pool_service: &'static screenerbot::tokens::pool::PoolPriceService,
-    price_service: &'static screenerbot::tokens::price_service::TokenPriceService,
     token_address: &str
 ) {
     log(LogTag::Pool, "TEST", &format!("Comparing pool vs API prices for: {}", token_address));
@@ -307,8 +310,8 @@ async fn compare_pool_api_prices(
         return;
     }
 
-    // Get API price (this returns SOL price)
-    let api_price_sol = price_service.get_token_price(token_address).await;
+    // Get API price (this returns SOL price) - use the global price service function
+    let api_price_sol = screenerbot::tokens::price_service::get_token_price_safe(token_address).await;
     log(LogTag::Pool, "API", &format!("API price: {:.12} SOL", api_price_sol.unwrap_or(0.0)));
 
     // Get pool price with detailed debugging

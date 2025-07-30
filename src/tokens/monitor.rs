@@ -171,8 +171,14 @@ impl TokenMonitor {
                 Ok(updated_tokens) => {
                     // Update database
                     if !updated_tokens.is_empty() {
-                        match self.database.update_tokens(&updated_tokens).await {
-                            Ok(_) => {
+                            if let Err(e) = self.database.update_tokens(&updated_tokens).await {
+                                log(
+                                    LogTag::Monitor,
+                                    "ERROR",
+                                    &format!("Failed to update priority tokens: {}", e)
+                                );
+                                errors += 1;
+                            } else {
                                 // Update price service cache
                                 update_tokens_prices_safe(chunk).await;
 
@@ -204,15 +210,6 @@ impl TokenMonitor {
                                     );
                                 }
                             }
-                            Err(e) => {
-                                log(
-                                    LogTag::Monitor,
-                                    "ERROR",
-                                    &format!("Failed to update priority tokens: {}", e)
-                                );
-                                errors += 1;
-                            }
-                        }
                     }
                 }
                 Err(e) => {

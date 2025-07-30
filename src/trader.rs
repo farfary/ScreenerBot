@@ -1449,19 +1449,52 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
     let shutdown = shutdown.clone();
 
+    log(LogTag::Trader, "STARTUP", "🚀 Starting monitor_new_entries task");
+
     'outer: loop {
+        let loop_start = std::time::Instant::now();
+        log(LogTag::Trader, "CYCLE", "📋 Starting new trading cycle");
+
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
         // Update position tracking in price service
+        log(LogTag::Trader, "DEBUG", "🔄 Updating position tracking in price service...");
+        let position_update_start = std::time::Instant::now();
         update_position_tracking_in_service().await;
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "✅ Position tracking updated in {:.1}ms",
+                position_update_start.elapsed().as_millis()
+            )
+        );
 
         // Ensure we have tokens to work with
+        log(LogTag::Trader, "DEBUG", "🪙 Ensuring tokens are populated...");
+        let token_populate_start = std::time::Instant::now();
         ensure_tokens_populated().await;
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("✅ Tokens populated in {:.1}ms", token_populate_start.elapsed().as_millis())
+        );
 
         let mut tokens: Vec<_> = {
             // Get tokens from safe system
+            log(LogTag::Trader, "DEBUG", "📡 Getting tokens from safe system...");
+            let token_fetch_start = std::time::Instant::now();
             let tokens_from_module = get_tokens_from_safe_system().await;
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "✅ Got {} tokens from safe system in {:.1}ms",
+                    tokens_from_module.len(),
+                    token_fetch_start.elapsed().as_millis()
+                )
+            );
 
             // Log total tokens available
             log(
@@ -1473,6 +1506,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
 
             // Add debug info about token prices and update times
+            log(LogTag::Trader, "DEBUG", "🏷️ Checking price service for sample tokens...");
+            let price_check_start = std::time::Instant::now();
             debug_trader_log(
                 "TOKEN_PRICE_DEBUG",
                 &format!(
@@ -1482,20 +1517,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
 
             for (i, token) in tokens_from_module.iter().take(3).enumerate() {
+                let price_lookup_start = std::time::Instant::now();
                 let price_from_service = get_token_price_safe(&token.mint).await;
                 debug_trader_log(
                     "TOKEN_PRICE_SAMPLE",
                     &format!(
-                        "Token {}: {} ({}) - price_service={:?}",
+                        "Token {}: {} ({}) - price_service={:?} (lookup took {:.1}ms)",
                         i + 1,
                         token.symbol,
                         token.mint,
-                        price_from_service
+                        price_from_service,
+                        price_lookup_start.elapsed().as_millis()
                     )
                 );
             }
-
-            // Include all tokens - we want to trade on existing tokens with updated info
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "✅ Price service check completed in {:.1}ms",
+                    price_check_start.elapsed().as_millis()
+                )
+            ); // Include all tokens - we want to trade on existing tokens with updated info
             // The discovery system ensures tokens are updated with fresh data before trading
             log(
                 LogTag::Trader,
@@ -1599,20 +1642,39 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             continue;
         }
 
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("🔍 Starting to process {} eligible tokens", tokens.len())
+        );
+
         // Use a semaphore to limit the number of concurrent token checks
         // This balances between parallelism and not overwhelming external APIs
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
         // Log filtering summary
+        log(LogTag::Trader, "DEBUG", "📊 Logging filtering summary...");
+        let summary_start = std::time::Instant::now();
         log_filtering_summary(&tokens);
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("✅ Filtering summary logged in {:.1}ms", summary_start.elapsed().as_millis())
+        );
 
         // Process all tokens in parallel with concurrent tasks
         let mut handles = Vec::new();
 
         // Get the total token count before starting the loop
         let total_tokens = tokens.len();
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!("🚀 Starting parallel processing of {} tokens", total_tokens)
+        );
 
+        let token_processing_start = std::time::Instant::now();
         // Note: tokens are still sorted by liquidity from highest to lowest
         for (index, token) in tokens.iter().enumerate() {
             // Check for shutdown before spawning tasks
