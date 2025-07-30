@@ -677,6 +677,9 @@ impl TokenDatabase {
                 active: row.get("boosts_active")?,
             }),
             info: Some(crate::tokens::types::TokenInfo {
+                address: row.get::<_, String>("mint")?,
+                name: row.get::<_, String>("name")?,
+                symbol: row.get::<_, String>("symbol")?,
                 image_url: row.get("info_image_url")?,
                 websites: None, // Not stored in simplified schema
                 socials: None, // Not stored in simplified schema

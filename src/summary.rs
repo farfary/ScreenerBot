@@ -148,37 +148,38 @@ pub async fn display_positions_table() {
     // The new pool price system runs in background and continuously updates prices
     // for open positions, so we don't need to refresh them here
 
-    let (open_positions, closed_positions, _open_count, _closed_count, total_invested, total_pnl) = {
-        let all_positions = SAVED_POSITIONS.lock().unwrap();
+    let (open_positions, closed_positions, _open_count, _closed_count, total_invested, total_pnl) =
+        {
+            let all_positions = SAVED_POSITIONS.lock().unwrap();
 
-        // Separate open and closed positions
-        let open_positions: Vec<Position> = all_positions
-            .iter()
-            .filter(|p| p.exit_time.is_none())
-            .cloned()
-            .collect();
-        let closed_positions: Vec<Position> = all_positions
-            .iter()
-            .filter(|p| p.exit_time.is_some())
-            .cloned()
-            .collect();
+            // Separate open and closed positions
+            let open_positions: Vec<Position> = all_positions
+                .iter()
+                .filter(|p| p.exit_time.is_none())
+                .cloned()
+                .collect();
+            let closed_positions: Vec<Position> = all_positions
+                .iter()
+                .filter(|p| p.exit_time.is_some())
+                .cloned()
+                .collect();
 
-        let open_count = open_positions.len();
-        let closed_count = closed_positions.len();
-        let total_invested: f64 = open_positions
-            .iter()
-            .map(|p| p.entry_size_sol)
-            .sum();
-        let total_pnl: f64 = closed_positions
-            .iter()
-            .map(|p| {
-                let (pnl_sol, _) = calculate_position_pnl(p, None);
-                pnl_sol
-            })
-            .sum();
+            let open_count = open_positions.len();
+            let closed_count = closed_positions.len();
+            let total_invested: f64 = open_positions
+                .iter()
+                .map(|p| p.entry_size_sol)
+                .sum();
+            let total_pnl: f64 = closed_positions
+                .iter()
+                .map(|p| {
+                    let (pnl_sol, _) = calculate_position_pnl(p, None);
+                    pnl_sol
+                })
+                .sum();
 
-        (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
-    }; // Lock is released here
+            (open_positions, closed_positions, open_count, closed_count, total_invested, total_pnl)
+        }; // Lock is released here
 
     // Log position summary to file
     // log_positions_summary(&open_positions, &closed_positions, total_invested, total_pnl).await;
@@ -217,10 +218,19 @@ pub async fn display_positions_table() {
         sorted_open.sort_by_key(|p| p.entry_time);
 
         let open_position_displays: Vec<_> = {
+            // Collect all mints that need prices
+            let mints: Vec<String> = sorted_open
+                .iter()
+                .map(|position| position.mint.clone())
+                .collect();
+
+            // Fetch all prices in one batch call (much faster!)
+            let price_map = crate::tokens::get_current_token_prices_batch(&mints).await;
+
+            // Build displays with fetched prices
             let mut displays = Vec::new();
             for position in &sorted_open {
-                // Get current price for this position from tokens module
-                let current_price = crate::tokens::get_current_token_price(&position.mint).await;
+                let current_price = price_map.get(&position.mint).copied().flatten();
                 displays.push(OpenPositionDisplay::from_position(position, current_price));
             }
             displays
@@ -677,8 +687,16 @@ async fn log_positions_summary(
     // Log open positions
     if !open_positions.is_empty() {
         log(LogTag::System, "OPEN_POS", &format!("Open positions ({})", open_positions.len()));
+
+        // Get all prices in batch for efficiency
+        let mints: Vec<String> = open_positions
+            .iter()
+            .map(|p| p.mint.clone())
+            .collect();
+        let price_map = crate::tokens::get_current_token_prices_batch(&mints).await;
+
         for position in open_positions {
-            let current_price = crate::tokens::get_current_token_price(&position.mint).await;
+            let current_price = price_map.get(&position.mint).copied().flatten();
             let (pnl_sol, pnl_percent) = if let Some(price) = current_price {
                 calculate_position_pnl(position, Some(price))
             } else {

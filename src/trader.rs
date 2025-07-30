@@ -106,7 +106,7 @@ pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
 // -----------------------------------------------------------------------------
 
 /// Summary display refresh interval (seconds)
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 15;
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
 
 /// New entry signals check interval (seconds)
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
@@ -116,6 +116,22 @@ pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
 
 /// Price history tracking duration (hours)
 pub const PRICE_HISTORY_DURATION_HOURS: i64 = 2;
+
+// -----------------------------------------------------------------------------
+// Task Timeout Configuration
+// -----------------------------------------------------------------------------
+
+/// Semaphore acquire timeout for token processing tasks (seconds)
+pub const SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 120;
+
+/// Individual token check task timeout (seconds)
+pub const TOKEN_CHECK_TASK_TIMEOUT_SECS: u64 = 60;
+
+/// Price cache lock acquire timeout (milliseconds)
+pub const PRICE_CACHE_LOCK_TIMEOUT_MS: u64 = 2000;
+
+/// Task collection timeout for concurrent operations (seconds)
+pub const TASK_COLLECTION_TIMEOUT_SECS: u64 = 120;
 
 // -----------------------------------------------------------------------------
 // Wallet Management Configuration
@@ -351,7 +367,7 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
     }
 
     // Calculate final urgency based on multiple strategy consensus
-    let final_urgency = calculate_multi_strategy_urgency(&dip_signals, token);
+    let final_urgency = calculate_multi_strategy_urgency(&dip_signals, token, Some(current_price));
 
     debug_trader_log(
         "SHOULD_BUY_FINAL_URGENCY",
@@ -822,7 +838,11 @@ fn strategy_multi_timeframe_convergence(token: &Token, current_price: f64) -> Op
 }
 
 /// Calculate final urgency based on multiple strategy consensus
-fn calculate_multi_strategy_urgency(signals: &[DipSignal], token: &Token) -> f64 {
+fn calculate_multi_strategy_urgency(
+    signals: &[DipSignal],
+    token: &Token,
+    current_price: Option<f64>
+) -> f64 {
     if signals.is_empty() {
         return 0.0;
     }
@@ -869,7 +889,7 @@ fn calculate_multi_strategy_urgency(signals: &[DipSignal], token: &Token) -> f64
     };
 
     // Check historical data - only if we have a valid price
-    let historical_factor = if let Some(price) = token.price_dexscreener_sol {
+    let historical_factor = if let Some(price) = current_price {
         if price > 0.0 && price.is_finite() {
             let historical_allowed = is_entry_allowed_by_historical_data(&token.mint, price);
             if historical_allowed {
@@ -1397,14 +1417,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
 
             for (i, token) in tokens_from_module.iter().take(3).enumerate() {
+                let price_from_service = get_token_price_safe(&token.mint).await;
                 debug_trader_log(
                     "TOKEN_PRICE_SAMPLE",
                     &format!(
-                        "Token {}: {} ({}) - price_dexscreener_sol={:?}",
+                        "Token {}: {} ({}) - price_service={:?}",
                         i + 1,
                         token.symbol,
                         token.mint,
-                        token.price_dexscreener_sol
+                        price_from_service
                     )
                 );
             }
@@ -1538,7 +1559,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Get permit from semaphore to limit concurrency with timeout
             let permit = match
                 tokio::time::timeout(
-                    Duration::from_secs(120),
+                    Duration::from_secs(SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
                     semaphore.clone().acquire_owned()
                 ).await
             {
@@ -1552,26 +1573,53 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     continue;
                 }
                 Err(_) => {
-                    log(LogTag::Trader, "WARN", "Semaphore acquire timed out after 10 seconds");
+                    log(
+                        LogTag::Trader,
+                        "WARN",
+                        &format!("Semaphore acquire timed out after {} seconds", SEMAPHORE_ACQUIRE_TIMEOUT_SECS)
+                    );
                     continue;
                 }
             };
 
             // Clone necessary variables for the task
             let token = token.clone();
+            let shutdown_clone = shutdown.clone();
 
             // Spawn a new task for this token with overall timeout
             let handle = tokio::spawn(async move {
                 // Keep the permit alive for the duration of this task
                 let _permit = permit; // This will be automatically dropped when the task completes
 
+                // Check for shutdown before starting task
+                if check_shutdown_or_delay(&shutdown_clone, Duration::from_millis(1)).await {
+                    return None;
+                }
+
                 // Clone the symbol for error logging before moving token into timeout
                 let token_symbol = token.symbol.clone();
 
                 // Wrap the entire task logic in a timeout to prevent hanging
                 match
-                    tokio::time::timeout(Duration::from_secs(30), async {
-                        if let Some(current_price) = token.price_dexscreener_sol {
+                    tokio::time::timeout(Duration::from_secs(TOKEN_CHECK_TASK_TIMEOUT_SECS), async {
+                        let task_start = std::time::Instant::now();
+
+                        // Use centralized price service instead of direct token field access
+                        debug_trader_log(
+                            "TASK_TIMING",
+                            &format!("Token {} starting price fetch", token.symbol)
+                        );
+                        let price_start = std::time::Instant::now();
+
+                        if let Some(current_price) = get_token_price_safe(&token.mint).await {
+                            debug_trader_log(
+                                "TASK_TIMING",
+                                &format!(
+                                    "Token {} price fetch took {:.2}ms",
+                                    token.symbol,
+                                    price_start.elapsed().as_millis()
+                                )
+                            );
                             // CRITICAL: Validate price is actually loaded and valid before any trading
                             if current_price <= 0.0 || !current_price.is_finite() {
                                 debug_trader_log(
@@ -1589,7 +1637,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             debug_trader_log(
                                 "PRICE_SOURCE",
                                 &format!(
-                                    "Token {} ({}): current price from token.price_dexscreener_sol = {:.10}",
+                                    "Token {} ({}): current price from price service = {:.10}",
                                     token.symbol,
                                     token.mint,
                                     current_price
@@ -1597,10 +1645,35 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
 
                             // Use centralized filtering system
+                            debug_trader_log(
+                                "TASK_TIMING",
+                                &format!("Token {} starting filtering", token.symbol)
+                            );
+                            let filter_start = std::time::Instant::now();
+
                             if !should_buy_token(&token) {
                                 // Token was filtered out, skip processing
                                 return None;
                             }
+
+                            // Check for shutdown after filtering
+                            if
+                                check_shutdown_or_delay(
+                                    &shutdown_clone,
+                                    Duration::from_millis(1)
+                                ).await
+                            {
+                                return None;
+                            }
+
+                            debug_trader_log(
+                                "TASK_TIMING",
+                                &format!(
+                                    "Token {} filtering took {:.2}ms",
+                                    token.symbol,
+                                    filter_start.elapsed().as_millis()
+                                )
+                            );
 
                             let liquidity_usd = token.liquidity
                                 .as_ref()
@@ -1610,9 +1683,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Update price history with proper error handling and timeout
                             let now = Utc::now();
                             match
-                                tokio::time::timeout(Duration::from_millis(500), async {
-                                    PRICE_HISTORY_24H.try_lock()
-                                }).await
+                                tokio::time::timeout(
+                                    Duration::from_millis(PRICE_CACHE_LOCK_TIMEOUT_MS),
+                                    async {
+                                        PRICE_HISTORY_24H.try_lock()
+                                    }
+                                ).await
                             {
                                 Ok(Ok(mut hist)) => {
                                     let entry = hist
@@ -1638,15 +1714,28 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 }
                             }
 
+                            // Check for shutdown after price history update
+                            if
+                                check_shutdown_or_delay(
+                                    &shutdown_clone,
+                                    Duration::from_millis(1)
+                                ).await
+                            {
+                                return None;
+                            }
+
                             // Check for entry opportunity using should_buy function
                             let mut buy_urgency = 0.0;
 
                             // First, get the previous price and release the lock
                             let prev_price = {
                                 match
-                                    tokio::time::timeout(Duration::from_millis(5000), async {
-                                        LAST_PRICES.try_lock()
-                                    }).await
+                                    tokio::time::timeout(
+                                        Duration::from_millis(PRICE_CACHE_LOCK_TIMEOUT_MS),
+                                        async {
+                                            LAST_PRICES.try_lock()
+                                        }
+                                    ).await
                                 {
                                     Ok(Ok(last_prices)) => { last_prices.get(&token.mint).copied() }
                                     _ => None,
@@ -1681,6 +1770,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     }
 
                                     // Rugcheck safety validation - block rugged or high-risk tokens
+                                    debug_trader_log(
+                                        "TASK_TIMING",
+                                        &format!("Token {} starting rugcheck", token.symbol)
+                                    );
+                                    let rugcheck_start = std::time::Instant::now();
+
                                     match get_token_rugcheck_data_safe(&token.mint).await {
                                         Ok(Some(rugcheck_data)) => {
                                             // Block tokens that are detected as rugged
@@ -1816,6 +1911,25 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     }
 
                                     debug_trader_log(
+                                        "TASK_TIMING",
+                                        &format!(
+                                            "Token {} rugcheck took {:.2}ms",
+                                            token.symbol,
+                                            rugcheck_start.elapsed().as_millis()
+                                        )
+                                    );
+
+                                    // Check for shutdown after rugcheck processing
+                                    if
+                                        check_shutdown_or_delay(
+                                            &shutdown_clone,
+                                            Duration::from_millis(1)
+                                        ).await
+                                    {
+                                        return None;
+                                    }
+
+                                    debug_trader_log(
                                         "TOKEN_CHECK_RESULT",
                                         &format!(
                                             "Token {} ({}): buy urgency result: {:.3}",
@@ -1848,9 +1962,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                             // Update price in cache
                             match
-                                tokio::time::timeout(Duration::from_millis(500), async {
-                                    LAST_PRICES.try_lock()
-                                }).await
+                                tokio::time::timeout(
+                                    Duration::from_millis(PRICE_CACHE_LOCK_TIMEOUT_MS),
+                                    async {
+                                        LAST_PRICES.try_lock()
+                                    }
+                                ).await
                             {
                                 Ok(Ok(mut last_prices)) => {
                                     // Add debug info before updating price
@@ -1892,6 +2009,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                             // Return the token and price if buy signal detected
                             if buy_urgency > 0.0 {
+                                // Check for shutdown before attempting to buy
+                                if
+                                    check_shutdown_or_delay(
+                                        &shutdown_clone,
+                                        Duration::from_millis(1)
+                                    ).await
+                                {
+                                    return None;
+                                }
+
                                 let change = if let Ok(last_prices) = LAST_PRICES.try_lock() {
                                     if let Some(&prev_price) = last_prices.get(&token.mint) {
                                         if prev_price > 0.0 {
@@ -1913,12 +2040,22 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             debug_trader_log(
                                 "PRICE_NOT_LOADED",
                                 &format!(
-                                    "Token {} ({}): PRICE NOT LOADED - skipping trading. token.price_dexscreener_sol = None",
+                                    "Token {} ({}): PRICE NOT LOADED - skipping trading. Price service returned None",
                                     token.symbol,
                                     token.mint
                                 )
                             );
                         }
+
+                        debug_trader_log(
+                            "TASK_TIMING",
+                            &format!(
+                                "Token {} task completed in {:.2}ms",
+                                token.symbol,
+                                task_start.elapsed().as_millis()
+                            )
+                        );
+
                         None
                     }).await
                 {
@@ -1928,7 +2065,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("Token check task for {} timed out after 10 seconds", token_symbol)
+                            &format!(
+                                "Token check task for {} timed out after {} seconds",
+                                token_symbol,
+                                TOKEN_CHECK_TASK_TIMEOUT_SECS
+                            )
                         );
                         None
                     }

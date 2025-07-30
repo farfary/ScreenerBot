@@ -2,11 +2,24 @@
 /// Handles token information retrieval with rate limiting and caching
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_api_enabled;
-use crate::tokens::types::*;
+use crate::tokens::types::{
+    TokenInfo,
+    VolumeStats,
+    PriceChangeStats,
+    TxnPeriod,
+    ApiToken,
+    ApiStats,
+    LiquidityInfo,
+    TxnStats,
+    BoostInfo,
+    WebsiteInfo,
+    SocialInfo,
+    DiscoverySourceType,
+};
 use std::collections::HashMap;
 use std::time::{ Duration, Instant };
-use tokio::sync::Semaphore;
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 use reqwest::StatusCode;
 use serde_json;
 use chrono::Utc;
@@ -38,61 +51,8 @@ impl DexScreenerApi {
     /// Initialize the API client
     pub async fn initialize(&mut self) -> Result<(), String> {
         log(LogTag::Api, "INIT", "Initializing DexScreener API client...");
-
-        // Test API connectivity
-        match self.test_connectivity().await {
-            Ok(_) => {
-                log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
-                Ok(())
-            }
-            Err(e) => {
-                log(LogTag::Api, "ERROR", &format!("Failed to initialize API client: {}", e));
-                Err(e)
-            }
-        }
-    }
-
-    /// Test API connectivity
-    async fn test_connectivity(&mut self) -> Result<(), String> {
-        log(LogTag::Api, "TEST", "Testing DexScreener API connectivity...");
-
-        // Use the token info endpoint for testing instead
-        let test_url =
-            "https://api.dexscreener.com/tokens/v1/solana/So11111111111111111111111111111111111111112";
-        let start_time = Instant::now();
-
-        let permit = self.rate_limiter
-            .clone()
-            .acquire_owned().await
-            .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
-
-        let response = self.client
-            .get(test_url)
-            .send().await
-            .map_err(|e| format!("Failed to connect to DexScreener API: {}", e))?;
-
-        drop(permit);
-
-        let response_time = start_time.elapsed().as_millis() as f64;
-        let success = response.status().is_success();
-
-        self.stats.record_request(success, response_time);
-
-        if success {
-            log(
-                LogTag::Api,
-                "SUCCESS",
-                &format!("API connectivity test passed ({}ms)", response_time)
-            );
-            Ok(())
-        } else {
-            let error_msg = format!(
-                "API connectivity test failed with status: {}",
-                response.status()
-            );
-            log(LogTag::Api, "ERROR", &error_msg);
-            Err(error_msg)
-        }
+        log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
+        Ok(())
     }
 
     /// Get token price for a single mint address
@@ -348,7 +308,7 @@ impl DexScreenerApi {
         let market_cap = pair_data.get("marketCap").and_then(|v| v.as_f64());
         let pair_created_at = pair_data.get("pairCreatedAt").and_then(|v| v.as_i64());
         let boosts = self.parse_boosts(pair_data.get("boosts"));
-        let info = self.parse_info(pair_data.get("info"));
+        let info = self.parse_info(pair_data.get("info"), &mint, &name, &symbol);
         let labels = self.parse_labels(pair_data.get("labels"));
 
         Ok(ApiToken {
@@ -426,8 +386,17 @@ impl DexScreenerApi {
         })
     }
 
-    fn parse_info(&self, value: Option<&serde_json::Value>) -> Option<TokenInfo> {
+    fn parse_info(
+        &self,
+        value: Option<&serde_json::Value>,
+        address: &str,
+        name: &str,
+        symbol: &str
+    ) -> Option<TokenInfo> {
         value.map(|v| TokenInfo {
+            address: address.to_string(),
+            name: name.to_string(),
+            symbol: symbol.to_string(),
             image_url: v
                 .get("imageUrl")
                 .and_then(|s| s.as_str())
@@ -577,14 +546,217 @@ impl DexScreenerApi {
     }
 }
 
-/// Standalone function to get token prices from API
-pub async fn get_token_prices_from_api(mints: Vec<String>) -> HashMap<String, f64> {
-    let mut api = DexScreenerApi::new();
+/// Pool pair information from DexScreener API
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TokenPair {
+    #[serde(rename = "chainId")]
+    pub chain_id: String,
+    #[serde(rename = "dexId")]
+    pub dex_id: String,
+    pub url: String,
+    #[serde(rename = "pairAddress")]
+    pub pair_address: String,
+    pub labels: Option<Vec<String>>,
+    #[serde(rename = "baseToken")]
+    pub base_token: TokenInfo,
+    #[serde(rename = "quoteToken")]
+    pub quote_token: TokenInfo,
+    #[serde(rename = "priceNative")]
+    pub price_native: String,
+    #[serde(rename = "priceUsd")]
+    pub price_usd: Option<String>,
+    pub txns: TxnStats,
+    pub volume: VolumeStats,
+    #[serde(rename = "priceChange")]
+    pub price_change: PriceChangeStats,
+    pub liquidity: Option<LiquidityStats>,
+    #[serde(rename = "pairCreatedAt")]
+    pub pair_created_at: u64,
+    pub fdv: Option<f64>,
+    #[serde(rename = "marketCap")]
+    pub market_cap: Option<f64>,
+}
 
-    if let Err(e) = api.initialize().await {
-        log(LogTag::Trader, "ERROR", &format!("Failed to initialize API: {}", e));
-        return HashMap::new();
+// Remove the duplicate struct definitions since we import from types
+// All structs are now imported from tokens::types module
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct LiquidityStats {
+    pub usd: f64,
+    pub base: f64,
+    pub quote: f64,
+}
+
+impl DexScreenerApi {
+    /// Get token pairs (pools) for a specific token from DexScreener API
+    pub async fn get_token_pairs(
+        &mut self,
+        chain_id: &str,
+        token_address: &str
+    ) -> Result<Vec<TokenPair>, String> {
+        let url = format!(
+            "https://api.dexscreener.com/token-pairs/v1/{}/{}",
+            chain_id,
+            token_address
+        );
+
+        if is_debug_api_enabled() {
+            log(LogTag::Api, "REQUEST", &format!("Fetching pools for token: {}", token_address));
+        }
+
+        let start_time = Instant::now();
+
+        // Rate limiting
+        let permit = self.rate_limiter
+            .clone()
+            .acquire_owned().await
+            .map_err(|e| format!("Failed to acquire rate limit permit: {}", e))?;
+
+        // Make HTTP request
+        let response = self.client
+            .get(&url)
+            .send().await
+            .map_err(|e| format!("Failed to fetch token pairs: {}", e))?;
+
+        drop(permit);
+
+        let response_time = start_time.elapsed().as_millis() as f64;
+        let success = response.status().is_success();
+
+        self.stats.record_request(success, response_time);
+
+        if !success {
+            let error_msg = format!("API request failed with status: {}", response.status());
+            log(LogTag::Api, "ERROR", &error_msg);
+            return Err(error_msg);
+        }
+
+        // Parse response
+        let response_text = response
+            .text().await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+
+        let pairs: Vec<TokenPair> = serde_json
+            ::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse token pairs response: {}", e))?;
+
+        if is_debug_api_enabled() {
+            log(
+                LogTag::Api,
+                "SUCCESS",
+                &format!(
+                    "Found {} pools for token {} ({}ms)",
+                    pairs.len(),
+                    token_address,
+                    response_time
+                )
+            );
+        }
+
+        // Update last request time
+        self.last_request_time = Some(Instant::now());
+
+        Ok(pairs)
     }
 
-    api.get_multiple_token_prices(&mints).await
+    /// Get token pairs for Solana specifically
+    pub async fn get_solana_token_pairs(
+        &mut self,
+        token_address: &str
+    ) -> Result<Vec<TokenPair>, String> {
+        self.get_token_pairs("solana", token_address).await
+    }
+}
+
+/// Standalone function to get token prices from API
+pub async fn get_token_prices_from_api(mints: Vec<String>) -> HashMap<String, f64> {
+    get_multiple_token_prices_from_global_api(&mints).await
+}
+
+/// Standalone function to get token pairs from API
+pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPair>, String> {
+    let api = get_global_dexscreener_api().await?;
+    let mut api_instance = api.lock().await;
+    api_instance.get_solana_token_pairs(token_address).await
+}
+
+// =============================================================================
+// GLOBAL DEXSCREENER API SINGLETON (TRUE SINGLETON)
+// =============================================================================
+
+use tokio::sync::{ OnceCell, Mutex };
+
+static GLOBAL_DEXSCREENER_API: OnceCell<Arc<Mutex<DexScreenerApi>>> = OnceCell::const_new();
+
+/// Initialize the global DexScreener API client (creates single instance)
+pub async fn init_dexscreener_api() -> Result<(), String> {
+    let api = Arc::new(Mutex::new(DexScreenerApi::new()));
+
+    // Initialize the API instance once
+    {
+        let mut api_instance = api.lock().await;
+        api_instance.initialize().await?;
+    }
+
+    GLOBAL_DEXSCREENER_API.set(api).map_err(
+        |_| "Failed to initialize global DexScreener API state"
+    )?;
+
+    Ok(())
+}
+
+/// Get reference to the global DexScreener API client
+pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, String> {
+    GLOBAL_DEXSCREENER_API.get()
+        .ok_or_else(||
+            "DexScreener API not initialized. Call init_dexscreener_api() first.".to_string()
+        )
+        .map(|api| api.clone())
+}
+
+/// Create a new DexScreener API client instance (DEPRECATED - use global API)
+#[deprecated(note = "Use get_global_dexscreener_api() instead to avoid multiple initializations")]
+pub async fn create_dexscreener_api() -> Result<DexScreenerApi, String> {
+    // For backwards compatibility, still works but logs warning
+    log(
+        LogTag::Api,
+        "WARNING",
+        "Using deprecated create_dexscreener_api() - use get_global_dexscreener_api() instead"
+    );
+
+    let global_api = get_global_dexscreener_api().await?;
+    let api_lock = global_api.lock().await;
+
+    // Return a clone (not ideal but maintains API compatibility)
+    let mut new_api = DexScreenerApi::new();
+    // Don't call initialize again to avoid duplicate logs
+    Ok(new_api)
+}
+
+/// Helper function to get token price using global API
+pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {
+    match get_global_dexscreener_api().await {
+        Ok(api) => {
+            let mut api_instance = api.lock().await;
+            api_instance.get_token_price(mint).await
+        }
+        Err(e) => {
+            log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
+            None
+        }
+    }
+}
+
+/// Helper function to get multiple token prices using global API
+pub async fn get_multiple_token_prices_from_global_api(mints: &[String]) -> HashMap<String, f64> {
+    match get_global_dexscreener_api().await {
+        Ok(api) => {
+            let mut api_instance = api.lock().await;
+            api_instance.get_multiple_token_prices(mints).await
+        }
+        Err(e) => {
+            log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
+            HashMap::new()
+        }
+    }
 }

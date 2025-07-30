@@ -52,10 +52,12 @@ const ENABLE_PRICE_SERVICE_LOGS: bool = true;
 const ENABLE_FILTERING_LOGS: bool = true;
 const ENABLE_RUGCHECK_LOGS: bool = true;
 const ENABLE_PROFIT_TAG_LOGS: bool = true;
+const ENABLE_RPC_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
 const ENABLE_ERROR_LOGS: bool = true;
+const ENABLE_FAILED_LOGS: bool = true;
 const ENABLE_WARN_LOGS: bool = true;
 const ENABLE_SUCCESS_LOGS: bool = true;
 const ENABLE_INFO_LOGS: bool = true;
@@ -90,6 +92,7 @@ struct FileLogger {
     file_writer: Option<BufWriter<File>>,
     current_date: String,
     log_dir: PathBuf,
+    write_counter: u64,
 }
 
 impl FileLogger {
@@ -97,8 +100,11 @@ impl FileLogger {
         let log_dir = get_log_directory()?;
         fs::create_dir_all(&log_dir)?;
 
-        let current_date = Local::now().format("%Y-%m-%d").to_string();
-        let log_file_path = log_dir.join(format!("screenerbot_{}.log", current_date));
+        // Create unique log file for each application start
+        let now = Local::now();
+        let timestamp = now.format("%Y-%m-%d_%H-%M-%S").to_string();
+        let log_file_name = format!("screenerbot_{}.log", timestamp);
+        let log_file_path = log_dir.join(&log_file_name);
 
         let file = OpenOptions::new().create(true).append(true).open(&log_file_path)?;
 
@@ -106,23 +112,26 @@ impl FileLogger {
 
         Ok(FileLogger {
             file_writer,
-            current_date,
+            current_date: now.format("%Y-%m-%d").to_string(),
             log_dir,
+            write_counter: 0,
         })
     }
 
     fn write_to_file(&mut self, message: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let today = Local::now().format("%Y-%m-%d").to_string();
-
-        // Check if we need to rotate the log file (new day)
-        if today != self.current_date {
-            self.rotate_log_file()?;
-            self.current_date = today;
-        }
+        // For per-start log files, we don't need daily rotation
+        // Just write to the current file and periodically clean up old files
 
         if let Some(ref mut writer) = self.file_writer {
             writeln!(writer, "{}", message)?;
             writer.flush()?;
+
+            // Increment write counter and occasionally clean up old log files
+            self.write_counter += 1;
+            if self.write_counter % 500 == 0 {
+                // Every 500 writes
+                let _ = self.cleanup_old_logs(); // Ignore cleanup errors
+            }
         }
 
         Ok(())
@@ -156,8 +165,9 @@ impl FileLogger {
             let mut log_files: Vec<_> = entries
                 .filter_map(|entry| entry.ok())
                 .filter(|entry| {
-                    entry.file_name().to_string_lossy().starts_with("screenerbot_") &&
-                        entry.file_name().to_string_lossy().ends_with(".log")
+                    let file_name = entry.file_name();
+                    let filename = file_name.to_string_lossy();
+                    filename.starts_with("screenerbot_") && filename.ends_with(".log")
                 })
                 .collect();
 
@@ -284,6 +294,7 @@ pub enum LogTag {
     Rugcheck,
     Profit,
     PriceService,
+    Rpc,
     Other(String),
 }
 
@@ -302,6 +313,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Rugcheck => format!("{:<8}", "RUGCHECK").bright_red().bold(), // 🛡️ Security red
             LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(), // 💲 Profit green
             LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
+            LogTag::Rpc => format!("{:<8}", "RPC").bright_cyan().bold(), // 🔗 RPC cyan
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -324,6 +336,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Rugcheck => ENABLE_RUGCHECK_LOGS,
         LogTag::Profit => ENABLE_PROFIT_TAG_LOGS,
         LogTag::PriceService => ENABLE_PRICE_SERVICE_LOGS,
+        LogTag::Rpc => ENABLE_RPC_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -334,6 +347,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Check if the log type is enabled
     let log_type_enabled = match log_type.to_uppercase().as_str() {
         "ERROR" => ENABLE_ERROR_LOGS,
+        "FAILED" => ENABLE_FAILED_LOGS,
         "WARN" | "WARNING" => ENABLE_WARN_LOGS,
         "SUCCESS" => ENABLE_SUCCESS_LOGS,
         "INFO" => ENABLE_INFO_LOGS,
@@ -414,6 +428,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             format!("{:<width$}", "PRICE", width = TAG_WIDTH)
                 .bright_green()
                 .bold(),
+        LogTag::Rpc =>
+            format!("{:<width$}", "RPC", width = TAG_WIDTH)
+                .bright_cyan()
+                .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
                 .white()
@@ -423,6 +441,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Fixed-width log type
     let log_type_str = match log_type.to_uppercase().as_str() {
         "ERROR" =>
+            format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
+                .bright_red()
+                .bold(),
+        "FAILED" =>
             format!("{:<width$}", log_type, width = LOG_TYPE_WIDTH)
                 .bright_red()
                 .bold(),
@@ -488,8 +510,26 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Split message into chunks that fit
     let message_chunks = wrap_text(message, available_space);
 
+    // Determine message color based on log type and message content
+    let message_color = match log_type.to_uppercase().as_str() {
+        "ERROR" => message_chunks[0].bright_red(),
+        "FAILED" => message_chunks[0].bright_red(),
+        _ => {
+            // Check if message contains error/failed keywords
+            if
+                message.to_lowercase().contains("error") ||
+                message.to_lowercase().contains("failed") ||
+                message.to_lowercase().contains("fail")
+            {
+                message_chunks[0].bright_red()
+            } else {
+                message_chunks[0].bright_white()
+            }
+        }
+    };
+
     // Print first line with full prefix (console output)
-    let console_line = format!("{}{}", base_line, message_chunks[0].bright_white());
+    let console_line = format!("{}{}", base_line, message_color);
     println!("{}", console_line);
 
     // Write to file (clean version without color codes)
@@ -507,6 +547,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Rugcheck => "RUGCHECK",
         LogTag::Profit => "PROFIT",
         LogTag::PriceService => "PRICE",
+        LogTag::Rpc => "RPC",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);
@@ -520,7 +561,25 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             " ".repeat(TOTAL_PREFIX_WIDTH)
         );
         for chunk in &message_chunks[1..] {
-            let console_continuation = format!("{}{}", continuation_prefix, chunk.bright_white());
+            // Apply same color logic to continuation lines
+            let chunk_color = match log_type.to_uppercase().as_str() {
+                "ERROR" => chunk.bright_red(),
+                "FAILED" => chunk.bright_red(),
+                _ => {
+                    // Check if message contains error/failed keywords
+                    if
+                        message.to_lowercase().contains("error") ||
+                        message.to_lowercase().contains("failed") ||
+                        message.to_lowercase().contains("fail")
+                    {
+                        chunk.bright_red()
+                    } else {
+                        chunk.bright_white()
+                    }
+                }
+            };
+
+            let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
             println!("{}", console_continuation);
 
             // Write continuation lines to file as well

@@ -12,6 +12,13 @@ pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| { Mutex::new(env::a
 // Startup timestamp to track when the bot started for trading logic
 pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 
+/// Set command arguments (used for tools and testing)
+pub fn set_cmd_args(args: Vec<String>) {
+    if let Ok(mut cmd_args) = CMD_ARGS.lock() {
+        *cmd_args = args;
+    }
+}
+
 /// Check if debug filtering mode is enabled via command line args
 pub fn is_debug_filtering_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() {

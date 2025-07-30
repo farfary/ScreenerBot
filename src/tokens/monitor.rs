@@ -7,7 +7,7 @@
 
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_monitor_enabled;
-use crate::tokens::api::DexScreenerApi;
+use crate::tokens::api::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
 use crate::tokens::price_service::{ get_priority_tokens_safe, update_tokens_prices_safe };
@@ -48,7 +48,6 @@ pub const MAX_TOKENS_PER_CYCLE: usize = 150;
 // =============================================================================
 
 pub struct TokenMonitor {
-    api: DexScreenerApi,
     database: TokenDatabase,
     rate_limiter: Arc<Semaphore>,
     current_cycle: usize,
@@ -58,12 +57,10 @@ pub struct TokenMonitor {
 impl TokenMonitor {
     /// Create new enhanced token monitor instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let api = DexScreenerApi::new();
         let database = TokenDatabase::new()?;
         let rate_limiter = Arc::new(Semaphore::new(INFO_CALLS_PER_CYCLE));
 
         Ok(Self {
-            api,
             database,
             rate_limiter,
             current_cycle: 0,
@@ -152,7 +149,25 @@ impl TokenMonitor {
             // Acquire rate limit permit
             let _permit = self.rate_limiter.acquire().await.unwrap();
 
-            match self.api.get_tokens_info(chunk).await {
+            let tokens_result = {
+                let api = match get_global_dexscreener_api().await {
+                    Ok(api) => api,
+                    Err(e) => {
+                        log(
+                            LogTag::Monitor,
+                            "ERROR",
+                            &format!("Failed to get global API client: {}", e)
+                        );
+                        errors += 1;
+                        continue;
+                    }
+                };
+                let mut api_instance = api.lock().await;
+                // CRITICAL: Only hold the lock for the API call, then release immediately
+                api_instance.get_tokens_info(chunk).await
+            }; // Lock is released here automatically
+
+            match tokens_result {
                 Ok(updated_tokens) => {
                     // Update database
                     if !updated_tokens.is_empty() {
@@ -313,7 +328,24 @@ impl TokenMonitor {
                 .map(|t| t.mint.clone())
                 .collect();
 
-            match self.api.get_tokens_info(&mints).await {
+            let tokens_result = {
+                let api = match get_global_dexscreener_api().await {
+                    Ok(api) => api,
+                    Err(e) => {
+                        log(
+                            LogTag::Monitor,
+                            "ERROR",
+                            &format!("Failed to get global API client: {}", e)
+                        );
+                        continue;
+                    }
+                };
+                let mut api_instance = api.lock().await;
+                // CRITICAL: Only hold the lock for the API call, then release immediately
+                api_instance.get_tokens_info(&mints).await
+            }; // Lock is released here automatically
+
+            match tokens_result {
                 Ok(updated_tokens) => {
                     if !updated_tokens.is_empty() {
                         if let Err(e) = self.database.update_tokens(&updated_tokens).await {

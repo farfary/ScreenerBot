@@ -1,7 +1,7 @@
 /// Base token discovery system structure
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_discovery_enabled;
-use crate::tokens::api::DexScreenerApi;
+use crate::tokens::api::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
@@ -336,18 +336,15 @@ pub const DISCOVERY_CYCLE_SECONDS: u64 = 10;
 // =============================================================================
 
 pub struct TokenDiscovery {
-    api: DexScreenerApi,
     database: TokenDatabase,
 }
 
 impl TokenDiscovery {
     /// Create new token discovery instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let api = DexScreenerApi::new();
         let database = TokenDatabase::new()?;
 
         Ok(Self {
-            api,
             database,
         })
     }
@@ -631,7 +628,24 @@ impl TokenDiscovery {
             );
 
             // Get token information from DexScreener API
-            match self.api.get_tokens_info(batch).await {
+            let tokens_result = {
+                let api = match get_global_dexscreener_api().await {
+                    Ok(api) => api,
+                    Err(e) => {
+                        log(
+                            LogTag::Discovery,
+                            "ERROR",
+                            &format!("Failed to get global API client: {}", e)
+                        );
+                        continue;
+                    }
+                };
+                let mut api_instance = api.lock().await;
+                // CRITICAL: Only hold the lock for the API call, then release immediately
+                api_instance.get_tokens_info(batch).await
+            }; // Lock is released here automatically
+
+            match tokens_result {
                 Ok(tokens) => {
                     if !tokens.is_empty() {
                         // Fetch actual decimals from blockchain and ensure they're cached

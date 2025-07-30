@@ -1,7 +1,7 @@
 // transactions/analyzer.rs - Transaction analysis and swap detection
 use super::types::*;
 use crate::logger::{ log, LogTag };
-use crate::tokens::api::DexScreenerApi;
+use crate::tokens::api::get_global_dexscreener_api;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -101,8 +101,24 @@ impl TransactionAnalyzer {
 
         // Fetch information for each unknown token
         for mint in unknown_mints {
-            let mut api = DexScreenerApi::new();
-            match api.get_tokens_info(&[mint.clone()]).await {
+            let tokens_result = {
+                let api = match get_global_dexscreener_api().await {
+                    Ok(api) => api,
+                    Err(e) => {
+                        log(
+                            LogTag::System,
+                            "ERROR",
+                            &format!("Failed to get global API client: {}", e)
+                        );
+                        continue;
+                    }
+                };
+                let mut api_instance = api.lock().await;
+                // CRITICAL: Only hold the lock for the API call, then release immediately
+                api_instance.get_tokens_info(&[mint.clone()]).await
+            }; // Lock is released here automatically
+
+            match tokens_result {
                 Ok(tokens) if !tokens.is_empty() => {
                     let token = &tokens[0];
                     log(

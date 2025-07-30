@@ -87,6 +87,9 @@ pub struct BoostInfo {
 /// Token information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenInfo {
+    pub address: String,
+    pub name: String,
+    pub symbol: String,
     pub image_url: Option<String>,
     pub websites: Option<Vec<WebsiteInfo>>,
     pub socials: Option<Vec<SocialInfo>>,
@@ -252,9 +255,9 @@ impl From<ApiToken> for Token {
 impl From<Token> for ApiToken {
     fn from(token: Token) -> Self {
         Self {
-            mint: token.mint,
-            symbol: token.symbol,
-            name: token.name,
+            mint: token.mint.clone(),
+            symbol: token.symbol.clone(),
+            name: token.name.clone(),
             // decimals removed - only use decimal_cache.json
             chain_id: token.chain,
             dex_id: token.dex_id.unwrap_or_default(),
@@ -272,6 +275,9 @@ impl From<Token> for ApiToken {
             pair_created_at: token.created_at.map(|dt| dt.timestamp()),
             boosts: token.boosts,
             info: token.info.map(|info| TokenInfo {
+                address: token.mint.clone(),
+                name: token.name.clone(),
+                symbol: token.symbol.clone(),
                 image_url: info.image_url,
                 websites: Some(
                     info.websites

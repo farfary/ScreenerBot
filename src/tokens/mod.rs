@@ -12,6 +12,13 @@ pub use pool::{
     get_token_price_from_pools,
     RAYDIUM_CPMM_PROGRAM_ID,
     SOL_MINT,
+    // New pool service exports
+    PoolPriceService,
+    init_pool_service,
+    get_pool_service,
+    PoolPriceResult,
+    CachedPoolInfo,
+    TokenAvailability,
 };
 
 /// This module provides thread-safe access to token data and prices
@@ -36,7 +43,14 @@ pub mod rugcheck;
 
 // Re-export main types and functions
 pub use types::*;
-pub use api::{ DexScreenerApi, get_token_prices_from_api };
+pub use api::{
+    DexScreenerApi,
+    get_token_prices_from_api,
+    get_token_pairs_from_api,
+    create_dexscreener_api,
+    init_dexscreener_api,
+    get_global_dexscreener_api,
+};
 pub use discovery::{ TokenDiscovery, start_token_discovery, discover_tokens_once };
 pub use monitor::{
     TokenMonitor,
@@ -75,6 +89,9 @@ pub use price_service::{
     cleanup_price_service,
     TokenPriceService,
     PriceCacheEntry,
+    // New price service functions
+    init_price_service,
+    get_price_service,
 };
 
 // =============================================================================
@@ -237,7 +254,21 @@ pub fn get_global_rugcheck_service() -> Option<Arc<RugcheckService>> {
 pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::error::Error>> {
     log(LogTag::System, "INIT", "Initializing complete tokens system...");
 
-    // Initialize price service first
+    // Initialize global RPC client from configuration
+    if let Err(e) = crate::rpc::init_rpc_client() {
+        log(
+            LogTag::System,
+            "WARN",
+            &format!("RPC config initialization failed, using fallback: {}", e)
+        );
+    }
+
+    // Initialize global DexScreener API client
+    if let Err(e) = init_dexscreener_api().await {
+        return Err(format!("Failed to initialize DexScreener API: {}", e).into());
+    }
+
+    // Initialize price service
     initialize_price_service().await?;
 
     // Create tokens system
@@ -347,6 +378,13 @@ pub async fn get_current_token_price(mint: &str) -> Option<f64> {
     get_token_price_safe(mint).await
 }
 
+/// Get multiple token prices in batch - much faster for multiple tokens
+pub async fn get_current_token_prices_batch(
+    mints: &[String]
+) -> std::collections::HashMap<String, Option<f64>> {
+    price_service::get_token_prices_batch_safe(mints).await
+}
+
 /// Get all tokens by liquidity using database directly (for compatibility)
 pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
@@ -424,14 +462,22 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
 
     // Update database with fresh token data
     let db = TokenDatabase::new().map_err(|e| format!("Failed to create database: {}", e))?;
-    let mut api = DexScreenerApi::new();
+    let api = get_global_dexscreener_api().await.map_err(|e|
+        format!("Failed to get global API client: {}", e)
+    )?;
 
     // Process tokens in batches (smaller batch size for 5-second intervals)
     let batch_size = 10;
     let mut total_updated = 0;
 
     for chunk in priority_mints.chunks(batch_size) {
-        match api.get_tokens_info(chunk).await {
+        let tokens_result = {
+            let mut api_instance = api.lock().await;
+            // CRITICAL: Only hold the lock for the API call, then release immediately
+            api_instance.get_tokens_info(chunk).await
+        }; // Lock is released here automatically
+
+        match tokens_result {
             Ok(updated_tokens) => {
                 // Update database
                 if let Err(e) = db.update_tokens(&updated_tokens).await {
