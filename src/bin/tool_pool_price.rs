@@ -311,7 +311,8 @@ async fn compare_pool_api_prices(
     }
 
     // Get API price (this returns SOL price) - use the global price service function
-    let api_price_sol = screenerbot::tokens::price_service::get_token_price_safe(token_address).await;
+    let api_price_sol =
+        screenerbot::tokens::price_service::get_token_price_safe(token_address).await;
     log(LogTag::Pool, "API", &format!("API price: {:.12} SOL", api_price_sol.unwrap_or(0.0)));
 
     // Get pool price with detailed debugging

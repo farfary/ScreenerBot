@@ -171,45 +171,42 @@ impl TokenMonitor {
                 Ok(updated_tokens) => {
                     // Update database
                     if !updated_tokens.is_empty() {
-                            if let Err(e) = self.database.update_tokens(&updated_tokens).await {
-                                log(
-                                    LogTag::Monitor,
-                                    "ERROR",
-                                    &format!("Failed to update priority tokens: {}", e)
-                                );
-                                errors += 1;
-                            } else {
-                                // Update price service cache
-                                update_tokens_prices_safe(chunk).await;
+                        if let Err(e) = self.database.update_tokens(&updated_tokens).await {
+                            log(
+                                LogTag::Monitor,
+                                "ERROR",
+                                &format!("Failed to update priority tokens: {}", e)
+                            );
+                            errors += 1;
+                        } else {
+                            // Update price service cache
+                            update_tokens_prices_safe(chunk).await;
 
-                                // Track liquidity for blacklisting
-                                for token in &updated_tokens {
-                                    if let Some(liquidity) = &token.liquidity {
-                                        if let Some(usd_liquidity) = liquidity.usd {
-                                            let age_hours = self.calculate_token_age(&token);
-                                            check_and_track_liquidity(
-                                                &token.mint,
-                                                &token.symbol,
-                                                usd_liquidity,
-                                                age_hours
-                                            );
-                                        }
+                            // Track liquidity for blacklisting
+                            for token in &updated_tokens {
+                                if let Some(liquidity) = &token.liquidity {
+                                    if let Some(usd_liquidity) = liquidity.usd {
+                                        let age_hours = self.calculate_token_age(&token);
+                                        check_and_track_liquidity(
+                                            &token.mint,
+                                            &token.symbol,
+                                            usd_liquidity,
+                                            age_hours
+                                        );
                                     }
                                 }
-
-                                updated += updated_tokens.len();
-                                // Only log significant batch updates to reduce noise
-                                if updated_tokens.len() > 10 && is_debug_monitor_enabled() {
-                                    log(
-                                        LogTag::Monitor,
-                                        "UPDATE",
-                                        &format!(
-                                            "Priority: Updated {} tokens",
-                                            updated_tokens.len()
-                                        )
-                                    );
-                                }
                             }
+
+                            updated += updated_tokens.len();
+                            // Only log significant batch updates to reduce noise
+                            if updated_tokens.len() > 10 && is_debug_monitor_enabled() {
+                                log(
+                                    LogTag::Monitor,
+                                    "UPDATE",
+                                    &format!("Priority: Updated {} tokens", updated_tokens.len())
+                                );
+                            }
+                        }
                     }
                 }
                 Err(e) => {

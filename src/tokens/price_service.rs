@@ -182,7 +182,7 @@ impl TokenPriceService {
             if *pool_usage < POOL_PRICE_LIMIT_PER_CYCLE {
                 *pool_usage += 1;
                 drop(pool_usage);
-                
+
                 let pool_service = get_pool_service();
                 if pool_service.check_token_availability(mint).await {
                     pool_service.get_pool_price(mint, None).await
@@ -198,7 +198,8 @@ impl TokenPriceService {
 
         // Try API if no pool result
         let api_token = if pool_result.is_none() {
-            self.database.get_token_by_mint(mint)
+            self.database
+                .get_token_by_mint(mint)
                 .map_err(|e| format!("Failed to get token from database: {}", e))?
         } else {
             None
@@ -211,15 +212,16 @@ impl TokenPriceService {
                     log(
                         LogTag::PriceService,
                         "POOL_PRICE",
-                        &format!("Using pool price for {}: ${:.8}", mint, 
-                            pool_result.price_sol.unwrap_or(0.0))
+                        &format!(
+                            "Using pool price for {}: ${:.8}",
+                            mint,
+                            pool_result.price_sol.unwrap_or(0.0)
+                        )
                     );
                 }
                 PriceCacheEntry::from_pool_result(&pool_result)
             }
-            (None, Some(api_token)) => {
-                PriceCacheEntry::from_api_token(&api_token)
-            }
+            (None, Some(api_token)) => { PriceCacheEntry::from_api_token(&api_token) }
             (None, None) => {
                 return Err("No price data available".to_string());
             }
@@ -246,7 +248,7 @@ impl TokenPriceService {
 
     pub async fn get_priority_tokens(&self) -> Vec<String> {
         let mut priority_tokens = Vec::new();
-        
+
         // Add open positions first (highest priority)
         let positions = self.open_positions.read().await;
         priority_tokens.extend(positions.iter().cloned());
@@ -263,7 +265,10 @@ impl TokenPriceService {
 
         // Add some high liquidity tokens if we have space
         if priority_tokens.len() < 100 {
-            if let Ok(high_liquidity_tokens) = self.database.get_tokens_by_liquidity_threshold(10000.0).await {
+            if
+                let Ok(high_liquidity_tokens) =
+                    self.database.get_tokens_by_liquidity_threshold(10000.0).await
+            {
                 for token in high_liquidity_tokens.into_iter().take(50) {
                     if !is_token_blacklisted(&token.mint) && !priority_tokens.contains(&token.mint) {
                         priority_tokens.push(token.mint);
@@ -321,7 +326,10 @@ impl TokenPriceService {
     pub async fn get_cache_stats(&self) -> (usize, usize, usize) {
         let cache = self.price_cache.read().await;
         let total_entries = cache.len();
-        let expired_entries = cache.values().filter(|entry| entry.is_expired()).count();
+        let expired_entries = cache
+            .values()
+            .filter(|entry| entry.is_expired())
+            .count();
         let valid_entries = total_entries - expired_entries;
         (total_entries, valid_entries, expired_entries)
     }
@@ -345,7 +353,10 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-async fn get_price_service_instance() -> Result<Arc<tokio::sync::Mutex<Option<TokenPriceService>>>, String> {
+async fn get_price_service_instance() -> Result<
+    Arc<tokio::sync::Mutex<Option<TokenPriceService>>>,
+    String
+> {
     Ok(PRICE_SERVICE.clone())
 }
 
@@ -378,14 +389,14 @@ pub async fn get_priority_tokens_safe() -> Vec<String> {
 /// Get multiple token prices in batch (for compatibility)
 pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Option<f64>> {
     let mut results = HashMap::new();
-    
+
     // For now, just call individual price lookups
     // This keeps it simple while maintaining the interface
     for mint in mints {
         let price = get_token_price_safe(mint).await;
         results.insert(mint.clone(), price);
     }
-    
+
     results
 }
 
