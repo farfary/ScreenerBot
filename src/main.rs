@@ -14,7 +14,7 @@ async fn main() {
     // Set up emergency shutdown handler (second Ctrl+C will force kill)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let emergency_shutdown_clone = emergency_shutdown.clone();
-    
+
     tokio::spawn(async move {
         // Wait for second Ctrl+C
         if tokio::signal::ctrl_c().await.is_ok() {
@@ -23,22 +23,46 @@ async fn main() {
                 let critical_ops = screenerbot::trader::CriticalOperationGuard::get_active_count();
                 if critical_ops > 0 {
                     log(
-                        LogTag::System, 
-                        "EMERGENCY", 
+                        LogTag::System,
+                        "EMERGENCY",
                         &format!("🚨 SECOND Ctrl+C DETECTED BUT {} CRITICAL TRADING OPERATIONS STILL ACTIVE!", critical_ops)
                     );
-                    log(LogTag::System, "EMERGENCY", "⚠️  FORCE KILL BLOCKED - Would cause financial loss!");
-                    log(LogTag::System, "EMERGENCY", "🔒 Waiting for trading operations to complete...");
-                    log(LogTag::System, "EMERGENCY", "💡 Press Ctrl+C a THIRD time to override (DANGEROUS!)");
-                    
+                    log(
+                        LogTag::System,
+                        "EMERGENCY",
+                        "⚠️  FORCE KILL BLOCKED - Would cause financial loss!"
+                    );
+                    log(
+                        LogTag::System,
+                        "EMERGENCY",
+                        "🔒 Waiting for trading operations to complete..."
+                    );
+                    log(
+                        LogTag::System,
+                        "EMERGENCY",
+                        "💡 Press Ctrl+C a THIRD time to override (DANGEROUS!)"
+                    );
+
                     // Wait for third Ctrl+C to override protection
                     if tokio::signal::ctrl_c().await.is_ok() {
-                        log(LogTag::System, "EMERGENCY", "💀 THIRD Ctrl+C - FORCE KILLING DESPITE ACTIVE OPERATIONS!");
-                        log(LogTag::System, "EMERGENCY", "⚠️  THIS MAY CAUSE FINANCIAL LOSS OR INCOMPLETE TRADES!");
+                        log(
+                            LogTag::System,
+                            "EMERGENCY",
+                            "💀 THIRD Ctrl+C - FORCE KILLING DESPITE ACTIVE OPERATIONS!"
+                        );
+                        log(
+                            LogTag::System,
+                            "EMERGENCY",
+                            "⚠️  THIS MAY CAUSE FINANCIAL LOSS OR INCOMPLETE TRADES!"
+                        );
                         std::process::abort();
                     }
                 } else {
-                    log(LogTag::System, "EMERGENCY", "Second Ctrl+C detected - FORCE KILLING APPLICATION");
+                    log(
+                        LogTag::System,
+                        "EMERGENCY",
+                        "Second Ctrl+C detected - FORCE KILLING APPLICATION"
+                    );
                     std::process::abort(); // Immediate termination
                 }
             }
@@ -126,21 +150,33 @@ async fn main() {
         log(LogTag::Trader, "INFO", "Trader task ended");
     });
 
-    log(LogTag::System, "INFO", "Waiting for Ctrl+C to shutdown (press Ctrl+C twice for immediate kill)");
-    
+    log(
+        LogTag::System,
+        "INFO",
+        "Waiting for Ctrl+C to shutdown (press Ctrl+C twice for immediate kill)"
+    );
+
     // Set up Ctrl+C signal handler with better error handling
     match tokio::signal::ctrl_c().await {
         Ok(_) => {
             emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-            log(LogTag::System, "INFO", "Shutdown signal received, initiating graceful shutdown...");
-            log(LogTag::System, "INFO", "Press Ctrl+C again within 5 seconds to force immediate termination");
+            log(
+                LogTag::System,
+                "INFO",
+                "Shutdown signal received, initiating graceful shutdown..."
+            );
+            log(
+                LogTag::System,
+                "INFO",
+                "Press Ctrl+C again within 5 seconds to force immediate termination"
+            );
         }
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to listen for shutdown signal: {}", e));
             std::process::exit(1);
         }
     }
-    
+
     // Notify all tasks to shutdown
     shutdown.notify_waiters();
     log(LogTag::System, "INFO", "Shutdown notification sent to all background tasks");
@@ -149,35 +185,44 @@ async fn main() {
     let critical_ops_count = screenerbot::trader::CriticalOperationGuard::get_active_count();
     if critical_ops_count > 0 {
         log(
-            LogTag::System, 
-            "CRITICAL", 
+            LogTag::System,
+            "CRITICAL",
             &format!("🚨 WAITING FOR {} CRITICAL TRADING OPERATIONS TO COMPLETE BEFORE SHUTDOWN", critical_ops_count)
         );
-        log(LogTag::System, "CRITICAL", "⚠️  DO NOT FORCE KILL - Financial operations in progress!");
-        
+        log(
+            LogTag::System,
+            "CRITICAL",
+            "⚠️  DO NOT FORCE KILL - Financial operations in progress!"
+        );
+
         // Wait for critical operations to complete (max 60 seconds)
         let critical_ops_timeout = std::time::Instant::now();
         while screenerbot::trader::CriticalOperationGuard::get_active_count() > 0 {
             if critical_ops_timeout.elapsed() > std::time::Duration::from_secs(60) {
-                log(LogTag::System, "EMERGENCY", "⚠️  CRITICAL OPERATIONS TIMEOUT - Some trades may be incomplete!");
+                log(
+                    LogTag::System,
+                    "EMERGENCY",
+                    "⚠️  CRITICAL OPERATIONS TIMEOUT - Some trades may be incomplete!"
+                );
                 break;
             }
-            
+
             let remaining = screenerbot::trader::CriticalOperationGuard::get_active_count();
             if remaining > 0 {
                 log(
-                    LogTag::System, 
-                    "CRITICAL", 
-                    &format!("🔒 Still waiting for {} critical operations... ({}s elapsed)", 
-                        remaining, 
+                    LogTag::System,
+                    "CRITICAL",
+                    &format!(
+                        "🔒 Still waiting for {} critical operations... ({}s elapsed)",
+                        remaining,
                         critical_ops_timeout.elapsed().as_secs()
                     )
                 );
             }
-            
+
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
-        
+
         if screenerbot::trader::CriticalOperationGuard::get_active_count() == 0 {
             log(LogTag::System, "CRITICAL", "✅ All critical trading operations completed safely");
         }
@@ -205,14 +250,22 @@ async fn main() {
         // Wait for tokens system tasks (includes rugcheck service)
         for (i, handle) in tokens_handles.into_iter().enumerate() {
             if let Err(e) = handle.await {
-                log(LogTag::System, "WARN", &format!("Tokens task {} failed to shutdown cleanly: {}", i, e));
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Tokens task {} failed to shutdown cleanly: {}", i, e)
+                );
             }
         }
 
         // Wait for pricing tasks
         for (i, handle) in pricing_handles.into_iter().enumerate() {
             if let Err(e) = handle.await {
-                log(LogTag::System, "WARN", &format!("Pricing task {} failed to shutdown cleanly: {}", i, e));
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Pricing task {} failed to shutdown cleanly: {}", i, e)
+                );
             }
         }
     });
@@ -222,7 +275,11 @@ async fn main() {
             log(LogTag::System, "INFO", "All background tasks finished gracefully. Exiting.");
         }
         Err(_) => {
-            log(LogTag::System, "WARN", "Tasks did not finish within 5 second timeout, forcing immediate exit.");
+            log(
+                LogTag::System,
+                "WARN",
+                "Tasks did not finish within 5 second timeout, forcing immediate exit."
+            );
             // Force immediate termination
             std::process::abort();
         }

@@ -195,8 +195,9 @@ pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new
 });
 
 /// Static global: tracks critical trading operations in progress to prevent force shutdown
-pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = 
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicUsize::new(0)));
+pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = Lazy::new(||
+    Arc::new(std::sync::atomic::AtomicUsize::new(0))
+);
 
 // =============================================================================
 // CRITICAL OPERATION PROTECTION
@@ -212,18 +213,25 @@ impl CriticalOperationGuard {
     /// Create a new critical operation guard
     /// This should be created before any buy/sell operation
     pub fn new(operation_name: &str) -> Self {
-        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_add(
+            1,
+            std::sync::atomic::Ordering::SeqCst
+        );
         log(
             LogTag::Trader,
             "CRITICAL_OP_START",
-            &format!("🔒 PROTECTED: {} operation started (active operations: {})", operation_name, count + 1)
+            &format!(
+                "🔒 PROTECTED: {} operation started (active operations: {})",
+                operation_name,
+                count + 1
+            )
         );
-        
+
         Self {
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     /// Get the current number of critical operations in progress
     pub fn get_active_count() -> usize {
         CRITICAL_OPERATIONS_IN_PROGRESS.load(std::sync::atomic::Ordering::SeqCst)
@@ -232,11 +240,17 @@ impl CriticalOperationGuard {
 
 impl Drop for CriticalOperationGuard {
     fn drop(&mut self) {
-        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        let count = CRITICAL_OPERATIONS_IN_PROGRESS.fetch_sub(
+            1,
+            std::sync::atomic::Ordering::SeqCst
+        );
         log(
             LogTag::Trader,
             "CRITICAL_OP_END",
-            &format!("🔓 UNPROTECTED: Critical operation finished (remaining operations: {})", count - 1)
+            &format!(
+                "🔓 UNPROTECTED: Critical operation finished (remaining operations: {})",
+                count - 1
+            )
         );
     }
 }
@@ -1434,7 +1448,7 @@ pub fn is_entry_allowed_by_historical_data(mint: &str, current_price: f64) -> bo
 pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
     let shutdown = shutdown.clone();
-    
+
     'outer: loop {
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
@@ -2317,7 +2331,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         let token_symbol = token.symbol.clone();
 
                         // Check for shutdown before starting buy operation (non-blocking check)
-                        let shutdown_check = tokio::time::timeout(Duration::from_millis(1), shutdown_for_task.notified()).await;
+                        let shutdown_check = tokio::time::timeout(
+                            Duration::from_millis(1),
+                            shutdown_for_task.notified()
+                        ).await;
                         if shutdown_check.is_ok() {
                             log(
                                 LogTag::Trader,
@@ -2467,7 +2484,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     // Clone shutdown once at the start to avoid borrow checker issues
     let shutdown = shutdown.clone();
-    
+
     loop {
         // First, collect all open position mints to fetch pool prices in parallel
         let open_position_mints: Vec<String> = {
@@ -2740,7 +2757,10 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
 
                     // Check for shutdown before starting sell operation (non-blocking check)
-                    let shutdown_check = tokio::time::timeout(Duration::from_millis(1), shutdown_for_task.notified()).await;
+                    let shutdown_check = tokio::time::timeout(
+                        Duration::from_millis(1),
+                        shutdown_for_task.notified()
+                    ).await;
                     if shutdown_check.is_ok() {
                         log(
                             LogTag::Trader,

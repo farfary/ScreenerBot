@@ -413,7 +413,11 @@ impl RugcheckService {
         for chunk in mints.chunks(RUGCHECK_BATCH_SIZE) {
             // Check for shutdown signal before processing each batch
             if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
-                log(LogTag::Rugcheck, "SHUTDOWN", "Shutdown signal received during batch processing");
+                log(
+                    LogTag::Rugcheck,
+                    "SHUTDOWN",
+                    "Shutdown signal received during batch processing"
+                );
                 break;
             }
 
@@ -422,7 +426,11 @@ impl RugcheckService {
             for mint in chunk {
                 // Check for shutdown signal before each token
                 if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
-                    log(LogTag::Rugcheck, "SHUTDOWN", "Shutdown signal received during token processing");
+                    log(
+                        LogTag::Rugcheck,
+                        "SHUTDOWN",
+                        "Shutdown signal received during token processing"
+                    );
                     break;
                 }
 
