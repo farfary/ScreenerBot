@@ -44,6 +44,9 @@ const USDT_MINT: &str = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 /// Raydium CPMM Program ID
 pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
 
+/// Meteora DAMM v2 Program ID
+pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
+
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
@@ -1296,6 +1299,9 @@ impl PoolPriceCalculator {
             RAYDIUM_CPMM_PROGRAM_ID => {
                 self.decode_raydium_cpmm_pool(pool_address, &account).await?
             }
+            METEORA_DAMM_V2_PROGRAM_ID => {
+                self.decode_meteora_damm_v2_pool(pool_address, &account).await?
+            }
             _ => {
                 return Err(format!("Unsupported pool program ID: {}", program_id));
             }
@@ -1383,6 +1389,9 @@ impl PoolPriceCalculator {
         let price_info = match pool_info.pool_program_id.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => {
                 self.calculate_raydium_cpmm_price(&pool_info, token_mint).await?
+            }
+            METEORA_DAMM_V2_PROGRAM_ID => {
+                self.calculate_meteora_damm_v2_price(&pool_info, token_mint).await?
             }
             _ => {
                 return Err(
@@ -1789,6 +1798,229 @@ impl PoolPriceCalculator {
         Ok((balance_0, balance_1))
     }
 
+    /// Decode Meteora DAMM v2 pool data from account bytes
+    async fn decode_meteora_damm_v2_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        if account.data.len() < 1112 {
+            // Meteora pools should be at least 1112 bytes based on your data
+            return Err(
+                format!(
+                    "Invalid Meteora DAMM v2 pool account data length: {} (expected >= 1112)",
+                    account.data.len()
+                )
+            );
+        }
+
+        let data = &account.data;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DECODE",
+                &format!(
+                    "Starting Meteora DAMM v2 decode for pool {}, data length: {}",
+                    pool_address,
+                    data.len()
+                )
+            );
+        }
+
+        // Decode Meteora DAMM v2 pool structure based on the provided JSON data
+        // The structure appears to follow this layout:
+
+        // Skip the complex pool_fees structure (starts at offset 8, quite large)
+        // Jump to token mints which start around offset 136 based on your data
+        let mut offset = 136;
+
+        let token_a_mint = Self::read_pubkey_at_offset(data, &mut offset)?;
+        let token_b_mint = Self::read_pubkey_at_offset(data, &mut offset)?;
+        let token_a_vault = Self::read_pubkey_at_offset(data, &mut offset)?;
+        let token_b_vault = Self::read_pubkey_at_offset(data, &mut offset)?;
+
+        // Skip whitelisted_vault and partner
+        offset += 64;
+
+        // Read liquidity (u128)
+        let liquidity = Self::read_u128_at_offset(data, &mut offset)?;
+
+        // Skip _padding (u128)
+        offset += 16;
+
+        // Read protocol fees
+        let protocol_a_fee = Self::read_u64_at_offset(data, &mut offset)?;
+        let protocol_b_fee = Self::read_u64_at_offset(data, &mut offset)?;
+
+        // Skip partner fees
+        offset += 16;
+
+        // Read sqrt prices
+        let sqrt_min_price = Self::read_u128_at_offset(data, &mut offset)?;
+        let sqrt_max_price = Self::read_u128_at_offset(data, &mut offset)?;
+        let sqrt_price = Self::read_u128_at_offset(data, &mut offset)?;
+
+        // Read activation point
+        let activation_point = Self::read_u64_at_offset(data, &mut offset)?;
+
+        // Read status flags
+        let activation_type = Self::read_u8_at_offset(data, &mut offset)?;
+        let pool_status = Self::read_u8_at_offset(data, &mut offset)?;
+        let token_a_flag = Self::read_u8_at_offset(data, &mut offset)?;
+        let token_b_flag = Self::read_u8_at_offset(data, &mut offset)?;
+        let collect_fee_mode = Self::read_u8_at_offset(data, &mut offset)?;
+        let pool_type = Self::read_u8_at_offset(data, &mut offset)?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_TOKENS",
+                &format!(
+                    "Token A: {}, Token B: {}, Vaults A: {}, B: {}",
+                    token_a_mint,
+                    token_b_mint,
+                    token_a_vault,
+                    token_b_vault
+                )
+            );
+
+            log(
+                LogTag::Pool,
+                "METEORA_PRICE",
+                &format!(
+                    "sqrt_price: {}, liquidity: {}, status: {}",
+                    sqrt_price,
+                    liquidity,
+                    pool_status
+                )
+            );
+        }
+
+        // Get token decimals
+        let token_a_decimals = get_token_decimals_with_cache(&token_a_mint).await;
+        let token_b_decimals = get_token_decimals_with_cache(&token_b_mint).await;
+
+        // Get vault balances to calculate reserves
+        let (token_a_reserve, token_b_reserve) = self.get_vault_balances(
+            &token_a_vault,
+            &token_b_vault
+        ).await?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_RESERVES",
+                &format!(
+                    "Token A reserve: {} (decimals: {}), Token B reserve: {} (decimals: {})",
+                    token_a_reserve,
+                    token_a_decimals,
+                    token_b_reserve,
+                    token_b_decimals
+                )
+            );
+        }
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: METEORA_DAMM_V2_PROGRAM_ID.to_string(),
+            pool_type: "Meteora DAMM v2".to_string(),
+            token_0_mint: token_a_mint,
+            token_1_mint: token_b_mint,
+            token_0_vault: Some(token_a_vault),
+            token_1_vault: Some(token_b_vault),
+            token_0_reserve: token_a_reserve,
+            token_1_reserve: token_b_reserve,
+            token_0_decimals: token_a_decimals,
+            token_1_decimals: token_b_decimals,
+            lp_mint: None, // Meteora DAMM v2 doesn't use traditional LP tokens
+            lp_supply: Some(liquidity as u64), // Store liquidity here
+            creator: None,
+            status: Some(pool_status as u32),
+            liquidity_usd: None, // Will be calculated separately
+        })
+    }
+
+    /// Calculate price for Meteora DAMM v2 pool
+    async fn calculate_meteora_damm_v2_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        // Determine which token is SOL and which is the target token
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_a) = if
+            pool_info.token_0_mint == SOL_MINT &&
+            pool_info.token_1_mint == token_mint
+        {
+            (
+                pool_info.token_0_reserve,
+                pool_info.token_1_reserve,
+                pool_info.token_0_decimals,
+                pool_info.token_1_decimals,
+                false,
+            )
+        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+            (
+                pool_info.token_1_reserve,
+                pool_info.token_0_reserve,
+                pool_info.token_1_decimals,
+                pool_info.token_0_decimals,
+                true,
+            )
+        } else {
+            return Err(format!("Pool does not contain SOL or target token {}", token_mint));
+        };
+
+        // Validate reserves
+        if sol_reserve == 0 || token_reserve == 0 {
+            return Err("Pool has zero reserves".to_string());
+        }
+
+        // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
+        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
+        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
+
+        let price_sol = sol_adjusted / token_adjusted;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "CALC",
+                &format!(
+                    "Meteora DAMM v2 Price Calculation for {}:\n  \
+                     SOL Reserve: {} ({:.12} adjusted, {} decimals)\n  \
+                     Token Reserve: {} ({:.12} adjusted, {} decimals)\n  \
+                     Price: {:.12} SOL\n  \
+                     Pool: {} ({})",
+                    token_mint,
+                    sol_reserve,
+                    sol_adjusted,
+                    sol_decimals,
+                    token_reserve,
+                    token_adjusted,
+                    token_decimals,
+                    price_sol,
+                    pool_info.pool_address,
+                    pool_info.pool_type
+                )
+            );
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals,
+                sol_decimals,
+            })
+        )
+    }
+
     /// Decode token account amount from account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
@@ -1840,6 +2072,21 @@ impl PoolPriceCalculator {
 
         let value = u64::from_le_bytes(
             bytes.try_into().map_err(|_| "Failed to parse u64".to_string())?
+        );
+
+        Ok(value)
+    }
+
+    fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, String> {
+        if *offset + 16 > data.len() {
+            return Err("Insufficient data for u128".to_string());
+        }
+
+        let bytes = &data[*offset..*offset + 16];
+        *offset += 16;
+
+        let value = u128::from_le_bytes(
+            bytes.try_into().map_err(|_| "Failed to parse u128".to_string())?
         );
 
         Ok(value)
