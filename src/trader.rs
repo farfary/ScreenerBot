@@ -149,7 +149,7 @@ use crate::tokens::{
     get_all_tokens_by_liquidity,
     discover_tokens_once,
     monitor_tokens_once,
-    get_token_price_safe,
+    get_token_price_blocking_safe,
 };
 use crate::positions::{
     Position,
@@ -1518,7 +1518,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
             for (i, token) in tokens_from_module.iter().take(3).enumerate() {
                 let price_lookup_start = std::time::Instant::now();
-                let price_from_service = get_token_price_safe(&token.mint).await;
+                let price_from_service = get_token_price_blocking_safe(&token.mint).await;
                 debug_trader_log(
                     "TOKEN_PRICE_SAMPLE",
                     &format!(
@@ -1738,7 +1738,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         );
                         let price_start = std::time::Instant::now();
 
-                        if let Some(current_price) = get_token_price_safe(&token.mint).await {
+                        if let Some(current_price) = get_token_price_blocking_safe(&token.mint).await {
                             debug_trader_log(
                                 "TASK_TIMING",
                                 &format!(
@@ -2598,7 +2598,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         // Now process each position with async calls (mutex is released)
         for (index, mut position) in open_positions_data {
             // Get current price from safe price service
-            if let Some(current_price) = get_token_price_safe(&position.mint).await {
+            if let Some(current_price) = get_token_price_blocking_safe(&position.mint).await {
                 if current_price > 0.0 && current_price.is_finite() {
                     // Update position tracking (extremes) on the local copy
                     update_position_tracking(&mut position, current_price);

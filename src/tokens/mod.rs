@@ -82,6 +82,7 @@ pub use rugcheck::{
 pub use price_service::{
     initialize_price_service,
     get_token_price_safe,
+    get_token_price_blocking_safe,
     update_open_positions_safe,
     get_priority_tokens_safe,
     update_tokens_prices_safe,

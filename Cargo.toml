@@ -39,14 +39,6 @@ path = "src/bin/tool_ata_cleanup.rs"
 name = "tool_pool_price"
 path = "src/bin/tool_pool_price.rs"
 
-[[bin]]
-name = "test_api_parsing"
-path = "src/bin/test_api_parsing.rs"
-
-[[bin]]
-name = "test_logger_colors"
-path = "src/bin/test_logger_colors.rs"
-
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }

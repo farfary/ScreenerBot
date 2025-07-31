@@ -5,7 +5,7 @@
 /// calculates prices from pool reserves, and maintains a watch list for continuous monitoring.
 
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_price_service_enabled;
+use crate::global::is_debug_pool_prices_enabled;
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_token_decimals_from_chain, get_cached_decimals };
 use crate::rpc::{ get_rpc_client, parse_pubkey };
@@ -26,8 +26,8 @@ use chrono::{ DateTime, Utc };
 /// Pool cache TTL (5 minutes)
 const POOL_CACHE_TTL_SECONDS: i64 = 300;
 
-/// Price cache TTL (3 seconds for real-time monitoring)
-const PRICE_CACHE_TTL_SECONDS: i64 = 3;
+/// Price cache TTL (1 second for real-time monitoring)
+const PRICE_CACHE_TTL_SECONDS: i64 = 1;
 
 /// Maximum price deviation between API and pool (90%)
 const MAX_PRICE_DEVIATION_PERCENT: f64 = 90.0;
@@ -267,7 +267,7 @@ impl PoolPriceService {
                 };
 
                 if !tokens_to_monitor.is_empty() {
-                    if is_debug_price_service_enabled() {
+                    if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
                             "MONITOR",
@@ -284,7 +284,7 @@ impl PoolPriceService {
                                 &token_address
                             ).await
                         {
-                            if is_debug_price_service_enabled() {
+                            if is_debug_pool_prices_enabled() {
                                 log(
                                     LogTag::Pool,
                                     "ERROR",
@@ -338,48 +338,115 @@ impl PoolPriceService {
         token_address: &str,
         api_price_sol: Option<f64> // SOL price from API for comparison
     ) -> Option<PoolPriceResult> {
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "PRICE_REQUEST",
+                &format!(
+                    "🎯 POOL PRICE REQUEST for {}: API_price={:.12} SOL",
+                    token_address,
+                    api_price_sol.unwrap_or(0.0)
+                )
+            );
+        }
+
         // Check price cache first
         {
             let price_cache = self.price_cache.read().await;
             if let Some(cached_price) = price_cache.get(token_address) {
                 let age = Utc::now() - cached_price.calculated_at;
                 if age.num_seconds() <= PRICE_CACHE_TTL_SECONDS {
-                    if is_debug_price_service_enabled() {
+                    if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
                             "CACHE_HIT",
-                            &format!("Using cached pool price for {}", token_address)
+                            &format!(
+                                "🔄 CACHE HIT for {}: cached_price={:.12} SOL, age={}s, cache_ttl={}s, updating timestamp",
+                                token_address,
+                                cached_price.price_sol.unwrap_or(0.0),
+                                age.num_seconds(),
+                                PRICE_CACHE_TTL_SECONDS
+                            )
                         );
                     }
-                    return Some(cached_price.clone());
+                    
+                    // Return cached result with updated timestamp for real-time accuracy
+                    let mut updated_result = cached_price.clone();
+                    let old_timestamp = updated_result.calculated_at;
+                    updated_result.calculated_at = Utc::now();
+                    
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "TIMESTAMP_UPDATE",
+                            &format!(
+                                "⏰ TIMESTAMP UPDATE for {}: {} -> {} (cached price still valid)",
+                                token_address,
+                                old_timestamp.format("%H:%M:%S%.3f"),
+                                updated_result.calculated_at.format("%H:%M:%S%.3f")
+                            )
+                        );
+                    }
+                    
+                    return Some(updated_result);
+                } else if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "CACHE_EXPIRED",
+                        &format!(
+                            "❌ CACHE EXPIRED for {}: age={}s > max={}s, will fetch FRESH price from blockchain",
+                            token_address,
+                            age.num_seconds(),
+                            PRICE_CACHE_TTL_SECONDS
+                        )
+                    );
                 }
+            } else if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "CACHE_MISS",
+                    &format!(
+                        "❓ NO CACHE for {}: first time or cleared cache, will fetch FRESH price from blockchain",
+                        token_address
+                    )
+                );
             }
         }
 
         // Check if token has available pools
         if !self.check_token_availability(token_address).await {
-            if is_debug_price_service_enabled() {
-                log(LogTag::Pool, "NO_POOLS", &format!("No available pools for {}", token_address));
+            if is_debug_pool_prices_enabled() {
+                log(LogTag::Pool, "NO_POOLS", &format!("❌ NO POOLS available for {}", token_address));
             }
             return None;
+        }
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "FRESH_CALC_START",
+                &format!(
+                    "🔄 STARTING FRESH CALCULATION for {} - will get REAL-TIME price from blockchain pools",
+                    token_address
+                )
+            );
         }
 
         // Calculate pool price
         match self.calculate_pool_price(token_address).await {
             Ok(pool_result) => {
-                // For pool calculations, we don't validate against API USD prices
-                // since we only calculate SOL prices from pools
-                if is_debug_price_service_enabled() {
+                if is_debug_pool_prices_enabled() {
                     if let Some(price_sol) = pool_result.price_sol {
                         // Log the pool price calculation
                         log(
                             LogTag::Pool,
-                            "POOL_CALC",
+                            "FRESH_CALC_SUCCESS",
                             &format!(
-                                "Pool price calculated for {}: {:.12} SOL from pool {}",
+                                "✅ FRESH POOL PRICE calculated for {}: {:.12} SOL from pool {} (dex: {})",
                                 token_address,
                                 price_sol,
-                                pool_result.pool_address
+                                pool_result.pool_address,
+                                pool_result.dex_id
                             )
                         );
 
@@ -394,10 +461,11 @@ impl PoolPriceService {
 
                             log(
                                 LogTag::Pool,
-                                "PRICE_DIFF",
+                                "PRICE_COMPARISON",
                                 &format!(
-                                    "Price comparison for {}: API={:.12} SOL, Pool={:.12} SOL, \
-                                     Diff={:.12} SOL ({:+.2}%) - Pool: {} ({})",
+                                    "💰 PRICE COMPARISON for {}: \
+                                     📊 API={:.12} SOL vs 🏊 POOL={:.12} SOL \
+                                     📈 Diff={:.12} SOL ({:+.2}%) - Pool: {} ({})",
                                     token_address,
                                     api_price_sol,
                                     price_sol,
@@ -408,14 +476,16 @@ impl PoolPriceService {
                                 )
                             );
 
-                            // If difference is more than 50%, log additional debug info
-                            if price_diff_percent.abs() > 50.0 {
+                            // Flag significant differences
+                            if price_diff_percent.abs() > 10.0 {
+                                let flag = if price_diff_percent.abs() > 50.0 { "🚨 CRITICAL" } else { "⚠️  WARNING" };
                                 log(
                                     LogTag::Pool,
-                                    "PRICE_WARN",
+                                    "PRICE_DIVERGENCE",
                                     &format!(
-                                        "Large price difference detected for {}: {:.2}% - \
-                                         Liquidity: ${:.2}, Volume 24h: ${:.2}, Source: {}",
+                                        "{} PRICE DIVERGENCE for {}: {:.2}% difference detected! \
+                                         💧 Liquidity: ${:.2}, 📊 Volume 24h: ${:.2}, 🔄 Source: {}",
+                                        flag,
                                         token_address,
                                         price_diff_percent,
                                         pool_result.liquidity_usd,
@@ -423,27 +493,28 @@ impl PoolPriceService {
                                         pool_result.source
                                     )
                                 );
-
-                                // Check if we should investigate decimal issues
-                                if price_diff_percent.abs() > 90.0 {
-                                    log(
-                                        LogTag::Pool,
-                                        "DECIMAL_WARN",
-                                        &format!(
-                                            "CRITICAL: {:.2}% difference suggests possible decimal mismatch. \
-                                             Ratios to investigate: 10x={:.2}%, 100x={:.2}%, 1000x={:.2}%",
-                                            price_diff_percent,
-                                            ((api_price_sol * 10.0 - price_sol) / price_sol) *
-                                                100.0,
-                                            ((api_price_sol * 100.0 - price_sol) / price_sol) *
-                                                100.0,
-                                            ((api_price_sol * 1000.0 - price_sol) / price_sol) *
-                                                100.0
-                                        )
-                                    );
-                                }
                             }
+                        } else {
+                            log(
+                                LogTag::Pool,
+                                "POOL_ONLY_PRICE",
+                                &format!(
+                                    "🏊 POOL-ONLY PRICE for {}: {:.12} SOL (no API price for comparison)",
+                                    token_address,
+                                    price_sol
+                                )
+                            );
                         }
+                    } else {
+                        log(
+                            LogTag::Pool,
+                            "CALC_NO_PRICE",
+                            &format!(
+                                "❌ CALCULATION FAILED: No price could be calculated for {} from pool {}",
+                                token_address,
+                                pool_result.pool_address
+                            )
+                        );
                     }
                 }
 
@@ -451,16 +522,30 @@ impl PoolPriceService {
                 {
                     let mut price_cache = self.price_cache.write().await;
                     price_cache.insert(token_address.to_string(), pool_result.clone());
+                    
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "CACHE_STORED",
+                            &format!(
+                                "💾 CACHED fresh price for {}: {:.12} SOL (TTL={}s) at {}",
+                                token_address,
+                                pool_result.price_sol.unwrap_or(0.0),
+                                PRICE_CACHE_TTL_SECONDS,
+                                pool_result.calculated_at.format("%H:%M:%S%.3f")
+                            )
+                        );
+                    }
                 }
 
                 Some(pool_result)
             }
             Err(e) => {
-                if is_debug_price_service_enabled() {
+                if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
                         "CALC_ERROR",
-                        &format!("Failed to calculate pool price for {}: {}", token_address, e)
+                        &format!("❌ CALCULATION ERROR for {}: {}", token_address, e)
                     );
                 }
                 None
@@ -525,31 +610,106 @@ impl PoolPriceService {
         &self,
         token_address: &str
     ) -> Result<Vec<CachedPoolInfo>, String> {
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "FETCH_START",
+                &format!("🌐 STARTING to fetch pools for {}", token_address)
+            );
+        }
+
         // Check pool cache first
         {
             let pool_cache = self.pool_cache.read().await;
             if let Some(cached_pools) = pool_cache.get(token_address) {
                 if !cached_pools.is_empty() && !cached_pools[0].is_expired() {
+                    if is_debug_pool_prices_enabled() {
+                        let age = Utc::now() - cached_pools[0].cached_at;
+                        log(
+                            LogTag::Pool,
+                            "FETCH_CACHE_HIT",
+                            &format!(
+                                "💾 Using CACHED pools for {}: {} pools, age={}s (max={}s)",
+                                token_address,
+                                cached_pools.len(),
+                                age.num_seconds(),
+                                POOL_CACHE_TTL_SECONDS
+                            )
+                        );
+                    }
                     return Ok(cached_pools.clone());
+                } else if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "FETCH_CACHE_EXPIRED",
+                        &format!(
+                            "⏰ Pool cache EXPIRED for {}, will fetch fresh pools from API",
+                            token_address
+                        )
+                    );
                 }
+            } else if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "FETCH_CACHE_MISS",
+                    &format!(
+                        "❓ No cached pools for {}, will fetch from API",
+                        token_address
+                    )
+                );
             }
         }
 
         // Fetch from API
-        log(LogTag::Pool, "FETCH", &format!("Fetching pools for {}", token_address));
+        if is_debug_pool_prices_enabled() {
+            log(LogTag::Pool, "FETCH_API_START", &format!("🔄 Fetching pools from DexScreener API for {}", token_address));
+        }
 
+        let api_start_time = Utc::now();
         let pairs = get_token_pairs_from_api(token_address).await?;
+        let api_duration = Utc::now() - api_start_time;
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "FETCH_API_COMPLETE",
+                &format!(
+                    "✅ API fetch complete for {}: got {} pairs in {}ms",
+                    token_address,
+                    pairs.len(),
+                    api_duration.num_milliseconds()
+                )
+            );
+        }
 
         let mut cached_pools = Vec::new();
-        for pair in pairs {
+        for (index, pair) in pairs.iter().enumerate() {
             match CachedPoolInfo::from_token_pair(&pair) {
-                Ok(cached_pool) => cached_pools.push(cached_pool),
+                Ok(cached_pool) => {
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "FETCH_PARSE_SUCCESS",
+                            &format!(
+                                "✅ Parsed pool #{} for {}: {} (dex: {}, liquidity: ${:.2})",
+                                index + 1,
+                                token_address,
+                                cached_pool.pair_address,
+                                cached_pool.dex_id,
+                                cached_pool.liquidity_usd
+                            )
+                        );
+                    }
+                    cached_pools.push(cached_pool);
+                }
                 Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "PARSE_ERROR",
-                        &format!("Failed to parse pool {}: {}", pair.pair_address, e)
-                    );
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "FETCH_PARSE_ERROR",
+                            &format!("❌ Failed to parse pool #{} for {}: {} - Error: {}", index + 1, token_address, pair.pair_address, e)
+                        );
+                    }
                 }
             }
         }
@@ -559,43 +719,155 @@ impl PoolPriceService {
             b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
         );
 
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "FETCH_SORTED",
+                &format!(
+                    "📊 Sorted {} pools for {} by liquidity (highest first)",
+                    cached_pools.len(),
+                    token_address
+                )
+            );
+            
+            // Log top 3 pools for debugging
+            for (i, pool) in cached_pools.iter().take(3).enumerate() {
+                log(
+                    LogTag::Pool,
+                    "FETCH_TOP_POOLS",
+                    &format!(
+                        "🏆 Pool #{}: {} (dex: {}, liquidity: ${:.2}, native_price: {:.12})",
+                        i + 1,
+                        pool.pair_address,
+                        pool.dex_id,
+                        pool.liquidity_usd,
+                        pool.price_native
+                    )
+                );
+            }
+        }
+
         // Cache the results
         {
             let mut pool_cache = self.pool_cache.write().await;
             pool_cache.insert(token_address.to_string(), cached_pools.clone());
+            
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "FETCH_CACHED",
+                    &format!(
+                        "💾 CACHED {} pools for {} (TTL={}s) at {}",
+                        cached_pools.len(),
+                        token_address,
+                        POOL_CACHE_TTL_SECONDS,
+                        Utc::now().format("%H:%M:%S%.3f")
+                    )
+                );
+            }
         }
-
-        log(
-            LogTag::Pool,
-            "CACHED",
-            &format!("Cached {} pools for {}", cached_pools.len(), token_address)
-        );
 
         Ok(cached_pools)
     }
 
     /// Calculate pool price for a token
     async fn calculate_pool_price(&self, token_address: &str) -> Result<PoolPriceResult, String> {
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "CALC_START",
+                &format!("🔍 STARTING pool price calculation for {}", token_address)
+            );
+        }
+
         let pools = self.fetch_and_cache_pools(token_address).await?;
 
         if pools.is_empty() {
-            return Err("No pools available".to_string());
+            let error_msg = format!("No pools available for {}", token_address);
+            if is_debug_pool_prices_enabled() {
+                log(LogTag::Pool, "CALC_NO_POOLS", &format!("❌ {}", error_msg));
+            }
+            return Err(error_msg);
+        }
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "CALC_POOLS_FOUND",
+                &format!(
+                    "📊 Found {} pools for {}, selecting highest liquidity pool",
+                    pools.len(),
+                    token_address
+                )
+            );
         }
 
         // Use the pool with highest liquidity
         let best_pool = &pools[0];
 
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "CALC_SELECTED_POOL",
+                &format!(
+                    "🏆 Selected best pool for {}: {} (dex: {}, liquidity: ${:.2}, volume_24h: ${:.2})",
+                    token_address,
+                    best_pool.pair_address,
+                    best_pool.dex_id,
+                    best_pool.liquidity_usd,
+                    best_pool.volume_24h
+                )
+            );
+        }
+
         // For now, use API price data from the pool info
         // In the future, this can be enhanced to calculate from actual pool reserves
         let price_sol = if best_pool.quote_token == SOL_MINT {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "CALC_QUOTE_SOL",
+                    &format!(
+                        "📈 {} is quoted in SOL, using direct price: {:.12}",
+                        token_address,
+                        best_pool.price_native
+                    )
+                );
+            }
             Some(best_pool.price_native)
         } else if best_pool.base_token == SOL_MINT {
-            Some(1.0 / best_pool.price_native)
+            let inverted_price = 1.0 / best_pool.price_native;
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "CALC_BASE_SOL",
+                    &format!(
+                        "📉 {} is base token vs SOL, inverting price: 1/{:.12} = {:.12}",
+                        token_address,
+                        best_pool.price_native,
+                        inverted_price
+                    )
+                );
+            }
+            Some(inverted_price)
         } else {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "CALC_NO_SOL_PAIR",
+                    &format!(
+                        "❌ Pool for {} doesn't have SOL pair: base={}, quote={}",
+                        token_address,
+                        best_pool.base_token,
+                        best_pool.quote_token
+                    )
+                );
+            }
             None
         };
 
-        Ok(PoolPriceResult {
+        let calculation_time = Utc::now();
+        let result = PoolPriceResult {
             pool_address: best_pool.pair_address.clone(),
             dex_id: best_pool.dex_id.clone(),
             token_address: token_address.to_string(),
@@ -604,8 +876,50 @@ impl PoolPriceService {
             liquidity_usd: best_pool.liquidity_usd,
             volume_24h: best_pool.volume_24h,
             source: "pool".to_string(),
-            calculated_at: Utc::now(),
-        })
+            calculated_at: calculation_time,
+        };
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "CALC_COMPLETE",
+                &format!(
+                    "✅ CALCULATION COMPLETE for {}: price={:.12} SOL, pool={}, calculated_at={}",
+                    token_address,
+                    price_sol.unwrap_or(0.0),
+                    best_pool.pair_address,
+                    result.calculated_at.format("%H:%M:%S%.3f")
+                )
+            );
+
+            // Log detailed pool info for debugging
+            log(
+                LogTag::Pool,
+                "CALC_POOL_DETAILS",
+                &format!(
+                    "🔬 POOL DETAILS for {}: \
+                     🎯 Pool Address: {}, \
+                     🏪 DEX: {}, \
+                     💰 Liquidity: ${:.2}, \
+                     📊 Volume 24h: ${:.2}, \
+                     🪙 Base Token: {}, \
+                     💱 Quote Token: {}, \
+                     💲 Native Price: {:.12}, \
+                     ⏰ Created: {}",
+                    token_address,
+                    best_pool.pair_address,
+                    best_pool.dex_id,
+                    best_pool.liquidity_usd,
+                    best_pool.volume_24h,
+                    best_pool.base_token,
+                    best_pool.quote_token,
+                    best_pool.price_native,
+                    best_pool.created_at
+                )
+            );
+        }
+
+        Ok(result)
     }
 
     /// Internal method for background price updates
@@ -1124,7 +1438,7 @@ impl PoolPriceCalculator {
             pool_mint_1_decimals
         );
 
-        if is_debug_price_service_enabled() {
+        if is_debug_pool_prices_enabled() {
             log(
                 LogTag::Pool,
                 "DECIMALS",

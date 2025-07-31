@@ -571,11 +571,11 @@ impl ClosedPositionDisplay {
             symbol: position.symbol.clone(),
             mint: position.mint.clone(),
             entry_price: if let Some(effective_price) = position.effective_entry_price {
-                format!("{:.8}", effective_price)
+                format!("{:.11}", effective_price)
             } else {
-                format!("{:.8}", position.entry_price)
+                format!("{:.11}", position.entry_price)
             },
-            exit_price: format!("{:.8}", exit_price),
+            exit_price: format!("{:.11}", exit_price),
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
@@ -588,7 +588,7 @@ impl ClosedPositionDisplay {
 impl OpenPositionDisplay {
     fn from_position(position: &Position, current_price: Option<f64>) -> Self {
         let current_price_str = if let Some(price) = current_price {
-            format!("{:.8}", price)
+            format!("{:.11}", price)
         } else {
             "N/A".to_string()
         };
@@ -623,9 +623,9 @@ impl OpenPositionDisplay {
             symbol: position.symbol.clone(),
             mint: position.mint.clone(),
             entry_price: if let Some(effective_price) = position.effective_entry_price {
-                format!("{:.8}", effective_price)
+                format!("{:.11}", effective_price)
             } else {
-                format!("{:.8}", position.entry_price)
+                format!("{:.11}", position.entry_price)
             },
             current_price: current_price_str,
             size_sol: format!("{:.6}", position.entry_size_sol),
