@@ -3,7 +3,6 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_discovery_enabled;
 use crate::tokens::api::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
-use crate::tokens::blacklist::is_token_blacklisted;
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
 
@@ -588,28 +587,6 @@ impl TokenDiscovery {
 
         if all_mints.is_empty() {
             log(LogTag::Discovery, "COMPLETE", "No tokens to process");
-            return Ok(());
-        }
-
-        // Filter out blacklisted tokens before processing
-        let original_mint_count = all_mints.len();
-        all_mints.retain(|mint| !is_token_blacklisted(mint));
-        let filtered_mint_count = all_mints.len();
-
-        if filtered_mint_count < original_mint_count {
-            log(
-                LogTag::Discovery,
-                "FILTER",
-                &format!(
-                    "Filtered out {} blacklisted tokens, {} remaining",
-                    original_mint_count - filtered_mint_count,
-                    filtered_mint_count
-                )
-            );
-        }
-
-        if all_mints.is_empty() {
-            log(LogTag::Discovery, "COMPLETE", "No non-blacklisted tokens to process");
             return Ok(());
         }
 

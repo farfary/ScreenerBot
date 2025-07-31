@@ -1,7 +1,6 @@
 /// Token decimals fetching from Solana blockchain
 use crate::logger::{ log, LogTag };
 use crate::global::read_configs;
-use crate::tokens::blacklist::add_to_blacklist_manual;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_program::program_pack::Pack;
@@ -329,22 +328,16 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         }
     }
 
-    // For any remaining failed mints, blacklist them instead of using default decimals
+    // For any remaining failed mints, add default decimals
     for (mint_str, _) in remaining_mints {
         log(
             LogTag::System,
             "ERROR",
-            &format!("All RPC endpoints failed for token {}, blacklisting token", mint_str)
+            &format!("All RPC endpoints failed for token {}, using default decimals (9)", mint_str)
         );
 
-        // Blacklist the token due to decimal fetch failure
-        add_to_blacklist_manual(&mint_str, "UNKNOWN");
-
-        // Return error instead of default decimals
-        fetch_results.push((
-            mint_str,
-            Err("Token blacklisted due to decimal fetch failure".to_string()),
-        ));
+        new_cache_entries.insert(mint_str.clone(), 9);
+        fetch_results.push((mint_str, Ok(9))); // Default fallback
     }
 
     // Update cache and save to disk if we have new entries

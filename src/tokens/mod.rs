@@ -8,7 +8,6 @@ pub use pool::{
     get_pool_price_from_address,
     get_pool_price_with_rpc,
     get_multiple_pool_prices,
-    decoder_raydium_cpmm,
     get_token_price_from_pools,
     RAYDIUM_CPMM_PROGRAM_ID,
     SOL_MINT,

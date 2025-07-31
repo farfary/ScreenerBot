@@ -109,23 +109,6 @@ pub struct PerformanceDisplay {
     worst_streak: String,
 }
 
-/// Display structure for current configuration
-#[derive(Tabled)]
-pub struct ConfigDisplay {
-    #[tabled(rename = "💰 Trade Size")]
-    trade_size: String,
-    #[tabled(rename = "🎯 Profit Target")]
-    profit_target: String,
-    #[tabled(rename = "🛑 Stop Loss")]
-    stop_loss: String,
-    #[tabled(rename = "📊 Max Positions")]
-    max_positions: String,
-    #[tabled(rename = "⏰ Min Hold Time")]
-    min_hold_time: String,
-    #[tabled(rename = "⌛ Max Hold Time")]
-    max_hold_time: String,
-}
-
 /// Display structure for ATA cleanup statistics
 #[derive(Tabled)]
 pub struct AtaCleanupDisplay {
@@ -398,15 +381,6 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         worst_streak: format!("{} losses", worst_streak),
     };
 
-    let config = ConfigDisplay {
-        trade_size: format!("{:.6} SOL", TRADE_SIZE_SOL),
-        profit_target: format!("{:.1}%", PROFIT_TARGET_PERCENT),
-        stop_loss: format!("{:.1}%", crate::profit::STOP_LOSS_PERCENT),
-        max_positions: format!("{}", MAX_OPEN_POSITIONS),
-        min_hold_time: format!("{:.0}s", MIN_POSITION_HOLD_TIME_SECS),
-        max_hold_time: format!("{:.0}s", MAX_POSITION_HOLD_TIME_SECS),
-    };
-
     // Get ATA cleanup statistics
     let ata_stats = get_ata_cleanup_statistics();
     let failed_ata_count = get_failed_ata_count();
@@ -437,11 +411,6 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", performance_table);
-
-    println!("\n⚙️ Current Configuration");
-    let mut config_table = Table::new(vec![config]);
-    config_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", config_table);
 
     println!("\n🧹 ATA Cleanup Statistics");
     let mut ata_table = Table::new(vec![ata_cleanup]);
@@ -614,44 +583,26 @@ impl OpenPositionDisplay {
 fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
     let base_status = if is_closed { "CLOSED" } else { "OPEN" };
 
-    if pnl_percent >= 100.0 {
-        format!("🌕 {}", base_status) // To the moon
-    } else if pnl_percent >= 70.0 {
-        format!("🚀 {}", base_status) // Rocket
-    } else if pnl_percent >= 50.0 {
-        format!("😐 {}", base_status) // Flat
-    } else if pnl_percent >= 35.0 {
-        format!("🔥 {}", base_status) // Fire
-    } else if pnl_percent >= 25.0 {
-        format!("💎 {}", base_status) // Diamond hands
-    } else if pnl_percent >= 15.0 {
-        format!("🤑 {}", base_status) // Big win
+    if pnl_percent >= 50.0 {
+        format!("🚀 {}", base_status) // Moon shot gains
+    } else if pnl_percent >= 20.0 {
+        format!("🔥 {}", base_status) // Hot gains
     } else if pnl_percent >= 10.0 {
-        format!("😎 {}", base_status) // Cool
-    } else if pnl_percent >= 7.0 {
-        format!("💵 {}", base_status) // Cash
-    } else if pnl_percent >= 4.0 {
-        format!("😌 {}", base_status) // Green
-    } else if pnl_percent >= 1.0 {
-        format!("🤏 {}", base_status) // Tiny win
+        format!("💰 {}", base_status) // Good profits
+    } else if pnl_percent >= 5.0 {
+        format!("📈 {}", base_status) // Modest gains
     } else if pnl_percent >= 0.0 {
-        format!("🙂 {}", base_status) // Barely up
-    } else if pnl_percent >= -1.0 {
-        format!("🥹 {}", base_status) // Flat
-    } else if pnl_percent >= -4.0 {
-        format!("😬 {}", base_status) // Small loss
-    } else if pnl_percent >= -7.0 {
-        format!("🥲 {}", base_status) // Meh
-    } else if pnl_percent >= -12.0 {
-        format!("🥶 {}", base_status) // Ouch
+        format!("✅ {}", base_status) // Small gains
+    } else if pnl_percent >= -5.0 {
+        format!("⚠️ {}", base_status) // Small loss
+    } else if pnl_percent >= -10.0 {
+        format!("📉 {}", base_status) // Moderate loss
     } else if pnl_percent >= -20.0 {
-        format!("🩸 {}", base_status) // Bleeding
-    } else if pnl_percent >= -35.0 {
-        format!("☠️ {}", base_status) // Rekt
+        format!("❌ {}", base_status) // Significant loss
     } else if pnl_percent >= -50.0 {
-        format!("💀 {}", base_status) // Dead
+        format!("💀 {}", base_status) // Major loss
     } else {
-        format!("💩 {}", base_status) // Disaster
+        format!("🔴 {}", base_status) // Devastating loss
     }
 }
 
