@@ -144,10 +144,18 @@ async fn main() {
         }
     };
 
+    // Start ATA cleanup background service
+    let shutdown_ata_cleanup = shutdown.clone();
+    let ata_cleanup_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "ATA cleanup service task started");
+        screenerbot::ata_cleanup::start_ata_cleanup_service(shutdown_ata_cleanup).await;
+        log(LogTag::System, "INFO", "ATA cleanup service task ended");
+    });
+
     let trader_handle = tokio::spawn(async move {
-        log(LogTag::Trader, "INFO", "Trader task started");
+        log(LogTag::System, "INFO", "Trader task started");
         trader(shutdown_trader).await;
-        log(LogTag::Trader, "INFO", "Trader task ended");
+        log(LogTag::System, "INFO", "Trader task ended");
     });
 
     log(
@@ -245,6 +253,15 @@ async fn main() {
         // Wait for trader task
         if let Err(e) = trader_handle.await {
             log(LogTag::System, "WARN", &format!("Trader task failed to shutdown cleanly: {}", e));
+        }
+
+        // Wait for ATA cleanup service
+        if let Err(e) = ata_cleanup_handle.await {
+            log(
+                LogTag::System,
+                "WARN",
+                &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
+            );
         }
 
         // Wait for tokens system tasks (includes rugcheck service)

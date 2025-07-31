@@ -4,6 +4,7 @@
 /// It handles rate limiting, database storage, and provides fresh data to the trading system.
 
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_rugcheck_enabled;
 use crate::tokens::cache::TokenDatabase;
 use reqwest::Client;
 use serde::{ Deserialize, Serialize, Deserializer };
@@ -437,11 +438,13 @@ impl RugcheckService {
                 match self.fetch_and_store_rugcheck_data(mint.clone()).await {
                     Ok(_) => {
                         success_count += 1;
-                        log(
-                            LogTag::Rugcheck,
-                            "SUCCESS",
-                            &format!("✓ Updated rugcheck data for {}", mint)
-                        );
+                        if is_debug_rugcheck_enabled() {
+                            log(
+                                LogTag::Rugcheck,
+                                "SUCCESS",
+                                &format!("✓ Updated rugcheck data for {}", mint)
+                            );
+                        }
                     }
                     Err(e) => {
                         error_count += 1;
@@ -454,11 +457,13 @@ impl RugcheckService {
                 }
             }
 
-            log(
-                LogTag::Rugcheck,
-                "BATCH",
-                &format!("Batch completed: {} success, {} errors", success_count, error_count)
-            );
+            if is_debug_rugcheck_enabled() {
+                log(
+                    LogTag::Rugcheck,
+                    "BATCH",
+                    &format!("Batch completed: {} success, {} errors", success_count, error_count)
+                );
+            }
         }
 
         log(
@@ -496,11 +501,13 @@ impl RugcheckService {
             let elapsed = last_time.elapsed();
             if elapsed < RUGCHECK_RATE_LIMIT_DELAY {
                 let wait_time = RUGCHECK_RATE_LIMIT_DELAY - elapsed;
-                log(
-                    LogTag::Rugcheck,
-                    "RATE_LIMIT",
-                    &format!("Rate limiting: waiting {:?} before fetching {}", wait_time, mint)
-                );
+                if is_debug_rugcheck_enabled() {
+                    log(
+                        LogTag::Rugcheck,
+                        "RATE_LIMIT",
+                        &format!("Rate limiting: waiting {:?} before fetching {}", wait_time, mint)
+                    );
+                }
                 tokio::time::sleep(wait_time).await;
             }
             *last_time = Instant::now();
@@ -572,15 +579,17 @@ impl RugcheckService {
                     } else {
                         match response.json::<RugcheckResponse>().await {
                             Ok(rugcheck_data) => {
-                                log(
-                                    LogTag::Rugcheck,
-                                    "SUCCESS",
-                                    &format!(
-                                        "Successfully fetched rugcheck data for {} on attempt {}",
-                                        mint,
-                                        attempt
-                                    )
-                                );
+                                if is_debug_rugcheck_enabled() {
+                                    log(
+                                        LogTag::Rugcheck,
+                                        "SUCCESS",
+                                        &format!(
+                                            "Successfully fetched rugcheck data for {} on attempt {}",
+                                            mint,
+                                            attempt
+                                        )
+                                    );
+                                }
                                 return Ok(rugcheck_data);
                             }
                             Err(e) => {

@@ -1462,51 +1462,68 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         log(LogTag::Trader, "DEBUG", "🔄 Updating position tracking in price service...");
         let position_update_start = std::time::Instant::now();
         update_position_tracking_in_service().await;
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!(
-                "✅ Position tracking updated in {:.1}ms",
-                position_update_start.elapsed().as_millis()
-            )
-        );
-
-        // Ensure we have tokens to work with
-        log(LogTag::Trader, "DEBUG", "🪙 Ensuring tokens are populated...");
-        let token_populate_start = std::time::Instant::now();
-        ensure_tokens_populated().await;
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!("✅ Tokens populated in {:.1}ms", token_populate_start.elapsed().as_millis())
-        );
-
-        let mut tokens: Vec<_> = {
-            // Get tokens from safe system
-            log(LogTag::Trader, "DEBUG", "📡 Getting tokens from safe system...");
-            let token_fetch_start = std::time::Instant::now();
-            let tokens_from_module = get_tokens_from_safe_system().await;
+        if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "DEBUG",
                 &format!(
-                    "✅ Got {} tokens from safe system in {:.1}ms",
-                    tokens_from_module.len(),
-                    token_fetch_start.elapsed().as_millis()
+                    "✅ Position tracking updated in {:.1}ms",
+                    position_update_start.elapsed().as_millis()
                 )
             );
+        }
 
-            // Log total tokens available
+        // Ensure we have tokens to work with
+        if is_debug_trader_enabled() {
+            log(LogTag::Trader, "DEBUG", "🪙 Ensuring tokens are populated...");
+        }
+        let token_populate_start = std::time::Instant::now();
+        ensure_tokens_populated().await;
+        if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "DEBUG",
-                &format!("Total tokens from safe system: {}", tokens_from_module.len())
-                    .dimmed()
-                    .to_string()
+                &format!(
+                    "✅ Tokens populated in {:.1}ms",
+                    token_populate_start.elapsed().as_millis()
+                )
             );
+        }
+
+        let mut tokens: Vec<_> = {
+            // Get tokens from safe system
+            if is_debug_trader_enabled() {
+                log(LogTag::Trader, "DEBUG", "📡 Getting tokens from safe system...");
+            }
+            let token_fetch_start = std::time::Instant::now();
+            let tokens_from_module = get_tokens_from_safe_system().await;
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "✅ Got {} tokens from safe system in {:.1}ms",
+                        tokens_from_module.len(),
+                        token_fetch_start.elapsed().as_millis()
+                    )
+                );
+            }
+
+            // Log total tokens available
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("Total tokens from safe system: {}", tokens_from_module.len())
+                        .dimmed()
+                        .to_string()
+                );
+            }
 
             // Add debug info about token prices and update times
-            log(LogTag::Trader, "DEBUG", "🏷️ Checking price service for sample tokens...");
+            if is_debug_trader_enabled() {
+                log(LogTag::Trader, "DEBUG", "🏷️ Checking price service for sample tokens...");
+            }
             let price_check_start = std::time::Instant::now();
             debug_trader_log(
                 "TOKEN_PRICE_DEBUG",
@@ -1531,25 +1548,29 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     )
                 );
             }
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!(
-                    "✅ Price service check completed in {:.1}ms",
-                    price_check_start.elapsed().as_millis()
-                )
-            ); // Include all tokens - we want to trade on existing tokens with updated info
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "✅ Price service check completed in {:.1}ms",
+                        price_check_start.elapsed().as_millis()
+                    )
+                );
+            } // Include all tokens - we want to trade on existing tokens with updated info
             // The discovery system ensures tokens are updated with fresh data before trading
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!(
-                    "Using all {} tokens for trading (startup filter removed)",
-                    tokens_from_module.len()
-                )
-                    .dimmed()
-                    .to_string()
-            );
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "Using all {} tokens for trading (startup filter removed)",
+                        tokens_from_module.len()
+                    )
+                        .dimmed()
+                        .to_string()
+                );
+            }
 
             // Count tokens with liquidity data
             let with_liquidity = tokens_from_module

@@ -2325,42 +2325,8 @@ pub async fn sell_token(
         enhanced_output_change
     };
 
-    // 🧹 AUTOMATIC ATA CLEANUP: Close all empty ATAs after successful sell
-    log(LogTag::Wallet, "ATA", "🧹 Starting automatic ATA cleanup after successful sell...");
-
-    // Wait a moment for the sell transaction to fully settle
-    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-
-    match close_all_empty_atas(&wallet_address).await {
-        Ok((closed_count, signatures)) => {
-            if closed_count > 0 {
-                let rent_reclaimed = (closed_count as f64) * 0.00203928; // Approximate ATA rent in SOL
-                log(
-                    LogTag::Wallet,
-                    "ATA",
-                    &format!(
-                        "🎉 ATA cleanup completed! Closed {} empty accounts, reclaimed ~{:.6} SOL",
-                        closed_count,
-                        rent_reclaimed
-                    )
-                );
-
-                // Log signatures for the closed ATAs
-                for (i, sig) in signatures.iter().enumerate() {
-                    log(LogTag::Wallet, "ATA", &format!("ATA close #{}: {}", i + 1, sig));
-                }
-            } else {
-                log(LogTag::Wallet, "ATA", "No empty ATAs found to close");
-            }
-        }
-        Err(e) => {
-            log(
-                LogTag::Wallet,
-                "WARNING",
-                &format!("ATA cleanup failed (sell was successful): {}", e)
-            );
-        }
-    }
+    // Note: ATA cleanup is now handled by background service - no blocking here
+    log(LogTag::Wallet, "ATA", "💡 ATA cleanup handled by background service");
 
     Ok(SwapResult {
         success: true,
@@ -2390,8 +2356,14 @@ pub async fn sell_token(
 }
 
 /// Public function to manually close all empty ATAs for the configured wallet
-/// This is useful for manual cleanup or when called from other parts of the system
+/// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
+/// This function is kept for manual cleanup or emergency situations
 pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), SwapError> {
+    log(
+        LogTag::Wallet,
+        "ATA",
+        "⚠️ Manual ATA cleanup triggered (normally handled by background service)"
+    );
     let wallet_address = get_wallet_address()?;
     close_all_empty_atas(&wallet_address).await
 }
@@ -2723,6 +2695,65 @@ fn extract_token_account_info(
         balance,
         is_token_2022,
     })
+}
+
+/// Closes a single empty ATA (Associated Token Account) for a specific mint
+/// Returns the transaction signature if successful
+pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String, SwapError> {
+    log(LogTag::Wallet, "ATA", &format!("Attempting to close single ATA for mint {}", &mint[..8]));
+
+    // Get all token accounts to find the specific one
+    let token_accounts = get_all_token_accounts(wallet_address).await?;
+
+    // Find the account for this mint
+    let target_account = token_accounts
+        .iter()
+        .find(|account| account.mint == mint && account.balance == 0);
+
+    match target_account {
+        Some(account) => {
+            log(
+                LogTag::Wallet,
+                "ATA",
+                &format!("Found empty ATA {} for mint {}", account.account, &mint[..8])
+            );
+
+            // Close the ATA
+            match close_ata(wallet_address, &account.account, mint, account.is_token_2022).await {
+                Ok(signature) => {
+                    log(
+                        LogTag::Wallet,
+                        "SUCCESS",
+                        &format!(
+                            "Closed ATA {} for mint {}. TX: {}",
+                            account.account,
+                            &mint[..8],
+                            signature
+                        )
+                    );
+                    Ok(signature)
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Wallet,
+                        "ERROR",
+                        &format!(
+                            "Failed to close ATA {} for mint {}: {}",
+                            account.account,
+                            &mint[..8],
+                            e
+                        )
+                    );
+                    Err(e)
+                }
+            }
+        }
+        None => {
+            let error_msg = format!("No empty ATA found for mint {}", &mint[..8]);
+            log(LogTag::Wallet, "WARNING", &error_msg);
+            Err(SwapError::InvalidAmount(error_msg))
+        }
+    }
 }
 
 /// Closes all empty ATAs (Associated Token Accounts) for a wallet

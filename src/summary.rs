@@ -4,6 +4,7 @@ use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::utils::*;
 use crate::global::STARTUP_TIME;
+use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 // TODO: Replace with new pool price system
 // use crate::pool_price_manager::refresh_open_position_prices;
 
@@ -16,46 +17,46 @@ use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
 pub struct ClosedPositionDisplay {
-    #[tabled(rename = "Symbol")]
+    #[tabled(rename = "🏷️ Symbol")]
     symbol: String,
-    #[tabled(rename = "Mint")]
+    #[tabled(rename = "🔑 Mint")]
     mint: String,
-    #[tabled(rename = "Entry")]
+    #[tabled(rename = "📈 Entry")]
     entry_price: String,
-    #[tabled(rename = "Exit")]
+    #[tabled(rename = "🚪 Exit")]
     exit_price: String,
-    #[tabled(rename = "Size (SOL)")]
+    #[tabled(rename = "💰 Size (SOL)")]
     size_sol: String,
-    #[tabled(rename = "P&L (SOL)")]
+    #[tabled(rename = "💸 P&L (SOL)")]
     pnl_sol: String,
-    #[tabled(rename = "P&L (%)")]
+    #[tabled(rename = "📊 P&L (%)")]
     pnl_percent: String,
-    #[tabled(rename = "Duration")]
+    #[tabled(rename = "⏱️ Duration")]
     duration: String,
-    #[tabled(rename = "Status")]
+    #[tabled(rename = "🎯 Status")]
     status: String,
 }
 
 /// Display structure for open positions with specific "Price" column
 #[derive(Tabled)]
 pub struct OpenPositionDisplay {
-    #[tabled(rename = "Symbol")]
+    #[tabled(rename = "🏷️ Symbol")]
     symbol: String,
-    #[tabled(rename = "Mint")]
+    #[tabled(rename = "🔑 Mint")]
     mint: String,
-    #[tabled(rename = "Entry")]
+    #[tabled(rename = "📈 Entry")]
     entry_price: String,
-    #[tabled(rename = "Price")]
+    #[tabled(rename = "💲 Price")]
     current_price: String,
-    #[tabled(rename = "Size (SOL)")]
+    #[tabled(rename = "💰 Size (SOL)")]
     size_sol: String,
-    #[tabled(rename = "P&L (SOL)")]
+    #[tabled(rename = "💸 P&L (SOL)")]
     pnl_sol: String,
-    #[tabled(rename = "P&L (%)")]
+    #[tabled(rename = "📊 P&L (%)")]
     pnl_percent: String,
-    #[tabled(rename = "Duration")]
+    #[tabled(rename = "⏱️ Duration")]
     duration: String,
-    #[tabled(rename = "Status")]
+    #[tabled(rename = "🎯 Status")]
     status: String,
 }
 
@@ -64,65 +65,78 @@ pub struct OpenPositionDisplay {
 pub struct BotOverviewDisplay {
     #[tabled(rename = "💼 Wallet Balance")]
     wallet_balance: String,
-    #[tabled(rename = "� Open Positions")]
+    #[tabled(rename = "🔄 Open Positions")]
     open_positions: String,
-    #[tabled(rename = "�📊 Total Trades")]
+    #[tabled(rename = "📊 Total Trades")]
     total_trades: usize,
-    #[tabled(rename = "⏱️ Bot Uptime")]
+    #[tabled(rename = "⏰ Bot Uptime")]
     bot_uptime: String,
-    #[tabled(rename = "💰 Total P&L")]
+    #[tabled(rename = "💸 Total P&L")]
     total_pnl: String,
 }
 
 /// Display structure for detailed trading statistics
 #[derive(Tabled)]
 pub struct TradingStatsDisplay {
-    #[tabled(rename = "🏆 Win Rate")]
+    #[tabled(rename = "🎯 Win Rate")]
     win_rate: String,
-    #[tabled(rename = "✅ Winners")]
+    #[tabled(rename = "🏆 Winners")]
     winners: usize,
     #[tabled(rename = "❌ Losers")]
     losers: usize,
-    #[tabled(rename = "🎯 Break-even")]
+    #[tabled(rename = "⚖️ Break-even")]
     break_even: usize,
-    #[tabled(rename = "📈 Avg P&L/Trade")]
+    #[tabled(rename = "📊 Avg P&L/Trade")]
     avg_pnl: String,
-    #[tabled(rename = "� Trade Volume")]
+    #[tabled(rename = "💰 Trade Volume")]
     total_volume: String,
 }
 
 /// Display structure for performance metrics
 #[derive(Tabled)]
 pub struct PerformanceDisplay {
-    #[tabled(rename = "�🚀 Best Trade")]
+    #[tabled(rename = "🚀 Best Trade")]
     best_trade: String,
-    #[tabled(rename = "📉 Worst Trade")]
+    #[tabled(rename = "💀 Worst Trade")]
     worst_trade: String,
-    #[tabled(rename = "📈 Profit Factor")]
+    #[tabled(rename = "⚡ Profit Factor")]
     profit_factor: String,
-    #[tabled(rename = "🔥 Max Drawdown")]
+    #[tabled(rename = "📉 Max Drawdown")]
     max_drawdown: String,
-    #[tabled(rename = "💎 Best Streak")]
+    #[tabled(rename = "🔥 Best Streak")]
     best_streak: String,
-    #[tabled(rename = "💀 Worst Streak")]
+    #[tabled(rename = "🧊 Worst Streak")]
     worst_streak: String,
 }
 
 /// Display structure for current configuration
 #[derive(Tabled)]
 pub struct ConfigDisplay {
-    #[tabled(rename = "💵 Trade Size")]
+    #[tabled(rename = "💰 Trade Size")]
     trade_size: String,
     #[tabled(rename = "🎯 Profit Target")]
     profit_target: String,
-    #[tabled(rename = "🛡️ Stop Loss")]
+    #[tabled(rename = "🛑 Stop Loss")]
     stop_loss: String,
-    #[tabled(rename = "📦 Max Positions")]
+    #[tabled(rename = "📊 Max Positions")]
     max_positions: String,
     #[tabled(rename = "⏰ Min Hold Time")]
     min_hold_time: String,
-    #[tabled(rename = "⏳ Max Hold Time")]
+    #[tabled(rename = "⌛ Max Hold Time")]
     max_hold_time: String,
+}
+
+/// Display structure for ATA cleanup statistics
+#[derive(Tabled)]
+pub struct AtaCleanupDisplay {
+    #[tabled(rename = "🧹 ATAs Closed")]
+    atas_closed: String,
+    #[tabled(rename = "💰 Rent Reclaimed")]
+    rent_reclaimed: String,
+    #[tabled(rename = "❌ Failed Cache")]
+    failed_cache: String,
+    #[tabled(rename = "⏰ Last Cleanup")]
+    last_cleanup: String,
 }
 
 /// Background task to display positions table every 10 seconds
@@ -202,7 +216,7 @@ pub async fn display_positions_table() {
             .collect();
 
         if !recent_closed.is_empty() {
-            println!("\n🔒 Recently Closed Positions (Last 10):");
+            println!("\n📋 Recently Closed Positions (Last 10):");
             let mut closed_table = Table::new(recent_closed);
             closed_table
                 .with(Style::rounded())
@@ -393,20 +407,31 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         max_hold_time: format!("{:.0}s", MAX_POSITION_HOLD_TIME_SECS),
     };
 
+    // Get ATA cleanup statistics
+    let ata_stats = get_ata_cleanup_statistics();
+    let failed_ata_count = get_failed_ata_count();
+
+    let ata_cleanup = AtaCleanupDisplay {
+        atas_closed: format!("{}", ata_stats.total_closed),
+        rent_reclaimed: format!("{:.6} SOL", ata_stats.total_rent_reclaimed),
+        failed_cache: format!("{} ATAs", failed_ata_count),
+        last_cleanup: ata_stats.last_cleanup_time.unwrap_or_else(|| "Never".to_string()),
+    };
+
     // Display all tables
-    println!("\n🤖 Bot Overview");
+    println!("\n📊 Bot Overview");
     let mut overview_table = Table::new(vec![overview]);
     overview_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", overview_table);
 
-    println!("\n📊 Trading Statistics");
+    println!("\n📈 Trading Statistics");
     let mut stats_table = Table::new(vec![trading_stats]);
     stats_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", stats_table);
 
-    println!("\n🚀 Performance Metrics");
+    println!("\n🎯 Performance Metrics");
     let mut performance_table = Table::new(vec![performance]);
     performance_table
         .with(Style::rounded())
@@ -418,18 +443,21 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     config_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", config_table);
 
+    println!("\n🧹 ATA Cleanup Statistics");
+    let mut ata_table = Table::new(vec![ata_cleanup]);
+    ata_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    println!("{}", ata_table);
+
     // Display frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
     if !active_cooldowns.is_empty() {
-        println!("\n🧊 Frozen Account Cooldowns");
+        println!("\n❄️ Frozen Account Cooldowns");
         for (mint, remaining_minutes) in active_cooldowns {
             let short_mint = format!("{}...", &mint[..8]);
-            println!("  🔒 {} - {} minutes remaining", short_mint, remaining_minutes);
+            println!("  {} - {} minutes remaining", short_mint, remaining_minutes);
         }
     }
 
-    // Display additional insights
-    display_trading_insights(closed_positions, total_pnl, win_rate, profit_factor);
     println!("");
 }
 
@@ -481,61 +509,6 @@ fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
     }
 
     max_drawdown
-}
-
-/// Display additional trading insights and recommendations
-fn display_trading_insights(
-    closed_positions: &[&Position],
-    total_pnl: f64,
-    win_rate: f64,
-    profit_factor: f64
-) {
-    println!("💡 Trading Insights:");
-
-    if total_pnl > 0.0 {
-        println!("   ✅ Overall profitable strategy (+{:.6} SOL)", total_pnl);
-    } else if total_pnl < 0.0 {
-        println!("   ⚠️  Currently losing strategy ({:+.6} SOL)", total_pnl);
-    } else {
-        println!("   ➖ Break-even performance");
-    }
-
-    if win_rate >= 60.0 {
-        println!("   🎯 Excellent win rate ({:.1}%)", win_rate);
-    } else if win_rate >= 50.0 {
-        println!("   👍 Good win rate ({:.1}%)", win_rate);
-    } else if win_rate > 0.0 {
-        println!("   ⚠️  Low win rate ({:.1}%) - consider strategy adjustment", win_rate);
-    }
-
-    if profit_factor >= 2.0 {
-        println!("   🚀 Strong profit factor ({:.2})", profit_factor);
-    } else if profit_factor >= 1.5 {
-        println!("   📈 Good profit factor ({:.2})", profit_factor);
-    } else if profit_factor >= 1.0 {
-        println!("   ⚠️  Weak profit factor ({:.2}) - wins barely exceed losses", profit_factor);
-    } else if profit_factor > 0.0 {
-        println!("   🔴 Poor profit factor ({:.2}) - losses exceed wins", profit_factor);
-    }
-
-    // Recent performance (last 10 trades)
-    if closed_positions.len() >= 10 {
-        let recent_pnl: f64 = closed_positions
-            .iter()
-            .rev()
-            .take(10)
-            .map(|p| {
-                let (pnl_sol, _) = calculate_position_pnl(p, None);
-                pnl_sol
-            })
-            .sum();
-
-        if recent_pnl > 0.0 {
-            println!("   📈 Recent momentum: Last 10 trades +{:.6} SOL", recent_pnl);
-        } else {
-            println!("   📉 Recent momentum: Last 10 trades {:+.6} SOL", recent_pnl);
-        }
-    }
 }
 
 impl ClosedPositionDisplay {
@@ -616,7 +589,7 @@ impl OpenPositionDisplay {
             let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));
             get_profit_status_emoji(pnl_sol, pnl_percent, false)
         } else {
-            "🔄 OPEN".to_string()
+            "OPEN".to_string()
         };
 
         Self {
@@ -637,7 +610,7 @@ impl OpenPositionDisplay {
     }
 }
 
-/// Generate profit-based status emoji for positions
+/// Generate profit-based status for positions
 fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
     let base_status = if is_closed { "CLOSED" } else { "OPEN" };
 
@@ -648,19 +621,19 @@ fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> 
     } else if pnl_percent >= 10.0 {
         format!("💰 {}", base_status) // Good profits
     } else if pnl_percent >= 5.0 {
-        format!("✅ {}", base_status) // Modest gains
+        format!("📈 {}", base_status) // Modest gains
     } else if pnl_percent >= 0.0 {
-        format!("🟢 {}", base_status) // Small gains
+        format!("✅ {}", base_status) // Small gains
     } else if pnl_percent >= -5.0 {
-        format!("🟡 {}", base_status) // Small loss
+        format!("⚠️ {}", base_status) // Small loss
     } else if pnl_percent >= -10.0 {
-        format!("🟠 {}", base_status) // Moderate loss
+        format!("📉 {}", base_status) // Moderate loss
     } else if pnl_percent >= -20.0 {
-        format!("🔴 {}", base_status) // Significant loss
+        format!("❌ {}", base_status) // Significant loss
     } else if pnl_percent >= -50.0 {
-        format!("💥 {}", base_status) // Major loss
+        format!("💀 {}", base_status) // Major loss
     } else {
-        format!("☠️ {}", base_status) // Devastating loss
+        format!("🔴 {}", base_status) // Devastating loss
     }
 }
 

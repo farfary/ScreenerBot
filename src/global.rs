@@ -96,6 +96,15 @@ pub fn is_debug_price_service_enabled() -> bool {
     }
 }
 
+/// Check if debug rugcheck mode is enabled via command line args
+pub fn is_debug_rugcheck_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-rugcheck".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {
