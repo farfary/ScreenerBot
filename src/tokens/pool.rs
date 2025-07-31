@@ -827,10 +827,12 @@ impl PoolPriceService {
         }
 
         // Calculate REAL price from blockchain pool reserves instead of using API data
-        let price_sol = match self.calculate_real_pool_price_from_reserves(
-            &best_pool.pair_address, 
-            token_address
-        ).await {
+        let price_sol = match
+            self.calculate_real_pool_price_from_reserves(
+                &best_pool.pair_address,
+                token_address
+            ).await
+        {
             Ok(Some(pool_price_info)) => {
                 if is_debug_pool_prices_enabled() {
                     log(
@@ -957,7 +959,11 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "REAL_CALC_START",
-                &format!("🔗 STARTING REAL blockchain calculation for pool {} token {}", pool_address, token_mint)
+                &format!(
+                    "🔗 STARTING REAL blockchain calculation for pool {} token {}",
+                    pool_address,
+                    token_mint
+                )
             );
         }
 
@@ -992,7 +998,11 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "REAL_CALC_NONE",
-                        &format!("❓ REAL calculation returned None for pool {} token {}", pool_address, token_mint)
+                        &format!(
+                            "❓ REAL calculation returned None for pool {} token {}",
+                            pool_address,
+                            token_mint
+                        )
                     );
                 }
                 Ok(None)
@@ -1002,7 +1012,12 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "REAL_CALC_ERROR",
-                        &format!("❌ REAL calculation FAILED for pool {} token {}: {}", pool_address, token_mint, e)
+                        &format!(
+                            "❌ REAL calculation FAILED for pool {} token {}: {}",
+                            pool_address,
+                            token_mint,
+                            e
+                        )
                     );
                 }
                 Err(e)
