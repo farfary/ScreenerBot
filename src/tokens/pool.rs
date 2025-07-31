@@ -47,6 +47,89 @@ pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQ
 /// Meteora DAMM v2 Program ID
 pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 
+/// Meteora DLMM Program ID
+pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+
+// =============================================================================
+// POOL TYPE CONFIGURATION - HARD-CODED ENABLE/DISABLE FLAGS
+// =============================================================================
+
+/// Enable/disable Raydium CPMM pool support
+pub const ENABLE_RAYDIUM_CPMM: bool = true;
+
+/// Enable/disable Meteora DAMM v2 pool support
+pub const ENABLE_METEORA_DAMM_V2: bool = true;
+
+/// Enable/disable Meteora DLMM pool support
+pub const ENABLE_METEORA_DLMM: bool = true;
+
+// =============================================================================
+// POOL TYPE UTILITY FUNCTIONS
+// =============================================================================
+
+/// Check if a specific pool type is enabled
+pub fn is_pool_type_enabled(program_id: &str) -> bool {
+    match program_id {
+        RAYDIUM_CPMM_PROGRAM_ID => ENABLE_RAYDIUM_CPMM,
+        METEORA_DAMM_V2_PROGRAM_ID => ENABLE_METEORA_DAMM_V2,
+        METEORA_DLMM_PROGRAM_ID => ENABLE_METEORA_DLMM,
+        _ => false,
+    }
+}
+
+/// Get count of enabled pool types
+pub fn get_enabled_pool_types_count() -> usize {
+    let mut count = 0;
+    if ENABLE_RAYDIUM_CPMM {
+        count += 1;
+    }
+    if ENABLE_METEORA_DAMM_V2 {
+        count += 1;
+    }
+    if ENABLE_METEORA_DLMM {
+        count += 1;
+    }
+    count
+}
+
+/// Get list of enabled pool type names
+pub fn get_enabled_pool_types() -> Vec<&'static str> {
+    let mut types = Vec::new();
+    if ENABLE_RAYDIUM_CPMM {
+        types.push("Raydium CPMM");
+    }
+    if ENABLE_METEORA_DAMM_V2 {
+        types.push("Meteora DAMM v2");
+    }
+    if ENABLE_METEORA_DLMM {
+        types.push("Meteora DLMM");
+    }
+    types
+}
+
+/// Get pool type configuration summary
+pub fn get_pool_config_summary() -> String {
+    format!(
+        "Pool Type Config: Raydium CPMM: {}, Meteora DAMM v2: {}, Meteora DLMM: {} ({} types enabled)",
+        if ENABLE_RAYDIUM_CPMM {
+            "✅"
+        } else {
+            "❌"
+        },
+        if ENABLE_METEORA_DAMM_V2 {
+            "✅"
+        } else {
+            "❌"
+        },
+        if ENABLE_METEORA_DLMM {
+            "✅"
+        } else {
+            "❌"
+        },
+        get_enabled_pool_types_count()
+    )
+}
+
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
@@ -723,6 +806,28 @@ impl PoolPriceService {
             }
         }
 
+        // Filter pools by enabled pool types
+        cached_pools.retain(|pool| {
+            match pool.dex_id.as_str() {
+                "raydium" => ENABLE_RAYDIUM_CPMM,
+                "meteora" => ENABLE_METEORA_DAMM_V2 || ENABLE_METEORA_DLMM, // Meteora could be either type
+                _ => true, // Keep unknown DEX types for now
+            }
+        });
+
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "FETCH_FILTERED",
+                &format!(
+                    "🔧 Filtered to {} pools after applying enable/disable flags (Raydium: {}, Meteora: {})",
+                    cached_pools.len(),
+                    ENABLE_RAYDIUM_CPMM,
+                    ENABLE_METEORA_DAMM_V2 || ENABLE_METEORA_DLMM
+                )
+            );
+        }
+
         // Sort by liquidity (highest first)
         cached_pools.sort_by(|a, b|
             b.liquidity_usd.partial_cmp(&a.liquidity_usd).unwrap_or(std::cmp::Ordering::Equal)
@@ -1297,10 +1402,28 @@ impl PoolPriceCalculator {
         // Decode based on program ID
         let pool_info = match program_id.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => {
+                if !ENABLE_RAYDIUM_CPMM {
+                    return Err(
+                        format!("Raydium CPMM pools are disabled (program ID: {})", program_id)
+                    );
+                }
                 self.decode_raydium_cpmm_pool(pool_address, &account).await?
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
+                if !ENABLE_METEORA_DAMM_V2 {
+                    return Err(
+                        format!("Meteora DAMM v2 pools are disabled (program ID: {})", program_id)
+                    );
+                }
                 self.decode_meteora_damm_v2_pool(pool_address, &account).await?
+            }
+            METEORA_DLMM_PROGRAM_ID => {
+                if !ENABLE_METEORA_DLMM {
+                    return Err(
+                        format!("Meteora DLMM pools are disabled (program ID: {})", program_id)
+                    );
+                }
+                self.decode_meteora_dlmm_pool(pool_address, &account).await?
             }
             _ => {
                 return Err(format!("Unsupported pool program ID: {}", program_id));
@@ -1388,10 +1511,22 @@ impl PoolPriceCalculator {
         // Calculate price based on pool type
         let price_info = match pool_info.pool_program_id.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => {
+                if !ENABLE_RAYDIUM_CPMM {
+                    return Err(format!("Raydium CPMM price calculation is disabled"));
+                }
                 self.calculate_raydium_cpmm_price(&pool_info, token_mint).await?
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
+                if !ENABLE_METEORA_DAMM_V2 {
+                    return Err(format!("Meteora DAMM v2 price calculation is disabled"));
+                }
                 self.calculate_meteora_damm_v2_price(&pool_info, token_mint).await?
+            }
+            METEORA_DLMM_PROGRAM_ID => {
+                if !ENABLE_METEORA_DLMM {
+                    return Err(format!("Meteora DLMM price calculation is disabled"));
+                }
+                self.calculate_meteora_dlmm_price(&pool_info, token_mint).await?
             }
             _ => {
                 return Err(
@@ -2021,6 +2156,185 @@ impl PoolPriceCalculator {
         )
     }
 
+    /// Decode Meteora DLMM pool data from account bytes
+    async fn decode_meteora_dlmm_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        if account.data.len() < 324 {
+            // Meteora DLMM pools should be at least 324 bytes (196 + 32 + 32 + 8 + 8 + buffer)
+            return Err(
+                format!(
+                    "Invalid Meteora DLMM pool account data length: {} (expected >= 324)",
+                    account.data.len()
+                )
+            );
+        }
+
+        let data = &account.data;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_DECODE",
+                &format!(
+                    "Starting Meteora DLMM decode for pool {}, data length: {}",
+                    pool_address,
+                    data.len()
+                )
+            );
+        }
+
+        // Decode Meteora DLMM pool structure based on empirical analysis
+        // Core data starts at offset 196, SOL mint pattern found at offset 228
+
+        // Read token_x_mint and token_y_mint (32 bytes each)
+        let token_x_mint = Self::read_pubkey_at_offset(data, &mut 196)?;
+        let token_y_mint = Self::read_pubkey_at_offset(data, &mut 228)?;
+
+        // Read reserve_x and reserve_y addresses (32 bytes each)
+        let reserve_x = Self::read_pubkey_at_offset(data, &mut 260)?;
+        let reserve_y = Self::read_pubkey_at_offset(data, &mut 292)?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_TOKENS",
+                &format!(
+                    "Token X: {}, Token Y: {}, Reserve X: {}, Reserve Y: {}",
+                    token_x_mint,
+                    token_y_mint,
+                    reserve_x,
+                    reserve_y
+                )
+            );
+        }
+
+        // Get token decimals
+        let token_x_decimals = get_token_decimals_with_cache(&token_x_mint).await;
+        let token_y_decimals = get_token_decimals_with_cache(&token_y_mint).await;
+
+        // Get vault balances to calculate reserves
+        let (token_x_reserve, token_y_reserve) = self.get_vault_balances(
+            &reserve_x,
+            &reserve_y
+        ).await?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_RESERVES",
+                &format!(
+                    "Token X reserve: {} (decimals: {}), Token Y reserve: {} (decimals: {})",
+                    token_x_reserve,
+                    token_x_decimals,
+                    token_y_reserve,
+                    token_y_decimals
+                )
+            );
+        }
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: METEORA_DLMM_PROGRAM_ID.to_string(),
+            pool_type: "Meteora DLMM".to_string(),
+            token_0_mint: token_x_mint,
+            token_1_mint: token_y_mint,
+            token_0_vault: Some(reserve_x),
+            token_1_vault: Some(reserve_y),
+            token_0_reserve: token_x_reserve,
+            token_1_reserve: token_y_reserve,
+            token_0_decimals: token_x_decimals,
+            token_1_decimals: token_y_decimals,
+            lp_mint: None, // DLMM doesn't use traditional LP tokens
+            lp_supply: None,
+            creator: None,
+            status: None, // Status not needed for price calculation
+            liquidity_usd: None, // Will be calculated separately
+        })
+    }
+
+    /// Calculate price for Meteora DLMM pool
+    async fn calculate_meteora_dlmm_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        // Determine which token is SOL and which is the target token
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_x) = if
+            pool_info.token_0_mint == SOL_MINT &&
+            pool_info.token_1_mint == token_mint
+        {
+            (
+                pool_info.token_0_reserve,
+                pool_info.token_1_reserve,
+                pool_info.token_0_decimals,
+                pool_info.token_1_decimals,
+                false,
+            )
+        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+            (
+                pool_info.token_1_reserve,
+                pool_info.token_0_reserve,
+                pool_info.token_1_decimals,
+                pool_info.token_0_decimals,
+                true,
+            )
+        } else {
+            return Err(format!("Pool does not contain SOL or target token {}", token_mint));
+        };
+
+        // Validate reserves
+        if sol_reserve == 0 || token_reserve == 0 {
+            return Err("Pool has zero reserves".to_string());
+        }
+
+        // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
+        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
+        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
+
+        let price_sol = sol_adjusted / token_adjusted;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "CALC",
+                &format!(
+                    "Meteora DLMM Price Calculation for {}:\n  \
+                     SOL Reserve: {} ({:.12} adjusted, {} decimals)\n  \
+                     Token Reserve: {} ({:.12} adjusted, {} decimals)\n  \
+                     Price: {:.12} SOL\n  \
+                     Pool: {} ({})",
+                    token_mint,
+                    sol_reserve,
+                    sol_adjusted,
+                    sol_decimals,
+                    token_reserve,
+                    token_adjusted,
+                    token_decimals,
+                    price_sol,
+                    pool_info.pool_address,
+                    pool_info.pool_type
+                )
+            );
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals,
+                sol_decimals,
+            })
+        )
+    }
+
     /// Decode token account amount from account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
@@ -2087,6 +2401,36 @@ impl PoolPriceCalculator {
 
         let value = u128::from_le_bytes(
             bytes.try_into().map_err(|_| "Failed to parse u128".to_string())?
+        );
+
+        Ok(value)
+    }
+
+    fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String> {
+        if *offset + 2 > data.len() {
+            return Err("Insufficient data for u16".to_string());
+        }
+
+        let bytes = &data[*offset..*offset + 2];
+        *offset += 2;
+
+        let value = u16::from_le_bytes(
+            bytes.try_into().map_err(|_| "Failed to parse u16".to_string())?
+        );
+
+        Ok(value)
+    }
+
+    fn read_i32_at_offset(data: &[u8], offset: &mut usize) -> Result<i32, String> {
+        if *offset + 4 > data.len() {
+            return Err("Insufficient data for i32".to_string());
+        }
+
+        let bytes = &data[*offset..*offset + 4];
+        *offset += 4;
+
+        let value = i32::from_le_bytes(
+            bytes.try_into().map_err(|_| "Failed to parse i32".to_string())?
         );
 
         Ok(value)
@@ -2182,78 +2526,4 @@ pub async fn get_token_price_from_pools(mint: &str) -> Option<f64> {
         &format!("get_token_price_from_pools called for {} - pool discovery not implemented yet", mint)
     );
     None
-}
-
-/// Decoder function specifically for Raydium CPMM (as requested)
-pub async fn decoder_raydium_cpmm(
-    pool_address: &str,
-    account_data: &[u8]
-) -> Result<RaydiumCpmmPoolData, String> {
-    if account_data.len() < 8 + 32 * 10 + 8 * 10 {
-        return Err("Invalid Raydium CPMM pool account data length".to_string());
-    }
-
-    let data = account_data;
-    let mut offset = 8; // Skip discriminator
-
-    // Decode all fields according to Raydium CPMM layout
-    let amm_config = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let pool_creator = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let token_0_vault = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let token_1_vault = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let lp_mint = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let token_0_mint = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let token_1_mint = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let token_0_program = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let token_1_program = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-    let observation_key = PoolPriceCalculator::read_pubkey_at_offset(data, &mut offset)?;
-
-    let auth_bump = PoolPriceCalculator::read_u8_at_offset(data, &mut offset)?;
-    let status = PoolPriceCalculator::read_u8_at_offset(data, &mut offset)?;
-    let lp_mint_decimals = PoolPriceCalculator::read_u8_at_offset(data, &mut offset)?;
-    let mint_0_decimals = PoolPriceCalculator::read_u8_at_offset(data, &mut offset)?;
-    let mint_1_decimals = PoolPriceCalculator::read_u8_at_offset(data, &mut offset)?;
-
-    // Skip padding
-    offset += 3;
-
-    let token_a_reserve = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let token_b_reserve = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let lp_supply = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let protocol_fees_token_0 = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let protocol_fees_token_1 = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let fund_fees_token_0 = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let fund_fees_token_1 = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let open_time = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-    let recent_epoch = PoolPriceCalculator::read_u64_at_offset(data, &mut offset)?;
-
-    Ok(RaydiumCpmmPoolData {
-        pool_address: pool_address.to_string(),
-        amm_config,
-        pool_creator,
-        token_0_vault,
-        token_1_vault,
-        lp_mint,
-        token_0_mint,
-        token_1_mint,
-        token_0_program,
-        token_1_program,
-        observation_key,
-        auth_bump,
-        status: status.into(),
-        lp_mint_decimals,
-        mint_0_decimals,
-        mint_1_decimals,
-        token_a_reserve,
-        token_b_reserve,
-        token_a_decimals: mint_0_decimals,
-        token_b_decimals: mint_1_decimals,
-        lp_supply,
-        protocol_fees_token_0,
-        protocol_fees_token_1,
-        fund_fees_token_0,
-        fund_fees_token_1,
-        open_time,
-        recent_epoch,
-    })
 }

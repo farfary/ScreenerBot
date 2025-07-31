@@ -614,26 +614,44 @@ impl OpenPositionDisplay {
 fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
     let base_status = if is_closed { "CLOSED" } else { "OPEN" };
 
-    if pnl_percent >= 50.0 {
-        format!("🚀 {}", base_status) // Moon shot gains
-    } else if pnl_percent >= 20.0 {
-        format!("🔥 {}", base_status) // Hot gains
+    if pnl_percent >= 100.0 {
+        format!("🌕 {}", base_status) // To the moon
+    } else if pnl_percent >= 70.0 {
+        format!("🚀 {}", base_status) // Rocket
+    } else if pnl_percent >= 50.0 {
+        format!("😐 {}", base_status) // Flat
+    } else if pnl_percent >= 35.0 {
+        format!("🔥 {}", base_status) // Fire
+    } else if pnl_percent >= 25.0 {
+        format!("💎 {}", base_status) // Diamond hands
+    } else if pnl_percent >= 15.0 {
+        format!("🤑 {}", base_status) // Big win
     } else if pnl_percent >= 10.0 {
-        format!("💰 {}", base_status) // Good profits
-    } else if pnl_percent >= 5.0 {
-        format!("📈 {}", base_status) // Modest gains
+        format!("😎 {}", base_status) // Cool
+    } else if pnl_percent >= 7.0 {
+        format!("💵 {}", base_status) // Cash
+    } else if pnl_percent >= 4.0 {
+        format!("😌 {}", base_status) // Green
+    } else if pnl_percent >= 1.0 {
+        format!("🤏 {}", base_status) // Tiny win
     } else if pnl_percent >= 0.0 {
-        format!("✅ {}", base_status) // Small gains
-    } else if pnl_percent >= -5.0 {
-        format!("⚠️ {}", base_status) // Small loss
-    } else if pnl_percent >= -10.0 {
-        format!("📉 {}", base_status) // Moderate loss
+        format!("🙂 {}", base_status) // Barely up
+    } else if pnl_percent >= -1.0 {
+        format!("🥹 {}", base_status) // Flat
+    } else if pnl_percent >= -4.0 {
+        format!("😬 {}", base_status) // Small loss
+    } else if pnl_percent >= -7.0 {
+        format!("🥲 {}", base_status) // Meh
+    } else if pnl_percent >= -12.0 {
+        format!("🥶 {}", base_status) // Ouch
     } else if pnl_percent >= -20.0 {
-        format!("❌ {}", base_status) // Significant loss
+        format!("🩸 {}", base_status) // Bleeding
+    } else if pnl_percent >= -35.0 {
+        format!("☠️ {}", base_status) // Rekt
     } else if pnl_percent >= -50.0 {
-        format!("💀 {}", base_status) // Major loss
+        format!("💀 {}", base_status) // Dead
     } else {
-        format!("🔴 {}", base_status) // Devastating loss
+        format!("💩 {}", base_status) // Disaster
     }
 }
 

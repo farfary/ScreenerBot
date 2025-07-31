@@ -291,7 +291,7 @@ async fn test_token_pools(token_address: &str) {
     }
 }
 
-/// Compare pool prices with API prices - Enhanced with decimal debugging
+/// Compare pool prices with API prices - Enhanced with support analysis
 async fn compare_pool_api_prices(
     pool_service: &'static screenerbot::tokens::pool::PoolPriceService,
     token_address: &str
@@ -300,6 +300,9 @@ async fn compare_pool_api_prices(
 
     // Debug decimal information first
     debug_token_decimals(token_address).await;
+
+    // First, let's analyze all available pools
+    analyze_pool_support(token_address).await;
 
     // Check pool availability
     let has_pools = pool_service.check_token_availability(token_address).await;
@@ -357,6 +360,198 @@ async fn compare_pool_api_prices(
     }
 }
 
+/// Analyze pool support to show which pools we can calculate from
+async fn analyze_pool_support(token_address: &str) {
+    log(LogTag::Pool, "ANALYSIS", "=== POOL SUPPORT ANALYSIS ===");
+
+    // Get all pools from API
+    match get_token_pairs_from_api(token_address).await {
+        Ok(pairs) => {
+            if pairs.is_empty() {
+                log(LogTag::Pool, "ANALYSIS", "❌ No pools found for this token");
+                return;
+            }
+
+            log(LogTag::Pool, "ANALYSIS", &format!("📊 Found {} total pools", pairs.len()));
+            log(LogTag::Pool, "ANALYSIS", "");
+
+            // Sort pools by liquidity (highest first)
+            let mut sorted_pairs = pairs.clone();
+            sorted_pairs.sort_by(|a, b| {
+                let liquidity_a = a.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0);
+                let liquidity_b = b.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0);
+                liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            // Supported pool programs
+            let supported_programs = [
+                "meteora", // Meteora DAMM v2
+                "raydium", // Raydium CPMM
+            ];
+
+            log(LogTag::Pool, "ANALYSIS", "🏆 POOLS RANKED BY LIQUIDITY:");
+            log(LogTag::Pool, "ANALYSIS", "");
+
+            let mut found_supported = false;
+            let mut largest_supported_rank = None;
+
+            for (i, pair) in sorted_pairs.iter().enumerate() {
+                let rank = i + 1;
+                let liquidity_usd = pair.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0);
+                let is_supported = supported_programs
+                    .iter()
+                    .any(|&prog| pair.dex_id.to_lowercase().contains(prog));
+
+                if is_supported && largest_supported_rank.is_none() {
+                    largest_supported_rank = Some(rank);
+                    found_supported = true;
+                }
+
+                let support_indicator = if is_supported {
+                    "✅ SUPPORTED"
+                } else {
+                    "❌ NOT SUPPORTED"
+                };
+                let rank_indicator = if rank == 1 {
+                    "👑 LARGEST"
+                } else if is_supported && largest_supported_rank == Some(rank) {
+                    "🎯 USING"
+                } else {
+                    ""
+                };
+
+                log(
+                    LogTag::Pool,
+                    "ANALYSIS",
+                    &format!(
+                        "#{:<2} {} {} - {} (liquidity: ${:.2}) {}",
+                        rank,
+                        support_indicator,
+                        pair.dex_id.to_uppercase(),
+                        pair.pair_address,
+                        liquidity_usd,
+                        rank_indicator
+                    )
+                );
+            }
+
+            log(LogTag::Pool, "ANALYSIS", "");
+            log(LogTag::Pool, "ANALYSIS", "📋 SUMMARY:");
+
+            let largest_pool = &sorted_pairs[0];
+            let largest_liquidity = largest_pool.liquidity
+                .as_ref()
+                .map(|l| l.usd)
+                .unwrap_or(0.0);
+            let largest_is_supported = supported_programs
+                .iter()
+                .any(|&prog| largest_pool.dex_id.to_lowercase().contains(prog));
+
+            if largest_is_supported {
+                log(
+                    LogTag::Pool,
+                    "ANALYSIS",
+                    &format!(
+                        "✅ PERFECT: Largest pool ({}) IS SUPPORTED",
+                        largest_pool.dex_id.to_uppercase()
+                    )
+                );
+                log(
+                    LogTag::Pool,
+                    "ANALYSIS",
+                    &format!(
+                        "💰 Using pool with ${:.2} liquidity for price calculation",
+                        largest_liquidity
+                    )
+                );
+            } else {
+                log(
+                    LogTag::Pool,
+                    "ANALYSIS",
+                    &format!(
+                        "⚠️  WARNING: Largest pool ({}) is NOT SUPPORTED",
+                        largest_pool.dex_id.to_uppercase()
+                    )
+                );
+
+                if let Some(rank) = largest_supported_rank {
+                    let supported_pool = &sorted_pairs[rank - 1];
+                    let supported_liquidity = supported_pool.liquidity
+                        .as_ref()
+                        .map(|l| l.usd)
+                        .unwrap_or(0.0);
+                    let liquidity_diff = if largest_liquidity > 0.0 {
+                        ((largest_liquidity - supported_liquidity) / largest_liquidity) * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    log(
+                        LogTag::Pool,
+                        "ANALYSIS",
+                        &format!(
+                            "🎯 FALLBACK: Using rank #{} pool ({}) instead",
+                            rank,
+                            supported_pool.dex_id.to_uppercase()
+                        )
+                    );
+                    log(
+                        LogTag::Pool,
+                        "ANALYSIS",
+                        &format!(
+                            "💸 Liquidity difference: -{:.1}% (${:.2} vs ${:.2})",
+                            liquidity_diff,
+                            largest_liquidity,
+                            supported_liquidity
+                        )
+                    );
+
+                    if liquidity_diff > 50.0 {
+                        log(
+                            LogTag::Pool,
+                            "ANALYSIS",
+                            "🚨 CRITICAL: Using pool with significantly lower liquidity!"
+                        );
+                    } else if liquidity_diff > 20.0 {
+                        log(LogTag::Pool, "ANALYSIS", "⚠️  CAUTION: Noticeable liquidity drop");
+                    } else {
+                        log(
+                            LogTag::Pool,
+                            "ANALYSIS",
+                            "✅ ACCEPTABLE: Reasonable liquidity alternative"
+                        );
+                    }
+                } else {
+                    log(LogTag::Pool, "ANALYSIS", "❌ CRITICAL: NO SUPPORTED POOLS FOUND!");
+                    log(
+                        LogTag::Pool,
+                        "ANALYSIS",
+                        "💡 SOLUTION: System will fall back to API price"
+                    );
+                }
+            }
+
+            log(LogTag::Pool, "ANALYSIS", "");
+            log(LogTag::Pool, "ANALYSIS", "🔧 SUPPORTED PROGRAMS:");
+            log(LogTag::Pool, "ANALYSIS", "  - Raydium CPMM (raydium)");
+            log(LogTag::Pool, "ANALYSIS", "  - Meteora DAMM v2 (meteora)");
+            log(LogTag::Pool, "ANALYSIS", "");
+        }
+        Err(e) => {
+            log(LogTag::Pool, "ANALYSIS", &format!("❌ Failed to fetch pools: {}", e));
+        }
+    }
+}
+
 /// Test specific pool address
 async fn test_specific_pool(pool_address: &str, token_address: &str) {
     log(
@@ -365,8 +560,56 @@ async fn test_specific_pool(pool_address: &str, token_address: &str) {
         &format!("Testing specific pool: {} for token: {}", pool_address, token_address)
     );
 
-    // This would require implementing specific pool data fetching
-    // For now, just test the token's general pool availability
+    // Import required function for specific pool testing
+    use screenerbot::tokens::pool::get_pool_price_from_address;
+
+    // Test the specific pool price calculation
+    match get_pool_price_from_address(pool_address, token_address).await {
+        Ok(Some(pool_info)) => {
+            log(
+                LogTag::Pool,
+                "SUCCESS",
+                &format!(
+                    "✅ Pool price calculated successfully!\n  \
+                     Pool: {} ({})\n  \
+                     Token: {}\n  \
+                     Price: {:.12} SOL\n  \
+                     SOL Reserve: {}\n  \
+                     Token Reserve: {}\n  \
+                     Token Decimals: {}\n  \
+                     SOL Decimals: {}",
+                    pool_info.pool_address,
+                    pool_info.pool_type,
+                    pool_info.token_mint,
+                    pool_info.price_sol,
+                    pool_info.sol_reserve,
+                    pool_info.token_reserve,
+                    pool_info.token_decimals,
+                    pool_info.sol_decimals
+                )
+            );
+        }
+        Ok(None) => {
+            log(
+                LogTag::Pool,
+                "WARNING",
+                &format!(
+                    "❌ Pool {} does not contain the target token {}",
+                    pool_address,
+                    token_address
+                )
+            );
+        }
+        Err(e) => {
+            log(
+                LogTag::Pool,
+                "ERROR",
+                &format!("❌ Failed to calculate price from pool {}: {}", pool_address, e)
+            );
+        }
+    }
+
+    // Also check general token availability for comparison
     let pool_service = get_pool_service();
     let has_pools = pool_service.check_token_availability(token_address).await;
 

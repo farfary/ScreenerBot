@@ -57,7 +57,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.002;
@@ -69,7 +69,7 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
 pub const SWAP_FEE_PERCENT: f64 = 0.0;
 
 /// Default slippage tolerance for swaps
-pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
+pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
 
 // -----------------------------------------------------------------------------
 // Entry Signal Configuration (Dip Detection)
@@ -112,7 +112,7 @@ pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
 
 /// Open positions monitoring interval (seconds)
-pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
+pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 3;
 
 /// Price history tracking duration (hours)
 pub const PRICE_HISTORY_DURATION_HOURS: i64 = 2;
@@ -1459,7 +1459,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let cycle_start = std::time::Instant::now();
 
         // Update position tracking in price service
-        log(LogTag::Trader, "DEBUG", "🔄 Updating position tracking in price service...");
         let position_update_start = std::time::Instant::now();
         update_position_tracking_in_service().await;
         if is_debug_trader_enabled() {
@@ -1674,27 +1673,34 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         use tokio::sync::Semaphore;
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
-        // Log filtering summary
-        log(LogTag::Trader, "DEBUG", "📊 Logging filtering summary...");
-        let summary_start = std::time::Instant::now();
-        log_filtering_summary(&tokens);
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!("✅ Filtering summary logged in {:.1}ms", summary_start.elapsed().as_millis())
-        );
+        if is_debug_trader_enabled() {
+            // Log filtering summary
+            log(LogTag::Trader, "DEBUG", "📊 Logging filtering summary...");
+            let summary_start = std::time::Instant::now();
+            log_filtering_summary(&tokens);
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "✅ Filtering summary logged in {:.1}ms",
+                    summary_start.elapsed().as_millis()
+                )
+            );
+        }
 
         // Process all tokens in parallel with concurrent tasks
         let mut handles = Vec::new();
 
-        // Get the total token count before starting the loop
-        let total_tokens = tokens.len();
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!("🚀 Starting parallel processing of {} tokens", total_tokens)
-        );
-
+        if is_debug_trader_enabled() {
+            // Get the total token count before starting the loop
+            let total_tokens = tokens.len();
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!("🚀 Starting parallel processing of {} tokens", total_tokens)
+            );
+        }
+        
         let token_processing_start = std::time::Instant::now();
         // Note: tokens are still sorted by liquidity from highest to lowest
         for (index, token) in tokens.iter().enumerate() {
