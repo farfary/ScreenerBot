@@ -369,12 +369,12 @@ impl PoolPriceService {
                             )
                         );
                     }
-                    
+
                     // Return cached result with updated timestamp for real-time accuracy
                     let mut updated_result = cached_price.clone();
                     let old_timestamp = updated_result.calculated_at;
                     updated_result.calculated_at = Utc::now();
-                    
+
                     if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
@@ -387,7 +387,7 @@ impl PoolPriceService {
                             )
                         );
                     }
-                    
+
                     return Some(updated_result);
                 } else if is_debug_pool_prices_enabled() {
                     log(
@@ -405,10 +405,7 @@ impl PoolPriceService {
                 log(
                     LogTag::Pool,
                     "CACHE_MISS",
-                    &format!(
-                        "❓ NO CACHE for {}: first time or cleared cache, will fetch FRESH price from blockchain",
-                        token_address
-                    )
+                    &format!("❓ NO CACHE for {}: first time or cleared cache, will fetch FRESH price from blockchain", token_address)
                 );
             }
         }
@@ -416,7 +413,11 @@ impl PoolPriceService {
         // Check if token has available pools
         if !self.check_token_availability(token_address).await {
             if is_debug_pool_prices_enabled() {
-                log(LogTag::Pool, "NO_POOLS", &format!("❌ NO POOLS available for {}", token_address));
+                log(
+                    LogTag::Pool,
+                    "NO_POOLS",
+                    &format!("❌ NO POOLS available for {}", token_address)
+                );
             }
             return None;
         }
@@ -425,10 +426,7 @@ impl PoolPriceService {
             log(
                 LogTag::Pool,
                 "FRESH_CALC_START",
-                &format!(
-                    "🔄 STARTING FRESH CALCULATION for {} - will get REAL-TIME price from blockchain pools",
-                    token_address
-                )
+                &format!("🔄 STARTING FRESH CALCULATION for {} - will get REAL-TIME price from blockchain pools", token_address)
             );
         }
 
@@ -478,7 +476,11 @@ impl PoolPriceService {
 
                             // Flag significant differences
                             if price_diff_percent.abs() > 10.0 {
-                                let flag = if price_diff_percent.abs() > 50.0 { "🚨 CRITICAL" } else { "⚠️  WARNING" };
+                                let flag = if price_diff_percent.abs() > 50.0 {
+                                    "🚨 CRITICAL"
+                                } else {
+                                    "⚠️  WARNING"
+                                };
                                 log(
                                     LogTag::Pool,
                                     "PRICE_DIVERGENCE",
@@ -522,7 +524,7 @@ impl PoolPriceService {
                 {
                     let mut price_cache = self.price_cache.write().await;
                     price_cache.insert(token_address.to_string(), pool_result.clone());
-                    
+
                     if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
@@ -642,27 +644,25 @@ impl PoolPriceService {
                     log(
                         LogTag::Pool,
                         "FETCH_CACHE_EXPIRED",
-                        &format!(
-                            "⏰ Pool cache EXPIRED for {}, will fetch fresh pools from API",
-                            token_address
-                        )
+                        &format!("⏰ Pool cache EXPIRED for {}, will fetch fresh pools from API", token_address)
                     );
                 }
             } else if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
                     "FETCH_CACHE_MISS",
-                    &format!(
-                        "❓ No cached pools for {}, will fetch from API",
-                        token_address
-                    )
+                    &format!("❓ No cached pools for {}, will fetch from API", token_address)
                 );
             }
         }
 
         // Fetch from API
         if is_debug_pool_prices_enabled() {
-            log(LogTag::Pool, "FETCH_API_START", &format!("🔄 Fetching pools from DexScreener API for {}", token_address));
+            log(
+                LogTag::Pool,
+                "FETCH_API_START",
+                &format!("🔄 Fetching pools from DexScreener API for {}", token_address)
+            );
         }
 
         let api_start_time = Utc::now();
@@ -707,7 +707,13 @@ impl PoolPriceService {
                         log(
                             LogTag::Pool,
                             "FETCH_PARSE_ERROR",
-                            &format!("❌ Failed to parse pool #{} for {}: {} - Error: {}", index + 1, token_address, pair.pair_address, e)
+                            &format!(
+                                "❌ Failed to parse pool #{} for {}: {} - Error: {}",
+                                index + 1,
+                                token_address,
+                                pair.pair_address,
+                                e
+                            )
                         );
                     }
                 }
@@ -729,7 +735,7 @@ impl PoolPriceService {
                     token_address
                 )
             );
-            
+
             // Log top 3 pools for debugging
             for (i, pool) in cached_pools.iter().take(3).enumerate() {
                 log(
@@ -751,7 +757,7 @@ impl PoolPriceService {
         {
             let mut pool_cache = self.pool_cache.write().await;
             pool_cache.insert(token_address.to_string(), cached_pools.clone());
-            
+
             if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,

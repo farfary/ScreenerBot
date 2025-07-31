@@ -181,7 +181,11 @@ impl TokenPriceService {
                     log(
                         LogTag::PriceService,
                         "CACHE_MISS_UPDATED",
-                        &format!("✅ UPDATED and got price for {}: ${:.12} SOL", mint, price.unwrap_or(0.0))
+                        &format!(
+                            "✅ UPDATED and got price for {}: ${:.12} SOL",
+                            mint,
+                            price.unwrap_or(0.0)
+                        )
                     );
                 }
                 price
@@ -204,7 +208,7 @@ impl TokenPriceService {
         if let Some(entry) = cache.get(mint) {
             let age_seconds = (Utc::now() - entry.last_updated).num_seconds();
             let is_expired = entry.is_expired();
-            
+
             if is_debug_price_service_enabled() {
                 log(
                     LogTag::PriceService,
@@ -220,7 +224,7 @@ impl TokenPriceService {
                     )
                 );
             }
-            
+
             if !is_expired {
                 if let Some(price) = entry.price_sol {
                     if price > 0.0 && price.is_finite() {
@@ -228,7 +232,12 @@ impl TokenPriceService {
                             log(
                                 LogTag::PriceService,
                                 "CACHE_VALID",
-                                &format!("✅ VALID CACHE for {}: price={:.12} SOL, age={}s", mint, price, age_seconds)
+                                &format!(
+                                    "✅ VALID CACHE for {}: price={:.12} SOL, age={}s",
+                                    mint,
+                                    price,
+                                    age_seconds
+                                )
                             );
                         }
                         return Some(price);
@@ -237,7 +246,11 @@ impl TokenPriceService {
                             log(
                                 LogTag::PriceService,
                                 "CACHE_INVALID_PRICE",
-                                &format!("❌ INVALID PRICE for {}: price={:.12} (not finite or zero)", mint, price)
+                                &format!(
+                                    "❌ INVALID PRICE for {}: price={:.12} (not finite or zero)",
+                                    mint,
+                                    price
+                                )
                             );
                         }
                     }
@@ -255,7 +268,12 @@ impl TokenPriceService {
                     log(
                         LogTag::PriceService,
                         "CACHE_EXPIRED",
-                        &format!("⏰ EXPIRED CACHE for {}: age={}s > max={}s", mint, age_seconds, PRICE_CACHE_MAX_AGE_SECONDS)
+                        &format!(
+                            "⏰ EXPIRED CACHE for {}: age={}s > max={}s",
+                            mint,
+                            age_seconds,
+                            PRICE_CACHE_MAX_AGE_SECONDS
+                        )
                     );
                 }
             }
@@ -300,13 +318,10 @@ impl TokenPriceService {
                         log(
                             LogTag::PriceService,
                             "POOL_REQUEST",
-                            &format!(
-                                "🏊 REQUESTING POOL PRICE for open position {} (will check real-time blockchain pools)",
-                                mint
-                            )
+                            &format!("🏊 REQUESTING POOL PRICE for open position {} (will check real-time blockchain pools)", mint)
                         );
                     }
-                    
+
                     if pool_service.check_token_availability(mint).await {
                         // Get current API price for comparison if available
                         let api_price_sol = {
@@ -469,27 +484,32 @@ impl TokenPriceService {
         let mut cache = self.price_cache.write().await;
         let old_entry = cache.get(mint);
         let old_price = old_entry.and_then(|e| e.price_sol);
-        
+
         cache.insert(mint.to_string(), cache_entry.clone());
-        
+
         if is_debug_price_service_enabled() {
             let price_change = match (old_price, cache_entry.price_sol) {
                 (Some(old), Some(new)) => {
                     let change = new - old;
                     let change_percent = if old != 0.0 { (change / old) * 100.0 } else { 0.0 };
-                    format!(" (changed from ${:.12} to ${:.12} SOL, {:+.2}%)", old, new, change_percent)
+                    format!(
+                        " (changed from ${:.12} to ${:.12} SOL, {:+.2}%)",
+                        old,
+                        new,
+                        change_percent
+                    )
                 }
                 (None, Some(new)) => format!(" (new price: ${:.12} SOL)", new),
                 (Some(old), None) => format!(" (removed price: was ${:.12} SOL)", old),
                 (None, None) => " (no price data)".to_string(),
             };
-            
+
             log(
                 LogTag::PriceService,
                 "CACHE_UPDATED",
                 &format!(
-                    "💾 CACHE UPDATED for {}: source={}, timestamp={}{}", 
-                    mint, 
+                    "💾 CACHE UPDATED for {}: source={}, timestamp={}{}",
+                    mint,
                     cache_entry.source,
                     cache_entry.last_updated.format("%H:%M:%S%.3f"),
                     price_change
@@ -680,11 +700,11 @@ pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
             &format!("🌐 GLOBAL price request for {}", mint)
         );
     }
-    
+
     let service_guard = PRICE_SERVICE.lock().await;
     if let Some(ref service) = *service_guard {
         let result = service.get_token_price(mint).await;
-        
+
         if is_debug_price_service_enabled() {
             log(
                 LogTag::PriceService,
@@ -692,7 +712,7 @@ pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
                 &format!("🌐 GLOBAL price result for {}: ${:.12} SOL", mint, result.unwrap_or(0.0))
             );
         }
-        
+
         return result;
     } else {
         if is_debug_price_service_enabled() {
@@ -715,19 +735,23 @@ pub async fn get_token_price_blocking_safe(mint: &str) -> Option<f64> {
             &format!("🌐 GLOBAL BLOCKING price request for {}", mint)
         );
     }
-    
+
     let service_guard = PRICE_SERVICE.lock().await;
     if let Some(ref service) = *service_guard {
         let result = service.get_token_price_blocking(mint).await;
-        
+
         if is_debug_price_service_enabled() {
             log(
                 LogTag::PriceService,
                 "GLOBAL_BLOCKING_RESULT",
-                &format!("🌐 GLOBAL BLOCKING price result for {}: ${:.12} SOL", mint, result.unwrap_or(0.0))
+                &format!(
+                    "🌐 GLOBAL BLOCKING price result for {}: ${:.12} SOL",
+                    mint,
+                    result.unwrap_or(0.0)
+                )
             );
         }
-        
+
         return result;
     } else {
         if is_debug_price_service_enabled() {
@@ -774,7 +798,7 @@ pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Op
     for mint in mints {
         let price = get_token_price_blocking_safe(mint).await;
         results.insert(mint.clone(), price);
-        
+
         if is_debug_price_service_enabled() {
             log(
                 LogTag::PriceService,
@@ -785,7 +809,10 @@ pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Op
     }
 
     if is_debug_price_service_enabled() {
-        let found_prices = results.values().filter(|p| p.is_some()).count();
+        let found_prices = results
+            .values()
+            .filter(|p| p.is_some())
+            .count();
         log(
             LogTag::PriceService,
             "BATCH_COMPLETE",
@@ -805,7 +832,7 @@ pub async fn update_tokens_prices_safe(mints: &[String]) {
             &format!("🔧 MONITOR requesting price updates for {} tokens: {:?}", mints.len(), mints)
         );
     }
-    
+
     let service_guard = PRICE_SERVICE.lock().await;
     if let Some(ref service) = *service_guard {
         service.update_tokens_from_api(mints).await;

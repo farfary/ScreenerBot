@@ -1738,7 +1738,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         );
                         let price_start = std::time::Instant::now();
 
-                        if let Some(current_price) = get_token_price_blocking_safe(&token.mint).await {
+                        if
+                            let Some(current_price) = get_token_price_blocking_safe(
+                                &token.mint
+                            ).await
+                        {
                             debug_trader_log(
                                 "TASK_TIMING",
                                 &format!(
