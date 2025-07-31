@@ -361,6 +361,19 @@ impl TokenPriceService {
                                     )
                                 );
 
+                                // Show detailed pool calculation information
+                                log(
+                                    LogTag::PriceService,
+                                    "POOL_DETAILS",
+                                    &format!(
+                                        "🔍 POOL CALCULATION DETAILS for {}: liquidity=${:.2}, reserves_calculation_time={}, calculated_on_blockchain={}",
+                                        mint,
+                                        result.liquidity_usd,
+                                        result.calculated_at.format("%H:%M:%S%.3f"),
+                                        "real-time"
+                                    )
+                                );
+
                                 // Show the price change if we have an API price for comparison
                                 if let Some(api_sol) = api_price_sol {
                                     if let Some(pool_sol) = result.price_sol {
@@ -375,7 +388,7 @@ impl TokenPriceService {
                                             LogTag::PriceService,
                                             "POOL_VS_API",
                                             &format!(
-                                                "💰 PRICE CHANGE DETECTED for {}: API={:.12} → POOL={:.12} SOL ({:+.12} SOL, {:+.2}%)",
+                                                "💰 PRICE COMPARISON for {}: API={:.12} → POOL={:.12} SOL (change: {:+.12} SOL, {:+.4}%)",
                                                 mint,
                                                 api_sol,
                                                 pool_sol,
@@ -389,7 +402,17 @@ impl TokenPriceService {
                                                 LogTag::PriceService,
                                                 "SIGNIFICANT_CHANGE",
                                                 &format!(
-                                                    "🚨 SIGNIFICANT PRICE CHANGE for {}: {:+.2}% change from API to pool price!",
+                                                    "🚨 SIGNIFICANT PRICE CHANGE for {}: {:+.4}% change from API to pool price!",
+                                                    mint,
+                                                    price_change_percent
+                                                )
+                                            );
+                                        } else if price_change_percent.abs() < 0.001 {
+                                            log(
+                                                LogTag::PriceService,
+                                                "STATIC_PRICE_WARNING",
+                                                &format!(
+                                                    "⚠️  POSSIBLE STATIC PRICE for {}: Only {:+.6}% change - pool reserves may be frozen or cached",
                                                     mint,
                                                     price_change_percent
                                                 )
@@ -492,16 +515,45 @@ impl TokenPriceService {
                 (Some(old), Some(new)) => {
                     let change = new - old;
                     let change_percent = if old != 0.0 { (change / old) * 100.0 } else { 0.0 };
+
+                    // Print to console for immediate visibility
+                    println!(
+                        "🔄 PRICE UPDATE for {}: {:.12} → {:.12} SOL ({:+.12} SOL, {:+.6}%)",
+                        mint,
+                        old,
+                        new,
+                        change,
+                        change_percent
+                    );
+
+                    // Check if the price is completely static (exactly the same)
+                    if (old - new).abs() < f64::EPSILON {
+                        println!(
+                            "⚠️  STATIC PRICE DETECTED for {}: Price has not changed at all (exactly {:.12} SOL)",
+                            mint,
+                            new
+                        );
+                    }
+
                     format!(
-                        " (changed from ${:.12} to ${:.12} SOL, {:+.2}%)",
+                        " (changed from ${:.12} to ${:.12} SOL, {:+.6}%)",
                         old,
                         new,
                         change_percent
                     )
                 }
-                (None, Some(new)) => format!(" (new price: ${:.12} SOL)", new),
-                (Some(old), None) => format!(" (removed price: was ${:.12} SOL)", old),
-                (None, None) => " (no price data)".to_string(),
+                (None, Some(new)) => {
+                    println!("🆕 NEW PRICE for {}: {:.12} SOL (first time)", mint, new);
+                    format!(" (new price: ${:.12} SOL)", new)
+                }
+                (Some(old), None) => {
+                    println!("❌ PRICE REMOVED for {}: was {:.12} SOL", mint, old);
+                    format!(" (removed price: was ${:.12} SOL)", old)
+                }
+                (None, None) => {
+                    println!("❓ NO PRICE DATA for {}", mint);
+                    " (no price data)".to_string()
+                }
             };
 
             log(

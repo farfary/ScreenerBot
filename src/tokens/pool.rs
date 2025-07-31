@@ -826,50 +826,69 @@ impl PoolPriceService {
             );
         }
 
-        // For now, use API price data from the pool info
-        // In the future, this can be enhanced to calculate from actual pool reserves
-        let price_sol = if best_pool.quote_token == SOL_MINT {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "CALC_QUOTE_SOL",
-                    &format!(
-                        "📈 {} is quoted in SOL, using direct price: {:.12}",
-                        token_address,
-                        best_pool.price_native
-                    )
-                );
+        // Calculate REAL price from blockchain pool reserves instead of using API data
+        let price_sol = match self.calculate_real_pool_price_from_reserves(
+            &best_pool.pair_address, 
+            token_address
+        ).await {
+            Ok(Some(pool_price_info)) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "CALC_REAL_BLOCKCHAIN",
+                        &format!(
+                            "✅ REAL BLOCKCHAIN PRICE calculated for {}: {:.12} SOL from reserves in pool {}",
+                            token_address,
+                            pool_price_info.price_sol,
+                            best_pool.pair_address
+                        )
+                    );
+                }
+                Some(pool_price_info.price_sol)
             }
-            Some(best_pool.price_native)
-        } else if best_pool.base_token == SOL_MINT {
-            let inverted_price = 1.0 / best_pool.price_native;
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "CALC_BASE_SOL",
-                    &format!(
-                        "📉 {} is base token vs SOL, inverting price: 1/{:.12} = {:.12}",
-                        token_address,
-                        best_pool.price_native,
-                        inverted_price
-                    )
-                );
+            Ok(None) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "CALC_FALLBACK_API",
+                        &format!(
+                            "⚠️  FALLBACK to API price for {}: pool calculation returned None, using API price {:.12}",
+                            token_address,
+                            best_pool.price_native
+                        )
+                    );
+                }
+                // Fallback to API price if pool calculation fails
+                if best_pool.quote_token == SOL_MINT {
+                    Some(best_pool.price_native)
+                } else if best_pool.base_token == SOL_MINT {
+                    Some(1.0 / best_pool.price_native)
+                } else {
+                    None
+                }
             }
-            Some(inverted_price)
-        } else {
-            if is_debug_pool_prices_enabled() {
-                log(
-                    LogTag::Pool,
-                    "CALC_NO_SOL_PAIR",
-                    &format!(
-                        "❌ Pool for {} doesn't have SOL pair: base={}, quote={}",
-                        token_address,
-                        best_pool.base_token,
-                        best_pool.quote_token
-                    )
-                );
+            Err(e) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "CALC_ERROR_FALLBACK",
+                        &format!(
+                            "❌ BLOCKCHAIN calculation FAILED for {}: {}. Fallback to API price {:.12}",
+                            token_address,
+                            e,
+                            best_pool.price_native
+                        )
+                    );
+                }
+                // Fallback to API price if pool calculation errors
+                if best_pool.quote_token == SOL_MINT {
+                    Some(best_pool.price_native)
+                } else if best_pool.base_token == SOL_MINT {
+                    Some(1.0 / best_pool.price_native)
+                } else {
+                    None
+                }
             }
-            None
         };
 
         let calculation_time = Utc::now();
@@ -926,6 +945,69 @@ impl PoolPriceService {
         }
 
         Ok(result)
+    }
+
+    /// Calculate REAL pool price from blockchain reserves instead of API data
+    async fn calculate_real_pool_price_from_reserves(
+        &self,
+        pool_address: &str,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "REAL_CALC_START",
+                &format!("🔗 STARTING REAL blockchain calculation for pool {} token {}", pool_address, token_mint)
+            );
+        }
+
+        // Create PoolPriceCalculator to get real-time reserves
+        let calculator = PoolPriceCalculator::new().map_err(|e|
+            format!("Failed to create pool calculator: {}", e)
+        )?;
+
+        // Calculate price from actual blockchain reserves
+        match calculator.calculate_token_price(pool_address, token_mint).await {
+            Ok(Some(pool_price_info)) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "REAL_CALC_SUCCESS",
+                        &format!(
+                            "✅ REAL price from reserves: {:.12} SOL for {} \
+                             (sol_reserve: {}, token_reserve: {}, sol_decimals: {}, token_decimals: {})",
+                            pool_price_info.price_sol,
+                            token_mint,
+                            pool_price_info.sol_reserve,
+                            pool_price_info.token_reserve,
+                            pool_price_info.sol_decimals,
+                            pool_price_info.token_decimals
+                        )
+                    );
+                }
+                Ok(Some(pool_price_info))
+            }
+            Ok(None) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "REAL_CALC_NONE",
+                        &format!("❓ REAL calculation returned None for pool {} token {}", pool_address, token_mint)
+                    );
+                }
+                Ok(None)
+            }
+            Err(e) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "REAL_CALC_ERROR",
+                        &format!("❌ REAL calculation FAILED for pool {} token {}: {}", pool_address, token_mint, e)
+                    );
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Internal method for background price updates
