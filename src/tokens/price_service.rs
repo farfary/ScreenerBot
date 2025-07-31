@@ -478,7 +478,9 @@ impl TokenPriceService {
                     );
                 }
                 let pool_info = (
-                    Some(pool_result.dex_id.clone()),
+                    pool_result.pool_type
+                        .clone()
+                        .or_else(|| Some(pool_result.dex_id.to_uppercase())), // Use actual pool type or fallback to dex_id
                     Some(pool_result.pool_address.clone()),
                 );
                 (PriceCacheEntry::from_pool_result(&pool_result), pool_info)

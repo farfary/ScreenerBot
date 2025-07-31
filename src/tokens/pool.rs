@@ -172,6 +172,7 @@ impl CachedPoolInfo {
 pub struct PoolPriceResult {
     pub pool_address: String,
     pub dex_id: String,
+    pub pool_type: Option<String>, // Actual pool type from decoder (e.g., "Raydium CPMM", "Meteora DAMM v2")
     pub token_address: String,
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,
@@ -830,7 +831,7 @@ impl PoolPriceService {
         }
 
         // Calculate REAL price from blockchain pool reserves instead of using API data
-        let price_sol = match
+        let (price_sol, actual_pool_type) = match
             self.calculate_real_pool_price_from_reserves(
                 &best_pool.pair_address,
                 token_address
@@ -842,14 +843,15 @@ impl PoolPriceService {
                         LogTag::Pool,
                         "CALC_REAL_BLOCKCHAIN",
                         &format!(
-                            "✅ REAL BLOCKCHAIN PRICE calculated for {}: {:.12} SOL from reserves in pool {}",
+                            "✅ REAL BLOCKCHAIN PRICE calculated for {}: {:.12} SOL from reserves in pool {} ({})",
                             token_address,
                             pool_price_info.price_sol,
-                            best_pool.pair_address
+                            best_pool.pair_address,
+                            pool_price_info.pool_type
                         )
                     );
                 }
-                Some(pool_price_info.price_sol)
+                (Some(pool_price_info.price_sol), Some(pool_price_info.pool_type))
             }
             Ok(None) => {
                 if is_debug_pool_prices_enabled() {
@@ -864,13 +866,14 @@ impl PoolPriceService {
                     );
                 }
                 // Fallback to API price if pool calculation fails
-                if best_pool.quote_token == SOL_MINT {
+                let api_price = if best_pool.quote_token == SOL_MINT {
                     Some(best_pool.price_native)
                 } else if best_pool.base_token == SOL_MINT {
                     Some(1.0 / best_pool.price_native)
                 } else {
                     None
-                }
+                };
+                (api_price, None) // No pool type since we're using API price
             }
             Err(e) => {
                 if is_debug_pool_prices_enabled() {
@@ -886,13 +889,14 @@ impl PoolPriceService {
                     );
                 }
                 // Fallback to API price if pool calculation errors
-                if best_pool.quote_token == SOL_MINT {
+                let api_price = if best_pool.quote_token == SOL_MINT {
                     Some(best_pool.price_native)
                 } else if best_pool.base_token == SOL_MINT {
                     Some(1.0 / best_pool.price_native)
                 } else {
                     None
-                }
+                };
+                (api_price, None) // No pool type since we're using API price
             }
         };
 
@@ -900,6 +904,7 @@ impl PoolPriceService {
         let result = PoolPriceResult {
             pool_address: best_pool.pair_address.clone(),
             dex_id: best_pool.dex_id.clone(),
+            pool_type: actual_pool_type, // Use actual pool type from decoder, not API dex_id
             token_address: token_address.to_string(),
             price_sol,
             price_usd: None, // We don't calculate USD prices from pools - only SOL prices

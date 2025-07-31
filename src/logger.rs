@@ -720,7 +720,7 @@ pub fn log_price_change(
                     pool_address,
                 )
             {
-                format!("🏊 {} Pool: {}", formatted_type, &pool_addr[..8]).bright_cyan()
+                format!("🏊 {} Pool: {}", formatted_type, pool_addr).bright_cyan()
             } else {
                 "🏊 Pool".bright_cyan()
             }
