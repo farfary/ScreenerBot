@@ -977,3 +977,40 @@ pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
 
     active_cooldowns
 }
+
+/// Gets all open position mints
+pub fn get_open_positions_mints() -> Vec<String> {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        positions
+            .iter()
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .map(|p| p.mint.clone())
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Gets all open positions
+pub fn get_open_positions() -> Vec<Position> {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        positions
+            .iter()
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Checks if a mint is an open position
+pub fn is_open_position(mint: &str) -> bool {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        positions
+            .iter()
+            .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_none())
+    } else {
+        false
+    }
+}

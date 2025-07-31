@@ -82,9 +82,6 @@ impl TokenMonitor {
                 _ = sleep(Duration::from_secs(ENHANCED_CYCLE_DURATION_SECONDS)) => {
                     self.current_cycle += 1;
                     
-                    log(LogTag::System, "MONITOR", 
-                        &format!("Starting enhanced monitoring cycle #{}", self.current_cycle));
-                    
                     if let Err(e) = self.enhanced_monitor_tokens().await {
                         log(LogTag::System, "ERROR", 
                             &format!("Enhanced monitoring cycle failed: {}", e));

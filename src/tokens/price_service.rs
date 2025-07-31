@@ -4,12 +4,13 @@
 /// and background monitoring. No timeouts on cache hits, automatic watch list management,
 /// and prioritized pool price integration for open positions.
 
-use crate::logger::{ log, LogTag };
+use crate::logger::{ log, LogTag, log_price_change };
 use crate::global::is_debug_price_service_enabled;
 use crate::tokens::types::ApiToken;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::is_token_blacklisted;
 use crate::tokens::pool::{ get_pool_service, PoolPriceResult };
+use crate::positions::is_open_position;
 use tokio::sync::RwLock;
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
@@ -299,13 +300,13 @@ impl TokenPriceService {
 
     async fn update_single_token_price(&self, mint: &str) -> Result<(), String> {
         // Check if this is an open position for pool price priority
-        let is_open_position = {
+        let is_position_open = {
             let positions = self.open_positions.read().await;
             positions.contains(mint)
         };
 
         // For non-open positions, ALWAYS use API price, never pool
-        let (pool_result, api_token) = if is_open_position {
+        let (pool_result, api_token) = if is_position_open {
             // Try pool price first for open positions if within limit
             let pool_result = {
                 let mut pool_usage = self.pool_usage_count.write().await;
@@ -463,7 +464,7 @@ impl TokenPriceService {
         };
 
         // Create cache entry
-        let cache_entry = match (pool_result, api_token) {
+        let (cache_entry, pool_info_for_logging) = match (pool_result.as_ref(), api_token) {
             (Some(pool_result), _) => {
                 if is_debug_price_service_enabled() {
                     log(
@@ -476,11 +477,15 @@ impl TokenPriceService {
                         )
                     );
                 }
-                PriceCacheEntry::from_pool_result(&pool_result)
+                let pool_info = (
+                    Some(pool_result.dex_id.clone()),
+                    Some(pool_result.pool_address.clone()),
+                );
+                (PriceCacheEntry::from_pool_result(&pool_result), pool_info)
             }
             (None, Some(api_token)) => {
                 if is_debug_price_service_enabled() {
-                    let position_type = if is_open_position {
+                    let position_type = if is_position_open {
                         "open position"
                     } else {
                         "non-open position"
@@ -496,7 +501,7 @@ impl TokenPriceService {
                         )
                     );
                 }
-                PriceCacheEntry::from_api_token(&api_token)
+                (PriceCacheEntry::from_api_token(&api_token), (None, None))
             }
             (None, None) => {
                 return Err("No price data available".to_string());
@@ -509,6 +514,46 @@ impl TokenPriceService {
         let old_price = old_entry.and_then(|e| e.price_sol);
 
         cache.insert(mint.to_string(), cache_entry.clone());
+
+        // Check if this is an open position and log colored price changes (always visible, not debug-only)
+        if is_open_position(mint) {
+            if let (Some(old), Some(new)) = (old_price, cache_entry.price_sol) {
+                // Only log if there's an actual price change
+                if (old - new).abs() > f64::EPSILON {
+                    // Get token symbol from database
+                    let symbol = match self.database.get_token_by_mint(mint) {
+                        Ok(Some(token)) => {
+                            if !token.symbol.is_empty() {
+                                token.symbol
+                            } else {
+                                mint[..8].to_string()
+                            }
+                        }
+                        _ => mint[..8].to_string(), // Fallback to mint prefix
+                    };
+
+                    // Extract pool information from the captured pool info
+                    let (pool_type, pool_address) = match cache_entry.source.as_str() {
+                        "pool" => {
+                            let (pool_type_opt, pool_address_opt) = &pool_info_for_logging;
+                            (pool_type_opt.as_deref(), pool_address_opt.as_deref())
+                        }
+                        _ => (None, None),
+                    };
+
+                    // Log the colored price change
+                    log_price_change(
+                        mint,
+                        &symbol,
+                        old,
+                        new,
+                        &cache_entry.source,
+                        pool_type,
+                        pool_address
+                    );
+                }
+            }
+        }
 
         if is_debug_price_service_enabled() {
             let price_change = match (old_price, cache_entry.price_sol) {

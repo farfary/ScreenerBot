@@ -510,20 +510,29 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     // Split message into chunks that fit
     let message_chunks = wrap_text(message, available_space);
 
+    // Check if the original message already contains color codes
+    let has_existing_colors = message.contains('\x1b');
+
     // Determine message color based on log type and message content
-    let message_color = match log_type.to_uppercase().as_str() {
-        "ERROR" => message_chunks[0].bright_red(),
-        "FAILED" => message_chunks[0].bright_red(),
-        _ => {
-            // Check if message contains error/failed keywords
-            if
-                message.to_lowercase().contains("error") ||
-                message.to_lowercase().contains("failed") ||
-                message.to_lowercase().contains("fail")
-            {
-                message_chunks[0].bright_red()
-            } else {
-                message_chunks[0].bright_white()
+    let message_color = if has_existing_colors {
+        // If message already has colors, use the first chunk as-is
+        message_chunks[0].to_string()
+    } else {
+        // Apply coloring based on log type only if no existing colors
+        match log_type.to_uppercase().as_str() {
+            "ERROR" => message_chunks[0].bright_red().to_string(),
+            "FAILED" => message_chunks[0].bright_red().to_string(),
+            _ => {
+                // Check if message contains error/failed keywords
+                if
+                    message.to_lowercase().contains("error") ||
+                    message.to_lowercase().contains("failed") ||
+                    message.to_lowercase().contains("fail")
+                {
+                    message_chunks[0].bright_red().to_string()
+                } else {
+                    message_chunks[0].bright_white().to_string()
+                }
             }
         }
     };
@@ -562,19 +571,25 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         );
         for chunk in &message_chunks[1..] {
             // Apply same color logic to continuation lines
-            let chunk_color = match log_type.to_uppercase().as_str() {
-                "ERROR" => chunk.bright_red(),
-                "FAILED" => chunk.bright_red(),
-                _ => {
-                    // Check if message contains error/failed keywords
-                    if
-                        message.to_lowercase().contains("error") ||
-                        message.to_lowercase().contains("failed") ||
-                        message.to_lowercase().contains("fail")
-                    {
-                        chunk.bright_red()
-                    } else {
-                        chunk.bright_white()
+            let chunk_color = if has_existing_colors {
+                // If original message had colors, use chunks as-is
+                chunk.to_string()
+            } else {
+                // Apply coloring based on log type only if no existing colors
+                match log_type.to_uppercase().as_str() {
+                    "ERROR" => chunk.bright_red().to_string(),
+                    "FAILED" => chunk.bright_red().to_string(),
+                    _ => {
+                        // Check if message contains error/failed keywords
+                        if
+                            message.to_lowercase().contains("error") ||
+                            message.to_lowercase().contains("failed") ||
+                            message.to_lowercase().contains("fail")
+                        {
+                            chunk.bright_red().to_string()
+                        } else {
+                            chunk.bright_white().to_string()
+                        }
                     }
                 }
             };
@@ -639,4 +654,91 @@ fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
     }
 
     lines
+}
+
+/// Special logging function for price changes with enhanced colors and formatting
+/// Shows colored price changes for open positions without requiring debug mode
+/// Uses the same format as the main logger system for consistency
+pub fn log_price_change(
+    _mint: &str,
+    symbol: &str,
+    old_price: f64,
+    new_price: f64,
+    price_source: &str,
+    pool_type: Option<&str>,
+    pool_address: Option<&str>
+) {
+    let price_change = new_price - old_price;
+    let price_change_percent = if old_price != 0.0 {
+        (price_change / old_price) * 100.0
+    } else {
+        0.0
+    };
+
+    // Build the main message parts
+    let symbol_padded = format!("{:<8}", symbol.chars().take(8).collect::<String>());
+
+    // Price with emoji and color
+    let (emoji, price_text) = if price_change > 0.0 {
+        ("📈", format!("{:.12}", new_price).bright_green().bold())
+    } else if price_change < 0.0 {
+        ("📉", format!("{:.12}", new_price).bright_red().bold())
+    } else {
+        ("➡️", format!("{:.12}", new_price).bright_yellow().bold())
+    };
+
+    // Change amount and percentage with colors
+    let change_text = if price_change > 0.0 {
+        format!("(+{:.12} SOL, +{:.4}%)", price_change, price_change_percent).bright_green()
+    } else if price_change < 0.0 {
+        format!("({:.12} SOL, {:.4}%)", price_change, price_change_percent).bright_red()
+    } else {
+        format!("(±{:.12} SOL, ±{:.4}%)", 0.0, 0.0).bright_yellow()
+    };
+
+    // Format pool type properly - "raydium-cpmm" becomes "Raydium CPMM"
+    let formatted_pool_type = pool_type.map(|pt| {
+        pt.split('-')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) =>
+                        first.to_uppercase().collect::<String>() + &chars.as_str().to_uppercase(),
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" ")
+    });
+
+    // Source info with proper pool type formatting
+    let source_text = match price_source {
+        "pool" => {
+            if
+                let (Some(formatted_type), Some(pool_addr)) = (
+                    formatted_pool_type.as_ref(),
+                    pool_address,
+                )
+            {
+                format!("🏊 {} Pool: {}", formatted_type, &pool_addr[..8]).bright_cyan()
+            } else {
+                "🏊 Pool".bright_cyan()
+            }
+        }
+        "api" => "🌐 API".bright_magenta(),
+        _ => format!("📊 {}", price_source).bright_white(),
+    };
+
+    // Build complete message using exact logger format
+    let message = format!(
+        "{} {} {} {} {}",
+        symbol_padded.bright_white().bold(),
+        emoji,
+        price_text,
+        change_text,
+        source_text
+    );
+
+    // Use standard logger with POSITION tag and PRICE type
+    log(LogTag::Other("POSITION".to_string()), "PRICE", &message);
 }
