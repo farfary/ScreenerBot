@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.002;
+pub const TRADE_SIZE_SOL: f64 = 0.004;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -69,7 +69,7 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
 pub const SWAP_FEE_PERCENT: f64 = 0.0;
 
 /// Default slippage tolerance for swaps
-pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
+pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
 
 // -----------------------------------------------------------------------------
 // Entry Signal Configuration (Dip Detection)
@@ -77,14 +77,6 @@ pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
 
 /// Minimum price drop percentage to trigger buy signal
 pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 2.0;
-
-// -----------------------------------------------------------------------------
-// Exit Signal Configuration (Profit Taking)
-// -----------------------------------------------------------------------------
-
-/// Profit target percentage for position exits - now duration-based
-/// This is the base target for short-term positions (< 2 hours)
-pub const PROFIT_TARGET_PERCENT: f64 = 5.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding

@@ -537,6 +537,7 @@ pub async fn sign_and_send_transaction(
 }
 
 /// Detects ATA close operations in a transaction and separates rent from trading proceeds
+/// Enhanced ATA detection with conservative fallbacks and safety checks
 /// Returns (has_ata_close, ata_rent_amount_lamports, sol_from_trade_only_lamports)
 pub fn detect_and_separate_ata_rent(
     transaction: &TransactionDetails,
@@ -553,10 +554,11 @@ pub fn detect_and_separate_ata_rent(
     const ATA_RENT_LAMPORTS: u64 = 2_039_280; // Standard ATA rent
     const ATA_RENT_TOLERANCE: u64 = 100_000; // Allow some tolerance
 
-    let mut ata_close_detected = false;
-    let mut ata_rent_reclaimed = 0u64;
+    let mut detection_methods = Vec::new();
+    let mut confidence_scores = Vec::new();
+    let mut detected_ata_amounts = Vec::new();
 
-    // Method 1: Check transaction logs for ATA close operations
+    // Method 1: Check transaction logs for ATA close operations (Highest confidence)
     let has_ata_close_instruction = if let Some(meta) = &transaction.meta {
         if let Some(log_messages) = &meta.log_messages {
             detect_ata_close_in_logs(log_messages)
@@ -568,86 +570,208 @@ pub fn detect_and_separate_ata_rent(
     };
 
     if has_ata_close_instruction {
-        ata_close_detected = true;
-        log(LogTag::Wallet, "ATA_DETECT", "ATA close detected in transaction logs");
+        detection_methods.push("TRANSACTION_LOGS");
+        confidence_scores.push(0.9);
+        detected_ata_amounts.push(ATA_RENT_LAMPORTS);
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            "ATA close detected in transaction logs (90% confidence)"
+        );
     }
 
-    // Method 2: Check for accounts with negative balance changes (account closures)
-    if !ata_close_detected {
-        if let Some(meta) = &transaction.meta {
-            for (i, (pre_balance, post_balance)) in meta.pre_balances
-                .iter()
-                .zip(meta.post_balances.iter())
-                .enumerate() {
-                // Skip the wallet account (first account)
-                if i == 0 {
-                    continue;
-                }
+    // Method 2: Check for accounts with balance changes (High confidence)
+    let mut balance_detection_ata = 0u64;
+    if let Some(meta) = &transaction.meta {
+        for (i, (pre_balance, post_balance)) in meta.pre_balances
+            .iter()
+            .zip(meta.post_balances.iter())
+            .enumerate() {
+            // Skip the wallet account (first account)
+            if i == 0 {
+                continue;
+            }
 
-                // Look for negative balance changes (account closures)
-                if *post_balance < *pre_balance {
-                    let closed_amount = *pre_balance - *post_balance;
+            // Look for accounts going to zero (closed) or significant decreases
+            let balance_change = if *post_balance < *pre_balance {
+                *pre_balance - *post_balance
+            } else {
+                0
+            };
 
-                    // Check if this matches ATA rent amount
-                    if
-                        closed_amount >= ATA_RENT_LAMPORTS - ATA_RENT_TOLERANCE &&
-                        closed_amount <= ATA_RENT_LAMPORTS + ATA_RENT_TOLERANCE
-                    {
-                        log(
-                            LogTag::Wallet,
-                            "ATA_DETECT",
-                            &format!("ATA account closure detected: {} lamports closed, matches rent pattern", closed_amount)
-                        );
-                        ata_close_detected = true;
-                        ata_rent_reclaimed = closed_amount;
-                        break;
-                    }
-                }
+            // Check if this matches ATA rent amount
+            if
+                balance_change >= ATA_RENT_LAMPORTS - ATA_RENT_TOLERANCE &&
+                balance_change <= ATA_RENT_LAMPORTS + ATA_RENT_TOLERANCE
+            {
+                detection_methods.push("BALANCE_CHANGES");
+                confidence_scores.push(0.8);
+                detected_ata_amounts.push(balance_change);
+                balance_detection_ata = balance_change;
+                log(
+                    LogTag::Wallet,
+                    "ATA_DETECT",
+                    &format!("ATA account closure detected: {} lamports closed (80% confidence)", balance_change)
+                );
+                break;
             }
         }
     }
 
-    // Method 3: Pattern analysis - check if SOL amount suggests ATA rent inclusion
-    if !ata_close_detected {
-        let likely_includes_ata_rent = detect_ata_rent_pattern(actual_output_change);
-        if likely_includes_ata_rent {
-            ata_close_detected = true;
-            log(LogTag::Wallet, "ATA_DETECT", "ATA rent detected by pattern analysis");
+    // Method 3: Pattern analysis with conservative thresholds (Medium confidence)
+    let total_sol = lamports_to_sol(actual_output_change);
+    let ata_rent_sol = lamports_to_sol(ATA_RENT_LAMPORTS);
+
+    // Only trigger pattern detection if SOL amount is suspicious
+    if total_sol > ata_rent_sol * 0.9 && total_sol > 0.0018 {
+        // Above 90% of ATA rent and meaningful amount
+        // Check if amount suspiciously matches ATA patterns
+        let remainder_after_ata = (total_sol - ata_rent_sol).abs();
+
+        if remainder_after_ata < 0.0015 {
+            // If removing ATA leaves reasonable trade amount
+            detection_methods.push("PATTERN_ANALYSIS");
+            confidence_scores.push(0.6);
+            detected_ata_amounts.push(ATA_RENT_LAMPORTS);
+            log(
+                LogTag::Wallet,
+                "ATA_DETECT",
+                &format!(
+                    "ATA rent pattern detected: total {:.6} SOL suggests ATA inclusion (60% confidence)",
+                    total_sol
+                )
+            );
         }
     }
 
-    // Method 4: Check for suspicious round numbers that might include ATA rent
-    if !ata_close_detected {
-        let suspicious_amount = check_suspicious_ata_amounts(actual_output_change);
-        if suspicious_amount {
-            ata_close_detected = true;
-            log(LogTag::Wallet, "ATA_DETECT", "ATA rent detected by suspicious amount pattern");
-        }
-    }
+    // Calculate consensus detection result
+    let total_methods = detection_methods.len();
+    let avg_confidence = if total_methods > 0 {
+        confidence_scores.iter().sum::<f64>() / (total_methods as f64)
+    } else {
+        0.0
+    };
 
-    if ata_close_detected {
-        // If no specific rent amount was detected, use standard amount
-        if ata_rent_reclaimed == 0 {
-            ata_rent_reclaimed = ATA_RENT_LAMPORTS;
-        }
+    let ata_detected = avg_confidence > 0.4; // Require at least 40% average confidence
+
+    if ata_detected {
+        // Use the most reliable ATA amount (prioritize balance changes over standard)
+        let ata_rent_amount = if balance_detection_ata > 0 {
+            balance_detection_ata
+        } else if !detected_ata_amounts.is_empty() {
+            // Use median of detected amounts
+            let mut amounts = detected_ata_amounts.clone();
+            amounts.sort();
+            amounts[amounts.len() / 2]
+        } else {
+            ATA_RENT_LAMPORTS
+        };
+
+        // Apply safety checks and fallbacks
+        let (final_ata_amount, trading_sol) = apply_ata_safety_checks(
+            ata_rent_amount,
+            actual_output_change,
+            total_sol,
+            avg_confidence
+        );
 
         log(
             LogTag::Wallet,
             "ATA_DETECT",
             &format!(
-                "ATA close detected - total_sol: {:.6}, ata_rent: {:.6}, trade_only: {:.6}",
+                "ATA detection result - methods: [{}], confidence: {:.1}%, total_sol: {:.6}, ata_rent: {:.6}, trade_only: {:.6}",
+                detection_methods.join(", "),
+                avg_confidence * 100.0,
                 lamports_to_sol(actual_output_change),
-                lamports_to_sol(ata_rent_reclaimed),
-                lamports_to_sol(actual_output_change.saturating_sub(ata_rent_reclaimed))
+                lamports_to_sol(final_ata_amount),
+                lamports_to_sol(trading_sol)
             )
         );
 
-        // Separate ATA rent from trading proceeds
-        let sol_from_trade_only = actual_output_change.saturating_sub(ata_rent_reclaimed);
-        (true, ata_rent_reclaimed, sol_from_trade_only)
+        (true, final_ata_amount, trading_sol)
     } else {
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            &format!(
+                "No ATA detected - confidence too low: {:.1}%, using full amount as trade SOL",
+                avg_confidence * 100.0
+            )
+        );
         (false, 0, actual_output_change)
     }
+}
+
+/// Apply safety checks and conservative fallbacks for ATA detection
+fn apply_ata_safety_checks(
+    detected_ata_amount: u64,
+    total_sol_lamports: u64,
+    total_sol: f64,
+    confidence: f64
+) -> (u64, u64) {
+    // Safety Check 1: ATA rent cannot exceed total SOL
+    if detected_ata_amount >= total_sol_lamports {
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            &format!(
+                "SAFETY: ATA amount ({:.6}) exceeds total SOL ({:.6}), using 50% split",
+                lamports_to_sol(detected_ata_amount),
+                total_sol
+            )
+        );
+        let conservative_ata = total_sol_lamports / 2;
+        return (conservative_ata, total_sol_lamports - conservative_ata);
+    }
+
+    // Safety Check 2: For small amounts, ensure minimum trading SOL
+    let trading_sol_lamports = total_sol_lamports.saturating_sub(detected_ata_amount);
+    let trading_sol = lamports_to_sol(trading_sol_lamports);
+
+    // Minimum trading SOL should be at least 0.0001 SOL (100k lamports)
+    const MIN_TRADING_LAMPORTS: u64 = 100_000;
+
+    if trading_sol_lamports < MIN_TRADING_LAMPORTS && total_sol > 0.0015 {
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            &format!("SAFETY: Trading SOL too small ({:.6}), adjusting ATA estimate", trading_sol)
+        );
+        let adjusted_ata = total_sol_lamports.saturating_sub(MIN_TRADING_LAMPORTS);
+        return (adjusted_ata, MIN_TRADING_LAMPORTS);
+    }
+
+    // Safety Check 3: Low confidence - use conservative ATA estimate
+    if confidence < 0.6 && total_sol > 0.003 {
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            &format!(
+                "SAFETY: Low confidence ({:.1}%), using conservative ATA estimate",
+                confidence * 100.0
+            )
+        );
+        // Use 80% of standard ATA rent for conservative estimate
+        let conservative_ata = ((2_039_280 as f64) * 0.8) as u64;
+        let remaining = total_sol_lamports.saturating_sub(conservative_ata);
+        return (conservative_ata, remaining);
+    }
+
+    // Safety Check 4: Very small total amounts - likely no ATA
+    if total_sol < 0.0015 {
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            &format!(
+                "SAFETY: Total SOL ({:.6}) too small for ATA, treating as trade-only",
+                total_sol
+            )
+        );
+        return (0, total_sol_lamports);
+    }
+
+    // Normal case: use detected values
+    (detected_ata_amount, trading_sol_lamports)
 }
 
 /// Detects ATA close operations in transaction log messages

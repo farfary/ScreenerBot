@@ -21,35 +21,27 @@ use serde::{ Serialize, Deserialize };
 // Smart exit strategies based on liquidity, volume, and social proof
 // ================================================================================================
 
-// 🔒 STOP LOSS PROTECTION - OPTIMIZED SAFETY NET
-pub const STOP_LOSS_PERCENT: f64 = -35.0; // Optimized: -35% (vs -55%)
+// 🔒 STOP LOSS PROTECTION - UNIVERSAL SAFETY NET
+pub const STOP_LOSS_PERCENT: f64 = -55.0; // Never sell below -55% loss
 
-// ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
-// Based on backtesting showing 2-30 minute optimal range
-const ULTRA_SAFE_MAX_TIME: f64 = 30.0; // Ultra safe tokens
-const SAFE_MAX_TIME: f64 = 25.0; // Safe tokens  
+// ⏰ MAXIMUM HOLD TIMES BY SAFETY LEVEL (MINUTES)
+const ULTRA_SAFE_MAX_TIME: f64 = 45.0; // Ultra safe tokens
+const SAFE_MAX_TIME: f64 = 30.0; // Safe tokens
 const MEDIUM_MAX_TIME: f64 = 20.0; // Medium risk tokens
 const RISKY_MAX_TIME: f64 = 15.0; // Risky tokens
 const DANGEROUS_MAX_TIME: f64 = 10.0; // Dangerous tokens
-const MIN_HOLD_TIME: f64 = 2.0; // Minimum hold time for all positions
 
-// 🎯 OPTIMIZED PROFIT TARGETS - CONSERVATIVE STRATEGY
-// Based on backtesting: 8%-25% range with 90.6% win rate
-const ULTRA_SAFE_PROFIT_MIN: f64 = 8.0; // 8-25% optimized range
-const ULTRA_SAFE_PROFIT_MAX: f64 = 25.0;
-const SAFE_PROFIT_MIN: f64 = 10.0; // 10-30% 
-const SAFE_PROFIT_MAX: f64 = 30.0;
-const MEDIUM_PROFIT_MIN: f64 = 12.0; // 12-35%
-const MEDIUM_PROFIT_MAX: f64 = 35.0;
-const RISKY_PROFIT_MIN: f64 = 15.0; // 15-40%
-const RISKY_PROFIT_MAX: f64 = 40.0;
-const DANGEROUS_PROFIT_MIN: f64 = 20.0; // 20-50%
-const DANGEROUS_PROFIT_MAX: f64 = 50.0;
-
-// 📈 TRAILING STOP CONFIGURATION - NEW OPTIMIZED FEATURE
-const USE_TRAILING_STOP: bool = true;
-const TRAILING_STOP_PERCENT: f64 = 5.0; // 5% trailing stop
-const TIME_DECAY_FACTOR: f64 = 0.1; // Gradual profit target reduction
+// 🎯 BASE PROFIT TARGETS BY SAFETY LEVEL (PERCENTAGE)
+const ULTRA_SAFE_PROFIT_MIN: f64 = 10.0; // 10-30%
+const ULTRA_SAFE_PROFIT_MAX: f64 = 30.0;
+const SAFE_PROFIT_MIN: f64 = 20.0; // 20-60%
+const SAFE_PROFIT_MAX: f64 = 60.0;
+const MEDIUM_PROFIT_MIN: f64 = 30.0; // 30-100%
+const MEDIUM_PROFIT_MAX: f64 = 100.0;
+const RISKY_PROFIT_MIN: f64 = 50.0; // 50-200%
+const RISKY_PROFIT_MAX: f64 = 200.0;
+const DANGEROUS_PROFIT_MIN: f64 = 100.0; // 100-500%
+const DANGEROUS_PROFIT_MAX: f64 = 500.0;
 
 // 🚀 INSTANT SELL THRESHOLDS
 const INSTANT_SELL_PROFIT: f64 = 1000.0; // 1000%+ = instant sell regardless
@@ -678,8 +670,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     let target_min_profit = (base_min_profit / momentum_multiplier) * volatility_multiplier;
     let target_max_profit = base_max_profit * momentum_multiplier * volatility_multiplier;
 
-    // Calculate profit progression for reference (now using adjusted version)
-    let _profit_progression = if pnl_percent >= target_max_profit {
+    // Calculate profit progression (0.0 to 1.0 based on profit vs targets)
+    let profit_progression = if pnl_percent >= target_max_profit {
         1.0
     } else if pnl_percent >= target_min_profit {
         (pnl_percent - target_min_profit) / (target_max_profit - target_min_profit)
@@ -781,69 +773,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // � OPTIMIZED TRAILING STOP LOGIC - NEW FEATURE
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if USE_TRAILING_STOP && pnl_percent > TRAILING_STOP_PERCENT {
-        // Get highest price reached (from position tracking)
-        let highest_price = position.price_highest;
-        
-        if highest_price > 0.0 {
-            let highest_profit_percent = ((highest_price - entry_price) / entry_price) * 100.0;
-            let current_drop_from_peak = highest_profit_percent - pnl_percent;
-            
-            if current_drop_from_peak >= TRAILING_STOP_PERCENT {
-                log(
-                    LogTag::Profit,
-                    "TRAILING_STOP",
-                    &format!(
-                        "Trailing stop triggered: Dropped {:.2}% from peak of {:.2}% (threshold: {:.2}%)",
-                        current_drop_from_peak,
-                        highest_profit_percent,
-                        TRAILING_STOP_PERCENT
-                    )
-                );
-                return (1.0, format!("TRAILING STOP: Dropped {:.2}% from {:.2}% peak", current_drop_from_peak, highest_profit_percent));
-            }
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ OPTIMIZED MINIMUM HOLD TIME - NEW FEATURE  
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if minutes_held < MIN_HOLD_TIME {
-        log(
-            LogTag::Profit,
-            "MIN_HOLD",
-            &format!(
-                "Minimum hold time not reached: {:.2}min < {:.2}min threshold",
-                minutes_held,
-                MIN_HOLD_TIME
-            )
-        );
-        return (0.0, format!("Minimum hold time: {:.2}min < {:.2}min required", minutes_held, MIN_HOLD_TIME));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🎯 TIME DECAY PROFIT TARGET ADJUSTMENT - NEW FEATURE
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    let time_decay_multiplier = 1.0 - (minutes_held / max_hold_time) * TIME_DECAY_FACTOR;
-    let adjusted_min_profit = target_min_profit * time_decay_multiplier.max(0.7); // Never go below 70%
-    let adjusted_max_profit = target_max_profit * time_decay_multiplier.max(0.8); // Never go below 80%
-
-    // Recalculate profit progression with time decay
-    let adjusted_profit_progression = if pnl_percent >= adjusted_max_profit {
-        1.0
-    } else if pnl_percent >= adjusted_min_profit {
-        (pnl_percent - adjusted_min_profit) / (adjusted_max_profit - adjusted_min_profit)
-    } else {
-        0.0
-    };
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // �🚨 SPECIAL RISK FACTORS
+    // 🚨 SPECIAL RISK FACTORS
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
     let mut risk_urgency: f64 = 0.0;
@@ -894,8 +824,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         risk_time_pressure
     };
 
-    // Combine all factors with optimized weights
-    let profit_urgency = adjusted_profit_progression * 0.3; // Use adjusted progression
+    // Combine all factors with updated weights (more emphasis on time for profitable positions)
+    let profit_urgency = profit_progression * 0.3; // Reduced from 40% to 30%
     let time_urgency = enhanced_time_pressure * 0.4; // Increased from 30% to 40%
     let momentum_urgency = (token_analysis.momentum_score / 2.0) * 0.2; // 20% weight on momentum
     let safety_urgency = (1.0 - token_analysis.safety_score / 100.0) * 0.1; // 10% weight on safety
@@ -980,28 +910,14 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 
         log(
             LogTag::Profit,
-            "OPTIMIZED",
-            &format!(
-                "OPTIMIZED SYSTEM: Profit: {:.1}% | Adjusted Targets: {:.1}%-{:.1}% | Time Decay: {:.3} | Trailing Stop: {} | Min Hold: {:.1}min",
-                pnl_percent,
-                adjusted_min_profit,
-                adjusted_max_profit,
-                time_decay_multiplier,
-                if USE_TRAILING_STOP { "ENABLED" } else { "DISABLED" },
-                MIN_HOLD_TIME
-            )
-        );
-
-        log(
-            LogTag::Profit,
             "TARGETS",
             &format!(
-                "Decision: Urgency={:.3} | Original Targets: {:.1}%-{:.1}% | Adjusted: {:.1}%-{:.1}% | Action: {}",
-                final_urgency_with_time_boost,
+                "Profit: {:.1}% | Targets: {:.1}%-{:.1}% | Base Urgency: {:.3} | Time Boost: {:.3} | Decision: {}",
+                pnl_percent,
                 target_min_profit,
                 target_max_profit,
-                adjusted_min_profit,
-                adjusted_max_profit,
+                final_urgency,
+                final_urgency_with_time_boost,
                 if final_urgency_with_time_boost >= 0.6 {
                     "SELL"
                 } else {
