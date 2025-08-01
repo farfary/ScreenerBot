@@ -638,11 +638,19 @@ impl RugcheckService {
         let mut last_error = String::new();
 
         for attempt in 1..=max_retries {
-            log(
-                LogTag::Rugcheck,
-                "FETCH",
-                &format!("Fetching data for token: {} (attempt {}/{})", mint, attempt, max_retries)
-            );
+            // Only log fetch attempts in debug mode to avoid noise
+            if is_debug_rugcheck_enabled() {
+                log(
+                    LogTag::Rugcheck,
+                    "FETCH",
+                    &format!(
+                        "Fetching data for token: {} (attempt {}/{})",
+                        mint,
+                        attempt,
+                        max_retries
+                    )
+                );
+            }
 
             match
                 self.client
@@ -928,12 +936,14 @@ impl RugcheckService {
             }
         }
 
-        // Auto-fetch missing data from API
-        log(
-            LogTag::Rugcheck,
-            "AUTO_FETCH",
-            &format!("Auto-fetching rugcheck data for token: {}", mint)
-        );
+        // Auto-fetch missing data from API (without logging to avoid duplication)
+        if is_debug_rugcheck_enabled() {
+            log(
+                LogTag::Rugcheck,
+                "AUTO_FETCH",
+                &format!("Auto-fetching rugcheck data for token: {}", mint)
+            );
+        }
 
         match self.fetch_and_store_rugcheck_data(mint.to_string()).await {
             Ok(_) => {
@@ -947,31 +957,30 @@ impl RugcheckService {
                         };
                         self.cache.write().await.insert(mint.to_string(), cache_entry);
 
-                        // Enhanced success logging with token details
-                        let symbol = data.token_meta
-                            .as_ref()
-                            .and_then(|meta| meta.symbol.as_ref())
-                            .map(|s| s.as_str())
-                            .unwrap_or(mint);
-
-                        let score = data.score_normalised.or(data.score);
-                        let is_safe = is_token_safe_for_trading(&data);
-                        let high_risks = if let Some(risks) = &data.risks {
-                            risks
-                                .iter()
-                                .filter(
-                                    |r|
-                                        r.level.as_deref() == Some("high") ||
-                                        r.level.as_deref() == Some("critical")
-                                )
-                                .count()
-                        } else {
-                            0
-                        };
-
-                        // Log success only in debug mode to avoid duplicate logging
-                        // (The main logging is done in update_rugcheck_data_for_mints)
+                        // Only log detailed success in debug mode to avoid duplication
+                        // (The main "STORED" logging is handled by batch update operations)
                         if is_debug_rugcheck_enabled() {
+                            let symbol = data.token_meta
+                                .as_ref()
+                                .and_then(|meta| meta.symbol.as_ref())
+                                .map(|s| s.as_str())
+                                .unwrap_or(mint);
+
+                            let score = data.score_normalised.or(data.score);
+                            let is_safe = is_token_safe_for_trading(&data);
+                            let high_risks = if let Some(risks) = &data.risks {
+                                risks
+                                    .iter()
+                                    .filter(
+                                        |r|
+                                            r.level.as_deref() == Some("high") ||
+                                            r.level.as_deref() == Some("critical")
+                                    )
+                                    .count()
+                            } else {
+                                0
+                            };
+
                             log(
                                 LogTag::Rugcheck,
                                 "FETCH_SUCCESS",
@@ -1009,11 +1018,13 @@ impl RugcheckService {
                 }
             }
             Err(e) => {
-                log(
-                    LogTag::Rugcheck,
-                    "FETCH_FAILED",
-                    &format!("Failed to auto-fetch rugcheck data for {}: {}", mint, e)
-                );
+                if is_debug_rugcheck_enabled() {
+                    log(
+                        LogTag::Rugcheck,
+                        "FETCH_FAILED",
+                        &format!("Failed to auto-fetch rugcheck data for {}: {}", mint, e)
+                    );
+                }
                 Ok(None) // Return None instead of error - let token pass if rugcheck unavailable
             }
         }
