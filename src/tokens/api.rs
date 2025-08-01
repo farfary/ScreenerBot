@@ -2,6 +2,7 @@
 /// Handles token information retrieval with rate limiting and caching
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_api_enabled;
+use crate::wallet::SOL_MINT;
 use crate::tokens::types::{
     TokenInfo,
     VolumeStats,
@@ -187,17 +188,27 @@ impl DexScreenerApi {
             .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
 
         let mut tokens = Vec::new();
+        let mut rejected_non_sol_pairs = 0;
+        let mut parsing_errors = 0;
 
         if let Some(pairs_array) = data.as_array() {
             for pair_data in pairs_array {
                 match self.parse_token_from_pair(pair_data) {
                     Ok(token) => tokens.push(token),
                     Err(e) => {
-                        log(
-                            LogTag::Api,
-                            "WARN",
-                            &format!("Failed to parse token from batch: {}", e)
-                        );
+                        if e.contains("not paired with SOL") || e.contains("not a SOL pair") {
+                            rejected_non_sol_pairs += 1;
+                            if is_debug_api_enabled() {
+                                log(LogTag::Api, "SOL_FILTER", &format!("Rejected: {}", e));
+                            }
+                        } else {
+                            parsing_errors += 1;
+                            log(
+                                LogTag::Api,
+                                "WARN",
+                                &format!("Failed to parse token from batch: {}", e)
+                            );
+                        }
                     }
                 }
             }
@@ -208,11 +219,19 @@ impl DexScreenerApi {
                 LogTag::Api,
                 "SUCCESS",
                 &format!(
-                    "Retrieved info for {}/{} tokens in {}ms",
+                    "Retrieved info for {}/{} tokens in {}ms (rejected {} non-SOL pairs, {} parsing errors)",
                     tokens.len(),
                     mints.len(),
-                    response_time as u64
+                    response_time as u64,
+                    rejected_non_sol_pairs,
+                    parsing_errors
                 )
+            );
+        } else if rejected_non_sol_pairs > 0 {
+            log(
+                LogTag::Api,
+                "SOL_FILTER",
+                &format!("Filtered out {} non-SOL pairs from batch", rejected_non_sol_pairs)
             );
         }
 
@@ -280,24 +299,30 @@ impl DexScreenerApi {
             0.0
         };
 
-        // Calculate SOL price based on quote token
+        // CRITICAL: Only accept tokens paired with SOL
         let quote_token = pair_data.get("quoteToken");
-        let price_sol = if let Some(qt) = quote_token {
+        let (price_sol, is_sol_pair) = if let Some(qt) = quote_token {
             if let Some(quote_address) = qt.get("address").and_then(|v| v.as_str()) {
-                // If quote is SOL, price_native is already in SOL
-                if quote_address == "So11111111111111111111111111111111111111112" {
-                    Some(price_native)
+                // Check if quote is SOL
+                if quote_address == SOL_MINT {
+                    (Some(price_native), true)
                 } else {
-                    // Calculate SOL price from USD price if available
-                    // This is approximate and would need SOL/USD rate
-                    None
+                    // Reject non-SOL pairs
+                    return Err(
+                        format!("Token {} is not paired with SOL (quote: {})", mint, quote_address)
+                    );
                 }
             } else {
-                None
+                return Err(format!("Token {} has no quote address", mint));
             }
         } else {
-            None
+            return Err(format!("Token {} has no quote token", mint));
         };
+
+        // Only proceed if this is a SOL pair
+        if !is_sol_pair {
+            return Err(format!("Token {} is not a SOL pair", mint));
+        }
 
         // Parse additional fields
         let liquidity = self.parse_liquidity(pair_data.get("liquidity"));

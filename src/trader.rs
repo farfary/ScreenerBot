@@ -76,7 +76,7 @@ pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
 // -----------------------------------------------------------------------------
 
 /// Minimum price drop percentage to trigger buy signal
-pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
+pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 8.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding

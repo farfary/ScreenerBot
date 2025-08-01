@@ -35,7 +35,7 @@ use chrono::{ Duration as ChronoDuration, Utc };
 pub const MIN_TOKEN_AGE_HOURS: i64 = 1;
 
 /// Maximum token age in hours (effectively unlimited)
-pub const MAX_TOKEN_AGE_HOURS: i64 = 12 * 30 * 24; // 30 days
+pub const MAX_TOKEN_AGE_HOURS: i64 = 5 * 12 * 30 * 24; // 30 days
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
@@ -65,10 +65,10 @@ pub const PREFERRED_MIN_LIQUIDITY_USD: f64 = 5000.0;
 /// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
 /// Maximum allowed rugcheck risk score (0-100 scale) - HIGHER MEANS MORE RISKY
 /// This threshold overrides all other rugcheck analysis and immediately rejects high-risk tokens
-pub const MAX_RUGCHECK_RISK_SCORE: i32 = 20; // Allow max 20 risk score (low-medium risk)
+pub const MAX_RUGCHECK_RISK_SCORE: i32 = 35; // Allow max 20 risk score (low-medium risk)
 
 /// Emergency override for very risky tokens - any score above this is automatically rejected
-pub const EMERGENCY_MAX_RISK_SCORE: i32 = 50; // Absolute maximum risk tolerance
+pub const EMERGENCY_MAX_RISK_SCORE: i32 = 65; // Absolute maximum risk tolerance
 
 /// Maximum number of high-risk issues to tolerate
 pub const MAX_HIGH_RISK_ISSUES: usize = 1;
