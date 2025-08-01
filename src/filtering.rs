@@ -6,7 +6,6 @@ use crate::tokens::Token;
 use crate::tokens::{ TokenDatabase, rugcheck::{ is_token_safe_for_trading, get_high_risk_issues } };
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_filtering_enabled;
-use crate::loss_prevention::should_allow_token_purchase;
 use crate::positions::SAVED_POSITIONS;
 use crate::trader::MAX_OPEN_POSITIONS;
 use chrono::{ Duration as ChronoDuration, Utc };
@@ -167,12 +166,6 @@ pub enum FilterReason {
         max_allowed_percent: f64,
     },
 
-    // Loss prevention
-    PoorHistoricalPerformance {
-        loss_rate: f64,
-        avg_loss: f64,
-    },
-
     // Account/Token status issues
     AccountFrozen,
     TokenAccountFrozen,
@@ -228,107 +221,185 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     }
 
     // 1. RUGCHECK SECURITY VALIDATION (FIRST - HIGHEST PRIORITY)
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_1",
+            &format!("🛡️ Step 1: Checking rugcheck security for {}", token.symbol)
+        );
+    }
     if let Some(reason) = validate_rugcheck_risks(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("❌ {}: Security risk - {:?}", token.symbol, reason)
+                "REJECT_STEP_1",
+                &format!("❌ {}: FAILED Step 1 (Rugcheck) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_1",
+            &format!("✅ {}: PASSED Step 1 (Rugcheck)", token.symbol)
+        );
+    }
 
     // 2. Basic metadata validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_2",
+            &format!("📝 Step 2: Checking metadata for {}", token.symbol)
+        );
+    }
     if let Some(reason) = validate_basic_token_info(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("📝 {}: Invalid metadata - {:?}", token.symbol, reason)
+                "REJECT_STEP_2",
+                &format!("❌ {}: FAILED Step 2 (Metadata) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_2",
+            &format!("✅ {}: PASSED Step 2 (Metadata)", token.symbol)
+        );
+    }
 
     // 3. Age validation
+    if is_debug_filtering_enabled() {
+        log(LogTag::Filtering, "STEP_3", &format!("⏰ Step 3: Checking age for {}", token.symbol));
+    }
     if let Some(reason) = validate_token_age(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("⏰ {}: Age constraint - {:?}", token.symbol, reason)
+                "REJECT_STEP_3",
+                &format!("❌ {}: FAILED Step 3 (Age) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
+    if is_debug_filtering_enabled() {
+        log(LogTag::Filtering, "PASS_STEP_3", &format!("✅ {}: PASSED Step 3 (Age)", token.symbol));
+    }
 
     // 4. Liquidity validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_4",
+            &format!("💧 Step 4: Checking liquidity for {}", token.symbol)
+        );
+    }
     if let Some(reason) = validate_liquidity(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("💧 {}: Liquidity issue - {:?}", token.symbol, reason)
+                "REJECT_STEP_4",
+                &format!("❌ {}: FAILED Step 4 (Liquidity) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_4",
+            &format!("✅ {}: PASSED Step 4 (Liquidity)", token.symbol)
+        );
+    }
 
     // 5. Price-to-ATH validation (NEW: Avoid buying near all-time highs)
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_5",
+            &format!("📈 Step 5: Checking ATH proximity for {}", token.symbol)
+        );
+    }
     if let Some(reason) = validate_price_to_ath(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("📈 {}: Too close to ATH - {:?}", token.symbol, reason)
+                "REJECT_STEP_5",
+                &format!("❌ {}: FAILED Step 5 (ATH Check) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_5",
+            &format!("✅ {}: PASSED Step 5 (ATH Check)", token.symbol)
+        );
+    }
 
-    // 5. Price validation
+    // 6. Price validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_6",
+            &format!("💰 Step 6: Checking price data for {}", token.symbol)
+        );
+    }
     if let Some(reason) = validate_price_data(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("💰 {}: Price data issue - {:?}", token.symbol, reason)
+                "REJECT_STEP_6",
+                &format!("❌ {}: FAILED Step 6 (Price Data) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_6",
+            &format!("✅ {}: PASSED Step 6 (Price Data)", token.symbol)
+        );
+    }
 
-    // 6. Position-related validation
+    // 7. Position-related validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_7",
+            &format!("🔒 Step 7: Checking position constraints for {}", token.symbol)
+        );
+    }
     if let Some(reason) = validate_position_constraints(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT",
-                &format!("🔒 {}: Position constraint - {:?}", token.symbol, reason)
+                "REJECT_STEP_7",
+                &format!("❌ {}: FAILED Step 7 (Position Constraints) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
-
-    // 7. Loss prevention check
-    if let Some(reason) = validate_loss_prevention(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "REJECT",
-                &format!("🛡️ {}: Loss prevention - {:?}", token.symbol, reason)
-            );
-        }
-        return FilterResult::Rejected(reason);
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_7",
+            &format!("✅ {}: PASSED Step 7 (Position Constraints)", token.symbol)
+        );
     }
 
     // Token passed all filters
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "APPROVE",
-            &format!("✅ {}: Passed all filters - ELIGIBLE FOR TRADING", token.symbol)
+            "ALL_STEPS_PASSED",
+            &format!("🎉 {}: PASSED ALL 7 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
         );
     }
 
@@ -1100,44 +1171,6 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
     None
 }
 
-/// Validate loss prevention constraints
-fn validate_loss_prevention(token: &Token) -> Option<FilterReason> {
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "DEBUG_LOSS_PREV",
-            &format!("🛡️ Checking loss prevention for token {}", token.symbol)
-        );
-    }
-
-    if !should_allow_token_purchase(&token.mint, &token.symbol) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_LOSS_PREV",
-                &format!(
-                    "❌ Token {} blocked by loss prevention (poor historical performance)",
-                    token.symbol
-                )
-            );
-        }
-        return Some(FilterReason::PoorHistoricalPerformance {
-            loss_rate: 0.0, // Placeholder - would need actual values
-            avg_loss: 0.0, // Placeholder - would need actual values
-        });
-    }
-
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "DEBUG_LOSS_PREV",
-            &format!("✅ Token {} passed loss prevention check", token.symbol)
-        );
-    }
-
-    None
-}
-
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
@@ -1287,7 +1320,6 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::RecentlyClosed { .. }
             | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
             FilterReason::TooCloseToATH { .. } => "Price Peak Protection",
-            FilterReason::PoorHistoricalPerformance { .. } => "Loss Prevention",
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
             FilterReason::RugcheckRisk { .. } => "Security Risks",
             FilterReason::LPLockRisk { .. } => "LP Lock Security",
@@ -1327,8 +1359,23 @@ pub fn log_filtering_error(token: &Token, reason: &FilterReason) {
 /// This should be used by the trader instead of filter_token_for_trading directly
 pub fn should_buy_token(token: &Token) -> bool {
     match filter_token_for_trading(token) {
-        FilterResult::Approved => true,
+        FilterResult::Approved => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "FINAL_APPROVE",
+                    &format!("✅ {} FINAL RESULT: APPROVED for trading", token.symbol)
+                );
+            }
+            true
+        }
         FilterResult::Rejected(reason) => {
+            // Always log rejections for better debugging
+            log(
+                LogTag::Filtering,
+                "FINAL_REJECT",
+                &format!("❌ {} FINAL RESULT: REJECTED - {:?}", token.symbol, reason)
+            );
             log_filtering_error(token, &reason);
             false
         }

@@ -8,7 +8,6 @@ pub mod summary;
 pub mod positions;
 pub mod tokens;
 pub mod profit;
-pub mod loss_prevention;
 pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;

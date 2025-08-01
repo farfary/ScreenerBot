@@ -28,15 +28,6 @@ pub fn is_debug_filtering_enabled() -> bool {
     }
 }
 
-/// Check if debug loss prevention mode is enabled via command line args
-pub fn is_debug_loss_prevention_enabled() -> bool {
-    if let Ok(args) = CMD_ARGS.lock() {
-        args.contains(&"--debug-loss-prevention".to_string())
-    } else {
-        false
-    }
-}
-
 /// Check if debug profit mode is enabled via command line args
 pub fn is_debug_profit_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() {

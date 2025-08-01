@@ -39,6 +39,10 @@ path = "src/bin/tool_ata_cleanup.rs"
 name = "tool_pool_price"
 path = "src/bin/tool_pool_price.rs"
 
+[[bin]]
+name = "test_sol_pair_filtering"
+path = "src/bin/test_sol_pair_filtering.rs"
+
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }
