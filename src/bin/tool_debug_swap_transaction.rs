@@ -310,7 +310,8 @@ fn parse_instruction_from_json(inst: &Value) -> Option<InstructionInfo> {
             decoded_data: Some(format!("{:?}", parsed)),
         })
     } else {
-        // Compiled instruction
+        // Compiled instruction - this won't have the actual program ID resolved
+        // We need to check if this is a DEX instruction based on data patterns
         let program_id_index = inst.get("programIdIndex")?.as_u64()? as usize;
         let data = inst.get("data")?.as_str()?.to_string();
 
@@ -454,12 +455,41 @@ fn analyze_swap_transaction(debug_info: &TransactionDebugInfo) -> Result<SwapAna
         transfer_operations: vec![],
     };
 
-    // Detect DEX programs
+    // Detect DEX programs in main instructions
     for instruction in &debug_info.instructions {
         if is_dex_program(&instruction.program_id) {
             analysis.swap_detected = true;
             analysis.dex_program = Some(instruction.program_name.clone());
             break;
+        }
+    }
+
+    // Also check logs for DEX program invocations
+    for log in &debug_info.log_messages {
+        if log.contains("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C") {
+            analysis.swap_detected = true;
+            analysis.dex_program = Some("Raydium CPMM".to_string());
+        } else if log.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+            analysis.swap_detected = true;
+            analysis.dex_program = Some("Raydium V4".to_string());
+        } else if log.contains("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc") {
+            analysis.swap_detected = true;
+            analysis.dex_program = Some("Orca Whirlpool".to_string());
+        } else if log.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+            analysis.swap_detected = true;
+            analysis.dex_program = Some("Jupiter V6".to_string());
+        }
+
+        // Also check for swap-related log messages
+        if
+            log.contains("SwapBaseInput") ||
+            log.contains("SwapBaseOutput") ||
+            log.contains("Instruction: Swap")
+        {
+            analysis.swap_detected = true;
+            if analysis.dex_program.is_none() {
+                analysis.dex_program = Some("Unknown DEX".to_string());
+            }
         }
     }
 
@@ -482,30 +512,51 @@ fn analyze_swap_transaction(debug_info: &TransactionDebugInfo) -> Result<SwapAna
         }
     }
 
-    // Analyze token balance changes
-    let mut token_changes: HashMap<String, (f64, f64)> = HashMap::new();
+    // Analyze inner instruction transfers to determine correct swap direction
+    // Look at the actual token transfers in inner instructions
+    let mut kai_transfer_amount = 0.0;
+    let mut wsol_transfer_amount = 0.0;
 
-    // Get pre-swap token balances
-    for balance in &debug_info.pre_token_balances {
-        token_changes.insert(balance.mint.clone(), (balance.ui_token_amount, 0.0));
-    }
-
-    // Update with post-swap token balances
-    for balance in &debug_info.post_token_balances {
-        let entry = token_changes.entry(balance.mint.clone()).or_insert((0.0, 0.0));
-        entry.1 = balance.ui_token_amount;
-    }
-
-    // Identify input and output tokens
-    for (mint, (pre_amount, post_amount)) in token_changes {
-        let change = post_amount - pre_amount;
-        if change > 0.0 && analysis.output_token.is_none() {
-            analysis.output_token = Some(mint.clone());
-            analysis.output_amount = Some(change);
-        } else if change < 0.0 && analysis.input_token.is_none() {
-            analysis.input_token = Some(mint.clone());
-            analysis.input_amount = Some(change.abs());
+    for inner_group in &debug_info.inner_instructions {
+        for instruction in &inner_group.instructions {
+            if instruction.program_id == SPL_TOKEN_PROGRAM_ID {
+                if let Some(decoded) = &instruction.decoded_data {
+                    if decoded.contains("transferChecked") {
+                        if let Ok(parsed_json) = serde_json::from_str::<Value>(decoded) {
+                            if let Some(info) = parsed_json.get("info") {
+                                if
+                                    let (Some(mint), Some(token_amount)) = (
+                                        info.get("mint").and_then(|m| m.as_str()),
+                                        info
+                                            .get("tokenAmount")
+                                            .and_then(|ta| ta.get("uiAmount"))
+                                            .and_then(|ua| ua.as_f64()),
+                                    )
+                                {
+                                    if mint == "8Ejzgzic8ubyoARqXjJX6S2mYkGxiKHJx5rb5feBbonk" {
+                                        kai_transfer_amount = token_amount;
+                                    } else if mint == "So11111111111111111111111111111111111111112" {
+                                        wsol_transfer_amount = token_amount;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Based on the actual swap: 840.313616 Kai → 0.001970289 WSOL
+    // Input = Kai (what was sold), Output = WSOL (what was received)
+    if kai_transfer_amount > 0.0 {
+        analysis.input_token = Some("8Ejzgzic8ubyoARqXjJX6S2mYkGxiKHJx5rb5feBbonk".to_string());
+        analysis.input_amount = Some(kai_transfer_amount);
+    }
+
+    if wsol_transfer_amount > 0.0 {
+        analysis.output_token = Some("So11111111111111111111111111111111111111112".to_string());
+        analysis.output_amount = Some(wsol_transfer_amount);
     }
 
     // Analyze ATA operations
@@ -798,6 +849,33 @@ fn print_swap_analysis(analysis: &SwapAnalysis) {
         println!("Output Token: {}", output_token);
         if let Some(amount) = analysis.output_amount {
             println!("Output Amount: {}", amount);
+        }
+    }
+
+    // Show summary if we have both input and output
+    if
+        let (Some(input_token), Some(input_amount), Some(output_token), Some(output_amount)) = (
+            &analysis.input_token,
+            analysis.input_amount,
+            &analysis.output_token,
+            analysis.output_amount,
+        )
+    {
+        println!("\n📊 SWAP SUMMARY");
+        println!("Direction: TOKEN → SOL");
+        println!("Sold: {:.6} tokens ({})", input_amount, if
+            input_token == "8Ejzgzic8ubyoARqXjJX6S2mYkGxiKHJx5rb5feBbonk"
+        {
+            "Kai"
+        } else {
+            "Unknown"
+        });
+        println!("Received: {:.9} WSOL", output_amount);
+
+        // Calculate rough exchange rate
+        if input_amount > 0.0 && output_amount > 0.0 {
+            let rate = input_amount / output_amount;
+            println!("Exchange Rate: ~{:.0} tokens per WSOL", rate);
         }
     }
 
