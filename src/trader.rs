@@ -370,6 +370,46 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
         );
     }
 
+    // EMERGENCY BUY LOGIC - NEVER MISS BIG OPPORTUNITIES
+    let price_change_percent = ((current_price - prev_price) / prev_price) * 100.0;
+    let price_drop_percent = -price_change_percent;
+
+    // Emergency thresholds for massive dips (bypass all other checks)
+    let emergency_dip_threshold = match
+        token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0)
+    {
+        liq if liq >= 100_000.0 => 5.0, // High liquidity: 5%+ = emergency
+        liq if liq >= 50_000.0 => 8.0, // Medium liquidity: 8%+ = emergency
+        liq if liq >= 10_000.0 => 12.0, // Low liquidity: 12%+ = emergency
+        _ => 15.0, // Very low: 15%+ = emergency
+    };
+
+    // EMERGENCY BUY - Skip all other checks for major dips
+    if price_drop_percent >= emergency_dip_threshold {
+        // Quick basic safety checks only
+        if current_price > 0.0 && current_price.is_finite() && prev_price > 0.0 {
+            let emergency_urgency = (price_drop_percent / emergency_dip_threshold).min(2.0);
+
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Trader,
+                    "EMERGENCY_BUY_SIGNAL",
+                    &format!(
+                        "🚨 EMERGENCY BUY SIGNAL for {}: {:.2}% drop >= {:.1}% threshold | Urgency={:.2}",
+                        token.symbol.as_str(),
+                        price_drop_percent,
+                        emergency_dip_threshold,
+                        emergency_urgency
+                    )
+                );
+            }
+            return emergency_urgency;
+        }
+    }
+
     // Step 1: Use centralized filtering system (basic validation only)
     if !should_buy_token(token) {
         if is_debug_entry_enabled() {
@@ -385,7 +425,8 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     // Step 2: Enhanced Smart entry analysis with OHLCV integration
     let (is_smart_safe, smart_analysis) = is_token_safe_for_smart_entry_enhanced(token).await;
 
-    if !is_smart_safe {
+    // RELAXED SMART ENTRY CHECK - Don't be too restrictive
+    if !is_smart_safe && smart_analysis.entry_confidence < 0.3 {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Trader,
@@ -419,108 +460,185 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
         );
     }
 
-    // Step 4: Combine Traditional and OHLCV Analysis
+    // Step 4: Combine Traditional and OHLCV Analysis + MICRO-DIP DETECTION
     let price_change_percent = ((current_price - prev_price) / prev_price) * 100.0;
     let price_drop_percent = -price_change_percent;
 
-    // Check traditional dip threshold OR OHLCV signals
-    let has_traditional_dip = price_drop_percent >= smart_analysis.dynamic_dip_threshold;
-    let has_ohlcv_signals =
-        !ohlcv_analysis.dip_signals.is_empty() && ohlcv_analysis.overall_confidence > 0.3;
+    // MICRO-DIP LOGIC: Handle tiny price movements and static prices
+    let micro_dip_threshold = smart_analysis.dynamic_dip_threshold * 0.3; // 30% of normal threshold
+    let has_micro_dip = price_drop_percent >= micro_dip_threshold && price_drop_percent > 0.1;
 
-    if !has_traditional_dip && !has_ohlcv_signals {
+    // Traditional dip check with micro-dip support
+    let has_traditional_dip =
+        price_drop_percent >= smart_analysis.dynamic_dip_threshold || has_micro_dip;
+
+    // OHLCV signals check (relaxed confidence threshold)
+    let has_ohlcv_signals =
+        !ohlcv_analysis.dip_signals.is_empty() && ohlcv_analysis.overall_confidence > 0.2; // Lowered from 0.3
+
+    // STATIC PRICE DETECTION: Buy tokens with good fundamentals even if price static
+    let is_static_price = price_change_percent.abs() < 0.05; // Less than 0.05% change
+    let has_static_opportunity =
+        is_static_price &&
+        smart_analysis.entry_confidence > 0.6 &&
+        token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0) > 50_000.0; // Only for good liquidity
+
+    if !has_traditional_dip && !has_ohlcv_signals && !has_static_opportunity {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Trader,
                 "ENHANCED_BUY_NO_SIGNALS",
                 &format!(
-                    "❌ {} no buy signals: traditional_dip={} ({:.2}% < {:.1}%), ohlcv_signals={}",
+                    "❌ {} no buy signals: traditional_dip={} ({:.2}% < {:.1}%), micro_dip={} ({:.2}% < {:.1}%), ohlcv_signals={}, static_opportunity={}",
                     token.symbol.as_str(),
                     has_traditional_dip,
                     price_drop_percent,
                     smart_analysis.dynamic_dip_threshold,
-                    has_ohlcv_signals
+                    has_micro_dip,
+                    price_drop_percent,
+                    micro_dip_threshold,
+                    has_ohlcv_signals,
+                    has_static_opportunity
                 )
             );
         }
         return 0.0;
     }
 
-    // Step 5: OHLCV ATH Safety Check (overrides smart analysis if more precise)
+    // Step 5: RELAXED OHLCV ATH Safety Check (less restrictive for more trades)
     let is_ath_safe = if let Some(ohlcv_ath) = &ohlcv_analysis.ath_analysis {
-        ohlcv_ath.is_safe_for_entry
+        // RELAXED: Allow moderate ATH proximity for good opportunities
+        ohlcv_ath.is_safe_for_entry ||
+            (smart_analysis.entry_confidence > 0.7 &&
+                price_drop_percent > smart_analysis.dynamic_dip_threshold * 1.5)
     } else {
-        smart_analysis.ath_analysis.is_safe_for_entry()
+        // RELAXED: Less strict traditional ATH analysis
+        smart_analysis.ath_analysis.is_safe_for_entry() || smart_analysis.entry_confidence > 0.6
     };
 
-    if !is_ath_safe {
+    // EMERGENCY OVERRIDE: Always allow trades for massive dips
+    let emergency_ath_override = price_drop_percent >= emergency_dip_threshold * 0.7;
+
+    if !is_ath_safe && !emergency_ath_override {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Trader,
                 "ENHANCED_BUY_ATH_REJECT",
                 &format!(
-                    "❌ {} rejected by OHLCV ATH analysis: danger level detected",
-                    token.symbol.as_str()
+                    "❌ {} rejected by ATH analysis: OHLCV_safe={}, traditional_safe={}, emergency_override={}",
+                    token.symbol.as_str(),
+                    ohlcv_analysis.ath_analysis
+                        .as_ref()
+                        .map(|a| a.is_safe_for_entry)
+                        .unwrap_or(false),
+                    smart_analysis.ath_analysis.is_safe_for_entry(),
+                    emergency_ath_override
                 )
             );
         }
         return 0.0;
     }
 
-    // Step 6: Calculate Enhanced Urgency Score
-    let traditional_urgency = if has_traditional_dip {
+    // Step 6: Calculate Enhanced Urgency Score with MULTIPLE OPPORTUNITY PATHS
+    let traditional_urgency = if has_traditional_dip || has_micro_dip {
         let base_urgency = match smart_analysis.recommended_action {
-            EntryAction::BuyNow => 1.2,
-            EntryAction::BuyOnDip => 0.8,
-            EntryAction::Monitor => 0.4,
-            EntryAction::Avoid => 0.0,
+            EntryAction::BuyNow => 1.4, // Increased from 1.2
+            EntryAction::BuyOnDip => 1.0, // Increased from 0.8
+            EntryAction::Monitor => 0.6, // Increased from 0.4
+            EntryAction::Avoid => 0.2, // Changed from 0.0 - give some chance
         };
-        base_urgency * smart_analysis.entry_confidence
+
+        // Micro-dip bonus for detecting small opportunities
+        let micro_bonus = if has_micro_dip && !has_traditional_dip { 0.3 } else { 0.0 };
+
+        (base_urgency + micro_bonus) * smart_analysis.entry_confidence
     } else {
         0.0
     };
 
     let ohlcv_urgency = if has_ohlcv_signals {
-        ohlcv_analysis.overall_buy_urgency * 0.8 // Slightly weight down OHLCV to balance
+        ohlcv_analysis.overall_buy_urgency * 0.9 // Increased weight from 0.8
     } else {
         0.0
     };
 
-    // Step 7: Combine Urgency Scores with Intelligent Weighting
+    // Static price opportunity urgency
+    let static_urgency = if has_static_opportunity {
+        smart_analysis.entry_confidence * 0.8 // Moderate urgency for static prices
+    } else {
+        0.0
+    };
+
+    // Step 7: Combine Urgency Scores with INTELLIGENT MULTI-PATH WEIGHTING
     let combined_urgency = if has_traditional_dip && has_ohlcv_signals {
         // Both systems agree - highest confidence
         let max_urgency = traditional_urgency.max(ohlcv_urgency);
-        let consensus_bonus = 0.3;
+        let consensus_bonus = 0.4; // Increased from 0.3
         (max_urgency + consensus_bonus).min(2.0)
     } else if has_ohlcv_signals {
-        // OHLCV-only signal - still strong but slightly reduced
-        (ohlcv_urgency * 1.1).min(2.0)
+        // OHLCV-only signal - strong confidence
+        (ohlcv_urgency * 1.2).min(2.0) // Increased from 1.1
+    } else if has_static_opportunity {
+        // Static price opportunity - patient entry
+        static_urgency
     } else {
-        // Traditional-only signal
+        // Traditional-only signal (including micro-dips)
         traditional_urgency
     };
 
-    // Step 8: Apply Additional Bonuses
+    // Step 8: Apply ENHANCED BONUS SYSTEM for more opportunities
     let is_deepest = is_deepest_dip_moment(token);
-    let deepest_bonus = if is_deepest { 0.2 } else { 0.0 };
+    let deepest_bonus = if is_deepest { 0.25 } else { 0.0 }; // Increased from 0.2
 
     // Volume confirmation bonus from OHLCV
     let volume_bonus = if ohlcv_analysis.dip_signals.iter().any(|s| s.volume_confirmation) {
-        0.15
+        0.2 // Increased from 0.15
     } else {
         0.0
     };
 
-    let final_urgency = (combined_urgency + deepest_bonus + volume_bonus).min(2.0);
+    // LIQUIDITY BONUS SYSTEM - Reward high liquidity tokens
+    let liquidity_bonus = match
+        token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0)
+    {
+        liq if liq >= 500_000.0 => 0.25, // Ultra high liquidity bonus
+        liq if liq >= 200_000.0 => 0.2, // High liquidity bonus
+        liq if liq >= 100_000.0 => 0.15, // Good liquidity bonus
+        liq if liq >= 50_000.0 => 0.1, // Medium liquidity bonus
+        _ => 0.0,
+    };
 
-    // Step 9: Final Safety Check
-    if final_urgency > 0.0 && !ohlcv_analysis.is_safe_for_entry {
+    // CONFIDENCE BONUS - Reward high confidence tokens
+    let confidence_bonus = if smart_analysis.entry_confidence > 0.8 {
+        0.2
+    } else if smart_analysis.entry_confidence > 0.6 {
+        0.1
+    } else {
+        0.0
+    };
+
+    let total_bonuses = deepest_bonus + volume_bonus + liquidity_bonus + confidence_bonus;
+    let final_urgency = (combined_urgency + total_bonuses).min(2.0);
+
+    // Step 9: RELAXED Final Safety Check - Allow more opportunities
+    if
+        final_urgency > 0.0 &&
+        !ohlcv_analysis.is_safe_for_entry &&
+        smart_analysis.entry_confidence < 0.5
+    {
+        // Only reject if both OHLCV and smart analysis are very negative
         if is_debug_entry_enabled() {
             log(
                 LogTag::Trader,
                 "ENHANCED_BUY_FINAL_SAFETY",
                 &format!(
-                    "⚠️ {} urgency reduced due to OHLCV safety concerns: {:.2} -> 0.0",
+                    "⚠️ {} urgency reduced due to combined safety concerns: {:.2} -> 0.0",
                     token.symbol.as_str(),
                     final_urgency
                 )
@@ -534,12 +652,31 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
             LogTag::Trader,
             "ENHANCED_BUY_SUCCESS",
             &format!(
-                "🚀 ENHANCED BUY SIGNAL for {}: Final={:.2} (Traditional={:.2}, OHLCV={:.2}, Bonuses={:.2})",
+                "🚀 ENHANCED BUY SIGNAL for {}: Final={:.2} (Traditional={:.2}, OHLCV={:.2}, Static={:.2}, Bonuses={:.2})",
                 token.symbol.as_str(),
                 final_urgency,
                 traditional_urgency,
                 ohlcv_urgency,
-                deepest_bonus + volume_bonus
+                static_urgency,
+                total_bonuses
+            )
+        );
+
+        // Log detailed breakdown
+        log(
+            LogTag::Trader,
+            "ENHANCED_BUY_BREAKDOWN",
+            &format!(
+                "   💎 {} Breakdown: Drop={:.2}% (threshold={:.1}%), Micro={}, Liquidity=${:.0}, Confidence={:.2}",
+                token.symbol.as_str(),
+                price_drop_percent,
+                smart_analysis.dynamic_dip_threshold,
+                has_micro_dip,
+                token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(0.0),
+                smart_analysis.entry_confidence
             )
         );
 
@@ -557,6 +694,20 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
                 )
             );
         }
+    } else if is_debug_entry_enabled() && final_urgency == 0.0 {
+        log(
+            LogTag::Trader,
+            "ENHANCED_BUY_NO_SIGNAL",
+            &format!(
+                "❌ {} NO BUY: Drop={:.2}% < {:.1}%, OHLCV_signals={}, Static={}, Confidence={:.2}",
+                token.symbol.as_str(),
+                price_drop_percent,
+                smart_analysis.dynamic_dip_threshold,
+                has_ohlcv_signals,
+                has_static_opportunity,
+                smart_analysis.entry_confidence
+            )
+        );
     }
 
     final_urgency

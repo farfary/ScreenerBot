@@ -71,37 +71,37 @@ impl LiquidityTier {
     }
 
     /// Get dynamic dip threshold based on liquidity tier
-    /// Higher liquidity = smaller moves, lower liquidity = bigger moves needed
-    /// Range: 1% (ultra stable) to 50% (ultra volatile)
+    /// OPTIMIZED FOR MORE TRADES: Much lower thresholds to catch opportunities
+    /// Range: 0.3% (ultra stable) to 8% (ultra volatile) - AGGRESSIVE FOR PROFITS
     pub fn get_dip_threshold(&self) -> f64 {
         match self {
-            // Ultra High Liquidity: Very stable, small dips are significant
-            LiquidityTier::UltraWhale => 1.0, // $5M+: 1% dip
-            LiquidityTier::MegaWhale => 1.2, // $3.5M-$5M: 1.2% dip
-            LiquidityTier::SuperWhale => 1.5, // $2M-$3.5M: 1.5% dip
+            // Ultra High Liquidity: Very stable, tiny dips are profitable
+            LiquidityTier::UltraWhale => 0.3, // $5M+: 0.3% dip (AGGRESSIVE)
+            LiquidityTier::MegaWhale => 0.4, // $3.5M-$5M: 0.4% dip
+            LiquidityTier::SuperWhale => 0.5, // $2M-$3.5M: 0.5% dip
 
-            // High Liquidity: Stable with moderate volatility
-            LiquidityTier::Whale => 2.0, // $1.5M-$2M: 2% dip
-            LiquidityTier::LargeWhale => 2.5, // $1M-$1.5M: 2.5% dip
-            LiquidityTier::MediumWhale => 3.0, // $750K-$1M: 3% dip
-            LiquidityTier::SmallWhale => 3.5, // $500K-$750K: 3.5% dip
+            // High Liquidity: Small moves generate good profits
+            LiquidityTier::Whale => 0.6, // $1.5M-$2M: 0.6% dip
+            LiquidityTier::LargeWhale => 0.8, // $1M-$1.5M: 0.8% dip
+            LiquidityTier::MediumWhale => 1.0, // $750K-$1M: 1.0% dip
+            LiquidityTier::SmallWhale => 1.2, // $500K-$750K: 1.2% dip
 
-            // Medium Liquidity: Moderate volatility
-            LiquidityTier::Massive => 4.0, // $300K-$500K: 4% dip
-            LiquidityTier::Large => 5.0, // $200K-$300K: 5% dip
-            LiquidityTier::MediumLarge => 6.0, // $150K-$200K: 6% dip
-            LiquidityTier::Medium => 7.0, // $100K-$150K: 7% dip
-            LiquidityTier::MediumSmall => 8.0, // $75K-$100K: 8% dip
-            LiquidityTier::Small => 10.0, // $50K-$75K: 10% dip
+            // Medium Liquidity: Still very tradeable
+            LiquidityTier::Massive => 1.5, // $300K-$500K: 1.5% dip
+            LiquidityTier::Large => 1.8, // $200K-$300K: 1.8% dip
+            LiquidityTier::MediumLarge => 2.0, // $150K-$200K: 2.0% dip
+            LiquidityTier::Medium => 2.2, // $100K-$150K: 2.2% dip
+            LiquidityTier::MediumSmall => 2.5, // $75K-$100K: 2.5% dip
+            LiquidityTier::Small => 3.0, // $50K-$75K: 3.0% dip
 
-            // Low Liquidity: Higher volatility, bigger moves needed
-            LiquidityTier::Micro => 12.0, // $25K-$50K: 12% dip
-            LiquidityTier::MiniMicro => 15.0, // $10K-$25K: 15% dip
-            LiquidityTier::Tiny => 20.0, // $5K-$10K: 20% dip
+            // Low Liquidity: Still profitable with moderate drops
+            LiquidityTier::Micro => 3.5, // $25K-$50K: 3.5% dip
+            LiquidityTier::MiniMicro => 4.0, // $10K-$25K: 4.0% dip
+            LiquidityTier::Tiny => 5.0, // $5K-$10K: 5.0% dip
 
-            // Ultra Low Liquidity: Very volatile, extreme moves
-            LiquidityTier::Nano => 30.0, // $1K-$5K: 30% dip
-            LiquidityTier::Pico => 50.0, // <$1K: 50% dip
+            // Ultra Low Liquidity: Higher moves but still reasonable
+            LiquidityTier::Nano => 6.0, // $1K-$5K: 6.0% dip
+            LiquidityTier::Pico => 8.0, // <$1K: 8.0% dip (MAX)
         }
     }
 

@@ -21,48 +21,48 @@ use serde::{ Serialize, Deserialize };
 // Smart exit strategies based on liquidity, volume, and social proof
 // ================================================================================================
 
-// 🔒 STOP LOSS PROTECTION - OPTIMIZED SAFETY NET
-pub const STOP_LOSS_PERCENT: f64 = -60.0;
+// 🔒 STOP LOSS PROTECTION - NEVER TAKE LOSSES UNLESS EMERGENCY
+pub const STOP_LOSS_PERCENT: f64 = -70.0; // Extended to -70% (more patient)
 
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
-// Based on backtesting showing 2-30 minute optimal range
-const ULTRA_SAFE_MAX_TIME: f64 = 30.0; // Ultra safe tokens
-const SAFE_MAX_TIME: f64 = 25.0; // Safe tokens
-const MEDIUM_MAX_TIME: f64 = 20.0; // Medium risk tokens
-const RISKY_MAX_TIME: f64 = 15.0; // Risky tokens
-const DANGEROUS_MAX_TIME: f64 = 10.0; // Dangerous tokens
-const MIN_HOLD_TIME: f64 = 2.0; // Minimum hold time for all positions
+// EXTENDED FOR BETTER PROFITS: 1 minute to 2 hours based on liquidity
+const ULTRA_SAFE_MAX_TIME: f64 = 120.0; // Ultra safe tokens - 2 hours max
+const SAFE_MAX_TIME: f64 = 90.0; // Safe tokens - 1.5 hours
+const MEDIUM_MAX_TIME: f64 = 60.0; // Medium risk tokens - 1 hour
+const RISKY_MAX_TIME: f64 = 45.0; // Risky tokens - 45 minutes
+const DANGEROUS_MAX_TIME: f64 = 30.0; // Dangerous tokens - 30 minutes
+const MIN_HOLD_TIME: f64 = 1.0; // Minimum hold time for all positions
 
-// 🎯 OPTIMIZED PROFIT TARGETS - CONSERVATIVE STRATEGY
-// Based on backtesting: 8%-25% range with 90.6% win rate
-const ULTRA_SAFE_PROFIT_MIN: f64 = 8.0; // 8-25% optimized range
-const ULTRA_SAFE_PROFIT_MAX: f64 = 25.0;
-const SAFE_PROFIT_MIN: f64 = 10.0; // 10-30%
-const SAFE_PROFIT_MAX: f64 = 30.0;
-const MEDIUM_PROFIT_MIN: f64 = 12.0; // 12-35%
-const MEDIUM_PROFIT_MAX: f64 = 35.0;
-const RISKY_PROFIT_MIN: f64 = 15.0; // 15-40%
-const RISKY_PROFIT_MAX: f64 = 40.0;
-const DANGEROUS_PROFIT_MIN: f64 = 20.0; // 20-50%
-const DANGEROUS_PROFIT_MAX: f64 = 50.0;
+// 🎯 OPTIMIZED PROFIT TARGETS - PATIENT PROFIT STRATEGY
+// EXTENDED RANGES: 5%-2000% based on liquidity for maximum profits
+const ULTRA_SAFE_PROFIT_MIN: f64 = 5.0; // 5-200% for stable tokens
+const ULTRA_SAFE_PROFIT_MAX: f64 = 200.0;
+const SAFE_PROFIT_MIN: f64 = 8.0; // 8-350%
+const SAFE_PROFIT_MAX: f64 = 350.0;
+const MEDIUM_PROFIT_MIN: f64 = 12.0; // 12-500%
+const MEDIUM_PROFIT_MAX: f64 = 500.0;
+const RISKY_PROFIT_MIN: f64 = 15.0; // 15-1000%
+const RISKY_PROFIT_MAX: f64 = 1000.0;
+const DANGEROUS_PROFIT_MIN: f64 = 20.0; // 20-2000%
+const DANGEROUS_PROFIT_MAX: f64 = 2000.0;
 
-// 📈 TRAILING STOP CONFIGURATION - NEW OPTIMIZED FEATURE
+// 📈 TRAILING STOP CONFIGURATION - OPTIMIZED FOR PATIENCE
 const USE_TRAILING_STOP: bool = true;
-const TRAILING_STOP_PERCENT: f64 = 5.0; // 5% trailing stop
-const TIME_DECAY_FACTOR: f64 = 0.1; // Gradual profit target reduction
+const TRAILING_STOP_PERCENT: f64 = 8.0; // 8% trailing stop (more tolerant)
+const TIME_DECAY_FACTOR: f64 = 0.05; // Slower profit target reduction (more patient)
 
-// 🚀 INSTANT SELL THRESHOLDS
-const INSTANT_SELL_PROFIT: f64 = 1000.0; // 1000%+ = instant sell regardless
-const MEGA_PROFIT_THRESHOLD: f64 = 500.0; // 500%+ = very urgent
+// 🚀 INSTANT SELL THRESHOLDS - CAPTURE MOONSHOTS
+const INSTANT_SELL_PROFIT: f64 = 2000.0; // 2000%+ = instant sell
+const MEGA_PROFIT_THRESHOLD: f64 = 1000.0; // 1000%+ = very urgent
 
-// 📊 LIQUIDITY THRESHOLDS FOR SAFETY CLASSIFICATION
-const HIGH_LIQUIDITY_THRESHOLD: f64 = 100_000.0;
-const MEDIUM_HIGH_LIQUIDITY_THRESHOLD: f64 = 50_000.0;
-const MEDIUM_LIQUIDITY_THRESHOLD: f64 = 10_000.0;
-const LOW_LIQUIDITY_THRESHOLD: f64 = 2_000.0;
+// 📊 LIQUIDITY THRESHOLDS FOR SAFETY CLASSIFICATION (INCREASED)
+const HIGH_LIQUIDITY_THRESHOLD: f64 = 200_000.0; // Increased threshold
+const MEDIUM_HIGH_LIQUIDITY_THRESHOLD: f64 = 100_000.0; // Increased threshold
+const MEDIUM_LIQUIDITY_THRESHOLD: f64 = 50_000.0; // Increased threshold
+const LOW_LIQUIDITY_THRESHOLD: f64 = 10_000.0; // Increased threshold
 
-// 🔍 ATH DANGER DETECTION
-const ATH_DANGER_THRESHOLD: f64 = 75.0; // >75% of ATH = dangerous
+// 🔍 ATH DANGER DETECTION - MORE TOLERANT
+const ATH_DANGER_THRESHOLD: f64 = 85.0; // >85% of ATH = dangerous (was 75%)
 
 // ================================================================================================
 // 📊 COMPREHENSIVE TOKEN ANALYSIS DATA
