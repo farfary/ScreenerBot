@@ -161,10 +161,9 @@ use crate::tokens::get_token_rugcheck_data_safe;
 use crate::tokens::rugcheck::{ is_token_safe_for_trading, get_high_risk_issues };
 use crate::smart_entry::{
     is_token_safe_for_smart_entry,
+    is_token_safe_for_smart_entry_enhanced,
     is_valid_dip_for_liquidity,
-    get_smart_profit_target,
     is_deepest_dip_moment,
-    SmartEntryAnalysis,
     EntryAction,
 };
 
@@ -351,7 +350,219 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
     (100000.0, 50000.0, 10000.0)
 }
 
-/// Smart Multi-Strategy Buy Signal Detection System
+/// Enhanced Multi-Strategy Buy Signal Detection System with OHLCV Analysis
+/// Combines smart entry analysis with advanced OHLCV technical indicators
+/// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
+pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: f64) -> f64 {
+    use crate::global::is_debug_entry_enabled;
+    use crate::ohlcv_analysis::perform_comprehensive_ohlcv_analysis;
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "ENHANCED_BUY_START",
+            &format!(
+                "🔬 ENHANCED SHOULD_BUY Analysis for {}: Current={:.10} SOL | Previous={:.10} SOL",
+                token.symbol.as_str(),
+                current_price,
+                prev_price
+            )
+        );
+    }
+
+    // Step 1: Use centralized filtering system (basic validation only)
+    if !should_buy_token(token) {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENHANCED_BUY_FILTER_REJECT",
+                &format!("❌ {} rejected by pre-filtering system", token.symbol.as_str())
+            );
+        }
+        return 0.0;
+    }
+
+    // Step 2: Enhanced Smart entry analysis with OHLCV integration
+    let (is_smart_safe, smart_analysis) = is_token_safe_for_smart_entry_enhanced(token).await;
+
+    if !is_smart_safe {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENHANCED_BUY_SMART_REJECT",
+                &format!(
+                    "❌ {} rejected by smart entry analysis: ATH={:?} | Confidence={:.2}",
+                    token.symbol.as_str(),
+                    smart_analysis.ath_analysis.ath_danger_level,
+                    smart_analysis.entry_confidence
+                )
+            );
+        }
+        return 0.0;
+    }
+
+    // Step 3: OHLCV Technical Analysis (NEW ENHANCED FEATURE)
+    let ohlcv_analysis = perform_comprehensive_ohlcv_analysis(token).await;
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "ENHANCED_BUY_OHLCV",
+            &format!(
+                "📊 {} OHLCV Analysis: {} signals, urgency={:.2}, confidence={:.2}, safe={}",
+                token.symbol.as_str(),
+                ohlcv_analysis.dip_signals.len(),
+                ohlcv_analysis.overall_buy_urgency,
+                ohlcv_analysis.overall_confidence,
+                ohlcv_analysis.is_safe_for_entry
+            )
+        );
+    }
+
+    // Step 4: Combine Traditional and OHLCV Analysis
+    let price_change_percent = ((current_price - prev_price) / prev_price) * 100.0;
+    let price_drop_percent = -price_change_percent;
+
+    // Check traditional dip threshold OR OHLCV signals
+    let has_traditional_dip = price_drop_percent >= smart_analysis.dynamic_dip_threshold;
+    let has_ohlcv_signals =
+        !ohlcv_analysis.dip_signals.is_empty() && ohlcv_analysis.overall_confidence > 0.3;
+
+    if !has_traditional_dip && !has_ohlcv_signals {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENHANCED_BUY_NO_SIGNALS",
+                &format!(
+                    "❌ {} no buy signals: traditional_dip={} ({:.2}% < {:.1}%), ohlcv_signals={}",
+                    token.symbol.as_str(),
+                    has_traditional_dip,
+                    price_drop_percent,
+                    smart_analysis.dynamic_dip_threshold,
+                    has_ohlcv_signals
+                )
+            );
+        }
+        return 0.0;
+    }
+
+    // Step 5: OHLCV ATH Safety Check (overrides smart analysis if more precise)
+    let is_ath_safe = if let Some(ohlcv_ath) = &ohlcv_analysis.ath_analysis {
+        ohlcv_ath.is_safe_for_entry
+    } else {
+        smart_analysis.ath_analysis.is_safe_for_entry()
+    };
+
+    if !is_ath_safe {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENHANCED_BUY_ATH_REJECT",
+                &format!(
+                    "❌ {} rejected by OHLCV ATH analysis: danger level detected",
+                    token.symbol.as_str()
+                )
+            );
+        }
+        return 0.0;
+    }
+
+    // Step 6: Calculate Enhanced Urgency Score
+    let traditional_urgency = if has_traditional_dip {
+        let base_urgency = match smart_analysis.recommended_action {
+            EntryAction::BuyNow => 1.2,
+            EntryAction::BuyOnDip => 0.8,
+            EntryAction::Monitor => 0.4,
+            EntryAction::Avoid => 0.0,
+        };
+        base_urgency * smart_analysis.entry_confidence
+    } else {
+        0.0
+    };
+
+    let ohlcv_urgency = if has_ohlcv_signals {
+        ohlcv_analysis.overall_buy_urgency * 0.8 // Slightly weight down OHLCV to balance
+    } else {
+        0.0
+    };
+
+    // Step 7: Combine Urgency Scores with Intelligent Weighting
+    let combined_urgency = if has_traditional_dip && has_ohlcv_signals {
+        // Both systems agree - highest confidence
+        let max_urgency = traditional_urgency.max(ohlcv_urgency);
+        let consensus_bonus = 0.3;
+        (max_urgency + consensus_bonus).min(2.0)
+    } else if has_ohlcv_signals {
+        // OHLCV-only signal - still strong but slightly reduced
+        (ohlcv_urgency * 1.1).min(2.0)
+    } else {
+        // Traditional-only signal
+        traditional_urgency
+    };
+
+    // Step 8: Apply Additional Bonuses
+    let is_deepest = is_deepest_dip_moment(token);
+    let deepest_bonus = if is_deepest { 0.2 } else { 0.0 };
+
+    // Volume confirmation bonus from OHLCV
+    let volume_bonus = if ohlcv_analysis.dip_signals.iter().any(|s| s.volume_confirmation) {
+        0.15
+    } else {
+        0.0
+    };
+
+    let final_urgency = (combined_urgency + deepest_bonus + volume_bonus).min(2.0);
+
+    // Step 9: Final Safety Check
+    if final_urgency > 0.0 && !ohlcv_analysis.is_safe_for_entry {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENHANCED_BUY_FINAL_SAFETY",
+                &format!(
+                    "⚠️ {} urgency reduced due to OHLCV safety concerns: {:.2} -> 0.0",
+                    token.symbol.as_str(),
+                    final_urgency
+                )
+            );
+        }
+        return 0.0;
+    }
+
+    if is_debug_entry_enabled() && final_urgency > 0.0 {
+        log(
+            LogTag::Trader,
+            "ENHANCED_BUY_SUCCESS",
+            &format!(
+                "🚀 ENHANCED BUY SIGNAL for {}: Final={:.2} (Traditional={:.2}, OHLCV={:.2}, Bonuses={:.2})",
+                token.symbol.as_str(),
+                final_urgency,
+                traditional_urgency,
+                ohlcv_urgency,
+                deepest_bonus + volume_bonus
+            )
+        );
+
+        // Log OHLCV signal details
+        for signal in &ohlcv_analysis.dip_signals {
+            log(
+                LogTag::Trader,
+                "ENHANCED_BUY_OHLCV_DETAIL",
+                &format!(
+                    "   📈 OHLCV Signal: {} | Urgency={:.2} | Confidence={:.2} | {}",
+                    signal.strategy_name,
+                    signal.urgency,
+                    signal.confidence,
+                    signal.analysis_details
+                )
+            );
+        }
+    }
+
+    final_urgency
+}
+
+/// Smart Multi-Strategy Buy Signal Detection System (Original)
 /// Uses intelligent ATH analysis, trend analysis, and liquidity-based dip detection
 /// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
 pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
@@ -2274,12 +2485,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                         );
                                                         buy_urgency = 0.0;
                                                     } else {
-                                                        // Use the new should_buy function
-                                                        buy_urgency = should_buy(
+                                                        // Use the enhanced OHLCV-based should_buy function
+                                                        buy_urgency = should_buy_enhanced(
                                                             &token,
                                                             current_price,
                                                             prev_price
-                                                        );
+                                                        ).await;
 
                                                         debug_trader_log(
                                                             "RUGCHECK_OK",
@@ -2292,12 +2503,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                         );
                                                     }
                                                 } else {
-                                                    // Use the new should_buy function
-                                                    buy_urgency = should_buy(
+                                                    // Use the enhanced OHLCV-based should_buy function
+                                                    buy_urgency = should_buy_enhanced(
                                                         &token,
                                                         current_price,
                                                         prev_price
-                                                    );
+                                                    ).await;
 
                                                     debug_trader_log(
                                                         "RUGCHECK_OK",
@@ -2321,12 +2532,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                 )
                                             );
 
-                                            // Use the new should_buy function
-                                            buy_urgency = should_buy(
+                                            // Use the enhanced OHLCV-based should_buy function
+                                            buy_urgency = should_buy_enhanced(
                                                 &token,
                                                 current_price,
                                                 prev_price
-                                            );
+                                            ).await;
                                         }
                                         Err(e) => {
                                             debug_trader_log(
@@ -2339,12 +2550,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                 )
                                             );
 
-                                            // Use the new should_buy function
-                                            buy_urgency = should_buy(
+                                            // Use the enhanced OHLCV-based should_buy function
+                                            buy_urgency = should_buy_enhanced(
                                                 &token,
                                                 current_price,
                                                 prev_price
-                                            );
+                                            ).await;
                                         }
                                     }
 

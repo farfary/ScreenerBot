@@ -1,14 +1,13 @@
 /// Advanced ATH and Trend Analysis System for ScreenerBot
 ///
 /// This module provides intelligent ATH detection and trend analysis using real-time API data
-/// instead of relying on bot's limited runtime price history. Implements multi-timeframe
-/// analysis and liquidity-based dynamic thresholds.
+/// and enhanced OHLCV technical analysis instead of relying on bot's limited runtime price history.
+/// Implements multi-timeframe analysis and liquidity-based dynamic thresholds.
 
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_trader_enabled, is_debug_entry_enabled };
-use serde::{ Serialize, Deserialize };
-use chrono::{ DateTime, Utc };
+use crate::ohlcv_analysis::{ AthDangerLevel };
 
 // =============================================================================
 // DYNAMIC LIQUIDITY-BASED THRESHOLDS
@@ -317,14 +316,6 @@ pub struct SmartAthAnalysis {
     pub is_near_1h_ath: bool, // Within 35% of estimated 1h high (lenient for dip buying)
     pub ath_proximity_score: f64, // 0.0 (far from ATH) to 1.0 (at ATH)
     pub ath_danger_level: AthDangerLevel,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AthDangerLevel {
-    Safe, // Far from any ATH
-    Caution, // Approaching some ATH levels
-    Warning, // Near multiple ATH levels
-    Danger, // Very close to recent ATHs
 }
 
 impl SmartAthAnalysis {
@@ -694,7 +685,44 @@ pub fn get_smart_profit_target(token: &Token) -> (f64, f64) {
     analysis.profit_target_range
 }
 
-/// Check if token is safe for entry using smart multi-timeframe analysis
+/// Check if token is safe for entry using smart multi-timeframe analysis (Enhanced with OHLCV)
+pub async fn is_token_safe_for_smart_entry_enhanced(token: &Token) -> (bool, SmartEntryAnalysis) {
+    let analysis = analyze_token_enhanced(token).await;
+    let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.5;
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "ENHANCED_SMART_ENTRY_RESULT",
+            &format!(
+                "🔬 Enhanced Smart Entry for {}: Safe={}, Confidence={:.2}, Action={:?}, Dip_Threshold={:.1}%, Profit_Target={:.1}%-{:.1}%",
+                token.symbol.as_str(),
+                is_safe,
+                analysis.entry_confidence,
+                analysis.recommended_action,
+                analysis.dynamic_dip_threshold,
+                analysis.profit_target_range.0,
+                analysis.profit_target_range.1
+            )
+        );
+    } else if is_debug_trader_enabled() {
+        log(
+            LogTag::Trader,
+            "ENHANCED_SMART_ENTRY_BRIEF",
+            &format!(
+                "Enhanced entry analysis for {}: safe={}, confidence={:.2}, action={:?}",
+                token.symbol.as_str(),
+                is_safe,
+                analysis.entry_confidence,
+                analysis.recommended_action
+            )
+        );
+    }
+
+    (is_safe, analysis)
+}
+
+/// Check if token is safe for entry using smart multi-timeframe analysis (Original)
 pub fn is_token_safe_for_smart_entry(token: &Token) -> (bool, SmartEntryAnalysis) {
     let analysis = SmartEntryAnalysis::analyze_token(token);
     let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.5;
@@ -805,4 +833,213 @@ pub fn is_deepest_dip_moment(token: &Token) -> bool {
     let sentiment_recovering = trend_analysis.overall_sentiment > -0.5;
 
     m5_not_crashing && recent_decline && sentiment_recovering
+}
+
+// =============================================================================
+// ENHANCED OHLCV INTEGRATION FOR ATH ANALYSIS
+// =============================================================================
+
+/// Enhanced ATH analysis that combines traditional price change analysis with OHLCV data
+#[derive(Debug, Clone)]
+pub struct EnhancedAthAnalysis {
+    pub traditional_ath: SmartAthAnalysis,
+    pub ohlcv_ath_available: bool,
+    pub combined_ath_danger_level: AthDangerLevel,
+    pub is_safe_for_entry: bool,
+    pub confidence_score: f64, // 0.0 to 1.0
+}
+
+/// Perform enhanced ATH analysis combining traditional and OHLCV approaches
+pub async fn analyze_ath_enhanced(token: &Token) -> EnhancedAthAnalysis {
+    // Start with traditional analysis
+    let traditional_ath = SmartAthAnalysis::from_token(token);
+    let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
+
+    // Try to get OHLCV-based ATH analysis
+    let ohlcv_ath = if current_price > 0.0 {
+        match crate::ohlcv_analysis::analyze_ath_with_ohlcv(&token.mint, current_price).await {
+            Some(analysis) => Some(analysis),
+            None => {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "ATH_OHLCV_UNAVAILABLE",
+                        &format!("OHLCV ATH analysis unavailable for {}", token.symbol.as_str())
+                    );
+                }
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let ohlcv_ath_available = ohlcv_ath.is_some();
+
+    // Determine combined danger level and safety
+    let (combined_ath_danger_level, is_safe_for_entry, confidence_score) = if
+        let Some(ohlcv) = ohlcv_ath
+    {
+        // OHLCV data available - use it as primary with traditional as backup
+        let ohlcv_confidence = ohlcv.ath_analysis_confidence;
+        let traditional_confidence = 0.6; // Fixed confidence for traditional analysis
+
+        // Weighted combination based on confidence
+        let is_ohlcv_safe = ohlcv.is_safe_for_entry;
+        let is_traditional_safe = traditional_ath.is_safe_for_entry();
+
+        let combined_safety = if ohlcv_confidence > 0.7 {
+            // High OHLCV confidence - trust it primarily
+            is_ohlcv_safe && is_traditional_safe
+        } else if ohlcv_confidence > 0.4 {
+            // Medium OHLCV confidence - require both to agree for safety
+            is_ohlcv_safe && is_traditional_safe
+        } else {
+            // Low OHLCV confidence - fall back to traditional
+            is_traditional_safe
+        };
+
+        let combined_danger = if !combined_safety {
+            // If not safe, take the more conservative (dangerous) assessment
+            match (ohlcv.overall_ath_danger, &traditional_ath.ath_danger_level) {
+                (d1, d2) if d1 == AthDangerLevel::Danger || *d2 == AthDangerLevel::Danger =>
+                    AthDangerLevel::Danger,
+                (d1, d2) if d1 == AthDangerLevel::Warning || *d2 == AthDangerLevel::Warning =>
+                    AthDangerLevel::Warning,
+                (d1, d2) if d1 == AthDangerLevel::Caution || *d2 == AthDangerLevel::Caution =>
+                    AthDangerLevel::Caution,
+                _ => AthDangerLevel::Safe,
+            }
+        } else {
+            AthDangerLevel::Safe
+        };
+
+        let final_confidence = (ohlcv_confidence * 0.7 + traditional_confidence * 0.3).min(1.0);
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ATH_ENHANCED_ANALYSIS",
+                &format!(
+                    "🔬 Enhanced ATH for {}: OHLCV_safe={}, Traditional_safe={}, Combined_safe={}, Danger={:?}, Confidence={:.2}",
+                    token.symbol.as_str(),
+                    is_ohlcv_safe,
+                    is_traditional_safe,
+                    combined_safety,
+                    combined_danger,
+                    final_confidence
+                )
+            );
+        }
+
+        (combined_danger, combined_safety, final_confidence)
+    } else {
+        // No OHLCV data - use traditional analysis only
+        let traditional_safety = traditional_ath.is_safe_for_entry();
+        let traditional_confidence = 0.6;
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ATH_TRADITIONAL_ONLY",
+                &format!(
+                    "📊 Traditional ATH only for {}: safe={}, danger={:?}, confidence={:.2}",
+                    token.symbol.as_str(),
+                    traditional_safety,
+                    traditional_ath.ath_danger_level,
+                    traditional_confidence
+                )
+            );
+        }
+
+        (traditional_ath.ath_danger_level.clone(), traditional_safety, traditional_confidence)
+    };
+
+    EnhancedAthAnalysis {
+        traditional_ath,
+        ohlcv_ath_available,
+        combined_ath_danger_level,
+        is_safe_for_entry,
+        confidence_score,
+    }
+}
+
+/// Enhanced comprehensive entry analysis that integrates OHLCV ATH analysis
+pub async fn analyze_token_enhanced(token: &Token) -> SmartEntryAnalysis {
+    let liquidity_usd = token.liquidity
+        .as_ref()
+        .and_then(|l| l.usd)
+        .unwrap_or(0.0);
+
+    let liquidity_tier = LiquidityTier::from_liquidity(liquidity_usd);
+    let trend_analysis = TrendAnalysis::from_token(token);
+
+    // Use enhanced ATH analysis
+    let enhanced_ath = analyze_ath_enhanced(token).await;
+
+    // Use the traditional ATH structure but with enhanced safety decision
+    let ath_analysis = enhanced_ath.traditional_ath.clone();
+
+    let dynamic_dip_threshold = liquidity_tier.get_dip_threshold();
+    let profit_target_range = liquidity_tier.get_profit_target_range();
+
+    // Enhanced safety check combining trend and enhanced ATH analysis
+    let is_safe_for_entry = trend_analysis.is_safe_for_entry && enhanced_ath.is_safe_for_entry;
+
+    // Enhanced confidence calculation
+    let trend_confidence = trend_analysis.momentum_score;
+    let ath_confidence = enhanced_ath.confidence_score;
+    let liquidity_confidence = match liquidity_tier {
+        LiquidityTier::UltraWhale | LiquidityTier::MegaWhale | LiquidityTier::SuperWhale => 0.9,
+        LiquidityTier::Whale | LiquidityTier::LargeWhale => 0.8,
+        LiquidityTier::MediumWhale | LiquidityTier::SmallWhale => 0.7,
+        LiquidityTier::Massive | LiquidityTier::Large => 0.6,
+        LiquidityTier::MediumLarge | LiquidityTier::Medium => 0.5,
+        _ => 0.3,
+    };
+
+    let entry_confidence = (
+        trend_confidence * 0.3 +
+        ath_confidence * 0.4 +
+        liquidity_confidence * 0.3
+    ).min(1.0);
+
+    let recommended_action = if !is_safe_for_entry {
+        EntryAction::Avoid
+    } else if
+        enhanced_ath.combined_ath_danger_level == AthDangerLevel::Safe &&
+        trend_analysis.overall_sentiment > 0.2
+    {
+        EntryAction::BuyNow
+    } else if enhanced_ath.combined_ath_danger_level == AthDangerLevel::Caution {
+        EntryAction::BuyOnDip
+    } else {
+        EntryAction::Monitor
+    };
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "ENHANCED_ENTRY_ANALYSIS",
+            &format!(
+                "🎯 Enhanced Entry Analysis for {}: Safe={}, Action={:?}, Confidence={:.2}, ATH_Enhanced={}",
+                token.symbol.as_str(),
+                is_safe_for_entry,
+                recommended_action,
+                entry_confidence,
+                enhanced_ath.ohlcv_ath_available
+            )
+        );
+    }
+
+    SmartEntryAnalysis {
+        liquidity_tier,
+        trend_analysis,
+        ath_analysis,
+        dynamic_dip_threshold,
+        profit_target_range,
+        is_safe_for_entry,
+        entry_confidence,
+        recommended_action,
+    }
 }
