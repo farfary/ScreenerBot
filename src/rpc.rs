@@ -24,6 +24,7 @@ pub const QUICKNODE_RPC_URL: &str = "https://your-endpoint.solana.quiknode.pro/"
 pub struct SolanaRpcClient {
     client: Arc<RpcClient>,
     rpc_url: String,
+    premium_url: Option<String>,
     fallback_urls: Vec<String>,
     current_url_index: usize,
 }
@@ -50,9 +51,10 @@ impl SolanaRpcClient {
             LogTag::Rpc,
             "INIT",
             &format!(
-                "Initializing RPC client with {} URLs (primary + {} fallbacks)",
+                "Initializing RPC client with {} URLs (primary + {} fallbacks), premium: {}",
                 all_urls.len(),
-                configs.rpc_fallbacks.len()
+                configs.rpc_fallbacks.len(),
+                configs.rpc_url_premium
             )
         );
 
@@ -64,11 +66,15 @@ impl SolanaRpcClient {
             );
         }
 
-        Self::new_with_urls(&configs.rpc_url, configs.rpc_fallbacks)
+        Self::new_with_urls(&configs.rpc_url, Some(configs.rpc_url_premium), configs.rpc_fallbacks)
     }
 
     /// Create new RPC client with primary URL and fallbacks
-    pub fn new_with_urls(primary_url: &str, fallback_urls: Vec<String>) -> Result<Self, String> {
+    pub fn new_with_urls(
+        primary_url: &str,
+        premium_url: Option<String>,
+        fallback_urls: Vec<String>
+    ) -> Result<Self, String> {
         log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with primary: {}", primary_url));
 
         let client = RpcClient::new_with_commitment(
@@ -79,6 +85,7 @@ impl SolanaRpcClient {
         Ok(Self {
             client: Arc::new(client),
             rpc_url: primary_url.to_string(),
+            premium_url,
             fallback_urls,
             current_url_index: 0,
         })
@@ -96,6 +103,7 @@ impl SolanaRpcClient {
         Self {
             client: Arc::new(client),
             rpc_url: rpc_url.to_string(),
+            premium_url: None,
             fallback_urls: Vec::new(),
             current_url_index: 0,
         }
@@ -109,6 +117,54 @@ impl SolanaRpcClient {
     /// Get RPC URL
     pub fn url(&self) -> &str {
         &self.rpc_url
+    }
+
+    /// Get premium RPC URL
+    pub fn premium_url(&self) -> Option<&str> {
+        self.premium_url.as_deref()
+    }
+
+    /// Create a new client using premium URL (for wallet operations)
+    pub fn create_premium_client(&self) -> Option<Arc<RpcClient>> {
+        if let Some(premium_url) = &self.premium_url {
+            log(LogTag::Rpc, "PREMIUM", &format!("Using premium RPC: {}", premium_url));
+            let client = RpcClient::new_with_commitment(
+                premium_url.clone(),
+                CommitmentConfig::confirmed()
+            );
+            Some(Arc::new(client))
+        } else {
+            None
+        }
+    }
+
+    /// Check if error should trigger fallback (rate limits, timeouts) vs real errors (account not found)
+    fn should_fallback_on_error(error: &str) -> bool {
+        let error_lower = error.to_lowercase();
+
+        // Rate limiting and temporary issues - should fallback
+        if
+            error_lower.contains("429") ||
+            error_lower.contains("too many requests") ||
+            error_lower.contains("rate limit") ||
+            error_lower.contains("timeout") ||
+            error_lower.contains("connection") ||
+            error_lower.contains("network")
+        {
+            return true;
+        }
+
+        // Real blockchain state - don't fallback, cache as failed
+        if
+            error_lower.contains("account not found") ||
+            error_lower.contains("invalid account") ||
+            error_lower.contains("account does not exist")
+        {
+            return false;
+        }
+
+        // Default to fallback for unknown errors
+        true
     }
 
     /// Get all available URLs (primary + fallbacks)
@@ -378,6 +434,11 @@ pub fn get_rpc_client() -> &'static SolanaRpcClient {
 /// Parse string to Pubkey
 pub fn parse_pubkey(address: &str) -> Result<Pubkey, String> {
     Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{}': {}", address, e))
+}
+
+/// Get premium RPC URL for wallet operations (high priority transactions)
+pub fn get_premium_transaction_rpc(configs: &crate::global::Configs) -> String {
+    configs.rpc_url_premium.clone()
 }
 
 #[cfg(test)]

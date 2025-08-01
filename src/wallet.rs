@@ -2,6 +2,7 @@ use crate::global::{ read_configs, is_debug_wallet_enabled };
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
+use crate::rpc::get_premium_transaction_rpc;
 
 use reqwest;
 use serde::{ Deserialize, Serialize, Deserializer };
@@ -150,30 +151,6 @@ impl Error for SwapError {}
 impl From<reqwest::Error> for SwapError {
     fn from(err: reqwest::Error) -> Self {
         SwapError::NetworkError(err)
-    }
-}
-
-/// Select a random RPC endpoint from the fallbacks (avoiding main RPC for transactions)
-fn get_random_transaction_rpc(configs: &crate::global::Configs) -> String {
-    use rand::seq::SliceRandom;
-
-    if configs.rpc_fallbacks.is_empty() {
-        // If no fallbacks, use main RPC as last resort
-        log(LogTag::Wallet, "WARN", "No RPC fallbacks configured, using main RPC for transaction");
-        return configs.rpc_url.clone();
-    }
-
-    // Randomly select from fallbacks only
-    let mut rng = rand::thread_rng();
-    match configs.rpc_fallbacks.choose(&mut rng) {
-        Some(rpc) => {
-            log(LogTag::Wallet, "RPC", &format!("Selected random transaction RPC: {}", rpc));
-            rpc.clone()
-        }
-        None => {
-            log(LogTag::Wallet, "WARN", "Failed to select random RPC, using main RPC");
-            configs.rpc_url.clone()
-        }
     }
 }
 
@@ -1301,8 +1278,8 @@ pub async fn execute_swap_with_quote(
         }
     }
 
-    // Sign and send the transaction using random fallback RPC
-    let selected_rpc = get_random_transaction_rpc(&configs);
+    // Sign and send the transaction using premium RPC
+    let selected_rpc = get_premium_transaction_rpc(&configs);
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
         &selected_rpc
@@ -1491,8 +1468,8 @@ pub async fn execute_swap(
         }
     }
 
-    // Sign and send the transaction using random fallback RPC (buy_token)
-    let selected_rpc = get_random_transaction_rpc(&configs);
+    // Sign and send the transaction using premium RPC (buy_token)
+    let selected_rpc = get_premium_transaction_rpc(&configs);
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
         &selected_rpc
@@ -1955,8 +1932,8 @@ pub async fn sell_token(
         }
     }
 
-    // Sign and send the transaction using random fallback RPC (sell_token)
-    let selected_rpc = get_random_transaction_rpc(&configs);
+    // Sign and send the transaction using premium RPC (sell_token)
+    let selected_rpc = get_premium_transaction_rpc(&configs);
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
         &selected_rpc

@@ -120,6 +120,7 @@ pub fn is_debug_wallet_enabled() -> bool {
 pub struct Configs {
     pub main_wallet_private: String,
     pub rpc_url: String,
+    pub rpc_url_premium: String,
     pub rpc_fallbacks: Vec<String>,
     pub websocket_url: String,
     pub websocket_fallbacks: Vec<String>,
