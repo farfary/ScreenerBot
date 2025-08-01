@@ -57,7 +57,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 10;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.004;
@@ -76,7 +76,7 @@ pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
 // -----------------------------------------------------------------------------
 
 /// Minimum price drop percentage to trigger buy signal
-pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 2.0;
+pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
