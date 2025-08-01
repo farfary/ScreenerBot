@@ -247,55 +247,122 @@ async fn main() {
         Err(_) => log(LogTag::System, "WARN", "Cleanup timed out after 3 seconds"),
     }
 
-    // Wait for background tasks to finish with shorter timeout and better handling
-    log(LogTag::System, "INFO", "Waiting for background tasks to shutdown (max 5 seconds)...");
-    let shutdown_timeout = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        // Wait for trader task
-        if let Err(e) = trader_handle.await {
-            log(LogTag::System, "WARN", &format!("Trader task failed to shutdown cleanly: {}", e));
-        }
+    // Wait for background tasks to finish with timeout that respects critical operations
+    let final_critical_ops = screenerbot::trader::CriticalOperationGuard::get_active_count();
+    let task_timeout_seconds = if final_critical_ops > 0 {
+        log(
+            LogTag::System,
+            "CRITICAL",
+            &format!("🚨 {} CRITICAL OPERATIONS STILL ACTIVE - Extending task shutdown timeout to 120 seconds", final_critical_ops)
+        );
+        120 // Extended timeout when critical operations are active
+    } else {
+        5 // Normal timeout when no critical operations
+    };
 
-        // Wait for ATA cleanup service
-        if let Err(e) = ata_cleanup_handle.await {
-            log(
-                LogTag::System,
-                "WARN",
-                &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
-            );
-        }
-
-        // Wait for tokens system tasks (includes rugcheck service)
-        for (i, handle) in tokens_handles.into_iter().enumerate() {
-            if let Err(e) = handle.await {
+    log(
+        LogTag::System,
+        "INFO",
+        &format!("Waiting for background tasks to shutdown (max {} seconds)...", task_timeout_seconds)
+    );
+    let shutdown_timeout = tokio::time::timeout(
+        std::time::Duration::from_secs(task_timeout_seconds),
+        async {
+            // Wait for trader task
+            if let Err(e) = trader_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Tokens task {} failed to shutdown cleanly: {}", i, e)
+                    &format!("Trader task failed to shutdown cleanly: {}", e)
                 );
             }
-        }
 
-        // Wait for pricing tasks
-        for (i, handle) in pricing_handles.into_iter().enumerate() {
-            if let Err(e) = handle.await {
+            // Wait for ATA cleanup service
+            if let Err(e) = ata_cleanup_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Pricing task {} failed to shutdown cleanly: {}", i, e)
+                    &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
                 );
             }
+
+            // Wait for tokens system tasks (includes rugcheck service)
+            for (i, handle) in tokens_handles.into_iter().enumerate() {
+                if let Err(e) = handle.await {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        &format!("Tokens task {} failed to shutdown cleanly: {}", i, e)
+                    );
+                }
+            }
+
+            // Wait for pricing tasks
+            for (i, handle) in pricing_handles.into_iter().enumerate() {
+                if let Err(e) = handle.await {
+                    log(
+                        LogTag::System,
+                        "WARN",
+                        &format!("Pricing task {} failed to shutdown cleanly: {}", i, e)
+                    );
+                }
+            }
         }
-    });
+    );
 
     match shutdown_timeout.await {
         Ok(_) => {
             log(LogTag::System, "INFO", "All background tasks finished gracefully. Exiting.");
         }
         Err(_) => {
+            let final_critical_check =
+                screenerbot::trader::CriticalOperationGuard::get_active_count();
+            if final_critical_check > 0 {
+                log(
+                    LogTag::System,
+                    "EMERGENCY",
+                    &format!("🚨 CRITICAL: {} trading operations still active during forced shutdown! This may cause data loss!", final_critical_check)
+                );
+                log(
+                    LogTag::System,
+                    "EMERGENCY",
+                    "⚠️  Waiting additional 30 seconds for critical operations to complete before force exit..."
+                );
+
+                // Last ditch effort - wait another 30 seconds for critical operations
+                let emergency_start = std::time::Instant::now();
+                while
+                    screenerbot::trader::CriticalOperationGuard::get_active_count() > 0 &&
+                    emergency_start.elapsed() < std::time::Duration::from_secs(30)
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                    let remaining = screenerbot::trader::CriticalOperationGuard::get_active_count();
+                    log(
+                        LogTag::System,
+                        "EMERGENCY",
+                        &format!("🔒 Emergency wait: {} critical operations remaining...", remaining)
+                    );
+                }
+
+                if screenerbot::trader::CriticalOperationGuard::get_active_count() > 0 {
+                    log(
+                        LogTag::System,
+                        "EMERGENCY",
+                        "💥 FORCE SHUTDOWN WITH ACTIVE TRADES - POTENTIAL DATA LOSS!"
+                    );
+                } else {
+                    log(
+                        LogTag::System,
+                        "INFO",
+                        "✅ Emergency wait successful - all critical operations completed"
+                    );
+                }
+            }
+
             log(
                 LogTag::System,
                 "WARN",
-                "Tasks did not finish within 5 second timeout, forcing immediate exit."
+                &format!("Tasks did not finish within {} second timeout, forcing immediate exit.", task_timeout_seconds)
             );
             // Force immediate termination
             std::process::abort();

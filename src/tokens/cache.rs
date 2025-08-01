@@ -1130,6 +1130,53 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Get rugcheck data for a specific token with timestamp
+    pub fn get_rugcheck_data_with_timestamp(
+        &self,
+        mint: &str
+    ) -> Result<
+        Option<(crate::tokens::rugcheck::RugcheckResponse, chrono::DateTime<chrono::Utc>)>,
+        rusqlite::Error
+    > {
+        let connection = self.connection
+            .lock()
+            .map_err(|_|
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                    Some("Failed to acquire database lock".to_string())
+                )
+            )?;
+
+        let mut stmt = connection.prepare(
+            "SELECT *, updated_at FROM rugcheck_data WHERE mint = ?1"
+        )?;
+
+        let mut rows = stmt.query_map(params![mint], |row| {
+            let rugcheck_response = self.row_to_rugcheck_response(row)?;
+            let updated_at_str: String = row.get("updated_at")?;
+
+            // Parse SQLite datetime format: "YYYY-MM-DD HH:MM:SS"
+            let updated_at = chrono::NaiveDateTime
+                ::parse_from_str(&updated_at_str, "%Y-%m-%d %H:%M:%S")
+                .map_err(|_|
+                    rusqlite::Error::InvalidColumnType(
+                        0,
+                        "updated_at".to_string(),
+                        rusqlite::types::Type::Text
+                    )
+                )?
+                .and_utc(); // Convert to UTC DateTime
+
+            Ok((rugcheck_response, updated_at))
+        })?;
+
+        if let Some(row) = rows.next() {
+            Ok(Some(row?))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Get rugcheck data for a specific token
     pub fn get_rugcheck_data(
         &self,

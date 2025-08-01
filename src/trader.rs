@@ -76,7 +76,7 @@ pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
 // -----------------------------------------------------------------------------
 
 /// Minimum price drop percentage to trigger buy signal
-pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 5.0;
+pub const MIN_DIP_THRESHOLD_PERCENT: f64 = 2.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
@@ -1942,7 +1942,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                     debug_trader_log(
                                                         "RUGCHECK_REJECT_UNSAFE",
                                                         &format!(
-                                                            "Token {} ({}) rejected - failed safety check (score: {}, issues: {:?})",
+                                                            "Token {} ({}) rejected - failed safety check (risk score: {}, issues: {:?})",
                                                             token.symbol,
                                                             token.mint,
                                                             rugcheck_score,
@@ -1990,7 +1990,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                         debug_trader_log(
                                                             "RUGCHECK_OK",
                                                             &format!(
-                                                                "Token {} ({}) passed rugcheck validation (score: {})",
+                                                                "Token {} ({}) passed rugcheck validation (risk score: {})",
                                                                 token.symbol,
                                                                 token.mint,
                                                                 rugcheck_score
@@ -2008,7 +2008,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                     debug_trader_log(
                                                         "RUGCHECK_OK",
                                                         &format!(
-                                                            "Token {} ({}) passed rugcheck validation (score: {})",
+                                                            "Token {} ({}) passed rugcheck validation (risk score: {})",
                                                             token.symbol,
                                                             token.mint,
                                                             rugcheck_score

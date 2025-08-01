@@ -203,8 +203,13 @@ impl From<ApiToken> for Token {
 
             logo_url: api_token.info.as_ref().and_then(|i| i.image_url.clone()),
             coingecko_id: None,
-            website: None,
-            description: None,
+            // Extract the first website URL from info.websites if available
+            website: api_token.info
+                .as_ref()
+                .and_then(|i| i.websites.as_ref())
+                .and_then(|websites| websites.first())
+                .map(|w| w.url.clone()),
+            description: None, // DexScreener API doesn't provide description field
             tags: Vec::new(),
             is_verified: false,
             created_at: api_token.pair_created_at.map(|ts| {

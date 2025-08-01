@@ -9,10 +9,7 @@ use crate::global::is_debug_filtering_enabled;
 use crate::loss_prevention::should_allow_token_purchase;
 use crate::positions::SAVED_POSITIONS;
 use crate::trader::MAX_OPEN_POSITIONS;
-use chrono::{ Duration as ChronoDuration, Utc, DateTime };
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
-use std::collections::HashMap;
+use chrono::{ Duration as ChronoDuration, Utc };
 
 // =============================================================================
 // FILTERING CONFIGURATION PARAMETERS (CENTRALIZED FOR EASY ACCESS)
@@ -38,7 +35,7 @@ use std::collections::HashMap;
 pub const MIN_TOKEN_AGE_HOURS: i64 = 1;
 
 /// Maximum token age in hours (effectively unlimited)
-pub const MAX_TOKEN_AGE_HOURS: i64 = 30 * 24; // 30 days
+pub const MAX_TOKEN_AGE_HOURS: i64 = 12 * 30 * 24; // 30 days
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
@@ -49,10 +46,10 @@ pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
 // ===== PRICE ACTION FILTERING PARAMETERS =====
 /// Maximum allowed percentage from all-time high to allow buying (e.g. 75% means
 /// current price must be at least 25% below ATH)
-pub const MAX_PRICE_TO_ATH_PERCENT: f64 = 75.0;
+pub const MAX_PRICE_TO_ATH_PERCENT: f64 = 50.0;
 
 /// Minimum price in SOL to consider valid
-pub const MIN_VALID_PRICE_SOL: f64 = 0.000000001;
+pub const MIN_VALID_PRICE_SOL: f64 = 0.000000000001;
 
 /// Maximum price in SOL to avoid (prevents overflow issues)
 pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
@@ -65,9 +62,13 @@ pub const MIN_LIQUIDITY_USD: f64 = 1000.0;
 pub const PREFERRED_MIN_LIQUIDITY_USD: f64 = 5000.0;
 
 // ===== RUGCHECK SECURITY PARAMETERS =====
-/// Minimum normalized rugcheck score to consider (0-100 scale)
-/// Note: Very low scores (0-4) can be GOOD for established tokens
-pub const MIN_RUGCHECK_SCORE_THRESHOLD: i32 = -1; // Allow all scores, let safety function decide
+/// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
+/// Maximum allowed rugcheck risk score (0-100 scale) - HIGHER MEANS MORE RISKY
+/// This threshold overrides all other rugcheck analysis and immediately rejects high-risk tokens
+pub const MAX_RUGCHECK_RISK_SCORE: i32 = 20; // Allow max 20 risk score (low-medium risk)
+
+/// Emergency override for very risky tokens - any score above this is automatically rejected
+pub const EMERGENCY_MAX_RISK_SCORE: i32 = 50; // Absolute maximum risk tolerance
 
 /// Maximum number of high-risk issues to tolerate
 pub const MAX_HIGH_RISK_ISSUES: usize = 1;
@@ -81,16 +82,6 @@ pub const MIN_LP_LOCK_PERCENTAGE: f64 = 80.0;
 
 /// Minimum percentage for new/risky tokens
 pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 90.0;
-
-// ===== LOGGING AND PERFORMANCE PARAMETERS =====
-/// Cooldown period for token filter logs (minutes)
-pub const LOG_COOLDOWN_MINUTES: i64 = 15;
-
-/// Maximum number of log entries to keep in memory
-pub const MAX_LOG_COOLDOWN_ENTRIES: usize = 1000;
-
-/// Cleanup interval for log cooldown entries (hours)
-pub const LOG_CLEANUP_INTERVAL_HOURS: i64 = 1;
 
 // ===== HISTORICAL PERFORMANCE PARAMETERS =====
 /// Maximum acceptable loss rate for historical performance (0.0-1.0)
@@ -118,11 +109,6 @@ pub const PRICE_HISTORY_LOCK_TIMEOUT_MS: u64 = 3000;
 //   • Performance: Logging, timeouts, and system limits
 // =============================================================================
 
-/// Static global: log cooldown tracking by token mint and reason
-static TOKEN_LOG_COOLDOWNS: Lazy<Mutex<HashMap<String, DateTime<Utc>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-
 // =============================================================================
 // FILTERING RESULT ENUM
 // =============================================================================
@@ -133,6 +119,9 @@ pub enum FilterReason {
     // Basic validation failures
     EmptySymbol,
     EmptyMint,
+    EmptyLogoUrl,
+    EmptyWebsite,
+    EmptyDescription,
     InvalidPrice,
     PriceTooLow {
         current_price: f64,
@@ -219,13 +208,32 @@ pub enum FilterResult {
 /// Returns FilterResult::Approved if token passes all filters
 /// Returns FilterResult::Rejected(reason) if token fails any filter
 pub fn filter_token_for_trading(token: &Token) -> FilterResult {
+    // Entry debug log with token basic info
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "START_FILTER",
+            &format!(
+                "🔍 Filtering token: {} ({}), Price: {:.10} SOL, Age: {}h, Liquidity: ${:.2}",
+                token.symbol,
+                &token.mint[..8],
+                token.price_dexscreener_sol.unwrap_or(0.0),
+                token.created_at.map_or("Unknown".to_string(), |created| {
+                    let age = (Utc::now() - created).num_hours();
+                    age.to_string()
+                }),
+                token.liquidity.as_ref().map_or(0.0, |l| l.usd.unwrap_or(0.0))
+            )
+        );
+    }
+
     // 1. RUGCHECK SECURITY VALIDATION (FIRST - HIGHEST PRIORITY)
     if let Some(reason) = validate_rugcheck_risks(token) {
-        if should_log_token_filter(token, "SecurityRisk") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Security risk - {:?}", token.symbol, reason)
+                &format!("❌ {}: Security risk - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -233,11 +241,11 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 2. Basic metadata validation
     if let Some(reason) = validate_basic_token_info(token) {
-        if should_log_token_filter(token, "Metadata") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Invalid metadata - {:?}", token.symbol, reason)
+                &format!("📝 {}: Invalid metadata - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -245,11 +253,11 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 3. Age validation
     if let Some(reason) = validate_token_age(token) {
-        if should_log_token_filter(token, "Age") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Age constraint - {:?}", token.symbol, reason)
+                &format!("⏰ {}: Age constraint - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -257,11 +265,11 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 4. Liquidity validation
     if let Some(reason) = validate_liquidity(token) {
-        if should_log_token_filter(token, "Liquidity") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Liquidity issue - {:?}", token.symbol, reason)
+                &format!("💧 {}: Liquidity issue - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -269,11 +277,11 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 5. Price-to-ATH validation (NEW: Avoid buying near all-time highs)
     if let Some(reason) = validate_price_to_ath(token) {
-        if should_log_token_filter(token, "ATH") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Too close to ATH - {:?}", token.symbol, reason)
+                &format!("📈 {}: Too close to ATH - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -281,11 +289,11 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 5. Price validation
     if let Some(reason) = validate_price_data(token) {
-        if should_log_token_filter(token, "Price") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Price data issue - {:?}", token.symbol, reason)
+                &format!("💰 {}: Price data issue - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -293,11 +301,11 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 6. Position-related validation
     if let Some(reason) = validate_position_constraints(token) {
-        if should_log_token_filter(token, "Position") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Position constraint - {:?}", token.symbol, reason)
+                &format!("🔒 {}: Position constraint - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -305,19 +313,23 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
     // 7. Loss prevention check
     if let Some(reason) = validate_loss_prevention(token) {
-        if should_log_token_filter(token, "LossPrevention") {
+        if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT",
-                &format!("{}: Loss prevention - {:?}", token.symbol, reason)
+                &format!("🛡️ {}: Loss prevention - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
 
     // Token passed all filters
-    if should_log_token_filter(token, "Approved") {
-        log(LogTag::Filtering, "APPROVE", &format!("{}: Passed all filters", token.symbol));
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "APPROVE",
+            &format!("✅ {}: Passed all filters - ELIGIBLE FOR TRADING", token.symbol)
+        );
     }
 
     FilterResult::Approved
@@ -329,17 +341,55 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 
 /// Validate if token price is too close to all-time high
 fn validate_price_to_ath(token: &Token) -> Option<FilterReason> {
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_ATH",
+            &format!("📈 Checking ATH validation for token {}", token.symbol)
+        );
+    }
+
     // If we don't have price history or all-time high data, we can't validate
     let price_history = match crate::trader::PRICE_HISTORY_24H.try_lock() {
         Ok(history) => history,
         Err(_) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_ATH",
+                    &format!("❌ Could not lock price history for {}", token.symbol)
+                );
+            }
             // If we can't lock the price history, we'll be conservative and skip the token
             return Some(FilterReason::LockAcquisitionFailed);
         }
     };
 
     if let Some(token_history) = price_history.get(&token.mint) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_ATH",
+                &format!(
+                    "📊 Found {} price history entries for {}",
+                    token_history.len(),
+                    token.symbol
+                )
+            );
+        }
+
         if token_history.len() < 5 {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_ATH",
+                    &format!(
+                        "⚠️ Insufficient price history for {}: {} entries < 5 minimum",
+                        token.symbol,
+                        token_history.len()
+                    )
+                );
+            }
             // Not enough history to determine ATH
             return None;
         }
@@ -355,20 +405,47 @@ fn validate_price_to_ath(token: &Token) -> Option<FilterReason> {
         // Get current price
         let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
         if current_price <= 0.0 || all_time_high <= 0.0 {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_ATH",
+                    &format!(
+                        "⚠️ Invalid price data for {}: current={:.10}, ATH={:.10}",
+                        token.symbol,
+                        current_price,
+                        all_time_high
+                    )
+                );
+            }
             return None; // Invalid price data
         }
 
         // Calculate what percentage of ATH is the current price
         let current_percent_of_ath = (current_price / all_time_high) * 100.0;
 
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_ATH",
+                &format!(
+                    "📊 ATH analysis for {}: current={:.10}, ATH={:.10}, percentage={:.1}%, max_allowed={:.1}%",
+                    token.symbol,
+                    current_price,
+                    all_time_high,
+                    current_percent_of_ath,
+                    MAX_PRICE_TO_ATH_PERCENT
+                )
+            );
+        }
+
         // If current price is too close to ATH (e.g. above 75% of ATH), reject
         if current_percent_of_ath > MAX_PRICE_TO_ATH_PERCENT {
-            if should_log_token_filter(token, "ATH_Detail") {
+            if is_debug_filtering_enabled() {
                 log(
                     LogTag::Filtering,
                     "ATH_CHECK",
                     &format!(
-                        "Token {} rejected: price is {:.1}% of ATH ({:.6} / {:.6})",
+                        "❌ Token {} rejected: price is {:.1}% of ATH ({:.6} / {:.6})",
                         token.symbol,
                         current_percent_of_ath,
                         current_price,
@@ -381,6 +458,26 @@ fn validate_price_to_ath(token: &Token) -> Option<FilterReason> {
                 current_percent_of_ath,
                 max_allowed_percent: MAX_PRICE_TO_ATH_PERCENT,
             });
+        }
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_ATH",
+                &format!(
+                    "✅ Token {} ATH check passed ({:.1}% of ATH)",
+                    token.symbol,
+                    current_percent_of_ath
+                )
+            );
+        }
+    } else {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_ATH",
+                &format!("ℹ️ No price history found for {} - skipping ATH check", token.symbol)
+            );
         }
     }
 
@@ -429,12 +526,81 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
         }
     };
 
-    // Check if token is safe for trading
+    // CRITICAL: Hard-coded risk score check - HIGHER SCORES MEAN MORE RISK!
+    if let Some(risk_score) = rugcheck_data.score_normalised.or(rugcheck_data.score) {
+        // Emergency override - immediately reject very risky tokens
+        if risk_score >= EMERGENCY_MAX_RISK_SCORE {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "EMERGENCY_RISK",
+                    &format!(
+                        "Token {} EMERGENCY REJECTED - Risk score {} >= {} (VERY HIGH RISK)",
+                        token.symbol,
+                        risk_score,
+                        EMERGENCY_MAX_RISK_SCORE
+                    )
+                );
+            }
+            return Some(FilterReason::RugcheckRisk {
+                risk_level: "EMERGENCY".to_string(),
+                reasons: vec![
+                    format!(
+                        "Risk score {} is too high (max allowed: {})",
+                        risk_score,
+                        EMERGENCY_MAX_RISK_SCORE
+                    )
+                ],
+            });
+        }
+
+        // Standard risk score check
+        if risk_score > MAX_RUGCHECK_RISK_SCORE {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "HIGH_RISK_SCORE",
+                    &format!(
+                        "Token {} rejected - Risk score {} > {} (HIGH RISK)",
+                        token.symbol,
+                        risk_score,
+                        MAX_RUGCHECK_RISK_SCORE
+                    )
+                );
+            }
+            return Some(FilterReason::RugcheckRisk {
+                risk_level: "HIGH".to_string(),
+                reasons: vec![
+                    format!(
+                        "Risk score {} exceeds maximum allowed {}",
+                        risk_score,
+                        MAX_RUGCHECK_RISK_SCORE
+                    )
+                ],
+            });
+        }
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "RISK_SCORE_OK",
+                &format!(
+                    "Token {} risk score {} <= {} (acceptable risk)",
+                    token.symbol,
+                    risk_score,
+                    MAX_RUGCHECK_RISK_SCORE
+                )
+            );
+        }
+    }
+
+    // Check if token is safe for trading (uses additional analysis beyond score)
     if !is_token_safe_for_trading(&rugcheck_data) {
         let risk_issues = get_high_risk_issues(&rugcheck_data);
         let risk_level = if rugcheck_data.rugged.unwrap_or(false) {
             "CRITICAL"
-        } else if rugcheck_data.score_normalised.unwrap_or(10) < 5 {
+        } else if rugcheck_data.score_normalised.unwrap_or(0) >= 50 {
+            // CORRECTED: high score = high risk
             "HIGH"
         } else {
             "MEDIUM"
@@ -460,11 +626,11 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
     }
 
     if is_debug_filtering_enabled() {
-        let score = rugcheck_data.score_normalised.unwrap_or(0);
+        let score = rugcheck_data.score_normalised.or(rugcheck_data.score).unwrap_or(0);
         log(
             LogTag::Filtering,
             "RUGCHECK_PASS",
-            &format!("Token {} passed rugcheck validation (score: {})", token.symbol, score)
+            &format!("Token {} passed rugcheck validation (risk score: {})", token.symbol, score)
         );
     }
 
@@ -473,13 +639,102 @@ fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
 
 /// Validate basic token metadata
 fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_META",
+            &format!(
+                "📝 Validating metadata for {}: symbol='{}', mint='{}', logo={}, website={}, description={}",
+                token.symbol,
+                token.symbol,
+                if token.mint.len() > 8 {
+                    &token.mint[..8]
+                } else {
+                    &token.mint
+                },
+                token.logo_url.as_ref().map_or("None", |_| "Present"),
+                if
+                    token.website.as_ref().map_or(false, |w| !w.trim().is_empty()) ||
+                    token.info
+                        .as_ref()
+                        .map_or(
+                            false,
+                            |info|
+                                !info.websites.is_empty() &&
+                                info.websites.iter().any(|w| !w.url.trim().is_empty())
+                        )
+                {
+                    "Present"
+                } else {
+                    "Missing"
+                },
+                token.description
+                    .as_ref()
+                    .map_or("None", |desc| if desc.trim().is_empty() { "Empty" } else { "Present" })
+            )
+        );
+    }
+
     if token.symbol.is_empty() {
+        if is_debug_filtering_enabled() {
+            log(LogTag::Filtering, "DEBUG_META", "❌ Symbol is empty");
+        }
         return Some(FilterReason::EmptySymbol);
     }
 
     if token.mint.is_empty() {
+        if is_debug_filtering_enabled() {
+            log(LogTag::Filtering, "DEBUG_META", "❌ Mint address is empty");
+        }
         return Some(FilterReason::EmptyMint);
     }
+
+    // Check logo URL
+    // if
+    //     token.logo_url.is_none() ||
+    //     token.logo_url.as_ref().map_or(true, |url| url.trim().is_empty())
+    // {
+    //     if is_debug_filtering_enabled() {
+    //         log(LogTag::Filtering, "DEBUG_META", "❌ Logo URL is missing or empty");
+    //     }
+    //     return Some(FilterReason::EmptyLogoUrl);
+    // }
+
+    // // Check website - can be from direct field or from info.websites
+    // let has_website =
+    //     token.website.as_ref().map_or(false, |w| !w.trim().is_empty()) ||
+    //     token.info
+    //         .as_ref()
+    //         .map_or(false, |info| {
+    //             !info.websites.is_empty() && info.websites.iter().any(|w| !w.url.trim().is_empty())
+    //         });
+
+    // if !has_website {
+    //     if is_debug_filtering_enabled() {
+    //         log(LogTag::Filtering, "DEBUG_META", "❌ Website is missing or empty");
+    //     }
+    //     return Some(FilterReason::EmptyWebsite);
+    // }
+
+    // Check description - Make this optional since DexScreener API doesn't provide it
+    // Only warn about missing description but don't reject the token
+    // if
+    //     token.description.is_none() ||
+    //     token.description.as_ref().map_or(true, |desc| desc.trim().is_empty())
+    // {
+    //     if is_debug_filtering_enabled() {
+    //         log(
+    //             LogTag::Filtering,
+    //             "DEBUG_META",
+    //             "⚠️ Description is missing (not required for DexScreener tokens)"
+    //         );
+    //     }
+    //     // Don't return FilterReason::EmptyDescription - just log it
+    // }
+
+    // if is_debug_filtering_enabled() {
+    //     log(LogTag::Filtering, "DEBUG_META", "✅ All metadata checks passed");
+    // }
 
     None
 }
@@ -487,14 +742,50 @@ fn validate_basic_token_info(token: &Token) -> Option<FilterReason> {
 /// Validate token age constraints
 fn validate_token_age(token: &Token) -> Option<FilterReason> {
     let Some(created_at) = token.created_at else {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_AGE",
+                &format!("⏰ Token {} has no creation date", token.symbol)
+            );
+        }
         return Some(FilterReason::NoCreationDate);
     };
 
     let now = Utc::now();
     let token_age = now - created_at;
     let age_hours = token_age.num_hours();
+    let age_minutes = token_age.num_minutes();
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_AGE",
+            &format!(
+                "⏰ Age check for {}: {}h {}m old (created: {}), min: {}h, max: {}h",
+                token.symbol,
+                age_hours,
+                age_minutes % 60,
+                created_at.format("%Y-%m-%d %H:%M:%S UTC"),
+                MIN_TOKEN_AGE_HOURS,
+                MAX_TOKEN_AGE_HOURS
+            )
+        );
+    }
 
     if age_hours < MIN_TOKEN_AGE_HOURS {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_AGE",
+                &format!(
+                    "❌ Token {} too young: {}h < {}h minimum",
+                    token.symbol,
+                    age_hours,
+                    MIN_TOKEN_AGE_HOURS
+                )
+            );
+        }
         return Some(FilterReason::TooYoung {
             age_hours,
             min_required: MIN_TOKEN_AGE_HOURS,
@@ -502,10 +793,30 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
     }
 
     if age_hours > MAX_TOKEN_AGE_HOURS {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_AGE",
+                &format!(
+                    "❌ Token {} too old: {}h > {}h maximum",
+                    token.symbol,
+                    age_hours,
+                    MAX_TOKEN_AGE_HOURS
+                )
+            );
+        }
         return Some(FilterReason::TooOld {
             age_hours,
             max_allowed: MAX_TOKEN_AGE_HOURS,
         });
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_AGE",
+            &format!("✅ Token {} age within acceptable range", token.symbol)
+        );
     }
 
     None
@@ -514,21 +825,74 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
 /// Validate liquidity requirements
 fn validate_liquidity(token: &Token) -> Option<FilterReason> {
     let Some(liquidity) = &token.liquidity else {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_LIQUIDITY",
+                &format!("💧 Token {} has no liquidity data", token.symbol)
+            );
+        }
         return Some(FilterReason::MissingLiquidityData);
     };
 
     let liquidity_usd = liquidity.usd.unwrap_or(0.0);
 
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_LIQUIDITY",
+            &format!(
+                "💧 Liquidity check for {}: ${:.2} (min: ${:.2}, preferred: ${:.2})",
+                token.symbol,
+                liquidity_usd,
+                MIN_LIQUIDITY_USD,
+                PREFERRED_MIN_LIQUIDITY_USD
+            )
+        );
+    }
+
     if liquidity_usd <= 0.0 {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_LIQUIDITY",
+                &format!("❌ Token {} has zero liquidity", token.symbol)
+            );
+        }
         return Some(FilterReason::ZeroLiquidity);
     }
 
     // Apply minimum liquidity requirement
     if liquidity_usd < MIN_LIQUIDITY_USD {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_LIQUIDITY",
+                &format!(
+                    "❌ Token {} insufficient liquidity: ${:.2} < ${:.2} minimum",
+                    token.symbol,
+                    liquidity_usd,
+                    MIN_LIQUIDITY_USD
+                )
+            );
+        }
         return Some(FilterReason::InsufficientLiquidity {
             current_usd: liquidity_usd,
             minimum_required: MIN_LIQUIDITY_USD,
         });
+    }
+
+    if is_debug_filtering_enabled() {
+        let quality = if liquidity_usd >= PREFERRED_MIN_LIQUIDITY_USD {
+            "excellent"
+        } else {
+            "adequate"
+        };
+        log(
+            LogTag::Filtering,
+            "DEBUG_LIQUIDITY",
+            &format!("✅ Token {} liquidity {} (${:.2})", token.symbol, quality, liquidity_usd)
+        );
     }
 
     None
@@ -538,16 +902,56 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
 fn validate_price_data(token: &Token) -> Option<FilterReason> {
     let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
 
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_PRICE",
+            &format!(
+                "💰 Price check for {}: {:.10} SOL (range: {:.12} - {:.3} SOL)",
+                token.symbol,
+                current_price,
+                MIN_VALID_PRICE_SOL,
+                MAX_VALID_PRICE_SOL
+            )
+        );
+    }
+
     if current_price <= 0.0 {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_PRICE",
+                &format!("❌ Token {} has invalid price: {:.10}", token.symbol, current_price)
+            );
+        }
         return Some(FilterReason::InvalidPrice);
     }
 
     if token.price_dexscreener_sol.is_none() {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_PRICE",
+                &format!("❌ Token {} missing price data", token.symbol)
+            );
+        }
         return Some(FilterReason::MissingPriceData);
     }
 
     // Validate price is within acceptable range
     if current_price < MIN_VALID_PRICE_SOL {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_PRICE",
+                &format!(
+                    "❌ Token {} price too low: {:.12} < {:.12} minimum",
+                    token.symbol,
+                    current_price,
+                    MIN_VALID_PRICE_SOL
+                )
+            );
+        }
         return Some(FilterReason::PriceTooLow {
             current_price,
             minimum_price: MIN_VALID_PRICE_SOL,
@@ -555,10 +959,30 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
     }
 
     if current_price > MAX_VALID_PRICE_SOL {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_PRICE",
+                &format!(
+                    "❌ Token {} price too high: {:.10} > {:.3} maximum",
+                    token.symbol,
+                    current_price,
+                    MAX_VALID_PRICE_SOL
+                )
+            );
+        }
         return Some(FilterReason::PriceTooHigh {
             current_price,
             maximum_price: MAX_VALID_PRICE_SOL,
         });
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_PRICE",
+            &format!("✅ Token {} price within valid range", token.symbol)
+        );
     }
 
     None
@@ -575,22 +999,54 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
         return Some(FilterReason::LockAcquisitionFailed);
     };
 
+    // Count all open positions for context
+    let open_positions_count = positions
+        .iter()
+        .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+        .count();
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_POSITION",
+            &format!(
+                "🔒 Position check for {}: open positions {}/{}, checking existing/cooldown",
+                token.symbol,
+                open_positions_count,
+                MAX_OPEN_POSITIONS
+            )
+        );
+    }
+
     // Check for existing open position
     let has_open_position = positions
         .iter()
         .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none());
 
     if has_open_position {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_POSITION",
+                &format!("❌ Token {} already has an open position", token.symbol)
+            );
+        }
         return Some(FilterReason::ExistingOpenPosition);
     }
 
     // Check maximum open positions limit
-    let open_positions_count = positions
-        .iter()
-        .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
-        .count();
-
     if open_positions_count >= MAX_OPEN_POSITIONS {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_POSITION",
+                &format!(
+                    "❌ Maximum positions reached: {}/{} open positions",
+                    open_positions_count,
+                    MAX_OPEN_POSITIONS
+                )
+            );
+        }
         return Some(FilterReason::MaxPositionsReached {
             current: open_positions_count,
             max: MAX_OPEN_POSITIONS,
@@ -607,6 +1063,23 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
                 let time_since_close = now - exit_time;
                 if time_since_close <= cooldown_duration {
                     let minutes_ago = time_since_close.num_minutes();
+                    let hours_remaining = (POSITION_CLOSE_COOLDOWN_MINUTES - minutes_ago) / 60;
+                    let minutes_remaining = (POSITION_CLOSE_COOLDOWN_MINUTES - minutes_ago) % 60;
+
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "DEBUG_POSITION",
+                            &format!(
+                                "❌ Token {} in cooldown: closed {}m ago, {}h {}m remaining",
+                                token.symbol,
+                                minutes_ago,
+                                hours_remaining,
+                                minutes_remaining
+                            )
+                        );
+                    }
+
                     return Some(FilterReason::RecentlyClosed {
                         minutes_ago,
                         cooldown_minutes: POSITION_CLOSE_COOLDOWN_MINUTES,
@@ -616,16 +1089,50 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
         }
     }
 
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_POSITION",
+            &format!("✅ Token {} position constraints satisfied", token.symbol)
+        );
+    }
+
     None
 }
 
 /// Validate loss prevention constraints
 fn validate_loss_prevention(token: &Token) -> Option<FilterReason> {
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_LOSS_PREV",
+            &format!("🛡️ Checking loss prevention for token {}", token.symbol)
+        );
+    }
+
     if !should_allow_token_purchase(&token.mint, &token.symbol) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_LOSS_PREV",
+                &format!(
+                    "❌ Token {} blocked by loss prevention (poor historical performance)",
+                    token.symbol
+                )
+            );
+        }
         return Some(FilterReason::PoorHistoricalPerformance {
             loss_rate: 0.0, // Placeholder - would need actual values
             avg_loss: 0.0, // Placeholder - would need actual values
         });
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_LOSS_PREV",
+            &format!("✅ Token {} passed loss prevention check", token.symbol)
+        );
     }
 
     None
@@ -634,48 +1141,6 @@ fn validate_loss_prevention(token: &Token) -> Option<FilterReason> {
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
-
-/// Check if we should log a filtering event for a token based on cooldown
-/// Returns true if the token hasn't been logged recently (within cooldown period)
-fn should_log_token_filter(token: &Token, reason_type: &str) -> bool {
-    if !is_debug_filtering_enabled() {
-        return false;
-    }
-
-    // Create a unique key combining token mint and reason type
-    let key = format!("{}:{}", token.mint, reason_type);
-
-    let now = Utc::now();
-    let cooldown_duration = ChronoDuration::minutes(LOG_COOLDOWN_MINUTES);
-
-    // Try to acquire lock on the cooldowns map
-    if let Ok(mut cooldowns) = TOKEN_LOG_COOLDOWNS.lock() {
-        // Check if this token+reason has a recent log entry
-        if let Some(last_logged) = cooldowns.get(&key) {
-            let elapsed = now - *last_logged;
-
-            // If within cooldown period, don't log
-            if elapsed < cooldown_duration {
-                return false;
-            }
-        }
-
-        // Update the last logged time
-        cooldowns.insert(key, now);
-
-        // Cleanup old entries periodically to prevent memory growth
-        if cooldowns.len() % 100 == 0 && cooldowns.len() > MAX_LOG_COOLDOWN_ENTRIES {
-            let cleanup_cutoff = now - ChronoDuration::hours(LOG_CLEANUP_INTERVAL_HOURS);
-            cooldowns.retain(|_, timestamp| *timestamp > cleanup_cutoff);
-        }
-
-        true
-    } else {
-        // If we can't get the lock, default to allowing the log
-        // This should be rare and is better than silent failures
-        true
-    }
-}
 
 /// Check if a specific token passes all filters (convenience function)
 pub fn is_token_eligible_for_trading(token: &Token) -> bool {
@@ -735,42 +1200,60 @@ pub fn log_filtering_summary(tokens: &[Token]) {
         return;
     }
 
-    // Create a simple key for summary logs that changes every LOG_COOLDOWN_MINUTES
-    // This ensures we don't spam summaries too often
-    let now = Utc::now();
+    let (total, eligible, pass_rate) = get_filtering_stats(tokens);
 
-    if let Ok(mut cooldowns) = TOKEN_LOG_COOLDOWNS.lock() {
-        let last_summary = cooldowns.get("summary_log").cloned();
+    log(
+        LogTag::Filtering,
+        "SUMMARY",
+        &format!(
+            "📊 FILTERING SUMMARY: Processed {} tokens → {} eligible ({:.1}% pass rate)",
+            total,
+            eligible,
+            pass_rate
+        )
+    );
 
-        // Only log summary if we haven't done so recently
-        if
-            last_summary.is_none() ||
-            now - last_summary.unwrap() > ChronoDuration::minutes(LOG_COOLDOWN_MINUTES)
-        {
-            let (total, eligible, pass_rate) = get_filtering_stats(tokens);
+    // Log detailed breakdown if we have rejections
+    if eligible < total && total > 0 {
+        let rejected_count = total - eligible;
+        log(
+            LogTag::Filtering,
+            "SUMMARY",
+            &format!(
+                "🚫 Rejected {} tokens ({:.1}% rejection rate) - use --debug-filtering for details",
+                rejected_count,
+                ((rejected_count as f64) / (total as f64)) * 100.0
+            )
+        );
+    }
 
-            log(
-                LogTag::Filtering,
-                "SUMMARY",
-                &format!(
-                    "Processed {} tokens: {} eligible ({:.1}% pass rate)",
-                    total,
-                    eligible,
-                    pass_rate
-                )
-            );
+    if eligible == 0 && total > 0 {
+        log(
+            LogTag::Filtering,
+            "WARN",
+            "⚠️ NO TOKENS PASSED FILTERING - Consider reviewing filter criteria or token sources"
+        );
 
-            if eligible == 0 && total > 0 {
-                log(
-                    LogTag::Filtering,
-                    "WARN",
-                    "No tokens passed filtering - check filter criteria"
-                );
-            }
-
-            // Update last summary timestamp
-            cooldowns.insert("summary_log".to_string(), now);
-        }
+        // Log current filter parameters for debugging
+        log(
+            LogTag::Filtering,
+            "WARN",
+            &format!(
+                "Current filters: Age {}h-{}h, Liquidity ${}+, Max ATH {}%, Price {:.12}-{:.3} SOL",
+                MIN_TOKEN_AGE_HOURS,
+                MAX_TOKEN_AGE_HOURS,
+                MIN_LIQUIDITY_USD,
+                MAX_PRICE_TO_ATH_PERCENT,
+                MIN_VALID_PRICE_SOL,
+                MAX_VALID_PRICE_SOL
+            )
+        );
+    } else if eligible > 0 {
+        log(
+            LogTag::Filtering,
+            "SUMMARY",
+            &format!("✅ {} tokens ready for trading evaluation", eligible)
+        );
     }
 }
 
@@ -780,54 +1263,41 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
         return;
     }
 
-    // Create a simple key for breakdown logs that changes every LOG_COOLDOWN_MINUTES
-    // This prevents spam in the logs
-    let now = Utc::now();
-    let time_bucket = now.timestamp() / (LOG_COOLDOWN_MINUTES * 60);
+    use std::collections::HashMap;
+    let mut reason_counts: HashMap<String, usize> = HashMap::new();
 
-    if let Ok(mut cooldowns) = TOKEN_LOG_COOLDOWNS.lock() {
-        let breakdown_key = format!("breakdown_{}", time_bucket);
-        let last_breakdown = cooldowns.get(&breakdown_key).cloned();
+    for (_, reason) in rejected {
+        let reason_type = match reason {
+            | FilterReason::EmptySymbol
+            | FilterReason::EmptyMint
+            | FilterReason::EmptyLogoUrl
+            | FilterReason::EmptyWebsite
+            | FilterReason::EmptyDescription => "Invalid Metadata",
+            | FilterReason::InvalidPrice
+            | FilterReason::PriceTooLow { .. }
+            | FilterReason::PriceTooHigh { .. }
+            | FilterReason::MissingPriceData => "Price Issues",
+            | FilterReason::ZeroLiquidity
+            | FilterReason::InsufficientLiquidity { .. }
+            | FilterReason::MissingLiquidityData => "Liquidity Issues",
+            | FilterReason::TooYoung { .. }
+            | FilterReason::TooOld { .. }
+            | FilterReason::NoCreationDate => "Age Constraints",
+            | FilterReason::ExistingOpenPosition
+            | FilterReason::RecentlyClosed { .. }
+            | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
+            FilterReason::TooCloseToATH { .. } => "Price Peak Protection",
+            FilterReason::PoorHistoricalPerformance { .. } => "Loss Prevention",
+            FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
+            FilterReason::RugcheckRisk { .. } => "Security Risks",
+            FilterReason::LPLockRisk { .. } => "LP Lock Security",
+            FilterReason::LockAcquisitionFailed => "System Errors",
+        };
 
-        // Only log breakdown if we haven't done so recently for this time bucket
-        if last_breakdown.is_none() {
-            use std::collections::HashMap;
-            let mut reason_counts: HashMap<String, usize> = HashMap::new();
-
-            for (_, reason) in rejected {
-                let reason_type = match reason {
-                    FilterReason::EmptySymbol | FilterReason::EmptyMint => "Invalid Metadata",
-                    | FilterReason::InvalidPrice
-                    | FilterReason::PriceTooLow { .. }
-                    | FilterReason::PriceTooHigh { .. }
-                    | FilterReason::MissingPriceData => "Price Issues",
-                    | FilterReason::ZeroLiquidity
-                    | FilterReason::InsufficientLiquidity { .. }
-                    | FilterReason::MissingLiquidityData => "Liquidity Issues",
-                    | FilterReason::TooYoung { .. }
-                    | FilterReason::TooOld { .. }
-                    | FilterReason::NoCreationDate => "Age Constraints",
-                    | FilterReason::ExistingOpenPosition
-                    | FilterReason::RecentlyClosed { .. }
-                    | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
-                    FilterReason::TooCloseToATH { .. } => "Price Peak Protection",
-                    FilterReason::PoorHistoricalPerformance { .. } => "Loss Prevention",
-                    FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen =>
-                        "Account Issues",
-                    FilterReason::RugcheckRisk { .. } => "Security Risks",
-                    FilterReason::LPLockRisk { .. } => "LP Lock Security",
-                    FilterReason::LockAcquisitionFailed => "System Errors",
-                };
-
-                *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
-            }
-
-            log(LogTag::Filtering, "DEBUG", &format!("Rejection breakdown: {:?}", reason_counts));
-
-            // Update last breakdown timestamp
-            cooldowns.insert(breakdown_key, now);
-        }
+        *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
     }
+
+    log(LogTag::Filtering, "DEBUG", &format!("Rejection breakdown: {:?}", reason_counts));
 }
 
 /// Log specific filtering error for important cases
@@ -841,9 +1311,9 @@ pub fn log_filtering_error(token: &Token, reason: &FilterReason) {
     if should_log {
         let message = match reason {
             FilterReason::LockAcquisitionFailed =>
-                format!("Lock acquisition failed for {}", token.symbol),
+                format!("🔒 Lock acquisition failed for {}", token.symbol),
             FilterReason::MaxPositionsReached { current, max } =>
-                format!("Max positions reached ({}/{})", current, max),
+                format!("📊 Max positions reached ({}/{})", current, max),
             _ => {
                 return;
             }

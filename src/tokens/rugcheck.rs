@@ -62,11 +62,11 @@ fn deserialize_int_or_string<'de, D>(deserializer: D) -> Result<Option<String>, 
 }
 
 // ===== RATE LIMITING CONSTANTS =====
-const RUGCHECK_RATE_LIMIT_DELAY: Duration = Duration::from_millis(5000); // 5 seconds between requests (more conservative for 429 errors)
-const RUGCHECK_BATCH_SIZE: usize = 1; // Process 1 token at a time for better rate limiting
-const RUGCHECK_REQUEST_TIMEOUT: Duration = Duration::from_secs(45); // Increased timeout
-const RUGCHECK_UPDATE_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
-const RUGCHECK_DATA_EXPIRY: Duration = Duration::from_secs(60 * 60); // 5 minutes
+const RUGCHECK_RATE_LIMIT_DELAY_MS: u64 = 1000; // 5 seconds between requests (more conservative for 429 errors)
+const RUGCHECK_REQUEST_TIMEOUT_SECS: u64 = 45; // Increased timeout
+const RUGCHECK_UPDATE_INTERVAL_SECS: u64 = 30; // 30 seconds - check for expired data and new tokens
+const RUGCHECK_PRIORITY_UPDATE_INTERVAL_SECS: u64 = 60; // 1 minute for open positions
+const RUGCHECK_DATA_EXPIRY_HOURS: u64 = 24; // 24 hours - when rugcheck data expires
 
 // ===== RUGCHECK API RESPONSE STRUCTURES =====
 
@@ -299,7 +299,7 @@ pub struct RugcheckCacheEntry {
 impl RugcheckCacheEntry {
     pub fn is_expired(&self) -> bool {
         Utc::now().signed_duration_since(self.timestamp).to_std().unwrap_or(Duration::MAX) >
-            RUGCHECK_DATA_EXPIRY
+            Duration::from_secs(RUGCHECK_DATA_EXPIRY_HOURS * 60 * 60)
     }
 }
 
@@ -316,7 +316,7 @@ pub struct RugcheckService {
 impl RugcheckService {
     pub fn new(database: TokenDatabase, shutdown_notify: Arc<Notify>) -> Self {
         let client = Client::builder()
-            .timeout(RUGCHECK_REQUEST_TIMEOUT)
+            .timeout(Duration::from_secs(RUGCHECK_REQUEST_TIMEOUT_SECS))
             .user_agent("ScreenerBot/1.0")
             .build()
             .expect("Failed to create HTTP client");
@@ -340,7 +340,7 @@ impl RugcheckService {
             return;
         }
 
-        let mut update_interval = interval(RUGCHECK_UPDATE_INTERVAL);
+        let mut update_interval = interval(Duration::from_secs(RUGCHECK_UPDATE_INTERVAL_SECS));
 
         loop {
             tokio::select! {
@@ -355,47 +355,157 @@ impl RugcheckService {
         }
     }
 
-    /// Update rugcheck data for all tokens in database
+    /// Update rugcheck data for priority tokens (open positions, recent discoveries)
+    /// These are updated more frequently regardless of expiry
+    pub async fn update_priority_tokens(&self, priority_mints: Vec<String>) -> Result<(), String> {
+        if priority_mints.is_empty() {
+            return Ok(());
+        }
+
+        log(
+            LogTag::Rugcheck,
+            "PRIORITY_UPDATE",
+            &format!("Updating rugcheck data for {} priority tokens", priority_mints.len())
+        );
+
+        // Filter to only tokens that actually need updating (older than 1 hour for priority)
+        let mut tokens_to_update = Vec::new();
+        let priority_expiry = Duration::from_secs(RUGCHECK_PRIORITY_UPDATE_INTERVAL_SECS * 60); // 1 hour for priority tokens
+
+        for mint in priority_mints {
+            let should_update = match self.database.get_rugcheck_data_with_timestamp(&mint) {
+                Ok(Some((_rugcheck_data, updated_at))) => {
+                    let age = Utc::now().signed_duration_since(updated_at);
+                    if let Ok(age_duration) = age.to_std() {
+                        age_duration > priority_expiry
+                    } else {
+                        true // Error parsing age, update to be safe
+                    }
+                }
+                Ok(None) => true, // No data, needs fetching
+                Err(_) => true, // Database error, update to be safe
+            };
+
+            if should_update {
+                tokens_to_update.push(mint);
+            }
+        }
+
+        if tokens_to_update.is_empty() {
+            log(LogTag::Rugcheck, "PRIORITY_SKIP", "All priority tokens have recent rugcheck data");
+            return Ok(());
+        }
+
+        log(
+            LogTag::Rugcheck,
+            "PRIORITY_FILTERED",
+            &format!("Updating {} priority tokens that need refresh", tokens_to_update.len())
+        );
+
+        self.update_rugcheck_data_for_mints(tokens_to_update).await
+    }
+
+    /// Get list of tokens with expired rugcheck data (24+ hours old)
+    async fn get_expired_tokens(&self) -> Result<Vec<String>, String> {
+        // Get all tokens from database
+        let tokens = self.database
+            .get_all_tokens().await
+            .map_err(|e| format!("Failed to get tokens from database: {}", e))?;
+
+        let mut expired_mints = Vec::new();
+
+        for token in tokens {
+            let mint = token.mint.clone(); // Clone the mint to avoid ownership issues
+
+            // Check if rugcheck data exists and if it's expired
+            match self.database.get_rugcheck_data_with_timestamp(&mint) {
+                Ok(Some((_rugcheck_data, updated_at))) => {
+                    // Check if rugcheck data is expired
+                    let age = Utc::now().signed_duration_since(updated_at);
+                    if let Ok(age_duration) = age.to_std() {
+                        if age_duration > Duration::from_secs(RUGCHECK_DATA_EXPIRY_HOURS * 60 * 60) {
+                            expired_mints.push(mint);
+                            if is_debug_rugcheck_enabled() {
+                                log(
+                                    LogTag::Rugcheck,
+                                    "EXPIRED",
+                                    &format!(
+                                        "Token {} has expired rugcheck data (age: {:?})",
+                                        token.mint,
+                                        age_duration
+                                    )
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {
+                    // No rugcheck data at all - needs fetching
+                    expired_mints.push(mint.clone());
+                    if is_debug_rugcheck_enabled() {
+                        log(
+                            LogTag::Rugcheck,
+                            "MISSING",
+                            &format!("Token {} has no rugcheck data - needs fetching", mint)
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Rugcheck,
+                        "DB_ERROR",
+                        &format!("Database error checking rugcheck data for {}: {}", mint, e)
+                    );
+                    // On database error, include token to be safe
+                    expired_mints.push(mint);
+                }
+            }
+        }
+
+        Ok(expired_mints)
+    }
+
+    /// Update rugcheck data for expired tokens only (smart expiry-based updates)
     async fn update_all_rugcheck_data(&self) {
         log(LogTag::Rugcheck, "UPDATE", "Starting periodic rugcheck data update");
 
-        // Get all token mints from database
-        let tokens = match self.database.get_all_tokens().await {
-            Ok(tokens) => tokens,
+        // Get expired tokens that need updating (24+ hours old)
+        let expired_mints = match self.get_expired_tokens().await {
+            Ok(mints) => mints,
             Err(e) => {
-                log(
-                    LogTag::Rugcheck,
-                    "ERROR",
-                    &format!("Failed to get tokens from database: {}", e)
-                );
+                log(LogTag::Rugcheck, "ERROR", &format!("Failed to get expired tokens: {}", e));
                 return;
             }
         };
 
-        let mints: Vec<String> = tokens
-            .into_iter()
-            .map(|token| token.mint)
-            .collect();
-
-        if mints.is_empty() {
-            log(LogTag::Rugcheck, "INFO", "No tokens found to update");
+        if expired_mints.is_empty() {
+            log(LogTag::Rugcheck, "INFO", "No expired tokens found - all rugcheck data is current");
             return;
         }
 
-        log(LogTag::Rugcheck, "INFO", &format!("Found {} tokens to update", mints.len()));
+        log(
+            LogTag::Rugcheck,
+            "INFO",
+            &format!("Found {} expired tokens to update", expired_mints.len())
+        );
 
-        // Update rugcheck data with rate limiting
-        if let Err(e) = self.update_rugcheck_data_for_mints(mints).await {
-            log(LogTag::Rugcheck, "ERROR", &format!("Failed to update rugcheck data: {}", e));
+        // Update only expired rugcheck data
+        if let Err(e) = self.update_rugcheck_data_for_mints(expired_mints).await {
+            log(
+                LogTag::Rugcheck,
+                "ERROR",
+                &format!("Failed to update expired rugcheck data: {}", e)
+            );
         }
     }
 
     /// Update rugcheck data for specific list of mints
     pub async fn update_rugcheck_data_for_mints(&self, mints: Vec<String>) -> Result<(), String> {
+        let total_mints = mints.len();
         log(
             LogTag::Rugcheck,
             "START",
-            &format!("Starting rugcheck update for {} tokens", mints.len())
+            &format!("Starting rugcheck update for {} tokens", total_mints)
         );
 
         let mut success_count = 0;
@@ -411,58 +521,67 @@ impl RugcheckService {
             shutdown_flag_clone.store(true, std::sync::atomic::Ordering::SeqCst);
         });
 
-        for chunk in mints.chunks(RUGCHECK_BATCH_SIZE) {
-            // Check for shutdown signal before processing each batch
+        // Process tokens sequentially with rate limiting
+        // Note: Individual fetch_rugcheck_data calls handle rate limiting internally
+        for mint in mints {
+            // Check for shutdown signal before each token
             if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
                 log(
                     LogTag::Rugcheck,
                     "SHUTDOWN",
-                    "Shutdown signal received during batch processing"
+                    "Shutdown signal received during token processing"
                 );
                 break;
             }
 
-            // Process batch sequentially to avoid rate limiting
-            // Note: Individual fetch_rugcheck_data calls now handle rate limiting
-            for mint in chunk {
-                // Check for shutdown signal before each token
-                if shutdown_flag.load(std::sync::atomic::Ordering::SeqCst) {
-                    log(
-                        LogTag::Rugcheck,
-                        "SHUTDOWN",
-                        "Shutdown signal received during token processing"
-                    );
-                    break;
-                }
+            match self.fetch_and_store_rugcheck_data(mint.clone()).await {
+                Ok(_) => {
+                    success_count += 1;
 
-                match self.fetch_and_store_rugcheck_data(mint.clone()).await {
-                    Ok(_) => {
-                        success_count += 1;
-                        if is_debug_rugcheck_enabled() {
-                            log(
-                                LogTag::Rugcheck,
-                                "SUCCESS",
-                                &format!("✓ Updated rugcheck data for {}", mint)
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        error_count += 1;
+                    // Get the stored data for detailed success logging
+                    if let Ok(Some(data)) = self.database.get_rugcheck_data(&mint) {
+                        let symbol = data.token_meta
+                            .as_ref()
+                            .and_then(|meta| meta.symbol.as_ref())
+                            .map(|s| s.as_str())
+                            .unwrap_or(&mint);
+
+                        let score = data.score_normalised.or(data.score);
+                        let is_safe = is_token_safe_for_trading(&data);
+
                         log(
                             LogTag::Rugcheck,
-                            "ERROR",
-                            &format!("✗ Failed to update {}: {}", mint, e)
+                            "STORED",
+                            &format!(
+                                "✓ Stored {} | Risk Score: {} | Status: {} | {}/{}",
+                                symbol,
+                                score.map_or("N/A".to_string(), |s| s.to_string()),
+                                if is_safe {
+                                    "🟢 SAFE"
+                                } else {
+                                    "🔴 RISKY"
+                                },
+                                success_count,
+                                total_mints
+                            )
+                        );
+                    } else if is_debug_rugcheck_enabled() {
+                        log(
+                            LogTag::Rugcheck,
+                            "SUCCESS",
+                            &format!(
+                                "✓ Updated rugcheck data for {} ({}/{})",
+                                mint,
+                                success_count,
+                                total_mints
+                            )
                         );
                     }
                 }
-            }
-
-            if is_debug_rugcheck_enabled() {
-                log(
-                    LogTag::Rugcheck,
-                    "BATCH",
-                    &format!("Batch completed: {} success, {} errors", success_count, error_count)
-                );
+                Err(e) => {
+                    error_count += 1;
+                    log(LogTag::Rugcheck, "ERROR", &format!("✗ Failed to update {}: {}", mint, e));
+                }
             }
         }
 
@@ -499,8 +618,9 @@ impl RugcheckService {
         {
             let mut last_time = self.last_request_time.lock().await;
             let elapsed = last_time.elapsed();
-            if elapsed < RUGCHECK_RATE_LIMIT_DELAY {
-                let wait_time = RUGCHECK_RATE_LIMIT_DELAY - elapsed;
+            let rate_limit_delay = Duration::from_millis(RUGCHECK_RATE_LIMIT_DELAY_MS);
+            if elapsed < rate_limit_delay {
+                let wait_time = rate_limit_delay - elapsed;
                 if is_debug_rugcheck_enabled() {
                     log(
                         LogTag::Rugcheck,
@@ -528,7 +648,7 @@ impl RugcheckService {
                 self.client
                     .get(&url)
                     .header("accept", "application/json")
-                    .timeout(RUGCHECK_REQUEST_TIMEOUT)
+                    .timeout(Duration::from_secs(RUGCHECK_REQUEST_TIMEOUT_SECS))
                     .send().await
             {
                 Ok(response) => {
@@ -579,17 +699,81 @@ impl RugcheckService {
                     } else {
                         match response.json::<RugcheckResponse>().await {
                             Ok(rugcheck_data) => {
-                                if is_debug_rugcheck_enabled() {
-                                    log(
-                                        LogTag::Rugcheck,
-                                        "SUCCESS",
-                                        &format!(
-                                            "Successfully fetched rugcheck data for {} on attempt {}",
-                                            mint,
-                                            attempt
+                                // Extract token information for detailed logging
+                                let symbol = rugcheck_data.token_meta
+                                    .as_ref()
+                                    .and_then(|meta| meta.symbol.as_ref())
+                                    .unwrap_or(&rugcheck_data.mint);
+
+                                let name = rugcheck_data.token_meta
+                                    .as_ref()
+                                    .and_then(|meta| meta.name.as_ref())
+                                    .unwrap_or(&symbol);
+
+                                let score = rugcheck_data.score_normalised.or(rugcheck_data.score);
+                                let is_rugged = rugcheck_data.rugged.unwrap_or(false);
+
+                                // Count high-risk issues
+                                let high_risks = if let Some(risks) = &rugcheck_data.risks {
+                                    risks
+                                        .iter()
+                                        .filter(
+                                            |r|
+                                                r.level.as_deref() == Some("high") ||
+                                                r.level.as_deref() == Some("critical")
                                         )
-                                    );
-                                }
+                                        .count()
+                                } else {
+                                    0
+                                };
+
+                                // Check LP lock status
+                                let lp_status = if let Some(markets) = &rugcheck_data.markets {
+                                    let mut best_lock_pct = 0.0f64;
+                                    for market in markets {
+                                        if let Some(lp) = &market.lp {
+                                            if let Some(pct) = lp.lp_locked_pct {
+                                                best_lock_pct = best_lock_pct.max(pct);
+                                            }
+                                        }
+                                    }
+                                    if best_lock_pct > 0.0 {
+                                        format!("LP: {:.1}%", best_lock_pct)
+                                    } else {
+                                        "LP: Unknown".to_string()
+                                    }
+                                } else {
+                                    "LP: No data".to_string()
+                                };
+
+                                // Format status indicators - REMEMBER: Higher score = MORE risk
+                                let safety_status = if is_rugged {
+                                    "🔴 RUGGED"
+                                } else if score.map_or(false, |s| s >= 80) {
+                                    "� VERY_HIGH_RISK"
+                                } else if score.map_or(false, |s| s >= 50) {
+                                    "� HIGH_RISK"
+                                } else if score.map_or(false, |s| s >= 20) {
+                                    "🟡 MEDIUM_RISK"
+                                } else {
+                                    "� LOW_RISK"
+                                };
+
+                                log(
+                                    LogTag::Rugcheck,
+                                    "SUCCESS",
+                                    &format!(
+                                        "✓ {} ({}) | Score: {} | {} | Risks: {} | {} | Attempt: {}",
+                                        symbol,
+                                        name,
+                                        score.map_or("N/A".to_string(), |s| s.to_string()),
+                                        safety_status,
+                                        high_risks,
+                                        lp_status,
+                                        attempt
+                                    )
+                                );
+
                                 return Ok(rugcheck_data);
                             }
                             Err(e) => {
@@ -644,7 +828,7 @@ impl RugcheckService {
             // Wait before retry (exponential backoff + additional rate limiting)
             if attempt < max_retries {
                 let base_wait = std::time::Duration::from_millis(2000 * attempt);
-                let rate_limit_wait = RUGCHECK_RATE_LIMIT_DELAY;
+                let rate_limit_wait = Duration::from_millis(RUGCHECK_RATE_LIMIT_DELAY_MS);
                 let wait_time = std::cmp::max(base_wait, rate_limit_wait);
 
                 log(
@@ -759,10 +943,42 @@ impl RugcheckService {
                         };
                         self.cache.write().await.insert(mint.to_string(), cache_entry);
 
+                        // Enhanced success logging with token details
+                        let symbol = data.token_meta
+                            .as_ref()
+                            .and_then(|meta| meta.symbol.as_ref())
+                            .map(|s| s.as_str())
+                            .unwrap_or(mint);
+
+                        let score = data.score_normalised.or(data.score);
+                        let is_safe = is_token_safe_for_trading(&data);
+                        let high_risks = if let Some(risks) = &data.risks {
+                            risks
+                                .iter()
+                                .filter(
+                                    |r|
+                                        r.level.as_deref() == Some("high") ||
+                                        r.level.as_deref() == Some("critical")
+                                )
+                                .count()
+                        } else {
+                            0
+                        };
+
                         log(
                             LogTag::Rugcheck,
                             "FETCH_SUCCESS",
-                            &format!("Successfully auto-fetched rugcheck data for: {}", mint)
+                            &format!(
+                                "🔄 Auto-fetched {} | Risk Score: {} | Status: {} | High Risks: {}",
+                                symbol,
+                                score.map_or("N/A".to_string(), |s| s.to_string()),
+                                if is_safe {
+                                    "🟢 SAFE"
+                                } else {
+                                    "🔴 RISKY"
+                                },
+                                high_risks
+                            )
                         );
                         Ok(Some(data))
                     }
@@ -875,15 +1091,15 @@ pub fn is_token_safe_for_trading(rugcheck_data: &RugcheckResponse) -> bool {
         return false;
     }
 
-    // Improved score-based evaluation for trading
-    if let Some(score) = rugcheck_data.score_normalised {
-        // Very low scores (negative) are dangerous
-        if score < 0 {
+    // CORRECTED score-based evaluation - HIGHER SCORES MEAN MORE RISK!
+    if let Some(risk_score) = rugcheck_data.score_normalised {
+        // Very high risk scores (80+) are dangerous - immediate rejection
+        if risk_score >= 80 {
             return false;
         }
 
-        // For low scores (0-4), check if there are high-risk issues
-        if score < 5 {
+        // High risk scores (50-79) need careful evaluation
+        if risk_score >= 50 {
             // Count high-level risks
             let high_risk_count = if let Some(risks) = &rugcheck_data.risks {
                 risks
@@ -894,20 +1110,31 @@ pub fn is_token_safe_for_trading(rugcheck_data: &RugcheckResponse) -> bool {
                 0
             };
 
-            // If score is 0-2 with no high risks, it's likely a legitimate established token
-            // (USDC, SOL, USDT all fall into this category)
-            if score <= 2 && high_risk_count == 0 {
-                return true;
+            // For high risk scores, don't allow any high-risk issues
+            if high_risk_count > 0 {
+                return false;
             }
-
-            // For scores 3-4, allow if less than 2 high risks
-            if score >= 3 && high_risk_count < 2 {
-                return true;
-            }
-
-            // Otherwise, too risky for low score
-            return false;
         }
+
+        // Medium risk scores (20-49) - allow with limited high risks
+        if risk_score >= 20 {
+            let high_risk_count = if let Some(risks) = &rugcheck_data.risks {
+                risks
+                    .iter()
+                    .filter(|r| r.level.as_deref() == Some("high"))
+                    .count()
+            } else {
+                0
+            };
+
+            // For medium risk scores, allow max 1 high risk
+            if high_risk_count > 1 {
+                return false;
+            }
+        }
+
+        // Low risk scores (0-19) are generally safe
+        // These are typically established tokens with good safety profiles
     }
 
     // For authority checks, be more nuanced

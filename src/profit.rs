@@ -27,7 +27,7 @@ pub const STOP_LOSS_PERCENT: f64 = -35.0; // Optimized: -35% (vs -55%)
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
 // Based on backtesting showing 2-30 minute optimal range
 const ULTRA_SAFE_MAX_TIME: f64 = 30.0; // Ultra safe tokens
-const SAFE_MAX_TIME: f64 = 25.0; // Safe tokens  
+const SAFE_MAX_TIME: f64 = 25.0; // Safe tokens
 const MEDIUM_MAX_TIME: f64 = 20.0; // Medium risk tokens
 const RISKY_MAX_TIME: f64 = 15.0; // Risky tokens
 const DANGEROUS_MAX_TIME: f64 = 10.0; // Dangerous tokens
@@ -37,7 +37,7 @@ const MIN_HOLD_TIME: f64 = 2.0; // Minimum hold time for all positions
 // Based on backtesting: 8%-25% range with 90.6% win rate
 const ULTRA_SAFE_PROFIT_MIN: f64 = 8.0; // 8-25% optimized range
 const ULTRA_SAFE_PROFIT_MAX: f64 = 25.0;
-const SAFE_PROFIT_MIN: f64 = 10.0; // 10-30% 
+const SAFE_PROFIT_MIN: f64 = 10.0; // 10-30%
 const SAFE_PROFIT_MAX: f64 = 30.0;
 const MEDIUM_PROFIT_MIN: f64 = 12.0; // 12-35%
 const MEDIUM_PROFIT_MAX: f64 = 35.0;
@@ -308,11 +308,14 @@ fn calculate_comprehensive_safety_score(
         if rugcheck.rugged.unwrap_or(false) {
             safety_score = 0.0; // Rugged token = 0 safety
         } else {
-            // Use normalized score if available (0-100), otherwise use raw score
-            let rugcheck_score = rugcheck.score_normalised.or(rugcheck.score).unwrap_or(50) as f64;
+            // CORRECTED: Rugcheck score is a RISK score - higher means MORE risk!
+            let rugcheck_risk_score = rugcheck.score_normalised
+                .or(rugcheck.score)
+                .unwrap_or(50) as f64;
 
-            // Convert rugcheck score (0-100) to our contribution (0-40)
-            let rugcheck_contribution = (rugcheck_score / 100.0) * 40.0;
+            // Convert risk score (0-100) to safety contribution (40-0)
+            // Higher risk score = lower safety contribution
+            let rugcheck_contribution = 40.0 - (rugcheck_risk_score / 100.0) * 40.0;
 
             // Additional penalty for high-risk items
             let risk_penalty = if let Some(risks) = &rugcheck.risks {
@@ -787,11 +790,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     if USE_TRAILING_STOP && pnl_percent > TRAILING_STOP_PERCENT {
         // Get highest price reached (from position tracking)
         let highest_price = position.price_highest;
-        
+
         if highest_price > 0.0 {
             let highest_profit_percent = ((highest_price - entry_price) / entry_price) * 100.0;
             let current_drop_from_peak = highest_profit_percent - pnl_percent;
-            
+
             if current_drop_from_peak >= TRAILING_STOP_PERCENT {
                 log(
                     LogTag::Profit,
@@ -803,13 +806,20 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                         TRAILING_STOP_PERCENT
                     )
                 );
-                return (1.0, format!("TRAILING STOP: Dropped {:.2}% from {:.2}% peak", current_drop_from_peak, highest_profit_percent));
+                return (
+                    1.0,
+                    format!(
+                        "TRAILING STOP: Dropped {:.2}% from {:.2}% peak",
+                        current_drop_from_peak,
+                        highest_profit_percent
+                    ),
+                );
             }
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ OPTIMIZED MINIMUM HOLD TIME - NEW FEATURE  
+    // ⏰ OPTIMIZED MINIMUM HOLD TIME - NEW FEATURE
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
     if minutes_held < MIN_HOLD_TIME {
@@ -822,7 +832,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 MIN_HOLD_TIME
             )
         );
-        return (0.0, format!("Minimum hold time: {:.2}min < {:.2}min required", minutes_held, MIN_HOLD_TIME));
+        return (
+            0.0,
+            format!("Minimum hold time: {:.2}min < {:.2}min required", minutes_held, MIN_HOLD_TIME),
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -987,7 +1000,11 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 adjusted_min_profit,
                 adjusted_max_profit,
                 time_decay_multiplier,
-                if USE_TRAILING_STOP { "ENABLED" } else { "DISABLED" },
+                if USE_TRAILING_STOP {
+                    "ENABLED"
+                } else {
+                    "DISABLED"
+                },
                 MIN_HOLD_TIME
             )
         );
