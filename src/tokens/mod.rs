@@ -161,19 +161,6 @@ impl TokensSystem {
         let monitor_handle = start_token_monitoring(shutdown.clone()).await?;
         handles.push(monitor_handle);
 
-        // Start rugcheck service
-        log(LogTag::System, "START", "Starting rugcheck background service...");
-        let rugcheck_service = Arc::new(
-            RugcheckService::new(self.database.clone(), shutdown.clone())
-        );
-        let rugcheck_handle = tokio::spawn({
-            let service = rugcheck_service.clone();
-            async move {
-                service.start_background_service().await;
-            }
-        });
-        handles.push(rugcheck_handle);
-
         log(LogTag::System, "SUCCESS", "All tokens system background tasks started");
 
         Ok(handles)

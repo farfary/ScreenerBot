@@ -534,6 +534,32 @@ impl RugcheckService {
                 break;
             }
 
+            // Skip tokens that were updated within the last minute to prevent duplicate processing
+            if
+                let Ok(Some((_data, updated_at))) = self.database.get_rugcheck_data_with_timestamp(
+                    &mint
+                )
+            {
+                let age = Utc::now().signed_duration_since(updated_at);
+                if let Ok(age_duration) = age.to_std() {
+                    if age_duration < Duration::from_secs(60) {
+                        // Skip if updated within last minute
+                        if is_debug_rugcheck_enabled() {
+                            log(
+                                LogTag::Rugcheck,
+                                "SKIP_RECENT",
+                                &format!(
+                                    "Skipping {} - recently updated ({:?} ago)",
+                                    mint,
+                                    age_duration
+                                )
+                            );
+                        }
+                        continue;
+                    }
+                }
+            }
+
             match self.fetch_and_store_rugcheck_data(mint.clone()).await {
                 Ok(_) => {
                     success_count += 1;
