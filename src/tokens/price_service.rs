@@ -563,22 +563,30 @@ impl TokenPriceService {
                     let change = new - old;
                     let change_percent = if old != 0.0 { (change / old) * 100.0 } else { 0.0 };
 
-                    // Print to console for immediate visibility
-                    println!(
-                        "🔄 PRICE UPDATE for {}: {:.12} → {:.12} SOL ({:+.12} SOL, {:+.6}%)",
-                        mint,
-                        old,
-                        new,
-                        change,
-                        change_percent
+                    // Log to console for immediate visibility
+                    log(
+                        LogTag::PriceService,
+                        "UPDATE",
+                        &format!(
+                            "🔄 PRICE UPDATE for {}: {:.12} → {:.12} SOL ({:+.12} SOL, {:+.6}%)",
+                            mint,
+                            old,
+                            new,
+                            change,
+                            change_percent
+                        )
                     );
 
                     // Check if the price is completely static (exactly the same)
                     if (old - new).abs() < f64::EPSILON {
-                        println!(
-                            "⚠️  STATIC PRICE DETECTED for {}: Price has not changed at all (exactly {:.12} SOL)",
-                            mint,
-                            new
+                        log(
+                            LogTag::PriceService,
+                            "STATIC",
+                            &format!(
+                                "⚠️  STATIC PRICE DETECTED for {}: Price has not changed at all (exactly {:.12} SOL)",
+                                mint,
+                                new
+                            )
                         );
                     }
 
@@ -590,15 +598,23 @@ impl TokenPriceService {
                     )
                 }
                 (None, Some(new)) => {
-                    println!("🆕 NEW PRICE for {}: {:.12} SOL (first time)", mint, new);
+                    log(
+                        LogTag::PriceService,
+                        "NEW",
+                        &format!("🆕 NEW PRICE for {}: {:.12} SOL (first time)", mint, new)
+                    );
                     format!(" (new price: ${:.12} SOL)", new)
                 }
                 (Some(old), None) => {
-                    println!("❌ PRICE REMOVED for {}: was {:.12} SOL", mint, old);
+                    log(
+                        LogTag::PriceService,
+                        "REMOVED",
+                        &format!("❌ PRICE REMOVED for {}: was {:.12} SOL", mint, old)
+                    );
                     format!(" (removed price: was ${:.12} SOL)", old)
                 }
                 (None, None) => {
-                    println!("❓ NO PRICE DATA for {}", mint);
+                    log(LogTag::PriceService, "NO_DATA", &format!("❓ NO PRICE DATA for {}", mint));
                     " (no price data)".to_string()
                 }
             };

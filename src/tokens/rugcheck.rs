@@ -759,20 +759,24 @@ impl RugcheckService {
                                     "� LOW_RISK"
                                 };
 
-                                log(
-                                    LogTag::Rugcheck,
-                                    "SUCCESS",
-                                    &format!(
-                                        "✓ {} ({}) | Score: {} | {} | Risks: {} | {} | Attempt: {}",
-                                        symbol,
-                                        name,
-                                        score.map_or("N/A".to_string(), |s| s.to_string()),
-                                        safety_status,
-                                        high_risks,
-                                        lp_status,
-                                        attempt
-                                    )
-                                );
+                                // Log success only in debug mode to avoid duplicate logging
+                                // (The main logging is done in update_rugcheck_data_for_mints)
+                                if is_debug_rugcheck_enabled() {
+                                    log(
+                                        LogTag::Rugcheck,
+                                        "SUCCESS",
+                                        &format!(
+                                            "✓ {} ({}) | Score: {} | {} | Risks: {} | {} | Attempt: {}",
+                                            symbol,
+                                            name,
+                                            score.map_or("N/A".to_string(), |s| s.to_string()),
+                                            safety_status,
+                                            high_risks,
+                                            lp_status,
+                                            attempt
+                                        )
+                                    );
+                                }
 
                                 return Ok(rugcheck_data);
                             }
@@ -965,21 +969,25 @@ impl RugcheckService {
                             0
                         };
 
-                        log(
-                            LogTag::Rugcheck,
-                            "FETCH_SUCCESS",
-                            &format!(
-                                "🔄 Auto-fetched {} | Risk Score: {} | Status: {} | High Risks: {}",
-                                symbol,
-                                score.map_or("N/A".to_string(), |s| s.to_string()),
-                                if is_safe {
-                                    "🟢 SAFE"
-                                } else {
-                                    "🔴 RISKY"
-                                },
-                                high_risks
-                            )
-                        );
+                        // Log success only in debug mode to avoid duplicate logging
+                        // (The main logging is done in update_rugcheck_data_for_mints)
+                        if is_debug_rugcheck_enabled() {
+                            log(
+                                LogTag::Rugcheck,
+                                "FETCH_SUCCESS",
+                                &format!(
+                                    "🔄 Auto-fetched {} | Risk Score: {} | Status: {} | High Risks: {}",
+                                    symbol,
+                                    score.map_or("N/A".to_string(), |s| s.to_string()),
+                                    if is_safe {
+                                        "🟢 SAFE"
+                                    } else {
+                                        "🔴 RISKY"
+                                    },
+                                    high_risks
+                                )
+                            );
+                        }
                         Ok(Some(data))
                     }
                     Ok(None) => {
