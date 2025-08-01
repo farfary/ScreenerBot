@@ -22,7 +22,7 @@ use serde::{ Serialize, Deserialize };
 // ================================================================================================
 
 // 🔒 STOP LOSS PROTECTION - OPTIMIZED SAFETY NET
-pub const STOP_LOSS_PERCENT: f64 = -35.0; // Optimized: -35% (vs -55%)
+pub const STOP_LOSS_PERCENT: f64 = -60.0;
 
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
 // Based on backtesting showing 2-30 minute optimal range

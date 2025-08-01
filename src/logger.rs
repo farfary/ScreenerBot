@@ -53,6 +53,7 @@ const ENABLE_FILTERING_LOGS: bool = true;
 const ENABLE_RUGCHECK_LOGS: bool = true;
 const ENABLE_PROFIT_TAG_LOGS: bool = true;
 const ENABLE_RPC_LOGS: bool = true;
+const ENABLE_OHLCV_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -295,6 +296,7 @@ pub enum LogTag {
     Profit,
     PriceService,
     Rpc,
+    Ohlcv,
     Other(String),
 }
 
@@ -314,6 +316,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Profit => format!("{:<8}", "PROFIT").bright_purple().bold(), // 💲 Profit green
             LogTag::PriceService => format!("{:<8}", "PRICE").bright_green().bold(), // 💹 Price service green
             LogTag::Rpc => format!("{:<8}", "RPC").bright_cyan().bold(), // 🔗 RPC cyan
+            LogTag::Ohlcv => format!("{:<8}", "OHLCV").bright_green().bold(), // 📈 OHLCV chart green
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -337,6 +340,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Profit => ENABLE_PROFIT_TAG_LOGS,
         LogTag::PriceService => ENABLE_PRICE_SERVICE_LOGS,
         LogTag::Rpc => ENABLE_RPC_LOGS,
+        LogTag::Ohlcv => ENABLE_OHLCV_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -431,6 +435,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Rpc =>
             format!("{:<width$}", "RPC", width = TAG_WIDTH)
                 .bright_cyan()
+                .bold(),
+        LogTag::Ohlcv =>
+            format!("{:<width$}", "OHLCV", width = TAG_WIDTH)
+                .bright_green()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
@@ -557,6 +565,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Profit => "PROFIT",
         LogTag::PriceService => "PRICE",
         LogTag::Rpc => "RPC",
+        LogTag::Ohlcv => "OHLCV",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);

@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 20;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.004;
+pub const TRADE_SIZE_SOL: f64 = 0.002;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -142,6 +142,7 @@ use crate::tokens::{
     discover_tokens_once,
     monitor_tokens_once,
     get_token_price_blocking_safe,
+    sync_watch_list_with_trader,
 };
 use crate::positions::{
     Position,
@@ -158,6 +159,14 @@ use crate::utils::*;
 use crate::filtering::{ should_buy_token, log_filtering_summary };
 use crate::tokens::get_token_rugcheck_data_safe;
 use crate::tokens::rugcheck::{ is_token_safe_for_trading, get_high_risk_issues };
+use crate::smart_entry::{
+    is_token_safe_for_smart_entry,
+    is_valid_dip_for_liquidity,
+    get_smart_profit_target,
+    is_deepest_dip_moment,
+    SmartEntryAnalysis,
+    EntryAction,
+};
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -342,14 +351,29 @@ fn calculate_dynamic_liquidity_thresholds() -> (f64, f64, f64) {
     (100000.0, 50000.0, 10000.0)
 }
 
-/// Advanced Multi-Strategy Dip Detection System
-/// Uses 5 different strategies to identify dips from -5% to -30%
+/// Smart Multi-Strategy Buy Signal Detection System
+/// Uses intelligent ATH analysis, trend analysis, and liquidity-based dip detection
 /// Returns urgency score from 0.0 (don't buy) to 2.0 (buy immediately)
 pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
+    use crate::global::is_debug_entry_enabled;
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_START",
+            &format!(
+                "🎯 SHOULD_BUY Analysis for {}: Current={:.10} SOL | Previous={:.10} SOL",
+                token.symbol,
+                current_price,
+                prev_price
+            )
+        );
+    }
+
     debug_trader_log(
         "SHOULD_BUY_START",
         &format!(
-            "Checking buy signal for {} ({}): current={:.10}, prev={:.10}",
+            "🧠 Smart buy analysis for {} ({}): current={:.10}, prev={:.10}",
             token.symbol,
             token.mint,
             current_price,
@@ -357,8 +381,15 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
         )
     );
 
-    // Use centralized filtering system
+    // Step 1: Use centralized filtering system (basic validation only)
     if !should_buy_token(token) {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL_FILTER_REJECT",
+                &format!("❌ {} rejected by pre-filtering system", token.symbol)
+            );
+        }
         debug_trader_log(
             "SHOULD_BUY_FILTER_REJECT",
             &format!("Token {} ({}) rejected by filtering system", token.symbol, token.mint)
@@ -366,13 +397,90 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
         return 0.0;
     }
 
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_FILTER_PASS",
+            &format!("✅ {} passed pre-filtering system", token.symbol)
+        );
+    }
+
     debug_trader_log(
         "SHOULD_BUY_FILTER_OK",
         &format!("Token {} ({}) passed filtering", token.symbol, token.mint)
     );
 
-    // Additional price validation for dip detection
+    // Step 2: Smart entry analysis (ATH, trends, liquidity-based thresholds)
+    let (is_smart_safe, smart_analysis) = is_token_safe_for_smart_entry(token);
+
+    if !is_smart_safe {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL_SMART_REJECT",
+                &format!(
+                    "❌ {} rejected by smart entry analysis: ATH={:?} | Trend Safe={} | Confidence={:.2}",
+                    token.symbol,
+                    smart_analysis.ath_analysis.ath_danger_level,
+                    smart_analysis.trend_analysis.is_safe_for_entry,
+                    smart_analysis.entry_confidence
+                )
+            );
+        }
+        debug_trader_log(
+            "SHOULD_BUY_SMART_REJECT",
+            &format!(
+                "Token {} ({}) rejected by smart entry analysis: ATH danger={:?}, Trend safe={}, Confidence={:.2}",
+                token.symbol,
+                token.mint,
+                smart_analysis.ath_analysis.ath_danger_level,
+                smart_analysis.trend_analysis.is_safe_for_entry,
+                smart_analysis.entry_confidence
+            )
+        );
+        return 0.0;
+    }
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_SMART_PASS",
+            &format!(
+                "✅ {} passed smart entry analysis: Action={:?} | Confidence={:.2} | Dip Threshold={:.1}%",
+                token.symbol,
+                smart_analysis.recommended_action,
+                smart_analysis.entry_confidence,
+                smart_analysis.dynamic_dip_threshold
+            )
+        );
+    }
+
+    debug_trader_log(
+        "SHOULD_BUY_SMART_OK",
+        &format!(
+            "Token {} ({}) passed smart analysis: Action={:?}, Confidence={:.2}, Dip threshold={:.1}%",
+            token.symbol,
+            token.mint,
+            smart_analysis.recommended_action,
+            smart_analysis.entry_confidence,
+            smart_analysis.dynamic_dip_threshold
+        )
+    );
+
+    // Step 3: Price validation
     if current_price <= 0.0 || prev_price <= 0.0 {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL_PRICE_INVALID",
+                &format!(
+                    "❌ {} has invalid prices: current={:.10} | previous={:.10}",
+                    token.symbol,
+                    current_price,
+                    prev_price
+                )
+            );
+        }
         debug_trader_log(
             "SHOULD_BUY_PRICE_INVALID",
             &format!(
@@ -386,58 +494,223 @@ pub fn should_buy(token: &Token, current_price: f64, prev_price: f64) -> f64 {
         return 0.0;
     }
 
-    // Calculate price change percentage
+    // Step 4: Calculate price drop with liquidity-adjusted threshold
     let price_change_percent = ((current_price - prev_price) / prev_price) * 100.0;
+    let price_drop_percent = -price_change_percent; // Convert to positive for drops
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_PRICE_ANALYSIS",
+            &format!(
+                "📊 {} Price Movement: Drop={:.2}% | Threshold={:.1}% | Sufficient={}",
+                token.symbol,
+                price_drop_percent,
+                smart_analysis.dynamic_dip_threshold,
+                price_drop_percent >= smart_analysis.dynamic_dip_threshold
+            )
+        );
+    }
+
     debug_trader_log(
-        "SHOULD_BUY_PRICE_CHANGE",
+        "SHOULD_BUY_PRICE_ANALYSIS",
         &format!(
-            "Token {} ({}) price change: {:.2}%",
+            "Token {} ({}) price drop: {:.2}% (threshold: {:.1}%)",
             token.symbol,
             token.mint,
-            price_change_percent
+            price_drop_percent,
+            smart_analysis.dynamic_dip_threshold
         )
     );
 
-    // Run all 5 dip detection strategies
-    let dip_signals = run_multi_strategy_dip_detection(token, current_price, prev_price);
-
-    debug_trader_log(
-        "SHOULD_BUY_STRATEGIES",
-        &format!(
-            "Token {} ({}) triggered {} strategies",
-            token.symbol,
-            token.mint,
-            dip_signals.len()
-        )
-    );
-
-    // If no strategies triggered, no buy signal
-    if dip_signals.is_empty() {
+    // Step 5: Check if this is a valid dip based on liquidity tier
+    if !is_valid_dip_for_liquidity(token, price_drop_percent) {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL_DIP_INSUFFICIENT",
+                &format!(
+                    "❌ {} dip insufficient: {:.2}% < {:.1}% threshold (Liquidity Tier: {:?})",
+                    token.symbol,
+                    price_drop_percent,
+                    smart_analysis.dynamic_dip_threshold,
+                    smart_analysis.liquidity_tier
+                )
+            );
+        }
         debug_trader_log(
-            "SHOULD_BUY_NO_SIGNALS",
-            &format!("Token {} ({}) no dip strategies triggered", token.symbol, token.mint)
+            "SHOULD_BUY_INSUFFICIENT_DIP",
+            &format!(
+                "Token {} ({}) insufficient dip: {:.2}% < {:.1}% (liquidity tier: {:?})",
+                token.symbol,
+                token.mint,
+                price_drop_percent,
+                smart_analysis.dynamic_dip_threshold,
+                smart_analysis.liquidity_tier
+            )
         );
         return 0.0;
     }
 
-    // Calculate final urgency based on multiple strategy consensus
-    let final_urgency = calculate_multi_strategy_urgency(&dip_signals, token, Some(current_price));
+    // Step 6: Check if we're in the deepest moment of the dip (5min trend analysis)
+    let is_deepest = is_deepest_dip_moment(token);
+    let deepest_bonus = if is_deepest { 0.3 } else { 0.0 };
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_DEEPEST_CHECK",
+            &format!(
+                "🕳️ {} Deepest Dip Check: Is Deepest={} | Bonus={:.2}",
+                token.symbol,
+                is_deepest,
+                deepest_bonus
+            )
+        );
+    }
+
+    // Step 7: Calculate urgency based on smart analysis
+    let base_urgency = match smart_analysis.recommended_action {
+        EntryAction::BuyNow => 1.5,
+        EntryAction::BuyOnDip => 1.0,
+        EntryAction::Monitor => 0.5,
+        EntryAction::Avoid => 0.0,
+    };
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_BASE_URGENCY",
+            &format!(
+                "⚡ {} Base Urgency: {:.2} (from action: {:?})",
+                token.symbol,
+                base_urgency,
+                smart_analysis.recommended_action
+            )
+        );
+    }
+
+    // Step 8: Apply confidence and trend momentum multipliers
+    let confidence_multiplier = smart_analysis.entry_confidence;
+    let momentum_multiplier = 1.0 + smart_analysis.trend_analysis.momentum_score * 0.3;
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_MULTIPLIERS",
+            &format!(
+                "🔢 {} Multipliers: Confidence={:.2} | Momentum={:.2} (from score: {:.2})",
+                token.symbol,
+                confidence_multiplier,
+                momentum_multiplier,
+                smart_analysis.trend_analysis.momentum_score
+            )
+        );
+    }
+
+    // Step 9: Apply dip intensity bonus (larger dips = higher urgency, capped)
+    let dip_intensity_bonus = (price_drop_percent / smart_analysis.dynamic_dip_threshold - 1.0)
+        .max(0.0)
+        .min(0.5); // Max 0.5 bonus for very large dips
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_DIP_BONUS",
+            &format!(
+                "🎁 {} Dip Intensity Bonus: {:.2} (drop={:.2}% / threshold={:.1}% = ratio {:.2})",
+                token.symbol,
+                dip_intensity_bonus,
+                price_drop_percent,
+                smart_analysis.dynamic_dip_threshold,
+                price_drop_percent / smart_analysis.dynamic_dip_threshold
+            )
+        );
+    }
+
+    let final_urgency = (
+        base_urgency * confidence_multiplier * momentum_multiplier +
+        deepest_bonus +
+        dip_intensity_bonus
+    ).min(2.0);
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "BUY_SIGNAL_FINAL_RESULT",
+            &format!(
+                "🏁 {} FINAL RESULT: Urgency={:.3} | Will Buy={} (threshold=0.0)",
+                token.symbol,
+                final_urgency,
+                if final_urgency > 0.0 {
+                    "✅ YES"
+                } else {
+                    "❌ NO"
+                }
+            )
+        );
+
+        if final_urgency > 0.0 {
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL_BREAKDOWN",
+                &format!(
+                    "   📋 Calculation: ({:.2} × {:.2} × {:.2}) + {:.2} + {:.2} = {:.3}",
+                    base_urgency,
+                    confidence_multiplier,
+                    momentum_multiplier,
+                    deepest_bonus,
+                    dip_intensity_bonus,
+                    final_urgency
+                )
+            );
+        }
+    }
 
     debug_trader_log(
-        "SHOULD_BUY_FINAL_URGENCY",
-        &format!("Token {} ({}) final urgency: {:.3}", token.symbol, token.mint, final_urgency)
+        "SHOULD_BUY_FINAL_CALCULATION",
+        &format!(
+            "Token {} ({}): base={:.2}, confidence={:.2}, momentum={:.2}, deepest={:.2}, dip_bonus={:.2}, final={:.3}",
+            token.symbol,
+            token.mint,
+            base_urgency,
+            confidence_multiplier,
+            momentum_multiplier,
+            deepest_bonus,
+            dip_intensity_bonus,
+            final_urgency
+        )
     );
 
     if final_urgency > 0.0 {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "BUY_SIGNAL_SUCCESS",
+                &format!(
+                    "🎯 BUY SIGNAL GENERATED for {}: Urgency={:.2} | Action={:?} | Dip={:.1}% | Profit Target={:.1}%-{:.1}%",
+                    token.symbol,
+                    final_urgency,
+                    smart_analysis.recommended_action,
+                    price_drop_percent,
+                    smart_analysis.profit_target_range.0,
+                    smart_analysis.profit_target_range.1
+                )
+            );
+        }
+
         log(
             LogTag::Trader,
-            "MULTI_DIP_SIGNAL",
+            "SMART_BUY_SIGNAL",
             &format!(
-                "Multi-strategy dip signal for {} ({}): {} strategies triggered, final urgency: {:.2}",
+                "🎯 Smart buy signal for {} ({}): urgency={:.2}, action={:?}, dip={:.1}%, profit target={:.1}%-{:.1}%",
                 token.symbol,
                 token.mint,
-                dip_signals.len(),
-                final_urgency
+                final_urgency,
+                smart_analysis.recommended_action,
+                price_drop_percent,
+                smart_analysis.profit_target_range.0,
+                smart_analysis.profit_target_range.1
             )
         );
     }
@@ -1672,6 +1945,27 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             &format!("✅ Filtering summary logged in {:.1}ms", summary_start.elapsed().as_millis())
         );
 
+        // Sync OHLCV watch list with trader tokens (run async to not block trading)
+        if is_debug_trader_enabled() {
+            log(LogTag::Trader, "DEBUG", "📈 Syncing OHLCV watch list with filtered tokens...");
+        }
+        let ohlcv_sync_start = std::time::Instant::now();
+        tokio::spawn(async move {
+            if let Err(e) = sync_watch_list_with_trader().await {
+                log(LogTag::Trader, "WARN", &format!("OHLCV sync failed: {}", e));
+            }
+        });
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "✅ OHLCV sync task spawned in {:.1}ms",
+                    ohlcv_sync_start.elapsed().as_millis()
+                )
+            );
+        }
+
         // Process all tokens in parallel with concurrent tasks
         let mut handles = Vec::new();
 
@@ -2153,6 +2447,20 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                             // Return the token and price if buy signal detected
                             if buy_urgency > 0.0 {
+                                use crate::global::is_debug_entry_enabled;
+
+                                if is_debug_entry_enabled() {
+                                    log(
+                                        LogTag::Trader,
+                                        "BUY_DECISION_POSITIVE",
+                                        &format!(
+                                            "🚀 BUY DECISION: {} has urgency {:.3} > 0.0 → Will attempt to buy!",
+                                            token.symbol,
+                                            buy_urgency
+                                        )
+                                    );
+                                }
+
                                 // Check for shutdown before attempting to buy
                                 if
                                     check_shutdown_or_delay(
@@ -2160,6 +2468,16 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         Duration::from_millis(1)
                                     ).await
                                 {
+                                    if is_debug_entry_enabled() {
+                                        log(
+                                            LogTag::Trader,
+                                            "BUY_DECISION_SHUTDOWN",
+                                            &format!(
+                                                "❌ {} buy cancelled due to shutdown",
+                                                token.symbol
+                                            )
+                                        );
+                                    }
                                     return None;
                                 }
 
@@ -2177,7 +2495,34 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     0.0
                                 };
 
+                                if is_debug_entry_enabled() {
+                                    log(
+                                        LogTag::Trader,
+                                        "BUY_DECISION_FINAL",
+                                        &format!(
+                                            "✅ {} PASSED ALL CHECKS → Returning for buy execution (price: {:.10}, change: {:.2}%)",
+                                            token.symbol,
+                                            current_price,
+                                            change
+                                        )
+                                    );
+                                }
+
                                 return Some((token, current_price, change));
+                            } else {
+                                use crate::global::is_debug_entry_enabled;
+
+                                if is_debug_entry_enabled() {
+                                    log(
+                                        LogTag::Trader,
+                                        "BUY_DECISION_NEGATIVE",
+                                        &format!(
+                                            "❌ {} has urgency {:.3} ≤ 0.0 → No buy signal generated",
+                                            token.symbol,
+                                            buy_urgency
+                                        )
+                                    );
+                                }
                             }
                         } else {
                             // Price is not loaded - do not attempt any trading
@@ -2306,6 +2651,54 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             liquidity_b.partial_cmp(&liquidity_a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        // Enhanced debug logging for opportunities
+        use crate::global::is_debug_entry_enabled;
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "OPPORTUNITIES_SUMMARY",
+                &format!(
+                    "🎯 Entry Opportunities Found: {} tokens passed all checks",
+                    opportunities.len()
+                )
+            );
+
+            if opportunities.is_empty() {
+                log(
+                    LogTag::Trader,
+                    "OPPORTUNITIES_NONE",
+                    "❌ No tokens generated buy signals this cycle"
+                );
+            } else {
+                log(
+                    LogTag::Trader,
+                    "OPPORTUNITIES_LIST",
+                    &format!("📋 Tokens ready for purchase:")
+                );
+
+                for (i, (token, price, change)) in opportunities.iter().enumerate() {
+                    let liquidity = token.liquidity
+                        .as_ref()
+                        .and_then(|l| l.usd)
+                        .unwrap_or(0.0);
+
+                    log(
+                        LogTag::Trader,
+                        "OPPORTUNITY_DETAIL",
+                        &format!(
+                            "   {}. {} - Price: {:.10} SOL | Change: {:.2}% | Liquidity: ${:.0}",
+                            i + 1,
+                            token.symbol,
+                            price,
+                            change,
+                            liquidity
+                        )
+                    );
+                }
+            }
+        }
+
         log(
             LogTag::Trader,
             "INFO",
@@ -2326,7 +2719,31 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             let current_open_count = get_open_positions_count();
             let available_slots = MAX_OPEN_POSITIONS.saturating_sub(current_open_count);
 
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Trader,
+                    "POSITION_CHECK",
+                    &format!(
+                        "💼 Position Limits: Current Open: {} | Max: {} | Available Slots: {}",
+                        current_open_count,
+                        MAX_OPEN_POSITIONS,
+                        available_slots
+                    )
+                );
+            }
+
             if available_slots == 0 {
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "POSITION_LIMIT_REACHED",
+                        &format!(
+                            "🚫 POSITION LIMIT REACHED: Cannot buy any tokens - {} opportunities skipped",
+                            opportunities.len()
+                        )
+                    );
+                }
+
                 log(
                     LogTag::Trader,
                     "LIMIT",
@@ -2337,11 +2754,37 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     )
                 );
             } else {
+                // Capture the original count before consuming the vector
+                let total_opportunities_count = opportunities.len();
+
                 // Limit opportunities to available slots
                 let opportunities_to_process = opportunities
                     .into_iter()
                     .take(available_slots)
                     .collect::<Vec<_>>();
+
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Trader,
+                        "PROCESSING_OPPORTUNITIES",
+                        &format!(
+                            "🚀 PROCESSING {} opportunities for purchase (limited by available slots)",
+                            opportunities_to_process.len()
+                        )
+                    );
+
+                    if opportunities_to_process.len() < total_opportunities_count {
+                        log(
+                            LogTag::Trader,
+                            "OPPORTUNITIES_LIMITED",
+                            &format!(
+                                "⚠️ Limited by position slots: Processing {} out of {} opportunities",
+                                opportunities_to_process.len(),
+                                total_opportunities_count
+                            )
+                        );
+                    }
+                }
 
                 log(
                     LogTag::Trader,

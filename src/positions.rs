@@ -207,6 +207,10 @@ pub struct Position {
     pub effective_entry_price: Option<f64>, // Actual price from on-chain transaction
     pub effective_exit_price: Option<f64>, // Actual exit price from on-chain transaction
     pub sol_received: Option<f64>, // Actual SOL received after sell (lamports converted to SOL)
+    // Smart profit targeting
+    pub profit_target_min: Option<f64>, // Minimum profit target percentage
+    pub profit_target_max: Option<f64>, // Maximum profit target percentage
+    pub liquidity_tier: Option<String>, // Liquidity tier for reference
 }
 
 /// Checks recent transactions to see if position was already closed
@@ -511,16 +515,24 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 return;
             }
 
+            // Get smart profit targets for this token
+            let (profit_min, profit_max) = crate::smart_entry::get_smart_profit_target(token);
+            let liquidity_tier = crate::smart_entry::SmartEntryAnalysis::analyze_token(
+                token
+            ).liquidity_tier;
+
             log(
                 LogTag::Trader,
                 "SUCCESS",
                 &format!(
-                    "Real swap executed for {}: TX: {}, Tokens: {}, Signal Price: {:.12} SOL, Effective Price: {:.12} SOL",
+                    "Real swap executed for {}: TX: {}, Tokens: {}, Signal Price: {:.12} SOL, Effective Price: {:.12} SOL, Profit Target: {:.1}%-{:.1}%",
                     token.symbol,
                     swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string()),
                     token_amount,
                     price,
-                    effective_entry_price
+                    effective_entry_price,
+                    profit_min,
+                    profit_max
                 )
             );
 
@@ -543,6 +555,9 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 effective_entry_price: Some(effective_entry_price), // Actual transaction price
                 effective_exit_price: None,
                 sol_received: None, // Will be set when position is closed
+                profit_target_min: Some(profit_min),
+                profit_target_max: Some(profit_max),
+                liquidity_tier: Some(format!("{:?}", liquidity_tier)),
             };
 
             if let Ok(mut positions) = SAVED_POSITIONS.lock() {

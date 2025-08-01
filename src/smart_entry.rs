@@ -1,0 +1,808 @@
+/// Advanced ATH and Trend Analysis System for ScreenerBot
+///
+/// This module provides intelligent ATH detection and trend analysis using real-time API data
+/// instead of relying on bot's limited runtime price history. Implements multi-timeframe
+/// analysis and liquidity-based dynamic thresholds.
+
+use crate::tokens::Token;
+use crate::logger::{ log, LogTag };
+use crate::global::{ is_debug_trader_enabled, is_debug_entry_enabled };
+use serde::{ Serialize, Deserialize };
+use chrono::{ DateTime, Utc };
+
+// =============================================================================
+// DYNAMIC LIQUIDITY-BASED THRESHOLDS
+// =============================================================================
+
+/// Liquidity tiers for dynamic threshold calculation (18 tiers from $100 to $5M)
+#[derive(Debug, Clone, PartialEq)]
+pub enum LiquidityTier {
+    // Ultra High Liquidity Tiers ($2M - $5M)
+    UltraWhale, // $5M+ liquidity
+    MegaWhale, // $3.5M-$5M liquidity
+    SuperWhale, // $2M-$3.5M liquidity
+
+    // High Liquidity Tiers ($500K - $2M)
+    Whale, // $1.5M-$2M liquidity
+    LargeWhale, // $1M-$1.5M liquidity
+    MediumWhale, // $750K-$1M liquidity
+    SmallWhale, // $500K-$750K liquidity
+
+    // Medium Liquidity Tiers ($50K - $500K)
+    Massive, // $300K-$500K liquidity
+    Large, // $200K-$300K liquidity
+    MediumLarge, // $150K-$200K liquidity
+    Medium, // $100K-$150K liquidity
+    MediumSmall, // $75K-$100K liquidity
+    Small, // $50K-$75K liquidity
+
+    // Low Liquidity Tiers ($1K - $50K)
+    Micro, // $25K-$50K liquidity
+    MiniMicro, // $10K-$25K liquidity
+    Tiny, // $5K-$10K liquidity
+
+    // Ultra Low Liquidity Tiers ($100 - $5K)
+    Nano, // $1K-$5K liquidity
+    Pico, // $100-$1K liquidity
+}
+
+impl LiquidityTier {
+    /// Determine liquidity tier from USD liquidity amount
+    pub fn from_liquidity(liquidity_usd: f64) -> Self {
+        match liquidity_usd {
+            x if x >= 5_000_000.0 => LiquidityTier::UltraWhale,
+            x if x >= 3_500_000.0 => LiquidityTier::MegaWhale,
+            x if x >= 2_000_000.0 => LiquidityTier::SuperWhale,
+            x if x >= 1_500_000.0 => LiquidityTier::Whale,
+            x if x >= 1_000_000.0 => LiquidityTier::LargeWhale,
+            x if x >= 750_000.0 => LiquidityTier::MediumWhale,
+            x if x >= 500_000.0 => LiquidityTier::SmallWhale,
+            x if x >= 300_000.0 => LiquidityTier::Massive,
+            x if x >= 200_000.0 => LiquidityTier::Large,
+            x if x >= 150_000.0 => LiquidityTier::MediumLarge,
+            x if x >= 100_000.0 => LiquidityTier::Medium,
+            x if x >= 75_000.0 => LiquidityTier::MediumSmall,
+            x if x >= 50_000.0 => LiquidityTier::Small,
+            x if x >= 25_000.0 => LiquidityTier::Micro,
+            x if x >= 10_000.0 => LiquidityTier::MiniMicro,
+            x if x >= 5_000.0 => LiquidityTier::Tiny,
+            x if x >= 1_000.0 => LiquidityTier::Nano,
+            _ => LiquidityTier::Pico,
+        }
+    }
+
+    /// Get dynamic dip threshold based on liquidity tier
+    /// Higher liquidity = smaller moves, lower liquidity = bigger moves needed
+    /// Range: 1% (ultra stable) to 50% (ultra volatile)
+    pub fn get_dip_threshold(&self) -> f64 {
+        match self {
+            // Ultra High Liquidity: Very stable, small dips are significant
+            LiquidityTier::UltraWhale => 1.0, // $5M+: 1% dip
+            LiquidityTier::MegaWhale => 1.2, // $3.5M-$5M: 1.2% dip
+            LiquidityTier::SuperWhale => 1.5, // $2M-$3.5M: 1.5% dip
+
+            // High Liquidity: Stable with moderate volatility
+            LiquidityTier::Whale => 2.0, // $1.5M-$2M: 2% dip
+            LiquidityTier::LargeWhale => 2.5, // $1M-$1.5M: 2.5% dip
+            LiquidityTier::MediumWhale => 3.0, // $750K-$1M: 3% dip
+            LiquidityTier::SmallWhale => 3.5, // $500K-$750K: 3.5% dip
+
+            // Medium Liquidity: Moderate volatility
+            LiquidityTier::Massive => 4.0, // $300K-$500K: 4% dip
+            LiquidityTier::Large => 5.0, // $200K-$300K: 5% dip
+            LiquidityTier::MediumLarge => 6.0, // $150K-$200K: 6% dip
+            LiquidityTier::Medium => 7.0, // $100K-$150K: 7% dip
+            LiquidityTier::MediumSmall => 8.0, // $75K-$100K: 8% dip
+            LiquidityTier::Small => 10.0, // $50K-$75K: 10% dip
+
+            // Low Liquidity: Higher volatility, bigger moves needed
+            LiquidityTier::Micro => 12.0, // $25K-$50K: 12% dip
+            LiquidityTier::MiniMicro => 15.0, // $10K-$25K: 15% dip
+            LiquidityTier::Tiny => 20.0, // $5K-$10K: 20% dip
+
+            // Ultra Low Liquidity: Very volatile, extreme moves
+            LiquidityTier::Nano => 30.0, // $1K-$5K: 30% dip
+            LiquidityTier::Pico => 50.0, // <$1K: 50% dip
+        }
+    }
+
+    /// Get profit target range based on liquidity tier
+    /// Range from conservative (5%-20%) to ultra aggressive (50%-1000%)
+    pub fn get_profit_target_range(&self) -> (f64, f64) {
+        match self {
+            // Ultra High Liquidity: Conservative, stable returns
+            LiquidityTier::UltraWhale => (5.0, 20.0), // $5M+: 5%-20%
+            LiquidityTier::MegaWhale => (6.0, 25.0), // $3.5M-$5M: 6%-25%
+            LiquidityTier::SuperWhale => (8.0, 30.0), // $2M-$3.5M: 8%-30%
+
+            // High Liquidity: Moderate returns with good stability
+            LiquidityTier::Whale => (10.0, 35.0), // $1.5M-$2M: 10%-35%
+            LiquidityTier::LargeWhale => (12.0, 40.0), // $1M-$1.5M: 12%-40%
+            LiquidityTier::MediumWhale => (15.0, 50.0), // $750K-$1M: 15%-50%
+            LiquidityTier::SmallWhale => (18.0, 60.0), // $500K-$750K: 18%-60%
+
+            // Medium Liquidity: Higher returns with moderate risk
+            LiquidityTier::Massive => (20.0, 75.0), // $300K-$500K: 20%-75%
+            LiquidityTier::Large => (25.0, 100.0), // $200K-$300K: 25%-100%
+            LiquidityTier::MediumLarge => (30.0, 125.0), // $150K-$200K: 30%-125%
+            LiquidityTier::Medium => (35.0, 150.0), // $100K-$150K: 35%-150%
+            LiquidityTier::MediumSmall => (40.0, 200.0), // $75K-$100K: 40%-200%
+            LiquidityTier::Small => (50.0, 250.0), // $50K-$75K: 50%-250%
+
+            // Low Liquidity: High volatility, high reward potential
+            LiquidityTier::Micro => (60.0, 350.0), // $25K-$50K: 60%-350%
+            LiquidityTier::MiniMicro => (75.0, 500.0), // $10K-$25K: 75%-500%
+            LiquidityTier::Tiny => (100.0, 750.0), // $5K-$10K: 100%-750%
+
+            // Ultra Low Liquidity: Extreme volatility, moonshot potential
+            LiquidityTier::Nano => (150.0, 1000.0), // $1K-$5K: 150%-1000%
+            LiquidityTier::Pico => (200.0, 1000.0), // <$1K: 200%-1000%
+        }
+    }
+}
+
+// =============================================================================
+// MULTI-TIMEFRAME TREND ANALYSIS
+// =============================================================================
+
+/// Trend direction for different timeframes
+#[derive(Debug, Clone, PartialEq)]
+pub enum TrendDirection {
+    StrongUp, // >+5% change
+    ModerateUp, // +2% to +5% change
+    Sideways, // -2% to +2% change
+    ModerateDown, // -5% to -2% change
+    StrongDown, // <-5% change
+}
+
+impl TrendDirection {
+    fn from_price_change(change_percent: f64) -> Self {
+        match change_percent {
+            x if x > 5.0 => TrendDirection::StrongUp,
+            x if x > 2.0 => TrendDirection::ModerateUp,
+            x if x > -2.0 => TrendDirection::Sideways,
+            x if x > -5.0 => TrendDirection::ModerateDown,
+            _ => TrendDirection::StrongDown,
+        }
+    }
+
+    /// Check if trend is bullish (up or sideways)
+    pub fn is_bullish(&self) -> bool {
+        matches!(
+            self,
+            TrendDirection::StrongUp | TrendDirection::ModerateUp | TrendDirection::Sideways
+        )
+    }
+
+    /// Check if trend is bearish (down)
+    pub fn is_bearish(&self) -> bool {
+        matches!(self, TrendDirection::ModerateDown | TrendDirection::StrongDown)
+    }
+}
+
+/// Multi-timeframe trend analysis result
+#[derive(Debug, Clone)]
+pub struct TrendAnalysis {
+    pub m5_trend: TrendDirection, // 5-minute trend
+    pub h1_trend: TrendDirection, // 1-hour trend
+    pub h6_trend: TrendDirection, // 6-hour trend
+    pub h24_trend: TrendDirection, // 24-hour trend
+    pub overall_sentiment: f64, // -1.0 (very bearish) to +1.0 (very bullish)
+    pub momentum_score: f64, // 0.0 to 1.0 momentum strength
+    pub is_safe_for_entry: bool, // True if trends allow entry
+}
+
+impl TrendAnalysis {
+    /// Create trend analysis from token price change data
+    pub fn from_token(token: &Token) -> Self {
+        let price_change = token.price_change.as_ref();
+
+        let m5_change = price_change.and_then(|pc| pc.m5).unwrap_or(0.0);
+        let h1_change = price_change.and_then(|pc| pc.h1).unwrap_or(0.0);
+        let h6_change = price_change.and_then(|pc| pc.h6).unwrap_or(0.0);
+        let h24_change = price_change.and_then(|pc| pc.h24).unwrap_or(0.0);
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "TREND_CHANGES",
+                &format!(
+                    "📈 {} Price Changes: 5m={:.2}% | 1h={:.2}% | 6h={:.2}% | 24h={:.2}%",
+                    token.symbol,
+                    m5_change,
+                    h1_change,
+                    h6_change,
+                    h24_change
+                )
+            );
+        }
+
+        let m5_trend = TrendDirection::from_price_change(m5_change);
+        let h1_trend = TrendDirection::from_price_change(h1_change);
+        let h6_trend = TrendDirection::from_price_change(h6_change);
+        let h24_trend = TrendDirection::from_price_change(h24_change);
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "TREND_DIRECTIONS",
+                &format!(
+                    "🧭 {} Trend Directions: 5m={:?} | 1h={:?} | 6h={:?} | 24h={:?}",
+                    token.symbol,
+                    m5_trend,
+                    h1_trend,
+                    h6_trend,
+                    h24_trend
+                )
+            );
+        }
+
+        // Calculate overall sentiment score (-1.0 to +1.0)
+        let sentiment_scores = [
+            Self::trend_to_score(&m5_trend) * 0.4, // 5min gets 40% weight (immediate)
+            Self::trend_to_score(&h1_trend) * 0.3, // 1h gets 30% weight
+            Self::trend_to_score(&h6_trend) * 0.2, // 6h gets 20% weight
+            Self::trend_to_score(&h24_trend) * 0.1, // 24h gets 10% weight
+        ];
+        let overall_sentiment = sentiment_scores.iter().sum();
+
+        // Calculate momentum score based on trend alignment
+        let momentum_score = Self::calculate_momentum_score(
+            &[&m5_trend, &h1_trend, &h6_trend, &h24_trend]
+        );
+
+        // Determine if safe for entry (no bearish short-term trends)
+        let is_safe_for_entry = !m5_trend.is_bearish() && !h1_trend.is_bearish();
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "TREND_SCORES",
+                &format!(
+                    "⚡ {} Trend Scores: Sentiment={:.2} | Momentum={:.2} | Safe={} (no bearish 5m+1h)",
+                    token.symbol,
+                    overall_sentiment,
+                    momentum_score,
+                    is_safe_for_entry
+                )
+            );
+        }
+
+        Self {
+            m5_trend,
+            h1_trend,
+            h6_trend,
+            h24_trend,
+            overall_sentiment,
+            momentum_score,
+            is_safe_for_entry,
+        }
+    }
+
+    /// Convert trend direction to numeric score
+    fn trend_to_score(trend: &TrendDirection) -> f64 {
+        match trend {
+            TrendDirection::StrongUp => 1.0,
+            TrendDirection::ModerateUp => 0.5,
+            TrendDirection::Sideways => 0.0,
+            TrendDirection::ModerateDown => -0.5,
+            TrendDirection::StrongDown => -1.0,
+        }
+    }
+
+    /// Calculate momentum score based on trend alignment
+    fn calculate_momentum_score(trends: &[&TrendDirection]) -> f64 {
+        let bullish_count = trends
+            .iter()
+            .filter(|t| t.is_bullish())
+            .count() as f64;
+        let total_count = trends.len() as f64;
+        bullish_count / total_count
+    }
+}
+
+// =============================================================================
+// SMART ATH DETECTION USING API DATA
+// =============================================================================
+
+/// ATH analysis using real-time price change data instead of runtime history
+#[derive(Debug, Clone)]
+pub struct SmartAthAnalysis {
+    pub current_price: f64,
+    pub estimated_24h_high: f64, // Estimated from current price + 24h change
+    pub estimated_6h_high: f64, // Estimated from current price + 6h change
+    pub estimated_1h_high: f64, // Estimated from current price + 1h change
+    pub is_near_24h_ath: bool, // Within 25% of estimated 24h high (lenient for dip buying)
+    pub is_near_6h_ath: bool, // Within 30% of estimated 6h high (lenient for dip buying)
+    pub is_near_1h_ath: bool, // Within 35% of estimated 1h high (lenient for dip buying)
+    pub ath_proximity_score: f64, // 0.0 (far from ATH) to 1.0 (at ATH)
+    pub ath_danger_level: AthDangerLevel,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AthDangerLevel {
+    Safe, // Far from any ATH
+    Caution, // Approaching some ATH levels
+    Warning, // Near multiple ATH levels
+    Danger, // Very close to recent ATHs
+}
+
+impl SmartAthAnalysis {
+    /// Create ATH analysis from token data
+    pub fn from_token(token: &Token) -> Self {
+        let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
+        let price_change = token.price_change.as_ref();
+
+        // Estimate recent highs from price change data
+        let h24_change = price_change.and_then(|pc| pc.h24).unwrap_or(0.0);
+        let h6_change = price_change.and_then(|pc| pc.h6).unwrap_or(0.0);
+        let h1_change = price_change.and_then(|pc| pc.h1).unwrap_or(0.0);
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ATH_INPUT_DATA",
+                &format!(
+                    "🏔️ {} ATH Input: Current={:.10} | Changes: 24h={:.2}% | 6h={:.2}% | 1h={:.2}%",
+                    token.symbol,
+                    current_price,
+                    h24_change,
+                    h6_change,
+                    h1_change
+                )
+            );
+        }
+
+        // Calculate estimated highs (assuming price was higher if change is negative)
+        let estimated_24h_high = if h24_change < 0.0 {
+            current_price / (1.0 + h24_change / 100.0)
+        } else {
+            current_price
+        };
+
+        let estimated_6h_high = if h6_change < 0.0 {
+            current_price / (1.0 + h6_change / 100.0)
+        } else {
+            current_price
+        };
+
+        let estimated_1h_high = if h1_change < 0.0 {
+            current_price / (1.0 + h1_change / 100.0)
+        } else {
+            current_price
+        };
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ATH_ESTIMATES",
+                &format!(
+                    "🔢 {} Estimated Highs: 24h={:.10} | 6h={:.10} | 1h={:.10}",
+                    token.symbol,
+                    estimated_24h_high,
+                    estimated_6h_high,
+                    estimated_1h_high
+                )
+            );
+        }
+
+        // Check ATH proximity with more lenient thresholds for dip buying
+        let is_near_24h_ath = current_price >= estimated_24h_high * 0.75; // Within 25% (more lenient)
+        let is_near_6h_ath = current_price >= estimated_6h_high * 0.7; // Within 30% (more lenient)
+        let is_near_1h_ath = current_price >= estimated_1h_high * 0.65; // Within 35% (more lenient)
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ATH_PROXIMITY_CHECKS",
+                &format!(
+                    "🚨 {} ATH Proximity: 24h: {} ({:.1}%) | 6h: {} ({:.1}%) | 1h: {} ({:.1}%)",
+                    token.symbol,
+                    is_near_24h_ath,
+                    (current_price / estimated_24h_high) * 100.0,
+                    is_near_6h_ath,
+                    (current_price / estimated_6h_high) * 100.0,
+                    is_near_1h_ath,
+                    (current_price / estimated_1h_high) * 100.0
+                )
+            );
+        }
+
+        // Calculate overall ATH proximity score
+        let proximity_scores = [
+            (current_price / estimated_24h_high).min(1.0) * 0.5, // 24h gets 50% weight
+            (current_price / estimated_6h_high).min(1.0) * 0.3, // 6h gets 30% weight
+            (current_price / estimated_1h_high).min(1.0) * 0.2, // 1h gets 20% weight
+        ];
+        let ath_proximity_score = proximity_scores.iter().sum::<f64>().min(1.0);
+
+        // Determine danger level
+        let ath_danger_level = if is_near_24h_ath && is_near_6h_ath && is_near_1h_ath {
+            AthDangerLevel::Danger
+        } else if (is_near_24h_ath && is_near_6h_ath) || (is_near_6h_ath && is_near_1h_ath) {
+            AthDangerLevel::Warning
+        } else if is_near_24h_ath || is_near_6h_ath || is_near_1h_ath {
+            AthDangerLevel::Caution
+        } else {
+            AthDangerLevel::Safe
+        };
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ATH_FINAL",
+                &format!(
+                    "⚠️ {} ATH Final: Proximity Score={:.2} | Danger Level={:?} | Safe={}",
+                    token.symbol,
+                    ath_proximity_score,
+                    ath_danger_level,
+                    matches!(ath_danger_level, AthDangerLevel::Safe | AthDangerLevel::Caution)
+                )
+            );
+        }
+
+        Self {
+            current_price,
+            estimated_24h_high,
+            estimated_6h_high,
+            estimated_1h_high,
+            is_near_24h_ath,
+            is_near_6h_ath,
+            is_near_1h_ath,
+            ath_proximity_score,
+            ath_danger_level,
+        }
+    }
+
+    /// Check if token is safe for entry based on ATH analysis (more lenient for dip buying)
+    pub fn is_safe_for_entry(&self) -> bool {
+        matches!(
+            self.ath_danger_level,
+            AthDangerLevel::Safe | AthDangerLevel::Caution | AthDangerLevel::Warning
+        )
+    }
+}
+
+// =============================================================================
+// COMPREHENSIVE ENTRY ANALYSIS
+// =============================================================================
+
+/// Complete entry analysis combining ATH, trend, and liquidity analysis
+#[derive(Debug, Clone)]
+pub struct SmartEntryAnalysis {
+    pub liquidity_tier: LiquidityTier,
+    pub trend_analysis: TrendAnalysis,
+    pub ath_analysis: SmartAthAnalysis,
+    pub dynamic_dip_threshold: f64,
+    pub profit_target_range: (f64, f64),
+    pub is_safe_for_entry: bool,
+    pub entry_confidence: f64, // 0.0 to 1.0
+    pub recommended_action: EntryAction,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EntryAction {
+    BuyNow, // Strong buy signal
+    BuyOnDip, // Wait for dip
+    Monitor, // Watch but don't enter
+    Avoid, // Skip this token
+}
+
+impl SmartEntryAnalysis {
+    /// Create comprehensive entry analysis from token
+    pub fn analyze_token(token: &Token) -> Self {
+        let liquidity_usd = token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+
+        let liquidity_tier = LiquidityTier::from_liquidity(liquidity_usd);
+        let trend_analysis = TrendAnalysis::from_token(token);
+        let ath_analysis = SmartAthAnalysis::from_token(token);
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_STEP1",
+                &format!(
+                    "🪙 {} Liquidity Analysis: ${:.0} USD → Tier: {:?}",
+                    token.symbol,
+                    liquidity_usd,
+                    liquidity_tier
+                )
+            );
+        }
+
+        let dynamic_dip_threshold = liquidity_tier.get_dip_threshold();
+        let profit_target_range = liquidity_tier.get_profit_target_range();
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_STEP2",
+                &format!(
+                    "🎯 {} Dynamic Thresholds: Dip: {:.1}% | Profit: {:.1}%-{:.1}%",
+                    token.symbol,
+                    dynamic_dip_threshold,
+                    profit_target_range.0,
+                    profit_target_range.1
+                )
+            );
+        }
+
+        // Calculate entry safety
+        let trend_safe = trend_analysis.is_safe_for_entry;
+        let ath_safe = ath_analysis.is_safe_for_entry();
+        let is_safe_for_entry = trend_safe && ath_safe;
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_STEP3",
+                &format!(
+                    "🛡️ {} Safety Checks: Trend Safe: {} | ATH Safe: {} | Combined: {}",
+                    token.symbol,
+                    trend_safe,
+                    ath_safe,
+                    is_safe_for_entry
+                )
+            );
+        }
+
+        // Calculate entry confidence (0.0 to 1.0)
+        let entry_confidence = Self::calculate_entry_confidence(
+            &trend_analysis,
+            &ath_analysis,
+            &liquidity_tier
+        );
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_STEP4",
+                &format!(
+                    "📊 {} Confidence Calculation: {:.2} (based on trend momentum, ATH safety, liquidity)",
+                    token.symbol,
+                    entry_confidence
+                )
+            );
+        }
+
+        // Determine recommended action
+        let recommended_action = Self::determine_action(
+            is_safe_for_entry,
+            entry_confidence,
+            &trend_analysis,
+            &ath_analysis
+        );
+
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_STEP5",
+                &format!(
+                    "🎬 {} Final Action: {:?} (based on safety={}, confidence={:.2}, sentiment={:.2})",
+                    token.symbol,
+                    recommended_action,
+                    is_safe_for_entry,
+                    entry_confidence,
+                    trend_analysis.overall_sentiment
+                )
+            );
+        }
+
+        Self {
+            liquidity_tier,
+            trend_analysis,
+            ath_analysis,
+            dynamic_dip_threshold,
+            profit_target_range,
+            is_safe_for_entry,
+            entry_confidence,
+            recommended_action,
+        }
+    }
+
+    /// Calculate entry confidence score
+    fn calculate_entry_confidence(
+        trend: &TrendAnalysis,
+        ath: &SmartAthAnalysis,
+        liquidity: &LiquidityTier
+    ) -> f64 {
+        let mut confidence = 0.0;
+
+        // Trend confidence (40% weight)
+        confidence += trend.momentum_score * 0.4;
+
+        // ATH safety confidence (30% weight)
+        let ath_confidence = match ath.ath_danger_level {
+            AthDangerLevel::Safe => 1.0,
+            AthDangerLevel::Caution => 0.7,
+            AthDangerLevel::Warning => 0.3,
+            AthDangerLevel::Danger => 0.0,
+        };
+        confidence += ath_confidence * 0.3;
+
+        // Liquidity confidence (20% weight) - More granular scaling
+        let liquidity_confidence = match liquidity {
+            // Ultra High Liquidity: Maximum confidence
+            LiquidityTier::UltraWhale | LiquidityTier::MegaWhale | LiquidityTier::SuperWhale => 1.0,
+
+            // High Liquidity: Very high confidence
+            LiquidityTier::Whale | LiquidityTier::LargeWhale => 0.95,
+            LiquidityTier::MediumWhale | LiquidityTier::SmallWhale => 0.9,
+
+            // Medium Liquidity: Good confidence
+            LiquidityTier::Massive | LiquidityTier::Large => 0.8,
+            LiquidityTier::MediumLarge | LiquidityTier::Medium => 0.7,
+            LiquidityTier::MediumSmall | LiquidityTier::Small => 0.6,
+
+            // Low Liquidity: Moderate confidence
+            LiquidityTier::Micro | LiquidityTier::MiniMicro => 0.4,
+            LiquidityTier::Tiny => 0.3,
+
+            // Ultra Low Liquidity: Lower confidence
+            LiquidityTier::Nano => 0.2,
+            LiquidityTier::Pico => 0.1,
+        };
+        confidence += liquidity_confidence * 0.2;
+
+        // Overall sentiment bonus (10% weight)
+        let sentiment_bonus = ((trend.overall_sentiment + 1.0) / 2.0).max(0.0);
+        confidence += sentiment_bonus * 0.1;
+
+        confidence.min(1.0)
+    }
+
+    /// Determine recommended action
+    fn determine_action(
+        is_safe: bool,
+        confidence: f64,
+        trend: &TrendAnalysis,
+        ath: &SmartAthAnalysis
+    ) -> EntryAction {
+        if !is_safe {
+            return EntryAction::Avoid;
+        }
+
+        // More relaxed conditions for BuyNow to enable more immediate trades
+        if confidence >= 0.65 && trend.overall_sentiment > 0.15 {
+            EntryAction::BuyNow
+        } else if confidence >= 0.5 && trend.overall_sentiment > -0.1 {
+            EntryAction::BuyOnDip
+        } else if confidence >= 0.4 {
+            EntryAction::Monitor
+        } else {
+            EntryAction::Avoid
+        }
+    }
+}
+
+// =============================================================================
+// PUBLIC INTERFACE FUNCTIONS
+// =============================================================================
+
+/// Check if token price action shows a valid dip based on liquidity-adjusted thresholds
+pub fn is_valid_dip_for_liquidity(token: &Token, price_drop_percent: f64) -> bool {
+    let analysis = SmartEntryAnalysis::analyze_token(token);
+    price_drop_percent >= analysis.dynamic_dip_threshold
+}
+
+/// Get recommended profit target for token based on comprehensive analysis
+pub fn get_smart_profit_target(token: &Token) -> (f64, f64) {
+    let analysis = SmartEntryAnalysis::analyze_token(token);
+    analysis.profit_target_range
+}
+
+/// Check if token is safe for entry using smart multi-timeframe analysis
+pub fn is_token_safe_for_smart_entry(token: &Token) -> (bool, SmartEntryAnalysis) {
+    let analysis = SmartEntryAnalysis::analyze_token(token);
+    let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.5;
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Trader,
+            "ENTRY_ANALYSIS",
+            &format!("🔍 SMART ENTRY ANALYSIS for {}: Final Result={}", token.symbol, if is_safe {
+                "✅ SAFE"
+            } else {
+                "❌ UNSAFE"
+            })
+        );
+
+        log(
+            LogTag::Trader,
+            "ENTRY_DETAILS",
+            &format!(
+                "   📊 Confidence: {:.2} | Action: {:?} | ATH Danger: {:?} | Trend Safe: {}",
+                analysis.entry_confidence,
+                analysis.recommended_action,
+                analysis.ath_analysis.ath_danger_level,
+                analysis.trend_analysis.is_safe_for_entry
+            )
+        );
+
+        log(
+            LogTag::Trader,
+            "ENTRY_THRESHOLDS",
+            &format!(
+                "   🎯 Liquidity Tier: {:?} | Dip Threshold: {:.1}% | Profit Target: {:.1}%-{:.1}%",
+                analysis.liquidity_tier,
+                analysis.dynamic_dip_threshold,
+                analysis.profit_target_range.0,
+                analysis.profit_target_range.1
+            )
+        );
+
+        log(
+            LogTag::Trader,
+            "ENTRY_TRENDS",
+            &format!(
+                "   📈 Trends: 5m={:?} | 1h={:?} | 6h={:?} | 24h={:?} | Sentiment: {:.2}",
+                analysis.trend_analysis.m5_trend,
+                analysis.trend_analysis.h1_trend,
+                analysis.trend_analysis.h6_trend,
+                analysis.trend_analysis.h24_trend,
+                analysis.trend_analysis.overall_sentiment
+            )
+        );
+
+        log(
+            LogTag::Trader,
+            "ENTRY_ATH",
+            &format!(
+                "   🏔️ ATH Analysis: Current: {:.10} | 24h High: {:.10} | 6h High: {:.10} | 1h High: {:.10}",
+                analysis.ath_analysis.current_price,
+                analysis.ath_analysis.estimated_24h_high,
+                analysis.ath_analysis.estimated_6h_high,
+                analysis.ath_analysis.estimated_1h_high
+            )
+        );
+
+        log(
+            LogTag::Trader,
+            "ENTRY_ATH_PROXIMITY",
+            &format!(
+                "   🚨 ATH Proximity: Near 24h: {} | Near 6h: {} | Near 1h: {} | Score: {:.2}",
+                analysis.ath_analysis.is_near_24h_ath,
+                analysis.ath_analysis.is_near_6h_ath,
+                analysis.ath_analysis.is_near_1h_ath,
+                analysis.ath_analysis.ath_proximity_score
+            )
+        );
+    } else if is_debug_trader_enabled() {
+        log(
+            LogTag::Trader,
+            "SMART_ENTRY",
+            &format!(
+                "🧠 Smart entry analysis for {}: Safe={}, Confidence={:.2}, Action={:?}, Dip Threshold={:.1}%, Profit Target={:.1}%-{:.1}%",
+                token.symbol,
+                is_safe,
+                analysis.entry_confidence,
+                analysis.recommended_action,
+                analysis.dynamic_dip_threshold,
+                analysis.profit_target_range.0,
+                analysis.profit_target_range.1
+            )
+        );
+    }
+
+    (is_safe, analysis)
+}
+
+/// Check if current price action indicates we're in the deepest part of a dip
+pub fn is_deepest_dip_moment(token: &Token) -> bool {
+    let trend_analysis = TrendAnalysis::from_token(token);
+
+    // We're in deepest dip if:
+    // 1. 5-minute trend is not strongly down (bottoming out)
+    // 2. Longer timeframes show recent decline (confirming dip)
+    // 3. Overall sentiment is recovering
+
+    let m5_not_crashing = !matches!(trend_analysis.m5_trend, TrendDirection::StrongDown);
+    let recent_decline =
+        trend_analysis.h1_trend.is_bearish() || trend_analysis.h6_trend.is_bearish();
+    let sentiment_recovering = trend_analysis.overall_sentiment > -0.5;
+
+    m5_not_crashing && recent_decline && sentiment_recovering
+}

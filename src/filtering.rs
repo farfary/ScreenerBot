@@ -18,9 +18,9 @@ use chrono::{ Duration as ChronoDuration, Utc };
 //   - MIN_TOKEN_AGE_HOURS = 1 (tokens must be at least 1 hour old)
 //   - MAX_TOKEN_AGE_HOURS = 720 (30 days max age)
 //   - POSITION_CLOSE_COOLDOWN_MINUTES = 1440 (24 hour cooldown)
-//   - MAX_PRICE_TO_ATH_PERCENT = 75.0 (must be 25% below ATH)
 //   - MIN_LIQUIDITY_USD = 1000.0 (minimum liquidity requirement)
 //   - MIN_LP_LOCK_PERCENTAGE = 80.0 (minimum LP lock requirement)
+//   - Note: ATH checking moved to trader for intelligent analysis
 //
 // 🔧 TO ADJUST TRADING BEHAVIOR:
 //   - Make more aggressive: Lower minimums, shorter cooldowns
@@ -43,9 +43,7 @@ pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
 // Note: MAX_OPEN_POSITIONS is imported from trader module above
 
 // ===== PRICE ACTION FILTERING PARAMETERS =====
-/// Maximum allowed percentage from all-time high to allow buying (e.g. 75% means
-/// current price must be at least 25% below ATH)
-pub const MAX_PRICE_TO_ATH_PERCENT: f64 = 50.0;
+// Note: ATH checking moved to trader for more intelligent analysis
 
 /// Minimum price in SOL to consider valid
 pub const MIN_VALID_PRICE_SOL: f64 = 0.000000000001;
@@ -158,12 +156,6 @@ pub enum FilterReason {
     MaxPositionsReached {
         current: usize,
         max: usize,
-    },
-
-    // Price action related failures
-    TooCloseToATH {
-        current_percent_of_ath: f64,
-        max_allowed_percent: f64,
     },
 
     // Account/Token status issues
@@ -316,20 +308,20 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         );
     }
 
-    // 5. Price-to-ATH validation (NEW: Avoid buying near all-time highs)
+    // 5. Basic Price Validation (Simplified - ATH checking moved to trader)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_5",
-            &format!("📈 Step 5: Checking ATH proximity for {}", token.symbol)
+            &format!("📈 Step 5: Checking basic price validity for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_price_to_ath(token) {
+    if let Some(reason) = validate_basic_price_data(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_5",
-                &format!("❌ {}: FAILED Step 5 (ATH Check) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 5 (Price Validation) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -338,7 +330,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_5",
-            &format!("✅ {}: PASSED Step 5 (ATH Check)", token.symbol)
+            &format!("✅ {}: PASSED Step 5 (Price Validation)", token.symbol)
         );
     }
 
@@ -410,146 +402,27 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
 // INDIVIDUAL FILTER FUNCTIONS
 // =============================================================================
 
-/// Validate if token price is too close to all-time high
-fn validate_price_to_ath(token: &Token) -> Option<FilterReason> {
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "DEBUG_ATH",
-            &format!("📈 Checking ATH validation for token {}", token.symbol)
-        );
+/// Validate basic price data (simplified price validation)
+fn validate_basic_price_data(token: &Token) -> Option<FilterReason> {
+    // Basic price validation - much simpler than before
+    let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
+
+    if current_price <= 0.0 || !current_price.is_finite() {
+        return Some(FilterReason::InvalidPrice);
     }
 
-    // If we don't have price history or all-time high data, we can't validate
-    let price_history = match crate::trader::PRICE_HISTORY_24H.try_lock() {
-        Ok(history) => history,
-        Err(_) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_ATH",
-                    &format!("❌ Could not lock price history for {}", token.symbol)
-                );
-            }
-            // If we can't lock the price history, we'll be conservative and skip the token
-            return Some(FilterReason::LockAcquisitionFailed);
-        }
-    };
+    if current_price < MIN_VALID_PRICE_SOL {
+        return Some(FilterReason::PriceTooLow {
+            current_price,
+            minimum_price: MIN_VALID_PRICE_SOL,
+        });
+    }
 
-    if let Some(token_history) = price_history.get(&token.mint) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_ATH",
-                &format!(
-                    "📊 Found {} price history entries for {}",
-                    token_history.len(),
-                    token.symbol
-                )
-            );
-        }
-
-        if token_history.len() < 5 {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_ATH",
-                    &format!(
-                        "⚠️ Insufficient price history for {}: {} entries < 5 minimum",
-                        token.symbol,
-                        token_history.len()
-                    )
-                );
-            }
-            // Not enough history to determine ATH
-            return None;
-        }
-
-        // Find the all-time high price in the available history
-        let mut all_time_high = 0.0;
-        for (_, price) in token_history {
-            if *price > all_time_high {
-                all_time_high = *price;
-            }
-        }
-
-        // Get current price
-        let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
-        if current_price <= 0.0 || all_time_high <= 0.0 {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_ATH",
-                    &format!(
-                        "⚠️ Invalid price data for {}: current={:.10}, ATH={:.10}",
-                        token.symbol,
-                        current_price,
-                        all_time_high
-                    )
-                );
-            }
-            return None; // Invalid price data
-        }
-
-        // Calculate what percentage of ATH is the current price
-        let current_percent_of_ath = (current_price / all_time_high) * 100.0;
-
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_ATH",
-                &format!(
-                    "📊 ATH analysis for {}: current={:.10}, ATH={:.10}, percentage={:.1}%, max_allowed={:.1}%",
-                    token.symbol,
-                    current_price,
-                    all_time_high,
-                    current_percent_of_ath,
-                    MAX_PRICE_TO_ATH_PERCENT
-                )
-            );
-        }
-
-        // If current price is too close to ATH (e.g. above 75% of ATH), reject
-        if current_percent_of_ath > MAX_PRICE_TO_ATH_PERCENT {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "ATH_CHECK",
-                    &format!(
-                        "❌ Token {} rejected: price is {:.1}% of ATH ({:.6} / {:.6})",
-                        token.symbol,
-                        current_percent_of_ath,
-                        current_price,
-                        all_time_high
-                    )
-                );
-            }
-
-            return Some(FilterReason::TooCloseToATH {
-                current_percent_of_ath,
-                max_allowed_percent: MAX_PRICE_TO_ATH_PERCENT,
-            });
-        }
-
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_ATH",
-                &format!(
-                    "✅ Token {} ATH check passed ({:.1}% of ATH)",
-                    token.symbol,
-                    current_percent_of_ath
-                )
-            );
-        }
-    } else {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_ATH",
-                &format!("ℹ️ No price history found for {} - skipping ATH check", token.symbol)
-            );
-        }
+    if current_price > MAX_VALID_PRICE_SOL {
+        return Some(FilterReason::PriceTooHigh {
+            current_price,
+            maximum_price: MAX_VALID_PRICE_SOL,
+        });
     }
 
     None
@@ -1272,11 +1145,10 @@ pub fn log_filtering_summary(tokens: &[Token]) {
             LogTag::Filtering,
             "WARN",
             &format!(
-                "Current filters: Age {}h-{}h, Liquidity ${}+, Max ATH {}%, Price {:.12}-{:.3} SOL",
+                "Current filters: Age {}h-{}h, Liquidity ${}+, Price {:.12}-{:.3} SOL",
                 MIN_TOKEN_AGE_HOURS,
                 MAX_TOKEN_AGE_HOURS,
                 MIN_LIQUIDITY_USD,
-                MAX_PRICE_TO_ATH_PERCENT,
                 MIN_VALID_PRICE_SOL,
                 MAX_VALID_PRICE_SOL
             )
@@ -1319,7 +1191,6 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::ExistingOpenPosition
             | FilterReason::RecentlyClosed { .. }
             | FilterReason::MaxPositionsReached { .. } => "Position Constraints",
-            FilterReason::TooCloseToATH { .. } => "Price Peak Protection",
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
             FilterReason::RugcheckRisk { .. } => "Security Risks",
             FilterReason::LPLockRisk { .. } => "LP Lock Security",

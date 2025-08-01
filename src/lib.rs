@@ -11,3 +11,4 @@ pub mod profit;
 pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;
+pub mod smart_entry;

@@ -622,20 +622,37 @@ impl RugcheckService {
     /// Fetch rugcheck data for a single token and store in database and cache
     async fn fetch_and_store_rugcheck_data(&self, mint: String) -> Result<(), String> {
         // Fetch data from rugcheck API
-        let rugcheck_data = self.fetch_rugcheck_data(&mint).await?;
+        match self.fetch_rugcheck_data(&mint).await {
+            Ok(rugcheck_data) => {
+                // Store data in database
+                self.store_rugcheck_data(&rugcheck_data).await?;
 
-        // Store data in database
-        self.store_rugcheck_data(&rugcheck_data).await?;
+                // Update cache
+                let cache_entry = RugcheckCacheEntry {
+                    data: rugcheck_data,
+                    timestamp: Utc::now(),
+                };
 
-        // Update cache
-        let cache_entry = RugcheckCacheEntry {
-            data: rugcheck_data,
-            timestamp: Utc::now(),
-        };
+                self.cache.write().await.insert(mint, cache_entry);
 
-        self.cache.write().await.insert(mint, cache_entry);
-
-        Ok(())
+                Ok(())
+            }
+            Err(error) => {
+                // Handle the special case where rugcheck has no data for the token
+                if error == "NO_RUGCHECK_DATA_AVAILABLE" {
+                    log(
+                        LogTag::Rugcheck,
+                        "SKIP",
+                        &format!("Skipping {} - no rugcheck data available", mint)
+                    );
+                    // Return Ok to avoid treating this as an error - this is normal
+                    return Ok(());
+                } else {
+                    // This is a real error
+                    return Err(error);
+                }
+            }
+        }
     }
 
     /// Fetch rugcheck data from API with 3 retry attempts and rate limiting
@@ -689,11 +706,54 @@ impl RugcheckService {
                     let status = response.status();
 
                     if !status.is_success() {
-                        last_error = format!(
-                            "API request failed with status: {} {}",
-                            status.as_u16(),
-                            status.canonical_reason().unwrap_or("Unknown")
-                        );
+                        // Handle special case: 400 "unable to generate report" - this is normal for some tokens
+                        if status.as_u16() == 400 {
+                            // Get the response body to check for "unable to generate report"
+                            match response.text().await {
+                                Ok(error_body) => {
+                                    if
+                                        error_body.contains("unable to generate report") ||
+                                        error_body.contains("not found")
+                                    {
+                                        log(
+                                            LogTag::Rugcheck,
+                                            "NO_DATA",
+                                            &format!(
+                                                "No rugcheck data available for token: {} ({})",
+                                                mint,
+                                                if error_body.contains("not found") {
+                                                    "not found"
+                                                } else {
+                                                    "rugcheck cannot generate report"
+                                                }
+                                            )
+                                        );
+                                        // Return a special error that indicates no data available
+                                        return Err("NO_RUGCHECK_DATA_AVAILABLE".to_string());
+                                    } else {
+                                        last_error = format!(
+                                            "API request failed with status: {} {} - Response: {}",
+                                            status.as_u16(),
+                                            status.canonical_reason().unwrap_or("Unknown"),
+                                            error_body
+                                        );
+                                    }
+                                }
+                                Err(_) => {
+                                    last_error = format!(
+                                        "API request failed with status: {} {} (could not read error body)",
+                                        status.as_u16(),
+                                        status.canonical_reason().unwrap_or("Unknown")
+                                    );
+                                }
+                            }
+                        } else {
+                            last_error = format!(
+                                "API request failed with status: {} {}",
+                                status.as_u16(),
+                                status.canonical_reason().unwrap_or("Unknown")
+                            );
+                        }
 
                         // Handle 429 (rate limit) with longer wait
                         if status.as_u16() == 429 {
@@ -913,7 +973,14 @@ impl RugcheckService {
             let cache = self.cache.read().await;
             if let Some(entry) = cache.get(mint) {
                 if !entry.is_expired() {
-                    log(LogTag::Rugcheck, "CACHE_HIT", &format!("Cache hit for token: {}", mint));
+                    if is_debug_rugcheck_enabled() {
+                        log(
+                            LogTag::Rugcheck,
+                            "CACHE_HIT",
+                            &format!("Cache hit for token: {}", mint)
+                        );
+                    }
+
                     return Ok(Some(entry.data.clone()));
                 } else {
                     log(
@@ -940,7 +1007,10 @@ impl RugcheckService {
                 };
                 self.cache.write().await.insert(mint.to_string(), cache_entry);
 
-                log(LogTag::Rugcheck, "DB_HIT", &format!("Database hit for token: {}", mint));
+                if is_debug_rugcheck_enabled() {
+                    log(LogTag::Rugcheck, "DB_HIT", &format!("Database hit for token: {}", mint));
+                }
+
                 return Ok(Some(data));
                 // }
             }

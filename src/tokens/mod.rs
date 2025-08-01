@@ -39,6 +39,7 @@ pub mod blacklist;
 pub mod price_service;
 pub mod decimals;
 pub mod rugcheck;
+pub mod ohlcvs;
 
 // Re-export main types and functions
 pub use types::*;
@@ -77,6 +78,18 @@ pub use rugcheck::{
     is_token_safe_for_trading,
     get_rugcheck_score,
     get_high_risk_issues,
+};
+pub use ohlcvs::{
+    OhlcvService,
+    OhlcvDataPoint,
+    Timeframe,
+    DataAvailability,
+    init_ohlcv_service,
+    get_ohlcv_service,
+    start_ohlcv_monitoring,
+    sync_watch_list_with_trader,
+    is_ohlcv_data_available,
+    get_latest_ohlcv,
 };
 pub use price_service::{
     initialize_price_service,
@@ -160,6 +173,18 @@ impl TokensSystem {
         log(LogTag::System, "START", "Starting token monitoring task...");
         let monitor_handle = start_token_monitoring(shutdown.clone()).await?;
         handles.push(monitor_handle);
+
+        // Start OHLCV monitoring task
+        log(LogTag::System, "START", "Starting OHLCV monitoring task...");
+        match start_ohlcv_monitoring(shutdown.clone()).await {
+            Ok(ohlcv_handle) => {
+                handles.push(ohlcv_handle);
+                log(LogTag::System, "SUCCESS", "OHLCV monitoring task started");
+            }
+            Err(e) => {
+                log(LogTag::System, "WARN", &format!("Failed to start OHLCV monitoring: {}", e));
+            }
+        }
 
         log(LogTag::System, "SUCCESS", "All tokens system background tasks started");
 
@@ -254,6 +279,13 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 
     // Initialize price service
     initialize_price_service().await?;
+
+    // Initialize OHLCV service
+    if let Err(e) = init_ohlcv_service() {
+        log(LogTag::System, "WARN", &format!("OHLCV service initialization failed: {}", e));
+    } else {
+        log(LogTag::System, "SUCCESS", "OHLCV service initialized successfully");
+    }
 
     // Create tokens system
     let system = TokensSystem::new()?;
