@@ -43,6 +43,10 @@ path = "src/bin/tool_pool_price.rs"
 name = "test_sol_pair_filtering"
 path = "src/bin/test_sol_pair_filtering.rs"
 
+[[bin]]
+name = "tool_test_rugcheck"
+path = "src/bin/tool_test_rugcheck.rs"
+
 [dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }

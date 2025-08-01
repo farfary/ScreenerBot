@@ -8,3 +8,4 @@
 .cache_ohlcv/*
 .cache_trades/*
 logs/*
+.cache_ohlcvs/*

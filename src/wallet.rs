@@ -1,4 +1,4 @@
-use crate::global::{ read_configs };
+use crate::global::{ read_configs, is_debug_wallet_enabled };
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
@@ -387,6 +387,18 @@ pub async fn sign_and_send_transaction(
 ) -> Result<String, SwapError> {
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "Starting transaction signing: tx_length={} bytes, rpc_url={}",
+                swap_transaction_base64.len(),
+                rpc_url
+            )
+        );
+    }
+
     log(
         LogTag::Wallet,
         "SIGN",
@@ -424,6 +436,18 @@ pub async fn sign_and_send_transaction(
 
     // Sign the transaction
     let signature = keypair.sign_message(&transaction.message.serialize());
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "Transaction signed successfully: wallet_pubkey={}, signature={}",
+                keypair.pubkey(),
+                signature
+            )
+        );
+    }
 
     // Add the signature to the transaction
     if transaction.signatures.is_empty() {
@@ -545,8 +569,25 @@ pub fn detect_and_separate_ata_rent(
     actual_output_change: u64,
     is_sell_transaction: bool
 ) -> (bool, u64, u64) {
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "ATA detection analysis: wallet={}, output_change={} lamports ({:.6} SOL), is_sell={}",
+                &wallet_address[..8],
+                actual_output_change,
+                lamports_to_sol(actual_output_change),
+                is_sell_transaction
+            )
+        );
+    }
+
     if !is_sell_transaction {
         // ATA closing only matters for sell transactions
+        if is_debug_wallet_enabled() {
+            log(LogTag::Wallet, "DEBUG", "Not a sell transaction, skipping ATA detection");
+        }
         return (false, 0, actual_output_change);
     }
 
@@ -652,6 +693,23 @@ pub fn detect_and_separate_ata_rent(
         0.0
     };
 
+    // ============== DEBUG WALLET LOGGING - ATA CONSENSUS ==============
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG_ATA_CONSENSUS",
+            &format!(
+                "🔍 ATA CONSENSUS ANALYSIS - Methods: {} | Avg Confidence: {:.3} | Detection Methods: [{}] | Detected Amounts: {:?} | Raw Output: {} lamports ({:.9} SOL)",
+                total_methods,
+                avg_confidence,
+                detection_methods.join(", "),
+                detected_ata_amounts,
+                actual_output_change,
+                lamports_to_sol(actual_output_change)
+            )
+        );
+    }
+
     let ata_detected = avg_confidence > 0.4; // Require at least 40% average confidence
 
     if ata_detected {
@@ -675,6 +733,27 @@ pub fn detect_and_separate_ata_rent(
             avg_confidence
         );
 
+        // ============== DEBUG WALLET LOGGING - ATA FINAL RESULT ==============
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_ATA_FINAL",
+                &format!(
+                    "✅ ATA DETECTED RESULT - Methods: [{}] | Confidence: {:.1}% | Raw ATA Amount: {} lamports ({:.9} SOL) | Final ATA: {} lamports ({:.9} SOL) | Trade-Only SOL: {} lamports ({:.9} SOL) | Original Total: {} lamports ({:.9} SOL)",
+                    detection_methods.join(", "),
+                    avg_confidence * 100.0,
+                    ata_rent_amount,
+                    lamports_to_sol(ata_rent_amount),
+                    final_ata_amount,
+                    lamports_to_sol(final_ata_amount),
+                    trading_sol,
+                    lamports_to_sol(trading_sol),
+                    actual_output_change,
+                    lamports_to_sol(actual_output_change)
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "ATA_DETECT",
@@ -690,6 +769,21 @@ pub fn detect_and_separate_ata_rent(
 
         (true, final_ata_amount, trading_sol)
     } else {
+        // ============== DEBUG WALLET LOGGING - NO ATA DETECTED ==============
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_NO_ATA",
+                &format!(
+                    "❌ NO ATA DETECTED - Confidence: {:.1}% (below 40% threshold) | Methods Tried: {} | Using Full Amount: {} lamports ({:.9} SOL) as Trade SOL",
+                    avg_confidence * 100.0,
+                    total_methods,
+                    actual_output_change,
+                    lamports_to_sol(actual_output_change)
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "ATA_DETECT",
@@ -709,8 +803,36 @@ fn apply_ata_safety_checks(
     total_sol: f64,
     confidence: f64
 ) -> (u64, u64) {
+    // ============== DEBUG WALLET LOGGING - SAFETY CHECKS START ==============
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG_SAFETY",
+            &format!(
+                "🛡️ STARTING SAFETY CHECKS - Input ATA: {} lamports ({:.9} SOL) | Total SOL: {} lamports ({:.9} SOL) | Confidence: {:.1}%",
+                detected_ata_amount,
+                lamports_to_sol(detected_ata_amount),
+                total_sol_lamports,
+                total_sol,
+                confidence * 100.0
+            )
+        );
+    }
+
     // Safety Check 1: ATA rent cannot exceed total SOL
     if detected_ata_amount >= total_sol_lamports {
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_SAFETY_1",
+                &format!(
+                    "⚠️ SAFETY CHECK 1 TRIGGERED - ATA amount ({:.9} SOL) exceeds total SOL ({:.9} SOL), applying 50% split",
+                    lamports_to_sol(detected_ata_amount),
+                    total_sol
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "ATA_DETECT",
@@ -732,6 +854,18 @@ fn apply_ata_safety_checks(
     const MIN_TRADING_LAMPORTS: u64 = 100_000;
 
     if trading_sol_lamports < MIN_TRADING_LAMPORTS && total_sol > 0.0015 {
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_SAFETY_2",
+                &format!(
+                    "⚠️ SAFETY CHECK 2 TRIGGERED - Trading SOL too small ({:.9} SOL), ensuring minimum {:.9} SOL",
+                    trading_sol,
+                    lamports_to_sol(MIN_TRADING_LAMPORTS)
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "ATA_DETECT",
@@ -743,6 +877,17 @@ fn apply_ata_safety_checks(
 
     // Safety Check 3: Low confidence - use conservative ATA estimate
     if confidence < 0.6 && total_sol > 0.003 {
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_SAFETY_3",
+                &format!(
+                    "⚠️ SAFETY CHECK 3 TRIGGERED - Low confidence ({:.1}%), using conservative 80% of standard ATA rent",
+                    confidence * 100.0
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "ATA_DETECT",
@@ -759,6 +904,17 @@ fn apply_ata_safety_checks(
 
     // Safety Check 4: Very small total amounts - likely no ATA
     if total_sol < 0.0015 {
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_SAFETY_4",
+                &format!(
+                    "⚠️ SAFETY CHECK 4 TRIGGERED - Total SOL ({:.9}) too small for ATA, treating as trade-only",
+                    total_sol
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "ATA_DETECT",
@@ -771,6 +927,20 @@ fn apply_ata_safety_checks(
     }
 
     // Normal case: use detected values
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG_SAFETY_FINAL",
+            &format!(
+                "✅ SAFETY CHECKS PASSED - Using detected values: ATA: {} lamports ({:.9} SOL) | Trade SOL: {} lamports ({:.9} SOL)",
+                detected_ata_amount,
+                lamports_to_sol(detected_ata_amount),
+                trading_sol_lamports,
+                lamports_to_sol(trading_sol_lamports)
+            )
+        );
+    }
+
     (detected_ata_amount, trading_sol_lamports)
 }
 
@@ -911,12 +1081,28 @@ async fn send_rpc_request(
     rpc_url: &str,
     payload: &serde_json::Value
 ) -> Result<String, SwapError> {
+    if is_debug_wallet_enabled() {
+        log(LogTag::Wallet, "DEBUG", &format!("Sending RPC request to: {}", rpc_url));
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "RPC payload: {}",
+                serde_json::to_string(payload).unwrap_or_else(|_| "Invalid JSON".to_string())
+            )
+        );
+    }
+
     let response = client
         .post(rpc_url)
         .header("Content-Type", "application/json")
         .json(payload)
         .send().await
         .map_err(|e| SwapError::NetworkError(e))?;
+
+    if is_debug_wallet_enabled() {
+        log(LogTag::Wallet, "DEBUG", &format!("RPC response status: {}", response.status()));
+    }
 
     if !response.status().is_success() {
         return Err(
@@ -930,6 +1116,20 @@ async fn send_rpc_request(
         .json().await
         .map_err(|e| SwapError::NetworkError(e))?;
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "RPC response: {}",
+                serde_json
+                    ::to_string(&rpc_response)
+                    .unwrap_or_else(|_| "Invalid JSON".to_string())
+                    [..(500).min(rpc_response.to_string().len())].to_string()
+            )
+        );
+    }
+
     // Check for RPC errors
     if let Some(error) = rpc_response.get("error") {
         return Err(SwapError::TransactionError(format!("RPC error: {:?}", error)));
@@ -938,6 +1138,13 @@ async fn send_rpc_request(
     // Extract the transaction signature from the response
     if let Some(result) = rpc_response.get("result") {
         if let Some(signature) = result.as_str() {
+            if is_debug_wallet_enabled() {
+                log(
+                    LogTag::Wallet,
+                    "DEBUG",
+                    &format!("Transaction signature received: {}", signature)
+                );
+            }
             return Ok(signature.to_string());
         }
     }
@@ -1161,6 +1368,25 @@ pub async fn calculate_effective_price_with_ata_detection(
         is_sell_transaction
     );
 
+    // ============== DEBUG WALLET LOGGING - ATA DETECTION ==============
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG_ATA_DETECT",
+            &format!(
+                "🔍 ATA DETECTION RESULTS - TX: {} | ATA Detected: {} | Raw Output: {} lamports ({:.9} SOL) | ATA Rent: {} lamports ({:.9} SOL) | Trade-Only SOL: {} lamports ({:.9} SOL)",
+                &transaction_signature[..8],
+                ata_close_detected,
+                actual_output_change,
+                lamports_to_sol(actual_output_change),
+                ata_rent_lamports,
+                lamports_to_sol(ata_rent_lamports),
+                sol_from_trade_only,
+                lamports_to_sol(sol_from_trade_only)
+            )
+        );
+    }
+
     // Calculate effective price using cleaned amounts
     let (sol_for_price_calc, token_change_raw, token_decimals) = if input_mint == SOL_MINT {
         // For buy transactions, estimate trade SOL by excluding fees and ATA rent
@@ -1176,6 +1402,22 @@ pub async fn calculate_effective_price_with_ata_detection(
             (trade_sol_lamports as f64) / (10_f64).powi(9)
         };
 
+        // ============== DEBUG WALLET LOGGING - BUY CALCULATION ==============
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_BUY_CALC",
+                &format!(
+                    "💰 BUY PRICE CALCULATION - TX: {} | Total SOL Input: {} lamports ({:.9} SOL) | Estimated Trade SOL: {:.9} | Token Output: {} lamports",
+                    &transaction_signature[..8],
+                    actual_input_change,
+                    lamports_to_sol(actual_input_change),
+                    estimated_trade_sol,
+                    actual_output_change
+                )
+            );
+        }
+
         (estimated_trade_sol, actual_output_change, output_decimals)
     } else {
         // Token -> SOL swap (sell) - use cleaned SOL amount excluding ATA rent
@@ -1184,6 +1426,24 @@ pub async fn calculate_effective_price_with_ata_detection(
         } else {
             (actual_output_change as f64) / (10_f64).powi(9)
         };
+
+        // ============== DEBUG WALLET LOGGING - SELL CALCULATION ==============
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_SELL_CALC",
+                &format!(
+                    "💸 SELL PRICE CALCULATION - TX: {} | Token Input: {} lamports | Raw SOL Output: {} lamports ({:.9} SOL) | ATA Detected: {} | Final SOL Used: {:.9}",
+                    &transaction_signature[..8],
+                    actual_input_change,
+                    actual_output_change,
+                    lamports_to_sol(actual_output_change),
+                    ata_close_detected,
+                    sol_received
+                )
+            );
+        }
+
         (sol_received, actual_input_change, input_decimals)
     };
 
@@ -1192,6 +1452,22 @@ pub async fn calculate_effective_price_with_ata_detection(
 
     // Effective price calculation (now ATA-rent-clean)
     let effective_price = if token_amount > 0.0 { sol_for_price_calc / token_amount } else { 0.0 };
+
+    // ============== DEBUG WALLET LOGGING - FINAL PRICE ==============
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG_EFFECTIVE_PRICE",
+            &format!(
+                "🎯 FINAL EFFECTIVE PRICE - TX: {} | SOL for Calc: {:.12} | Token Amount (UI): {:.12} | Effective Price: {:.15} SOL/token | Token Decimals: {}",
+                &transaction_signature[..8],
+                sol_for_price_calc,
+                token_amount,
+                effective_price,
+                token_decimals
+            )
+        );
+    }
 
     log(
         LogTag::Wallet,
@@ -1406,6 +1682,22 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         PARTNER
     );
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "Swap request details: amount_sol={:.6}, slippage={}, fee={}, anti_mev={}, from_address={}",
+                request.amount_sol,
+                request.slippage,
+                request.fee,
+                request.is_anti_mev,
+                &request.from_address[..8]
+            )
+        );
+        log(LogTag::Wallet, "DEBUG", &format!("API URL: {}", url));
+    }
+
     log(
         LogTag::Wallet,
         "QUOTE",
@@ -1484,11 +1776,16 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 };
 
                 // Log the raw response for debugging
-                log(
-                    LogTag::Wallet,
-                    "DEBUG",
-                    &format!("Raw API response: {}", &response_text[..response_text.len().min(500)])
-                );
+                if is_debug_wallet_enabled() {
+                    log(
+                        LogTag::Wallet,
+                        "DEBUG",
+                        &format!(
+                            "Raw API response: {}",
+                            &response_text[..response_text.len().min(500)]
+                        )
+                    );
+                }
 
                 // Try to parse the JSON response with better error handling
                 let api_response: SwapApiResponse = match serde_json::from_str(&response_text) {
@@ -1804,6 +2101,25 @@ pub async fn execute_swap(
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
     let wallet_address = get_wallet_address()?;
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "Starting swap execution: token={} ({}), amount_sol={}, input_mint={}, output_mint={}, wallet_address={}",
+                token.symbol,
+                token.name,
+                amount_sol,
+                input_mint,
+                output_mint,
+                &wallet_address[..8]
+            )
+        );
+        if let Some(price) = expected_price {
+            log(LogTag::Wallet, "DEBUG", &format!("Expected price: {:.10} SOL per token", price));
+        }
+    }
+
     let request = SwapRequest {
         input_mint: input_mint.to_string(),
         output_mint: output_mint.to_string(),
@@ -1835,6 +2151,9 @@ pub async fn execute_swap(
     );
 
     // Get quote first
+    if is_debug_wallet_enabled() {
+        log(LogTag::Wallet, "DEBUG", "Requesting swap quote...");
+    }
     let swap_data = get_swap_quote(&request).await?;
 
     // Validate expected price if provided
@@ -2444,10 +2763,89 @@ pub async fn sell_token(
                 lamports_to_sol(ata_rent_lamports)
             )
         );
+
+        // ============== DEBUG WALLET LOGGING ==============
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_ATA",
+                &format!(
+                    "🔍 ATA DETECTION ANALYSIS - Token: {} | ATA Detected: {} | Enhanced Output: {:.9} SOL | ATA Rent: {:.9} SOL | Trade-Only SOL: {:.9} SOL",
+                    token.symbol,
+                    ata_close_detected,
+                    lamports_to_sol(enhanced_output_change),
+                    lamports_to_sol(ata_rent_lamports),
+                    lamports_to_sol(sol_from_trade_only)
+                )
+            );
+        }
+
         sol_from_trade_only
     } else {
+        // ============== DEBUG WALLET LOGGING ==============
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Wallet,
+                "DEBUG_ATA",
+                &format!(
+                    "🔍 ATA DETECTION ANALYSIS - Token: {} | ATA Detected: {} | Using Enhanced Output: {:.9} SOL (no ATA cleanup needed)",
+                    token.symbol,
+                    ata_close_detected,
+                    lamports_to_sol(enhanced_output_change)
+                )
+            );
+        }
+
         enhanced_output_change
     };
+
+    // ============== DEBUG WALLET LOGGING - FINAL CALCULATIONS ==============
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG_PRICE",
+            &format!(
+                "💰 EFFECTIVE PRICE CALCULATION - Token: {} | Effective Price: {:.12} SOL | Input Change: {} lamports | Final Output: {:.9} SOL",
+                token.symbol,
+                effective_price,
+                actual_input_change,
+                lamports_to_sol(final_output_change)
+            )
+        );
+
+        let entry_sol = lamports_to_sol(actual_input_change);
+        let exit_sol = lamports_to_sol(final_output_change);
+        let profit_sol = exit_sol - entry_sol;
+        let profit_percent = if entry_sol > 0.0 { (profit_sol / entry_sol) * 100.0 } else { 0.0 };
+
+        log(
+            LogTag::Wallet,
+            "DEBUG_PROFIT",
+            &format!(
+                "📊 PROFIT ANALYSIS - Token: {} | Entry: {:.9} SOL | Exit: {:.9} SOL | P&L: {:.9} SOL ({:.2}%)",
+                token.symbol,
+                entry_sol,
+                exit_sol,
+                profit_sol,
+                profit_percent
+            )
+        );
+
+        // Check if this looks like a big loss that might be incorrect
+        if profit_percent < -50.0 {
+            log(
+                LogTag::Wallet,
+                "DEBUG_ALERT",
+                &format!(
+                    "⚠️ LARGE LOSS DETECTED - Token: {} | Loss: {:.2}% | ATA Detected: {} | ATA Rent: {:.9} SOL | Please verify calculation accuracy",
+                    token.symbol,
+                    profit_percent,
+                    ata_close_detected,
+                    lamports_to_sol(ata_rent_lamports)
+                )
+            );
+        }
+    }
 
     // Note: ATA cleanup is now handled by background service - no blocking here
     log(LogTag::Wallet, "ATA", "💡 ATA cleanup handled by background service");
@@ -2520,6 +2918,14 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
 pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, SwapError> {
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!("Checking SOL balance for wallet: {}", &wallet_address[..8])
+        );
+    }
+
     let rpc_payload =
         serde_json::json!({
         "jsonrpc": "2.0",
@@ -2549,7 +2955,20 @@ pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, SwapError> {
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(value) = result.get("value") {
                             if let Some(balance_lamports) = value.as_u64() {
-                                return Ok(lamports_to_sol(balance_lamports));
+                                let balance_sol = lamports_to_sol(balance_lamports);
+                                if is_debug_wallet_enabled() {
+                                    log(
+                                        LogTag::Wallet,
+                                        "DEBUG",
+                                        &format!(
+                                            "SOL balance retrieved: {} lamports ({:.6} SOL) from RPC: {}",
+                                            balance_lamports,
+                                            balance_sol,
+                                            rpc_url
+                                        )
+                                    );
+                                }
+                                return Ok(balance_sol);
                             }
                         }
                     }

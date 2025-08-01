@@ -106,6 +106,15 @@ pub fn is_debug_ohlcv_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() { args.contains(&"--debug-ohlcv".to_string()) } else { false }
 }
 
+/// Check if debug wallet mode is enabled via command line args
+pub fn is_debug_wallet_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-wallet".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {
