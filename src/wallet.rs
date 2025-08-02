@@ -1,4 +1,4 @@
-use crate::global::{ read_configs, is_debug_wallet_enabled };
+use crate::global::{ read_configs, is_debug_wallet_enabled, is_debug_swap_enabled };
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
@@ -702,6 +702,29 @@ pub async fn calculate_effective_price(
 ) -> Result<(f64, u64, u64, f64, bool, u64, f64), SwapError> {
     use crate::swap_calculator::analyze_swap_comprehensive;
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "CALC_START",
+            &format!(
+                "🧮 Starting effective price calculation\n  TX: {}\n  Pair: {} -> {}\n  Wallet: {}\n  RPC: {}",
+                transaction_signature,
+                if input_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &input_mint[..8]
+                },
+                if output_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &output_mint[..8]
+                },
+                &wallet_address[..8],
+                rpc_url
+            )
+        );
+    }
+
     log(
         LogTag::Wallet,
         "ANALYZE",
@@ -720,6 +743,16 @@ pub async fn calculate_effective_price(
     ).await?;
 
     if !analysis_result.success {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "CALC_FAILED",
+                &format!(
+                    "❌ Analysis failed: {}",
+                    analysis_result.error_message.as_ref().unwrap_or(&"Unknown error".to_string())
+                )
+            );
+        }
         return Err(
             SwapError::TransactionError(
                 analysis_result.error_message.unwrap_or("Swap analysis failed".to_string())
@@ -735,6 +768,26 @@ pub async fn calculate_effective_price(
     let ata_detected = analysis_result.ata_creation_detected;
     let ata_rent_lamports = analysis_result.ata_rent_lamports;
     let ata_rent_sol = analysis_result.ata_rent_sol;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "CALC_SUCCESS",
+            &format!(
+                "✅ Price calculation successful\n  📊 Effective Price: {:.12} SOL per token\n  💱 Input Raw: {} | Output Raw: {}\n  📈 Slippage: {:.3}%\n  🏦 ATA: {} ({:.6} SOL)",
+                effective_price,
+                input_raw,
+                output_raw,
+                slippage,
+                if ata_detected {
+                    "DETECTED"
+                } else {
+                    "NONE"
+                },
+                ata_rent_sol
+            )
+        );
+    }
 
     log(
         LogTag::Wallet,
@@ -771,7 +824,7 @@ pub async fn calculate_effective_price(
     );
 
     // Return expanded result with ATA detection data
-    Ok((
+    let result = (
         effective_price,
         input_raw,
         output_raw,
@@ -779,7 +832,26 @@ pub async fn calculate_effective_price(
         ata_detected,
         ata_rent_lamports,
         ata_rent_sol,
-    ))
+    );
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "CALC_FINAL",
+            &format!(
+                "🎯 Final calculation result returned\n  📊 (price={:.12}, input_raw={}, output_raw={}, slippage={:.3}%, ata={}, ata_lamports={}, ata_sol={:.6})",
+                result.0,
+                result.1,
+                result.2,
+                result.3,
+                result.4,
+                result.5,
+                result.6
+            )
+        );
+    }
+
+    Ok(result)
 }
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
@@ -818,6 +890,31 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
     let amount_lamports = sol_to_lamports(request.amount_sol);
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "QUOTE_START",
+            &format!(
+                "🔍 Getting swap quote\n  📊 Amount: {:.6} SOL ({} lamports)\n  💱 Route: {} -> {}\n  ⚙️ Slippage: {}%, Fee: {}%, Anti-MEV: {}",
+                request.amount_sol,
+                amount_lamports,
+                if request.input_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &request.input_mint[..8]
+                },
+                if request.output_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &request.output_mint[..8]
+                },
+                request.slippage,
+                request.fee,
+                request.is_anti_mev
+            )
+        );
+    }
+
     let url = format!(
         "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
         request.input_mint,
@@ -829,6 +926,10 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         request.is_anti_mev,
         PARTNER
     );
+
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "QUOTE_URL", &format!("🌐 API URL: {}", url));
+    }
 
     if is_debug_wallet_enabled() {
         log(
@@ -872,6 +973,18 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
     for attempt in 1..=3 {
         match client.get(&url).send().await {
             Ok(response) => {
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "QUOTE_RESPONSE",
+                        &format!(
+                            "📡 API response received - Status: {}, Attempt: {}/3",
+                            response.status(),
+                            attempt
+                        )
+                    );
+                }
+
                 if !response.status().is_success() {
                     let status_code = response.status().as_u16();
                     let error_text = response
@@ -880,6 +993,14 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                     let error = SwapError::ApiError(
                         format!("HTTP error {}: {}", status_code, error_text)
                     );
+
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "QUOTE_ERROR",
+                            &format!("❌ API error {}: {}", status_code, error_text)
+                        );
+                    }
 
                     if attempt < 3 && status_code >= 500 {
                         log(
@@ -935,10 +1056,40 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                     );
                 }
 
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "QUOTE_RAW",
+                        &format!("📄 Raw response length: {} chars", response_text.len())
+                    );
+                }
+
                 // Try to parse the JSON response with better error handling
-                let api_response: SwapApiResponse = match serde_json::from_str(&response_text) {
-                    Ok(response) => response,
+                let api_response: SwapApiResponse = match
+                    serde_json::from_str::<SwapApiResponse>(&response_text)
+                {
+                    Ok(response) => {
+                        if is_debug_swap_enabled() {
+                            log(
+                                LogTag::Swap,
+                                "QUOTE_PARSED",
+                                &format!(
+                                    "✅ JSON parsing successful - Code: {}, Msg: {}",
+                                    response.code,
+                                    response.msg
+                                )
+                            );
+                        }
+                        response
+                    }
                     Err(e) => {
+                        if is_debug_swap_enabled() {
+                            log(
+                                LogTag::Swap,
+                                "QUOTE_PARSE_ERR",
+                                &format!("❌ JSON parsing failed: {}", e)
+                            );
+                        }
                         let error = SwapError::InvalidResponse(
                             format!("JSON parsing error: {} - Response: {}", e, response_text)
                         );
@@ -976,6 +1127,28 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
                 match api_response.data {
                     Some(data) => {
+                        if is_debug_swap_enabled() {
+                            let in_amount_sol = lamports_to_sol(
+                                data.quote.in_amount.parse().unwrap_or(0)
+                            );
+                            let out_amount_sol = lamports_to_sol(
+                                data.quote.out_amount.parse().unwrap_or(0)
+                            );
+                            log(
+                                LogTag::Swap,
+                                "QUOTE_SUCCESS",
+                                &format!(
+                                    "🎯 Quote successful\n  📊 Input: {:.6} SOL ({} lamports)\n  📊 Output: {:.6} SOL ({} lamports)\n  💹 Price Impact: {:.3}%\n  ⏱️ Time: {:.3}s",
+                                    in_amount_sol,
+                                    data.quote.in_amount,
+                                    out_amount_sol,
+                                    data.quote.out_amount,
+                                    data.quote.price_impact_pct,
+                                    data.quote.time_taken
+                                )
+                            );
+                        }
+
                         log(
                             LogTag::Wallet,
                             "QUOTE",
@@ -1266,6 +1439,38 @@ pub async fn execute_swap(
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
     let wallet_address = get_wallet_address()?;
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "EXEC_START",
+            &format!(
+                "🚀 Starting swap execution\n  🪙 Token: {} ({})\n  💰 Amount: {:.6} SOL\n  🔄 Route: {} -> {}\n  👤 Wallet: {}",
+                token.symbol,
+                token.name,
+                amount_sol,
+                if input_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &input_mint[..8]
+                },
+                if output_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &output_mint[..8]
+                },
+                &wallet_address[..8]
+            )
+        );
+
+        if let Some(price) = expected_price {
+            log(
+                LogTag::Swap,
+                "EXEC_EXPECTED",
+                &format!("🎯 Expected price: {:.12} SOL per token", price)
+            );
+        }
+    }
+
     if is_debug_wallet_enabled() {
         log(
             LogTag::Wallet,
@@ -1316,13 +1521,34 @@ pub async fn execute_swap(
     );
 
     // Get quote first
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "EXEC_QUOTE", "📋 Requesting swap quote...");
+    }
     if is_debug_wallet_enabled() {
         log(LogTag::Wallet, "DEBUG", "Requesting swap quote...");
     }
     let swap_data = get_swap_quote(&request).await?;
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "EXEC_QUOTE_OK",
+            &format!(
+                "✅ Quote received\n  📊 In: {} | Out: {}\n  📈 Impact: {:.3}%\n  🕒 Time: {:.3}s",
+                swap_data.quote.in_amount,
+                swap_data.quote.out_amount,
+                swap_data.quote.price_impact_pct,
+                swap_data.quote.time_taken
+            )
+        );
+    }
+
     // Validate expected price if provided
     if let Some(expected) = expected_price {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "EXEC_PRICE_VAL", "🔍 Validating expected price...");
+        }
+
         // Calculate the actual price per token from the quote
         let input_sol = request.amount_sol;
         let output_amount_raw = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
@@ -1338,6 +1564,20 @@ pub async fn execute_swap(
 
         let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
 
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "EXEC_PRICE_CALC",
+                &format!(
+                    "💹 Price calculation\n  🎯 Expected: {:.12} SOL/token\n  📊 Actual: {:.12} SOL/token\n  📈 Difference: {:.3}%\n  ⚠️ Slippage limit: {:.3}%",
+                    expected,
+                    actual_price_per_token,
+                    price_difference,
+                    request.slippage
+                )
+            );
+        }
+
         log(
             LogTag::Wallet,
             "PRICE",
@@ -1350,6 +1590,17 @@ pub async fn execute_swap(
         );
 
         if price_difference > request.slippage {
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "EXEC_PRICE_FAIL",
+                    &format!(
+                        "❌ Price difference {:.3}% exceeds slippage tolerance {:.3}%",
+                        price_difference,
+                        request.slippage
+                    )
+                );
+            }
             return Err(
                 SwapError::SlippageExceeded(
                     format!(
@@ -1360,20 +1611,45 @@ pub async fn execute_swap(
                 )
             );
         }
+
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "EXEC_PRICE_OK", "✅ Price validation passed");
+        }
     }
 
     // Sign and send the transaction using premium RPC (buy_token)
     let selected_rpc = get_premium_transaction_rpc(&configs);
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "EXEC_TX_START",
+            &format!("📡 Signing and sending transaction via RPC: {}", selected_rpc)
+        );
+    }
+
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
         &selected_rpc
     ).await?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "EXEC_TX_SUCCESS",
+            &format!("✅ Transaction submitted successfully! TX: {}", transaction_signature)
+        );
+    }
 
     log(
         LogTag::Wallet,
         "SUCCESS",
         &format!("Swap executed successfully! TX: {}", transaction_signature)
     );
+
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "EXEC_ANALYSIS", "🔍 Starting effective price analysis...");
+    }
 
     // Calculate effective price with comprehensive ATA detection
     let (
@@ -1396,6 +1672,26 @@ pub async fn execute_swap(
         log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
         (0.0, 0, 0, 0.0, false, 0, 0.0)
     });
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "EXEC_COMPLETE",
+            &format!(
+                "🎉 Swap execution complete\n  ✅ Success: true\n  📊 Effective Price: {:.12} SOL per token\n  💱 Input Change: {} | Output Change: {}\n  📈 Slippage: {:.3}%\n  🏦 ATA Detected: {} ({:.6} SOL rent)",
+                effective_price,
+                actual_input_change,
+                actual_output_change,
+                slippage,
+                if ata_detected {
+                    "YES"
+                } else {
+                    "NO"
+                },
+                ata_rent_sol
+            )
+        );
+    }
 
     Ok(SwapResult {
         success: true,

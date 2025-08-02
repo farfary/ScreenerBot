@@ -1,5 +1,9 @@
 use serde_json::Value;
-use crate::{ wallet::SwapError, global::is_debug_profit_enabled, logger::{ log, LogTag } };
+use crate::{
+    wallet::SwapError,
+    global::{ is_debug_profit_enabled, is_debug_swap_enabled },
+    logger::{ log, LogTag },
+};
 
 /// SOL mint address (native SOL)
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -133,6 +137,29 @@ pub async fn analyze_swap_comprehensive(
 ) -> Result<SwapAnalysisResult, SwapError> {
     let start_time = std::time::Instant::now();
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "ANALYSIS_START",
+            &format!(
+                "🔄 Starting comprehensive swap analysis\n  TX: {}\n  Input: {} -> Output: {}\n  Wallet: {}\n  Intended: {:?}",
+                transaction_signature,
+                if input_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &input_mint[..8]
+                },
+                if output_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &output_mint[..8]
+                },
+                &wallet_address[..8],
+                intended_amount
+            )
+        );
+    }
+
     if is_debug_profit_enabled() {
         log(
             LogTag::Wallet,
@@ -149,6 +176,45 @@ pub async fn analyze_swap_comprehensive(
     let transaction_json: Value = serde_json
         ::from_str(&tx_response)
         .map_err(|e| SwapError::InvalidResponse(format!("Failed to parse transaction: {}", e)))?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TX_FETCHED",
+            &format!("📥 Transaction data retrieved from RPC endpoint: {}", rpc_endpoint)
+        );
+
+        // Log transaction structure overview
+        if let Some(result) = transaction_json.get("result") {
+            if let Some(meta) = result.get("meta") {
+                let fee = meta
+                    .get("fee")
+                    .and_then(|f| f.as_u64())
+                    .unwrap_or(0);
+                let compute_units = meta
+                    .get("computeUnitsConsumed")
+                    .and_then(|c| c.as_u64())
+                    .unwrap_or(0);
+                let err = meta.get("err");
+
+                log(
+                    LogTag::Swap,
+                    "TX_META",
+                    &format!(
+                        "📊 Transaction metadata - Fee: {} lamports ({:.6} SOL), Compute Units: {}, Error: {}",
+                        fee,
+                        lamports_to_sol(fee),
+                        compute_units,
+                        if err.is_some() && !err.unwrap().is_null() {
+                            "❌ FAILED"
+                        } else {
+                            "✅ SUCCESS"
+                        }
+                    )
+                );
+            }
+        }
+    }
 
     // Check transaction success
     let success = check_transaction_success(&transaction_json)?;
@@ -195,29 +261,141 @@ pub async fn analyze_swap_comprehensive(
         analyze_log_messages(&transaction_json, input_mint, output_mint)
     ];
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "ANALYSIS_METHODS",
+            "🔍 Running 3 analysis methods: Inner Instructions, Token Balances, Log Messages"
+        );
+    }
+
     // Get valid results
     let valid_results: Vec<_> = methods
         .into_iter()
-        .filter_map(|r| r.ok())
+        .enumerate()
+        .filter_map(|(i, r)| {
+            match r {
+                Ok(result) => {
+                    if is_debug_swap_enabled() {
+                        let method_name = match i {
+                            0 => "Inner Instructions",
+                            1 => "Token Balances",
+                            2 => "Log Messages",
+                            _ => "Unknown",
+                        };
+                        log(
+                            LogTag::Swap,
+                            "METHOD_SUCCESS",
+                            &format!(
+                                "✅ {} - Input: {:.6}, Output: {:.6}, Confidence: {:.2}",
+                                method_name,
+                                result.input_amount,
+                                result.output_amount,
+                                result.confidence
+                            )
+                        );
+                    }
+                    Some(result)
+                }
+                Err(e) => {
+                    if is_debug_swap_enabled() {
+                        let method_name = match i {
+                            0 => "Inner Instructions",
+                            1 => "Token Balances",
+                            2 => "Log Messages",
+                            _ => "Unknown",
+                        };
+                        log(
+                            LogTag::Swap,
+                            "METHOD_FAILED",
+                            &format!("❌ {} failed: {}", method_name, e)
+                        );
+                    }
+                    None
+                }
+            }
+        })
         .collect();
 
     if valid_results.is_empty() {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "ANALYSIS_FAILED",
+                "❌ No valid analysis methods succeeded - unable to determine swap amounts"
+            );
+        }
         return Err(SwapError::InvalidResponse("No valid analysis methods succeeded".to_string()));
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "CONSENSUS_START",
+            &format!("🎯 Calculating consensus from {} valid results", valid_results.len())
+        );
     }
 
     // Calculate consensus result
     let consensus_result = calculate_consensus_result(valid_results, intended_amount)?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "CONSENSUS_RESULT",
+            &format!(
+                "📊 Consensus: Input={:.6} (decimals={}), Output={:.6} (decimals={}), Method={}, Confidence={:.2}",
+                consensus_result.input_amount,
+                consensus_result.input_decimals,
+                consensus_result.output_amount,
+                consensus_result.output_decimals,
+                consensus_result.method,
+                consensus_result.confidence
+            )
+        );
+    }
 
     // Extract fee information
     let (tx_fee_lamports, tx_fee_sol) = extract_transaction_fee(&transaction_json);
     let platform_fee_sol = extract_platform_fee(&transaction_json);
     let total_fees_sol = tx_fee_sol + platform_fee_sol.unwrap_or(0.0);
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "FEE_ANALYSIS",
+            &format!(
+                "💰 Fee breakdown - TX Fee: {:.6} SOL ({} lamports), Platform Fee: {:.6} SOL, Total: {:.6} SOL",
+                tx_fee_sol,
+                tx_fee_lamports,
+                platform_fee_sol.unwrap_or(0.0),
+                total_fees_sol
+            )
+        );
+    }
+
     // Detect ATA creation
     let (ata_detected, ata_rent_lamports, ata_rent_sol) = detect_ata_creation(
         &transaction_json,
         wallet_address
     );
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "ATA_DETECTION",
+            &format!(
+                "🏦 ATA Analysis - Detected: {}, Rent: {:.6} SOL ({} lamports)",
+                if ata_detected {
+                    "✅ YES"
+                } else {
+                    "❌ NO"
+                },
+                ata_rent_sol,
+                ata_rent_lamports
+            )
+        );
+    }
 
     // Calculate effective price correctly (SOL per token)
     // For SOL->Token: price = SOL_amount / token_amount
@@ -230,6 +408,47 @@ pub async fn analyze_swap_comprehensive(
         consensus_result.output_amount / consensus_result.input_amount
     };
 
+    if is_debug_swap_enabled() {
+        let swap_type = if input_mint == SOL_MINT {
+            "SOL -> Token (BUY)"
+        } else {
+            "Token -> SOL (SELL)"
+        };
+        log(
+            LogTag::Swap,
+            "PRICE_CALC",
+            &format!(
+                "💹 Price calculation - Type: {}, Effective Price: {:.12} SOL per token",
+                swap_type,
+                effective_price
+            )
+        );
+
+        if input_mint == SOL_MINT {
+            log(
+                LogTag::Swap,
+                "PRICE_DETAIL",
+                &format!(
+                    "📈 BUY: Spent {:.6} SOL → Received {:.6} tokens = {:.12} SOL per token",
+                    consensus_result.input_amount,
+                    consensus_result.output_amount,
+                    effective_price
+                )
+            );
+        } else {
+            log(
+                LogTag::Swap,
+                "PRICE_DETAIL",
+                &format!(
+                    "📉 SELL: Spent {:.6} tokens → Received {:.6} SOL = {:.12} SOL per token",
+                    consensus_result.input_amount,
+                    consensus_result.output_amount,
+                    effective_price
+                )
+            );
+        }
+    }
+
     // Calculate price difference and slippage based on expected vs actual amounts
     let (price_diff_percent, slippage_percent) = if let Some(intended) = intended_amount {
         if input_mint == SOL_MINT {
@@ -239,6 +458,22 @@ pub async fn analyze_swap_comprehensive(
             let actual_tokens = consensus_result.output_amount;
             let token_diff_percent = ((actual_tokens - expected_tokens) / expected_tokens) * 100.0;
             let slippage = token_diff_percent.abs();
+
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "SLIPPAGE_BUY",
+                    &format!(
+                        "📊 BUY Slippage - Intended: {:.6} SOL, Expected tokens: {:.6}, Actual tokens: {:.6}, Diff: {:.3}%, Slippage: {:.3}%",
+                        intended,
+                        expected_tokens,
+                        actual_tokens,
+                        token_diff_percent,
+                        slippage
+                    )
+                );
+            }
+
             (token_diff_percent, slippage)
         } else {
             // For Token->SOL: intended is token amount, compare with actual SOL received
@@ -247,9 +482,32 @@ pub async fn analyze_swap_comprehensive(
             let actual_sol = consensus_result.output_amount;
             let sol_diff_percent = ((actual_sol - expected_sol) / expected_sol) * 100.0;
             let slippage = sol_diff_percent.abs();
+
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "SLIPPAGE_SELL",
+                    &format!(
+                        "📊 SELL Slippage - Intended: {:.6} tokens, Expected SOL: {:.6}, Actual SOL: {:.6}, Diff: {:.3}%, Slippage: {:.3}%",
+                        intended,
+                        expected_sol,
+                        actual_sol,
+                        sol_diff_percent,
+                        slippage
+                    )
+                );
+            }
+
             (sol_diff_percent, slippage)
         }
     } else {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "NO_SLIPPAGE",
+                "⚠️ No intended amount provided - cannot calculate slippage"
+            );
+        }
         (0.0, 0.0)
     };
 
@@ -260,6 +518,28 @@ pub async fn analyze_swap_comprehensive(
         (10_f64).powi(consensus_result.output_decimals as i32)) as u64;
 
     let analysis_time = start_time.elapsed().as_millis() as u64;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "ANALYSIS_COMPLETE",
+            &format!(
+                "🎉 Comprehensive analysis complete in {}ms\n  ✅ Success: {}\n  📊 Method: {} (confidence: {:.2})\n  💹 Price: {:.12} SOL per token\n  📈 Slippage: {:.3}%\n  💰 Total Fees: {:.6} SOL\n  🏦 ATA Detected: {}",
+                analysis_time,
+                true,
+                consensus_result.method,
+                consensus_result.confidence,
+                effective_price,
+                slippage_percent,
+                total_fees_sol,
+                if ata_detected {
+                    "YES"
+                } else {
+                    "NO"
+                }
+            )
+        );
+    }
 
     if is_debug_profit_enabled() {
         log(
@@ -460,6 +740,10 @@ fn analyze_inner_instructions(
     output_mint: &str,
     wallet_address: &str
 ) -> Result<TokenTransferData, SwapError> {
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "INNER_START", "🔍 Analyzing inner instructions for token transfers");
+    }
+
     let meta = transaction_json
         .get("meta")
         .ok_or_else(|| SwapError::InvalidResponse("Missing metadata".to_string()))?;
@@ -470,10 +754,19 @@ fn analyze_inner_instructions(
         .as_array()
         .ok_or_else(|| SwapError::InvalidResponse("Inner instructions not an array".to_string()))?;
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_COUNT",
+            &format!("📋 Found {} inner instruction groups", inner_instructions.len())
+        );
+    }
+
     let mut input_amount = 0.0;
     let mut output_amount = 0.0;
     let mut input_decimals = 0u8;
     let mut output_decimals = 0u8;
+    let mut transfer_count = 0;
 
     for inner_ix_group in inner_instructions {
         if let Some(instructions) = inner_ix_group.get("instructions").and_then(|i| i.as_array()) {
@@ -510,12 +803,52 @@ fn analyze_inner_instructions(
                                 if mint == input_mint && source.contains(wallet_address) {
                                     input_amount = amount;
                                     input_decimals = decimals;
+                                    transfer_count += 1;
+
+                                    if is_debug_swap_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "INNER_INPUT",
+                                            &format!(
+                                                "📤 INPUT transfer: {:.6} {} (decimals: {}) from {} to {}",
+                                                amount,
+                                                if mint == SOL_MINT {
+                                                    "SOL"
+                                                } else {
+                                                    &mint[..8]
+                                                },
+                                                decimals,
+                                                &source[..8],
+                                                &destination[..8]
+                                            )
+                                        );
+                                    }
                                 } else if
                                     mint == output_mint &&
                                     destination.contains(wallet_address)
                                 {
                                     output_amount = amount;
                                     output_decimals = decimals;
+                                    transfer_count += 1;
+
+                                    if is_debug_swap_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "INNER_OUTPUT",
+                                            &format!(
+                                                "📥 OUTPUT transfer: {:.6} {} (decimals: {}) from {} to {}",
+                                                amount,
+                                                if mint == SOL_MINT {
+                                                    "SOL"
+                                                } else {
+                                                    &mint[..8]
+                                                },
+                                                decimals,
+                                                &source[..8],
+                                                &destination[..8]
+                                            )
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -531,10 +864,41 @@ fn analyze_inner_instructions(
         if input_mint == SOL_MINT {
             input_amount = sol_change;
             input_decimals = 9;
+
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "INNER_SOL_IN",
+                    &format!("💰 SOL input amount: {:.6} SOL", sol_change)
+                );
+            }
         } else {
             output_amount = sol_change;
             output_decimals = 9;
+
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "INNER_SOL_OUT",
+                    &format!("💰 SOL output amount: {:.6} SOL", sol_change)
+                );
+            }
         }
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_RESULT",
+            &format!(
+                "📊 Inner instructions analysis - Transfers: {}, Input: {:.6} (decimals: {}), Output: {:.6} (decimals: {})",
+                transfer_count,
+                input_amount,
+                input_decimals,
+                output_amount,
+                output_decimals
+            )
+        );
     }
 
     if input_amount > 0.0 && output_amount > 0.0 {

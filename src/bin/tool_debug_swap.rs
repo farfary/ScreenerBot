@@ -1274,352 +1274,6 @@ fn display_analysis_results(result: &SwapDebugResult, token_mint: &str) {
     println!("{}", "=".repeat(80).bright_blue());
 }
 
-/// Test batch operations
-async fn test_batch_operations(token_mints: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    log(
-        LogTag::System,
-        "BATCH",
-        &format!("🔄 Testing batch operations for {} tokens", token_mints.len())
-    );
-
-    let start_time = Instant::now();
-
-    // Test batch decimal fetching
-    log(LogTag::System, "BATCH", "📥 Testing batch decimal fetching...");
-    let results = batch_fetch_token_decimals(&token_mints).await;
-    let mut successful_count = 0;
-    for (token, result) in &results {
-        match result {
-            Ok(decimals) => {
-                successful_count += 1;
-                log(LogTag::System, "BATCH", &format!("✅ Token {}: {} decimals", token, decimals));
-            }
-            Err(e) => {
-                log(LogTag::System, "BATCH", &format!("❌ Token {}: {}", token, e));
-            }
-        }
-    }
-    log(
-        LogTag::System,
-        "BATCH",
-        &format!(
-            "✅ Batch decimals fetch completed: {}/{} successful",
-            successful_count,
-            token_mints.len()
-        )
-    );
-
-    // Test batch API data fetching
-    log(LogTag::System, "BATCH", "📡 Testing batch API data fetching...");
-    let api_result = {
-        let api = get_global_dexscreener_api().await?;
-        let mut api_instance = api.lock().await;
-        api_instance.get_tokens_info(&token_mints).await
-    };
-
-    match api_result {
-        Ok(tokens) => {
-            log(
-                LogTag::System,
-                "BATCH",
-                &format!(
-                    "✅ Batch API fetch completed: {}/{} tokens found",
-                    tokens.len(),
-                    token_mints.len()
-                )
-            );
-        }
-        Err(e) => {
-            log(LogTag::System, "BATCH", &format!("❌ Batch API fetch failed: {}", e));
-        }
-    }
-
-    let batch_time = start_time.elapsed();
-    log(
-        LogTag::System,
-        "BATCH",
-        &format!("🏁 Batch operations completed in {:.2}s", batch_time.as_secs_f64())
-    );
-
-    Ok(())
-}
-
-/// Test comprehensive REAL swap operations for a specific token with multiple sizes
-async fn test_swap_operations(
-    token_mint: &str,
-    test_sizes: &[f64]
-) -> Result<(), Box<dyn std::error::Error>> {
-    log(
-        LogTag::System,
-        "SWAP_TEST",
-        &format!("🔄 Testing comprehensive REAL swap operations for token: {}", token_mint)
-    );
-
-    let start_time = Instant::now();
-
-    // First, analyze the token to ensure it's valid for testing
-    log(LogTag::System, "SWAP_TEST", "📊 Performing initial token analysis...");
-    let token_analysis = analyze_token_for_swap(token_mint).await;
-
-    if !token_analysis.token_valid {
-        log(LogTag::System, "SWAP_TEST", "❌ Token is invalid, aborting swap tests");
-        return Ok(());
-    }
-
-    log(
-        LogTag::System,
-        "SWAP_TEST",
-        &format!(
-            "✅ Token analysis complete - API: {}, Pool: {}, Price: {}",
-            token_analysis.api_data_available,
-            token_analysis.pool_data_available,
-            token_analysis.price_available
-        )
-    );
-
-    // Get token decimals for calculations
-    let token_decimals = get_cached_decimals(token_mint)
-        .or_else(|| {
-            log(LogTag::System, "SWAP_TEST", "⚠️ Decimals not cached, using default 6");
-            Some(6)
-        })
-        .unwrap_or(6);
-
-    log(
-        LogTag::System,
-        "SWAP_TEST",
-        &format!("🔢 Using {} decimals for calculations", token_decimals)
-    );
-
-    // Track accumulated tokens for reverse swaps
-    let mut accumulated_tokens = 0.0;
-    let mut buy_results = Vec::new();
-
-    // Test each swap size - BUY operations
-    for &size in test_sizes {
-        log(LogTag::System, "SWAP_TEST", &format!("🎯 Testing REAL swap size: {:.3} SOL", size));
-
-        // Execute REAL SOL → Token swap
-        log(LogTag::System, "SWAP_TEST", &format!("🔄 REAL SOL → Token swap ({:.3} SOL)", size));
-
-        match execute_real_sol_to_token_swap(token_mint, size).await {
-            Ok(swap_result) => {
-                if swap_result.success {
-                    // Calculate actual tokens received
-                    let output_amount_raw: u64 = swap_result.output_amount.parse().unwrap_or(0);
-                    let tokens_received =
-                        (output_amount_raw as f64) / (10_f64).powi(token_decimals as i32);
-
-                    accumulated_tokens += tokens_received;
-                    buy_results.push((
-                        size,
-                        tokens_received,
-                        swap_result.transaction_signature.clone(),
-                    ));
-
-                    log(
-                        LogTag::System,
-                        "SWAP_TEST",
-                        &format!(
-                            "✅ REAL SOL → Token: {:.3} SOL → {:.2} tokens (TX: {})",
-                            size,
-                            tokens_received,
-                            swap_result.transaction_signature.unwrap_or("unknown".to_string())
-                        )
-                    );
-
-                    // Calculate price impact and effective price
-                    if let Some(effective_price) = swap_result.effective_price {
-                        log(
-                            LogTag::System,
-                            "SWAP_TEST",
-                            &format!(
-                                "📊 Effective price: {:.8} SOL per token, Price impact: {}%",
-                                effective_price,
-                                swap_result.price_impact
-                            )
-                        );
-                    }
-                } else {
-                    log(
-                        LogTag::System,
-                        "SWAP_TEST",
-                        &format!(
-                            "❌ REAL SOL → Token swap failed for {:.3} SOL: {}",
-                            size,
-                            swap_result.error.unwrap_or("Unknown error".to_string())
-                        )
-                    );
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::System,
-                    "SWAP_TEST",
-                    &format!("❌ REAL SOL → Token swap failed for {:.3} SOL: {}", size, e)
-                );
-            }
-        }
-
-        // Add separator between different sizes
-        log(LogTag::System, "SWAP_TEST", &format!("{}", "-".repeat(60)));
-    }
-
-    // Wait a bit for transactions to settle
-    log(
-        LogTag::System,
-        "SWAP_TEST",
-        "⏳ Waiting for transactions to settle before reverse swaps..."
-    );
-    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-
-    // Now test reverse swaps - SELL operations
-    if accumulated_tokens > 0.0 {
-        log(
-            LogTag::System,
-            "SWAP_TEST",
-            &format!(
-                "🔄 Testing REAL Token → SOL reverse swaps (total tokens: {:.2})",
-                accumulated_tokens
-            )
-        );
-
-        // Calculate how much to sell per size test (proportional to what we bought)
-        let _total_sol_invested: f64 = test_sizes.iter().sum();
-
-        for (i, &original_size) in test_sizes.iter().enumerate() {
-            if let Some((_, tokens_bought, _)) = buy_results.get(i) {
-                let tokens_to_sell = *tokens_bought;
-
-                if tokens_to_sell > 0.1 {
-                    // Only sell if we have meaningful amount
-                    log(
-                        LogTag::System,
-                        "SWAP_TEST",
-                        &format!("🔄 REAL Token → SOL swap ({:.2} tokens)", tokens_to_sell)
-                    );
-
-                    match execute_real_token_to_sol_swap(token_mint, tokens_to_sell).await {
-                        Ok(swap_result) => {
-                            if swap_result.success {
-                                // Calculate SOL received
-                                let output_amount_raw: u64 = swap_result.output_amount
-                                    .parse()
-                                    .unwrap_or(0);
-                                let sol_received = lamports_to_sol(output_amount_raw);
-
-                                // Calculate round-trip efficiency
-                                let round_trip_efficiency = (sol_received / original_size) * 100.0;
-                                let slippage_loss =
-                                    ((original_size - sol_received) / original_size) * 100.0;
-
-                                log(
-                                    LogTag::System,
-                                    "SWAP_TEST",
-                                    &format!(
-                                        "✅ REAL Token → SOL: {:.2} tokens → {:.6} SOL (TX: {})",
-                                        tokens_to_sell,
-                                        sol_received,
-                                        swap_result.transaction_signature.unwrap_or(
-                                            "unknown".to_string()
-                                        )
-                                    )
-                                );
-
-                                log(
-                                    LogTag::System,
-                                    "SWAP_TEST",
-                                    &format!(
-                                        "📈 Round-trip efficiency: {:.2}% ({:.6} SOL recovered from {:.3} SOL, slippage: {:.2}%)",
-                                        round_trip_efficiency,
-                                        sol_received,
-                                        original_size,
-                                        slippage_loss
-                                    )
-                                );
-                            } else {
-                                log(
-                                    LogTag::System,
-                                    "SWAP_TEST",
-                                    &format!(
-                                        "❌ REAL Token → SOL swap failed for {:.2} tokens: {}",
-                                        tokens_to_sell,
-                                        swap_result.error.unwrap_or("Unknown error".to_string())
-                                    )
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            log(
-                                LogTag::System,
-                                "SWAP_TEST",
-                                &format!(
-                                    "❌ REAL Token → SOL swap failed for {:.2} tokens: {}",
-                                    tokens_to_sell,
-                                    e
-                                )
-                            );
-                        }
-                    }
-                } else {
-                    log(
-                        LogTag::System,
-                        "SWAP_TEST",
-                        &format!(
-                            "⚠️ Skipping reverse swap for {:.2} tokens (too small)",
-                            tokens_to_sell
-                        )
-                    );
-                }
-
-                // Add separator between different sizes
-                log(LogTag::System, "SWAP_TEST", &format!("{}", "-".repeat(60)));
-            }
-        }
-    } else {
-        log(
-            LogTag::System,
-            "SWAP_TEST",
-            "⚠️ No tokens accumulated from buy operations, skipping reverse swaps"
-        );
-    }
-
-    // Test pool price calculations for comparison
-    log(LogTag::System, "SWAP_TEST", "🏊 Testing pool price calculations...");
-    let pool_service = get_pool_service();
-    if let Some(pool_result) = pool_service.get_pool_price(token_mint, None).await {
-        if let Some(pool_price) = pool_result.price_sol {
-            log(
-                LogTag::System,
-                "SWAP_TEST",
-                &format!("✅ Pool price: {:.8} SOL per token", pool_price)
-            );
-
-            // Compare with API price
-            if let Some(api_price) = get_token_price_safe(token_mint).await {
-                let price_difference = ((pool_price - api_price) / api_price) * 100.0;
-                log(
-                    LogTag::System,
-                    "SWAP_TEST",
-                    &format!(
-                        "📊 API price: {:.8} SOL (difference: {:.2}%)",
-                        api_price,
-                        price_difference
-                    )
-                );
-            }
-        }
-    }
-
-    let test_time = start_time.elapsed();
-    log(
-        LogTag::System,
-        "SWAP_TEST",
-        &format!("🏁 Comprehensive REAL swap testing completed in {:.2}s", test_time.as_secs_f64())
-    );
-
-    Ok(())
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1636,10 +1290,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Token mint address to analyze")
                 .required(false)
         )
+        .arg(
+            Arg::new("debug-swap")
+                .long("debug-swap")
+                .help("Enable detailed swap debugging with transaction analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
         .get_matches();
 
     // Set command args for debug flags
-    let args: Vec<String> = std::env::args().collect();
+    let mut args: Vec<String> = std::env::args().collect();
+    if matches.get_flag("debug-swap") {
+        args.push("--debug-swap".to_string());
+    }
     set_cmd_args(args);
 
     println!("{}", "🚀 ScreenerBot Swap Debug Tool".bright_cyan().bold());
@@ -1677,6 +1340,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "     {} Example: cargo run --bin tool_debug_swap -- --token DGKj2gcKkrYnJYLGN89d1yStpx7r6yPkR166opx2bonk",
             "→".blue()
         );
+
+        println!("\n{}", "🐛 DEBUG OPTIONS:".bright_cyan().bold());
+        println!("   {} Enable detailed swap debugging:", "•".cyan());
+        println!(
+            "     {} cargo run --bin tool_debug_swap -- --token <TOKEN_MINT> --debug-swap",
+            "→".blue()
+        );
+        println!(
+            "   {} Shows transaction instructions, logs, balance changes, and detailed analysis",
+            "•".cyan()
+        );
+        println!(
+            "   {} Provides comprehensive swap calculation details and ATA detection",
+            "•".cyan()
+        );
+
+        println!("\n{}", "📊 DEBUG OUTPUT DETAILS:".bright_magenta().bold());
+        println!(
+            "   {} Without --debug-swap: Basic swap analysis and final results only",
+            "•".magenta()
+        );
+        println!("   {} With --debug-swap enabled, you'll see:", "•".magenta());
+        println!("     {} Transaction fetching and validation details", "-".cyan());
+        println!("     {} Instruction-by-instruction transaction analysis", "-".cyan());
+        println!("     {} Account balance changes and calculations", "-".cyan());
+        println!("     {} Price calculations and slippage analysis", "-".cyan());
+        println!("     {} ATA detection and rent calculations", "-".cyan());
+        println!("     {} Consensus scoring and confidence metrics", "-".cyan());
+        println!("     {} Internal swap calculator debugging information", "-".cyan());
 
         println!("\n{}", "⚠️ IMPORTANT WARNINGS:".bright_red().bold());
         println!(
