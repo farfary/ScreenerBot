@@ -24,7 +24,7 @@ pub use pool::{
 /// using a centralized price service instead of direct database access.
 
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_monitor_enabled;
+use crate::global::{ is_debug_monitor_enabled, is_debug_decimals_enabled };
 use std::sync::Arc;
 use tokio::sync::Notify;
 use std::sync::Mutex;
@@ -298,68 +298,111 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 // SAFE TOKEN ACCESS FUNCTIONS
 // =============================================================================
 
-/// Get token decimals from blockchain with caching
-pub async fn get_token_decimals(mint: &str) -> Option<u8> {
-    match get_token_decimals_from_chain(mint).await {
-        Ok(decimals) => Some(decimals),
-        Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to get decimals for {}: {}", mint, e));
-            None // No fallback - return None if decimals can't be determined
-        }
-    }
-}
+// =============================================================================
+// UNIFIED DECIMAL ACCESS FUNCTION
+// =============================================================================
 
-/// Get token decimals synchronously (cache-only, no RPC calls)
-/// Returns cached decimals if available, otherwise returns None
-pub fn get_token_decimals_sync(mint: &str) -> Option<u8> {
-    // Only check decimal cache - no database fallback
+/// Universal token decimal access function
+///
+/// This is the ONLY function you should use for getting token decimals anywhere in the codebase.
+/// It handles all scenarios: sync/async, cache/blockchain, SOL native token, and proper error handling.
+///
+/// **Usage Patterns:**
+/// - `get_token_decimals(mint)` - Always check cache first, then blockchain if needed
+///
+/// **Parameters:**
+/// - `mint`: Token mint address
+///
+/// **Returns:**
+/// - `Some(decimals)` - Successfully found decimals (9 for SOL, actual value for tokens)
+/// - `None` - Could not determine decimals (caller should skip operations)
+///
+/// **Debug Logging:** Use `--debug-decimals` flag to enable detailed logging
+pub async fn get_token_decimals(mint: &str) -> Option<u8> {
+    let debug_enabled = is_debug_decimals_enabled();
+
+    // Handle SOL native token immediately
+    if mint == "So11111111111111111111111111111111111111112" {
+        if debug_enabled {
+            log(LogTag::Decimals, "SOL_NATIVE", "SOL decimals: 9 (native token)");
+        }
+        return Some(9);
+    }
+
+    // First check cache (always available)
     if let Some(decimals) = get_cached_decimals(mint) {
+        if debug_enabled {
+            log(
+                LogTag::Decimals,
+                "CACHE_HIT",
+                &format!("Cached decimals for {}: {}", &mint[..8], decimals)
+            );
+        }
         return Some(decimals);
     }
 
-    // Error if not in cache - must use decimal cache only
-    log(LogTag::System, "ERROR", &format!("Decimals not found in cache for {}", mint));
-
-    // CRITICAL: No fallback - return None to prevent P&L calculation errors
-    log(
-        LogTag::System,
-        "CRITICAL",
-        &format!("No decimals available for {} - SKIPPING operations to prevent errors", mint)
-    );
-    None
-}
-
-/// Async version that attempts to fetch decimals from blockchain if not in cache
-pub async fn get_token_decimals_safe(mint: &str) -> Result<u8, String> {
-    // First check cache
-    if let Some(decimals) = get_cached_decimals(mint) {
-        return Ok(decimals);
-    }
-
     // If not in cache, try to fetch from blockchain
-    log(
-        LogTag::System,
-        "WARNING",
-        &format!("Decimals not in cache for {}, attempting blockchain fetch", mint)
-    );
+    if debug_enabled {
+        log(
+            LogTag::Decimals,
+            "BLOCKCHAIN_FETCH",
+            &format!("Fetching decimals for {} from blockchain", &mint[..8])
+        );
+    }
 
     match get_token_decimals_from_chain(mint).await {
         Ok(decimals) => {
-            log(
-                LogTag::System,
-                "SUCCESS",
-                &format!("Fetched decimals {} for {} from blockchain", decimals, mint)
-            );
-            Ok(decimals)
+            if debug_enabled {
+                log(
+                    LogTag::Decimals,
+                    "FETCH_SUCCESS",
+                    &format!("Fetched decimals {} for {} from blockchain", decimals, &mint[..8])
+                );
+            }
+            return Some(decimals);
         }
         Err(e) => {
-            log(
-                LogTag::System,
-                "ERROR",
-                &format!("Failed to fetch decimals for {} from blockchain: {}", mint, e)
-            );
-            Err(format!("Could not determine decimals for token {}: {}", mint, e))
+            if debug_enabled {
+                log(
+                    LogTag::Decimals,
+                    "FETCH_ERROR",
+                    &format!("Failed to fetch decimals for {}: {}", &mint[..8], e)
+                );
+            }
         }
+    }
+
+    // Could not determine decimals - only log this as warning if debug enabled
+    if debug_enabled {
+        log(
+            LogTag::Decimals,
+            "NO_DECIMALS",
+            &format!("No decimals available for {} - operations will be skipped", &mint[..8])
+        );
+    }
+
+    None
+}
+
+// =============================================================================
+// CONVENIENCE WRAPPER FUNCTIONS (for backward compatibility)
+// =============================================================================
+
+/// Synchronous cache-only decimal access (for P&L calculations)
+/// **Use this in sync contexts where you can't await**
+pub fn get_token_decimals_sync(mint: &str) -> Option<u8> {
+    // Use a blocking runtime to call the unified get_token_decimals function
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async { get_token_decimals(mint).await })
+    })
+}
+
+/// Async blockchain-enabled decimal access with Result return type
+/// **Use this when you need detailed error information**
+pub async fn get_token_decimals_safe(mint: &str) -> Result<u8, String> {
+    match get_token_decimals(mint).await {
+        Some(decimals) => Ok(decimals),
+        None => Err(format!("Could not determine decimals for token {}", mint)),
     }
 }
 

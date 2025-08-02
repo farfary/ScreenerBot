@@ -31,6 +31,26 @@ const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
 const POOL_PRICE_LIMIT_PER_CYCLE: usize = 10;
 
 // =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/// Check if a token is a stable/system token that should be excluded from watch lists
+fn is_system_or_stable_token(mint: &str) -> bool {
+    let system_tokens = [
+        "So11111111111111111111111111111111111111112", // SOL
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
+        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+        "11111111111111111111111111111111", // System Program (invalid token)
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
+    ];
+
+    system_tokens.contains(&mint)
+}
+
+// =============================================================================
 // PRICE CACHE ENTRY
 // =============================================================================
 
@@ -291,6 +311,18 @@ impl TokenPriceService {
     }
 
     async fn add_to_watch_list(&self, mint: &str, is_open_position: bool) {
+        // Skip system/stable tokens from watch list
+        if is_system_or_stable_token(mint) {
+            if is_debug_price_service_enabled() {
+                log(
+                    LogTag::PriceService,
+                    "SKIP_SYSTEM",
+                    &format!("Skipping system/stable token from watch list: {}", mint)
+                );
+            }
+            return;
+        }
+
         let mut watch_list = self.watch_list.write().await;
         watch_list.insert(mint.to_string(), WatchEntry {
             last_requested: Utc::now(),
@@ -798,7 +830,6 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
     log(LogTag::PriceService, "INIT", "Price service initialized successfully");
     Ok(())
 }
-
 
 /// Get token price using global service - instant response for cached prices
 pub async fn get_token_price_safe(mint: &str) -> Option<f64> {

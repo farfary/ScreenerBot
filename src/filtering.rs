@@ -3,7 +3,11 @@
 /// No structs or models - pure functional approach
 
 use crate::tokens::Token;
-use crate::tokens::{ TokenDatabase, rugcheck::{ is_token_safe_for_trading, get_high_risk_issues } };
+use crate::tokens::{
+    TokenDatabase,
+    rugcheck::{ is_token_safe_for_trading, get_high_risk_issues },
+    get_token_decimals_sync,
+};
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_filtering_enabled;
 use crate::positions::SAVED_POSITIONS;
@@ -103,6 +107,7 @@ pub const PRICE_HISTORY_LOCK_TIMEOUT_MS: u64 = 3000;
 //   • Price Action: Avoids buying near peaks, validates price ranges
 //   • Liquidity: Ensures sufficient trading volume
 //   • Security: Rugcheck and LP lock safety requirements
+//   • Decimal Validation: Ensures token decimals are available for calculations
 //   • Performance: Logging, timeouts, and system limits
 // =============================================================================
 
@@ -176,6 +181,11 @@ pub enum FilterReason {
 
     // Trading requirements
     LockAcquisitionFailed,
+
+    // Decimal validation failures
+    DecimalsNotAvailable {
+        mint: String,
+    },
 }
 
 /// Result of token filtering
@@ -360,20 +370,20 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         );
     }
 
-    // 7. Position-related validation
+    // 7. Decimal availability validation
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_7",
-            &format!("🔒 Step 7: Checking position constraints for {}", token.symbol)
+            &format!("🔢 Step 7: Checking decimal availability for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_position_constraints(token) {
+    if let Some(reason) = validate_decimal_availability(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_7",
-                &format!("❌ {}: FAILED Step 7 (Position Constraints) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 7 (Decimal Availability) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -382,7 +392,33 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_7",
-            &format!("✅ {}: PASSED Step 7 (Position Constraints)", token.symbol)
+            &format!("✅ {}: PASSED Step 7 (Decimal Availability)", token.symbol)
+        );
+    }
+
+    // 8. Position-related validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_8",
+            &format!("🔒 Step 8: Checking position constraints for {}", token.symbol)
+        );
+    }
+    if let Some(reason) = validate_position_constraints(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT_STEP_8",
+                &format!("❌ {}: FAILED Step 8 (Position Constraints) - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_8",
+            &format!("✅ {}: PASSED Step 8 (Position Constraints)", token.symbol)
         );
     }
 
@@ -391,7 +427,7 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "ALL_STEPS_PASSED",
-            &format!("🎉 {}: PASSED ALL 7 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
+            &format!("🎉 {}: PASSED ALL 8 FILTERING STEPS - ELIGIBLE FOR TRADING", token.symbol)
         );
     }
 
@@ -932,6 +968,34 @@ fn validate_price_data(token: &Token) -> Option<FilterReason> {
     None
 }
 
+/// Validate that token decimals are available (critical for trading calculations)
+fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
+    // Use the synchronous decimal access function to check if decimals are available
+    // This checks both cache and can fallback to blockchain if needed
+    if get_token_decimals_sync(&token.mint).is_none() {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_DECIMALS",
+                &format!("❌ Token {} decimals not available in cache or blockchain", token.symbol)
+            );
+        }
+        return Some(FilterReason::DecimalsNotAvailable {
+            mint: token.mint.clone(),
+        });
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_DECIMALS",
+            &format!("✅ Token {} decimals are available", token.symbol)
+        );
+    }
+
+    None
+}
+
 /// Validate position-related constraints
 fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
     let Ok(positions) = SAVED_POSITIONS.lock() else {
@@ -1195,6 +1259,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::RugcheckRisk { .. } => "Security Risks",
             FilterReason::LPLockRisk { .. } => "LP Lock Security",
             FilterReason::LockAcquisitionFailed => "System Errors",
+            FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",
         };
 
         *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;

@@ -47,6 +47,26 @@ pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQ
 pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 
 // =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/// Check if a token is a stable/system token that should be excluded from watch lists
+fn is_system_or_stable_token(mint: &str) -> bool {
+    let system_tokens = [
+        "So11111111111111111111111111111111111111112", // SOL
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
+        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+        "11111111111111111111111111111111", // System Program (invalid token)
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
+    ];
+
+    system_tokens.contains(&mint)
+}
+
+// =============================================================================
 // DATA STRUCTURES
 // =============================================================================
 
@@ -312,6 +332,18 @@ impl PoolPriceService {
 
     /// Add token to watch list
     pub async fn add_to_watch_list(&self, token_address: &str, priority: i32) {
+        // Skip system/stable tokens from watch list
+        if is_system_or_stable_token(token_address) {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "SKIP_SYSTEM",
+                    &format!("Skipping system/stable token from watch list: {}", token_address)
+                );
+            }
+            return;
+        }
+
         let mut watch_list = self.watch_list.write().await;
         watch_list.insert(token_address.to_string(), WatchListEntry {
             token_address: token_address.to_string(),
@@ -320,11 +352,13 @@ impl PoolPriceService {
             last_price_check: None,
         });
 
-        log(
-            LogTag::Pool,
-            "WATCH",
-            &format!("Added {} to watch list (priority: {})", token_address, priority)
-        );
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "WATCH_ADD",
+                &format!("Added {} to watch list (priority: {})", token_address, priority)
+            );
+        }
     }
 
     /// Remove token from watch list
@@ -1102,27 +1136,10 @@ pub fn get_pool_service() -> &'static PoolPriceService {
 // HELPER FUNCTIONS
 // =============================================================================
 
-/// Get token decimals with cache fallback
+/// Get token decimals for pool calculations (unified approach)
 async fn get_token_decimals_with_cache(mint: &str) -> Option<u8> {
-    if let Some(decimals) = get_cached_decimals(mint) {
-        return Some(decimals);
-    }
-
-    match get_token_decimals_from_chain(mint).await {
-        Ok(decimals) => Some(decimals),
-        Err(_) => {
-            if mint == SOL_MINT {
-                Some(9) // SOL always has 9 decimals
-            } else {
-                log(
-                    LogTag::Pool,
-                    "ERROR",
-                    &format!("Cannot determine decimals for token {} - skipping pool calculation", mint)
-                );
-                None // No fallback for unknown tokens
-            }
-        }
-    }
+    // Use the unified decimal function (cache + blockchain if needed)
+    crate::tokens::get_token_decimals(mint).await
 }
 
 // =============================================================================

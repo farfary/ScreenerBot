@@ -120,6 +120,15 @@ pub fn is_debug_swap_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() { args.contains(&"--debug-swap".to_string()) } else { false }
 }
 
+/// Check if debug decimals mode is enabled via command line args
+pub fn is_debug_decimals_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-decimals".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {

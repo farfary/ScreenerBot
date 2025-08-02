@@ -1,5 +1,6 @@
 /// Token decimals fetching from Solana blockchain
 use crate::logger::{ log, LogTag };
+use crate::global::is_debug_decimals_enabled;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_program::program_pack::Pack;
@@ -37,15 +38,17 @@ fn load_cache_from_disk() -> (HashMap<String, u8>, HashMap<String, String>) {
             Ok(content) => {
                 match serde_json::from_str::<DecimalCacheData>(&content) {
                     Ok(cache_data) => {
-                        log(
-                            LogTag::Decimals,
-                            "CACHE",
-                            &format!(
-                                "Loaded {} decimal entries and {} failed entries from cache file",
-                                cache_data.decimals.len(),
-                                cache_data.failed_tokens.len()
-                            )
-                        );
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "CACHE_LOAD",
+                                &format!(
+                                    "Loaded {} decimal entries and {} failed entries from cache file",
+                                    cache_data.decimals.len(),
+                                    cache_data.failed_tokens.len()
+                                )
+                            );
+                        }
                         return (cache_data.decimals, cache_data.failed_tokens);
                     }
                     Err(e) => {
@@ -55,27 +58,37 @@ fn load_cache_from_disk() -> (HashMap<String, u8>, HashMap<String, String>) {
                                 &content
                             )
                         {
-                            log(
-                                LogTag::Decimals,
-                                "CACHE",
-                                &format!(
-                                    "Loaded {} decimal entries from old format cache file",
-                                    old_cache.len()
-                                )
-                            );
+                            if is_debug_decimals_enabled() {
+                                log(
+                                    LogTag::Decimals,
+                                    "CACHE_MIGRATE",
+                                    &format!(
+                                        "Migrated {} decimal entries from old format cache file",
+                                        old_cache.len()
+                                    )
+                                );
+                            }
                             return (old_cache, HashMap::new());
                         }
 
-                        log(
-                            LogTag::Decimals,
-                            "WARN",
-                            &format!("Failed to parse decimal cache file: {}", e)
-                        );
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "CACHE_ERROR",
+                                &format!("Failed to parse decimal cache file: {}", e)
+                            );
+                        }
                     }
                 }
             }
             Err(e) => {
-                log(LogTag::Decimals, "WARN", &format!("Failed to read decimal cache file: {}", e));
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "CACHE_READ_ERROR",
+                        &format!("Failed to read decimal cache file: {}", e)
+                    );
+                }
             }
         }
     }
@@ -93,21 +106,46 @@ fn save_cache_to_disk(cache: &HashMap<String, u8>, failed_cache: &HashMap<String
     match serde_json::to_string_pretty(&cache_data) {
         Ok(json) => {
             if let Err(e) = fs::write(CACHE_FILE_NAME, json) {
-                log(
-                    LogTag::Decimals,
-                    "ERROR",
-                    &format!("Failed to save decimal cache to disk: {}", e)
-                );
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "SAVE_ERROR",
+                        &format!("Failed to save decimal cache to disk: {}", e)
+                    );
+                }
             }
         }
         Err(e) => {
-            log(LogTag::Decimals, "ERROR", &format!("Failed to serialize decimal cache: {}", e));
+            if is_debug_decimals_enabled() {
+                log(
+                    LogTag::Decimals,
+                    "SERIALIZE_ERROR",
+                    &format!("Failed to serialize decimal cache: {}", e)
+                );
+            }
         }
     }
 }
 
 /// Get token decimals from Solana blockchain with caching
 pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
+    // CRITICAL: SOL (native token) always has 9 decimals
+    if mint == "So11111111111111111111111111111111111111112" {
+        return Ok(9);
+    }
+
+    // Skip system/stable tokens that shouldn't be processed
+    if is_system_or_stable_token(mint) {
+        if is_debug_decimals_enabled() {
+            log(
+                LogTag::Decimals,
+                "SKIP_SYSTEM",
+                &format!("Skipping system/stable token: {}", mint)
+            );
+        }
+        return Err("System or stable token excluded from processing".to_string());
+    }
+
     // Check successful decimals cache first
     if let Ok(cache) = DECIMAL_CACHE.lock() {
         if let Some(&decimals) = cache.get(mint) {
@@ -118,11 +156,13 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     // Check failed decimals cache
     if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
         if let Some(error) = failed_cache.get(mint) {
-            log(
-                LogTag::Decimals,
-                "CACHED_FAIL",
-                &format!("Skipping previously failed token {}: {}", mint, error)
-            );
+            if is_debug_decimals_enabled() {
+                log(
+                    LogTag::Decimals,
+                    "CACHED_FAIL",
+                    &format!("Skipping previously failed token {}: {}", mint, error)
+                );
+            }
             return Err(error.clone());
         }
     }
@@ -150,11 +190,13 @@ fn is_token_already_failed(mint: &str) -> bool {
 fn cache_failed_token(mint: &str, error: &str) {
     if let Ok(mut failed_cache) = FAILED_DECIMALS_CACHE.lock() {
         failed_cache.insert(mint.to_string(), error.to_string());
-        log(
-            LogTag::Decimals,
-            "CACHE_FAIL",
-            &format!("Cached failed lookup for {}: {}", mint, error)
-        );
+        if is_debug_decimals_enabled() {
+            log(
+                LogTag::Decimals,
+                "CACHE_FAIL",
+                &format!("Cached failed lookup for {}: {}", mint, error)
+            );
+        }
     }
 }
 
@@ -273,26 +315,72 @@ fn parse_token_2022_mint(data: &[u8]) -> Result<u8, String> {
     Ok(data[44])
 }
 
+/// Check if a token is a stable/system token that should be excluded from discovery
+fn is_system_or_stable_token(mint: &str) -> bool {
+    let system_tokens = [
+        "So11111111111111111111111111111111111111112", // SOL
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
+        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+        "11111111111111111111111111111111", // System Program (invalid token)
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
+    ];
+
+    system_tokens.contains(&mint)
+}
+
 /// Batch fetch decimals for multiple tokens using efficient batch RPC calls
 pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result<u8, String>)> {
     if mints.is_empty() {
         return Vec::new();
     }
 
-    // Convert mint strings to Pubkeys, filtering out invalid ones
+    // Convert mint strings to Pubkeys, filtering out invalid ones and handling SOL
     let mut valid_mints = Vec::new();
     let mut invalid_results = Vec::new();
+    let mut sol_results = Vec::new();
 
     for mint in mints {
+        // CRITICAL: Handle SOL (native token) first
+        if mint == "So11111111111111111111111111111111111111112" {
+            sol_results.push((mint.clone(), Ok(9u8)));
+            continue;
+        }
+
+        // Skip system/stable tokens that shouldn't be in watch lists
+        if is_system_or_stable_token(mint) {
+            if is_debug_decimals_enabled() {
+                log(
+                    LogTag::Decimals,
+                    "SKIP_SYSTEM",
+                    &format!("Skipping system/stable token: {}", mint)
+                );
+            }
+            continue;
+        }
+
         match Pubkey::from_str(mint) {
             Ok(pubkey) => valid_mints.push((mint.clone(), pubkey)),
-            Err(e) =>
-                invalid_results.push((mint.clone(), Err(format!("Invalid mint address: {}", e)))),
+            Err(e) => {
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "INVALID_MINT",
+                        &format!("Invalid mint address {}: {}", mint, e)
+                    );
+                }
+                invalid_results.push((mint.clone(), Err(format!("Invalid mint address: {}", e))));
+            }
         }
     }
 
     if valid_mints.is_empty() {
-        return invalid_results;
+        // Return SOL results + invalid results if no other valid mints
+        let mut all_results = sol_results;
+        all_results.extend(invalid_results);
+        return all_results;
     }
 
     // Check which tokens are not in cache and not previously failed
@@ -308,11 +396,13 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
                     if let Some(error) = failed_cache.get(mint_str) {
                         cached_results.push((mint_str.clone(), Err(error.clone())));
-                        log(
-                            LogTag::Decimals,
-                            "SKIP_FAILED",
-                            &format!("Skipping previously failed token {}", mint_str)
-                        );
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "SKIP_FAILED",
+                                &format!("Skipping previously failed token {}", mint_str)
+                            );
+                        }
                     }
                 }
             } else {
@@ -334,7 +424,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         }
     }
 
-    // Only log and fetch if there are uncached tokens
+    // Only log and fetch if there are uncached tokens and debug is enabled
     if uncached_mints.is_empty() {
         // Return all cached results in original order
         let mut all_results = Vec::new();
@@ -347,15 +437,18 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         return all_results;
     }
 
-    log(
-        LogTag::Decimals,
-        "FETCH",
-        &format!(
-            "Fetching decimals for {} new tokens (cached: {})",
-            uncached_mints.len(),
-            cached_results.len()
-        )
-    );
+    // Only log batch operations if debug is enabled and significant batch size
+    if is_debug_decimals_enabled() && uncached_mints.len() > 3 {
+        log(
+            LogTag::Decimals,
+            "BATCH_FETCH",
+            &format!(
+                "Fetching decimals for {} tokens (batch operation, cached: {})",
+                uncached_mints.len(),
+                cached_results.len()
+            )
+        );
+    }
 
     // Use only mainnet RPC for decimal fetching (no premium, no fallbacks unless rate limited)
     let mainnet_rpc = "https://api.mainnet-beta.solana.com";
@@ -400,23 +493,31 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                                 cache_failed_token(mint_str, e);
                                 fetch_results.push((mint_str.clone(), Err(e.clone())));
 
-                                log(
-                                    LogTag::Decimals,
-                                    "REAL_ERROR",
-                                    &format!("Token {} failed with real error: {}", mint_str, e)
-                                );
+                                if is_debug_decimals_enabled() {
+                                    log(
+                                        LogTag::Decimals,
+                                        "REAL_ERROR",
+                                        &format!(
+                                            "Token {} failed with permanent error: {}",
+                                            mint_str,
+                                            e
+                                        )
+                                    );
+                                }
                             } else {
                                 // Rate limit / network issue - will retry on next RPC
-                                log(
-                                    LogTag::Decimals,
-                                    "RETRY_ERROR",
-                                    &format!(
-                                        "Token {} failed with retryable error from {}: {}",
-                                        mint_str,
-                                        rpc_url,
-                                        e
-                                    )
-                                );
+                                if is_debug_decimals_enabled() {
+                                    log(
+                                        LogTag::Decimals,
+                                        "RETRY_ERROR",
+                                        &format!(
+                                            "Token {} failed with retryable error from {}: {}",
+                                            mint_str,
+                                            rpc_url,
+                                            e
+                                        )
+                                    );
+                                }
                             }
                         }
                     }
@@ -439,20 +540,23 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                     remaining_mints.remove(index);
                 }
 
-                if !successful_indices.is_empty() {
+                if !successful_indices.is_empty() && is_debug_decimals_enabled() {
                     log(
                         LogTag::Decimals,
-                        "SUCCESS",
+                        "BATCH_SUCCESS",
                         &format!(
-                            "Fetched {} new decimal entries from {}",
+                            "Successfully fetched decimals for {} tokens from {} (failed: {})",
                             successful_indices.len(),
-                            rpc_url
+                            rpc_url,
+                            batch_results.len() - successful_indices.len()
                         )
                     );
                 }
             }
             Err(e) => {
-                log(LogTag::Decimals, "RPC_ERROR", &format!("RPC {} failed: {}", rpc_url, e));
+                if is_debug_decimals_enabled() {
+                    log(LogTag::Decimals, "RPC_ERROR", &format!("RPC {} failed: {}", rpc_url, e));
+                }
 
                 // If this is a connection/rate limit error, continue to next RPC
                 // If it's a systemic error, fail all remaining tokens
@@ -471,11 +575,13 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
     // Handle any remaining mints that weren't processed (timeout/network issues across all RPCs)
     for (mint_str, _) in remaining_mints {
         let error_msg = "All RPC endpoints failed";
-        log(
-            LogTag::Decimals,
-            "TIMEOUT",
-            &format!("All RPC endpoints failed for token {}, caching as failed", mint_str)
-        );
+        if is_debug_decimals_enabled() {
+            log(
+                LogTag::Decimals,
+                "RPC_TIMEOUT",
+                &format!("All RPC endpoints failed for token {}, caching as failed", mint_str)
+            );
+        }
 
         cache_failed_token(&mint_str, error_msg);
         fetch_results.push((mint_str, Err(error_msg.to_string())));
@@ -485,7 +591,7 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
     if !new_cache_entries.is_empty() {
         if let Ok(mut cache) = DECIMAL_CACHE.lock() {
             let old_size = cache.len();
-            cache.extend(new_cache_entries);
+            cache.extend(new_cache_entries.clone());
             let new_size = cache.len();
 
             // Get current failed cache for saving
@@ -498,16 +604,20 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
             // Save to disk
             save_cache_to_disk(&cache, &failed_cache);
 
-            log(
-                LogTag::Decimals,
-                "CACHE_UPDATE",
-                &format!(
-                    "Updated decimal cache: {} → {} entries (+{})",
-                    old_size,
-                    new_size,
-                    new_size - old_size
-                )
-            );
+            // Only log significant cache updates or in debug mode
+            if is_debug_decimals_enabled() || new_cache_entries.len() > 5 {
+                log(
+                    LogTag::Decimals,
+                    "CACHE_UPDATE",
+                    &format!(
+                        "Updated decimal cache: {} → {} entries (+{} new: {})",
+                        old_size,
+                        new_size,
+                        new_cache_entries.len(),
+                        new_cache_entries.keys().take(3).cloned().collect::<Vec<_>>().join(", ")
+                    )
+                );
+            }
         }
     }
 
@@ -528,7 +638,8 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         }
     }
 
-    // Add back the invalid mint results
+    // Add back the SOL results and invalid mint results
+    all_results.extend(sol_results);
     all_results.extend(invalid_results);
 
     all_results
@@ -536,6 +647,11 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
 
 /// Get decimals from cache only (no RPC call)
 pub fn get_cached_decimals(mint: &str) -> Option<u8> {
+    // CRITICAL: SOL (native token) always has 9 decimals
+    if mint == "So11111111111111111111111111111111111111112" {
+        return Some(9);
+    }
+
     DECIMAL_CACHE.lock().ok()?.get(mint).copied()
 }
 
@@ -600,7 +716,9 @@ pub fn clear_decimals_cache() {
             HashMap::new()
         };
         save_cache_to_disk(&cache, &failed_cache);
-        log(LogTag::Decimals, "CACHE", "Cleared decimal cache and saved to disk");
+        if is_debug_decimals_enabled() {
+            log(LogTag::Decimals, "CACHE_CLEAR", "Cleared decimal cache and saved to disk");
+        }
     }
 }
 
