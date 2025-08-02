@@ -1,4 +1,5 @@
 use serde_json::Value;
+use regex::Regex;
 use crate::{
     wallet::SwapError,
     global::{ is_debug_profit_enabled, is_debug_swap_enabled },
@@ -767,6 +768,8 @@ fn analyze_inner_instructions(
     let mut input_decimals = 0u8;
     let mut output_decimals = 0u8;
     let mut transfer_count = 0;
+    let mut found_wallet_input = false;
+    let mut found_wallet_output = false;
 
     for inner_ix_group in inner_instructions {
         if let Some(instructions) = inner_ix_group.get("instructions").and_then(|i| i.as_array()) {
@@ -774,21 +777,42 @@ fn analyze_inner_instructions(
                 if let Some(parsed) = instruction.get("parsed") {
                     if let Some(info) = parsed.get("info") {
                         if let Some(instruction_type) = parsed.get("type").and_then(|t| t.as_str()) {
-                            if instruction_type == "transferChecked" {
-                                let mint = info
-                                    .get("mint")
-                                    .and_then(|m| m.as_str())
-                                    .unwrap_or("");
-                                let amount = info
-                                    .get("tokenAmount")
-                                    .and_then(|ta| ta.get("uiAmount"))
-                                    .and_then(|ua| ua.as_f64())
-                                    .unwrap_or(0.0);
-                                let decimals = info
-                                    .get("tokenAmount")
-                                    .and_then(|ta| ta.get("decimals"))
-                                    .and_then(|d| d.as_u64())
-                                    .unwrap_or(0) as u8;
+                            // Handle both transferChecked and regular transfer instructions
+                            if
+                                instruction_type == "transferChecked" ||
+                                instruction_type == "transfer"
+                            {
+                                let mint = if instruction_type == "transferChecked" {
+                                    info.get("mint")
+                                        .and_then(|m| m.as_str())
+                                        .unwrap_or("")
+                                } else {
+                                    // For regular transfer, we need to look at account keys or infer from context
+                                    ""
+                                };
+
+                                let amount = if instruction_type == "transferChecked" {
+                                    info.get("tokenAmount")
+                                        .and_then(|ta| ta.get("uiAmount"))
+                                        .and_then(|ua| ua.as_f64())
+                                        .unwrap_or(0.0)
+                                } else {
+                                    // For regular transfer, get lamports and convert if it's SOL
+                                    info.get("lamports")
+                                        .and_then(|l| l.as_u64())
+                                        .map(|l| lamports_to_sol(l))
+                                        .unwrap_or(0.0)
+                                };
+
+                                let decimals = if instruction_type == "transferChecked" {
+                                    info
+                                        .get("tokenAmount")
+                                        .and_then(|ta| ta.get("decimals"))
+                                        .and_then(|d| d.as_u64())
+                                        .unwrap_or(0) as u8
+                                } else {
+                                    9 // SOL decimals
+                                };
 
                                 let source = info
                                     .get("source")
@@ -799,11 +823,23 @@ fn analyze_inner_instructions(
                                     .and_then(|d| d.as_str())
                                     .unwrap_or("");
 
-                                // Determine if this is input or output based on wallet involvement
-                                if mint == input_mint && source.contains(wallet_address) {
+                                // Check for wallet involvement in transfers
+                                let wallet_in_source =
+                                    source.contains(wallet_address) || source == wallet_address;
+                                let wallet_in_dest =
+                                    destination.contains(wallet_address) ||
+                                    destination == wallet_address;
+
+                                // Determine if this is input or output based on wallet involvement and mint
+                                if
+                                    (mint == input_mint ||
+                                        (mint.is_empty() && input_mint == SOL_MINT)) &&
+                                    wallet_in_source
+                                {
                                     input_amount = amount;
                                     input_decimals = decimals;
                                     transfer_count += 1;
+                                    found_wallet_input = true;
 
                                     if is_debug_swap_enabled() {
                                         log(
@@ -812,7 +848,7 @@ fn analyze_inner_instructions(
                                             &format!(
                                                 "📤 INPUT transfer: {:.6} {} (decimals: {}) from {} to {}",
                                                 amount,
-                                                if mint == SOL_MINT {
+                                                if mint == SOL_MINT || mint.is_empty() {
                                                     "SOL"
                                                 } else {
                                                     &mint[..8]
@@ -824,12 +860,14 @@ fn analyze_inner_instructions(
                                         );
                                     }
                                 } else if
-                                    mint == output_mint &&
-                                    destination.contains(wallet_address)
+                                    (mint == output_mint ||
+                                        (mint.is_empty() && output_mint == SOL_MINT)) &&
+                                    wallet_in_dest
                                 {
                                     output_amount = amount;
                                     output_decimals = decimals;
                                     transfer_count += 1;
+                                    found_wallet_output = true;
 
                                     if is_debug_swap_enabled() {
                                         log(
@@ -838,7 +876,7 @@ fn analyze_inner_instructions(
                                             &format!(
                                                 "📥 OUTPUT transfer: {:.6} {} (decimals: {}) from {} to {}",
                                                 amount,
-                                                if mint == SOL_MINT {
+                                                if mint == SOL_MINT || mint.is_empty() {
                                                     "SOL"
                                                 } else {
                                                     &mint[..8]
@@ -858,30 +896,44 @@ fn analyze_inner_instructions(
         }
     }
 
-    // Handle SOL transfers for SOL-token swaps
+    // Handle SOL transfers for SOL-token swaps - use balance changes for more accuracy
     if input_mint == SOL_MINT || output_mint == SOL_MINT {
-        let sol_change = calculate_sol_balance_change(transaction_json, wallet_address)?;
-        if input_mint == SOL_MINT {
-            input_amount = sol_change;
-            input_decimals = 9;
+        match calculate_sol_balance_change(transaction_json, wallet_address) {
+            Ok(sol_change) => {
+                if input_mint == SOL_MINT && (!found_wallet_input || input_amount == 0.0) {
+                    input_amount = sol_change;
+                    input_decimals = 9;
+                    found_wallet_input = true;
 
-            if is_debug_swap_enabled() {
-                log(
-                    LogTag::Swap,
-                    "INNER_SOL_IN",
-                    &format!("💰 SOL input amount: {:.6} SOL", sol_change)
-                );
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "INNER_SOL_IN",
+                            &format!("💰 SOL input amount: {:.6} SOL", sol_change)
+                        );
+                    }
+                } else if output_mint == SOL_MINT && (!found_wallet_output || output_amount == 0.0) {
+                    output_amount = sol_change;
+                    output_decimals = 9;
+                    found_wallet_output = true;
+
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "INNER_SOL_OUT",
+                            &format!("💰 SOL output amount: {:.6} SOL", sol_change)
+                        );
+                    }
+                }
             }
-        } else {
-            output_amount = sol_change;
-            output_decimals = 9;
-
-            if is_debug_swap_enabled() {
-                log(
-                    LogTag::Swap,
-                    "INNER_SOL_OUT",
-                    &format!("💰 SOL output amount: {:.6} SOL", sol_change)
-                );
+            Err(e) => {
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "INNER_SOL_ERROR",
+                        &format!("⚠️ Failed to calculate SOL balance change: {}", e)
+                    );
+                }
             }
         }
     }
@@ -901,7 +953,8 @@ fn analyze_inner_instructions(
         );
     }
 
-    if input_amount > 0.0 && output_amount > 0.0 {
+    // Require both input and output amounts to be found for success
+    if input_amount > 0.0 && output_amount > 0.0 && found_wallet_input && found_wallet_output {
         Ok(TokenTransferData {
             input_amount,
             output_amount,
@@ -913,7 +966,13 @@ fn analyze_inner_instructions(
     } else {
         Err(
             SwapError::InvalidResponse(
-                "Could not extract transfer amounts from inner instructions".to_string()
+                format!(
+                    "Could not extract transfer amounts from inner instructions. Input: {:.6}, Output: {:.6}, WalletInput: {}, WalletOutput: {}",
+                    input_amount,
+                    output_amount,
+                    found_wallet_input,
+                    found_wallet_output
+                )
             )
         )
     }
@@ -1006,21 +1065,55 @@ fn analyze_log_messages(
     input_mint: &str,
     output_mint: &str
 ) -> Result<TokenTransferData, SwapError> {
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "LOG_START", "🔍 Analyzing log messages for swap patterns");
+    }
+
     let meta = transaction_json
         .get("meta")
         .ok_or_else(|| SwapError::InvalidResponse("Missing metadata".to_string()))?;
 
     if let Some(log_messages) = meta.get("logMessages").and_then(|logs| logs.as_array()) {
-        for log in log_messages {
-            if let Some(log_text) = log.as_str() {
-                // Try to parse GMGN swap logs
-                if log_text.contains("swap") || log_text.contains("Swap") {
-                    if let Ok(parsed) = parse_swap_log(log_text, input_mint, output_mint) {
-                        return Ok(parsed);
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "LOG_COUNT",
+                &format!("📋 Found {} log messages to analyze", log_messages.len())
+            );
+        }
+
+        for (i, log_msg) in log_messages.iter().enumerate() {
+            if let Some(log_text) = log_msg.as_str() {
+                if is_debug_swap_enabled() && i < 5 {
+                    // Only log first 5 for debugging
+                    log(
+                        LogTag::Swap,
+                        "LOG_ENTRY",
+                        &format!(
+                            "🔍 Log {}: {}",
+                            i + 1,
+                            &log_text[..std::cmp::min(100, log_text.len())]
+                        )
+                    );
+                }
+
+                // Try to parse different swap log formats
+                if let Ok(parsed) = parse_swap_log(log_text, input_mint, output_mint) {
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "LOG_PARSED",
+                            &format!("✅ Successfully parsed swap from log message")
+                        );
                     }
+                    return Ok(parsed);
                 }
             }
         }
+    }
+
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "LOG_FAILED", "❌ No recognizable swap patterns found in logs");
     }
 
     Err(SwapError::InvalidResponse("No recognizable swap logs found".to_string()))
@@ -1220,19 +1313,191 @@ fn get_decimals_from_balances(
 
 fn parse_swap_log(
     log_text: &str,
-    _input_mint: &str,
-    _output_mint: &str
+    input_mint: &str,
+    output_mint: &str
 ) -> Result<TokenTransferData, SwapError> {
-    // This is a simplified parser - you can extend this to handle specific DEX log formats
-    if log_text.contains("swap") {
-        // Extract numbers from log if possible
-        // This is a placeholder implementation
-        return Err(
-            SwapError::InvalidResponse("Log parsing not implemented for this format".to_string())
-        );
+    // Parse various DEX log formats
+
+    // Jupiter/Meteora swap logs often contain swap amounts
+    if log_text.contains("Swap") || log_text.contains("swap") {
+        // Look for numeric patterns that might be amounts
+        let numbers: Vec<&str> = log_text
+            .split_whitespace()
+            .filter(|s| s.chars().all(|c| (c.is_numeric() || c == '.')))
+            .collect();
+
+        if numbers.len() >= 2 {
+            if let (Ok(first), Ok(second)) = (numbers[0].parse::<f64>(), numbers[1].parse::<f64>()) {
+                // Try to determine which is input and which is output
+                // This is a heuristic approach - might need refinement based on actual log formats
+                return Ok(TokenTransferData {
+                    input_amount: first,
+                    output_amount: second,
+                    input_decimals: if input_mint == SOL_MINT {
+                        9
+                    } else {
+                        6
+                    },
+                    output_decimals: if output_mint == SOL_MINT {
+                        9
+                    } else {
+                        6
+                    },
+                    confidence: 0.7, // Lower confidence since this is pattern matching
+                    method: "Log Messages".to_string(),
+                });
+            }
+        }
     }
 
-    Err(SwapError::InvalidResponse("No swap data found in log".to_string()))
+    // Jupiter V6 specific log patterns
+    if log_text.contains("jupiter") || log_text.contains("Jupiter") {
+        // Look for structured log data
+        if let Some(amount_in_pos) = log_text.find("amountIn:") {
+            if let Some(amount_out_pos) = log_text.find("amountOut:") {
+                let amount_in_part = &log_text[amount_in_pos + 9..];
+                let amount_out_part = &log_text[amount_out_pos + 10..];
+
+                if
+                    let (Some(in_end), Some(out_end)) = (
+                        amount_in_part.find(' ').or_else(|| amount_in_part.find(',')),
+                        amount_out_part.find(' ').or_else(|| amount_out_part.find(',')),
+                    )
+                {
+                    let in_str = &amount_in_part[..in_end];
+                    let out_str = &amount_out_part[..out_end];
+
+                    if
+                        let (Ok(amount_in), Ok(amount_out)) = (
+                            in_str.parse::<f64>(),
+                            out_str.parse::<f64>(),
+                        )
+                    {
+                        return Ok(TokenTransferData {
+                            input_amount: amount_in,
+                            output_amount: amount_out,
+                            input_decimals: if input_mint == SOL_MINT {
+                                9
+                            } else {
+                                6
+                            },
+                            output_decimals: if output_mint == SOL_MINT {
+                                9
+                            } else {
+                                6
+                            },
+                            confidence: 0.85,
+                            method: "Log Messages".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Raydium swap log patterns
+    if log_text.contains("raydium") || log_text.contains("Raydium") {
+        // Parse Raydium specific log formats
+        if log_text.contains("SwapEvent") {
+            // Look for amount patterns in Raydium logs
+            let parts: Vec<&str> = log_text.split(',').collect();
+            let mut amounts: Vec<f64> = Vec::new();
+
+            for part in parts {
+                if let Some(colon_pos) = part.find(':') {
+                    let value_part = &part[colon_pos + 1..].trim();
+                    if let Ok(amount) = value_part.parse::<f64>() {
+                        amounts.push(amount);
+                    }
+                }
+            }
+
+            if amounts.len() >= 2 {
+                return Ok(TokenTransferData {
+                    input_amount: amounts[0],
+                    output_amount: amounts[1],
+                    input_decimals: if input_mint == SOL_MINT {
+                        9
+                    } else {
+                        6
+                    },
+                    output_decimals: if output_mint == SOL_MINT {
+                        9
+                    } else {
+                        6
+                    },
+                    confidence: 0.8,
+                    method: "Log Messages".to_string(),
+                });
+            }
+        }
+    }
+
+    // Meteora DLMM specific patterns
+    if log_text.contains("meteora") || log_text.contains("Meteora") || log_text.contains("DLMM") {
+        // Look for swap amounts in Meteora logs
+        if log_text.contains("amount") {
+            if let Ok(amount_regex) = Regex::new(r"amount[^:]*:\s*(\d+(?:\.\d+)?)") {
+                let amounts: Vec<f64> = amount_regex
+                    .captures_iter(log_text)
+                    .filter_map(|cap| cap.get(1)?.as_str().parse().ok())
+                    .collect();
+
+                if amounts.len() >= 2 {
+                    return Ok(TokenTransferData {
+                        input_amount: amounts[0],
+                        output_amount: amounts[1],
+                        input_decimals: if input_mint == SOL_MINT {
+                            9
+                        } else {
+                            6
+                        },
+                        output_decimals: if output_mint == SOL_MINT {
+                            9
+                        } else {
+                            6
+                        },
+                        confidence: 0.75,
+                        method: "Log Messages".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Generic numeric extraction as fallback
+    if log_text.len() > 20 && (log_text.contains("amount") || log_text.contains("transfer")) {
+        // Extract all decimal numbers from the log
+        if let Ok(number_regex) = Regex::new(r"\d+(?:\.\d+)?") {
+            let numbers: Vec<f64> = number_regex
+                .find_iter(log_text)
+                .filter_map(|m| m.as_str().parse().ok())
+                .filter(|&n| n > 0.0 && n < 1e12) // Filter reasonable amounts
+                .collect();
+
+            if numbers.len() >= 2 {
+                // Use the first two reasonable amounts
+                return Ok(TokenTransferData {
+                    input_amount: numbers[0],
+                    output_amount: numbers[1],
+                    input_decimals: if input_mint == SOL_MINT {
+                        9
+                    } else {
+                        6
+                    },
+                    output_decimals: if output_mint == SOL_MINT {
+                        9
+                    } else {
+                        6
+                    },
+                    confidence: 0.6, // Lower confidence for generic parsing
+                    method: "Log Messages".to_string(),
+                });
+            }
+        }
+    }
+
+    Err(SwapError::InvalidResponse("No recognizable swap pattern in log".to_string()))
 }
 
 fn calculate_consensus_result(

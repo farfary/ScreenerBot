@@ -17,12 +17,8 @@ use screenerbot::{
     logger::{ log, LogTag, init_file_logging },
     tokens::{
         api::{ get_global_dexscreener_api, init_dexscreener_api, get_token_pairs_from_api },
-        decimals::{
-            batch_fetch_token_decimals,
-            get_cached_decimals,
-            get_token_decimals_from_chain,
-        },
-        price_service::{ get_token_price_safe, initialize_price_service },
+        decimals::{ get_cached_decimals, get_token_decimals_from_chain },
+        price_service::{ initialize_price_service },
         pool::{ get_pool_service },
         // cache::{TokenDatabase},
         Token,
@@ -38,7 +34,6 @@ use screenerbot::{
         get_sol_balance,
         get_token_balance,
         SOL_MINT,
-        lamports_to_sol,
         SwapError,
     },
     rpc::{ init_rpc_client },
@@ -77,8 +72,6 @@ struct SwapAnalysisData {
     transaction_signature: String,
     input_amount: f64,
     output_amount: f64,
-    input_mint: String,
-    output_mint: String,
     effective_price: f64,
     transaction_fee: f64,
     ata_rent_detected: bool,
@@ -367,8 +360,6 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                             transaction_signature: tx_sig.clone(),
                             input_amount: analysis.input_amount,
                             output_amount: analysis.output_amount,
-                            input_mint: analysis.input_mint,
-                            output_mint: analysis.output_mint,
                             effective_price: analysis.effective_price,
                             transaction_fee: analysis.transaction_fee_sol,
                             ata_rent_detected: analysis.ata_creation_detected,
@@ -538,8 +529,6 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                                             transaction_signature: sell_tx_sig.clone(),
                                             input_amount: sell_analysis.input_amount,
                                             output_amount: sell_analysis.output_amount,
-                                            input_mint: sell_analysis.input_mint,
-                                            output_mint: sell_analysis.output_mint,
                                             effective_price: sell_analysis.effective_price,
                                             transaction_fee: sell_analysis.transaction_fee_sol,
                                             ata_rent_detected: sell_analysis.ata_creation_detected,
@@ -1274,7 +1263,6 @@ fn display_analysis_results(result: &SwapDebugResult, token_mint: &str) {
     println!("{}", "=".repeat(80).bright_blue());
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize file logging
@@ -1290,19 +1278,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Token mint address to analyze")
                 .required(false)
         )
-        .arg(
-            Arg::new("debug-swap")
-                .long("debug-swap")
-                .help("Enable detailed swap debugging with transaction analysis")
-                .action(clap::ArgAction::SetTrue)
-        )
         .get_matches();
 
-    // Set command args for debug flags
+    // Set command args for debug flags - always enable debug-swap and debug-wallet
     let mut args: Vec<String> = std::env::args().collect();
-    if matches.get_flag("debug-swap") {
-        args.push("--debug-swap".to_string());
-    }
+    args.push("--debug-swap".to_string());
+    args.push("--debug-wallet".to_string());
     set_cmd_args(args);
 
     println!("{}", "🚀 ScreenerBot Swap Debug Tool".bright_cyan().bold());
@@ -1341,10 +1322,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "→".blue()
         );
 
-        println!("\n{}", "🐛 DEBUG OPTIONS:".bright_cyan().bold());
-        println!("   {} Enable detailed swap debugging:", "•".cyan());
+        println!("\n{}", "🐛 DEBUG MODE:".bright_cyan().bold());
+        println!("   {} Detailed swap debugging is ALWAYS ENABLED:", "•".cyan());
         println!(
-            "     {} cargo run --bin tool_debug_swap -- --token <TOKEN_MINT> --debug-swap",
+            "     {} --debug-swap and --debug-wallet flags are automatically activated",
             "→".blue()
         );
         println!(
@@ -1358,10 +1339,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\n{}", "📊 DEBUG OUTPUT DETAILS:".bright_magenta().bold());
         println!(
-            "   {} Without --debug-swap: Basic swap analysis and final results only",
+            "   {} This tool always runs in full debug mode with comprehensive logging:",
             "•".magenta()
         );
-        println!("   {} With --debug-swap enabled, you'll see:", "•".magenta());
+        println!("   {} You will always see:", "•".magenta());
         println!("     {} Transaction fetching and validation details", "-".cyan());
         println!("     {} Instruction-by-instruction transaction analysis", "-".cyan());
         println!("     {} Account balance changes and calculations", "-".cyan());
