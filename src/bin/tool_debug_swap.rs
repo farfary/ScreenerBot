@@ -27,7 +27,6 @@ use screenerbot::{
         // cache::{TokenDatabase},
         Token,
         blacklist::is_token_blacklisted,
-        rugcheck::{ get_token_rugcheck_data },
         get_global_rugcheck_service,
     },
     wallet::{
@@ -43,7 +42,6 @@ use screenerbot::{
         SwapError,
     },
     rpc::{ init_rpc_client },
-    filtering::should_buy_token,
     swap_calculator::analyze_swap_comprehensive,
 };
 
@@ -160,8 +158,8 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
     );
 
     // Step 1: Validate token mint format
-    if token_mint.len() != 44 {
-        result.errors.push("Invalid token mint format: must be 44 characters".to_string());
+    if token_mint.len() < 32 || token_mint.len() > 44 {
+        result.errors.push("Invalid token mint format: must be 32-44 characters".to_string());
         return result;
     }
     result.token_valid = true;
@@ -342,6 +340,16 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
 
                 // Perform comprehensive swap analysis
                 let client = reqwest::Client::new();
+                println!(
+                    "📊 {} Performing comprehensive swap analysis...",
+                    "[ANALYSIS]".bright_blue().bold()
+                );
+                println!("   {} Transaction: {}", "🔗".blue(), tx_sig);
+                println!(
+                    "   {} Analyzing SOL → Token swap with expected 0.001 SOL input",
+                    "🔍".purple()
+                );
+
                 match
                     analyze_swap_comprehensive(
                         &client,
@@ -354,6 +362,7 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                     ).await
                 {
                     Ok(analysis) => {
+                        let analysis_method = analysis.analysis_method.clone();
                         result.sol_to_token_analysis = Some(SwapAnalysisData {
                             transaction_signature: tx_sig.clone(),
                             input_amount: analysis.input_amount,
@@ -380,15 +389,73 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                                 analysis.transaction_fee_sol
                             )
                         );
+
+                        println!(
+                            "✅ {} SOL → Token analysis completed!",
+                            "[ANALYSIS]".bright_green().bold()
+                        );
+                        println!(
+                            "   {} Input Amount: {:.6} SOL",
+                            "📥".green(),
+                            analysis.input_amount
+                        );
+                        println!(
+                            "   {} Output Amount: {:.6} tokens",
+                            "📤".green(),
+                            analysis.output_amount
+                        );
+                        println!(
+                            "   {} Effective Price: {:.10} SOL/token",
+                            "💰".yellow(),
+                            analysis.effective_price
+                        );
+                        println!(
+                            "   {} Transaction Fee: {:.6} SOL",
+                            "💸".red(),
+                            analysis.transaction_fee_sol
+                        );
+                        if analysis.ata_creation_detected {
+                            println!(
+                                "   {} ATA Creation Detected: {:.6} SOL rent",
+                                "🏠".blue(),
+                                analysis.ata_rent_sol
+                            );
+                        }
+                        println!(
+                            "   {} Price Impact/Slippage: {:.2}%",
+                            "📊".cyan(),
+                            analysis.slippage_percent
+                        );
+                        println!(
+                            "   {} Analysis Confidence: {:.1}%",
+                            "🎯".purple(),
+                            analysis.confidence_score * 100.0
+                        );
+                        println!("   {} Analysis Method: {}", "🔧".white(), analysis_method);
                     }
                     Err(e) => {
                         result.warnings.push(format!("Comprehensive swap analysis failed: {}", e));
+                        println!(
+                            "❌ {} SOL → Token analysis failed: {}",
+                            "[ANALYSIS]".bright_red().bold(),
+                            e
+                        );
                     }
                 }
 
                 // Test Token → SOL swap (sell back)
                 if tokens_received > 0.0 {
                     log(LogTag::System, "ANALYZE", "🔄 Testing Token → SOL reverse swap...");
+                    println!(
+                        "\n🔄 {} Testing Token → SOL reverse swap...",
+                        "[REVERSE]".bright_blue().bold()
+                    );
+                    println!(
+                        "   {} Available tokens to sell: {:.6}",
+                        "🪙".yellow(),
+                        tokens_received
+                    );
+
                     match execute_real_token_to_sol_swap(token_mint, tokens_received).await {
                         Ok(sell_result) => {
                             if sell_result.success {
@@ -414,10 +481,46 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                                     )
                                 );
 
+                                println!(
+                                    "✅ {} Token → SOL reverse swap successful!",
+                                    "[REVERSE]".bright_green().bold()
+                                );
+                                println!(
+                                    "   {} SOL Received: {:.6} SOL",
+                                    "💰".green(),
+                                    sol_received
+                                );
+                                println!(
+                                    "   {} Round-trip Efficiency: {:.2}%",
+                                    "🔄".cyan(),
+                                    round_trip_efficiency
+                                );
+                                println!(
+                                    "   {} Net Loss: {:.6} SOL ({:.2}%)",
+                                    "📉".red(),
+                                    0.001 - sol_received,
+                                    (1.0 - round_trip_efficiency / 100.0) * 100.0
+                                );
+
                                 // Wait for transaction to settle
+                                println!(
+                                    "⏳ {} Waiting for transaction to settle before analysis...",
+                                    "[WAIT]".bright_yellow().bold()
+                                );
                                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
                                 // Perform comprehensive sell analysis
+                                println!(
+                                    "📊 {} Performing comprehensive sell analysis...",
+                                    "[ANALYSIS]".bright_blue().bold()
+                                );
+                                println!("   {} Transaction: {}", "🔗".blue(), sell_tx_sig);
+                                println!(
+                                    "   {} Analyzing Token → SOL swap with {:.6} token input",
+                                    "🔍".purple(),
+                                    tokens_received
+                                );
+
                                 match
                                     analyze_swap_comprehensive(
                                         &client,
@@ -430,6 +533,7 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                                     ).await
                                 {
                                     Ok(sell_analysis) => {
+                                        let analysis_method = sell_analysis.analysis_method.clone();
                                         result.token_to_sol_analysis = Some(SwapAnalysisData {
                                             transaction_signature: sell_tx_sig.clone(),
                                             input_amount: sell_analysis.input_amount,
@@ -467,16 +571,77 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                                                 total_fees
                                             )
                                         );
+
+                                        println!(
+                                            "✅ {} Token → SOL analysis completed!",
+                                            "[ANALYSIS]".bright_green().bold()
+                                        );
+                                        println!(
+                                            "   {} Input Amount: {:.6} tokens",
+                                            "📥".green(),
+                                            sell_analysis.input_amount
+                                        );
+                                        println!(
+                                            "   {} Output Amount: {:.6} SOL",
+                                            "📤".green(),
+                                            sell_analysis.output_amount
+                                        );
+                                        println!(
+                                            "   {} Effective Price: {:.10} SOL/token",
+                                            "💰".yellow(),
+                                            sell_analysis.effective_price
+                                        );
+                                        println!(
+                                            "   {} Transaction Fee: {:.6} SOL",
+                                            "💸".red(),
+                                            sell_analysis.transaction_fee_sol
+                                        );
+                                        if sell_analysis.ata_creation_detected {
+                                            println!(
+                                                "   {} ATA Creation Detected: {:.6} SOL rent",
+                                                "🏠".blue(),
+                                                sell_analysis.ata_rent_sol
+                                            );
+                                        }
+                                        println!(
+                                            "   {} Price Impact/Slippage: {:.2}%",
+                                            "📊".cyan(),
+                                            sell_analysis.slippage_percent
+                                        );
+                                        println!(
+                                            "   {} Analysis Confidence: {:.1}%",
+                                            "🎯".purple(),
+                                            sell_analysis.confidence_score * 100.0
+                                        );
+                                        println!(
+                                            "   {} Analysis Method: {}",
+                                            "🔧".white(),
+                                            analysis_method
+                                        );
+                                        println!(
+                                            "   {} Total Round-trip Fees: {:.6} SOL",
+                                            "💸".red(),
+                                            total_fees
+                                        );
                                     }
                                     Err(e) => {
                                         result.warnings.push(
                                             format!("Comprehensive sell analysis failed: {}", e)
+                                        );
+                                        println!(
+                                            "❌ {} Token → SOL analysis failed: {}",
+                                            "[ANALYSIS]".bright_red().bold(),
+                                            e
                                         );
                                         result.swap_route_available = true; // Still mark as available since swap succeeded
                                     }
                                 }
                             } else {
                                 log(LogTag::System, "ANALYZE", "❌ Token → SOL swap failed");
+                                println!(
+                                    "❌ {} Token → SOL reverse swap failed!",
+                                    "[REVERSE]".bright_red().bold()
+                                );
                                 result.warnings.push("Token to SOL swap failed".to_string());
                             }
                         }
@@ -486,19 +651,30 @@ async fn analyze_token_for_swap(token_mint: &str) -> SwapDebugResult {
                                 "ANALYZE",
                                 &format!("❌ Token → SOL swap error: {}", e)
                             );
+                            println!(
+                                "❌ {} Token → SOL swap error: {}",
+                                "[REVERSE]".bright_red().bold(),
+                                e
+                            );
                             result.warnings.push(format!("Token to SOL swap error: {}", e));
                         }
                     }
                 } else {
+                    println!(
+                        "⚠️ {} No tokens received from first swap - skipping reverse swap",
+                        "[REVERSE]".bright_yellow().bold()
+                    );
                     result.warnings.push("No tokens received from first swap".to_string());
                 }
             } else {
                 log(LogTag::System, "ANALYZE", "❌ SOL → Token swap failed");
+                println!("❌ {} SOL → Token swap failed!", "[SWAP]".bright_red().bold());
                 result.errors.push("SOL to Token swap failed".to_string());
             }
         }
         Err(e) => {
             log(LogTag::System, "ANALYZE", &format!("❌ SOL → Token swap error: {}", e));
+            println!("❌ {} SOL → Token swap error: {}", "[SWAP]".bright_red().bold(), e);
             result.errors.push(format!("SOL to Token swap error: {}", e));
         }
     }
@@ -524,24 +700,36 @@ async fn execute_real_sol_to_token_swap(
         &format!("🔄 Executing REAL SOL → Token swap: {:.4} SOL -> {}", amount_sol, token_mint)
     );
 
+    println!(
+        "\n🚀 {} Starting REAL SOL → Token swap operation...",
+        "[SWAP_INIT]".bright_blue().bold()
+    );
+    println!("   {} Token Mint: {}", "🎯".cyan(), token_mint);
+    println!("   {} Amount: {:.6} SOL", "💵".green(), amount_sol);
+
     let wallet_address = get_wallet_address()?;
     log(LogTag::System, "REAL_SWAP", &format!("💼 Using wallet: {}", wallet_address));
+    println!("   {} Wallet Address: {}", "👛".blue(), wallet_address);
 
     // Check SOL balance first
     let sol_balance = get_sol_balance(&wallet_address).await?;
     log(LogTag::System, "REAL_SWAP", &format!("💰 Current SOL balance: {:.6} SOL", sol_balance));
+    println!("   {} Current SOL Balance: {:.6} SOL", "💰".yellow(), sol_balance);
 
     if sol_balance < amount_sol {
-        return Err(
-            SwapError::InsufficientBalance(
-                format!(
-                    "Insufficient SOL balance. Have: {:.6} SOL, Need: {:.6} SOL",
-                    sol_balance,
-                    amount_sol
-                )
-            )
+        let error_msg = format!(
+            "Insufficient SOL balance. Have: {:.6} SOL, Need: {:.6} SOL",
+            sol_balance,
+            amount_sol
         );
+        println!("❌ {} {}", "[BALANCE_CHECK]".bright_red().bold(), error_msg);
+        return Err(SwapError::InsufficientBalance(error_msg));
     }
+
+    println!(
+        "✅ {} Balance check passed - sufficient SOL available",
+        "[BALANCE_CHECK]".bright_green().bold()
+    );
 
     // Create swap request
     let request = SwapRequest {
@@ -555,20 +743,40 @@ async fn execute_real_sol_to_token_swap(
         is_anti_mev: false, // Default anti-MEV
     };
 
+    println!("📋 {} Swap request configured:", "[REQUEST]".bright_blue().bold());
+    println!("   {} Input Mint: {}", "📥".green(), SOL_MINT);
+    println!("   {} Output Mint: {}", "📤".green(), token_mint);
+    println!("   {} Amount: {:.6} SOL", "💵".yellow(), amount_sol);
+    println!("   {} Slippage: {:.1}%", "📊".cyan(), request.slippage);
+    println!("   {} Anti-MEV: {}", "🛡️".purple(), request.is_anti_mev);
+
     // Get quote
     log(LogTag::System, "REAL_SWAP", "📊 Getting swap quote...");
+    println!("📊 {} Requesting swap quote from GMGN...", "[QUOTE]".bright_blue().bold());
+
     let swap_data = get_swap_quote(&request).await?;
 
     log(
         LogTag::System,
         "REAL_SWAP",
         &format!(
-            "� Quote received: Input: {} lamports, Output: {} tokens, Price Impact: {:.4}%",
+            "📋 Quote received: Input: {} lamports, Output: {} tokens, Price Impact: {:.4}%",
             swap_data.quote.in_amount,
             swap_data.quote.out_amount,
             swap_data.quote.price_impact_pct
         )
     );
+
+    println!("✅ {} Quote received successfully!", "[QUOTE]".bright_green().bold());
+    println!("   {} Input: {} lamports SOL", "📥".green(), swap_data.quote.in_amount);
+    println!("   {} Expected Output: {} tokens", "📤".green(), swap_data.quote.out_amount);
+    println!("   {} Price Impact: {:.4}%", "📊".cyan(), swap_data.quote.price_impact_pct);
+    println!("   {} Route Steps: {}", "🛣️".blue(), "multiple");
+    // println!("   {} Other Fees: {} lamports", "💸".red(), swap_data.quote.other_fees);
+
+    // if let Some(price_change) = swap_data.quote.price_change_bps {
+    //     println!("   {} Price Change: {:.2} bps", "📈".purple(), price_change);
+    // }
 
     // Create a temporary token for the swap (we only need mint and symbol for logging)
     let temp_token = Token {
@@ -603,6 +811,12 @@ async fn execute_real_sol_to_token_swap(
 
     // Execute the real swap
     log(LogTag::System, "REAL_SWAP", "🚀 Executing REAL swap transaction...");
+    println!("🚀 {} Executing REAL SOL → Token swap transaction...", "[SWAP]".bright_blue().bold());
+    println!("   {} Input: {:.6} SOL → {}", "📥".green(), amount_sol, &token_mint[..8]);
+    println!("   {} Expected Output: {} tokens", "📤".yellow(), swap_data.quote.out_amount);
+    println!("   {} Price Impact: {:.4}%", "📊".cyan(), swap_data.quote.price_impact_pct);
+    println!("   {} Route Info: {}", "🛣️".blue(), "multiple steps");
+
     let swap_result = execute_swap_with_quote(
         &temp_token,
         SOL_MINT,
@@ -613,16 +827,27 @@ async fn execute_real_sol_to_token_swap(
     ).await?;
 
     if swap_result.success {
-        log(
-            LogTag::System,
-            "REAL_SWAP",
-            &format!(
-                "✅ REAL swap completed! TX: {}",
-                swap_result.transaction_signature.as_ref().unwrap_or(&"unknown".to_string())
-            )
-        );
+        let tx_sig = swap_result.transaction_signature
+            .as_ref()
+            .unwrap_or(&"unknown".to_string())
+            .clone();
+        log(LogTag::System, "REAL_SWAP", &format!("✅ REAL swap completed! TX: {}", tx_sig));
+        println!("✅ {} SOL → Token swap SUCCESSFUL!", "[SWAP]".bright_green().bold());
+        println!("   {} Transaction Signature: {}", "🔗".blue(), tx_sig);
+        println!("   {} Output Amount: {} tokens", "📤".green(), swap_result.output_amount);
+        if let Some(effective_price) = swap_result.effective_price {
+            println!("   {} Effective Price: {:.10} SOL/token", "💰".yellow(), effective_price);
+        }
+        if !swap_result.price_impact.is_empty() {
+            println!("   {} Actual Price Impact: {}%", "📉".cyan(), swap_result.price_impact);
+        }
+        println!("   {} Explorer: https://solscan.io/tx/{}", "🔍".purple(), tx_sig);
     } else {
         log(LogTag::System, "REAL_SWAP", "❌ REAL swap failed!");
+        println!("❌ {} SOL → Token swap FAILED!", "[SWAP]".bright_red().bold());
+        if let Some(error) = &swap_result.error {
+            println!("   {} Error: {}", "🚨".red(), error);
+        }
     }
 
     Ok(swap_result)
@@ -639,10 +864,19 @@ async fn execute_real_token_to_sol_swap(
         &format!("🔄 Executing REAL Token → SOL swap: {:.2} tokens -> SOL", amount_token)
     );
 
+    println!(
+        "\n🚀 {} Starting REAL Token → SOL swap operation...",
+        "[SELL_INIT]".bright_blue().bold()
+    );
+    println!("   {} Token Mint: {}", "🎯".cyan(), token_mint);
+    println!("   {} Amount: {:.6} tokens", "🪙".green(), amount_token);
+
     let wallet_address = get_wallet_address()?;
+    println!("   {} Wallet Address: {}", "👛".blue(), wallet_address);
 
     // Convert UI amount to raw amount
     let token_amount_raw = (amount_token * (10_f64).powi(6)) as u64;
+    println!("   {} Raw Token Amount: {} units", "🔢".yellow(), token_amount_raw);
 
     // Check token balance first
     let current_token_balance = get_token_balance(&wallet_address, token_mint).await?;
@@ -651,23 +885,27 @@ async fn execute_real_token_to_sol_swap(
         "REAL_SWAP",
         &format!("🪙 Current token balance: {} raw units", current_token_balance)
     );
+    println!("   {} Current Token Balance: {} raw units", "💰".yellow(), current_token_balance);
 
     if current_token_balance < token_amount_raw {
-        return Err(
-            SwapError::InsufficientBalance(
-                format!(
-                    "Insufficient token balance. Have: {} raw units, Need: {} raw units",
-                    current_token_balance,
-                    token_amount_raw
-                )
-            )
+        let error_msg = format!(
+            "Insufficient token balance. Have: {} raw units, Need: {} raw units",
+            current_token_balance,
+            token_amount_raw
         );
+        println!("❌ {} {}", "[BALANCE_CHECK]".bright_red().bold(), error_msg);
+        return Err(SwapError::InsufficientBalance(error_msg));
     }
+
+    println!(
+        "✅ {} Balance check passed - sufficient tokens available",
+        "[BALANCE_CHECK]".bright_green().bold()
+    );
 
     // For token to SOL swap, we need to use a different approach
     // We'll create a SwapRequest with amount_sol = 0 (not used for token->SOL)
     // and manually build the URL for token-to-SOL swap
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let _configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     let url = format!(
         "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
@@ -682,23 +920,42 @@ async fn execute_real_token_to_sol_swap(
     );
 
     log(LogTag::System, "REAL_SWAP", "📊 Getting sell quote...");
+    println!("📊 {} Getting Token → SOL quote...", "[QUOTE]".bright_blue().bold());
+    println!("   {} API URL: {}", "🌐".blue(), &url[..100]);
+    println!("   {} Input: {} tokens ({} raw units)", "📥".green(), amount_token, token_amount_raw);
+    println!("   {} Expected Output: SOL", "📤".yellow());
+
     let client = reqwest::Client::new();
     let response = client.get(&url).send().await?;
 
     if !response.status().is_success() {
+        println!("❌ {} HTTP request failed: {}", "[QUOTE]".bright_red().bold(), response.status());
         return Err(SwapError::ApiError(format!("HTTP error: {}", response.status())));
     }
 
     let response_text = response.text().await?;
+    println!(
+        "✅ {} Quote response received ({} bytes)",
+        "[QUOTE]".bright_green().bold(),
+        response_text.len()
+    );
+
     let api_response: screenerbot::wallet::SwapApiResponse = serde_json::from_str(&response_text)?;
 
     if api_response.code != 0 {
+        println!(
+            "❌ {} API error: {} - {}",
+            "[QUOTE]".bright_red().bold(),
+            api_response.code,
+            api_response.msg
+        );
         return Err(
             SwapError::ApiError(format!("API error: {} - {}", api_response.code, api_response.msg))
         );
     }
 
     let swap_data = api_response.data.ok_or_else(|| {
+        println!("❌ {} No swap data in API response", "[QUOTE]".bright_red().bold());
         SwapError::InvalidResponse("No data in response".to_string())
     })?;
 
@@ -712,6 +969,12 @@ async fn execute_real_token_to_sol_swap(
             swap_data.quote.price_impact_pct
         )
     );
+
+    println!("✅ {} Token → SOL quote received!", "[QUOTE]".bright_green().bold());
+    println!("   {} Input: {} tokens", "📥".green(), amount_token);
+    println!("   {} Expected Output: {} lamports SOL", "📤".yellow(), swap_data.quote.out_amount);
+    println!("   {} Price Impact: {:.4}%", "📊".cyan(), swap_data.quote.price_impact_pct);
+    println!("   {} Route Steps: {}", "🛣️".blue(), "multiple");
 
     // Create a temporary token for the swap
     let temp_token = Token {
@@ -746,6 +1009,11 @@ async fn execute_real_token_to_sol_swap(
 
     // Execute the real swap
     log(LogTag::System, "REAL_SWAP", "🚀 Executing REAL sell transaction...");
+    println!("🚀 {} Executing REAL Token → SOL swap transaction...", "[SWAP]".bright_blue().bold());
+    println!("   {} Input: {:.6} tokens → SOL", "📥".green(), amount_token);
+    println!("   {} Expected Output: {} lamports SOL", "📤".yellow(), swap_data.quote.out_amount);
+    println!("   {} Price Impact: {:.4}%", "📊".cyan(), swap_data.quote.price_impact_pct);
+
     let swap_result = execute_swap_with_quote(
         &temp_token,
         token_mint,
@@ -756,16 +1024,27 @@ async fn execute_real_token_to_sol_swap(
     ).await?;
 
     if swap_result.success {
-        log(
-            LogTag::System,
-            "REAL_SWAP",
-            &format!(
-                "✅ REAL sell completed! TX: {}",
-                swap_result.transaction_signature.as_ref().unwrap_or(&"unknown".to_string())
-            )
-        );
+        let tx_sig = swap_result.transaction_signature
+            .as_ref()
+            .unwrap_or(&"unknown".to_string())
+            .clone();
+        log(LogTag::System, "REAL_SWAP", &format!("✅ REAL sell completed! TX: {}", tx_sig));
+        println!("✅ {} Token → SOL swap SUCCESSFUL!", "[SWAP]".bright_green().bold());
+        println!("   {} Transaction Signature: {}", "🔗".blue(), tx_sig);
+        println!("   {} Output Amount: {} lamports SOL", "📤".green(), swap_result.output_amount);
+        if let Some(effective_price) = swap_result.effective_price {
+            println!("   {} Effective Price: {:.10} SOL/token", "💰".yellow(), effective_price);
+        }
+        if !swap_result.price_impact.is_empty() {
+            println!("   {} Actual Price Impact: {}%", "📉".cyan(), swap_result.price_impact);
+        }
+        println!("   {} Explorer: https://solscan.io/tx/{}", "🔍".purple(), tx_sig);
     } else {
         log(LogTag::System, "REAL_SWAP", "❌ REAL sell failed!");
+        println!("❌ {} Token → SOL swap FAILED!", "[SWAP]".bright_red().bold());
+        if let Some(error) = &swap_result.error {
+            println!("   {} Error: {}", "🚨".red(), error);
+        }
     }
 
     Ok(swap_result)
@@ -1386,6 +1665,121 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "{}",
             "   Token analysis will include real 0.001 SOL swap testing".bright_yellow()
         );
+
+        // Display comprehensive usage instructions
+        println!("\n{}", "📖 USAGE INSTRUCTIONS:".bright_cyan().bold());
+        println!("{}", "=".repeat(60).bright_blue());
+
+        println!("\n{}", "🎯 BASIC USAGE:".bright_green().bold());
+        println!("   {} Test a specific token:", "•".green());
+        println!("     {} cargo run --bin tool_debug_swap -- --token <TOKEN_MINT>", "→".blue());
+        println!(
+            "     {} Example: cargo run --bin tool_debug_swap -- --token DGKj2gcKkrYnJYLGN89d1yStpx7r6yPkR166opx2bonk",
+            "→".blue()
+        );
+
+        println!("\n{}", "⚠️ IMPORTANT WARNINGS:".bright_red().bold());
+        println!(
+            "   {} This tool performs REAL swaps with REAL SOL (0.001 SOL per test)",
+            "•".red()
+        );
+        println!("   {} Ensure you have sufficient SOL balance (recommend >0.01 SOL)", "•".red());
+        println!("   {} All transactions are executed on mainnet and will incur fees", "•".red());
+        println!("   {} Failed tokens may result in loss of the test amount", "•".red());
+
+        println!("\n{}", "🔍 WHAT THIS TOOL DOES:".bright_blue().bold());
+        println!("   {} Validates token mint format and basic checks", "1.".cyan());
+        println!("   {} Fetches token metadata from DexScreener API", "2.".cyan());
+        println!("   {} Tests pool price calculations and availability", "3.".cyan());
+        println!("   {} Verifies decimal cache and blockchain data", "4.".cyan());
+        println!("   {} Executes REAL SOL → Token swap (0.001 SOL)", "5.".cyan());
+        println!("   {} Performs comprehensive transaction analysis", "6.".cyan());
+        println!("   {} Executes REAL Token → SOL reverse swap", "7.".cyan());
+        println!("   {} Calculates round-trip efficiency and fees", "8.".cyan());
+
+        println!("\n{}", "📊 OUTPUT ANALYSIS:".bright_purple().bold());
+        println!(
+            "   {} {} Live console output with detailed transaction logs",
+            "•".purple(),
+            "[REAL-TIME]".bright_white()
+        );
+        println!(
+            "   {} {} All transactions with explorer links",
+            "•".purple(),
+            "[BLOCKCHAIN]".bright_white()
+        );
+        println!(
+            "   {} {} Balance checks and quote details",
+            "•".purple(),
+            "[VALIDATION]".bright_white()
+        );
+        println!(
+            "   {} {} ATA creation detection and rent analysis",
+            "•".purple(),
+            "[ATA_ANALYSIS]".bright_white()
+        );
+        println!(
+            "   {} {} Price impact and slippage calculations",
+            "•".purple(),
+            "[PRICE_IMPACT]".bright_white()
+        );
+        println!(
+            "   {} {} Round-trip efficiency metrics",
+            "•".purple(),
+            "[EFFICIENCY]".bright_white()
+        );
+
+        println!("\n{}", "🏷️ CONSOLE LOG TAGS:".bright_yellow().bold());
+        println!("   {} {} System initialization and setup", "•".yellow(), "[INIT]".bright_white());
+        println!(
+            "   {} {} Wallet balance and validation checks",
+            "•".yellow(),
+            "[BALANCE_CHECK]".bright_white()
+        );
+        println!(
+            "   {} {} API quote requests and responses",
+            "•".yellow(),
+            "[QUOTE]".bright_white()
+        );
+        println!("   {} {} Swap request configuration", "•".yellow(), "[REQUEST]".bright_white());
+        println!("   {} {} Real swap transaction execution", "•".yellow(), "[SWAP]".bright_white());
+        println!(
+            "   {} {} Comprehensive transaction analysis",
+            "•".yellow(),
+            "[ANALYSIS]".bright_white()
+        );
+        println!("   {} {} Reverse swap operations", "•".yellow(), "[REVERSE]".bright_white());
+        println!("   {} {} Transaction settlement waiting", "•".yellow(), "[WAIT]".bright_white());
+
+        println!("\n{}", "💡 EXAMPLE TOKEN ADDRESSES:".bright_green().bold());
+        println!(
+            "   {} {} BONK: DGKj2gcKkrYnJYLGN89d1yStpx7r6yPkR166opx2bonk",
+            "•".green(),
+            "[POPULAR]".bright_white()
+        );
+        println!(
+            "   {} {} WIF: EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+            "•".green(),
+            "[POPULAR]".bright_white()
+        );
+        println!(
+            "   {} {} JUP: JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+            "•".green(),
+            "[POPULAR]".bright_white()
+        );
+
+        println!("\n{}", "📁 LOG FILES:".bright_cyan().bold());
+        println!("   {} Console output shows real-time progress", "•".cyan());
+        println!("   {} Detailed logs saved to: logs/screenerbot_*.log", "•".cyan());
+        println!("   {} All transactions recorded with full details", "•".cyan());
+
+        println!("\n{}", "🚨 RISK DISCLOSURE:".bright_red().bold());
+        println!("   {} This tool uses real funds and real transactions", "•".red());
+        println!("   {} Tokens may fail, rug, or become illiquid during testing", "•".red());
+        println!("   {} Always test with small amounts you can afford to lose", "•".red());
+        println!("   {} Network fees and slippage will result in SOL loss", "•".red());
+
+        println!("{}", "=".repeat(60).bright_blue());
     }
 
     log(LogTag::System, "SHUTDOWN", "🏁 Swap debug tool completed");

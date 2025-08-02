@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 pub mod global;
 pub mod utils;
 pub mod trader;

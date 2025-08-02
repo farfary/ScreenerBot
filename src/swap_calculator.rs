@@ -219,18 +219,36 @@ pub async fn analyze_swap_comprehensive(
         wallet_address
     );
 
-    // Calculate effective price
+    // Calculate effective price correctly (SOL per token)
+    // For SOL->Token: price = SOL_amount / token_amount
+    // For Token->SOL: price = SOL_amount / token_amount
     let effective_price = if input_mint == SOL_MINT {
+        // SOL -> Token: SOL spent / tokens received
         consensus_result.input_amount / consensus_result.output_amount
     } else {
+        // Token -> SOL: SOL received / tokens spent
         consensus_result.output_amount / consensus_result.input_amount
     };
 
-    // Calculate price difference and slippage
-    let (price_diff_percent, slippage_percent) = if let Some(expected) = intended_amount {
-        let price_diff = ((effective_price - expected) / expected) * 100.0;
-        let slippage = price_diff.abs();
-        (price_diff, slippage)
+    // Calculate price difference and slippage based on expected vs actual amounts
+    let (price_diff_percent, slippage_percent) = if let Some(intended) = intended_amount {
+        if input_mint == SOL_MINT {
+            // For SOL->Token: intended is SOL amount, compare with actual tokens received
+            // Expected tokens = intended_sol_amount / effective_price
+            let expected_tokens = intended / effective_price;
+            let actual_tokens = consensus_result.output_amount;
+            let token_diff_percent = ((actual_tokens - expected_tokens) / expected_tokens) * 100.0;
+            let slippage = token_diff_percent.abs();
+            (token_diff_percent, slippage)
+        } else {
+            // For Token->SOL: intended is token amount, compare with actual SOL received
+            // Expected SOL = intended_tokens * effective_price
+            let expected_sol = intended * effective_price;
+            let actual_sol = consensus_result.output_amount;
+            let sol_diff_percent = ((actual_sol - expected_sol) / expected_sol) * 100.0;
+            let slippage = sol_diff_percent.abs();
+            (sol_diff_percent, slippage)
+        }
     } else {
         (0.0, 0.0)
     };
@@ -697,7 +715,11 @@ fn calculate_token_balance_change(
         }
     }
 
-    Ok((post_amount - pre_amount).abs())
+    // Return the actual change (positive = received, negative = spent)
+    // But since we're dealing with amounts, return absolute value
+    // The sign logic is handled in the calling function
+    let change = post_amount - pre_amount;
+    Ok(change.abs())
 }
 
 fn calculate_sol_balance_change(
@@ -765,24 +787,23 @@ fn calculate_sol_balance_change(
         .as_u64()
         .ok_or_else(|| SwapError::InvalidResponse("Invalid postBalance".to_string()))?;
 
-    // Calculate change (excluding fees for more accuracy)
-    let sol_change_lamports = if post_balance > pre_balance {
-        post_balance - pre_balance
-    } else {
-        pre_balance - post_balance
-    };
+    // Calculate actual SOL change (positive = received, negative = spent)
+    let sol_change_lamports = (post_balance as i64) - (pre_balance as i64);
 
-    // Exclude transaction fee
+    // Exclude transaction fee from the calculation for better accuracy
     let fee = meta
         .get("fee")
         .and_then(|f| f.as_u64())
-        .unwrap_or(0);
+        .unwrap_or(0) as i64;
 
-    let adjusted_lamports = if post_balance < pre_balance && fee > 0 {
-        // For outgoing transactions, subtract the fee
-        sol_change_lamports.saturating_sub(fee)
+    // For SOL outgoing (buying tokens), add back the fee to get pure trade amount
+    // For SOL incoming (selling tokens), the fee was already deducted from balance
+    let adjusted_lamports = if sol_change_lamports < 0 {
+        // Spent SOL: remove fee from the spent amount to get pure trade
+        (sol_change_lamports + fee).abs() as u64
     } else {
-        sol_change_lamports
+        // Received SOL: use as-is (fee already deducted)
+        sol_change_lamports as u64
     };
 
     Ok(lamports_to_sol(adjusted_lamports))
@@ -897,9 +918,47 @@ fn extract_platform_fee(transaction_json: &Value) -> Option<f64> {
     None
 }
 
-fn detect_ata_creation(transaction_json: &Value, _wallet_address: &str) -> (bool, u64, f64) {
-    // Look for ATA creation in inner instructions
+/// Comprehensive ATA detection with multiple strategies
+/// Detects both ATA creation (rent spent) and ATA closure (rent reclaimed)
+/// Analyzes transaction logs, instructions, and balance changes for accurate detection
+fn detect_ata_creation(transaction_json: &Value, wallet_address: &str) -> (bool, u64, f64) {
+    let mut ata_rent_spent = 0u64;
+    let mut ata_rent_reclaimed = 0u64;
+    let mut wsol_ata_detected = false;
+    let mut confidence_score = 0.0;
+
+    // Method 1: Analyze log messages for ATA operations
     if let Some(meta) = transaction_json.get("meta") {
+        if let Some(log_messages) = meta.get("logMessages").and_then(|logs| logs.as_array()) {
+            for log in log_messages {
+                if let Some(log_str) = log.as_str() {
+                    // Check for various ATA creation patterns
+                    if log_str.contains("CreateAccount") || log_str.contains("InitializeAccount") {
+                        ata_rent_spent += 2_039_280; // Standard ATA rent
+                        confidence_score += 0.4;
+                    }
+
+                    // Check for ATA close operations (rent reclaimed)
+                    if log_str.contains("CloseAccount") || log_str.contains("close_account") {
+                        ata_rent_reclaimed += 2_039_280;
+                        confidence_score += 0.4;
+                    }
+
+                    // Check for WSOL ATA operations (common in swaps)
+                    if log_str.contains("So11111111111111111111111111111111111111112") {
+                        wsol_ata_detected = true;
+                        confidence_score += 0.2;
+                    }
+
+                    // Check for specific SPL Token operations
+                    if log_str.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") {
+                        confidence_score += 0.1;
+                    }
+                }
+            }
+        }
+
+        // Method 2: Analyze inner instructions for account creation/closure
         if
             let Some(inner_instructions) = meta
                 .get("innerInstructions")
@@ -918,14 +977,96 @@ fn detect_ata_creation(transaction_json: &Value, _wallet_address: &str) -> (bool
                                     .get("type")
                                     .and_then(|t| t.as_str())
                             {
-                                if
-                                    instruction_type == "createAccount" ||
-                                    instruction_type == "create"
-                                {
-                                    // Common ATA rent is ~2,039,280 lamports
-                                    let ata_rent = 2_039_280u64;
-                                    return (true, ata_rent, lamports_to_sol(ata_rent));
+                                match instruction_type {
+                                    "createAccount" | "create" => {
+                                        // Analyze account creation details
+                                        if let Some(info) = parsed.get("info") {
+                                            if
+                                                let Some(space) = info
+                                                    .get("space")
+                                                    .and_then(|s| s.as_u64())
+                                            {
+                                                // Token account space is typically 165 bytes
+                                                if space == 165 {
+                                                    ata_rent_spent += 2_039_280;
+                                                    confidence_score += 0.5;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    "closeAccount" | "close" => {
+                                        // ATA closure detected
+                                        ata_rent_reclaimed += 2_039_280;
+                                        confidence_score += 0.5;
+                                    }
+                                    "initializeAccount" => {
+                                        // Token account initialization
+                                        confidence_score += 0.3;
+                                    }
+                                    _ => {}
                                 }
+                            }
+                        }
+
+                        // Check raw instruction data for program IDs
+                        if
+                            let Some(program_id) = instruction
+                                .get("programId")
+                                .and_then(|p| p.as_str())
+                        {
+                            // SPL Token program
+                            if program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+                                confidence_score += 0.1;
+                            }
+                            // Associated Token Account program
+                            if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                                ata_rent_spent += 2_039_280;
+                                confidence_score += 0.6;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Method 3: Analyze SOL balance changes for ATA rent patterns
+        if let Some(pre_balances) = meta.get("preBalances").and_then(|pb| pb.as_array()) {
+            if let Some(post_balances) = meta.get("postBalances").and_then(|pb| pb.as_array()) {
+                // Find wallet's balance change
+                if
+                    let Some(account_keys) = transaction_json
+                        .get("transaction")
+                        .and_then(|tx| tx.get("message"))
+                        .and_then(|msg| msg.get("accountKeys"))
+                        .and_then(|ak| ak.as_array())
+                {
+                    for (i, account) in account_keys.iter().enumerate() {
+                        if let Some(account_str) = account.as_str() {
+                            if account_str == wallet_address {
+                                if
+                                    let (Some(pre_bal), Some(post_bal)) = (
+                                        pre_balances.get(i).and_then(|b| b.as_u64()),
+                                        post_balances.get(i).and_then(|b| b.as_u64()),
+                                    )
+                                {
+                                    let balance_diff = if pre_bal > post_bal {
+                                        pre_bal - post_bal
+                                    } else {
+                                        post_bal - pre_bal
+                                    };
+
+                                    // Check if balance change indicates ATA rent
+                                    // Common patterns: 2,039,280 (ATA rent) ± transaction fees
+                                    if balance_diff >= 2_030_000 && balance_diff <= 2_050_000 {
+                                        if pre_bal > post_bal {
+                                            ata_rent_spent += 2_039_280;
+                                        } else {
+                                            ata_rent_reclaimed += 2_039_280;
+                                        }
+                                        confidence_score += 0.3;
+                                    }
+                                }
+                                break;
                             }
                         }
                     }
@@ -934,7 +1075,32 @@ fn detect_ata_creation(transaction_json: &Value, _wallet_address: &str) -> (bool
         }
     }
 
-    (false, 0, 0.0)
+    // Calculate net ATA impact (spent - reclaimed)
+    let net_ata_rent = if ata_rent_spent >= ata_rent_reclaimed {
+        ata_rent_spent - ata_rent_reclaimed
+    } else {
+        0 // If more reclaimed than spent, no net cost
+    };
+
+    // Determine if ATA activity was detected with sufficient confidence
+    let ata_detected = confidence_score >= 0.4 || net_ata_rent > 0;
+
+    if ata_detected && is_debug_profit_enabled() {
+        log(
+            LogTag::Wallet,
+            "ATA_DETECT",
+            &format!(
+                "ATA detected: spent={} lamports, reclaimed={} lamports, net={} lamports, WSOL={}, confidence={:.2}",
+                ata_rent_spent,
+                ata_rent_reclaimed,
+                net_ata_rent,
+                wsol_ata_detected,
+                confidence_score
+            )
+        );
+    }
+
+    (ata_detected, net_ata_rent, lamports_to_sol(net_ata_rent))
 }
 
 fn build_swap_result(
