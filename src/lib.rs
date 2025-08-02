@@ -13,3 +13,4 @@ pub mod rpc;
 pub mod ata_cleanup;
 pub mod smart_entry;
 pub mod ohlcv_analysis;
+pub mod swap_calculator;

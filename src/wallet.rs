@@ -128,6 +128,7 @@ pub enum SwapError {
     ConfigError(String),
     TransactionError(String),
     SigningError(String),
+    ParseError(String),
 }
 
 impl fmt::Display for SwapError {
@@ -142,6 +143,7 @@ impl fmt::Display for SwapError {
             SwapError::ConfigError(msg) => write!(f, "Config Error: {}", msg),
             SwapError::TransactionError(msg) => write!(f, "Transaction Error: {}", msg),
             SwapError::SigningError(msg) => write!(f, "Signing Error: {}", msg),
+            SwapError::ParseError(msg) => write!(f, "Parse Error: {}", msg),
         }
     }
 }
@@ -151,6 +153,12 @@ impl Error for SwapError {}
 impl From<reqwest::Error> for SwapError {
     fn from(err: reqwest::Error) -> Self {
         SwapError::NetworkError(err)
+    }
+}
+
+impl From<serde_json::Error> for SwapError {
+    fn from(err: serde_json::Error) -> Self {
+        SwapError::ParseError(format!("JSON parsing error: {}", err))
     }
 }
 
