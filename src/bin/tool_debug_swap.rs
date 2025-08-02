@@ -162,17 +162,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _token_decimals = match get_token_decimals_from_chain(token_mint).await {
         Ok(decimals) => {
             log(LogTag::System, "INFO", &format!("Token decimals: {}", decimals));
-            decimals
+            Some(decimals)
         }
         Err(e) => {
             log(
                 LogTag::System,
-                "WARNING",
-                &format!("Failed to get token decimals, using default 9: {}", e)
+                "ERROR",
+                &format!("Failed to get token decimals: {} - Cannot proceed with analysis", e)
             );
-            9
+            None
         }
     };
+
+    // Skip further analysis if decimals cannot be determined
+    if _token_decimals.is_none() {
+        log(LogTag::System, "ERROR", "Cannot analyze swap without token decimals - aborting");
+        return Err("Cannot determine token decimals".into());
+    }
 
     let current_price = match get_token_price_safe(token_mint).await {
         Some(price) => {
@@ -321,7 +327,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let token_decimals = if let Some(swap_data) = &buy_result.swap_data {
             swap_data.quote.out_decimals as u32
         } else {
-            _token_decimals as u32
+            match _token_decimals {
+                Some(decimals) => decimals as u32,
+                None => {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        "Cannot calculate expected output without decimals"
+                    );
+                    return Ok(());
+                }
+            }
         };
 
         // Convert raw tokens to actual token amount

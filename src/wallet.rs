@@ -1468,29 +1468,33 @@ pub async fn sell_token(
                 if is_debug_wallet_enabled() {
                     if let Some(expected_sol) = expected_sol_output {
                         // Get actual token decimals from swap data
-                        let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
-                            swap_data.quote.in_decimals as u32
+                        if let Some(swap_data) = &swap_result.swap_data {
+                            let token_decimals = swap_data.quote.in_decimals as u32;
+                            let tokens_sold =
+                                (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+                            let expected_price_per_token = expected_sol / tokens_sold;
+                            let price_diff =
+                                ((effective_price - expected_price_per_token) /
+                                    expected_price_per_token) *
+                                100.0;
+                            log(
+                                LogTag::Wallet,
+                                "DEBUG",
+                                &format!(
+                                    "📊 SELL PRICE ANALYSIS:\n  🎯 Expected Price: {:.10} SOL per token\n  💰 Actual Price: {:.10} SOL per token\n  📈 Difference: {:.2}%\n  🔢 Token Decimals: {}",
+                                    expected_price_per_token,
+                                    effective_price,
+                                    price_diff,
+                                    token_decimals
+                                )
+                            );
                         } else {
-                            9 // Default fallback
-                        };
-                        let tokens_sold =
-                            (token_amount as f64) / (10_f64).powi(token_decimals as i32);
-                        let expected_price_per_token = expected_sol / tokens_sold;
-                        let price_diff =
-                            ((effective_price - expected_price_per_token) /
-                                expected_price_per_token) *
-                            100.0;
-                        log(
-                            LogTag::Wallet,
-                            "DEBUG",
-                            &format!(
-                                "📊 SELL PRICE ANALYSIS:\n  🎯 Expected Price: {:.10} SOL per token\n  💰 Actual Price: {:.10} SOL per token\n  📈 Difference: {:.2}%\n  🔢 Token Decimals: {}",
-                                expected_price_per_token,
-                                effective_price,
-                                price_diff,
-                                token_decimals
-                            )
-                        );
+                            log(
+                                LogTag::Wallet,
+                                "ERROR",
+                                "Cannot validate price without swap data decimals"
+                            );
+                        }
                     }
                 }
             }
@@ -1747,11 +1751,12 @@ pub fn calculate_effective_price_buy(swap_result: &SwapResult) -> Result<f64, Sw
     // Convert lamports to SOL
     let input_sol = lamports_to_sol(input_lamports);
 
-    // Get the actual token decimals from swap data if available, otherwise assume 9
+    // Get the actual token decimals from swap data if available
     let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
         swap_data.quote.out_decimals as u32
     } else {
-        9 // Default fallback
+        log(LogTag::Wallet, "ERROR", "Cannot calculate effective price without swap data decimals");
+        return Err(SwapError::InvalidResponse("Missing decimals in swap data".to_string()));
     };
 
     // Convert raw token amount to actual tokens using correct decimals
@@ -1805,11 +1810,12 @@ pub fn calculate_effective_price_sell(swap_result: &SwapResult) -> Result<f64, S
     // Convert lamports to SOL
     let output_sol = lamports_to_sol(output_lamports);
 
-    // Get the actual token decimals from swap data if available, otherwise assume 9
+    // Get the actual token decimals from swap data if available
     let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
         swap_data.quote.in_decimals as u32
     } else {
-        9 // Default fallback
+        log(LogTag::Wallet, "ERROR", "Cannot calculate effective price without swap data decimals");
+        return Err(SwapError::InvalidResponse("Missing decimals in swap data".to_string()));
     };
 
     // Convert raw token amount to actual tokens using correct decimals

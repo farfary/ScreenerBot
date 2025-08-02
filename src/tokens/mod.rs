@@ -299,39 +299,34 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
 // =============================================================================
 
 /// Get token decimals from blockchain with caching
-pub async fn get_token_decimals(mint: &str) -> u8 {
+pub async fn get_token_decimals(mint: &str) -> Option<u8> {
     match get_token_decimals_from_chain(mint).await {
-        Ok(decimals) => decimals,
+        Ok(decimals) => Some(decimals),
         Err(e) => {
-            log(
-                LogTag::System,
-                "WARN",
-                &format!("Failed to get decimals for {}: {}, using default (9)", mint, e)
-            );
-            9 // Fallback to default
+            log(LogTag::System, "ERROR", &format!("Failed to get decimals for {}: {}", mint, e));
+            None // No fallback - return None if decimals can't be determined
         }
     }
 }
 
 /// Get token decimals synchronously (cache-only, no RPC calls)
-/// Returns cached decimals if available, otherwise returns error
-pub fn get_token_decimals_sync(mint: &str) -> u8 {
+/// Returns cached decimals if available, otherwise returns None
+pub fn get_token_decimals_sync(mint: &str) -> Option<u8> {
     // Only check decimal cache - no database fallback
     if let Some(decimals) = get_cached_decimals(mint) {
-        return decimals;
+        return Some(decimals);
     }
 
     // Error if not in cache - must use decimal cache only
     log(LogTag::System, "ERROR", &format!("Decimals not found in cache for {}", mint));
 
-    // CRITICAL: Don't use potentially wrong default - try to fetch or fail gracefully
-    // Return default 9 but log error - in production this should be rare
+    // CRITICAL: No fallback - return None to prevent P&L calculation errors
     log(
         LogTag::System,
         "CRITICAL",
-        &format!("Using fallback decimals=9 for {} - THIS MAY CAUSE P&L CALCULATION ERRORS", mint)
+        &format!("No decimals available for {} - SKIPPING operations to prevent errors", mint)
     );
-    9
+    None
 }
 
 /// Async version that attempts to fetch decimals from blockchain if not in cache

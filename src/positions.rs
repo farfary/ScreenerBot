@@ -127,21 +127,23 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         // For closed positions: actual transaction-based calculation
         if let Some(token_amount) = position.token_amount {
             // Get token decimals from cache (synchronous)
-            let token_decimals = crate::tokens::get_token_decimals_sync(&position.mint);
+            let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
 
-            // CRITICAL: Check if decimals were fetched properly vs fallback
-            let decimals_uncertain = !crate::tokens::get_cached_decimals(&position.mint).is_some();
-            if decimals_uncertain {
-                log(
-                    LogTag::System,
-                    "CRITICAL",
-                    &format!(
-                        "P&L calculation using fallback decimals for {}: may be INCORRECT",
-                        position.mint
-                    )
-                );
-                // Consider returning an error or using a different approach here
-            }
+            // CRITICAL: Skip P&L calculation if decimals are not available
+            let token_decimals = match token_decimals_opt {
+                Some(decimals) => decimals,
+                None => {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!(
+                            "Cannot calculate P&L for {} - decimals not available, skipping calculation",
+                            position.mint
+                        )
+                    );
+                    return (0.0, 0.0); // Return zero P&L instead of wrong calculation
+                }
+            };
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let entry_cost = position.entry_size_sol;
@@ -172,21 +174,23 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
             // Get token decimals from cache (synchronous)
-            let token_decimals = crate::tokens::get_token_decimals_sync(&position.mint);
+            let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
 
-            // CRITICAL: Check if decimals were fetched properly vs fallback
-            let decimals_uncertain = !crate::tokens::get_cached_decimals(&position.mint).is_some();
-            if decimals_uncertain {
-                log(
-                    LogTag::System,
-                    "CRITICAL",
-                    &format!(
-                        "P&L calculation using fallback decimals for {}: may be INCORRECT",
-                        position.mint
-                    )
-                );
-                // Consider returning an error or using a different approach here
-            }
+            // CRITICAL: Skip P&L calculation if decimals are not available
+            let token_decimals = match token_decimals_opt {
+                Some(decimals) => decimals,
+                None => {
+                    log(
+                        LogTag::System,
+                        "ERROR",
+                        &format!(
+                            "Cannot calculate P&L for {} - decimals not available, skipping calculation",
+                            position.mint
+                        )
+                    );
+                    return (0.0, 0.0); // Return zero P&L instead of wrong calculation
+                }
+            };
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let current_value = ui_token_amount * current;

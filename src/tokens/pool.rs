@@ -1103,18 +1103,23 @@ pub fn get_pool_service() -> &'static PoolPriceService {
 // =============================================================================
 
 /// Get token decimals with cache fallback
-async fn get_token_decimals_with_cache(mint: &str) -> u8 {
+async fn get_token_decimals_with_cache(mint: &str) -> Option<u8> {
     if let Some(decimals) = get_cached_decimals(mint) {
-        return decimals;
+        return Some(decimals);
     }
 
     match get_token_decimals_from_chain(mint).await {
-        Ok(decimals) => decimals,
+        Ok(decimals) => Some(decimals),
         Err(_) => {
             if mint == SOL_MINT {
-                9
+                Some(9) // SOL always has 9 decimals
             } else {
-                6 // Most SPL tokens use 6 decimals
+                log(
+                    LogTag::Pool,
+                    "ERROR",
+                    &format!("Cannot determine decimals for token {} - skipping pool calculation", mint)
+                );
+                None // No fallback for unknown tokens
             }
         }
     }
@@ -1902,8 +1907,23 @@ impl PoolPriceCalculator {
         }
 
         // Get token decimals
-        let token_a_decimals = get_token_decimals_with_cache(&token_a_mint).await;
-        let token_b_decimals = get_token_decimals_with_cache(&token_b_mint).await;
+        let token_a_decimals_opt = get_token_decimals_with_cache(&token_a_mint).await;
+        let token_b_decimals_opt = get_token_decimals_with_cache(&token_b_mint).await;
+
+        // Check if decimals are available for both tokens
+        let token_a_decimals = match token_a_decimals_opt {
+            Some(decimals) => decimals,
+            None => {
+                return Err(format!("Cannot determine decimals for token A: {}", token_a_mint));
+            }
+        };
+
+        let token_b_decimals = match token_b_decimals_opt {
+            Some(decimals) => decimals,
+            None => {
+                return Err(format!("Cannot determine decimals for token B: {}", token_b_mint));
+            }
+        };
 
         // Get vault balances to calculate reserves
         let (token_a_reserve, token_b_reserve) = self.get_vault_balances(
