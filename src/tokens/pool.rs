@@ -175,7 +175,7 @@ impl CachedPoolInfo {
                 .map(|l| l.usd)
                 .unwrap_or(0.0),
             volume_24h: pair.volume.h24.unwrap_or(0.0),
-            created_at: pair.pair_created_at,
+            created_at: pair.pair_created_at.unwrap_or(0), // Default to 0 if not available
             cached_at: Utc::now(),
         })
     }

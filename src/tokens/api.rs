@@ -609,7 +609,7 @@ pub struct TokenPair {
     pub price_change: PriceChangeStats,
     pub liquidity: Option<LiquidityStats>,
     #[serde(rename = "pairCreatedAt")]
-    pub pair_created_at: u64,
+    pub pair_created_at: Option<u64>, // Made optional since some pairs don't have this field
     pub fdv: Option<f64>,
     #[serde(rename = "marketCap")]
     pub market_cap: Option<f64>,

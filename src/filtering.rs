@@ -19,8 +19,8 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // =============================================================================
 //
 // 🚀 QUICK PARAMETER REFERENCE:
-//   - MIN_TOKEN_AGE_HOURS = 1 (tokens must be at least 1 hour old)
-//   - MAX_TOKEN_AGE_HOURS = 720 (30 days max age)
+//   - MIN_TOKEN_AGE_SECONDS = 3600 (tokens must be at least 1 hour old)
+//   - MAX_TOKEN_AGE_SECONDS = 2592000 (30 days max age)
 //   - POSITION_CLOSE_COOLDOWN_MINUTES = 1440 (24 hour cooldown)
 //   - MIN_LIQUIDITY_USD = 1000.0 (minimum liquidity requirement)
 //   - MIN_LP_LOCK_PERCENTAGE = 80.0 (minimum LP lock requirement)
@@ -34,11 +34,11 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // =============================================================================
 
 // ===== AGE FILTERING PARAMETERS =====
-/// Minimum token age in hours before trading
-pub const MIN_TOKEN_AGE_HOURS: i64 = 1;
+/// Minimum token age in seconds before trading
+pub const MIN_TOKEN_AGE_SECONDS: i64 = 60;
 
-/// Maximum token age in hours (effectively unlimited)
-pub const MAX_TOKEN_AGE_HOURS: i64 = 2 * 30 * 24; // 30 days
+/// Maximum token age in seconds
+pub const MAX_TOKEN_AGE_SECONDS: i64 = 30 * 24 * 60 * 60;
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
@@ -50,7 +50,7 @@ pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
 // Note: ATH checking moved to trader for more intelligent analysis
 
 /// Minimum price in SOL to consider valid
-pub const MIN_VALID_PRICE_SOL: f64 = 0.000000000001;
+pub const MIN_VALID_PRICE_SOL: f64 = 0.0000000000001;
 
 /// Maximum price in SOL to avoid (prevents overflow issues)
 pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
@@ -59,17 +59,14 @@ pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
 /// Minimum liquidity in USD required for trading
 pub const MIN_LIQUIDITY_USD: f64 = 1000.0;
 
-/// Preferred minimum liquidity in USD for safer trading
-pub const PREFERRED_MIN_LIQUIDITY_USD: f64 = 5000.0;
-
 // ===== RUGCHECK SECURITY PARAMETERS =====
 /// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
 /// Maximum allowed rugcheck risk score (0-100 scale) - HIGHER MEANS MORE RISKY
 /// This threshold overrides all other rugcheck analysis and immediately rejects high-risk tokens
-pub const MAX_RUGCHECK_RISK_SCORE: i32 = 35; // Allow max 20 risk score (low-medium risk)
+pub const MAX_RUGCHECK_RISK_SCORE: i32 = 80; // Allow max 20 risk score (low-medium risk)
 
 /// Emergency override for very risky tokens - any score above this is automatically rejected
-pub const EMERGENCY_MAX_RISK_SCORE: i32 = 65; // Absolute maximum risk tolerance
+pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100; // Absolute maximum risk tolerance
 
 /// Maximum number of high-risk issues to tolerate
 pub const MAX_HIGH_RISK_ISSUES: usize = 1;
@@ -734,6 +731,7 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
 
     let now = Utc::now();
     let token_age = now - created_at;
+    let age_seconds = token_age.num_seconds();
     let age_hours = token_age.num_hours();
     let age_minutes = token_age.num_minutes();
 
@@ -742,52 +740,54 @@ fn validate_token_age(token: &Token) -> Option<FilterReason> {
             LogTag::Filtering,
             "DEBUG_AGE",
             &format!(
-                "⏰ Age check for {}: {}h {}m old (created: {}), min: {}h, max: {}h",
+                "⏰ Age check for {}: {}h {}m old (created: {}), min: {}s ({}h), max: {}s ({}h)",
                 token.symbol,
                 age_hours,
                 age_minutes % 60,
                 created_at.format("%Y-%m-%d %H:%M:%S UTC"),
-                MIN_TOKEN_AGE_HOURS,
-                MAX_TOKEN_AGE_HOURS
+                MIN_TOKEN_AGE_SECONDS,
+                MIN_TOKEN_AGE_SECONDS / 3600,
+                MAX_TOKEN_AGE_SECONDS,
+                MAX_TOKEN_AGE_SECONDS / 3600
             )
         );
     }
 
-    if age_hours < MIN_TOKEN_AGE_HOURS {
+    if age_seconds < MIN_TOKEN_AGE_SECONDS {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "DEBUG_AGE",
                 &format!(
-                    "❌ Token {} too young: {}h < {}h minimum",
+                    "❌ Token {} too young: {}s < {}s minimum",
                     token.symbol,
-                    age_hours,
-                    MIN_TOKEN_AGE_HOURS
+                    age_seconds,
+                    MIN_TOKEN_AGE_SECONDS
                 )
             );
         }
         return Some(FilterReason::TooYoung {
             age_hours,
-            min_required: MIN_TOKEN_AGE_HOURS,
+            min_required: MIN_TOKEN_AGE_SECONDS / 3600,
         });
     }
 
-    if age_hours > MAX_TOKEN_AGE_HOURS {
+    if age_seconds > MAX_TOKEN_AGE_SECONDS {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "DEBUG_AGE",
                 &format!(
-                    "❌ Token {} too old: {}h > {}h maximum",
+                    "❌ Token {} too old: {}s > {}s maximum",
                     token.symbol,
-                    age_hours,
-                    MAX_TOKEN_AGE_HOURS
+                    age_seconds,
+                    MAX_TOKEN_AGE_SECONDS
                 )
             );
         }
         return Some(FilterReason::TooOld {
             age_hours,
-            max_allowed: MAX_TOKEN_AGE_HOURS,
+            max_allowed: MAX_TOKEN_AGE_SECONDS / 3600,
         });
     }
 
@@ -822,11 +822,10 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
             LogTag::Filtering,
             "DEBUG_LIQUIDITY",
             &format!(
-                "💧 Liquidity check for {}: ${:.2} (min: ${:.2}, preferred: ${:.2})",
+                "💧 Liquidity check for {}: ${:.2} (min: ${:.2})",
                 token.symbol,
                 liquidity_usd,
-                MIN_LIQUIDITY_USD,
-                PREFERRED_MIN_LIQUIDITY_USD
+                MIN_LIQUIDITY_USD
             )
         );
     }
@@ -863,15 +862,10 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
     }
 
     if is_debug_filtering_enabled() {
-        let quality = if liquidity_usd >= PREFERRED_MIN_LIQUIDITY_USD {
-            "excellent"
-        } else {
-            "adequate"
-        };
         log(
             LogTag::Filtering,
             "DEBUG_LIQUIDITY",
-            &format!("✅ Token {} liquidity {} (${:.2})", token.symbol, quality, liquidity_usd)
+            &format!("✅ Token {} liquidity adequate (${:.2})", token.symbol, liquidity_usd)
         );
     }
 
@@ -1209,9 +1203,11 @@ pub fn log_filtering_summary(tokens: &[Token]) {
             LogTag::Filtering,
             "WARN",
             &format!(
-                "Current filters: Age {}h-{}h, Liquidity ${}+, Price {:.12}-{:.3} SOL",
-                MIN_TOKEN_AGE_HOURS,
-                MAX_TOKEN_AGE_HOURS,
+                "Current filters: Age {}s-{}s ({}h-{}h), Liquidity ${}+, Price {:.12}-{:.3} SOL",
+                MIN_TOKEN_AGE_SECONDS,
+                MAX_TOKEN_AGE_SECONDS,
+                MIN_TOKEN_AGE_SECONDS / 3600,
+                MAX_TOKEN_AGE_SECONDS / 3600,
                 MIN_LIQUIDITY_USD,
                 MIN_VALID_PRICE_SOL,
                 MAX_VALID_PRICE_SOL

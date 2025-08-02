@@ -57,10 +57,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 10;
+pub const MAX_OPEN_POSITIONS: usize = 20;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.001;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -1422,14 +1422,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
         // Log filtering summary
-        log(LogTag::Trader, "DEBUG", "📊 Logging filtering summary...");
-        let summary_start = std::time::Instant::now();
         log_filtering_summary(&tokens);
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!("✅ Filtering summary logged in {:.1}ms", summary_start.elapsed().as_millis())
-        );
 
         // Sync OHLCV watch list with trader tokens (run async to not block trading)
         if is_debug_trader_enabled() {
@@ -1457,12 +1450,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
         // Get the total token count before starting the loop
         let total_tokens = tokens.len();
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!("🚀 Starting parallel processing of {} tokens", total_tokens)
-        );
-
         let token_processing_start = std::time::Instant::now();
         // Note: tokens are still sorted by liquidity from highest to lowest
         for (index, token) in tokens.iter().enumerate() {
