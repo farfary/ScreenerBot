@@ -269,14 +269,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match sell_token(&token, account.balance, None).await {
                     Ok(swap_result) => {
                         if swap_result.success {
-                            // Calculate SOL output from actual_output_change and decimals
-                            let sol_output = if
-                                let Some(output_change) = swap_result.actual_output_change
-                            {
-                                (output_change as f64) / 1_000_000_000.0 // Convert lamports to SOL
-                            } else {
-                                0.0
-                            };
+                            // Calculate SOL output from output_amount string
+                            let sol_output = swap_result.output_amount
+                                .parse::<u64>()
+                                .map(|lamports| (lamports as f64) / 1_000_000_000.0) // Convert lamports to SOL
+                                .unwrap_or(0.0);
 
                             println!(
                                 "✅ Successfully sold {} for {:.6} SOL",

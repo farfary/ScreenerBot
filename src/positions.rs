@@ -526,8 +526,8 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 return;
             }
 
-            let effective_entry_price = swap_result.effective_price.unwrap_or(price);
-            let token_amount = swap_result.actual_output_change.unwrap_or(0);
+            let effective_entry_price = price;
+            let token_amount = swap_result.output_amount.parse::<u64>().unwrap_or(0);
 
             // Validate that we actually received tokens
             if token_amount == 0 {
@@ -772,8 +772,8 @@ pub async fn close_position(
                     return false; // Failed to close
                 }
 
-                let effective_exit_price = swap_result.effective_price.unwrap_or(exit_price);
-                let sol_received = swap_result.actual_output_change.unwrap_or(0);
+                let effective_exit_price = exit_price;
+                let sol_received = swap_result.output_amount.parse::<u64>().unwrap_or(0);
                 let transaction_signature = swap_result.transaction_signature.clone();
 
                 // Validate that we actually received SOL
@@ -790,29 +790,8 @@ pub async fn close_position(
                     return false; // Failed to close properly
                 }
 
-                // Use ATA-cleaned SOL amount for accurate P&L calculation
-                let clean_sol_received = if swap_result.ata_close_detected {
-                    // Use the ATA-cleaned amount (trading proceeds only)
-                    let ata_cleaned_lamports =
-                        swap_result.sol_from_trade_only.unwrap_or(sol_received);
-                    let ata_rent_lamports = swap_result.ata_rent_reclaimed.unwrap_or(0);
-
-                    log(
-                        LogTag::Trader,
-                        "ATA_SEPARATION",
-                        &format!(
-                            "ATA detected for {} - Total: {:.6} SOL, Trade only: {:.6} SOL, ATA rent: {:.6} SOL",
-                            position.symbol,
-                            crate::wallet::lamports_to_sol(sol_received),
-                            crate::wallet::lamports_to_sol(ata_cleaned_lamports),
-                            crate::wallet::lamports_to_sol(ata_rent_lamports)
-                        )
-                    );
-
-                    ata_cleaned_lamports
-                } else {
-                    sol_received
-                };
+                // Use total SOL received (without ATA separation)
+                let clean_sol_received = sol_received;
 
                 // Calculate actual P&L using unified function
                 position.exit_price = Some(exit_price);
@@ -834,31 +813,16 @@ pub async fn close_position(
                 let actual_sol_received = crate::wallet::lamports_to_sol(clean_sol_received);
                 let total_sol_received = crate::wallet::lamports_to_sol(sol_received);
 
-                let log_message = if swap_result.ata_close_detected {
-                    format!(
-                        "Closed position for {} ({}) - TX: {}, Total SOL: {:.6} (Trade: {:.6}, ATA rent: {:.6}), Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
-                        position.symbol,
-                        position.mint,
-                        transaction_signature.as_ref().unwrap_or(&"None".to_string()),
-                        total_sol_received,
-                        actual_sol_received,
-                        crate::wallet::lamports_to_sol(swap_result.ata_rent_reclaimed.unwrap_or(0)),
-                        status_color,
-                        net_pnl_sol,
-                        net_pnl_percent
-                    )
-                } else {
-                    format!(
-                        "Closed position for {} ({}) - TX: {}, SOL From Sale: {:.6}, Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
-                        position.symbol,
-                        position.mint,
-                        transaction_signature.as_ref().unwrap_or(&"None".to_string()),
-                        actual_sol_received,
-                        status_color,
-                        net_pnl_sol,
-                        net_pnl_percent
-                    )
-                };
+                let log_message = format!(
+                    "Closed position for {} ({}) - TX: {}, SOL From Sale: {:.6}, Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
+                    position.symbol,
+                    position.mint,
+                    transaction_signature.as_ref().unwrap_or(&"None".to_string()),
+                    actual_sol_received,
+                    status_color,
+                    net_pnl_sol,
+                    net_pnl_percent
+                );
 
                 log(LogTag::Trader, status_text, &log_message);
 

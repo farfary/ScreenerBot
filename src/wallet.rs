@@ -235,7 +235,7 @@ pub struct SwapApiResponse {
 pub struct SwapRequest {
     pub input_mint: String,
     pub output_mint: String,
-    pub amount_sol: f64,
+    pub input_amount: u64, // Amount in smallest unit (lamports for SOL, raw amount for tokens)
     pub from_address: String,
     pub slippage: f64,
     pub fee: f64,
@@ -248,7 +248,7 @@ impl Default for SwapRequest {
         Self {
             input_mint: SOL_MINT.to_string(),
             output_mint: String::new(),
-            amount_sol: 0.0,
+            input_amount: 0,
             from_address: String::new(),
             slippage: SLIPPAGE_TOLERANCE_PERCENT,
             fee: SWAP_FEE_PERCENT,
@@ -269,15 +269,6 @@ pub struct SwapResult {
     pub fee_lamports: u64,
     pub execution_time: f64,
     pub error: Option<String>,
-    // New fields for effective price calculation
-    pub effective_price: Option<f64>,
-    pub actual_input_change: Option<u64>,
-    pub actual_output_change: Option<u64>,
-    pub quote_vs_actual_difference: Option<f64>,
-    // ATA rent separation fields
-    pub ata_close_detected: bool,
-    pub ata_rent_reclaimed: Option<u64>, // ATA rent amount in lamports
-    pub sol_from_trade_only: Option<u64>, // SOL from trade excluding ATA rent
 }
 
 /// Transaction details from RPC
@@ -703,8 +694,8 @@ fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
         return Err(SwapError::InvalidAmount("From address cannot be empty".to_string()));
     }
 
-    if request.amount_sol <= 0.0 {
-        return Err(SwapError::InvalidAmount("Amount must be greater than 0".to_string()));
+    if request.input_amount == 0 {
+        return Err(SwapError::InvalidAmount("Input amount must be greater than 0".to_string()));
     }
 
     if request.slippage < 0.0 || request.slippage > 100.0 {
@@ -724,16 +715,13 @@ fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
 pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError> {
     validate_swap_request(request)?;
 
-    let amount_lamports = sol_to_lamports(request.amount_sol);
-
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "QUOTE_START",
             &format!(
-                "🔍 Getting swap quote\n  📊 Amount: {:.6} SOL ({} lamports)\n  💱 Route: {} -> {}\n  ⚙️ Slippage: {}%, Fee: {}%, Anti-MEV: {}",
-                request.amount_sol,
-                amount_lamports,
+                "🔍 Getting swap quote\n  📊 Amount: {} units\n  💱 Route: {} -> {}\n  ⚙️ Slippage: {}%, Fee: {}%, Anti-MEV: {}",
+                request.input_amount,
                 if request.input_mint == SOL_MINT {
                     "SOL"
                 } else {
@@ -755,7 +743,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
         request.input_mint,
         request.output_mint,
-        amount_lamports,
+        request.input_amount,
         request.from_address,
         request.slippage,
         request.fee,
@@ -772,8 +760,8 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
             LogTag::Wallet,
             "DEBUG",
             &format!(
-                "Swap request details: amount_sol={:.6}, slippage={}, fee={}, anti_mev={}, from_address={}",
-                request.amount_sol,
+                "Swap request details: input_amount={}, slippage={}, fee={}, anti_mev={}, from_address={}",
+                request.input_amount,
                 request.slippage,
                 request.fee,
                 request.is_anti_mev,
@@ -787,8 +775,8 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         LogTag::Wallet,
         "QUOTE",
         &format!(
-            "Requesting swap quote: {} SOL {} -> {}",
-            request.amount_sol,
+            "Requesting swap quote: {} units {} -> {}",
+            request.input_amount,
             if request.input_mint == SOL_MINT {
                 "SOL"
             } else {
@@ -1044,21 +1032,27 @@ pub async fn execute_swap_with_quote(
     token: &Token,
     input_mint: &str,
     output_mint: &str,
-    amount_sol: f64,
-    expected_price: Option<f64>,
+    input_amount: u64,
     swap_data: SwapData
 ) -> Result<SwapResult, SwapError> {
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-    let wallet_address = get_wallet_address()?;
+
+    // Determine if this is SOL to token or token to SOL
+    let is_sol_to_token = input_mint == SOL_MINT;
+    let input_display = if is_sol_to_token {
+        format!("{:.6} SOL", lamports_to_sol(input_amount))
+    } else {
+        format!("{} tokens", input_amount)
+    };
 
     log(
         LogTag::Wallet,
         "SWAP",
         &format!(
-            "Executing swap for {} ({}) - {} SOL {} -> {} (using cached quote)",
+            "Executing swap for {} ({}) - {} {} -> {} (using cached quote)",
             token.symbol,
             token.name,
-            amount_sol,
+            input_display,
             if input_mint == SOL_MINT {
                 "SOL"
             } else {
@@ -1071,79 +1065,6 @@ pub async fn execute_swap_with_quote(
             }
         )
     );
-
-    // Validate expected price if provided (using cached quote)
-    if let Some(expected) = expected_price {
-        let input_sol = amount_sol;
-        let output_amount_str = &swap_data.quote.out_amount;
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!("Final - Raw out_amount string: '{}'", output_amount_str)
-        );
-
-        let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!("Final - Failed to parse out_amount '{}': {}", output_amount_str, e)
-            );
-            0.0
-        });
-
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!("Final - Parsed output_amount_raw: {}", output_amount_raw)
-        );
-
-        // CRITICAL FIX: Use actual token decimals from quote response, not token struct
-        let token_decimals = swap_data.quote.out_decimals as u32;
-        let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
-
-        let actual_price_per_token = if output_tokens > 0.0 {
-            input_sol / output_tokens
-        } else {
-            0.0
-        };
-
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "Final price calc debug: raw_amount={}, decimals={} (from quote), output_tokens={:.12}, actual_price={:.12}",
-                output_amount_raw,
-                token_decimals,
-                output_tokens,
-                actual_price_per_token
-            )
-        );
-
-        let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
-
-        log(
-            LogTag::Wallet,
-            "PRICE",
-            &format!(
-                "Final price validation: Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
-                expected,
-                actual_price_per_token,
-                price_difference
-            )
-        );
-
-        if price_difference > SLIPPAGE_TOLERANCE_PERCENT {
-            return Err(
-                SwapError::SlippageExceeded(
-                    format!(
-                        "Price difference {:.2}% exceeds slippage tolerance {:.2}%",
-                        price_difference,
-                        SLIPPAGE_TOLERANCE_PERCENT
-                    )
-                )
-            );
-        }
-    }
 
     // Sign and send the transaction using premium RPC
     let selected_rpc = get_premium_transaction_rpc(&configs);
@@ -1154,93 +1075,10 @@ pub async fn execute_swap_with_quote(
 
     log(
         LogTag::Wallet,
-        "SIGN",
+        "SUCCESS",
         &format!("Transaction submitted successfully! TX: {}", transaction_signature)
     );
 
-    // Calculate effective price with comprehensive ATA detection
-    let (
-        effective_price,
-        actual_input_change,
-        actual_output_change,
-        slippage,
-        ata_detected,
-        ata_rent_lamports,
-        ata_rent_sol,
-    ) = match (
-        {
-            // Use the transaction analyzer for effective price calculation
-            let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
-            analyzer.calculate_effective_price(
-                &reqwest::Client::new(),
-                &transaction_signature,
-                input_mint,
-                output_mint,
-                &wallet_address,
-                &selected_rpc, // Use the same randomly selected RPC endpoint
-                Some(amount_sol) // Pass intended amount for accurate calculation
-            ).await
-        }
-    ) {
-        Ok(
-            (
-                effective_price,
-                input_change,
-                output_change,
-                slippage,
-                ata_detected,
-                ata_rent_lamports,
-                ata_rent_sol,
-            ),
-        ) => {
-            log(
-                LogTag::Wallet,
-                "SUCCESS",
-                &format!(
-                    "Transaction verified successful on-chain. Effective price: {:.12} SOL, ATA detected: {}, ATA rent: {:.6} SOL",
-                    effective_price,
-                    ata_detected,
-                    ata_rent_sol
-                )
-            );
-            (
-                effective_price,
-                input_change,
-                output_change,
-                slippage,
-                ata_detected,
-                ata_rent_lamports,
-                ata_rent_sol,
-            )
-        }
-        Err(e) => {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!("Transaction failed on-chain or verification failed: {}", e)
-            );
-
-            // Return failed swap result for failed transactions
-            return Ok(SwapResult {
-                success: false,
-                transaction_signature: Some(transaction_signature),
-                input_amount: swap_data.quote.in_amount,
-                output_amount: swap_data.quote.out_amount,
-                price_impact: swap_data.quote.price_impact_pct,
-                fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-                execution_time: swap_data.quote.time_taken,
-                error: Some(format!("Transaction failed on-chain: {}", e)),
-                effective_price: None,
-                actual_input_change: None,
-                actual_output_change: None,
-                quote_vs_actual_difference: None,
-                ata_close_detected: false,
-                ata_rent_reclaimed: None,
-                sol_from_trade_only: None,
-            });
-        }
-    };
-
     Ok(SwapResult {
         success: true,
         transaction_signature: Some(transaction_signature),
@@ -1250,319 +1088,6 @@ pub async fn execute_swap_with_quote(
         fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
         execution_time: swap_data.quote.time_taken,
         error: None,
-        effective_price: Some(effective_price),
-        actual_input_change: Some(actual_input_change),
-        actual_output_change: Some(actual_output_change),
-        quote_vs_actual_difference: Some(slippage),
-        ata_close_detected: ata_detected,
-        ata_rent_reclaimed: if ata_detected {
-            Some(ata_rent_lamports)
-        } else {
-            None
-        },
-        sol_from_trade_only: if ata_detected {
-            Some(actual_output_change.saturating_sub(ata_rent_lamports))
-        } else {
-            Some(actual_output_change)
-        },
-    })
-}
-
-/// Executes a swap operation with real transaction signing and sending
-pub async fn execute_swap(
-    token: &Token,
-    input_mint: &str,
-    output_mint: &str,
-    amount_sol: f64,
-    expected_price: Option<f64>
-) -> Result<SwapResult, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-    let wallet_address = get_wallet_address()?;
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXEC_START",
-            &format!(
-                "🚀 Starting swap execution\n  🪙 Token: {} ({})\n  💰 Amount: {:.6} SOL\n  🔄 Route: {} -> {}\n  👤 Wallet: {}",
-                token.symbol,
-                token.name,
-                amount_sol,
-                if input_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &input_mint[..8]
-                },
-                if output_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &output_mint[..8]
-                },
-                &wallet_address[..8]
-            )
-        );
-
-        if let Some(price) = expected_price {
-            log(
-                LogTag::Swap,
-                "EXEC_EXPECTED",
-                &format!("🎯 Expected price: {:.12} SOL per token", price)
-            );
-        }
-    }
-
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "Starting swap execution: token={} ({}), amount_sol={}, input_mint={}, output_mint={}, wallet_address={}",
-                token.symbol,
-                token.name,
-                amount_sol,
-                input_mint,
-                output_mint,
-                &wallet_address[..8]
-            )
-        );
-        if let Some(price) = expected_price {
-            log(LogTag::Wallet, "DEBUG", &format!("Expected price: {:.10} SOL per token", price));
-        }
-    }
-
-    let request = SwapRequest {
-        input_mint: input_mint.to_string(),
-        output_mint: output_mint.to_string(),
-        amount_sol,
-        from_address: wallet_address.clone(),
-        expected_price,
-        ..Default::default()
-    };
-
-    log(
-        LogTag::Wallet,
-        "SWAP",
-        &format!(
-            "Executing swap for {} ({}) - {} SOL {} -> {}",
-            token.symbol,
-            token.name,
-            amount_sol,
-            if input_mint == SOL_MINT {
-                "SOL"
-            } else {
-                &input_mint[..8]
-            },
-            if output_mint == SOL_MINT {
-                "SOL"
-            } else {
-                &output_mint[..8]
-            }
-        )
-    );
-
-    // Get quote first
-    if is_debug_swap_enabled() {
-        log(LogTag::Swap, "EXEC_QUOTE", "📋 Requesting swap quote...");
-    }
-    if is_debug_wallet_enabled() {
-        log(LogTag::Wallet, "DEBUG", "Requesting swap quote...");
-    }
-    let swap_data = get_swap_quote(&request).await?;
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXEC_QUOTE_OK",
-            &format!(
-                "✅ Quote received\n  📊 In: {} | Out: {}\n  📈 Impact: {:.3}%\n  🕒 Time: {:.3}s",
-                swap_data.quote.in_amount,
-                swap_data.quote.out_amount,
-                swap_data.quote.price_impact_pct,
-                swap_data.quote.time_taken
-            )
-        );
-    }
-
-    // Validate expected price if provided
-    if let Some(expected) = expected_price {
-        if is_debug_swap_enabled() {
-            log(LogTag::Swap, "EXEC_PRICE_VAL", "🔍 Validating expected price...");
-        }
-
-        // Calculate the actual price per token from the quote
-        let input_sol = request.amount_sol;
-        let output_amount_raw = swap_data.quote.out_amount.parse().unwrap_or(0) as f64;
-        // CRITICAL FIX: Use actual token decimals from quote response, not token struct
-        let token_decimals = swap_data.quote.out_decimals as u32;
-        let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
-
-        let actual_price_per_token = if output_tokens > 0.0 {
-            input_sol / output_tokens
-        } else {
-            0.0
-        };
-
-        let price_difference = (((actual_price_per_token - expected) / expected) * 100.0).abs();
-
-        if is_debug_swap_enabled() {
-            log(
-                LogTag::Swap,
-                "EXEC_PRICE_CALC",
-                &format!(
-                    "💹 Price calculation\n  🎯 Expected: {:.12} SOL/token\n  📊 Actual: {:.12} SOL/token\n  📈 Difference: {:.3}%\n  ⚠️ Slippage limit: {:.3}%",
-                    expected,
-                    actual_price_per_token,
-                    price_difference,
-                    request.slippage
-                )
-            );
-        }
-
-        log(
-            LogTag::Wallet,
-            "PRICE",
-            &format!(
-                "Price validation: Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
-                expected,
-                actual_price_per_token,
-                price_difference
-            )
-        );
-
-        if price_difference > request.slippage {
-            if is_debug_swap_enabled() {
-                log(
-                    LogTag::Swap,
-                    "EXEC_PRICE_FAIL",
-                    &format!(
-                        "❌ Price difference {:.3}% exceeds slippage tolerance {:.3}%",
-                        price_difference,
-                        request.slippage
-                    )
-                );
-            }
-            return Err(
-                SwapError::SlippageExceeded(
-                    format!(
-                        "Price difference {:.2}% exceeds slippage tolerance {:.2}%",
-                        price_difference,
-                        request.slippage
-                    )
-                )
-            );
-        }
-
-        if is_debug_swap_enabled() {
-            log(LogTag::Swap, "EXEC_PRICE_OK", "✅ Price validation passed");
-        }
-    }
-
-    // Sign and send the transaction using premium RPC (buy_token)
-    let selected_rpc = get_premium_transaction_rpc(&configs);
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXEC_TX_START",
-            &format!("📡 Signing and sending transaction via RPC: {}", selected_rpc)
-        );
-    }
-
-    let transaction_signature = sign_and_send_transaction(
-        &swap_data.raw_tx.swap_transaction,
-        &selected_rpc
-    ).await?;
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXEC_TX_SUCCESS",
-            &format!("✅ Transaction submitted successfully! TX: {}", transaction_signature)
-        );
-    }
-
-    log(
-        LogTag::Wallet,
-        "SUCCESS",
-        &format!("Swap executed successfully! TX: {}", transaction_signature)
-    );
-
-    if is_debug_swap_enabled() {
-        log(LogTag::Swap, "EXEC_ANALYSIS", "🔍 Starting effective price analysis...");
-    }
-
-    // Calculate effective price with comprehensive ATA detection
-    let (
-        effective_price,
-        actual_input_change,
-        actual_output_change,
-        slippage,
-        ata_detected,
-        ata_rent_lamports,
-        ata_rent_sol,
-    ) = (
-        {
-            // Use the transaction analyzer for effective price calculation
-            let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
-            analyzer.calculate_effective_price(
-                &reqwest::Client::new(),
-                &transaction_signature,
-                input_mint,
-                output_mint,
-                &wallet_address,
-                &selected_rpc, // Use the same randomly selected RPC endpoint
-                None // No intended amount for legacy call
-            ).await
-        }
-    ).unwrap_or_else(|e| {
-        log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
-        (0.0, 0, 0, 0.0, false, 0, 0.0)
-    });
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXEC_COMPLETE",
-            &format!(
-                "🎉 Swap execution complete\n  ✅ Success: true\n  📊 Effective Price: {:.12} SOL per token\n  💱 Input Change: {} | Output Change: {}\n  📈 Slippage: {:.3}%\n  🏦 ATA Detected: {} ({:.6} SOL rent)",
-                effective_price,
-                actual_input_change,
-                actual_output_change,
-                slippage,
-                if ata_detected {
-                    "YES"
-                } else {
-                    "NO"
-                },
-                ata_rent_sol
-            )
-        );
-    }
-
-    Ok(SwapResult {
-        success: true,
-        transaction_signature: Some(transaction_signature),
-        input_amount: swap_data.quote.in_amount,
-        output_amount: swap_data.quote.out_amount,
-        price_impact: swap_data.quote.price_impact_pct,
-        fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-        execution_time: swap_data.quote.time_taken,
-        error: None,
-        effective_price: Some(effective_price),
-        actual_input_change: Some(actual_input_change),
-        actual_output_change: Some(actual_output_change),
-        quote_vs_actual_difference: Some(slippage),
-        ata_close_detected: ata_detected,
-        ata_rent_reclaimed: if ata_detected {
-            Some(ata_rent_lamports)
-        } else {
-            None
-        },
-        sol_from_trade_only: if ata_detected {
-            Some(actual_output_change.saturating_sub(ata_rent_lamports))
-        } else {
-            Some(actual_output_change)
-        },
     })
 }
 
@@ -1644,7 +1169,7 @@ pub async fn buy_token(
     let request = SwapRequest {
         input_mint: SOL_MINT.to_string(),
         output_mint: token.mint.clone(),
-        amount_sol,
+        input_amount: sol_to_lamports(amount_sol),
         from_address: wallet_address.clone(),
         expected_price,
         ..Default::default()
@@ -1677,95 +1202,11 @@ pub async fn buy_token(
         )
     );
 
-    // Check current price if expected price is provided
+    // Validate expected price if provided (using cached quote)
     if let Some(expected) = expected_price {
         log(LogTag::Wallet, "PRICE", "🔍 Validating current token price...");
-
-        // Calculate current price from quote, accounting for token decimals
-        let output_amount_str = &swap_data.quote.out_amount;
-        log(LogTag::Wallet, "DEBUG", &format!("📋 Raw out_amount string: '{}'", output_amount_str));
-
-        let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!("❌ Failed to parse out_amount '{}': {}", output_amount_str, e)
-            );
-            0.0
-        });
-
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!("🔢 Parsed output_amount_raw: {}", output_amount_raw)
-        );
-
-        // CRITICAL FIX: Use the actual token decimals from the quote response, not from token struct
-        let token_decimals = swap_data.quote.out_decimals as u32;
-        let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
-        let current_price = if output_tokens > 0.0 { amount_sol / output_tokens } else { 0.0 };
-
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "🧮 Price calculation: raw_amount={}, decimals={} (from quote), output_tokens={:.12}, current_price={:.12}",
-                output_amount_raw,
-                token_decimals,
-                output_tokens,
-                current_price
-            )
-        );
-
-        log(
-            LogTag::Wallet,
-            "PRICE",
-            &format!("💲 Current price: {:.12} SOL, Expected: {:.12} SOL", current_price, expected)
-        );
-
-        // Use 5% tolerance for price validation
-        if current_price > 0.0 && !validate_price_near_expected(current_price, expected, 5.0) {
-            let price_diff = ((current_price - expected) / expected) * 100.0;
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!(
-                    "❌ Price validation failed! Current: {:.12} SOL, Expected: {:.12} SOL, Diff: {:.2}% (Max: {:.1}%)",
-                    current_price,
-                    expected,
-                    price_diff,
-                    SLIPPAGE_TOLERANCE_PERCENT
-                )
-            );
-            return Err(
-                SwapError::SlippageExceeded(
-                    format!(
-                        "Current price {:.12} SOL differs from expected {:.12} SOL by {:.2}% (tolerance: {:.1}%)",
-                        current_price,
-                        expected,
-                        price_diff,
-                        SLIPPAGE_TOLERANCE_PERCENT
-                    )
-                )
-            );
-        } else if current_price <= 0.0 {
-            log(
-                LogTag::Wallet,
-                "WARNING",
-                "⚠️ Could not calculate current price from quote, proceeding without validation"
-            );
-        } else {
-            let price_diff = ((current_price - expected) / expected) * 100.0;
-            log(
-                LogTag::Wallet,
-                "SUCCESS",
-                &format!(
-                    "✅ Price validation passed! Diff: {:.2}% (within {:.1}% tolerance)",
-                    price_diff,
-                    SLIPPAGE_TOLERANCE_PERCENT
-                )
-            );
-        }
+        validate_quote_price(&swap_data, sol_to_lamports(amount_sol), expected, true)?;
+        log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
     }
 
     log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with validated quote..."));
@@ -1774,11 +1215,11 @@ pub async fn buy_token(
         token,
         SOL_MINT,
         &token.mint,
-        amount_sol,
-        expected_price,
+        sol_to_lamports(amount_sol),
         swap_data
     ).await
 }
+
 
 /// Helper function to sell a token for SOL
 pub async fn sell_token(
@@ -1807,7 +1248,6 @@ pub async fn sell_token(
         }
     }
 
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
     let wallet_address = get_wallet_address()?;
 
     // Check if trying to sell 0 tokens
@@ -1882,7 +1322,7 @@ pub async fn sell_token(
     let request = SwapRequest {
         input_mint: token.mint.clone(),
         output_mint: SOL_MINT.to_string(),
-        amount_sol: 0.0, // Not used for token-to-SOL swaps
+        input_amount: token_amount,
         from_address: wallet_address.clone(),
         expected_price: expected_sol_output,
         ..Default::default()
@@ -1899,59 +1339,14 @@ pub async fn sell_token(
         )
     );
 
-    // Build URL for token-to-SOL swap
-    let url = format!(
-        "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
-        request.input_mint,
-        request.output_mint,
-        token_amount,
-        request.from_address,
-        request.slippage,
-        request.fee,
-        request.is_anti_mev,
-        PARTNER
-    );
-
     log(
         LogTag::Wallet,
         "QUOTE",
         &format!("Requesting sell quote: {} tokens {} -> SOL", token_amount, &token.symbol)
     );
 
-    let client = reqwest::Client::new();
-    let response = client.get(&url).send().await?;
-
-    if !response.status().is_success() {
-        return Err(SwapError::ApiError(format!("HTTP error: {}", response.status())));
-    }
-
-    // Get response text first for better error reporting
-    let response_text = response.text().await?;
-
-    // Try to parse the JSON response with better error handling
-    let api_response: SwapApiResponse = match serde_json::from_str(&response_text) {
-        Ok(response) => response,
-        Err(e) => {
-            return Err(
-                SwapError::InvalidResponse(
-                    format!("JSON parsing error: {} - Response: {}", e, response_text)
-                )
-            );
-        }
-    };
-
-    if api_response.code != 0 {
-        return Err(
-            SwapError::ApiError(format!("API error: {} - {}", api_response.code, api_response.msg))
-        );
-    }
-
-    let swap_data = match api_response.data {
-        Some(data) => data,
-        None => {
-            return Err(SwapError::InvalidResponse("No data in response".to_string()));
-        }
-    };
+    // Get quote using the centralized function
+    let swap_data = get_swap_quote(&request).await?;
 
     log(
         LogTag::Wallet,
@@ -1965,140 +1360,20 @@ pub async fn sell_token(
         )
     );
 
-    // Validate expected output if provided
+    // Validate expected output if provided (using cached quote)
     if let Some(expected) = expected_sol_output {
-        let actual_output = lamports_to_sol(swap_data.quote.out_amount.parse().unwrap_or(0));
-        let price_difference = (((actual_output - expected) / expected) * 100.0).abs();
-
-        if price_difference > request.slippage {
-            return Err(
-                SwapError::SlippageExceeded(
-                    format!(
-                        "Price difference {:.2}% exceeds slippage tolerance {:.2}%",
-                        price_difference,
-                        request.slippage
-                    )
-                )
-            );
-        }
+        log(LogTag::Wallet, "PRICE", "🔍 Validating expected SOL output...");
+        validate_quote_price(&swap_data, token_amount, expected, false)?;
+        log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
     }
 
-    // Sign and send the transaction using premium RPC (sell_token)
-    let selected_rpc = get_premium_transaction_rpc(&configs);
-    let transaction_signature = sign_and_send_transaction(
-        &swap_data.raw_tx.swap_transaction,
-        &selected_rpc
-    ).await?;
+    log(LogTag::Wallet, "SWAP", "🚀 Executing sell with validated quote...");
 
-    log(
-        LogTag::Wallet,
-        "SUCCESS",
-        &format!("Sell executed successfully! TX: {}", transaction_signature)
-    );
-
-    // Calculate effective price with comprehensive ATA detection for sell transaction
-    let (
-        effective_price,
-        actual_input_change,
-        actual_output_change,
-        slippage,
-        ata_detected,
-        ata_rent_lamports,
-        ata_rent_sol,
-    ) = (
-        {
-            // Use the transaction analyzer for effective price calculation
-            let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
-            analyzer.calculate_effective_price(
-                &reqwest::Client::new(),
-                &transaction_signature,
-                &request.input_mint,
-                &request.output_mint,
-                &wallet_address,
-                &configs.rpc_url,
-                expected_sol_output // Pass expected SOL output for sell transactions
-            ).await
-        }
-    ).unwrap_or_else(|e| {
-        log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
-        (0.0, 0, 0, 0.0, false, 0, 0.0)
-    });
-
-    // ============== DEBUG WALLET LOGGING - FINAL CALCULATIONS ==============
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG_PRICE",
-            &format!(
-                "💰 EFFECTIVE PRICE CALCULATION - Token: {} | Effective Price: {:.12} SOL | Input Change: {} lamports | Output: {:.9} SOL",
-                token.symbol,
-                effective_price,
-                actual_input_change,
-                lamports_to_sol(actual_output_change)
-            )
-        );
-
-        let entry_sol = lamports_to_sol(actual_input_change);
-        let exit_sol = lamports_to_sol(actual_output_change);
-        let profit_sol = exit_sol - entry_sol;
-        let profit_percent = if entry_sol > 0.0 { (profit_sol / entry_sol) * 100.0 } else { 0.0 };
-
-        log(
-            LogTag::Wallet,
-            "DEBUG_PROFIT",
-            &format!(
-                "📊 PROFIT ANALYSIS - Token: {} | Entry: {:.9} SOL | Exit: {:.9} SOL | P&L: {:.9} SOL ({:.2}%)",
-                token.symbol,
-                entry_sol,
-                exit_sol,
-                profit_sol,
-                profit_percent
-            )
-        );
-
-        // Check if this looks like a big loss that might be incorrect
-        if profit_percent < -50.0 {
-            log(
-                LogTag::Wallet,
-                "DEBUG_ALERT",
-                &format!(
-                    "⚠️ LARGE LOSS DETECTED - Token: {} | Loss: {:.2}% | Please verify calculation accuracy",
-                    token.symbol,
-                    profit_percent
-                )
-            );
-        }
-    }
-
-    // Note: ATA cleanup is now handled by background service - no blocking here
-    log(LogTag::Wallet, "ATA", "💡 ATA cleanup handled by background service");
-
-    Ok(SwapResult {
-        success: true,
-        transaction_signature: Some(transaction_signature),
-        input_amount: swap_data.quote.in_amount,
-        output_amount: swap_data.quote.out_amount,
-        price_impact: swap_data.quote.price_impact_pct,
-        fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-        execution_time: swap_data.quote.time_taken,
-        error: None,
-        effective_price: Some(effective_price),
-        actual_input_change: Some(actual_input_change),
-        actual_output_change: Some(actual_output_change),
-        quote_vs_actual_difference: Some(slippage),
-        ata_close_detected: ata_detected,
-        ata_rent_reclaimed: if ata_detected {
-            Some(ata_rent_lamports)
-        } else {
-            None
-        },
-        sol_from_trade_only: if ata_detected {
-            Some(actual_output_change.saturating_sub(ata_rent_lamports))
-        } else {
-            Some(actual_output_change)
-        },
-    })
+    // Use the centralized execution function
+    execute_swap_with_quote(token, &token.mint, SOL_MINT, token_amount, swap_data).await
 }
+
+
 
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
@@ -2121,7 +1396,7 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
     let request = SwapRequest {
         input_mint: SOL_MINT.to_string(),
         output_mint: token_mint.to_string(),
-        amount_sol: small_amount,
+        input_amount: sol_to_lamports(small_amount),
         from_address: wallet_address,
         ..Default::default()
     };
@@ -2310,6 +1585,102 @@ pub fn validate_price_near_expected(
 ) -> bool {
     let price_difference = (((current_price - expected_price) / expected_price) * 100.0).abs();
     price_difference <= tolerance_percent
+}
+
+/// Validates the price from a swap quote against expected price
+pub fn validate_quote_price(
+    swap_data: &SwapData,
+    input_amount: u64,
+    expected_price: f64,
+    is_sol_to_token: bool
+) -> Result<(), SwapError> {
+    let output_amount_str = &swap_data.quote.out_amount;
+    log(
+        LogTag::Wallet,
+        "DEBUG",
+        &format!("Quote validation - Raw out_amount string: '{}'", output_amount_str)
+    );
+
+    let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
+        log(
+            LogTag::Wallet,
+            "ERROR",
+            &format!("Quote validation - Failed to parse out_amount '{}': {}", output_amount_str, e)
+        );
+        0.0
+    });
+
+    log(
+        LogTag::Wallet,
+        "DEBUG",
+        &format!("Quote validation - Parsed output_amount_raw: {}", output_amount_raw)
+    );
+
+    // Use actual token decimals from quote response
+    let token_decimals = swap_data.quote.out_decimals as u32;
+    let output_tokens = output_amount_raw / (10_f64).powi(token_decimals as i32);
+
+    let actual_price_per_token = if is_sol_to_token {
+        // For SOL to token: price = SOL spent / tokens received
+        let input_sol = lamports_to_sol(input_amount);
+        if output_tokens > 0.0 {
+            input_sol / output_tokens
+        } else {
+            0.0
+        }
+    } else {
+        // For token to SOL: price = SOL received / tokens spent
+        let input_token_decimals = swap_data.quote.in_decimals as u32;
+        let input_tokens = (input_amount as f64) / (10_f64).powi(input_token_decimals as i32);
+        let output_sol = lamports_to_sol(output_amount_raw as u64);
+        if input_tokens > 0.0 {
+            output_sol / input_tokens
+        } else {
+            0.0
+        }
+    };
+
+    log(
+        LogTag::Wallet,
+        "DEBUG",
+        &format!(
+            "Quote validation - Price calc debug: input_amount={}, output_amount_raw={}, output_decimals={}, actual_price={:.12}",
+            input_amount,
+            output_amount_raw,
+            token_decimals,
+            actual_price_per_token
+        )
+    );
+
+    let price_difference = (
+        ((actual_price_per_token - expected_price) / expected_price) *
+        100.0
+    ).abs();
+
+    log(
+        LogTag::Wallet,
+        "PRICE",
+        &format!(
+            "Quote validation - Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
+            expected_price,
+            actual_price_per_token,
+            price_difference
+        )
+    );
+
+    if price_difference > SLIPPAGE_TOLERANCE_PERCENT {
+        return Err(
+            SwapError::SlippageExceeded(
+                format!(
+                    "Price difference {:.2}% exceeds slippage tolerance {:.2}%",
+                    price_difference,
+                    SLIPPAGE_TOLERANCE_PERCENT
+                )
+            )
+        );
+    }
+
+    Ok(())
 }
 
 /// Structure to hold token account information
@@ -2851,92 +2222,7 @@ async fn close_ata(
     }
 }
 
-/// Builds and sends close account instruction using Solana SDK
-async fn build_and_send_close_instruction(
-    wallet_address: &str,
-    token_account: &str,
-    is_token_2022: bool
-) -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
-    // Parse addresses
-    let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|
-        SwapError::InvalidAmount(format!("Invalid wallet address: {}", e))
-    )?;
-
-    let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e|
-        SwapError::InvalidAmount(format!("Invalid token account: {}", e))
-    )?;
-
-    // Decode private key
-    let private_key_bytes = bs58
-        ::decode(&configs.main_wallet_private)
-        .into_vec()
-        .map_err(|e| SwapError::ConfigError(format!("Invalid private key: {}", e)))?;
-
-    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
-    )?;
-
-    // Build close account instruction
-    let close_instruction = if is_token_2022 {
-        // For Token-2022, use the Token Extensions program
-        build_token_2022_close_instruction(&token_account_pubkey, &owner_pubkey)?
-    } else {
-        // For regular SPL tokens, use standard close_account instruction
-        close_account(
-            &spl_token::id(),
-            &token_account_pubkey,
-            &owner_pubkey,
-            &owner_pubkey,
-            &[]
-        ).map_err(|e|
-            SwapError::TransactionError(format!("Failed to build close instruction: {}", e))
-        )?
-    };
-
-    log(
-        LogTag::Wallet,
-        "ATA",
-        &format!("Built close instruction for {} account", if is_token_2022 {
-            "Token-2022"
-        } else {
-            "SPL Token"
-        })
-    );
-
-    // Get recent blockhash via RPC
-    let recent_blockhash = get_latest_blockhash(&configs.rpc_url).await?;
-
-    // Build transaction
-    let transaction = Transaction::new_signed_with_payer(
-        &[close_instruction],
-        Some(&owner_pubkey),
-        &[&keypair],
-        recent_blockhash
-    );
-
-    log(LogTag::Wallet, "ATA", "Built and signed close transaction");
-
-    // Send transaction via RPC
-    send_close_transaction_via_rpc(&transaction, &configs).await
-}
-
-/// Builds close instruction for Token-2022 accounts
-fn build_token_2022_close_instruction(
-    token_account: &Pubkey,
-    owner: &Pubkey
-) -> Result<Instruction, SwapError> {
-    // Token-2022 uses the same close account instruction format
-    // but with different program ID
-    let token_2022_program_id = Pubkey::from_str(
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    ).map_err(|e| SwapError::TransactionError(format!("Invalid Token-2022 program ID: {}", e)))?;
-
-    close_account(&token_2022_program_id, token_account, owner, owner, &[]).map_err(|e|
-        SwapError::TransactionError(format!("Failed to build Token-2022 close instruction: {}", e))
-    )
-}
 
 /// Gets latest blockhash from Solana RPC
 pub async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {
@@ -3067,4 +2353,91 @@ pub async fn send_close_transaction_via_rpc(
     }
 
     Err(SwapError::TransactionError("All RPC endpoints failed to send transaction".to_string()))
+}
+
+/// Builds and sends close account instruction using Solana SDK
+async fn build_and_send_close_instruction(
+    wallet_address: &str,
+    token_account: &str,
+    is_token_2022: bool
+) -> Result<String, SwapError> {
+    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    // Parse addresses
+    let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|
+        SwapError::InvalidAmount(format!("Invalid wallet address: {}", e))
+    )?;
+
+    let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e|
+        SwapError::InvalidAmount(format!("Invalid token account: {}", e))
+    )?;
+
+    // Decode private key
+    let private_key_bytes = bs58
+        ::decode(&configs.main_wallet_private)
+        .into_vec()
+        .map_err(|e| SwapError::ConfigError(format!("Invalid private key: {}", e)))?;
+
+    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
+        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+    )?;
+
+    // Build close account instruction
+    let close_instruction = if is_token_2022 {
+        // For Token-2022, use the Token Extensions program
+        build_token_2022_close_instruction(&token_account_pubkey, &owner_pubkey)?
+    } else {
+        // For regular SPL tokens, use standard close_account instruction
+        close_account(
+            &spl_token::id(),
+            &token_account_pubkey,
+            &owner_pubkey,
+            &owner_pubkey,
+            &[]
+        ).map_err(|e|
+            SwapError::TransactionError(format!("Failed to build close instruction: {}", e))
+        )?
+    };
+
+    log(
+        LogTag::Wallet,
+        "ATA",
+        &format!("Built close instruction for {} account", if is_token_2022 {
+            "Token-2022"
+        } else {
+            "SPL Token"
+        })
+    );
+
+    // Get recent blockhash via RPC
+    let recent_blockhash = get_latest_blockhash(&configs.rpc_url).await?;
+
+    // Build transaction
+    let transaction = Transaction::new_signed_with_payer(
+        &[close_instruction],
+        Some(&owner_pubkey),
+        &[&keypair],
+        recent_blockhash
+    );
+
+    log(LogTag::Wallet, "ATA", "Built and signed close transaction");
+
+    // Send transaction via RPC
+    send_close_transaction_via_rpc(&transaction, &configs).await
+}
+
+/// Builds close instruction for Token-2022 accounts
+fn build_token_2022_close_instruction(
+    token_account: &Pubkey,
+    owner: &Pubkey
+) -> Result<Instruction, SwapError> {
+    // Token-2022 uses the same close account instruction format
+    // but with different program ID
+    let token_2022_program_id = Pubkey::from_str(
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    ).map_err(|e| SwapError::TransactionError(format!("Invalid Token-2022 program ID: {}", e)))?;
+
+    close_account(&token_2022_program_id, token_account, owner, owner, &[]).map_err(|e|
+        SwapError::TransactionError(format!("Failed to build Token-2022 close instruction: {}", e))
+    )
 }

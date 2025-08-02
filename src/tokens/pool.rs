@@ -8,7 +8,6 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_prices_enabled;
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_token_decimals_from_chain, get_cached_decimals };
-use crate::rpc::{ get_rpc_client, parse_pubkey };
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
 use std::collections::HashMap;

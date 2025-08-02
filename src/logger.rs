@@ -140,26 +140,6 @@ impl FileLogger {
         Ok(())
     }
 
-    fn rotate_log_file(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Close current file
-        if let Some(writer) = self.file_writer.take() {
-            drop(writer);
-        }
-
-        // Clean up old log files
-        self.cleanup_old_logs()?;
-
-        // Create new log file for today
-        let today = Local::now().format("%Y-%m-%d").to_string();
-        let log_file_path = self.log_dir.join(format!("screenerbot_{}.log", today));
-
-        let file = OpenOptions::new().create(true).append(true).open(&log_file_path)?;
-
-        self.file_writer = Some(BufWriter::new(file));
-
-        Ok(())
-    }
-
     fn cleanup_old_logs(&self) -> Result<(), Box<dyn std::error::Error>> {
         let now = Local::now();
         let cutoff_time = now - chrono::Duration::hours(LOG_RETENTION_HOURS as i64);

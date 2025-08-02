@@ -799,12 +799,6 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-async fn get_price_service_instance() -> Result<
-    Arc<tokio::sync::Mutex<Option<TokenPriceService>>>,
-    String
-> {
-    Ok(PRICE_SERVICE.clone())
-}
 
 /// Get token price using global service - instant response for cached prices
 pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
