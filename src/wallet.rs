@@ -688,171 +688,7 @@ async fn send_rpc_request(
     Err(SwapError::TransactionError("Invalid RPC response format".to_string()))
 }
 
-/// Calculates effective price with comprehensive ATA detection and fee separation
-/// This is the main function for accurate price calculation in trading and position management
-/// Uses swap_calculator.rs for detailed transaction analysis
-pub async fn calculate_effective_price(
-    client: &reqwest::Client,
-    transaction_signature: &str,
-    input_mint: &str,
-    output_mint: &str,
-    wallet_address: &str,
-    rpc_url: &str,
-    intended_amount: Option<f64>
-) -> Result<(f64, u64, u64, f64, bool, u64, f64), SwapError> {
-    use crate::swap_calculator::analyze_swap_comprehensive;
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "CALC_START",
-            &format!(
-                "🧮 Starting effective price calculation\n  TX: {}\n  Pair: {} -> {}\n  Wallet: {}\n  RPC: {}",
-                transaction_signature,
-                if input_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &input_mint[..8]
-                },
-                if output_mint == SOL_MINT {
-                    "SOL"
-                } else {
-                    &output_mint[..8]
-                },
-                &wallet_address[..8],
-                rpc_url
-            )
-        );
-    }
-
-    log(
-        LogTag::Wallet,
-        "ANALYZE",
-        &format!("Calculating effective price with ATA detection for transaction: {}", transaction_signature)
-    );
-
-    // Use comprehensive swap analysis from swap_calculator
-    let analysis_result = analyze_swap_comprehensive(
-        client,
-        transaction_signature,
-        input_mint,
-        output_mint,
-        wallet_address,
-        rpc_url,
-        intended_amount
-    ).await?;
-
-    if !analysis_result.success {
-        if is_debug_swap_enabled() {
-            log(
-                LogTag::Swap,
-                "CALC_FAILED",
-                &format!(
-                    "❌ Analysis failed: {}",
-                    analysis_result.error_message.as_ref().unwrap_or(&"Unknown error".to_string())
-                )
-            );
-        }
-        return Err(
-            SwapError::TransactionError(
-                analysis_result.error_message.unwrap_or("Swap analysis failed".to_string())
-            )
-        );
-    }
-
-    // Extract comprehensive analysis results
-    let effective_price = analysis_result.effective_price;
-    let input_raw = analysis_result.input_amount_raw;
-    let output_raw = analysis_result.output_amount_raw;
-    let slippage = analysis_result.slippage_percent;
-    let ata_detected = analysis_result.ata_creation_detected;
-    let ata_rent_lamports = analysis_result.ata_rent_lamports;
-    let ata_rent_sol = analysis_result.ata_rent_sol;
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "CALC_SUCCESS",
-            &format!(
-                "✅ Price calculation successful\n  📊 Effective Price: {:.12} SOL per token\n  💱 Input Raw: {} | Output Raw: {}\n  📈 Slippage: {:.3}%\n  🏦 ATA: {} ({:.6} SOL)",
-                effective_price,
-                input_raw,
-                output_raw,
-                slippage,
-                if ata_detected {
-                    "DETECTED"
-                } else {
-                    "NONE"
-                },
-                ata_rent_sol
-            )
-        );
-    }
-
-    log(
-        LogTag::Wallet,
-        "ATA_DETECT",
-        &format!(
-            "ATA Analysis: detected={}, rent={:.6} SOL ({} lamports), method={}",
-            ata_detected,
-            ata_rent_sol,
-            ata_rent_lamports,
-            analysis_result.analysis_method
-        )
-    );
-
-    log(
-        LogTag::Wallet,
-        "EFFECTIVE",
-        &format!(
-            "EffPrice: {:.15} SOL/token (input={:.6} {}, output={:.6} {}, slippage={:.2}%)",
-            effective_price,
-            analysis_result.input_amount,
-            if input_mint == SOL_MINT {
-                "SOL"
-            } else {
-                "tokens"
-            },
-            analysis_result.output_amount,
-            if output_mint == SOL_MINT {
-                "SOL"
-            } else {
-                "tokens"
-            },
-            slippage
-        )
-    );
-
-    // Return expanded result with ATA detection data
-    let result = (
-        effective_price,
-        input_raw,
-        output_raw,
-        slippage,
-        ata_detected,
-        ata_rent_lamports,
-        ata_rent_sol,
-    );
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "CALC_FINAL",
-            &format!(
-                "🎯 Final calculation result returned\n  📊 (price={:.12}, input_raw={}, output_raw={}, slippage={:.3}%, ata={}, ata_lamports={}, ata_sol={:.6})",
-                result.0,
-                result.1,
-                result.2,
-                result.3,
-                result.4,
-                result.5,
-                result.6
-            )
-        );
-    }
-
-    Ok(result)
-}
+// calculate_effective_price function has been moved to transactions/analyzer.rs
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
     if request.input_mint.is_empty() {
@@ -1331,17 +1167,21 @@ pub async fn execute_swap_with_quote(
         ata_detected,
         ata_rent_lamports,
         ata_rent_sol,
-    ) = match
-        calculate_effective_price(
-            &reqwest::Client::new(),
-            &transaction_signature,
-            input_mint,
-            output_mint,
-            &wallet_address,
-            &selected_rpc, // Use the same randomly selected RPC endpoint
-            Some(amount_sol) // Pass intended amount for accurate calculation
-        ).await
-    {
+    ) = match (
+        {
+            // Use the transaction analyzer for effective price calculation
+            let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
+            analyzer.calculate_effective_price(
+                &reqwest::Client::new(),
+                &transaction_signature,
+                input_mint,
+                output_mint,
+                &wallet_address,
+                &selected_rpc, // Use the same randomly selected RPC endpoint
+                Some(amount_sol) // Pass intended amount for accurate calculation
+            ).await
+        }
+    ) {
         Ok(
             (
                 effective_price,
@@ -1660,15 +1500,21 @@ pub async fn execute_swap(
         ata_detected,
         ata_rent_lamports,
         ata_rent_sol,
-    ) = calculate_effective_price(
-        &reqwest::Client::new(),
-        &transaction_signature,
-        input_mint,
-        output_mint,
-        &wallet_address,
-        &selected_rpc, // Use the same randomly selected RPC endpoint
-        None // No intended amount for legacy call
-    ).await.unwrap_or_else(|e| {
+    ) = (
+        {
+            // Use the transaction analyzer for effective price calculation
+            let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
+            analyzer.calculate_effective_price(
+                &reqwest::Client::new(),
+                &transaction_signature,
+                input_mint,
+                output_mint,
+                &wallet_address,
+                &selected_rpc, // Use the same randomly selected RPC endpoint
+                None // No intended amount for legacy call
+            ).await
+        }
+    ).unwrap_or_else(|e| {
         log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
         (0.0, 0, 0, 0.0, false, 0, 0.0)
     });
@@ -2159,15 +2005,21 @@ pub async fn sell_token(
         ata_detected,
         ata_rent_lamports,
         ata_rent_sol,
-    ) = calculate_effective_price(
-        &reqwest::Client::new(),
-        &transaction_signature,
-        &request.input_mint,
-        &request.output_mint,
-        &wallet_address,
-        &configs.rpc_url,
-        expected_sol_output // Pass expected SOL output for sell transactions
-    ).await.unwrap_or_else(|e| {
+    ) = (
+        {
+            // Use the transaction analyzer for effective price calculation
+            let analyzer = crate::transactions::analyzer::TransactionAnalyzer::new();
+            analyzer.calculate_effective_price(
+                &reqwest::Client::new(),
+                &transaction_signature,
+                &request.input_mint,
+                &request.output_mint,
+                &wallet_address,
+                &configs.rpc_url,
+                expected_sol_output // Pass expected SOL output for sell transactions
+            ).await
+        }
+    ).unwrap_or_else(|e| {
         log(LogTag::Wallet, "WARNING", &format!("Failed to calculate effective price: {}", e));
         (0.0, 0, 0, 0.0, false, 0, 0.0)
     });
