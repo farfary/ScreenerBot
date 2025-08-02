@@ -1,5 +1,6 @@
 use serde_json::Value;
 use regex::Regex;
+use base64::{ Engine as _, engine::general_purpose };
 use crate::{
     wallet::SwapError,
     global::{ is_debug_profit_enabled, is_debug_swap_enabled },
@@ -8,6 +9,9 @@ use crate::{
 
 /// SOL mint address (native SOL)
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+/// GMGN platform fee address - transfers to this address should be excluded from swap calculations
+const GMGN_FEE_ADDRESS: &str = "BB5dnY55FXS1e1NXqZDwCzgdYJdMCj3B92PU6Q5Fb6DT";
 
 /// Comprehensive swap analysis result containing all important details
 #[derive(Debug, Clone)]
@@ -79,6 +83,186 @@ fn lamports_to_sol(lamports: u64) -> f64 {
 /// Convert SOL to lamports
 fn sol_to_lamports(sol: f64) -> u64 {
     (sol * 1_000_000_000.0) as u64
+}
+
+/// Detects GMGN platform fees by analyzing SOL transfers to the GMGN fee address
+/// Returns the total GMGN fees in lamports
+fn detect_gmgn_fees(transaction_json: &Value) -> u64 {
+    let mut total_gmgn_fees = 0u64;
+
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "GMGN_FEE_CHECK", "🔍 Checking for GMGN platform fees...");
+    }
+
+    // Check system program transfers to GMGN fee address
+    if let Some(transaction) = transaction_json.get("transaction") {
+        if let Some(message) = transaction.get("message") {
+            if let Some(instructions) = message.get("instructions").and_then(|i| i.as_array()) {
+                if let Some(account_keys) = message.get("accountKeys").and_then(|k| k.as_array()) {
+                    for instruction in instructions {
+                        // Check for system program transfers
+                        if
+                            let Some(program_id_index) = instruction
+                                .get("programIdIndex")
+                                .and_then(|i| i.as_u64())
+                        {
+                            if
+                                let Some(program_id) = account_keys
+                                    .get(program_id_index as usize)
+                                    .and_then(|k| k.as_str())
+                            {
+                                if program_id == "11111111111111111111111111111111" {
+                                    // System Program
+                                    if
+                                        let Some(accounts) = instruction
+                                            .get("accounts")
+                                            .and_then(|a| a.as_array())
+                                    {
+                                        if accounts.len() >= 2 {
+                                            // Get destination account (index 1 for transfers)
+                                            if
+                                                let Some(dest_idx) = accounts
+                                                    .get(1)
+                                                    .and_then(|i| i.as_u64())
+                                            {
+                                                if
+                                                    let Some(dest_address) = account_keys
+                                                        .get(dest_idx as usize)
+                                                        .and_then(|k| k.as_str())
+                                                {
+                                                    if dest_address == GMGN_FEE_ADDRESS {
+                                                        // Try to decode transfer amount from instruction data
+                                                        if
+                                                            let Some(data) = instruction
+                                                                .get("data")
+                                                                .and_then(|d| d.as_str())
+                                                        {
+                                                            if
+                                                                let Ok(decoded_data) =
+                                                                    general_purpose::STANDARD.decode(
+                                                                        data
+                                                                    )
+                                                            {
+                                                                if decoded_data.len() >= 12 {
+                                                                    // System transfer instruction format: [instruction_type (4 bytes), amount (8 bytes)]
+                                                                    let amount_bytes =
+                                                                        &decoded_data[4..12];
+                                                                    let amount = u64::from_le_bytes(
+                                                                        [
+                                                                            amount_bytes[0],
+                                                                            amount_bytes[1],
+                                                                            amount_bytes[2],
+                                                                            amount_bytes[3],
+                                                                            amount_bytes[4],
+                                                                            amount_bytes[5],
+                                                                            amount_bytes[6],
+                                                                            amount_bytes[7],
+                                                                        ]
+                                                                    );
+                                                                    total_gmgn_fees += amount;
+
+                                                                    if is_debug_swap_enabled() {
+                                                                        log(
+                                                                            LogTag::Swap,
+                                                                            "GMGN_FEE_FOUND",
+                                                                            &format!(
+                                                                                "💰 GMGN fee detected: {} lamports ({:.6} SOL)",
+                                                                                amount,
+                                                                                lamports_to_sol(
+                                                                                    amount
+                                                                                )
+                                                                            )
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Also check inner instructions for GMGN fees
+    if let Some(meta) = transaction_json.get("meta") {
+        if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|i| i.as_array()) {
+            for inner_group in inner_instructions {
+                if
+                    let Some(instructions) = inner_group
+                        .get("instructions")
+                        .and_then(|i| i.as_array())
+                {
+                    for instruction in instructions {
+                        if let Some(program) = instruction.get("program").and_then(|p| p.as_str()) {
+                            if program == "system" {
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if
+                                        let Some(instruction_type) = parsed
+                                            .get("type")
+                                            .and_then(|t| t.as_str())
+                                    {
+                                        if instruction_type == "transfer" {
+                                            if let Some(info) = parsed.get("info") {
+                                                if
+                                                    let Some(dest) = info
+                                                        .get("destination")
+                                                        .and_then(|d| d.as_str())
+                                                {
+                                                    if dest == GMGN_FEE_ADDRESS {
+                                                        if
+                                                            let Some(amount) = info
+                                                                .get("lamports")
+                                                                .and_then(|l| l.as_u64())
+                                                        {
+                                                            total_gmgn_fees += amount;
+
+                                                            if is_debug_swap_enabled() {
+                                                                log(
+                                                                    LogTag::Swap,
+                                                                    "GMGN_FEE_INNER",
+                                                                    &format!(
+                                                                        "💰 GMGN inner fee detected: {} lamports ({:.6} SOL)",
+                                                                        amount,
+                                                                        lamports_to_sol(amount)
+                                                                    )
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if total_gmgn_fees > 0 && is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "GMGN_TOTAL_FEES",
+            &format!(
+                "💰 Total GMGN fees detected: {} lamports ({:.6} SOL)",
+                total_gmgn_fees,
+                lamports_to_sol(total_gmgn_fees)
+            )
+        );
+    }
+
+    total_gmgn_fees
 }
 
 /// Get transaction details from RPC
@@ -743,6 +927,24 @@ fn analyze_inner_instructions(
 ) -> Result<TokenTransferData, SwapError> {
     if is_debug_swap_enabled() {
         log(LogTag::Swap, "INNER_START", "🔍 Analyzing inner instructions for token transfers");
+        log(
+            LogTag::Swap,
+            "INNER_PARAMS",
+            &format!(
+                "🎯 Looking for: {} -> {} (wallet: {})",
+                if input_mint == "So11111111111111111111111111111111111111112" {
+                    "SOL"
+                } else {
+                    &input_mint[..8]
+                },
+                if output_mint == "So11111111111111111111111111111111111111112" {
+                    "SOL"
+                } else {
+                    &output_mint[..8]
+                },
+                &wallet_address[..8]
+            )
+        );
     }
 
     let meta = transaction_json
@@ -771,12 +973,56 @@ fn analyze_inner_instructions(
     let mut found_wallet_input = false;
     let mut found_wallet_output = false;
 
-    for inner_ix_group in inner_instructions {
+    for (group_idx, inner_ix_group) in inner_instructions.iter().enumerate() {
         if let Some(instructions) = inner_ix_group.get("instructions").and_then(|i| i.as_array()) {
-            for instruction in instructions {
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "INNER_GROUP",
+                    &format!("📦 Group {} has {} instructions", group_idx, instructions.len())
+                );
+            }
+
+            for (inst_idx, instruction) in instructions.iter().enumerate() {
+                if is_debug_swap_enabled() {
+                    // Log the basic instruction structure first
+                    if let Some(program_id) = instruction.get("programId").and_then(|p| p.as_str()) {
+                        log(
+                            LogTag::Swap,
+                            "INNER_INST",
+                            &format!(
+                                "🔧 Instruction {}.{}: Program {}",
+                                group_idx,
+                                inst_idx,
+                                &program_id[..8]
+                            )
+                        );
+                    }
+
+                    // Log the full instruction for debugging this specific token
+                    log(
+                        LogTag::Swap,
+                        "INNER_FULL",
+                        &format!(
+                            "📄 Full instruction: {}",
+                            serde_json
+                                ::to_string_pretty(instruction)
+                                .unwrap_or_else(|_| "Failed to serialize".to_string())
+                        )
+                    );
+                }
+
                 if let Some(parsed) = instruction.get("parsed") {
                     if let Some(info) = parsed.get("info") {
                         if let Some(instruction_type) = parsed.get("type").and_then(|t| t.as_str()) {
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "INNER_TYPE",
+                                    &format!("📋 Instruction type: {}", instruction_type)
+                                );
+                            }
+
                             // Handle both transferChecked and regular transfer instructions
                             if
                                 instruction_type == "transferChecked" ||
@@ -823,12 +1069,68 @@ fn analyze_inner_instructions(
                                     .and_then(|d| d.as_str())
                                     .unwrap_or("");
 
+                                if is_debug_swap_enabled() {
+                                    log(
+                                        LogTag::Swap,
+                                        "INNER_TRANSFER",
+                                        &format!(
+                                            "💸 Transfer: {} {} from {} to {} (mint: {})",
+                                            amount,
+                                            if mint.is_empty() {
+                                                "SOL"
+                                            } else {
+                                                &mint[..8]
+                                            },
+                                            &source[..8],
+                                            &destination[..8],
+                                            if mint.is_empty() {
+                                                "SOL"
+                                            } else {
+                                                &mint[..8]
+                                            }
+                                        )
+                                    );
+                                }
+
                                 // Check for wallet involvement in transfers
                                 let wallet_in_source =
                                     source.contains(wallet_address) || source == wallet_address;
                                 let wallet_in_dest =
                                     destination.contains(wallet_address) ||
                                     destination == wallet_address;
+
+                                if is_debug_swap_enabled() {
+                                    log(
+                                        LogTag::Swap,
+                                        "INNER_WALLET",
+                                        &format!(
+                                            "👛 Wallet check: source={}, dest={}, mint={}, target_input={}, target_output={}",
+                                            wallet_in_source,
+                                            wallet_in_dest,
+                                            if mint.is_empty() {
+                                                "SOL"
+                                            } else {
+                                                &mint[..8]
+                                            },
+                                            if
+                                                input_mint ==
+                                                "So11111111111111111111111111111111111111112"
+                                            {
+                                                "SOL"
+                                            } else {
+                                                &input_mint[..8]
+                                            },
+                                            if
+                                                output_mint ==
+                                                "So11111111111111111111111111111111111111112"
+                                            {
+                                                "SOL"
+                                            } else {
+                                                &output_mint[..8]
+                                            }
+                                        )
+                                    );
+                                }
 
                                 // Determine if this is input or output based on wallet involvement and mint
                                 if
@@ -887,6 +1189,131 @@ fn analyze_inner_instructions(
                                             )
                                         );
                                     }
+                                } else {
+                                    if is_debug_swap_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "INNER_SKIP",
+                                            &format!(
+                                                "⏭️ Skipped transfer: mint match={}, wallet match={}/{}, amount={:.6}",
+                                                mint == input_mint ||
+                                                    mint == output_mint ||
+                                                    (mint.is_empty() &&
+                                                        (input_mint == SOL_MINT ||
+                                                            output_mint == SOL_MINT)),
+                                                wallet_in_source,
+                                                wallet_in_dest,
+                                                amount
+                                            )
+                                        );
+                                    }
+                                }
+                            } else {
+                                if is_debug_swap_enabled() {
+                                    log(
+                                        LogTag::Swap,
+                                        "INNER_OTHER_TYPE",
+                                        &format!("🔍 Non-transfer instruction: {}", instruction_type)
+                                    );
+                                }
+                            }
+                        } else {
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "INNER_NO_TYPE",
+                                    "🚫 Instruction has no type field"
+                                );
+                            }
+                        }
+                    } else {
+                        if is_debug_swap_enabled() {
+                            log(LogTag::Swap, "INNER_NO_INFO", "🚫 Instruction has no info field");
+                        }
+                    }
+                } else {
+                    if is_debug_swap_enabled() {
+                        // Log unparsed instructions too - these might contain the actual transfers
+                        if
+                            let Some(program_id) = instruction
+                                .get("programId")
+                                .and_then(|p| p.as_str())
+                        {
+                            log(
+                                LogTag::Swap,
+                                "INNER_UNPARSED",
+                                &format!("🔍 Unparsed instruction: Program {}", &program_id[..8])
+                            );
+                            if let Some(accounts) = instruction.get("accounts") {
+                                log(
+                                    LogTag::Swap,
+                                    "INNER_ACCOUNTS",
+                                    &format!("📋 Accounts: {}", accounts)
+                                );
+                            }
+                            if let Some(data) = instruction.get("data") {
+                                log(LogTag::Swap, "INNER_DATA", &format!("📋 Data: {}", data));
+                            }
+                        }
+                    }
+
+                    // Try to handle unparsed SPL Token instructions
+                    // These come back as raw instruction data when RPC doesn't parse them
+                    if
+                        let Some(program_id_index) = instruction
+                            .get("programIdIndex")
+                            .and_then(|p| p.as_u64())
+                    {
+                        if
+                            let Some(accounts) = instruction
+                                .get("accounts")
+                                .and_then(|a| a.as_array())
+                        {
+                            if let Some(data) = instruction.get("data").and_then(|d| d.as_str()) {
+                                // Try to decode this as a potential token transfer
+                                if
+                                    let Ok(transfer_info) = try_decode_unparsed_token_transfer(
+                                        &transaction_json,
+                                        program_id_index as usize,
+                                        accounts,
+                                        data,
+                                        input_mint,
+                                        output_mint,
+                                        wallet_address
+                                    )
+                                {
+                                    if is_debug_swap_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "INNER_DECODED",
+                                            &format!(
+                                                "🔓 Decoded unparsed transfer: {} {} ({})",
+                                                transfer_info.amount,
+                                                if transfer_info.mint.is_empty() {
+                                                    "SOL"
+                                                } else {
+                                                    &transfer_info.mint[..8]
+                                                },
+                                                if transfer_info.is_input {
+                                                    "INPUT"
+                                                } else {
+                                                    "OUTPUT"
+                                                }
+                                            )
+                                        );
+                                    }
+
+                                    if transfer_info.is_input {
+                                        input_amount = transfer_info.amount;
+                                        input_decimals = transfer_info.decimals;
+                                        found_wallet_input = true;
+                                        transfer_count += 1;
+                                    } else {
+                                        output_amount = transfer_info.amount;
+                                        output_decimals = transfer_info.decimals;
+                                        found_wallet_output = true;
+                                        transfer_count += 1;
+                                    }
                                 }
                             }
                         }
@@ -897,6 +1324,7 @@ fn analyze_inner_instructions(
     }
 
     // Handle SOL transfers for SOL-token swaps - use balance changes for more accuracy
+    // This is crucial for swaps involving wrapped SOL (WSOL) which is common in DEX routing
     if input_mint == SOL_MINT || output_mint == SOL_MINT {
         match calculate_sol_balance_change(transaction_json, wallet_address) {
             Ok(sol_change) => {
@@ -909,7 +1337,10 @@ fn analyze_inner_instructions(
                         log(
                             LogTag::Swap,
                             "INNER_SOL_IN",
-                            &format!("💰 SOL input amount: {:.6} SOL", sol_change)
+                            &format!(
+                                "💰 SOL input amount: {:.6} SOL (using balance change method)",
+                                sol_change
+                            )
                         );
                     }
                 } else if output_mint == SOL_MINT && (!found_wallet_output || output_amount == 0.0) {
@@ -921,7 +1352,10 @@ fn analyze_inner_instructions(
                         log(
                             LogTag::Swap,
                             "INNER_SOL_OUT",
-                            &format!("💰 SOL output amount: {:.6} SOL", sol_change)
+                            &format!(
+                                "💰 SOL output amount: {:.6} SOL (using balance change method)",
+                                sol_change
+                            )
                         );
                     }
                 }
@@ -932,6 +1366,55 @@ fn analyze_inner_instructions(
                         LogTag::Swap,
                         "INNER_SOL_ERROR",
                         &format!("⚠️ Failed to calculate SOL balance change: {}", e)
+                    );
+                }
+            }
+        }
+    }
+
+    // Try to get token amounts from token balance changes if not found in instructions
+    if (!found_wallet_input || input_amount == 0.0) && input_mint != SOL_MINT {
+        if
+            let Ok(token_change) = calculate_token_balance_change_for_inner(
+                transaction_json,
+                input_mint,
+                wallet_address
+            )
+        {
+            if token_change > 0.0 {
+                input_amount = token_change;
+                found_wallet_input = true;
+                transfer_count += 1;
+
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "INNER_TOKEN_IN_FALLBACK",
+                        &format!("💰 Input token amount from balance: {:.6} tokens", token_change)
+                    );
+                }
+            }
+        }
+    }
+
+    if (!found_wallet_output || output_amount == 0.0) && output_mint != SOL_MINT {
+        if
+            let Ok(token_change) = calculate_token_balance_change_for_inner(
+                transaction_json,
+                output_mint,
+                wallet_address
+            )
+        {
+            if token_change > 0.0 {
+                output_amount = token_change;
+                found_wallet_output = true;
+                transfer_count += 1;
+
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "INNER_TOKEN_OUT_FALLBACK",
+                        &format!("💰 Output token amount from balance: {:.6} tokens", token_change)
                     );
                 }
             }
@@ -984,6 +1467,19 @@ fn analyze_token_balances(
     output_mint: &str,
     wallet_address: &str
 ) -> Result<TokenTransferData, SwapError> {
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "BALANCE_START",
+            &format!(
+                "🔍 Analyzing token balances - Input: {}, Output: {}, Wallet: {}",
+                &input_mint[..8],
+                &output_mint[..8],
+                &wallet_address[..8]
+            )
+        );
+    }
+
     let meta = transaction_json
         .get("meta")
         .ok_or_else(|| SwapError::InvalidResponse("Missing metadata".to_string()))?;
@@ -998,52 +1494,186 @@ fn analyze_token_balances(
         .and_then(|b| b.as_array())
         .unwrap_or(&empty_vec);
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "BALANCE_COUNTS",
+            &format!(
+                "📊 Balance arrays - Pre: {} tokens, Post: {} tokens",
+                pre_token_balances.len(),
+                post_token_balances.len()
+            )
+        );
+    }
+
     let mut input_amount = 0.0;
     let mut output_amount = 0.0;
     let mut input_decimals = 0u8;
     let mut output_decimals = 0u8;
 
-    // Find token balance changes
-    let input_change = calculate_token_balance_change(
-        pre_token_balances,
-        post_token_balances,
-        input_mint,
-        wallet_address
-    )?;
-    let output_change = calculate_token_balance_change(
-        pre_token_balances,
-        post_token_balances,
-        output_mint,
-        wallet_address
-    )?;
-
-    // Get decimals
-    input_decimals = get_decimals_from_balances(
-        pre_token_balances,
-        post_token_balances,
-        input_mint
-    )?;
-    output_decimals = get_decimals_from_balances(
-        pre_token_balances,
-        post_token_balances,
-        output_mint
-    )?;
-
-    // Handle SOL separately
+    // Handle SOL separately with enhanced analysis
     if input_mint == SOL_MINT || output_mint == SOL_MINT {
-        let sol_change = calculate_sol_balance_change(transaction_json, wallet_address)?;
-        if input_mint == SOL_MINT {
-            input_amount = sol_change;
-            input_decimals = 9;
-            output_amount = output_change;
-        } else {
-            input_amount = input_change;
-            output_amount = sol_change;
-            output_decimals = 9;
+        match calculate_sol_balance_change(transaction_json, wallet_address) {
+            Ok(sol_change) => {
+                if input_mint == SOL_MINT {
+                    input_amount = sol_change;
+                    input_decimals = 9;
+
+                    // Get token output amount
+                    match
+                        calculate_token_balance_change(
+                            pre_token_balances,
+                            post_token_balances,
+                            output_mint,
+                            wallet_address
+                        )
+                    {
+                        Ok(token_change) => {
+                            output_amount = token_change;
+                            output_decimals = get_decimals_from_balances(
+                                pre_token_balances,
+                                post_token_balances,
+                                output_mint
+                            ).unwrap_or(6); // Default to 6 if not found
+
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "BALANCE_SOL_BUY",
+                                    &format!(
+                                        "💰 SOL→Token: {:.6} SOL → {:.6} tokens (decimals: {})",
+                                        input_amount,
+                                        output_amount,
+                                        output_decimals
+                                    )
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "BALANCE_TOKEN_ERROR",
+                                    &format!("⚠️ Failed to get token balance change: {}", e)
+                                );
+                            }
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    output_amount = sol_change;
+                    output_decimals = 9;
+
+                    // Get token input amount
+                    match
+                        calculate_token_balance_change(
+                            pre_token_balances,
+                            post_token_balances,
+                            input_mint,
+                            wallet_address
+                        )
+                    {
+                        Ok(token_change) => {
+                            input_amount = token_change;
+                            input_decimals = get_decimals_from_balances(
+                                pre_token_balances,
+                                post_token_balances,
+                                input_mint
+                            ).unwrap_or(6); // Default to 6 if not found
+
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "BALANCE_SOL_SELL",
+                                    &format!(
+                                        "💰 Token→SOL: {:.6} tokens → {:.6} SOL (decimals: {})",
+                                        input_amount,
+                                        output_amount,
+                                        input_decimals
+                                    )
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "BALANCE_TOKEN_ERROR",
+                                    &format!("⚠️ Failed to get token balance change: {}", e)
+                                );
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "BALANCE_SOL_ERROR",
+                        &format!("⚠️ Failed to calculate SOL balance change: {}", e)
+                    );
+                }
+                return Err(e);
+            }
         }
     } else {
+        // Token-to-Token swap (rare)
+        let input_change = calculate_token_balance_change(
+            pre_token_balances,
+            post_token_balances,
+            input_mint,
+            wallet_address
+        )?;
+        let output_change = calculate_token_balance_change(
+            pre_token_balances,
+            post_token_balances,
+            output_mint,
+            wallet_address
+        )?;
+
         input_amount = input_change;
         output_amount = output_change;
+
+        input_decimals = get_decimals_from_balances(
+            pre_token_balances,
+            post_token_balances,
+            input_mint
+        )?;
+        output_decimals = get_decimals_from_balances(
+            pre_token_balances,
+            post_token_balances,
+            output_mint
+        )?;
+
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "BALANCE_TOKEN_SWAP",
+                &format!(
+                    "💰 Token→Token: {:.6} {} → {:.6} {}",
+                    input_amount,
+                    &input_mint[..8],
+                    output_amount,
+                    &output_mint[..8]
+                )
+            );
+        }
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "BALANCE_RESULT",
+            &format!(
+                "📊 Balance analysis result - Input: {:.6} (decimals: {}), Output: {:.6} (decimals: {})",
+                input_amount,
+                input_decimals,
+                output_amount,
+                output_decimals
+            )
+        );
     }
 
     if input_amount > 0.0 && output_amount > 0.0 {
@@ -1056,7 +1686,17 @@ fn analyze_token_balances(
             method: "Token Balances".to_string(),
         })
     } else {
-        Err(SwapError::InvalidResponse("Could not extract amounts from token balances".to_string()))
+        let error_msg = format!(
+            "Could not extract amounts from token balances. Input: {:.6}, Output: {:.6}",
+            input_amount,
+            output_amount
+        );
+
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "BALANCE_FAILED", &format!("❌ {}", error_msg));
+        }
+
+        Err(SwapError::InvalidResponse(error_msg))
     }
 }
 
@@ -1179,6 +1819,29 @@ fn calculate_token_balance_change(
     Ok(change.abs())
 }
 
+/// Helper function for inner instructions to get token balance changes
+fn calculate_token_balance_change_for_inner(
+    transaction_json: &Value,
+    mint: &str,
+    wallet_address: &str
+) -> Result<f64, SwapError> {
+    let meta = transaction_json
+        .get("meta")
+        .ok_or_else(|| SwapError::InvalidResponse("Missing metadata".to_string()))?;
+
+    let empty_vec = vec![];
+    let pre_token_balances = meta
+        .get("preTokenBalances")
+        .and_then(|b| b.as_array())
+        .unwrap_or(&empty_vec);
+    let post_token_balances = meta
+        .get("postTokenBalances")
+        .and_then(|b| b.as_array())
+        .unwrap_or(&empty_vec);
+
+    calculate_token_balance_change(pre_token_balances, post_token_balances, mint, wallet_address)
+}
+
 fn calculate_sol_balance_change(
     transaction_json: &Value,
     wallet_address: &str
@@ -1244,26 +1907,88 @@ fn calculate_sol_balance_change(
         .as_u64()
         .ok_or_else(|| SwapError::InvalidResponse("Invalid postBalance".to_string()))?;
 
-    // Calculate actual SOL change (positive = received, negative = spent)
-    let sol_change_lamports = (post_balance as i64) - (pre_balance as i64);
+    // Calculate raw SOL change (positive = received, negative = spent)
+    let raw_sol_change_lamports = (post_balance as i64) - (pre_balance as i64);
 
-    // Exclude transaction fee from the calculation for better accuracy
-    let fee = meta
+    // Get transaction fee
+    let transaction_fee = meta
         .get("fee")
         .and_then(|f| f.as_u64())
-        .unwrap_or(0) as i64;
+        .unwrap_or(0);
 
-    // For SOL outgoing (buying tokens), add back the fee to get pure trade amount
-    // For SOL incoming (selling tokens), the fee was already deducted from balance
-    let adjusted_lamports = if sol_change_lamports < 0 {
-        // Spent SOL: remove fee from the spent amount to get pure trade
-        (sol_change_lamports + fee).abs() as u64
+    // Detect GMGN platform fees that should be excluded from swap calculations
+    let gmgn_fees_lamports = detect_gmgn_fees(transaction_json);
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "SOL_BALANCE_ANALYSIS",
+            &format!(
+                "💰 SOL Analysis - Raw Change: {} lamports, TX Fee: {} lamports, GMGN Fees: {} lamports",
+                raw_sol_change_lamports,
+                transaction_fee,
+                gmgn_fees_lamports
+            )
+        );
+    }
+
+    // Calculate net SOL change for the actual swap (excluding fees)
+    let adjusted_lamports = if raw_sol_change_lamports < 0 {
+        // SOL spent (buying tokens): remove transaction fee and GMGN fees from the amount
+        // to get the pure swap amount
+        let total_fees = transaction_fee + gmgn_fees_lamports;
+        let pure_swap_amount = (raw_sol_change_lamports.abs() as u64).saturating_sub(total_fees);
+
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "SOL_SPENT_BREAKDOWN",
+                &format!(
+                    "📤 SOL Spent Analysis - Total: {} lamports, TX Fee: {} lamports, GMGN Fee: {} lamports, Pure Swap: {} lamports",
+                    raw_sol_change_lamports.abs(),
+                    transaction_fee,
+                    gmgn_fees_lamports,
+                    pure_swap_amount
+                )
+            );
+        }
+
+        pure_swap_amount
     } else {
-        // Received SOL: use as-is (fee already deducted)
-        sol_change_lamports as u64
+        // SOL received (selling tokens): the balance already excludes transaction fee,
+        // but we need to check if any GMGN fees were deducted
+        let received_amount = raw_sol_change_lamports as u64;
+
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "SOL_RECEIVED_BREAKDOWN",
+                &format!(
+                    "📥 SOL Received Analysis - Amount: {} lamports, GMGN Fees: {} lamports",
+                    received_amount,
+                    gmgn_fees_lamports
+                )
+            );
+        }
+
+        received_amount
     };
 
-    Ok(lamports_to_sol(adjusted_lamports))
+    let final_sol_amount = lamports_to_sol(adjusted_lamports);
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "SOL_FINAL_AMOUNT",
+            &format!(
+                "💹 Final SOL amount for swap calculation: {:.6} SOL ({} lamports)",
+                final_sol_amount,
+                adjusted_lamports
+            )
+        );
+    }
+
+    Ok(final_sol_amount)
 }
 
 fn get_decimals_from_balances(
@@ -1531,7 +2256,25 @@ fn extract_transaction_fee(transaction_json: &Value) -> (u64, f64) {
 }
 
 fn extract_platform_fee(transaction_json: &Value) -> Option<f64> {
-    // Look for platform-specific fees in logs
+    // Detect GMGN platform fees
+    let gmgn_fees_lamports = detect_gmgn_fees(transaction_json);
+
+    if gmgn_fees_lamports > 0 {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "PLATFORM_FEE",
+                &format!(
+                    "💰 Platform fee detected: {} lamports ({:.6} SOL)",
+                    gmgn_fees_lamports,
+                    lamports_to_sol(gmgn_fees_lamports)
+                )
+            );
+        }
+        return Some(lamports_to_sol(gmgn_fees_lamports));
+    }
+
+    // Look for other platform-specific fees in logs
     if let Some(meta) = transaction_json.get("meta") {
         if let Some(logs) = meta.get("logMessages").and_then(|l| l.as_array()) {
             for log in logs {
@@ -1539,11 +2282,23 @@ fn extract_platform_fee(transaction_json: &Value) -> Option<f64> {
                     if log_text.contains("platform fee") || log_text.contains("Platform Fee") {
                         // Parse platform fee from log message
                         // This is implementation specific to each DEX
+                        if let Ok(number_regex) = Regex::new(r"(\d+(?:\.\d+)?)\s*(?:SOL|lamports)") {
+                            if let Some(cap) = number_regex.captures(log_text) {
+                                if let Ok(amount) = cap.get(1).unwrap().as_str().parse::<f64>() {
+                                    if log_text.contains("lamports") {
+                                        return Some(lamports_to_sol(amount as u64));
+                                    } else {
+                                        return Some(amount);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
     None
 }
 
@@ -1798,4 +2553,505 @@ fn build_swap_result(
         block_height: extract_block_height(transaction_json),
         block_time: extract_block_time(transaction_json),
     })
+}
+
+#[derive(Debug)]
+struct UnparsedTransferInfo {
+    amount: f64,
+    decimals: u8,
+    mint: String,
+    is_input: bool, // true if this is input from wallet, false if output to wallet
+}
+
+/// Try to decode unparsed token transfer instructions
+/// This handles cases where the RPC doesn't parse SPL Token instructions automatically
+fn try_decode_unparsed_token_transfer(
+    transaction_json: &Value,
+    program_id_index: usize,
+    accounts: &[Value],
+    data: &str,
+    input_mint: &str,
+    output_mint: &str,
+    wallet_address: &str
+) -> Result<UnparsedTransferInfo, SwapError> {
+    // Get account keys from transaction
+    let account_keys = transaction_json
+        .get("transaction")
+        .and_then(|tx| tx.get("message"))
+        .and_then(|msg| msg.get("accountKeys"))
+        .and_then(|keys| keys.as_array())
+        .ok_or_else(|| SwapError::InvalidResponse("Could not get account keys".to_string()))?;
+
+    // Get program ID
+    let program_id = account_keys
+        .get(program_id_index)
+        .and_then(|key| key.as_str())
+        .ok_or_else(|| SwapError::InvalidResponse("Could not get program ID".to_string()))?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE",
+            &format!(
+                "🔍 Decoding: program={}, accounts={}, data={}",
+                &program_id[..8],
+                accounts.len(),
+                &data[..std::cmp::min(20, data.len())]
+            )
+        );
+    }
+
+    // Check if this is a known SPL Token program
+    let is_spl_token =
+        program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" || // SPL Token
+        program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"; // SPL Token 2022
+
+    if !is_spl_token {
+        return Err(SwapError::InvalidResponse("Not an SPL Token instruction".to_string()));
+    }
+
+    // For SPL Token transfers, we typically need at least 3 accounts:
+    // [0] source account, [1] destination account, [2] authority
+    if accounts.len() < 3 {
+        return Err(
+            SwapError::InvalidResponse("Insufficient accounts for token transfer".to_string())
+        );
+    }
+
+    // Get account addresses
+    let source_account_idx = accounts[0]
+        .as_u64()
+        .ok_or_else(||
+            SwapError::InvalidResponse("Invalid source account index".to_string())
+        )? as usize;
+
+    let dest_account_idx = accounts[1]
+        .as_u64()
+        .ok_or_else(||
+            SwapError::InvalidResponse("Invalid destination account index".to_string())
+        )? as usize;
+
+    let source_account = account_keys
+        .get(source_account_idx)
+        .and_then(|key| key.as_str())
+        .ok_or_else(|| SwapError::InvalidResponse("Could not get source account".to_string()))?;
+
+    let dest_account = account_keys
+        .get(dest_account_idx)
+        .and_then(|key| key.as_str())
+        .ok_or_else(||
+            SwapError::InvalidResponse("Could not get destination account".to_string())
+        )?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_ACCOUNTS_DETAIL",
+            &format!(
+                "📋 Source: {}, Dest: {}, Wallet: {}, Match: source={}, dest={}",
+                &source_account[..8],
+                &dest_account[..8],
+                &wallet_address[..8],
+                source_account.contains(wallet_address) || source_account == wallet_address,
+                dest_account.contains(wallet_address) || dest_account == wallet_address
+            )
+        );
+    }
+
+    // Try to determine token amounts from balance changes
+    // This is more reliable than trying to decode the instruction data
+    let meta = transaction_json
+        .get("meta")
+        .ok_or_else(|| SwapError::InvalidResponse("Missing metadata".to_string()))?;
+
+    let empty_vec = vec![];
+    let pre_token_balances = meta
+        .get("preTokenBalances")
+        .and_then(|b| b.as_array())
+        .unwrap_or(&empty_vec);
+    let post_token_balances = meta
+        .get("postTokenBalances")
+        .and_then(|b| b.as_array())
+        .unwrap_or(&empty_vec);
+
+    // Check if wallet is involved and determine direction
+    let wallet_is_source =
+        source_account.contains(wallet_address) || source_account == wallet_address;
+    let wallet_is_dest = dest_account.contains(wallet_address) || dest_account == wallet_address;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE_WALLET_CHECK",
+            &format!(
+                "👛 Wallet involvement: source={}, dest={}, both={}",
+                wallet_is_source,
+                wallet_is_dest,
+                wallet_is_source && wallet_is_dest
+            )
+        );
+    }
+
+    // For Raydium CPMM swaps, token transfers happen between pool accounts, not directly with wallet
+    // We need to detect transfers that involve our target mints, even if wallet isn't directly involved
+    let source_mint_matches = source_account == input_mint || source_account == output_mint;
+    let dest_mint_matches = dest_account == input_mint || dest_account == output_mint;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE_MINT_CHECK",
+            &format!(
+                "🪙 Mint matching: source_mint={}, dest_mint={}, input_mint={}, output_mint={}",
+                source_mint_matches,
+                dest_mint_matches,
+                input_mint,
+                output_mint
+            )
+        );
+    }
+
+    // Accept transfer if either:
+    // 1. Wallet is directly involved (traditional pattern)
+    // 2. Transfer involves our target mints (Raydium CPMM pattern)
+    let wallet_involved = wallet_is_source || wallet_is_dest;
+    let mint_involved = source_mint_matches || dest_mint_matches;
+
+    if !wallet_involved && !mint_involved {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "INNER_DECODE_NO_RELEVANCE",
+                "❌ Neither wallet nor target mints involved - skipping"
+            );
+        }
+        return Err(
+            SwapError::InvalidResponse(
+                "Neither wallet nor target mints involved in transfer".to_string()
+            )
+        );
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE_RELEVANT",
+            &format!(
+                "✅ Transfer relevant: wallet_involved={}, mint_involved={}",
+                wallet_involved,
+                mint_involved
+            )
+        );
+    }
+
+    // Find the relevant token account and its mint
+    let mut transfer_mint = String::new();
+    let mut transfer_amount = 0.0;
+    let mut transfer_decimals = 0u8;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE_STEP1",
+            &format!(
+                "🔍 Step 1: Looking for balance changes in accounts {} and {}",
+                source_account_idx,
+                dest_account_idx
+            )
+        );
+    }
+
+    // Look for balance changes in the relevant accounts
+    for (i, balance) in pre_token_balances.iter().chain(post_token_balances.iter()).enumerate() {
+        if let Some(account_index) = balance.get("accountIndex").and_then(|i| i.as_u64()) {
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "INNER_DECODE_BALANCE",
+                    &format!(
+                        "🔍 Checking balance {} - account_index: {}, target accounts: {}, {}",
+                        i,
+                        account_index,
+                        source_account_idx,
+                        dest_account_idx
+                    )
+                );
+            }
+
+            if
+                (account_index as usize) == source_account_idx ||
+                (account_index as usize) == dest_account_idx
+            {
+                if let Some(mint) = balance.get("mint").and_then(|m| m.as_str()) {
+                    transfer_mint = mint.to_string();
+
+                    if
+                        let Some(decimals) = balance
+                            .get("uiTokenAmount")
+                            .and_then(|ta| ta.get("decimals"))
+                            .and_then(|d| d.as_u64())
+                    {
+                        transfer_decimals = decimals as u8;
+                    }
+
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "INNER_DECODE_FOUND_MINT",
+                            &format!(
+                                "✅ Found mint: {}, decimals: {}",
+                                &mint[..8],
+                                transfer_decimals
+                            )
+                        );
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if transfer_mint.is_empty() {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "INNER_DECODE_NO_MINT",
+                "❌ Could not determine transfer mint from balance changes"
+            );
+        }
+        return Err(SwapError::InvalidResponse("Could not determine transfer mint".to_string()));
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE_MINT_CHECK",
+            &format!(
+                "🔍 Transfer mint: {}, Input mint: {}, Output mint: {}, Match: {}",
+                &transfer_mint[..std::cmp::min(8, transfer_mint.len())],
+                if input_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &input_mint[..8]
+                },
+                if output_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &output_mint[..8]
+                },
+                transfer_mint == input_mint || transfer_mint == output_mint
+            )
+        );
+    }
+
+    // Calculate the actual transfer amount from balance changes
+    if transfer_mint == input_mint || transfer_mint == output_mint {
+        // Try to get amount from wallet balance changes first (traditional pattern)
+        let amount_from_wallet = if wallet_involved {
+            match
+                calculate_token_balance_change(
+                    pre_token_balances,
+                    post_token_balances,
+                    &transfer_mint,
+                    wallet_address
+                )
+            {
+                Ok(amount) => Some(amount),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        // If we can't get amount from wallet, try to decode from instruction data
+        transfer_amount = if let Some(amount) = amount_from_wallet {
+            amount
+        } else {
+            // For Raydium CPMM, use balance changes from pool accounts instead of instruction data
+            // Try to find the balance change for the relevant accounts
+            let mut found_amount = 0.0;
+
+            // Look through all balance changes for the involved accounts
+            for balance in pre_token_balances.iter().chain(post_token_balances.iter()) {
+                if let Some(account_index) = balance.get("accountIndex").and_then(|i| i.as_u64()) {
+                    if
+                        (account_index as usize) == source_account_idx ||
+                        (account_index as usize) == dest_account_idx
+                    {
+                        if let Some(mint) = balance.get("mint").and_then(|m| m.as_str()) {
+                            if mint == transfer_mint {
+                                if
+                                    let Some(ui_amount) = balance
+                                        .get("uiTokenAmount")
+                                        .and_then(|ta| ta.get("uiAmount"))
+                                        .and_then(|ua| ua.as_f64())
+                                {
+                                    found_amount = ui_amount.abs(); // Use absolute value
+
+                                    if is_debug_swap_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "INNER_DECODE_BALANCE_AMOUNT",
+                                            &format!(
+                                                "💰 Found balance amount: {} for account {} mint {}",
+                                                found_amount,
+                                                account_index,
+                                                &mint[..8]
+                                            )
+                                        );
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if found_amount > 0.0 {
+                found_amount
+            } else {
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "INNER_DECODE_NO_BALANCE",
+                        "❌ Could not find balance amount in pool transfers"
+                    );
+                }
+                return Err(
+                    SwapError::InvalidResponse(
+                        "Could not determine transfer amount from pool balances".to_string()
+                    )
+                );
+            }
+        };
+
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "INNER_DECODE_AMOUNT",
+                &format!(
+                    "💰 Final calculated amount: {} for mint {}",
+                    transfer_amount,
+                    &transfer_mint[..8]
+                )
+            );
+        }
+
+        let is_input = if wallet_involved {
+            // Traditional pattern: wallet directly involved
+            transfer_mint == input_mint && wallet_is_source
+        } else {
+            // Raydium CPMM pattern: infer direction from mint type
+            // If we're doing SOL->Token swap and this transfer involves the token mint, it's output
+            // If we're doing Token->SOL swap and this transfer involves the token mint, it's input
+            if input_mint == SOL_MINT && transfer_mint == output_mint {
+                false // Token mint in SOL->Token swap = output
+            } else if output_mint == SOL_MINT && transfer_mint == input_mint {
+                true // Token mint in Token->SOL swap = input
+            } else if transfer_mint == input_mint {
+                true // Input mint = input
+            } else {
+                false // Output mint = output
+            }
+        };
+
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "INNER_DECODE_SUCCESS",
+                &format!(
+                    "✅ Decoded transfer: {} {} ({}), mint={}, decimals={}, wallet_source={}, wallet_dest={}",
+                    transfer_amount,
+                    if transfer_mint == SOL_MINT {
+                        "SOL"
+                    } else {
+                        &transfer_mint[..8]
+                    },
+                    if is_input {
+                        "INPUT"
+                    } else {
+                        "OUTPUT"
+                    },
+                    &transfer_mint[..8],
+                    transfer_decimals,
+                    wallet_is_source,
+                    wallet_is_dest
+                )
+            );
+        }
+
+        return Ok(UnparsedTransferInfo {
+            amount: transfer_amount,
+            decimals: transfer_decimals,
+            mint: transfer_mint,
+            is_input,
+        });
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INNER_DECODE_FAIL",
+            &format!(
+                "❌ Transfer mint {} doesn't match expected mints (input: {}, output: {})",
+                &transfer_mint[..std::cmp::min(8, transfer_mint.len())],
+                if input_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &input_mint[..8]
+                },
+                if output_mint == SOL_MINT {
+                    "SOL"
+                } else {
+                    &output_mint[..8]
+                }
+            )
+        );
+    }
+
+    Err(SwapError::InvalidResponse("Transfer mint doesn't match expected mints".to_string()))
+}
+
+/// Decode the transfer amount from SPL Token transfer instruction data
+fn decode_spl_token_transfer_amount(data: &str) -> Result<u64, SwapError> {
+    use base64::Engine as _;
+
+    // Try base64 first
+    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) {
+        return decode_spl_token_amount_from_bytes(&bytes);
+    }
+
+    // Try base58 (common in Solana)
+    if let Ok(bytes) = bs58::decode(data).into_vec() {
+        return decode_spl_token_amount_from_bytes(&bytes);
+    }
+
+    Err(SwapError::InvalidResponse("Could not decode instruction data".to_string()))
+}
+
+/// Decode SPL Token transfer amount from raw bytes
+fn decode_spl_token_amount_from_bytes(bytes: &[u8]) -> Result<u64, SwapError> {
+    if bytes.len() < 9 {
+        return Err(
+            SwapError::InvalidResponse(
+                "Instruction data too short for SPL Token transfer".to_string()
+            )
+        );
+    }
+
+    // SPL Token Transfer instruction format:
+    // [0] = instruction discriminator (3 for Transfer)
+    // [1..9] = amount as u64 little endian
+    if bytes[0] != 3 {
+        return Err(SwapError::InvalidResponse("Not a SPL Token transfer instruction".to_string()));
+    }
+
+    // Extract the 8-byte amount in little endian format
+    let amount_bytes: [u8; 8] = bytes[1..9]
+        .try_into()
+        .map_err(|_| SwapError::InvalidResponse("Failed to extract amount bytes".to_string()))?;
+
+    let amount = u64::from_le_bytes(amount_bytes);
+    Ok(amount)
 }
