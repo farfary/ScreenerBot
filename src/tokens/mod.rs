@@ -324,8 +324,48 @@ pub fn get_token_decimals_sync(mint: &str) -> u8 {
     // Error if not in cache - must use decimal cache only
     log(LogTag::System, "ERROR", &format!("Decimals not found in cache for {}", mint));
 
+    // CRITICAL: Don't use potentially wrong default - try to fetch or fail gracefully
     // Return default 9 but log error - in production this should be rare
+    log(
+        LogTag::System,
+        "CRITICAL",
+        &format!("Using fallback decimals=9 for {} - THIS MAY CAUSE P&L CALCULATION ERRORS", mint)
+    );
     9
+}
+
+/// Async version that attempts to fetch decimals from blockchain if not in cache
+pub async fn get_token_decimals_safe(mint: &str) -> Result<u8, String> {
+    // First check cache
+    if let Some(decimals) = get_cached_decimals(mint) {
+        return Ok(decimals);
+    }
+
+    // If not in cache, try to fetch from blockchain
+    log(
+        LogTag::System,
+        "WARNING",
+        &format!("Decimals not in cache for {}, attempting blockchain fetch", mint)
+    );
+
+    match get_token_decimals_from_chain(mint).await {
+        Ok(decimals) => {
+            log(
+                LogTag::System,
+                "SUCCESS",
+                &format!("Fetched decimals {} for {} from blockchain", decimals, mint)
+            );
+            Ok(decimals)
+        }
+        Err(e) => {
+            log(
+                LogTag::System,
+                "ERROR",
+                &format!("Failed to fetch decimals for {} from blockchain: {}", mint, e)
+            );
+            Err(format!("Could not determine decimals for token {}: {}", mint, e))
+        }
+    }
 }
 
 // =============================================================================

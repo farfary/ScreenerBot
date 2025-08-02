@@ -34,7 +34,7 @@ use chrono::{ Duration as ChronoDuration, Utc };
 pub const MIN_TOKEN_AGE_HOURS: i64 = 1;
 
 /// Maximum token age in hours (effectively unlimited)
-pub const MAX_TOKEN_AGE_HOURS: i64 = 5 * 12 * 30 * 24; // 30 days
+pub const MAX_TOKEN_AGE_HOURS: i64 = 2 * 30 * 24; // 30 days
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)

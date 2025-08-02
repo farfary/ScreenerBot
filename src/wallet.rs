@@ -680,8 +680,363 @@ async fn send_rpc_request(
     Err(SwapError::TransactionError("Invalid RPC response format".to_string()))
 }
 
+/// Calculates effective price using intended trade amount instead of total balance changes
+/// This provides more accurate slippage calculation by excluding fees and ATA costs
+pub async fn calculate_effective_price_with_intended_amount(
+    client: &reqwest::Client,
+    transaction_signature: &str,
+    input_mint: &str,
+    output_mint: &str,
+    wallet_address: &str,
+    intended_trade_amount_sol: f64, // The actual amount intended for trading
+    _rpc_url: &str, // Unused parameter - kept for backwards compatibility
+    configs: &crate::global::Configs
+) -> Result<(f64, u64, u64, f64), SwapError> {
+    log(
+        LogTag::Wallet,
+        "ANALYZE",
+        &format!(
+            "Calculating effective price for transaction: {} with intended amount: {} SOL",
+            transaction_signature,
+            intended_trade_amount_sol
+        )
+    );
+
+    // Wait a moment for transaction to be confirmed
+    tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
+
+    // Try all available RPC endpoints with retries - prioritize fallbacks
+    let mut rpc_endpoints = configs.rpc_fallbacks.iter().collect::<Vec<_>>();
+    if rpc_endpoints.is_empty() {
+        rpc_endpoints.push(&configs.rpc_url);
+    }
+
+    let mut transaction_details = None;
+    for (rpc_idx, rpc_endpoint) in rpc_endpoints.iter().enumerate() {
+        for attempt in 1..=3 {
+            match get_transaction_details(client, transaction_signature, rpc_endpoint).await {
+                Ok(details) => {
+                    transaction_details = Some(details);
+                    log(
+                        LogTag::Wallet,
+                        "SUCCESS",
+                        &format!(
+                            "Got transaction details from RPC {} on attempt {}",
+                            rpc_idx + 1,
+                            attempt
+                        )
+                    );
+                    break;
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Wallet,
+                        "RETRY",
+                        &format!("RPC {} attempt {} failed: {}", rpc_idx + 1, attempt, e)
+                    );
+                    if attempt < 3 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                    }
+                }
+            }
+        }
+        if transaction_details.is_some() {
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    }
+
+    let details = transaction_details.ok_or_else(||
+        SwapError::TransactionError("Failed to get transaction details after retries".to_string())
+    )?;
+    let meta = details.meta
+        .as_ref()
+        .ok_or_else(||
+            SwapError::TransactionError("Transaction metadata not available".to_string())
+        )?;
+    if meta.err.is_some() {
+        return Err(SwapError::TransactionError("Transaction failed on-chain".to_string()));
+    }
+
+    // Parse the transaction as JSON to extract inner instructions (like debug tool)
+    let transaction_json = serde_json
+        ::to_value(&details)
+        .map_err(|e|
+            SwapError::InvalidResponse(format!("Failed to serialize transaction: {}", e))
+        )?;
+
+    // Extract token transfer amounts from inner instructions
+    let mut input_amount = 0.0;
+    let mut output_amount = 0.0;
+    let mut input_decimals = 9u8;
+    let mut output_decimals = 9u8;
+
+    // Analyze inner instruction transfers to determine exact swap amounts
+    if
+        let Some(inner_instructions) = transaction_json
+            .get("meta")
+            .and_then(|m| m.get("innerInstructions"))
+            .and_then(|inner| inner.as_array())
+    {
+        for inner_group in inner_instructions {
+            if let Some(instructions) = inner_group.get("instructions").and_then(|i| i.as_array()) {
+                for instruction in instructions {
+                    if let Some(parsed) = instruction.get("parsed") {
+                        if let Some(info) = parsed.get("info") {
+                            if
+                                let Some(instruction_type) = parsed
+                                    .get("type")
+                                    .and_then(|t| t.as_str())
+                            {
+                                if instruction_type == "transferChecked" {
+                                    if
+                                        let (Some(mint), Some(token_amount)) = (
+                                            info.get("mint").and_then(|m| m.as_str()),
+                                            info.get("tokenAmount"),
+                                        )
+                                    {
+                                        if
+                                            let (Some(ui_amount), Some(decimals)) = (
+                                                token_amount
+                                                    .get("uiAmount")
+                                                    .and_then(|ua| ua.as_f64()),
+                                                token_amount
+                                                    .get("decimals")
+                                                    .and_then(|d| d.as_u64()),
+                                            )
+                                        {
+                                            if mint == input_mint {
+                                                input_amount = ui_amount;
+                                                input_decimals = decimals as u8;
+                                            } else if mint == output_mint {
+                                                output_amount = ui_amount;
+                                                output_decimals = decimals as u8;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If we couldn't extract from inner instructions, fall back to token balance changes only
+    // For SOL amounts, use the INTENDED trade amount instead of total balance change
+    if input_amount == 0.0 && output_amount == 0.0 {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            "No transfers found in inner instructions, falling back to token balance changes"
+        );
+
+        // Fall back to balance change analysis for tokens only
+        if
+            let (Some(pre_tokens), Some(post_tokens)) = (
+                &meta.pre_token_balances,
+                &meta.post_token_balances,
+            )
+        {
+            // Find input token balance change (non-SOL only)
+            if input_mint != SOL_MINT {
+                let mut pre_amount = 0.0;
+                let mut post_amount = 0.0;
+
+                // Get pre-transaction balance
+                for balance in pre_tokens {
+                    if
+                        balance.mint == input_mint &&
+                        balance.owner.as_ref().map(|o| o.as_str()) == Some(wallet_address)
+                    {
+                        pre_amount = balance.ui_token_amount.ui_amount.unwrap_or(0.0);
+                        input_decimals = balance.ui_token_amount.decimals;
+                        break;
+                    }
+                }
+
+                // Get post-transaction balance
+                for balance in post_tokens {
+                    if
+                        balance.mint == input_mint &&
+                        balance.owner.as_ref().map(|o| o.as_str()) == Some(wallet_address)
+                    {
+                        post_amount = balance.ui_token_amount.ui_amount.unwrap_or(0.0);
+                        break;
+                    }
+                }
+
+                // Calculate the change (should be negative for input)
+                input_amount = if pre_amount > post_amount {
+                    pre_amount - post_amount // Tokens spent
+                } else {
+                    0.0
+                };
+            }
+
+            // Find output token balance change (non-SOL only)
+            if output_mint != SOL_MINT {
+                let mut pre_amount = 0.0;
+                let mut post_amount = 0.0;
+
+                // Get pre-transaction balance
+                for balance in pre_tokens {
+                    if
+                        balance.mint == output_mint &&
+                        balance.owner.as_ref().map(|o| o.as_str()) == Some(wallet_address)
+                    {
+                        pre_amount = balance.ui_token_amount.ui_amount.unwrap_or(0.0);
+                        output_decimals = balance.ui_token_amount.decimals;
+                        break;
+                    }
+                }
+
+                // Get post-transaction balance
+                for balance in post_tokens {
+                    if
+                        balance.mint == output_mint &&
+                        balance.owner.as_ref().map(|o| o.as_str()) == Some(wallet_address)
+                    {
+                        post_amount = balance.ui_token_amount.ui_amount.unwrap_or(0.0);
+                        break;
+                    }
+                }
+
+                // Calculate the change (should be positive for output)
+                output_amount = if post_amount > pre_amount {
+                    post_amount - pre_amount // Tokens received
+                } else {
+                    0.0
+                };
+            }
+        }
+
+        // For SOL amounts, use the intended trade amount to avoid wallet-wide balance corruption
+        // This excludes fees, ATA creation costs, and concurrent operations
+        if input_mint == SOL_MINT {
+            input_amount = intended_trade_amount_sol;
+            input_decimals = 9;
+            log(
+                LogTag::Wallet,
+                "DEBUG",
+                &format!("Using intended SOL trade amount: {} SOL instead of wallet balance change", intended_trade_amount_sol)
+            );
+        } else if output_mint == SOL_MINT {
+            // For sells (Token -> SOL), use account-specific balance changes
+            // Find the wallet's account index to get precise SOL changes
+            if
+                let Some(account_keys) = transaction_json
+                    .get("transaction")
+                    .and_then(|t| t.get("message"))
+                    .and_then(|m| m.get("accountKeys"))
+                    .and_then(|ak| ak.as_array())
+            {
+                // Find the wallet's SOL account balance change
+                let wallet_index = account_keys
+                    .iter()
+                    .position(|key| key.as_str() == Some(wallet_address));
+
+                if let Some(index) = wallet_index {
+                    if
+                        let (Some(pre), Some(post)) = (
+                            meta.pre_balances.get(index),
+                            meta.post_balances.get(index),
+                        )
+                    {
+                        let sol_change = if post > pre {
+                            lamports_to_sol(post - pre)
+                        } else {
+                            lamports_to_sol(pre - post)
+                        };
+
+                        // Validate the change makes sense (not too large compared to input tokens)
+                        let max_expected_sol = input_amount * 0.001; // Max 0.001 SOL per token (very generous)
+                        if sol_change <= max_expected_sol {
+                            output_amount = sol_change;
+                        } else {
+                            // Fallback: calculate based on token amount and conservative price
+                            output_amount = input_amount * 0.00001; // Very conservative fallback
+                            log(
+                                LogTag::Wallet,
+                                "DEBUG",
+                                &format!(
+                                    "SOL change too large ({}), using conservative fallback: {}",
+                                    sol_change,
+                                    output_amount
+                                )
+                            );
+                        }
+
+                        output_decimals = 9;
+                        log(
+                            LogTag::Wallet,
+                            "DEBUG",
+                            &format!(
+                                "Using account-specific SOL change: {} SOL (index: {})",
+                                output_amount,
+                                index
+                            )
+                        );
+                    }
+                } else {
+                    // Fallback if we can't find the wallet index
+                    output_amount = input_amount * 0.00001; // Very conservative fallback
+                    output_decimals = 9;
+                    log(
+                        LogTag::Wallet,
+                        "DEBUG",
+                        &format!("Could not find wallet index, using conservative fallback: {} SOL", output_amount)
+                    );
+                }
+            }
+        }
+    }
+
+    // Calculate effective price using intended trade amount
+    let effective_price = if input_amount > 0.0 && output_amount > 0.0 {
+        if input_mint == SOL_MINT {
+            // SOL -> Token: price = SOL / tokens (using intended amount)
+            input_amount / output_amount
+        } else {
+            // Token -> SOL: price = SOL / tokens
+            output_amount / input_amount
+        }
+    } else {
+        0.0
+    };
+
+    // Convert amounts to raw amounts for return values
+    let input_raw = (input_amount * (10_f64).powi(input_decimals as i32)) as u64;
+    let output_raw = (output_amount * (10_f64).powi(output_decimals as i32)) as u64;
+
+    log(
+        LogTag::Wallet,
+        "EFFECTIVE",
+        &format!(
+            "EffPrice: {:.15} SOL/token (intended_input={:.12} {}, output={:.12} {})",
+            effective_price,
+            input_amount,
+            if input_mint == SOL_MINT {
+                "SOL"
+            } else {
+                "tokens"
+            },
+            output_amount,
+            if output_mint == SOL_MINT {
+                "SOL"
+            } else {
+                "tokens"
+            }
+        )
+    );
+
+    Ok((effective_price, input_raw, output_raw, 0.0))
+}
+
 /// Calculates effective price from actual balance changes using the same approach as the debug tool
 /// Analyzes inner instruction transfers to determine exact token amounts
+/// NOTE: This version includes fees and ATA costs in SOL calculations - use calculate_effective_price_with_intended_amount for accurate slippage
 pub async fn calculate_effective_price(
     client: &reqwest::Client,
     transaction_signature: &str,
@@ -1291,14 +1646,15 @@ pub async fn execute_swap_with_quote(
         &format!("Transaction submitted successfully! TX: {}", transaction_signature)
     );
 
-    // Calculate effective price from actual balance changes and verify transaction success
+    // Calculate effective price using intended trade amount for accurate slippage calculation
     let (effective_price, actual_input_change, actual_output_change, quote_vs_actual_diff) = match
-        calculate_effective_price(
+        calculate_effective_price_with_intended_amount(
             &reqwest::Client::new(),
             &transaction_signature,
             input_mint,
             output_mint,
             &wallet_address,
+            amount_sol, // Use the intended trade amount instead of total balance change
             &selected_rpc, // Use the same randomly selected RPC endpoint
             &configs
         ).await

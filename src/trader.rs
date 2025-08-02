@@ -57,10 +57,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 5;
+pub const MAX_OPEN_POSITIONS: usize = 3;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.002;
+pub const TRADE_SIZE_SOL: f64 = 0.001;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -69,7 +69,7 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
 pub const SWAP_FEE_PERCENT: f64 = 0.0;
 
 /// Default slippage tolerance for swaps
-pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
+pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
 
 // -----------------------------------------------------------------------------
 // Entry Signal Configuration (Dip Detection)

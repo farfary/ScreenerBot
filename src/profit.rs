@@ -22,7 +22,7 @@ use serde::{ Serialize, Deserialize };
 // ================================================================================================
 
 // 🔒 STOP LOSS PROTECTION - NEVER TAKE LOSSES UNLESS EMERGENCY
-pub const STOP_LOSS_PERCENT: f64 = -70.0; // Extended to -70% (more patient)
+pub const STOP_LOSS_PERCENT: f64 = -99.0; // Extended to -70% (more patient)
 
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
 // EXTENDED FOR BETTER PROFITS: 1 minute to 2 hours based on liquidity

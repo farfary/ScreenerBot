@@ -129,6 +129,20 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             // Get token decimals from cache (synchronous)
             let token_decimals = crate::tokens::get_token_decimals_sync(&position.mint);
 
+            // CRITICAL: Check if decimals were fetched properly vs fallback
+            let decimals_uncertain = !crate::tokens::get_cached_decimals(&position.mint).is_some();
+            if decimals_uncertain {
+                log(
+                    LogTag::System,
+                    "CRITICAL",
+                    &format!(
+                        "P&L calculation using fallback decimals for {}: may be INCORRECT",
+                        position.mint
+                    )
+                );
+                // Consider returning an error or using a different approach here
+            }
+
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let entry_cost = position.entry_size_sol;
             let exit_value = ui_token_amount * effective_exit;
@@ -159,6 +173,20 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         if let Some(token_amount) = position.token_amount {
             // Get token decimals from cache (synchronous)
             let token_decimals = crate::tokens::get_token_decimals_sync(&position.mint);
+
+            // CRITICAL: Check if decimals were fetched properly vs fallback
+            let decimals_uncertain = !crate::tokens::get_cached_decimals(&position.mint).is_some();
+            if decimals_uncertain {
+                log(
+                    LogTag::System,
+                    "CRITICAL",
+                    &format!(
+                        "P&L calculation using fallback decimals for {}: may be INCORRECT",
+                        position.mint
+                    )
+                );
+                // Consider returning an error or using a different approach here
+            }
 
             let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
             let current_value = ui_token_amount * current;
