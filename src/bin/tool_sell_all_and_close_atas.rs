@@ -51,61 +51,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let dry_run = args.contains(&"--dry-run".to_string()) || args.contains(&"-d".to_string());
 
-    log(
-        LogTag::System,
-        "TOOL_START",
-        &format!("Starting wallet cleanup tool (dry_run: {})", dry_run)
-    );
-
-    println!("⚠️  WALLET CLEANUP UTILITY ⚠️");
-    println!("===============================");
+    log(LogTag::System, "INFO", "WALLET CLEANUP UTILITY");
+    log(LogTag::System, "INFO", "========================");
 
     if dry_run {
-        println!("🔍 DRY RUN MODE - No actual transactions will be made");
+        log(LogTag::System, "INFO", "DRY RUN MODE - No actual transactions will be made");
     }
 
-    println!("This tool will:");
-    println!("  🔍 Scan for all token accounts (SPL & Token-2022)");
+    log(LogTag::System, "INFO", "This tool will:");
+    log(LogTag::System, "INFO", "  - Scan for all token accounts (SPL & Token-2022)");
     if !dry_run {
-        println!("  💰 Sell ALL tokens for SOL");
-        println!("  🔒 Close all Associated Token Accounts (ATAs)");
-        println!("  💎 Reclaim rent SOL from closed ATAs");
+        log(LogTag::System, "INFO", "  - Sell ALL tokens for SOL");
+        log(LogTag::System, "INFO", "  - Close all Associated Token Accounts (ATAs)");
+        log(LogTag::System, "INFO", "  - Reclaim rent SOL from closed ATAs");
     } else {
-        println!("  💰 Show what tokens would be sold");
-        println!("  🔒 Show what ATAs would be closed");
-        println!("  💎 Estimate rent SOL that would be reclaimed");
-    }
-    println!("");
-
-    if !dry_run {
-        println!("❗ WARNING: This will sell ALL tokens in your wallet!");
-        println!("❗ Make sure you want to do this before continuing.");
-        println!("❗ Add --dry-run flag to see what would happen without executing.");
-        println!("");
-        print!("Type 'YES' to confirm or anything else to cancel: ");
-
-        use std::io::{ self, Write };
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-
-        if input.trim() != "YES" {
-            println!("❌ Operation cancelled by user.");
-            return Ok(());
-        }
+        log(LogTag::System, "INFO", "  - Show what tokens would be sold");
+        log(LogTag::System, "INFO", "  - Show what ATAs would be closed");
+        log(LogTag::System, "INFO", "  - Estimate rent SOL that would be reclaimed");
     }
 
-    println!("🚀 Starting comprehensive wallet cleanup{}...", if dry_run {
-        " (DRY RUN)"
-    } else {
-        ""
-    });
+    log(
+        LogTag::System,
+        "INFO",
+        &format!("Starting comprehensive wallet cleanup{}", if dry_run { " (DRY RUN)" } else { "" })
+    );
 
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            eprintln!("❌ Failed to get wallet address: {}", e);
+            log(LogTag::System, "ERROR", &format!("Failed to get wallet address: {}", e));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
     };
@@ -113,49 +87,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "WALLET", &format!("Processing wallet: {}", wallet_address));
 
     // Step 1: Get all token accounts (both regular SPL and Token-2022)
-    println!("🔍 Scanning for SPL Token accounts...");
+    log(LogTag::System, "INFO", "Scanning for SPL Token accounts...");
     let mut token_accounts = match get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            eprintln!("❌ Failed to get SPL token accounts: {}", e);
+            log(LogTag::System, "ERROR", &format!("Failed to get SPL token accounts: {}", e));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
     };
 
-    println!("🔍 Scanning for Token-2022 accounts...");
+    log(LogTag::System, "INFO", "Scanning for Token-2022 accounts...");
     match get_token_2022_accounts(&wallet_address).await {
         Ok(mut token_2022_accounts) => {
             if !token_2022_accounts.is_empty() {
-                println!("📊 Found {} Token-2022 accounts", token_2022_accounts.len());
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!("Found {} Token-2022 accounts", token_2022_accounts.len())
+                );
                 token_accounts.append(&mut token_2022_accounts);
             }
         }
         Err(e) => {
-            println!("⚠️  Warning: Could not scan Token-2022 accounts: {}", e);
+            log(LogTag::System, "WARNING", &format!("Could not scan Token-2022 accounts: {}", e));
         }
     }
 
     if token_accounts.is_empty() {
-        println!("✅ No token accounts found - wallet is already clean!");
+        log(LogTag::System, "INFO", "No token accounts found - wallet is already clean!");
         return Ok(());
     }
 
-    println!("📊 Found {} token accounts:", token_accounts.len());
+    log(LogTag::System, "INFO", &format!("Found {} token accounts:", token_accounts.len()));
     for account in &token_accounts {
-        println!(
-            "  🪙 {} ({:.6} tokens) - Mint: {}",
-            account.mint[..8].to_string() + "...",
-            account.ui_amount,
-            account.mint
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "  Token {} ({:.6} tokens) - Mint: {}",
+                &account.mint[..8],
+                account.ui_amount,
+                account.mint
+            )
         );
     }
 
     // Step 2: Sell all tokens with balances > 0
-    println!("\n💰 Starting token sales{}...", if dry_run { " (DRY RUN)" } else { "" });
     log(
         LogTag::System,
         "SELL_START",
-        &format!("Starting token sales for {} accounts", token_accounts.len())
+        &format!("Starting token sales for {} accounts{}", token_accounts.len(), if dry_run {
+            " (DRY RUN)"
+        } else {
+            ""
+        })
     );
 
     // Filter accounts for selling (skip zero balance and SOL)
@@ -163,7 +148,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .filter(|account| {
             if account.balance == 0 {
-                println!("⏭️  Skipping {} - zero balance", account.mint[..8].to_string() + "...");
                 log(
                     LogTag::System,
                     "SKIP_ZERO",
@@ -173,7 +157,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if account.mint == SOL_MINT {
-                println!("⏭️  Skipping SOL (native token)");
                 log(LogTag::System, "SKIP_SOL", "Skipping SOL (native token)");
                 return false;
             }
@@ -203,11 +186,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _permit = semaphore.acquire().await.unwrap();
 
                 if dry_run {
-                    println!(
-                        "🔄 Would sell {:.6} tokens of {}",
-                        account.ui_amount,
-                        account.mint[..8].to_string() + "..."
-                    );
                     log(
                         LogTag::System,
                         "DRY_SELL",
@@ -216,11 +194,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return (account, true, None);
                 }
 
-                println!(
-                    "🔄 Selling {:.6} tokens of {}...",
-                    account.ui_amount,
-                    account.mint[..8].to_string() + "..."
-                );
                 log(
                     LogTag::System,
                     "SELL_START",
@@ -275,11 +248,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .map(|lamports| (lamports as f64) / 1_000_000_000.0) // Convert lamports to SOL
                                 .unwrap_or(0.0);
 
-                            println!(
-                                "✅ Successfully sold {} for {:.6} SOL",
-                                account.mint[..8].to_string() + "...",
-                                sol_output
-                            );
                             log(
                                 LogTag::System,
                                 "SELL_SUCCESS",
@@ -292,11 +260,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             (account, true, None)
                         } else {
                             let error_msg = swap_result.error.as_deref().unwrap_or("Unknown error");
-                            println!(
-                                "❌ Sell failed for {}: {}",
-                                account.mint[..8].to_string() + "...",
-                                error_msg
-                            );
                             log(
                                 LogTag::System,
                                 "SELL_FAILED",
@@ -306,11 +269,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     Err(e) => {
-                        println!(
-                            "❌ Sell error for {}: {}",
-                            account.mint[..8].to_string() + "...",
-                            e
-                        );
                         log(
                             LogTag::System,
                             "SELL_ERROR",
@@ -333,9 +291,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|(_, success, _)| !*success)
         .count();
 
-    println!("\n📈 Sales Summary:");
-    println!("  ✅ Successful sells: {}", successful_sells);
-    println!("  ❌ Failed sells: {}", failed_sells);
     log(
         LogTag::System,
         "SELL_SUMMARY",
@@ -343,11 +298,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Step 3: Close all ATAs
-    println!("\n🔒 Starting ATA cleanup{}...", if dry_run { " (DRY RUN)" } else { "" });
     log(
         LogTag::System,
         "ATA_START",
-        &format!("Starting ATA cleanup for {} accounts", token_accounts.len())
+        &format!("Starting ATA cleanup for {} accounts{}", token_accounts.len(), if dry_run {
+            " (DRY RUN)"
+        } else {
+            ""
+        })
     );
 
     // Filter accounts for ATA closing (skip SOL)
@@ -384,7 +342,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _permit = semaphore.acquire().await.unwrap();
 
                 if dry_run {
-                    println!("🔄 Would close ATA for {}", account.mint[..8].to_string() + "...");
                     log(
                         LogTag::System,
                         "DRY_ATA",
@@ -393,7 +350,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return (account, true, Some("DRY_RUN_TX".to_string()));
                 }
 
-                println!("🔄 Closing ATA for {}...", account.mint[..8].to_string() + "...");
                 log(
                     LogTag::System,
                     "ATA_START",
@@ -402,11 +358,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match close_token_account(&account.mint, &wallet_address).await {
                     Ok(signature) => {
-                        println!(
-                            "✅ Successfully closed ATA for {}. TX: {}",
-                            account.mint[..8].to_string() + "...",
-                            signature
-                        );
                         log(
                             LogTag::System,
                             "ATA_SUCCESS",
@@ -419,11 +370,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         (account, true, Some(signature))
                     }
                     Err(e) => {
-                        println!(
-                            "❌ Failed to close ATA for {}: {}",
-                            account.mint[..8].to_string() + "...",
-                            e
-                        );
                         log(
                             LogTag::System,
                             "ATA_FAILED",
@@ -446,9 +392,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|(_, success, _)| !*success)
         .count();
 
-    println!("\n🔒 ATA Cleanup Summary:");
-    println!("  ✅ Successful closes: {}", successful_closes);
-    println!("  ❌ Failed closes: {}", failed_closes);
     log(
         LogTag::System,
         "ATA_SUMMARY",
@@ -456,34 +399,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Step 4: Final summary and cleanup report
-    println!("\n🎯 FINAL CLEANUP REPORT{}", if dry_run { " (DRY RUN)" } else { "" });
-    println!("========================");
     log(
         LogTag::System,
         "FINAL_REPORT",
         &format!("Final cleanup report: {} accounts found", token_accounts.len())
     );
-
-    println!("📊 Token Accounts Found: {}", token_accounts.len());
     if dry_run {
-        println!("💰 Would Sell - Success: {} | Failed: {}", successful_sells, failed_sells);
-        println!(
-            "🔒 Would Close ATAs - Success: {} | Failed: {}",
-            successful_closes,
-            failed_closes
+        log(
+            LogTag::System,
+            "FINAL_REPORT",
+            &format!("Would Sell - Success: {} | Failed: {}", successful_sells, failed_sells)
+        );
+        log(
+            LogTag::System,
+            "FINAL_REPORT",
+            &format!(
+                "Would Close ATAs - Success: {} | Failed: {}",
+                successful_closes,
+                failed_closes
+            )
         );
     } else {
-        println!("💰 Sales - Success: {} | Failed: {}", successful_sells, failed_sells);
-        println!("🔒 ATA Closes - Success: {} | Failed: {}", successful_closes, failed_closes);
+        log(
+            LogTag::System,
+            "FINAL_REPORT",
+            &format!("Sales - Success: {} | Failed: {}", successful_sells, failed_sells)
+        );
+        log(
+            LogTag::System,
+            "FINAL_REPORT",
+            &format!("ATA Closes - Success: {} | Failed: {}", successful_closes, failed_closes)
+        );
     }
 
     if failed_sells > 0 {
-        println!("\n❌ FAILED SELLS:");
         log(LogTag::System, "FAILED_SELLS", &format!("Found {} failed sells", failed_sells));
         for (account, success, error) in &sell_results {
             if !*success {
                 let error_msg = error.as_deref().unwrap_or("Unknown error");
-                println!("  🪙 {} - {}", account.mint[..8].to_string() + "...", error_msg);
                 log(
                     LogTag::System,
                     "SELL_FAIL_DETAIL",
@@ -494,11 +447,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if failed_closes > 0 {
-        println!("\n❌ FAILED ATA CLOSES:");
         log(LogTag::System, "FAILED_CLOSES", &format!("Found {} failed ATA closes", failed_closes));
         for (account, success, _) in &close_results {
             if !*success {
-                println!("  🪙 {}", account.mint[..8].to_string() + "...");
                 log(
                     LogTag::System,
                     "CLOSE_FAIL_DETAIL",
@@ -510,17 +461,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let estimated_rent_reclaimed = (successful_closes as f64) * 0.00203928; // ~0.002 SOL per ATA
     if dry_run {
-        println!(
-            "\n💎 Estimated rent SOL that would be reclaimed: {:.6} SOL",
-            estimated_rent_reclaimed
-        );
         log(
             LogTag::System,
             "ESTIMATED_RENT",
             &format!("Would reclaim {:.6} SOL in rent", estimated_rent_reclaimed)
         );
     } else {
-        println!("\n💎 Estimated rent SOL reclaimed: {:.6} SOL", estimated_rent_reclaimed);
         log(
             LogTag::System,
             "RECLAIMED_RENT",
@@ -538,19 +484,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if successful_sells == expected_operations && successful_closes == expected_operations {
         // All operations successful
         if dry_run {
-            println!("\n🎉 DRY RUN COMPLETE! All tokens would be sold and ATAs closed.");
             log(
                 LogTag::System,
                 "DRY_RUN_COMPLETE",
                 "All operations would succeed - dry run complete"
             );
         } else {
-            println!("\n🎉 WALLET CLEANUP COMPLETE! All tokens sold and ATAs closed.");
             log(LogTag::System, "CLEANUP_COMPLETE", "All tokens sold and ATAs closed successfully");
         }
     } else {
         if dry_run {
-            println!("\n⚠️  Dry run completed with some potential failures. See details above.");
             log(
                 LogTag::System,
                 "DRY_RUN_ISSUES",
@@ -561,7 +504,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             );
         } else {
-            println!("\n⚠️  Cleanup completed with some failures. See details above.");
             log(
                 LogTag::System,
                 "CLEANUP_ISSUES",
@@ -575,7 +517,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if dry_run {
-        println!("\n💡 To execute these operations for real, run without --dry-run flag.");
         log(LogTag::System, "DRY_RUN_HINT", "To execute for real, run without --dry-run flag");
     }
 

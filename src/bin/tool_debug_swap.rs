@@ -11,9 +11,11 @@ use screenerbot::{
         types::Token,
         price_service::get_token_price_safe,
         decimals::get_token_decimals_from_chain,
+        api::{ init_dexscreener_api, get_token_from_mint_global_api },
     },
     global::{ read_configs, set_cmd_args },
     logger::{ log, LogTag, init_file_logging },
+    rpc::init_rpc_client,
 };
 
 use std::env;
@@ -56,6 +58,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     };
+
+    // Initialize API systems
+    log(LogTag::System, "INFO", "🔧 Initializing systems...");
+
+    // Initialize RPC client
+    if let Err(e) = init_rpc_client() {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize RPC client: {}", e));
+        std::process::exit(1);
+    }
+
+    // Initialize DexScreener API
+    if let Err(e) = init_dexscreener_api().await {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize DexScreener API: {}", e));
+        std::process::exit(1);
+    }
+
+    log(LogTag::System, "SUCCESS", "✅ Systems initialized successfully");
 
     // Get wallet address
     let wallet_address = match get_wallet_address() {
@@ -101,7 +120,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get token information
     log(LogTag::System, "INFO", "📊 Fetching token information...");
-    let token_decimals = match get_token_decimals_from_chain(token_mint).await {
+
+    // Get token from API (returns complete Token object)
+    let token = match get_token_from_mint_global_api(token_mint).await {
+        Ok(Some(token)) => {
+            log(
+                LogTag::System,
+                "SUCCESS",
+                &format!("✅ Token found: {} ({})", token.symbol, token.name)
+            );
+            log(
+                LogTag::System,
+                "INFO",
+                &format!("DEX: {}", token.dex_id.as_ref().unwrap_or(&"Unknown".to_string()))
+            );
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "Pair address: {}",
+                    token.pair_address.as_ref().unwrap_or(&"None".to_string())
+                )
+            );
+            if let Some(liquidity) = &token.liquidity {
+                if let Some(usd) = liquidity.usd {
+                    log(LogTag::System, "INFO", &format!("Liquidity: ${:.2}", usd));
+                }
+            }
+            token
+        }
+        Ok(None) => {
+            log(LogTag::System, "ERROR", "❌ Token not found in DexScreener API");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("❌ Failed to fetch token info: {}", e));
+            std::process::exit(1);
+        }
+    };
+
+    let _token_decimals = match get_token_decimals_from_chain(token_mint).await {
         Ok(decimals) => {
             log(LogTag::System, "INFO", &format!("Token decimals: {}", decimals));
             decimals
@@ -122,40 +180,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             price
         }
         None => {
-            log(LogTag::System, "WARNING", "Failed to get current price");
-            0.0
+            // Try to get price from the token object
+            if let Some(price) = token.price_dexscreener_sol {
+                log(LogTag::System, "INFO", &format!("Token price from API: {:.8} SOL", price));
+                price
+            } else {
+                log(LogTag::System, "WARNING", "Failed to get current price");
+                0.0
+            }
         }
-    };
-
-    // Create Token struct for the functions
-    let token = Token {
-        mint: token_mint.to_string(),
-        symbol: format!("TEST_{}", &token_mint[..8]),
-        name: format!("Test Token {}", &token_mint[..8]),
-        chain: "solana".to_string(),
-        logo_url: None,
-        coingecko_id: None,
-        website: None,
-        description: None,
-        tags: vec![],
-        is_verified: false,
-        created_at: None,
-        price_dexscreener_sol: Some(current_price),
-        price_dexscreener_usd: None,
-        price_pool_sol: None,
-        price_pool_usd: None,
-        dex_id: None,
-        pair_address: None,
-        pair_url: None,
-        labels: vec![],
-        fdv: None,
-        market_cap: None,
-        txns: None,
-        volume: None,
-        price_change: None,
-        liquidity: None,
-        info: None,
-        boosts: None,
     };
 
     log(LogTag::System, "INFO", &format!("Using token: {} ({})", token.symbol, token.name));
@@ -220,8 +253,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Wait a moment for transaction to settle
-    log(LogTag::System, "INFO", "⏳ Waiting 5 seconds for transaction to settle...");
-    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    log(LogTag::System, "INFO", "⏳ Waiting 10 seconds for transaction to settle...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
     // Check balances after buy
     log(LogTag::System, "INFO", "💰 Checking balances after buy...");
@@ -248,12 +281,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
     );
 
-    // Calculate tokens received
-    let tokens_received = token_balance_after_buy - initial_token_balance;
-    if tokens_received == 0 {
+    // Calculate tokens received from balance difference
+    let tokens_received_balance = token_balance_after_buy - initial_token_balance;
+
+    // Also get tokens received from swap result
+    let tokens_received_swap = buy_result.output_amount.parse::<u64>().unwrap_or(0);
+
+    log(
+        LogTag::System,
+        "INFO",
+        &format!("Tokens expected from swap: {} tokens", tokens_received_swap)
+    );
+
+    // Use swap result if balance difference is zero (due to timing/caching)
+    let tokens_received = if tokens_received_balance > 0 {
+        tokens_received_balance
+    } else if tokens_received_swap > 0 {
+        log(
+            LogTag::System,
+            "WARNING",
+            "⚠️ Balance difference is 0, using swap result data instead"
+        );
+        tokens_received_swap
+    } else {
         log(LogTag::System, "ERROR", "❌ No tokens received from buy transaction!");
         std::process::exit(1);
-    }
+    };
 
     log(LogTag::System, "SUCCESS", &format!("✅ Successfully bought {} tokens", tokens_received));
 
@@ -264,8 +317,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Calculate expected SOL output based on current price
     let expected_sol_output = if current_price > 0.0 {
-        let estimated_sol = current_price * (tokens_received as f64);
-        log(LogTag::System, "INFO", &format!("Estimated SOL output: {:.6} SOL", estimated_sol));
+        // Convert raw tokens to actual tokens using decimals from the buy result
+        let token_decimals = if let Some(swap_data) = &buy_result.swap_data {
+            swap_data.quote.out_decimals as u32
+        } else {
+            _token_decimals as u32
+        };
+
+        // Convert raw tokens to actual token amount
+        let actual_tokens = (tokens_received as f64) / (10_f64).powi(token_decimals as i32);
+
+        // Calculate expected SOL using actual tokens
+        let estimated_sol = current_price * actual_tokens;
+
+        log(
+            LogTag::System,
+            "INFO",
+            &format!(
+                "Expected SOL calculation: {:.6} tokens (raw: {}) * {:.10} SOL/token = {:.6} SOL",
+                actual_tokens,
+                tokens_received,
+                current_price,
+                estimated_sol
+            )
+        );
+
         Some(estimated_sol)
     } else {
         None
@@ -463,23 +539,98 @@ async fn calculate_swap_metrics(
     log(LogTag::System, "INFO", &format!("  Price impact: {}%", sell_result.price_impact));
     log(LogTag::System, "INFO", &format!("  Fee: {} lamports", sell_result.fee_lamports));
 
-    // Calculate effective prices
-    if buy_output_tokens > 0 {
-        let buy_price_per_token = buy_input_sol / (buy_output_tokens as f64);
+    // Display effective prices from SwapResult (calculated with correct decimals)
+    if let Some(buy_effective_price) = buy_result.effective_price {
         log(
             LogTag::System,
             "INFO",
-            &format!("Effective buy price: {:.8} SOL per token", buy_price_per_token)
+            &format!("Effective buy price: {:.10} SOL per token", buy_effective_price)
         );
+    } else {
+        log(LogTag::System, "WARNING", "Buy effective price not available");
     }
 
-    if sell_input_tokens > 0 {
-        let sell_price_per_token = sell_output_sol / (sell_input_tokens as f64);
+    if let Some(sell_effective_price) = sell_result.effective_price {
         log(
             LogTag::System,
             "INFO",
-            &format!("Effective sell price: {:.8} SOL per token", sell_price_per_token)
+            &format!("Effective sell price: {:.10} SOL per token", sell_effective_price)
         );
+
+        // Compare buy and sell prices if both are available
+        if let Some(buy_effective_price) = buy_result.effective_price {
+            let price_difference_percent = if buy_effective_price > 0.0 {
+                ((sell_effective_price - buy_effective_price) / buy_effective_price) * 100.0
+            } else {
+                0.0
+            };
+
+            log(
+                LogTag::System,
+                "INFO",
+                &format!(
+                    "📈 Price difference: {:.2}% (buy: {:.10}, sell: {:.10})",
+                    price_difference_percent,
+                    buy_effective_price,
+                    sell_effective_price
+                )
+            );
+        }
+    } else {
+        log(LogTag::System, "WARNING", "Sell effective price not available");
+
+        // Fallback: Calculate manually with proper decimal handling
+        if buy_output_tokens > 0 && sell_input_tokens > 0 {
+            // Get token decimals from buy result
+            if let Some(swap_data) = &buy_result.swap_data {
+                let token_decimals = swap_data.quote.out_decimals as u32;
+
+                // Calculate effective prices manually with correct decimals
+                let buy_tokens_actual =
+                    (buy_output_tokens as f64) / (10_f64).powi(token_decimals as i32);
+                let sell_tokens_actual =
+                    (sell_input_tokens as f64) / (10_f64).powi(token_decimals as i32);
+
+                let buy_price_manual = buy_input_sol / buy_tokens_actual;
+                let sell_price_manual = sell_output_sol / sell_tokens_actual;
+
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!(
+                        "Manual effective buy price: {:.10} SOL per token (with {} decimals)",
+                        buy_price_manual,
+                        token_decimals
+                    )
+                );
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!(
+                        "Manual effective sell price: {:.10} SOL per token (with {} decimals)",
+                        sell_price_manual,
+                        token_decimals
+                    )
+                );
+
+                let manual_price_diff = if buy_price_manual > 0.0 {
+                    ((sell_price_manual - buy_price_manual) / buy_price_manual) * 100.0
+                } else {
+                    0.0
+                };
+
+                log(
+                    LogTag::System,
+                    "INFO",
+                    &format!(
+                        "📈 Manual price difference: {:.2}% (buy: {:.10}, sell: {:.10})",
+                        manual_price_diff,
+                        buy_price_manual,
+                        sell_price_manual
+                    )
+                );
+            }
+        }
     }
 
     // Calculate round-trip efficiency

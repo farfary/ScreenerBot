@@ -268,6 +268,8 @@ pub struct SwapResult {
     pub price_impact: String,
     pub fee_lamports: u64,
     pub execution_time: f64,
+    pub effective_price: Option<f64>, // Price per token in SOL
+    pub swap_data: Option<SwapData>, // Complete swap data for reference
     pub error: Option<String>,
 }
 
@@ -1082,11 +1084,13 @@ pub async fn execute_swap_with_quote(
     Ok(SwapResult {
         success: true,
         transaction_signature: Some(transaction_signature),
-        input_amount: swap_data.quote.in_amount,
-        output_amount: swap_data.quote.out_amount,
-        price_impact: swap_data.quote.price_impact_pct,
+        input_amount: swap_data.quote.in_amount.clone(),
+        output_amount: swap_data.quote.out_amount.clone(),
+        price_impact: swap_data.quote.price_impact_pct.clone(),
         fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
         execution_time: swap_data.quote.time_taken,
+        effective_price: None, // Will be calculated later
+        swap_data: Some(swap_data), // Include the complete swap data
         error: None,
     })
 }
@@ -1211,15 +1215,60 @@ pub async fn buy_token(
 
     log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with validated quote..."));
 
-    execute_swap_with_quote(
+    let mut swap_result = execute_swap_with_quote(
         token,
         SOL_MINT,
         &token.mint,
         sol_to_lamports(amount_sol),
         swap_data
-    ).await
-}
+    ).await?;
 
+    // Calculate and set the effective price in the swap result
+    if swap_result.success {
+        match calculate_effective_price_buy(&swap_result) {
+            Ok(effective_price) => {
+                // Update the swap result with the calculated effective price
+                swap_result.effective_price = Some(effective_price);
+
+                log(
+                    LogTag::Wallet,
+                    "PRICE",
+                    &format!(
+                        "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token",
+                        effective_price,
+                        token.symbol
+                    )
+                );
+
+                if is_debug_wallet_enabled() {
+                    if let Some(expected) = expected_price {
+                        let price_diff = ((effective_price - expected) / expected) * 100.0;
+                        log(
+                            LogTag::Wallet,
+                            "DEBUG",
+                            &format!(
+                                "📊 PRICE ANALYSIS:\n  🎯 Expected: {:.10} SOL\n  💰 Actual: {:.10} SOL\n  📈 Difference: {:.2}%",
+                                expected,
+                                effective_price,
+                                price_diff
+                            )
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Wallet,
+                    "WARNING",
+                    &format!("Failed to calculate effective price: {}", e)
+                );
+                // Keep effective_price as None if calculation fails
+            }
+        }
+    }
+
+    Ok(swap_result)
+}
 
 /// Helper function to sell a token for SOL
 pub async fn sell_token(
@@ -1361,19 +1410,103 @@ pub async fn sell_token(
     );
 
     // Validate expected output if provided (using cached quote)
-    if let Some(expected) = expected_sol_output {
+    if let Some(expected_sol_total) = expected_sol_output {
         log(LogTag::Wallet, "PRICE", "🔍 Validating expected SOL output...");
-        validate_quote_price(&swap_data, token_amount, expected, false)?;
+
+        // Convert expected total SOL to price per token for validation
+        let token_decimals = swap_data.quote.in_decimals as u32;
+        let actual_tokens = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+        let expected_price_per_token = if actual_tokens > 0.0 {
+            expected_sol_total / actual_tokens
+        } else {
+            0.0
+        };
+
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "Sell validation: {} total SOL / {:.6} tokens = {:.12} SOL per token",
+                expected_sol_total,
+                actual_tokens,
+                expected_price_per_token
+            )
+        );
+
+        validate_quote_price(&swap_data, token_amount, expected_price_per_token, false)?;
         log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
     }
 
     log(LogTag::Wallet, "SWAP", "🚀 Executing sell with validated quote...");
 
     // Use the centralized execution function
-    execute_swap_with_quote(token, &token.mint, SOL_MINT, token_amount, swap_data).await
+    let mut swap_result = execute_swap_with_quote(
+        token,
+        &token.mint,
+        SOL_MINT,
+        token_amount,
+        swap_data
+    ).await?;
+
+    // Calculate and set the effective price in the swap result
+    if swap_result.success {
+        match calculate_effective_price_sell(&swap_result) {
+            Ok(effective_price) => {
+                // Update the swap result with the calculated effective price
+                swap_result.effective_price = Some(effective_price);
+
+                log(
+                    LogTag::Wallet,
+                    "PRICE",
+                    &format!(
+                        "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token",
+                        effective_price,
+                        token.symbol
+                    )
+                );
+
+                if is_debug_wallet_enabled() {
+                    if let Some(expected_sol) = expected_sol_output {
+                        // Get actual token decimals from swap data
+                        let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
+                            swap_data.quote.in_decimals as u32
+                        } else {
+                            9 // Default fallback
+                        };
+                        let tokens_sold =
+                            (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+                        let expected_price_per_token = expected_sol / tokens_sold;
+                        let price_diff =
+                            ((effective_price - expected_price_per_token) /
+                                expected_price_per_token) *
+                            100.0;
+                        log(
+                            LogTag::Wallet,
+                            "DEBUG",
+                            &format!(
+                                "📊 SELL PRICE ANALYSIS:\n  🎯 Expected Price: {:.10} SOL per token\n  💰 Actual Price: {:.10} SOL per token\n  📈 Difference: {:.2}%\n  🔢 Token Decimals: {}",
+                                expected_price_per_token,
+                                effective_price,
+                                price_diff,
+                                token_decimals
+                            )
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Wallet,
+                    "WARNING",
+                    &format!("Failed to calculate effective price: {}", e)
+                );
+                // Keep effective_price as None if calculation fails
+            }
+        }
+    }
+
+    Ok(swap_result)
 }
-
-
 
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
@@ -1501,7 +1634,8 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                 "mint": mint
             },
             {
-                "encoding": "jsonParsed"
+                "encoding": "jsonParsed",
+                "commitment": "confirmed"
             }
         ]
     });
@@ -1585,6 +1719,121 @@ pub fn validate_price_near_expected(
 ) -> bool {
     let price_difference = (((current_price - expected_price) / expected_price) * 100.0).abs();
     price_difference <= tolerance_percent
+}
+
+/// Calculates the effective price per token from a successful buy swap result
+/// Returns the price in SOL per token based on actual input/output amounts
+pub fn calculate_effective_price_buy(swap_result: &SwapResult) -> Result<f64, SwapError> {
+    if !swap_result.success {
+        return Err(SwapError::InvalidAmount("Cannot calculate price from failed swap".to_string()));
+    }
+
+    // Parse input amount (SOL in lamports)
+    let input_lamports: u64 = swap_result.input_amount
+        .parse()
+        .map_err(|_| SwapError::ParseError("Invalid input amount in swap result".to_string()))?;
+
+    // Parse output amount (tokens in smallest unit)
+    let output_tokens_raw: u64 = swap_result.output_amount
+        .parse()
+        .map_err(|_| SwapError::ParseError("Invalid output amount in swap result".to_string()))?;
+
+    if output_tokens_raw == 0 {
+        return Err(
+            SwapError::InvalidAmount("Cannot calculate price with zero token output".to_string())
+        );
+    }
+
+    // Convert lamports to SOL
+    let input_sol = lamports_to_sol(input_lamports);
+
+    // Get the actual token decimals from swap data if available, otherwise assume 9
+    let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
+        swap_data.quote.out_decimals as u32
+    } else {
+        9 // Default fallback
+    };
+
+    // Convert raw token amount to actual tokens using correct decimals
+    let output_tokens = (output_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
+
+    // Calculate effective price: SOL spent / tokens received
+    let effective_price = input_sol / output_tokens;
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "💰 EFFECTIVE PRICE CALCULATION (BUY):\n  📥 Input: {} SOL ({} lamports)\n  📤 Output: {:.6} tokens ({} raw)\n  🔢 Token Decimals: {}\n  💎 Effective Price: {:.10} SOL per token",
+                input_sol,
+                input_lamports,
+                output_tokens,
+                output_tokens_raw,
+                token_decimals,
+                effective_price
+            )
+        );
+    }
+
+    Ok(effective_price)
+}
+
+/// Calculates the effective price per token from a successful sell swap result
+/// Returns the price in SOL per token based on actual input/output amounts
+pub fn calculate_effective_price_sell(swap_result: &SwapResult) -> Result<f64, SwapError> {
+    if !swap_result.success {
+        return Err(SwapError::InvalidAmount("Cannot calculate price from failed swap".to_string()));
+    }
+
+    // Parse input amount (tokens in smallest unit)
+    let input_tokens_raw: u64 = swap_result.input_amount
+        .parse()
+        .map_err(|_| SwapError::ParseError("Invalid input amount in swap result".to_string()))?;
+
+    // Parse output amount (SOL in lamports)
+    let output_lamports: u64 = swap_result.output_amount
+        .parse()
+        .map_err(|_| SwapError::ParseError("Invalid output amount in swap result".to_string()))?;
+
+    if input_tokens_raw == 0 {
+        return Err(
+            SwapError::InvalidAmount("Cannot calculate price with zero token input".to_string())
+        );
+    }
+
+    // Convert lamports to SOL
+    let output_sol = lamports_to_sol(output_lamports);
+
+    // Get the actual token decimals from swap data if available, otherwise assume 9
+    let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
+        swap_data.quote.in_decimals as u32
+    } else {
+        9 // Default fallback
+    };
+
+    // Convert raw token amount to actual tokens using correct decimals
+    let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
+
+    // Calculate effective price: SOL received / tokens sold
+    let effective_price = output_sol / input_tokens;
+
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "DEBUG",
+            &format!(
+                "💰 EFFECTIVE PRICE CALCULATION (SELL):\n  📥 Input: {:.6} tokens ({} raw)\n  📤 Output: {} SOL ({} lamports)\n  � Token Decimals: {}\n  �💎 Effective Price: {:.10} SOL per token",
+                input_tokens,
+                input_tokens_raw,
+                output_sol,
+                output_lamports,
+                token_decimals,
+                effective_price
+            )
+        );
+    }
+    Ok(effective_price)
 }
 
 /// Validates the price from a swap quote against expected price
@@ -2221,8 +2470,6 @@ async fn close_ata(
         }
     }
 }
-
-
 
 /// Gets latest blockhash from Solana RPC
 pub async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {

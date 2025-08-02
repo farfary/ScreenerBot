@@ -16,6 +16,7 @@ use crate::tokens::types::{
     WebsiteInfo,
     SocialInfo,
     DiscoverySourceType,
+    Token,
 };
 use std::collections::HashMap;
 use std::time::{ Duration, Instant };
@@ -143,6 +144,18 @@ impl DexScreenerApi {
     pub async fn get_token_data(&mut self, mint: &str) -> Result<Option<ApiToken>, String> {
         let tokens = self.get_tokens_info(&[mint.to_string()]).await?;
         Ok(tokens.into_iter().next())
+    }
+
+    /// Get Token object from mint address (converts ApiToken to Token)
+    pub async fn get_token_from_mint(&mut self, mint: &str) -> Result<Option<Token>, String> {
+        let api_tokens = self.get_tokens_info(&[mint.to_string()]).await?;
+
+        if let Some(api_token) = api_tokens.into_iter().next() {
+            let token = Token::from(api_token);
+            Ok(Some(token))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Get token information for multiple mint addresses (main function)
@@ -768,6 +781,20 @@ pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {
         Err(e) => {
             log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
             None
+        }
+    }
+}
+
+/// Helper function to get Token object from mint using global API
+pub async fn get_token_from_mint_global_api(mint: &str) -> Result<Option<Token>, String> {
+    match get_global_dexscreener_api().await {
+        Ok(api) => {
+            let mut api_instance = api.lock().await;
+            api_instance.get_token_from_mint(mint).await
+        }
+        Err(e) => {
+            log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
+            Err(e)
         }
     }
 }
