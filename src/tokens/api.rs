@@ -752,24 +752,7 @@ pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, 
         .map(|api| api.clone())
 }
 
-/// Create a new DexScreener API client instance (DEPRECATED - use global API)
-#[deprecated(note = "Use get_global_dexscreener_api() instead to avoid multiple initializations")]
-pub async fn create_dexscreener_api() -> Result<DexScreenerApi, String> {
-    // For backwards compatibility, still works but logs warning
-    log(
-        LogTag::Api,
-        "WARNING",
-        "Using deprecated create_dexscreener_api() - use get_global_dexscreener_api() instead"
-    );
 
-    let global_api = get_global_dexscreener_api().await?;
-    let api_lock = global_api.lock().await;
-
-    // Return a clone (not ideal but maintains API compatibility)
-    let mut new_api = DexScreenerApi::new();
-    // Don't call initialize again to avoid duplicate logs
-    Ok(new_api)
-}
 
 /// Helper function to get token price using global API
 pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {

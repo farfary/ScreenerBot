@@ -5,11 +5,6 @@ pub use pool::{
     PoolPriceInfo,
     PoolInfo,
     RaydiumCpmmPoolData,
-    get_pool_price_from_address,
-    get_pool_price_with_rpc,
-    get_multiple_pool_prices,
-    get_token_price_from_pools,
-    RAYDIUM_CPMM_PROGRAM_ID,
     SOL_MINT,
     // New pool service exports
     PoolPriceService,
@@ -47,7 +42,6 @@ pub use api::{
     DexScreenerApi,
     get_token_prices_from_api,
     get_token_pairs_from_api,
-    create_dexscreener_api,
     init_dexscreener_api,
     get_global_dexscreener_api,
 };
