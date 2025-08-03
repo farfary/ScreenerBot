@@ -898,46 +898,47 @@ impl PoolPriceService {
                 if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
-                        "CALC_FALLBACK_API",
+                        "CALC_NO_POOL_PRICE",
                         &format!(
-                            "⚠️  FALLBACK to API price for {}: pool calculation returned None, using API price {:.12}",
+                            "❌ POOL calculation returned None for {}: cannot decode pool {} - returning None",
                             token_address,
-                            best_pool.price_native
+                            best_pool.pair_address
                         )
                     );
                 }
-                // Fallback to API price if pool calculation fails
-                let api_price = if best_pool.quote_token == SOL_MINT {
-                    Some(best_pool.price_native)
-                } else if best_pool.base_token == SOL_MINT {
-                    Some(1.0 / best_pool.price_native)
-                } else {
-                    None
-                };
-                (api_price, None) // No pool type since we're using API price
+                // Return None - price_service.rs will decide whether to use API fallback
+                (None, None)
             }
             Err(e) => {
                 if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
-                        "CALC_ERROR_FALLBACK",
+                        "CALC_POOL_ERROR",
                         &format!(
-                            "❌ BLOCKCHAIN calculation FAILED for {}: {}. Fallback to API price {:.12}",
+                            "❌ POOL calculation FAILED for {}: {} - returning None (price_service.rs will handle fallback)",
                             token_address,
-                            e,
-                            best_pool.price_native
+                            e
                         )
                     );
                 }
-                // Fallback to API price if pool calculation errors
-                let api_price = if best_pool.quote_token == SOL_MINT {
-                    Some(best_pool.price_native)
-                } else if best_pool.base_token == SOL_MINT {
-                    Some(1.0 / best_pool.price_native)
-                } else {
-                    None
-                };
-                (api_price, None) // No pool type since we're using API price
+                // Return None - price_service.rs will decide whether to use API fallback
+                (None, None)
+            }
+        };
+
+        // If no pool price could be calculated, return error
+        let price_sol = match price_sol {
+            Some(price) => price,
+            None => {
+                let error_msg = format!(
+                    "Pool calculation failed for {} from pool {}",
+                    token_address,
+                    best_pool.pair_address
+                );
+                if is_debug_pool_prices_enabled() {
+                    log(LogTag::Pool, "CALC_FAILED", &format!("❌ {}", error_msg));
+                }
+                return Err(error_msg);
             }
         };
 
@@ -947,7 +948,7 @@ impl PoolPriceService {
             dex_id: best_pool.dex_id.clone(), // Keep for internal tracking, but use pool_type for display
             pool_type: actual_pool_type, // Use actual pool type from decoder, not API dex_id
             token_address: token_address.to_string(),
-            price_sol,
+            price_sol: Some(price_sol),
             price_usd: None, // We don't calculate USD prices from pools - only SOL prices
             liquidity_usd: best_pool.liquidity_usd,
             volume_24h: best_pool.volume_24h,
@@ -962,7 +963,7 @@ impl PoolPriceService {
                 &format!(
                     "✅ CALCULATION COMPLETE for {}: price={:.12} SOL, pool={}, calculated_at={}",
                     token_address,
-                    price_sol.unwrap_or(0.0),
+                    price_sol,
                     best_pool.pair_address,
                     result.calculated_at.format("%H:%M:%S%.3f")
                 )
