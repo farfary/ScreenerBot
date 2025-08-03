@@ -1,4 +1,5 @@
 use crate::trader::*;
+use crate::global::*;
 use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
@@ -23,8 +24,17 @@ static FROZEN_ACCOUNT_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<U
     || { StdArc::new(StdMutex::new(HashMap::new())) }
 );
 
+/// Static global: balance check cooldown tracking
+/// Maps mint address to timestamp of last balance check to prevent excessive checking
+static BALANCE_CHECK_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(
+    || { StdArc::new(StdMutex::new(HashMap::new())) }
+);
+
 /// Cooldown duration for frozen account errors (15 minutes)
 const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
+
+/// Cooldown duration for balance checks (5 minutes)
+const BALANCE_CHECK_COOLDOWN_MINUTES: i64 = 5;
 
 /// Checks if a mint is currently in cooldown due to frozen account error
 fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
@@ -40,6 +50,24 @@ fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
     false
 }
 
+/// Checks if a balance check is allowed for a specific mint (rate limiting)
+fn is_balance_check_allowed(mint: &str) -> bool {
+    if let Ok(mut cooldowns) = BALANCE_CHECK_COOLDOWNS.lock() {
+        if let Some(last_check_time) = cooldowns.get(mint) {
+            let now = Utc::now();
+            let minutes_since_last_check = (now - *last_check_time).num_minutes();
+            if minutes_since_last_check < BALANCE_CHECK_COOLDOWN_MINUTES {
+                return false; // Still in cooldown
+            }
+        }
+        // Update last check time
+        cooldowns.insert(mint.to_string(), Utc::now());
+        true
+    } else {
+        false
+    }
+}
+
 /// Adds a mint to frozen account cooldown tracking
 fn add_mint_to_frozen_cooldown(mint: &str) {
     if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
@@ -53,6 +81,25 @@ fn add_mint_to_frozen_cooldown(mint: &str) {
                 FROZEN_ACCOUNT_COOLDOWN_MINUTES
             )
         );
+    }
+}
+
+/// Gets remaining balance check cooldown time for a mint
+fn get_remaining_balance_check_cooldown_minutes(mint: &str) -> Option<i64> {
+    if let Ok(cooldowns) = BALANCE_CHECK_COOLDOWNS.lock() {
+        if let Some(last_check_time) = cooldowns.get(mint) {
+            let now = Utc::now();
+            let minutes_since_last_check = (now - *last_check_time).num_minutes();
+            if minutes_since_last_check < BALANCE_CHECK_COOLDOWN_MINUTES {
+                Some(BALANCE_CHECK_COOLDOWN_MINUTES - minutes_since_last_check)
+            } else {
+                None // Cooldown expired
+            }
+        } else {
+            None // No previous check recorded
+        }
+    } else {
+        None
     }
 }
 
@@ -254,6 +301,22 @@ pub struct Position {
 /// Checks recent transactions to see if position was already closed
 /// Enhanced version with strict validation to prevent phantom sells
 pub async fn check_recent_transactions_for_position(position: &mut Position) -> bool {
+    // Rate limiting: only check balance every 5 minutes per position
+    if !is_balance_check_allowed(&position.mint) {
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "Balance check skipped for {} - cooldown active (checks every {} minutes)",
+                    position.symbol,
+                    BALANCE_CHECK_COOLDOWN_MINUTES
+                )
+            );
+        }
+        return false;
+    }
+
     // Get wallet address
     let wallet_address = match crate::wallet::get_wallet_address() {
         Ok(addr) => addr,
@@ -280,86 +343,35 @@ pub async fn check_recent_transactions_for_position(position: &mut Position) -> 
         return false;
     }
 
-    // Perform multiple balance checks with delays to ensure consistency
-    let mut balance_checks = Vec::new();
-    let check_count = 3;
-
-    for attempt in 1..=check_count {
-        match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
-            Ok(balance) => {
-                balance_checks.push(balance);
-                log(
-                    LogTag::Trader,
-                    "DEBUG",
-                    &format!(
-                        "Balance check {}/{} for {}: {} tokens",
-                        attempt,
-                        check_count,
-                        position.symbol,
-                        balance
-                    )
-                );
-            }
-            Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "WARN",
-                    &format!(
-                        "Balance check {}/{} failed for {}: {}",
-                        attempt,
-                        check_count,
-                        position.symbol,
-                        e
-                    )
-                );
-            }
+    // Perform a single balance check (reduced from 3 checks)
+    let balance = match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
+        Ok(balance) => {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!("Balance check for {}: {} tokens", position.symbol, balance)
+            );
+            balance
         }
-
-        // Add delay between checks (except for the last one)
-        if attempt < check_count {
-            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "WARN",
+                &format!("Balance check failed for {}: {}", position.symbol, e)
+            );
+            return false;
         }
-    }
-
-    // Require at least 2 successful balance checks
-    if balance_checks.len() < 2 {
-        log(
-            LogTag::Trader,
-            "WARN",
-            &format!(
-                "Insufficient balance checks for {} - cannot determine auto-close",
-                position.symbol
-            )
-        );
-        return false;
-    }
-
-    // Check if all balance checks consistently show 0 tokens
-    let all_zero = balance_checks.iter().all(|&balance| balance == 0);
-    let consistent = balance_checks.windows(2).all(|w| w[0] == w[1]);
-
-    if !consistent {
-        log(
-            LogTag::Trader,
-            "WARN",
-            &format!(
-                "Inconsistent balance checks for {} - results: {:?}",
-                position.symbol,
-                balance_checks
-            )
-        );
-        return false;
-    }
+    };
 
     let stored_amount = position.token_amount.unwrap_or(0);
 
-    // Only proceed if we consistently have 0 tokens but position shows we should have tokens
-    if all_zero && stored_amount > 0 {
+    // Only proceed if we have 0 tokens but position shows we should have tokens
+    if balance == 0 && stored_amount > 0 {
         log(
             LogTag::Trader,
             "WARNING",
             &format!(
-                "Consistent zero balance detected for {} (stored: {}) - investigating external sell",
+                "Zero balance detected for {} (stored: {}) - investigating external sell",
                 position.symbol,
                 stored_amount
             )
@@ -968,6 +980,33 @@ pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
                 expired_mints.push(mint.clone());
             } else {
                 let remaining_minutes = FROZEN_ACCOUNT_COOLDOWN_MINUTES - minutes_since_cooldown;
+                active_cooldowns.push((mint.clone(), remaining_minutes));
+            }
+        }
+
+        // Remove expired cooldowns
+        for mint in expired_mints {
+            cooldowns.remove(&mint);
+        }
+    }
+
+    active_cooldowns
+}
+
+/// Gets active balance check cooldowns for debugging
+pub fn get_active_balance_check_cooldowns() -> Vec<(String, i64)> {
+    let mut active_cooldowns = Vec::new();
+
+    if let Ok(mut cooldowns) = BALANCE_CHECK_COOLDOWNS.lock() {
+        let now = Utc::now();
+        let mut expired_mints = Vec::new();
+
+        for (mint, last_check_time) in cooldowns.iter() {
+            let minutes_since_last_check = (now - *last_check_time).num_minutes();
+            if minutes_since_last_check >= BALANCE_CHECK_COOLDOWN_MINUTES {
+                expired_mints.push(mint.clone());
+            } else {
+                let remaining_minutes = BALANCE_CHECK_COOLDOWN_MINUTES - minutes_since_last_check;
                 active_cooldowns.push((mint.clone(), remaining_minutes));
             }
         }

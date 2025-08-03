@@ -619,11 +619,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 
     // Never sell at a loss unless stop loss is triggered
     if pnl_percent < 0.0 {
-        log(
-            LogTag::Profit,
-            "HOLD_LOSS",
-            &format!("Holding position with {:.2}% loss (above stop loss)", pnl_percent)
-        );
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "HOLD_LOSS",
+                &format!("Holding position with {:.2}% loss (above stop loss)", pnl_percent)
+            );
+        }
         return (0.0, format!("Holding at {:.2}% loss (above stop loss)", pnl_percent));
     }
 
