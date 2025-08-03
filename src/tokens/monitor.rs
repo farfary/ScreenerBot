@@ -379,15 +379,6 @@ impl TokenMonitor {
             sleep(Duration::from_millis(100)).await;
         }
 
-        // Only log summary if there were significant updates or processes
-        if updated > 20 || processed > 100 {
-            log(
-                LogTag::Monitor,
-                "NEW_ENTRY",
-                &format!("New entry detection - Processed: {}, Updated: {}", processed, updated)
-            );
-        }
-
         Ok(())
     }
 
