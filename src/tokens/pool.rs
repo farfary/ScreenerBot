@@ -37,6 +37,9 @@ pub const RAYDIUM_CPMM_PROGRAM_ID: &str = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQ
 /// Meteora DAMM v2 Program ID
 pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 
+/// Meteora DLMM Program ID
+pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -1000,9 +1003,12 @@ impl PoolPriceService {
         }
 
         // Create PoolPriceCalculator to get real-time reserves
-        let calculator = PoolPriceCalculator::new().map_err(|e|
+        let mut calculator = PoolPriceCalculator::new().map_err(|e|
             format!("Failed to create pool calculator: {}", e)
         )?;
+
+        // Enable debug mode for detailed logging
+        calculator.enable_debug();
 
         // Calculate price from actual blockchain reserves
         match calculator.calculate_token_price(pool_address, token_mint).await {
@@ -1093,6 +1099,109 @@ impl PoolPriceService {
         let availability_cache = self.availability_cache.read().await;
 
         (pool_cache.len(), price_cache.len(), availability_cache.len())
+    }
+
+    /// Calculate price directly from a specific pool address (bypasses API discovery)
+    /// This function provides direct blockchain decoding of any pool program
+    pub async fn get_pool_price_direct(
+        &self,
+        pool_address: &str,
+        token_mint: &str
+    ) -> Option<PoolPriceResult> {
+        if is_debug_pool_prices_enabled() {
+            log(
+                LogTag::Pool,
+                "DIRECT_CALC_START",
+                &format!(
+                    "🎯 DIRECT pool calculation for pool {} token {} (bypassing API discovery)",
+                    pool_address,
+                    token_mint
+                )
+            );
+        }
+
+        // Calculate REAL price directly from blockchain pool reserves
+        match self.calculate_real_pool_price_from_reserves(pool_address, token_mint).await {
+            Ok(Some(pool_price_info)) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "DIRECT_CALC_SUCCESS",
+                        &format!(
+                            "✅ DIRECT price calculated: {:.12} SOL for {} from pool {} ({})",
+                            pool_price_info.price_sol,
+                            token_mint,
+                            pool_address,
+                            pool_price_info.pool_type
+                        )
+                    );
+                }
+
+                let calculation_time = Utc::now();
+                let result = PoolPriceResult {
+                    pool_address: pool_address.to_string(),
+                    dex_id: "Direct".to_string(), // Mark as direct calculation
+                    pool_type: Some(pool_price_info.pool_type.clone()),
+                    token_address: token_mint.to_string(),
+                    price_sol: Some(pool_price_info.price_sol),
+                    price_usd: None, // We don't calculate USD prices from pools - only SOL prices
+                    liquidity_usd: 0.0, // No API data for liquidity in direct mode
+                    volume_24h: 0.0, // No API data for volume in direct mode
+                    source: "pool_direct".to_string(),
+                    calculated_at: calculation_time,
+                };
+
+                // Cache the result
+                {
+                    let mut price_cache = self.price_cache.write().await;
+                    price_cache.insert(token_mint.to_string(), result.clone());
+
+                    if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "DIRECT_CACHE_STORED",
+                            &format!(
+                                "💾 CACHED direct price for {}: {:.12} SOL from pool {}",
+                                token_mint,
+                                pool_price_info.price_sol,
+                                pool_address
+                            )
+                        );
+                    }
+                }
+
+                Some(result)
+            }
+            Ok(None) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "DIRECT_CALC_NONE",
+                        &format!(
+                            "❓ DIRECT calculation returned None for pool {} token {}",
+                            pool_address,
+                            token_mint
+                        )
+                    );
+                }
+                None
+            }
+            Err(e) => {
+                if is_debug_pool_prices_enabled() {
+                    log(
+                        LogTag::Pool,
+                        "DIRECT_CALC_ERROR",
+                        &format!(
+                            "❌ DIRECT calculation FAILED for pool {} token {}: {}",
+                            pool_address,
+                            token_mint,
+                            e
+                        )
+                    );
+                }
+                None
+            }
+        }
     }
 }
 
@@ -1319,6 +1428,9 @@ impl PoolPriceCalculator {
             METEORA_DAMM_V2_PROGRAM_ID => {
                 self.decode_meteora_damm_v2_pool(pool_address, &account).await?
             }
+            METEORA_DLMM_PROGRAM_ID => {
+                self.decode_meteora_dlmm_pool(pool_address, &account).await?
+            }
             _ => {
                 return Err(format!("Unsupported pool program ID: {}", program_id));
             }
@@ -1409,6 +1521,9 @@ impl PoolPriceCalculator {
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
                 self.calculate_meteora_damm_v2_price(&pool_info, token_mint).await?
+            }
+            METEORA_DLMM_PROGRAM_ID => {
+                self.calculate_meteora_dlmm_price(&pool_info, token_mint).await?
             }
             _ => {
                 return Err(
@@ -1815,6 +1930,51 @@ impl PoolPriceCalculator {
         Ok((balance_0, balance_1))
     }
 
+    /// Get DLMM token reserve balances from token accounts
+    async fn get_dlmm_vault_balances(
+        &self,
+        reserve_0: &str,
+        reserve_1: &str
+    ) -> Result<(u64, u64), String> {
+        let reserve_0_pubkey = Pubkey::from_str(reserve_0).map_err(|e|
+            format!("Invalid reserve 0 address {}: {}", reserve_0, e)
+        )?;
+        let reserve_1_pubkey = Pubkey::from_str(reserve_1).map_err(|e|
+            format!("Invalid reserve 1 address {}: {}", reserve_1, e)
+        )?;
+
+        let accounts = self.rpc_client
+            .get_multiple_accounts(&[reserve_0_pubkey, reserve_1_pubkey])
+            .map_err(|e| format!("Failed to get DLMM reserve accounts: {}", e))?;
+
+        let reserve_0_account = accounts[0]
+            .as_ref()
+            .ok_or_else(|| format!("DLMM reserve 0 account {} not found", reserve_0))?;
+        let reserve_1_account = accounts[1]
+            .as_ref()
+            .ok_or_else(|| format!("DLMM reserve 1 account {} not found", reserve_1))?;
+
+        // For DLMM, reserves are stored in SPL Token accounts
+        let balance_0 = Self::decode_token_account_amount(&reserve_0_account.data)?;
+        let balance_1 = Self::decode_token_account_amount(&reserve_1_account.data)?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "DLMM_RESERVE",
+                &format!(
+                    "DLMM reserve balances - Reserve0 ({}): {}, Reserve1 ({}): {}",
+                    reserve_0,
+                    balance_0,
+                    reserve_1,
+                    balance_1
+                )
+            );
+        }
+
+        Ok((balance_0, balance_1))
+    }
+
     /// Decode Meteora DAMM v2 pool data from account bytes
     async fn decode_meteora_damm_v2_pool(
         &self,
@@ -2053,6 +2213,264 @@ impl PoolPriceCalculator {
         )
     }
 
+    /// Decode Meteora DLMM pool data from account bytes
+    async fn decode_meteora_dlmm_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        let data = &account.data;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_DECODE",
+                &format!(
+                    "Starting Meteora DLMM decode for pool {}, data length: {}",
+                    pool_address,
+                    data.len()
+                )
+            );
+        }
+
+        if data.len() < 216 {
+            return Err(format!("DLMM pool data too short: {} bytes", data.len()));
+        }
+
+        // Extract pubkeys at known offsets (from hex dump analysis)
+        let token_x_mint = extract_pubkey_at_offset(data, 88)?;
+        let token_y_mint = extract_pubkey_at_offset(data, 120)?;
+        let reserve_x = extract_pubkey_at_offset(data, 152)?;
+        let reserve_y = extract_pubkey_at_offset(data, 184)?;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_STRUCT",
+                &format!(
+                    "DLMM Pool Structure - token_x: {}, token_y: {}, reserve_x: {}, reserve_y: {}",
+                    token_x_mint,
+                    token_y_mint,
+                    reserve_x,
+                    reserve_y
+                )
+            );
+        }
+
+        // Verify we have SOL as one of the tokens
+        let sol_mint = "So11111111111111111111111111111111111111112";
+        let (token_mint, sol_reserve, token_reserve, token_decimals_to_use) = if
+            token_y_mint.to_string() == sol_mint
+        {
+            // token_x is the custom token, token_y is SOL
+            let token_decimals = get_token_decimals_with_cache(
+                &token_x_mint.to_string()
+            ).await.unwrap_or(9);
+            (token_x_mint.to_string(), reserve_y.to_string(), reserve_x.to_string(), token_decimals)
+        } else if token_x_mint.to_string() == sol_mint {
+            // token_x is SOL, token_y is the custom token
+            let token_decimals = get_token_decimals_with_cache(
+                &token_y_mint.to_string()
+            ).await.unwrap_or(9);
+            (token_y_mint.to_string(), reserve_x.to_string(), reserve_y.to_string(), token_decimals)
+        } else {
+            return Err("Pool doesn't contain SOL".to_string());
+        };
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_PAIR",
+                &format!(
+                    "Identified token: {}, SOL reserve: {}, Token reserve: {}",
+                    token_mint,
+                    sol_reserve,
+                    token_reserve
+                )
+            );
+        }
+
+        // Get reserve balances from vault accounts
+        let (sol_balance, token_balance) = if token_y_mint.to_string() == sol_mint {
+            // token_x is the custom token, token_y is SOL -> (sol_balance, token_balance)
+            let (token_bal, sol_bal) = self.get_vault_balances(
+                &reserve_x.to_string(),
+                &reserve_y.to_string()
+            ).await?;
+            (sol_bal, token_bal)
+        } else {
+            // token_x is SOL, token_y is the custom token -> (sol_balance, token_balance)
+            let (sol_bal, token_bal) = self.get_vault_balances(
+                &reserve_x.to_string(),
+                &reserve_y.to_string()
+            ).await?;
+            (sol_bal, token_bal)
+        };
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_BALANCES",
+                &format!(
+                    "SOL balance: {} lamports, Token balance: {} raw units",
+                    sol_balance,
+                    token_balance
+                )
+            );
+        }
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_DECIMALS",
+                &format!("Token {} has {} decimals", token_mint, token_decimals_to_use)
+            );
+        }
+
+        // Calculate price: SOL per token
+        let sol_decimals = 9u8;
+
+        if token_balance == 0 {
+            return Err("Token reserve is empty".to_string());
+        }
+
+        let price_sol =
+            (sol_balance as f64) /
+            (10_f64).powi(sol_decimals as i32) /
+            ((token_balance as f64) / (10_f64).powi(token_decimals_to_use as i32));
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_PRICE",
+                &format!("Calculated price: {:.12} SOL per token", price_sol)
+            );
+        }
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: METEORA_DLMM_PROGRAM_ID.to_string(),
+            pool_type: "Meteora DLMM".to_string(),
+            token_0_mint: token_x_mint.to_string(),
+            token_1_mint: token_y_mint.to_string(),
+            token_0_vault: Some(reserve_x.to_string()),
+            token_1_vault: Some(reserve_y.to_string()),
+            token_0_reserve: if token_x_mint.to_string() == sol_mint {
+                sol_balance
+            } else {
+                token_balance
+            },
+            token_1_reserve: if token_y_mint.to_string() == sol_mint {
+                sol_balance
+            } else {
+                token_balance
+            },
+            token_0_decimals: if token_x_mint.to_string() == sol_mint {
+                9
+            } else {
+                token_decimals_to_use
+            },
+            token_1_decimals: if token_y_mint.to_string() == sol_mint {
+                9
+            } else {
+                token_decimals_to_use
+            },
+            lp_mint: None,
+            lp_supply: None,
+            creator: None,
+            status: Some(0),
+            liquidity_usd: None,
+        })
+    }
+
+    /// Calculate price for Meteora DLMM pool
+    async fn calculate_meteora_dlmm_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        // Determine which token is SOL and which is the target token
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, _is_token_x) = if
+            pool_info.token_0_mint == SOL_MINT &&
+            pool_info.token_1_mint == token_mint
+        {
+            (
+                pool_info.token_0_reserve,
+                pool_info.token_1_reserve,
+                pool_info.token_0_decimals,
+                pool_info.token_1_decimals,
+                true,
+            )
+        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+            (
+                pool_info.token_1_reserve,
+                pool_info.token_0_reserve,
+                pool_info.token_1_decimals,
+                pool_info.token_0_decimals,
+                false,
+            )
+        } else {
+            return Err(
+                format!(
+                    "DLMM pool {} does not contain SOL mint. Token0: {}, Token1: {}, Target: {}",
+                    pool_info.pool_address,
+                    pool_info.token_0_mint,
+                    pool_info.token_1_mint,
+                    token_mint
+                )
+            );
+        };
+
+        // Validate reserves
+        if sol_reserve == 0 || token_reserve == 0 {
+            return Err(
+                format!(
+                    "DLMM pool {} has zero reserves. SOL: {}, Token: {}",
+                    pool_info.pool_address,
+                    sol_reserve,
+                    token_reserve
+                )
+            );
+        }
+
+        // Calculate price in SOL: price = (SOL reserves * 10^token_decimals) / (token reserves * 10^SOL_decimals)
+        let price_sol =
+            ((sol_reserve as f64) * (10f64).powi(token_decimals as i32)) /
+            ((token_reserve as f64) * (10f64).powi(sol_decimals as i32));
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_PRICE",
+                &format!(
+                    "DLMM Price calculation:\n\
+                    - SOL Reserve: {} (decimals: {})\n\
+                    - Token Reserve: {} (decimals: {})\n\
+                    - Price SOL: {:.12}",
+                    sol_reserve,
+                    sol_decimals,
+                    token_reserve,
+                    token_decimals,
+                    price_sol
+                )
+            );
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals,
+                sol_decimals,
+            })
+        )
+    }
+
     /// Decode token account amount from account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
@@ -2123,4 +2541,17 @@ impl PoolPriceCalculator {
 
         Ok(value)
     }
+}
+
+/// Helper function to extract a pubkey from raw data at a specific offset
+fn extract_pubkey_at_offset(data: &[u8], offset: usize) -> Result<Pubkey, String> {
+    if data.len() < offset + 32 {
+        return Err(format!("Insufficient data length for pubkey at offset {}", offset));
+    }
+
+    let pubkey_bytes: [u8; 32] = data[offset..offset + 32]
+        .try_into()
+        .map_err(|_| "Failed to extract 32 bytes for pubkey".to_string())?;
+
+    Ok(Pubkey::new_from_array(pubkey_bytes))
 }

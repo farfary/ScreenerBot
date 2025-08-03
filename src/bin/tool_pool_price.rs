@@ -19,6 +19,8 @@ use screenerbot::rpc::{ init_rpc_client, init_rpc_client_with_url, get_rpc_clien
 use screenerbot::global::set_cmd_args;
 use clap::{ Arg, Command };
 use std::time::Duration;
+use std::str::FromStr;
+use solana_sdk::pubkey::Pubkey;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -97,6 +99,12 @@ async fn main() {
                 .help("Enable price service debug output")
                 .action(clap::ArgAction::SetTrue)
         )
+        .arg(
+            Arg::new("test-direct")
+                .long("test-direct")
+                .help("Test pool directly via blockchain decoder (bypasses API discovery)")
+                .action(clap::ArgAction::SetTrue)
+        )
         .get_matches();
 
     // Set up command args for global debug flags
@@ -159,7 +167,9 @@ async fn main() {
         } else if matches.get_flag("compare-api") {
             compare_pool_api_prices(pool_service, token_address).await;
         } else if let Some(pool_address) = matches.get_one::<String>("pool") {
-            if matches.get_flag("debug-detailed") {
+            if matches.get_flag("test-direct") {
+                test_pool_direct(pool_address, token_address).await;
+            } else if matches.get_flag("debug-detailed") {
                 debug_specific_pool_detailed(pool_address, token_address).await;
             } else {
                 test_specific_pool(pool_address, token_address).await;
@@ -375,6 +385,84 @@ async fn test_specific_pool(pool_address: &str, token_address: &str) {
         "INFO",
         &format!("Token {} has available pools: {}", token_address, has_pools)
     );
+}
+
+/// Test pool directly via blockchain decoder (bypasses API discovery)
+async fn test_pool_direct(pool_address: &str, token_address: &str) {
+    log(
+        LogTag::Pool,
+        "DIRECT_TEST",
+        &format!("Testing direct pool calculation: {} for token: {}", pool_address, token_address)
+    );
+
+    // First, dump the raw pool data for analysis
+    dump_pool_hex_data(pool_address).await;
+
+    let pool_service = get_pool_service();
+
+    // Test direct pool price calculation
+    match pool_service.get_pool_price_direct(pool_address, token_address).await {
+        Some(pool_result) => {
+            log(
+                LogTag::Pool,
+                "DIRECT_SUCCESS",
+                &format!(
+                    "✅ Direct pool calculation successful:\n\
+                    - Pool Address: {}\n\
+                    - Pool Type: {}\n\
+                    - Price SOL: {:.12}\n\
+                    - Source: {}\n\
+                    - Calculated At: {}",
+                    pool_result.pool_address,
+                    pool_result.pool_type.as_deref().unwrap_or("Unknown"),
+                    pool_result.price_sol.unwrap_or(0.0),
+                    pool_result.source,
+                    pool_result.calculated_at.format("%Y-%m-%d %H:%M:%S%.3f UTC")
+                )
+            );
+
+            // Compare with API-based calculation if available
+            log(LogTag::Pool, "COMPARISON", "Comparing with API-based calculation...");
+            match pool_service.get_pool_price(token_address, None).await {
+                Some(api_result) => {
+                    if
+                        let (Some(direct_price), Some(api_price)) = (
+                            pool_result.price_sol,
+                            api_result.price_sol,
+                        )
+                    {
+                        let price_diff = direct_price - api_price;
+                        let price_diff_percent = if api_price != 0.0 {
+                            ((direct_price - api_price) / api_price) * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        log(
+                            LogTag::Pool,
+                            "PRICE_DIFF",
+                            &format!(
+                                "📊 Price Comparison:\n\
+                                - Direct: {:.12} SOL\n\
+                                - API-based: {:.12} SOL\n\
+                                - Difference: {:.12} SOL ({:.4}%)",
+                                direct_price,
+                                api_price,
+                                price_diff,
+                                price_diff_percent
+                            )
+                        );
+                    }
+                }
+                None => {
+                    log(LogTag::Pool, "COMPARISON", "❌ API-based calculation failed");
+                }
+            }
+        }
+        None => {
+            log(LogTag::Pool, "DIRECT_ERROR", "❌ Direct pool calculation failed");
+        }
+    }
 }
 
 /// Test token availability and price calculation
@@ -610,4 +698,119 @@ fn print_usage_examples() {
 
     println!("\n7. Compare prices with detailed debugging:");
     println!("   cargo run --bin tool_pool_price -- --token <TOKEN_MINT> --compare-api --debug");
+
+    println!("\n8. Test direct pool calculation (bypasses API discovery):");
+    println!(
+        "   cargo run --bin tool_pool_price -- --pool <POOL_ADDRESS> --token <TOKEN_MINT> --test-direct"
+    );
+
+    println!("\n9. Test Meteora DLMM pool (example with provided data):");
+    println!(
+        "   cargo run --bin tool_pool_price -- --pool 3PB3eohmv5g7rUtnr1k7vJkM1RLu1X8h4knryfxB1DuZ --token 9tqjeRS1swj36Ee5C1iGiwAxjQJNGAVCzaTLwFY8bonk --test-direct --debug"
+    );
+
+    println!("\n10. Full comparison test (API vs Direct pool calculation):");
+    println!(
+        "   cargo run --bin tool_pool_price -- --pool <POOL_ADDRESS> --token <TOKEN_MINT> --test-direct --debug-detailed"
+    );
+}
+
+/// Dump raw pool account data as hex for analysis
+async fn dump_pool_hex_data(pool_address: &str) {
+    log(
+        LogTag::Pool,
+        "HEX_DUMP",
+        &format!("🔍 Dumping raw pool data for analysis: {}", pool_address)
+    );
+
+    // Create calculator to get raw pool data
+    match screenerbot::tokens::pool::PoolPriceCalculator::new() {
+        Ok(mut calculator) => {
+            calculator.enable_debug();
+
+            match calculator.get_raw_pool_data(pool_address).await {
+                Ok(Some(data)) => {
+                    log(
+                        LogTag::Pool,
+                        "HEX_DATA",
+                        &format!("📊 Pool data length: {} bytes", data.len())
+                    );
+
+                    // Dump hex data in 16-byte rows with offset and ASCII
+                    for (i, chunk) in data.chunks(16).enumerate() {
+                        let offset = i * 16;
+                        let hex_part: String = chunk
+                            .iter()
+                            .map(|byte| format!("{:02x}", byte))
+                            .collect::<Vec<String>>()
+                            .join(" ");
+
+                        let ascii_part: String = chunk
+                            .iter()
+                            .map(|&byte| {
+                                if byte >= 32 && byte <= 126 { byte as char } else { '.' }
+                            })
+                            .collect();
+
+                        log(
+                            LogTag::Pool,
+                            "HEX_ROW",
+                            &format!("{:04x}: {:<48} |{}|", offset, hex_part, ascii_part)
+                        );
+                    }
+
+                    // Look for the specific pubkeys in the data
+                    search_pubkeys_in_data(&data, pool_address).await;
+                }
+                Ok(None) => {
+                    log(LogTag::Pool, "HEX_ERROR", "❌ Pool account not found");
+                }
+                Err(e) => {
+                    log(LogTag::Pool, "HEX_ERROR", &format!("❌ Failed to fetch pool data: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            log(LogTag::Pool, "HEX_ERROR", &format!("❌ Failed to create pool calculator: {}", e));
+        }
+    }
+}
+
+/// Search for known pubkeys in the pool data to find their offsets
+async fn search_pubkeys_in_data(data: &[u8], pool_address: &str) {
+    // Known pubkeys from the provided structure
+    let expected_pubkeys = vec![
+        ("token_x_mint", "9tqjeRS1swj36Ee5C1iGiwAxjQJNGAVCzaTLwFY8bonk"),
+        ("token_y_mint", "So11111111111111111111111111111111111111112"),
+        ("reserve_x", "DTxrnmwcN9FDRhgwMANoaKxjeBLuffq8cQ1PuJ7BGUDW"),
+        ("reserve_y", "FttuDshzg3NLyEadJg1LThsH9UFTp1ebUbfugfmW9yBu"),
+        ("oracle", "7k15A8Qy2wgZRRJwgpQKaUtdCJLjfz7ByGcUH8BcwDXq"),
+        ("base_key", "2RA1EnEVxWP8TQZhFt2nXuVcrQetFQUgYyGsUBTWUNpR"),
+        ("creator", "3edfkoVJeU4AzWGjXRyNrsgsyns5FepTK4Je8QU9qbwi")
+    ];
+
+    log(
+        LogTag::Pool,
+        "SEARCH_PUBKEYS",
+        &format!("🔍 Searching for known pubkeys in pool {} data...", pool_address)
+    );
+
+    for (name, pubkey_str) in expected_pubkeys {
+        // Convert pubkey string to bytes
+        if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::from_str(pubkey_str) {
+            let pubkey_bytes = pubkey.to_bytes();
+
+            // Search for this pubkey in the data
+            for i in 0..data.len().saturating_sub(31) {
+                if data[i..i + 32] == pubkey_bytes {
+                    log(
+                        LogTag::Pool,
+                        "FOUND_PUBKEY",
+                        &format!("✅ Found {} at offset {}: {}", name, i, pubkey_str)
+                    );
+                    break;
+                }
+            }
+        }
+    }
 }
