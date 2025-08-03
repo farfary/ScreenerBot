@@ -1007,8 +1007,6 @@ impl PoolPriceService {
             format!("Failed to create pool calculator: {}", e)
         )?;
 
-        // Enable debug mode for detailed logging
-        calculator.enable_debug();
 
         // Calculate price from actual blockchain reserves
         match calculator.calculate_token_price(pool_address, token_mint).await {
