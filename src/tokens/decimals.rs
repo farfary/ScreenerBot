@@ -153,17 +153,34 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
         }
     }
 
-    // Check failed decimals cache
+    // Check failed decimals cache - but allow retries for network/temporary errors
     if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
         if let Some(error) = failed_cache.get(mint) {
-            if is_debug_decimals_enabled() {
-                log(
-                    LogTag::Decimals,
-                    "CACHED_FAIL",
-                    &format!("Skipping previously failed token {}: {}", mint, error)
-                );
+            // Only skip if this was a real blockchain error, not a network issue
+            if should_cache_as_failed(error) {
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "CACHED_FAIL",
+                        &format!("Skipping previously failed token {}: {}", mint, error)
+                    );
+                }
+                return Err(error.clone());
+            } else {
+                // Network/temporary error - allow retry but log it
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "RETRY_CACHED",
+                        &format!(
+                            "Retrying previously failed token {} (network error): {}",
+                            mint,
+                            error
+                        )
+                    );
+                }
+                // Continue to fetch - don't return early
             }
-            return Err(error.clone());
         }
     }
 
@@ -171,6 +188,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     let results = batch_fetch_token_decimals(&[mint.to_string()]).await;
 
     if let Some((_, result)) = results.first() {
+        // If successful and was previously failed, the batch function already cleaned it up
         result.clone()
     } else {
         Err("No results returned from batch fetch".to_string())
@@ -184,6 +202,17 @@ fn is_token_already_failed(mint: &str) -> bool {
     } else {
         false
     }
+}
+
+/// Check if a token failed with a permanent error (not retryable)
+fn is_token_failed_permanently(mint: &str) -> bool {
+    if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
+        if let Some(error) = failed_cache.get(mint) {
+            // Only permanently failed if it's a real blockchain error
+            return should_cache_as_failed(error);
+        }
+    }
+    false
 }
 
 /// Add a token to the failed cache
@@ -223,7 +252,15 @@ fn should_cache_as_failed(error: &str) -> bool {
         error_lower.contains("timeout") ||
         error_lower.contains("connection") ||
         error_lower.contains("network") ||
-        error_lower.contains("unavailable")
+        error_lower.contains("unavailable") ||
+        error_lower.contains("error sending request") ||
+        error_lower.contains("request failed") ||
+        error_lower.contains("connection refused") ||
+        error_lower.contains("connection reset") ||
+        error_lower.contains("timed out") ||
+        error_lower.contains("dns") ||
+        error_lower.contains("ssl") ||
+        error_lower.contains("tls")
     {
         return false;
     }
@@ -391,8 +428,8 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         for (mint_str, pubkey) in &valid_mints {
             if let Some(&decimals) = cache.get(mint_str) {
                 cached_results.push((mint_str.clone(), Ok(decimals)));
-            } else if is_token_already_failed(mint_str) {
-                // Token already failed, skip but report as failed
+            } else if is_token_failed_permanently(mint_str) {
+                // Token failed with permanent error (not network), skip
                 if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
                     if let Some(error) = failed_cache.get(mint_str) {
                         cached_results.push((mint_str.clone(), Err(error.clone())));
@@ -400,19 +437,31 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                             log(
                                 LogTag::Decimals,
                                 "SKIP_FAILED",
-                                &format!("Skipping previously failed token {}", mint_str)
+                                &format!("Skipping permanently failed token {}", mint_str)
                             );
                         }
                     }
                 }
             } else {
+                // Either not in failed cache, or failed with retryable error
+                if is_token_already_failed(mint_str) && is_debug_decimals_enabled() {
+                    if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
+                        if let Some(error) = failed_cache.get(mint_str) {
+                            log(
+                                LogTag::Decimals,
+                                "RETRY_BATCH",
+                                &format!("Retrying token {} (network error): {}", mint_str, error)
+                            );
+                        }
+                    }
+                }
                 uncached_mints.push((mint_str.clone(), *pubkey));
             }
         }
     } else {
-        // Filter out already failed tokens even if main cache is locked
+        // Filter out permanently failed tokens even if main cache is locked
         for (mint_str, pubkey) in &valid_mints {
-            if !is_token_already_failed(mint_str) {
+            if !is_token_failed_permanently(mint_str) {
                 uncached_mints.push((mint_str.clone(), *pubkey));
             } else {
                 if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
@@ -485,6 +534,25 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                             new_cache_entries.insert(mint_str.clone(), *decimals);
                             fetch_results.push((mint_str.clone(), Ok(*decimals)));
                             successful_indices.push(i);
+
+                            // Remove from failed cache if it was previously failed
+                            if is_token_already_failed(mint_str) {
+                                if let Ok(mut failed_cache) = FAILED_DECIMALS_CACHE.lock() {
+                                    if let Some(old_error) = failed_cache.remove(mint_str) {
+                                        if is_debug_decimals_enabled() {
+                                            log(
+                                                LogTag::Decimals,
+                                                "RETRY_SUCCESS",
+                                                &format!(
+                                                    "Token {} succeeded on retry, removed from failed cache (was: {})",
+                                                    mint_str,
+                                                    old_error
+                                                )
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                         }
                         Err(e) => {
                             // Check if this is a real error (account not found) vs rate limit
@@ -587,22 +655,15 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         fetch_results.push((mint_str, Err(error_msg.to_string())));
     }
 
-    // Update cache and save to disk if we have new entries
+    // Update cache and save to disk if we have new entries or removed failed entries
+    let mut cache_updated = false;
+
     if !new_cache_entries.is_empty() {
         if let Ok(mut cache) = DECIMAL_CACHE.lock() {
             let old_size = cache.len();
             cache.extend(new_cache_entries.clone());
             let new_size = cache.len();
-
-            // Get current failed cache for saving
-            let failed_cache = if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
-                failed_cache.clone()
-            } else {
-                HashMap::new()
-            };
-
-            // Save to disk
-            save_cache_to_disk(&cache, &failed_cache);
+            cache_updated = true;
 
             // Only log significant cache updates or in debug mode
             if is_debug_decimals_enabled() || new_cache_entries.len() > 5 {
@@ -619,6 +680,25 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                 );
             }
         }
+    }
+
+    // Always save to disk if cache was updated (includes failed cache removals)
+    if cache_updated {
+        // Get current caches for saving
+        let success_cache = if let Ok(cache) = DECIMAL_CACHE.lock() {
+            cache.clone()
+        } else {
+            HashMap::new()
+        };
+
+        let failed_cache = if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
+            failed_cache.clone()
+        } else {
+            HashMap::new()
+        };
+
+        // Save both caches to disk
+        save_cache_to_disk(&success_cache, &failed_cache);
     }
 
     // Combine cached and fetched results in original order
@@ -742,5 +822,40 @@ pub fn save_decimal_cache() {
             HashMap::new()
         };
         save_cache_to_disk(&cache, &failed_cache);
+    }
+}
+
+/// Clean up temporary/network errors from failed cache, keeping only permanent blockchain errors
+pub fn cleanup_retryable_failed_cache() {
+    if let Ok(mut failed_cache) = FAILED_DECIMALS_CACHE.lock() {
+        let original_size = failed_cache.len();
+
+        // Keep only permanent errors (blockchain state errors)
+        failed_cache.retain(|_mint, error| should_cache_as_failed(error));
+
+        let cleaned_size = failed_cache.len();
+        let removed_count = original_size - cleaned_size;
+
+        if removed_count > 0 {
+            // Save cleaned cache to disk
+            let success_cache = if let Ok(cache) = DECIMAL_CACHE.lock() {
+                cache.clone()
+            } else {
+                HashMap::new()
+            };
+            save_cache_to_disk(&success_cache, &failed_cache);
+
+            if is_debug_decimals_enabled() {
+                log(
+                    LogTag::Decimals,
+                    "CACHE_CLEANUP",
+                    &format!(
+                        "Cleaned failed cache: removed {} retryable errors, kept {} permanent errors",
+                        removed_count,
+                        cleaned_size
+                    )
+                );
+            }
+        }
     }
 }

@@ -385,11 +385,13 @@ impl TokenPriceService {
                                     LogTag::PriceService,
                                     "POOL_SUCCESS",
                                     &format!(
-                                        "✅ POOL PRICE SUCCESS for {}: ${:.12} SOL from pool {} (dex: {}) at {}",
+                                        "✅ POOL PRICE SUCCESS for {}: ${:.12} SOL from pool {} ({}) at {}",
                                         mint,
                                         result.price_sol.unwrap_or(0.0),
                                         result.pool_address,
-                                        result.dex_id,
+                                        result.pool_type
+                                            .as_ref()
+                                            .unwrap_or(&"Unknown Pool".to_string()),
                                         result.calculated_at.format("%H:%M:%S%.3f")
                                     )
                                 );
@@ -510,9 +512,7 @@ impl TokenPriceService {
                     );
                 }
                 let pool_info = (
-                    pool_result.pool_type
-                        .clone()
-                        .or_else(|| Some(pool_result.dex_id.to_uppercase())), // Use actual pool type or fallback to dex_id
+                    pool_result.pool_type.clone(), // Only use actual pool type from decoder, no fallback to dex_id
                     Some(pool_result.pool_address.clone()),
                 );
                 (PriceCacheEntry::from_pool_result(&pool_result), pool_info)

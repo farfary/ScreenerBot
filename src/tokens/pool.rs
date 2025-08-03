@@ -481,11 +481,13 @@ impl PoolPriceService {
                             LogTag::Pool,
                             "FRESH_CALC_SUCCESS",
                             &format!(
-                                "✅ FRESH POOL PRICE calculated for {}: {:.12} SOL from pool {} (dex: {})",
+                                "✅ FRESH POOL PRICE calculated for {}: {:.12} SOL from pool {} ({})",
                                 token_address,
                                 price_sol,
                                 pool_result.pool_address,
-                                pool_result.dex_id
+                                pool_result.pool_type
+                                    .as_ref()
+                                    .unwrap_or(&"Unknown Pool".to_string())
                             )
                         );
 
@@ -511,7 +513,9 @@ impl PoolPriceService {
                                     price_diff,
                                     price_diff_percent,
                                     pool_result.pool_address,
-                                    pool_result.dex_id
+                                    pool_result.pool_type
+                                        .as_ref()
+                                        .unwrap_or(&"Unknown Pool".to_string())
                                 )
                             );
 
@@ -732,11 +736,11 @@ impl PoolPriceService {
                             LogTag::Pool,
                             "FETCH_PARSE_SUCCESS",
                             &format!(
-                                "✅ Parsed pool #{} for {}: {} (dex: {}, liquidity: ${:.2})",
+                                "✅ Parsed pool #{} for {}: {} ({}, liquidity: ${:.2})",
                                 index + 1,
                                 token_address,
                                 cached_pool.pair_address,
-                                cached_pool.dex_id,
+                                cached_pool.dex_id, // Keep API dex_id for debugging pool fetching
                                 cached_pool.liquidity_usd
                             )
                         );
@@ -783,10 +787,10 @@ impl PoolPriceService {
                     LogTag::Pool,
                     "FETCH_TOP_POOLS",
                     &format!(
-                        "🏆 Pool #{}: {} (dex: {}, liquidity: ${:.2}, native_price: {:.12})",
+                        "🏆 Pool #{}: {} ({}, liquidity: ${:.2}, native_price: {:.12})",
                         i + 1,
                         pool.pair_address,
-                        pool.dex_id,
+                        pool.dex_id, // Keep API dex_id for debugging pool fetching
                         pool.liquidity_usd,
                         pool.price_native
                     )
@@ -857,10 +861,10 @@ impl PoolPriceService {
                 LogTag::Pool,
                 "CALC_SELECTED_POOL",
                 &format!(
-                    "🏆 Selected best pool for {}: {} (dex: {}, liquidity: ${:.2}, volume_24h: ${:.2})",
+                    "🏆 Selected best pool for {}: {} ({}, liquidity: ${:.2}, volume_24h: ${:.2})",
                     token_address,
                     best_pool.pair_address,
-                    best_pool.dex_id,
+                    best_pool.dex_id, // Keep API dex_id for debugging pool selection
                     best_pool.liquidity_usd,
                     best_pool.volume_24h
                 )
@@ -940,7 +944,7 @@ impl PoolPriceService {
         let calculation_time = Utc::now();
         let result = PoolPriceResult {
             pool_address: best_pool.pair_address.clone(),
-            dex_id: best_pool.dex_id.clone(),
+            dex_id: best_pool.dex_id.clone(), // Keep for internal tracking, but use pool_type for display
             pool_type: actual_pool_type, // Use actual pool type from decoder, not API dex_id
             token_address: token_address.to_string(),
             price_sol,
@@ -980,7 +984,7 @@ impl PoolPriceService {
                      ⏰ Created: {}",
                     token_address,
                     best_pool.pair_address,
-                    best_pool.dex_id,
+                    best_pool.dex_id, // Keep API dex_id for debugging pool details
                     best_pool.liquidity_usd,
                     best_pool.volume_24h,
                     best_pool.base_token,

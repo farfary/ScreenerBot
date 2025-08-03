@@ -255,7 +255,7 @@ async fn test_token_pools(token_address: &str) {
                         "Pool {}: {} on {} - Liquidity: ${:.2}, Volume 24h: ${:.2}, Price: ${}",
                         i + 1,
                         pair.pair_address,
-                        pair.dex_id,
+                        pair.dex_id, // Keep API dex_id for debugging tool output
                         pair.liquidity
                             .as_ref()
                             .map(|l| l.usd)
@@ -290,7 +290,7 @@ async fn test_token_pools(token_address: &str) {
                             .as_ref()
                             .map(|l| l.usd)
                             .unwrap_or(0.0),
-                        best_pool.dex_id
+                        best_pool.dex_id // Keep API dex_id for debugging tool output
                     )
                 );
             }
@@ -484,10 +484,10 @@ async fn test_token_availability_and_price(
                     LogTag::Pool,
                     "SUCCESS",
                     &format!(
-                        "Pool price calculated: {:.12} SOL from {} on {}",
+                        "Pool price calculated: {:.12} SOL from {} ({})",
                         pool_result.price_sol.unwrap_or(0.0),
                         pool_result.pool_address,
-                        pool_result.dex_id
+                        pool_result.pool_type.as_ref().unwrap_or(&"Unknown Pool".to_string())
                     )
                 );
             }
@@ -567,7 +567,7 @@ async fn debug_pool_reserves(pool_address: &str, token_address: &str) {
                     - Liquidity USD: ${:.2}\n\
                     - Volume 24h: ${:.2}",
                         pool.pair_address,
-                        pool.dex_id,
+                        pool.dex_id, // Keep API dex_id for debugging tool output
                         pool.base_token.address,
                         pool.base_token.symbol,
                         pool.quote_token.address,
