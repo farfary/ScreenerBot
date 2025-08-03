@@ -38,11 +38,11 @@ use chrono::{ Duration as ChronoDuration, Utc };
 pub const MIN_TOKEN_AGE_SECONDS: i64 = 60;
 
 /// Maximum token age in seconds
-pub const MAX_TOKEN_AGE_SECONDS: i64 = 3 * 30 * 24 * 60 * 60;
+pub const MAX_TOKEN_AGE_SECONDS: i64 = 12 * 30 * 24 * 60 * 60;
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 24 * 60; // 24 hours
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 24 hours
 
 // Note: MAX_OPEN_POSITIONS is imported from trader module above
 
