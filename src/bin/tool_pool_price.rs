@@ -111,6 +111,18 @@ async fn main() {
                 .help("Test pool directly via blockchain decoder (bypasses API discovery)")
                 .action(clap::ArgAction::SetTrue)
         )
+        .arg(
+            Arg::new("list-pools")
+                .long("list-pools")
+                .help("List all available pools for a token with detailed information")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("test-pool-direct")
+                .long("test-pool-direct")
+                .help("Test a specific pool address directly (requires --pool)")
+                .action(clap::ArgAction::SetTrue)
+        )
         .get_matches();
 
     // Set up command args for global debug flags
@@ -166,12 +178,10 @@ async fn main() {
     // Determine what operation to perform
     if matches.get_flag("test-monitoring") {
         test_monitoring_service(pool_service, &matches).await;
-    } else if let Some(token_address) = matches.get_one::<String>("token") {
-        if matches.get_flag("test-pools") {
-            test_token_pools(token_address).await;
-        } else if matches.get_flag("compare-api") {
-            compare_pool_api_prices(pool_service, token_address).await;
-        } else if let Some(pool_address) = matches.get_one::<String>("pool") {
+    } else if let Some(pool_address) = matches.get_one::<String>("pool") {
+        if matches.get_flag("test-pool-direct") {
+            test_pool_address_direct(pool_address).await;
+        } else if let Some(token_address) = matches.get_one::<String>("token") {
             if matches.get_flag("test-direct") {
                 test_pool_direct(pool_address, token_address).await;
             } else if matches.get_flag("debug-detailed") {
@@ -179,6 +189,21 @@ async fn main() {
             } else {
                 test_specific_pool(pool_address, token_address).await;
             }
+        } else {
+            log(
+                LogTag::Pool,
+                "ERROR",
+                "Pool address specified but no token address provided. Use --token <TOKEN_MINT>"
+            );
+            print_usage_examples();
+        }
+    } else if let Some(token_address) = matches.get_one::<String>("token") {
+        if matches.get_flag("list-pools") {
+            list_all_pools_for_token(token_address).await;
+        } else if matches.get_flag("test-pools") {
+            test_token_pools(token_address).await;
+        } else if matches.get_flag("compare-api") {
+            compare_pool_api_prices(pool_service, token_address).await;
         } else {
             test_token_availability_and_price(pool_service, token_address).await;
         }
@@ -188,7 +213,597 @@ async fn main() {
     }
 }
 
-/// Test the background monitoring service
+/// List all available pools for a token with detailed information
+async fn list_all_pools_for_token(token_address: &str) {
+    log(LogTag::Pool, "LIST_POOLS", &format!("🔍 Listing all pools for token: {}", token_address));
+
+    match get_token_pairs_from_api(token_address).await {
+        Ok(pairs) => {
+            if pairs.is_empty() {
+                log(LogTag::Pool, "NO_POOLS", "❌ No pools found for this token");
+                return;
+            }
+
+            log(LogTag::Pool, "SUCCESS", &format!("✅ Found {} pools for token", pairs.len()));
+
+            // Sort pools by liquidity (highest first)
+            let mut sorted_pairs = pairs.clone();
+            sorted_pairs.sort_by(|a, b| {
+                let a_liquidity = a.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0);
+                let b_liquidity = b.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0);
+                b_liquidity.partial_cmp(&a_liquidity).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            println!("
+📊 POOL LIST (sorted by liquidity):");
+            println!("================================================================");
+
+            for (i, pair) in sorted_pairs.iter().enumerate() {
+                let liquidity = pair.liquidity
+                    .as_ref()
+                    .map(|l| l.usd)
+                    .unwrap_or(0.0);
+                let volume_24h = pair.volume.h24.unwrap_or(0.0);
+                let price_usd = pair.price_usd.as_deref().unwrap_or("N/A");
+
+                println!("{}. Pool Address: {}", i + 1, pair.pair_address);
+                println!(
+                    "   DEX:           {} ({})",
+                    get_dex_display_name(&pair.dex_id),
+                    pair.dex_id
+                );
+                println!("   Liquidity:     ${:.2}", liquidity);
+                println!("   Volume 24h:    ${:.2}", volume_24h);
+                println!("   Price USD:     ${}", price_usd);
+                println!(
+                    "   Base Token:    {} ({})",
+                    pair.base_token.symbol,
+                    pair.base_token.address
+                );
+                println!(
+                    "   Quote Token:   {} ({})",
+                    pair.quote_token.symbol,
+                    pair.quote_token.address
+                );
+
+                // Try to identify pool program type
+                let pool_type = identify_pool_program_type(&pair.dex_id, &pair.pair_address).await;
+                println!("   Pool Type:     {}", pool_type);
+                println!("   ─────────────────────────────────────────────────────────────");
+            }
+
+            // Show summary statistics
+            let total_liquidity: f64 = sorted_pairs
+                .iter()
+                .map(|p|
+                    p.liquidity
+                        .as_ref()
+                        .map(|l| l.usd)
+                        .unwrap_or(0.0)
+                )
+                .sum();
+            let total_volume: f64 = sorted_pairs
+                .iter()
+                .map(|p| p.volume.h24.unwrap_or(0.0))
+                .sum();
+
+            println!("
+📈 SUMMARY:");
+            println!("Total Pools:     {}", sorted_pairs.len());
+            println!("Total Liquidity: ${:.2}", total_liquidity);
+            println!("Total Volume:    ${:.2}", total_volume);
+
+            // Show DEX distribution
+            let mut dex_counts = std::collections::HashMap::new();
+            for pair in &sorted_pairs {
+                *dex_counts.entry(pair.dex_id.clone()).or_insert(0) += 1;
+            }
+
+            println!("
+🏪 DEX DISTRIBUTION:");
+            for (dex, count) in dex_counts {
+                println!("  {}: {} pools", get_dex_display_name(&dex), count);
+            }
+        }
+        Err(e) => {
+            log(LogTag::Pool, "ERROR", &format!("❌ Failed to fetch pools: {}", e));
+        }
+    }
+}
+
+/// Test a specific pool address directly without needing token address
+async fn test_pool_address_direct(pool_address: &str) {
+    log(
+        LogTag::Pool,
+        "DIRECT_POOL_TEST",
+        &format!("🎯 Testing pool address directly: {}", pool_address)
+    );
+
+    // First, dump the raw pool data for analysis
+    dump_pool_hex_data(pool_address).await;
+
+    // Try to determine what type of pool this is by fetching the account
+    match screenerbot::tokens::pool::PoolPriceCalculator::new() {
+        Ok(mut calculator) => {
+            calculator.enable_debug();
+
+            // Get raw pool data to analyze
+            match calculator.get_raw_pool_data(pool_address).await {
+                Ok(Some(data)) => {
+                    log(
+                        LogTag::Pool,
+                        "POOL_DATA",
+                        &format!("✅ Retrieved pool data: {} bytes", data.len())
+                    );
+
+                    // Try to identify the pool program type from the account owner
+                    match
+                        get_rpc_client().get_account(
+                            &solana_sdk::pubkey::Pubkey::from_str(pool_address).unwrap()
+                        ).await
+                    {
+                        Ok(account) => {
+                            let program_id = account.owner.to_string();
+                            log(
+                                LogTag::Pool,
+                                "PROGRAM_ID",
+                                &format!("Pool owned by program: {}", program_id)
+                            );
+
+                            let pool_type = match program_id.as_str() {
+                                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" =>
+                                    "Raydium Legacy AMM",
+                                "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => "Pump.fun AMM",
+                                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM",
+                                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
+                                "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => "Meteora DAMM v2",
+                                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Orca CAMM",
+                                "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => "Moonshot",
+                                _ => &format!("Unknown ({})", program_id),
+                            };
+
+                            log(
+                                LogTag::Pool,
+                                "POOL_TYPE",
+                                &format!("🏷️  Pool Type: {}", pool_type)
+                            );
+
+                            // Try to decode specific pool type
+                            match program_id.as_str() {
+                                "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => {
+                                    test_pump_fun_pool_direct(pool_address, &data).await;
+                                }
+                                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
+                                    test_raydium_legacy_pool_direct(pool_address, &data).await;
+                                }
+                                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => {
+                                    test_raydium_cpmm_pool_direct(pool_address, &data).await;
+                                }
+                                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
+                                    test_meteora_dlmm_pool_direct(pool_address, &data).await;
+                                }
+                                "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => {
+                                    test_meteora_damm_pool_direct(pool_address, &data).await;
+                                }
+                                _ => {
+                                    log(
+                                        LogTag::Pool,
+                                        "UNSUPPORTED",
+                                        &format!("❌ Unsupported pool type: {}", pool_type)
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Pool,
+                                "ERROR",
+                                &format!("❌ Failed to get account info: {}", e)
+                            );
+                        }
+                    }
+                }
+                Ok(None) => {
+                    log(LogTag::Pool, "NOT_FOUND", "❌ Pool account not found");
+                }
+                Err(e) => {
+                    log(LogTag::Pool, "ERROR", &format!("❌ Failed to fetch pool data: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            log(LogTag::Pool, "ERROR", &format!("❌ Failed to create pool calculator: {}", e));
+        }
+    }
+}
+
+/// Get display name for DEX
+fn get_dex_display_name(dex_id: &str) -> &str {
+    match dex_id {
+        "pumpswap" => "Pump.fun",
+        "raydium" => "Raydium CPMM",
+        "meteora" => "Meteora",
+        "orca" => "Orca",
+        "moonshot" => "Moonshot",
+        _ => dex_id,
+    }
+}
+
+/// Identify pool program type from DEX ID and pool address
+async fn identify_pool_program_type(dex_id: &str, pool_address: &str) -> String {
+    // Try to get the account to check program ID
+    if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::from_str(pool_address) {
+        if let Ok(account) = get_rpc_client().get_account(&pubkey).await {
+            let program_id = account.owner.to_string();
+            return match program_id.as_str() {
+                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "Raydium Legacy AMM".to_string(),
+                "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => "Pump.fun AMM".to_string(),
+                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "Raydium CPMM".to_string(),
+                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM".to_string(),
+                "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv" => "Meteora DAMM v2".to_string(),
+                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Orca CAMM".to_string(),
+                "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB" => "Moonshot".to_string(),
+                _ => format!("Unknown ({}) - {}", dex_id, program_id),
+            };
+        }
+    }
+
+    // Fallback to DEX ID mapping
+    (
+        match dex_id {
+            "pumpswap" => "Pump.fun AMM (assumed)",
+            "raydium" => "Raydium (assumed)",
+            "meteora" => "Meteora (assumed)",
+            "orca" => "Orca (assumed)",
+            "moonshot" => "Moonshot (assumed)",
+            _ => dex_id,
+        }
+    ).to_string()
+}
+
+/// Test Pump.fun pool directly
+async fn test_pump_fun_pool_direct(pool_address: &str, data: &[u8]) {
+    log(LogTag::Pool, "PUMP_TEST", &format!("🚀 Testing Pump.fun pool: {}", pool_address));
+
+    // Pump.fun pool structure (300 bytes):
+    // Offsets based on our successful implementation
+    if data.len() >= 300 {
+        // Extract reserves at known offsets
+        if data.len() >= 152 {
+            let token_reserve_bytes = &data[136..144];
+            let sol_reserve_bytes = &data[144..152];
+
+            let token_reserve = u64::from_le_bytes(
+                token_reserve_bytes.try_into().unwrap_or([0; 8])
+            );
+            let sol_reserve = u64::from_le_bytes(sol_reserve_bytes.try_into().unwrap_or([0; 8]));
+
+            log(
+                LogTag::Pool,
+                "PUMP_RESERVES",
+                &format!("Token Reserve: {}, SOL Reserve: {}", token_reserve, sol_reserve)
+            );
+
+            // Calculate price (SOL per token)
+            if token_reserve > 0 && sol_reserve > 0 {
+                let price_sol =
+                    (sol_reserve as f64) /
+                    (10_f64).powi(9) /
+                    ((token_reserve as f64) / (10_f64).powi(6));
+                log(
+                    LogTag::Pool,
+                    "PUMP_PRICE",
+                    &format!("✅ Calculated Price: {:.12} SOL per token", price_sol)
+                );
+            }
+        }
+    } else {
+        log(
+            LogTag::Pool,
+            "PUMP_ERROR",
+            &format!("❌ Invalid pool data size: {} bytes (expected 300)", data.len())
+        );
+    }
+}
+
+/// Test Raydium Legacy AMM pool directly
+async fn test_raydium_legacy_pool_direct(pool_address: &str, data: &[u8]) {
+    log(
+        LogTag::Pool,
+        "RAYDIUM_LEGACY",
+        &format!("🔄 Testing Raydium Legacy AMM pool: {}", pool_address)
+    );
+
+    // Raydium Legacy AMM structure analysis
+    log(LogTag::Pool, "RAYDIUM_DATA", &format!("Pool data size: {} bytes", data.len()));
+
+    // Try to extract reserves using known Raydium Legacy offsets
+    // These offsets would need to be determined from Raydium documentation or reverse engineering
+    if data.len() >= 700 {
+        // Estimated size for Raydium Legacy pools
+        log(LogTag::Pool, "RAYDIUM_ANALYSIS", "Analyzing Raydium Legacy pool structure...");
+
+        // Look for potential reserve values (64-bit integers)
+        let mut potential_reserves = Vec::new();
+
+        for i in (0..data.len().saturating_sub(8)).step_by(8) {
+            if let Ok(value_bytes) = data[i..i + 8].try_into() {
+                let value = u64::from_le_bytes(value_bytes);
+                // Look for values that could be token reserves (reasonable range)
+                if value > 1_000_000 && value < 1_000_000_000_000_000_000 {
+                    potential_reserves.push((i, value));
+                }
+            }
+        }
+
+        log(
+            LogTag::Pool,
+            "RAYDIUM_RESERVES",
+            &format!("Found {} potential reserve values:", potential_reserves.len())
+        );
+        for (offset, value) in &potential_reserves {
+            log(LogTag::Pool, "RESERVE_CANDIDATE", &format!("  Offset {}: {}", offset, value));
+        }
+
+        // Try to find vault addresses (32-byte pubkeys) - but don't fetch them to avoid hanging
+        log(LogTag::Pool, "VAULT_SEARCH", "🔍 Looking for potential vault addresses in pool data");
+
+        // Search for known pubkeys in the data instead of making RPC calls
+        search_for_known_pubkeys_in_data(data);
+
+        // Try direct reserve extraction based on hex analysis
+        if let Some((reserve_a, reserve_b)) = extract_reserves_from_raydium_legacy(data) {
+            log(
+                LogTag::Pool,
+                "RESERVES_EXTRACTED",
+                &format!("🎯 Extracted reserves: A={}, B={}", reserve_a, reserve_b)
+            );
+
+            // Calculate potential price (assuming one is SOL, other is token)
+            let sol_decimals = 9;
+            let token_decimals = 6; // Common for pump.fun tokens
+
+            let price_a_to_b =
+                (reserve_b as f64) /
+                (10_f64).powi(sol_decimals) /
+                ((reserve_a as f64) / (10_f64).powi(token_decimals));
+            let price_b_to_a =
+                (reserve_a as f64) /
+                (10_f64).powi(sol_decimals) /
+                ((reserve_b as f64) / (10_f64).powi(token_decimals));
+
+            log(
+                LogTag::Pool,
+                "PRICE_CALC",
+                &format!(
+                    "💰 Potential prices: A→B: {:.12} SOL, B→A: {:.12} SOL",
+                    price_a_to_b,
+                    price_b_to_a
+                )
+            );
+        } else {
+            log(LogTag::Pool, "NO_RESERVES", "❌ Could not extract reserves from pool data");
+        }
+    } else {
+        log(
+            LogTag::Pool,
+            "RAYDIUM_ERROR",
+            &format!("❌ Unexpected pool data size: {} bytes", data.len())
+        );
+    }
+}
+
+/// Test Raydium CPMM pool directly
+async fn test_raydium_cpmm_pool_direct(pool_address: &str, data: &[u8]) {
+    log(LogTag::Pool, "RAYDIUM_CPMM", &format!("🔄 Testing Raydium CPMM pool: {}", pool_address));
+
+    // Raydium CPMM structure - we have working decoder for this
+    log(LogTag::Pool, "CPMM_DATA", &format!("Pool data size: {} bytes", data.len()));
+
+    // Use our existing CPMM decoder
+    match screenerbot::tokens::pool::PoolPriceCalculator::new() {
+        Ok(mut calculator) => {
+            calculator.enable_debug();
+
+            // The CPMM decoder should work
+            log(LogTag::Pool, "CPMM_DECODE", "Using existing Raydium CPMM decoder...");
+        }
+        Err(e) => {
+            log(LogTag::Pool, "CPMM_ERROR", &format!("❌ Failed to create calculator: {}", e));
+        }
+    }
+}
+
+/// Test Meteora DLMM pool directly
+async fn test_meteora_dlmm_pool_direct(pool_address: &str, data: &[u8]) {
+    log(LogTag::Pool, "METEORA_DLMM", &format!("⚡ Testing Meteora DLMM pool: {}", pool_address));
+
+    log(LogTag::Pool, "DLMM_DATA", &format!("Pool data size: {} bytes", data.len()));
+
+    // Meteora DLMM has complex structure - this would need detailed analysis
+    if data.len() > 100 {
+        log(LogTag::Pool, "DLMM_ANALYSIS", "Meteora DLMM pools have complex bin-based structure");
+        log(
+            LogTag::Pool,
+            "DLMM_NOTE",
+            "This pool type requires specialized bin analysis - using existing decoder"
+        );
+    }
+}
+
+/// Test Meteora DAMM v2 pool directly
+async fn test_meteora_damm_pool_direct(pool_address: &str, data: &[u8]) {
+    log(
+        LogTag::Pool,
+        "METEORA_DAMM",
+        &format!("⚡ Testing Meteora DAMM v2 pool: {}", pool_address)
+    );
+
+    log(LogTag::Pool, "DAMM_DATA", &format!("Pool data size: {} bytes", data.len()));
+
+    // DAMM v2 should have reserve information
+    if data.len() >= 200 {
+        log(LogTag::Pool, "DAMM_ANALYSIS", "Analyzing DAMM v2 structure - using existing decoder");
+    }
+}
+
+/// Search for known pubkeys in pool data without making RPC calls
+fn search_for_known_pubkeys_in_data(data: &[u8]) {
+    log(LogTag::Pool, "SEARCH_PUBKEYS", "🔍 Searching for known pubkeys in pool data...");
+
+    // Known important pubkeys to look for
+    let known_pubkeys = vec![
+        ("So11111111111111111111111111111111111111112", "SOL mint"),
+        ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "SPL Token Program"),
+        ("11111111111111111111111111111111", "System Program")
+    ];
+
+    for (pubkey_str, name) in known_pubkeys {
+        if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::from_str(pubkey_str) {
+            let pubkey_bytes = pubkey.to_bytes();
+
+            // Search for this pubkey in the data
+            for i in 0..data.len().saturating_sub(32) {
+                if &data[i..i + 32] == pubkey_bytes {
+                    log(
+                        LogTag::Pool,
+                        "FOUND_PUBKEY",
+                        &format!("✅ Found {} at offset {}: {}", name, i, pubkey_str)
+                    );
+                }
+            }
+        }
+    }
+
+    // Also look for the specific token mint in our test
+    let test_token = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
+    if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::from_str(test_token) {
+        let pubkey_bytes = pubkey.to_bytes();
+
+        for i in 0..data.len().saturating_sub(32) {
+            if &data[i..i + 32] == pubkey_bytes {
+                log(
+                    LogTag::Pool,
+                    "FOUND_TOKEN",
+                    &format!("✅ Found test token mint at offset {}: {}", i, test_token)
+                );
+            }
+        }
+    }
+}
+
+/// Extract reserves from Raydium Legacy pool data based on analysis
+fn extract_reserves_from_raydium_legacy(data: &[u8]) -> Option<(u64, u64)> {
+    // Based on our hex analysis, let's try the most promising offsets
+    // From the analysis, we saw potential reserves at offsets 208 and 216
+
+    if data.len() < 224 {
+        return None;
+    }
+
+    // Try offset 208 and 216 (these showed promising values)
+    if
+        let (Ok(reserve_a_bytes), Ok(reserve_b_bytes)) = (
+            data[208..216].try_into(),
+            data[216..224].try_into(),
+        )
+    {
+        let reserve_a = u64::from_le_bytes(reserve_a_bytes);
+        let reserve_b = u64::from_le_bytes(reserve_b_bytes);
+
+        // Validate that these look like reasonable reserves
+        if
+            reserve_a > 1_000 &&
+            reserve_b > 1_000 &&
+            reserve_a < 1_000_000_000_000_000 &&
+            reserve_b < 1_000_000_000_000_000
+        {
+            return Some((reserve_a, reserve_b));
+        }
+    }
+
+    // If that doesn't work, try other promising offsets from our analysis
+    let promising_offsets = vec![
+        (256, 264), // Alternative offsets
+        (288, 296),
+        (312, 320)
+    ];
+
+    for (offset_a, offset_b) in promising_offsets {
+        if data.len() >= offset_b + 8 {
+            if
+                let (Ok(reserve_a_bytes), Ok(reserve_b_bytes)) = (
+                    data[offset_a..offset_a + 8].try_into(),
+                    data[offset_b..offset_b + 8].try_into(),
+                )
+            {
+                let reserve_a = u64::from_le_bytes(reserve_a_bytes);
+                let reserve_b = u64::from_le_bytes(reserve_b_bytes);
+
+                if
+                    reserve_a > 1_000 &&
+                    reserve_b > 1_000 &&
+                    reserve_a < 1_000_000_000_000_000 &&
+                    reserve_b < 1_000_000_000_000_000
+                {
+                    return Some((reserve_a, reserve_b));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Search for vault addresses in pool data
+async fn search_for_vault_addresses(data: &[u8], pool_type: &str) {
+    log(
+        LogTag::Pool,
+        "VAULT_SEARCH",
+        &format!("🔍 Searching for vault addresses in {} pool", pool_type)
+    );
+
+    // Look for 32-byte sequences that could be pubkeys
+    let mut vault_candidates = Vec::new();
+
+    for i in 0..data.len().saturating_sub(32) {
+        let potential_pubkey = &data[i..i + 32];
+
+        // Basic validation - pubkeys shouldn't be all zeros or all 255s
+        if !potential_pubkey.iter().all(|&b| b == 0) && !potential_pubkey.iter().all(|&b| b == 255) {
+            if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::try_from(potential_pubkey) {
+                // Check if this could be a token account by fetching it
+                if let Ok(account) = get_rpc_client().get_account(&pubkey).await {
+                    // Token accounts are owned by the SPL Token program
+                    if account.owner.to_string() == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
+                        vault_candidates.push((i, pubkey.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    if vault_candidates.is_empty() {
+        log(LogTag::Pool, "NO_VAULTS", "❌ No vault addresses found");
+    } else {
+        log(
+            LogTag::Pool,
+            "VAULTS_FOUND",
+            &format!("✅ Found {} potential vault addresses:", vault_candidates.len())
+        );
+        for (offset, address) in vault_candidates {
+            log(LogTag::Pool, "VAULT", &format!("  Offset {}: {}", offset, address));
+        }
+    }
+}
+
+/// Test monitoring service
 async fn test_monitoring_service(
     pool_service: &'static screenerbot::tokens::pool::PoolPriceService,
     matches: &clap::ArgMatches
@@ -325,9 +940,9 @@ async fn compare_pool_api_prices(
         return;
     }
 
-    // Get API price (this returns SOL price) - use the global price service function
+    // Get API price (this returns SOL price) - use the blocking version to ensure we get the price
     let api_price_sol =
-        screenerbot::tokens::price_service::get_token_price_safe(token_address).await;
+        screenerbot::tokens::price_service::get_token_price_blocking_safe(token_address).await;
     log(LogTag::Pool, "API", &format!("API price: {:.12} SOL", api_price_sol.unwrap_or(0.0)));
 
     // Get pool price with detailed debugging
@@ -477,31 +1092,111 @@ async fn test_token_availability_and_price(
 ) {
     log(LogTag::Pool, "TEST", &format!("Testing availability and price for: {}", token_address));
 
-    // Test availability
-    let has_pools = pool_service.check_token_availability(token_address).await;
-    log(LogTag::Pool, "AVAILABILITY", &format!("Has pools: {}", has_pools));
+    // Enable debug mode if pool prices debug flag is set
+    use screenerbot::global::is_debug_pool_prices_enabled;
+    if is_debug_pool_prices_enabled() {
+        log(
+            LogTag::Pool,
+            "DEBUG",
+            "Pool price debugging enabled - will test with direct calculator"
+        );
 
-    if has_pools {
-        // Test price calculation
-        match pool_service.get_pool_price(token_address, None).await {
-            Some(pool_result) => {
-                log(
-                    LogTag::Pool,
-                    "SUCCESS",
-                    &format!(
-                        "Pool price calculated: {:.12} SOL from {} ({})",
-                        pool_result.price_sol.unwrap_or(0.0),
-                        pool_result.pool_address,
-                        pool_result.pool_type.as_ref().unwrap_or(&"Unknown Pool".to_string())
-                    )
-                );
+        // Test with direct calculator to get debug output
+        match screenerbot::tokens::pool::PoolPriceCalculator::new() {
+            Ok(mut calculator) => {
+                calculator.enable_debug();
+
+                // First test if we can get pool info for this token
+                let has_pools = pool_service.check_token_availability(token_address).await;
+                log(LogTag::Pool, "AVAILABILITY", &format!("Has pools: {}", has_pools));
+
+                if has_pools {
+                    // Get pairs for this token
+                    if
+                        let Ok(pairs) =
+                            screenerbot::tokens::api::get_token_pairs_from_api(token_address).await
+                    {
+                        for pair in pairs {
+                            if pair.dex_id == "pumpswap" {
+                                log(
+                                    LogTag::Pool,
+                                    "PUMP_TEST",
+                                    &format!(
+                                        "Testing pump.fun pool: {} ({})",
+                                        pair.pair_address,
+                                        pair.dex_id
+                                    )
+                                );
+
+                                // Test direct calculation with debug
+                                match
+                                    calculator.calculate_token_price(
+                                        &pair.pair_address,
+                                        token_address
+                                    ).await
+                                {
+                                    Ok(Some(price_info)) => {
+                                        log(
+                                            LogTag::Pool,
+                                            "PUMP_SUCCESS",
+                                            &format!(
+                                                "Pump.fun price calculated: {:.12} SOL",
+                                                price_info.price_sol
+                                            )
+                                        );
+                                    }
+                                    Ok(None) => {
+                                        log(
+                                            LogTag::Pool,
+                                            "PUMP_NONE",
+                                            "Pump.fun calculation returned None"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        log(
+                                            LogTag::Pool,
+                                            "PUMP_ERROR",
+                                            &format!("Pump.fun calculation failed: {}", e)
+                                        );
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
             }
-            None => {
-                log(LogTag::Pool, "ERROR", "Failed to calculate pool price");
+            Err(e) => {
+                log(LogTag::Pool, "ERROR", &format!("Failed to create calculator: {}", e));
             }
         }
     } else {
-        log(LogTag::Pool, "WARN", "No pools available for this token");
+        // Test availability
+        let has_pools = pool_service.check_token_availability(token_address).await;
+        log(LogTag::Pool, "AVAILABILITY", &format!("Has pools: {}", has_pools));
+
+        if has_pools {
+            // Test price calculation
+            match pool_service.get_pool_price(token_address, None).await {
+                Some(pool_result) => {
+                    log(
+                        LogTag::Pool,
+                        "SUCCESS",
+                        &format!(
+                            "Pool price calculated: {:.12} SOL from {} ({})",
+                            pool_result.price_sol.unwrap_or(0.0),
+                            pool_result.pool_address,
+                            pool_result.pool_type.as_ref().unwrap_or(&"Unknown Pool".to_string())
+                        )
+                    );
+                }
+                None => {
+                    log(LogTag::Pool, "ERROR", "Failed to calculate pool price");
+                }
+            }
+        } else {
+            log(LogTag::Pool, "WARN", "No pools available for this token");
+        }
     }
 }
 
@@ -679,7 +1374,24 @@ async fn debug_specific_pool_detailed(pool_address: &str, token_address: &str) {
 /// Print usage examples
 fn print_usage_examples() {
     println!("\nUsage Examples:");
-    println!("1. Test specific token pools:");
+
+    println!("\n🔍 LIST ALL POOLS:");
+    println!("   cargo run --bin tool_pool_price -- --token <TOKEN_MINT> --list-pools");
+
+    println!("\n🎯 TEST SPECIFIC POOL DIRECTLY:");
+    println!("   cargo run --bin tool_pool_price -- --pool <POOL_ADDRESS> --test-pool-direct");
+
+    println!("\n🧪 TEST RAYDIUM LEGACY AMM:");
+    println!(
+        "   cargo run --bin tool_pool_price -- --pool Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw --test-pool-direct --debug"
+    );
+
+    println!("\n🚀 TEST PUMP.FUN POOL:");
+    println!(
+        "   cargo run --bin tool_pool_price -- --pool 35TqQMeiRwEbK6FR5qiPwastuAAvo32VjnULJpxVSxUK --test-pool-direct --debug"
+    );
+
+    println!("\n1. Test specific token pools:");
     println!(
         "   cargo run --bin tool_pool_price -- --token So11111111111111111111111111111111111111112 --test-pools"
     );

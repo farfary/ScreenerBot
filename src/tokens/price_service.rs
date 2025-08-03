@@ -562,6 +562,35 @@ impl TokenPriceService {
                         _ => (None, None),
                     };
 
+                    // Get API price for comparison if this is a pool price update
+                    let api_price = if cache_entry.source == "pool" {
+                        // For pool updates, try to get API price for comparison
+                        match self.database.get_token_by_mint(mint) {
+                            Ok(Some(token)) => token.price_sol,
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Get current position for P&L calculation
+                    let current_pnl = {
+                        use crate::positions::{ get_open_positions, calculate_position_pnl };
+                        if
+                            let Some(position) = get_open_positions()
+                                .into_iter()
+                                .find(|pos| pos.mint == mint)
+                        {
+                            let (pnl_sol, pnl_percent) = calculate_position_pnl(
+                                &position,
+                                Some(new)
+                            );
+                            Some((pnl_sol, pnl_percent))
+                        } else {
+                            None
+                        }
+                    };
+
                     // Log the colored price change
                     log_price_change(
                         mint,
@@ -570,7 +599,9 @@ impl TokenPriceService {
                         new,
                         &cache_entry.source,
                         pool_type,
-                        pool_address
+                        pool_address,
+                        api_price,
+                        current_pnl
                     );
                 }
             }

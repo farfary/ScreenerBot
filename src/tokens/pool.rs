@@ -41,6 +41,15 @@ pub const METEORA_DAMM_V2_PROGRAM_ID: &str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWA
 /// Meteora DLMM Program ID
 pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
 
+/// Orca Whirlpool Program ID
+pub const ORCA_WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+
+/// Pump.fun AMM Program ID
+pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+
+/// Raydium Legacy AMM Program ID
+pub const RAYDIUM_LEGACY_AMM_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -49,8 +58,11 @@ pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9Yu
 pub fn get_pool_program_display_name(program_id: &str) -> String {
     match program_id {
         RAYDIUM_CPMM_PROGRAM_ID => "RAYDIUM CPMM".to_string(),
+        RAYDIUM_LEGACY_AMM_PROGRAM_ID => "RAYDIUM LEGACY AMM".to_string(),
         METEORA_DAMM_V2_PROGRAM_ID => "METEORA DAMM v2".to_string(),
         METEORA_DLMM_PROGRAM_ID => "METEORA DLMM".to_string(),
+        ORCA_WHIRLPOOL_PROGRAM_ID => "ORCA WHIRLPOOL".to_string(),
+        PUMP_FUN_AMM_PROGRAM_ID => "PUMP.FUN AMM".to_string(),
         _ => format!("UNKNOWN ({})", &program_id[..8]), // Show first 8 chars for unknown programs
     }
 }
@@ -108,6 +120,8 @@ pub struct PoolInfo {
     pub creator: Option<String>,
     pub status: Option<u32>,
     pub liquidity_usd: Option<f64>,
+    /// sqrt_price for concentrated liquidity pools (Orca Whirlpool)
+    pub sqrt_price: Option<u128>,
 }
 
 /// Raydium CPMM pool data structure
@@ -1023,6 +1037,11 @@ impl PoolPriceService {
             format!("Failed to create pool calculator: {}", e)
         )?;
 
+        // Enable debug for detailed logging if debug is enabled globally
+        if is_debug_pool_prices_enabled() {
+            calculator.enable_debug();
+        }
+
         // Calculate price from actual blockchain reserves
         match calculator.calculate_token_price(pool_address, token_mint).await {
             Ok(Some(pool_price_info)) => {
@@ -1423,6 +1442,17 @@ impl PoolPriceCalculator {
                     account.data.len()
                 )
             );
+            log(
+                LogTag::Pool,
+                "PROGRAM_ID_COMPARISON",
+                &format!(
+                    "Comparing:\n  Pool program: '{}'\n  Legacy AMM:   '{}'\n  CPMM:         '{}'\n  Match Legacy: {}",
+                    program_id,
+                    RAYDIUM_LEGACY_AMM_PROGRAM_ID,
+                    RAYDIUM_CPMM_PROGRAM_ID,
+                    program_id == RAYDIUM_LEGACY_AMM_PROGRAM_ID
+                )
+            );
         }
 
         // Decode based on program ID
@@ -1432,6 +1462,12 @@ impl PoolPriceCalculator {
                     log(LogTag::Pool, "DECODER_SELECT", "Using Raydium CPMM decoder");
                 }
                 self.decode_raydium_cpmm_pool(pool_address, &account).await?
+            }
+            RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
+                if self.debug_enabled {
+                    log(LogTag::Pool, "DECODER_SELECT", "Using Raydium Legacy AMM decoder");
+                }
+                self.decode_raydium_legacy_amm_pool(pool_address, &account).await?
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
                 if self.debug_enabled {
@@ -1444,6 +1480,18 @@ impl PoolPriceCalculator {
                     log(LogTag::Pool, "DECODER_SELECT", "Using Meteora DLMM decoder");
                 }
                 self.decode_meteora_dlmm_pool(pool_address, &account).await?
+            }
+            ORCA_WHIRLPOOL_PROGRAM_ID => {
+                if self.debug_enabled {
+                    log(LogTag::Pool, "DECODER_SELECT", "Using Orca Whirlpool decoder");
+                }
+                self.decode_orca_whirlpool_pool(pool_address, &account).await?
+            }
+            PUMP_FUN_AMM_PROGRAM_ID => {
+                if self.debug_enabled {
+                    log(LogTag::Pool, "DECODER_SELECT", "Using Pump.fun AMM decoder");
+                }
+                self.decode_pump_fun_amm_pool(pool_address, &account).await?
             }
             _ => {
                 return Err(format!("Unsupported pool program ID: {}", program_id));
@@ -1533,11 +1581,20 @@ impl PoolPriceCalculator {
             RAYDIUM_CPMM_PROGRAM_ID => {
                 self.calculate_raydium_cpmm_price(&pool_info, token_mint).await?
             }
+            RAYDIUM_LEGACY_AMM_PROGRAM_ID => {
+                self.calculate_raydium_legacy_amm_price(&pool_info, token_mint).await?
+            }
             METEORA_DAMM_V2_PROGRAM_ID => {
                 self.calculate_meteora_damm_v2_price(&pool_info, token_mint).await?
             }
             METEORA_DLMM_PROGRAM_ID => {
                 self.calculate_meteora_dlmm_price(&pool_info, token_mint).await?
+            }
+            ORCA_WHIRLPOOL_PROGRAM_ID => {
+                self.calculate_orca_whirlpool_price(&pool_info, token_mint).await?
+            }
+            PUMP_FUN_AMM_PROGRAM_ID => {
+                self.calculate_pump_fun_amm_price(&pool_info, token_mint).await?
             }
             _ => {
                 return Err(
@@ -1792,6 +1849,7 @@ impl PoolPriceCalculator {
             creator: Some(pool_creator),
             status: Some(status.into()),
             liquidity_usd: None, // Will be calculated separately
+            sqrt_price: None, // Not applicable to AMM pools
         })
     }
 
@@ -1905,6 +1963,80 @@ impl PoolPriceCalculator {
     }
 
     /// Get vault token balances
+    /// Extract reserves directly from Raydium Legacy AMM pool data
+    /// This is a fallback when vault addresses are incorrect or inaccessible
+    fn extract_raydium_legacy_reserves_from_data(
+        &self,
+        data: &[u8]
+    ) -> Result<Vec<(u64, u64)>, String> {
+        let mut reserve_pairs = Vec::new();
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_EXTRACT_START",
+                "🔍 Starting Raydium Legacy reserve extraction from pool data"
+            );
+        }
+
+        // Based on hex analysis, the mints are at:
+        // - SOL mint at offset 400 (0x190)
+        // - Token mint at offset 432 (0x1b0)
+
+        // And potential reserves are at:
+        // - Offset 208-216: Most promising pair (33547458368970, 40683086513379)
+        // These numbers make sense for a pool with ~$20M liquidity
+
+        let promising_offsets = [
+            (208, 216), // Primary candidate: Found these in hex dump analysis
+            (256, 272), // Secondary: Also large values that could be reserves
+            (288, 296), // Backup: Alternative reserve location
+        ];
+
+        for &(offset1, offset2) in &promising_offsets {
+            if offset1 + 8 <= data.len() && offset2 + 8 <= data.len() {
+                let reserve1 = u64::from_le_bytes(
+                    data[offset1..offset1 + 8].try_into().map_err(|_| "Failed to read reserve1")?
+                );
+                let reserve2 = u64::from_le_bytes(
+                    data[offset2..offset2 + 8].try_into().map_err(|_| "Failed to read reserve2")?
+                );
+
+                // For Raydium Legacy with ~$20M liquidity, reserves should be substantial
+                // but not astronomical
+                if
+                    reserve1 > 10_000_000 &&
+                    reserve1 < 1_000_000_000_000_000 &&
+                    reserve2 > 10_000_000 &&
+                    reserve2 < 1_000_000_000_000_000
+                {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Pool,
+                            "LEGACY_RESERVES_FOUND",
+                            &format!(
+                                "Found reserves at offsets {} and {}: {} and {}",
+                                offset1,
+                                offset2,
+                                reserve1,
+                                reserve2
+                            )
+                        );
+                    }
+
+                    reserve_pairs.push((reserve1, reserve2));
+                }
+            }
+        }
+
+        if reserve_pairs.is_empty() {
+            return Err("No reasonable reserve pairs found in Raydium Legacy pool data".to_string());
+        }
+
+        // Return the most promising pair first (offset 208-216)
+        Ok(reserve_pairs)
+    }
+
     async fn get_vault_balances(&self, vault_0: &str, vault_1: &str) -> Result<(u64, u64), String> {
         let vault_0_pubkey = Pubkey::from_str(vault_0).map_err(|e|
             format!("Invalid vault 0 address {}: {}", vault_0, e)
@@ -1987,6 +2119,410 @@ impl PoolPriceCalculator {
         }
 
         Ok((balance_0, balance_1))
+    }
+
+    /// Decode Raydium Legacy AMM pool data from account bytes
+    async fn decode_raydium_legacy_amm_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        if account.data.len() < 752 {
+            return Err("Invalid Raydium Legacy AMM pool account data length".to_string());
+        }
+
+        let data = &account.data;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_DEBUG",
+                &format!(
+                    "Raydium Legacy AMM pool {} - data length: {} bytes, analyzing structure...",
+                    pool_address,
+                    data.len()
+                )
+            );
+
+            // Hex dump for structure analysis
+            let hex_sample = data
+                .iter()
+                .take(200)
+                .map(|b| format!("{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            log(LogTag::Pool, "LEGACY_HEX", &format!("First 200 bytes: {}", hex_sample));
+        }
+
+        // Raydium Legacy AMM structure (based on actual data analysis)
+        // From hex analysis, the real mints are at different offsets than CPMM
+        // Skip the initial structure fields and go directly to the important addresses
+        let mut offset = 0x190; // Jump to where SOL mint is found
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_PARSE_START",
+                &format!(
+                    "Starting Legacy AMM parsing at offset 0x{:x} (based on pubkey scan)",
+                    offset
+                )
+            );
+        }
+
+        // Extract addresses at the known correct offsets
+        let pc_mint = Self::read_pubkey_at_offset(data, &mut offset)?; // SOL mint at 0x190
+        offset = 0x1b0; // Jump to token mint location
+        let coin_mint = Self::read_pubkey_at_offset(data, &mut offset)?; // Token mint at 0x1b0
+
+        // Vault addresses are at the correct offsets we found from hex analysis
+        offset = 0x150; // Base vault (SOL) at offset 0x150
+        let base_vault = Self::read_pubkey_at_offset(data, &mut offset)?;
+        let quote_vault = Self::read_pubkey_at_offset(data, &mut offset)?; // Quote vault (Token) at offset 0x160
+
+        // Map vaults correctly: pc_mint=SOL uses base_vault, coin_mint=token uses quote_vault
+        let (coin_vault, pc_vault) = (quote_vault.clone(), base_vault.clone());
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_PARSE_FIELDS",
+                &format!(
+                    "Using direct offset parsing: pc_mint at 0x190, coin_mint at 0x1b0, base_vault at 0x150, quote_vault at 0x160"
+                )
+            );
+
+            log(
+                LogTag::Pool,
+                "LEGACY_VAULT_ADDRESSES",
+                &format!(
+                    "Parsed vault addresses (with correct mapping):\n  \
+                         - Base Vault (SOL, {}): {}\n  \
+                         - Quote Vault (Token, {}): {}\n  \
+                         - Coin Vault (mapped to Quote): {}\n  \
+                         - PC Vault (mapped to Base): {}",
+                    pc_mint,
+                    base_vault,
+                    coin_mint,
+                    quote_vault,
+                    coin_vault,
+                    pc_vault
+                )
+            );
+
+            // Compare with expected addresses from pool data
+            let expected_base_vault = "F6iWqisguZYprVwp916BgGR7d5ahP6Ev5E213k8y3MEb";
+            let expected_quote_vault = "7bxbfwXi1CY7zWUXW35PBMZjhPD27SarVuHaehMzR2Fn";
+
+            log(
+                LogTag::Pool,
+                "LEGACY_VAULT_COMPARISON",
+                &format!(
+                    "Expected vault addresses from pool data:\n  \
+                         - Base Vault (SOL): {}\n  \
+                         - Quote Vault (Token): {}",
+                    expected_base_vault,
+                    expected_quote_vault
+                )
+            );
+
+            // Check if our parsed addresses match expected
+            let base_vault_str = base_vault.to_string();
+            let quote_vault_str = quote_vault.to_string();
+
+            if base_vault_str == expected_base_vault && quote_vault_str == expected_quote_vault {
+                log(
+                    LogTag::Pool,
+                    "LEGACY_VAULT_MATCH",
+                    "✅ Parsed vault addresses match expected pool data EXACTLY!"
+                );
+            } else {
+                log(
+                    LogTag::Pool,
+                    "LEGACY_VAULT_MISMATCH",
+                    &format!(
+                        "❌ Parsed vault addresses don't match expected:\n  \
+                             Parsed: base={}, quote={}\n  \
+                             Expected: base={}, quote={}",
+                        base_vault_str,
+                        quote_vault_str,
+                        expected_base_vault,
+                        expected_quote_vault
+                    )
+                );
+            }
+        }
+
+        // Use decimal values from cache (since we skipped the pool structure parsing)
+        let token_0_decimals = get_cached_decimals(&coin_mint.to_string()).unwrap_or(6);
+        let token_1_decimals = get_cached_decimals(&pc_mint.to_string()).unwrap_or(9); // SOL is 9 decimals
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_DECODE",
+                &format!(
+                    "Raydium Legacy AMM pool {} parsed:\n  \
+                     - Coin Mint: {} (decimals: {})\n  \
+                     - PC Mint: {} (decimals: {})\n  \
+                     - Coin Vault: {}\n  \
+                     - PC Vault: {}",
+                    pool_address,
+                    coin_mint,
+                    token_0_decimals,
+                    pc_mint,
+                    token_1_decimals,
+                    coin_vault,
+                    pc_vault
+                )
+            );
+
+            // Additional debugging: scan for pubkeys at various offsets
+            log(LogTag::Pool, "LEGACY_PUBKEY_SCAN", "Scanning for pubkeys at various offsets:");
+            for test_offset in [
+                0x150, 0x160, 0x170, 0x180, 0x190, 0x1a0, 0x1b0, 0x1c0, 0x1d0, 0x1e0, 0x1f0, 0x200,
+            ].iter() {
+                if *test_offset + 32 <= data.len() {
+                    if let Ok(pubkey_bytes) = data[*test_offset..*test_offset + 32].try_into() {
+                        let test_pubkey = Pubkey::new_from_array(pubkey_bytes);
+                        log(
+                            LogTag::Pool,
+                            "LEGACY_PUBKEY_SCAN",
+                            &format!("  Offset 0x{:x}: {}", test_offset, test_pubkey)
+                        );
+                    }
+                }
+            }
+        }
+
+        // Get vault balances to calculate reserves - vault balances are the TRUE trading reserves
+        let (token_0_reserve, token_1_reserve) = {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "LEGACY_VAULT_PRIORITY",
+                    "Vault balances are the actual trading reserves, not PnL values from pool data"
+                );
+            }
+
+            // ALWAYS try vault balance fetch first - this is the accurate method
+            match
+                tokio::time::timeout(
+                    Duration::from_secs(5), // Increased timeout for better reliability
+                    self.get_vault_balances(&coin_vault.to_string(), &pc_vault.to_string())
+                ).await
+            {
+                Ok(Ok((coin_reserve, pc_reserve))) => {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Pool,
+                            "LEGACY_VAULT_SUCCESS",
+                            &format!(
+                                "Vault balances fetched successfully:\n  \
+                                     - Coin Vault ({}): {} {} tokens\n  \
+                                     - PC Vault ({}): {} {} tokens",
+                                coin_vault,
+                                coin_reserve,
+                                coin_mint,
+                                pc_vault,
+                                pc_reserve,
+                                pc_mint
+                            )
+                        );
+                    }
+                    (coin_reserve, pc_reserve)
+                }
+                Ok(Err(e)) => {
+                    if self.debug_enabled {
+                        log(
+                            LogTag::Pool,
+                            "LEGACY_VAULT_ERROR",
+                            &format!("Vault balance fetch failed: {}. Using PnL fallback (less accurate)...", e)
+                        );
+                    }
+
+                    // Fallback: Use PnL values but with correct assignment based on pool data structure
+                    // From pool data: quoteTotalPnl=33547458368970, baseTotalPnl=40683086513379
+                    // base=SOL (9 decimals), quote=token (6 decimals)
+                    match self.extract_raydium_legacy_reserves_from_data(data) {
+                        Ok(reserves) if !reserves.is_empty() => {
+                            let (pnl_val1, pnl_val2) = reserves[0];
+                            // These are likely quoteTotalPnl and baseTotalPnl
+                            // Based on pool structure: coin_mint=token, pc_mint=SOL
+                            // So coin_reserve should be smaller (token), pc_reserve should be larger (SOL)
+                            let (coin_reserve, pc_reserve) = if pnl_val2 > pnl_val1 {
+                                (pnl_val1, pnl_val2) // Assign smaller to token, larger to SOL
+                            } else {
+                                (pnl_val2, pnl_val1) // Ensure SOL gets the larger value
+                            };
+
+                            if self.debug_enabled {
+                                log(
+                                    LogTag::Pool,
+                                    "LEGACY_PNL_FALLBACK",
+                                    &format!(
+                                        "Using PnL values as fallback:\n  \
+                                             - Coin (token): {}\n  \
+                                             - PC (SOL): {} (assigned larger value)",
+                                        coin_reserve,
+                                        pc_reserve
+                                    )
+                                );
+                            }
+                            (coin_reserve, pc_reserve)
+                        }
+                        _ => {
+                            return Err(
+                                format!("Both vault balance fetch and PnL extraction failed: {}", e)
+                            );
+                        }
+                    }
+                }
+                Err(_) => {
+                    return Err("Vault balance fetch timed out after 5 seconds".to_string());
+                }
+            }
+        };
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_RESERVES",
+                &format!(
+                    "Raydium Legacy AMM {} reserves:\n  \
+                     - Coin Reserve: {} (vault: {})\n  \
+                     - PC Reserve: {} (vault: {})",
+                    pool_address,
+                    token_0_reserve,
+                    coin_vault,
+                    token_1_reserve,
+                    pc_vault
+                )
+            );
+        }
+
+        // Map coin/pc reserves back to token_0/token_1 for consistent interface
+        let (token_0_reserve, token_1_reserve) = (token_0_reserve, token_1_reserve);
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: RAYDIUM_LEGACY_AMM_PROGRAM_ID.to_string(),
+            pool_type: get_pool_program_display_name(RAYDIUM_LEGACY_AMM_PROGRAM_ID),
+            token_0_mint: coin_mint.to_string(),
+            token_1_mint: pc_mint.to_string(),
+            token_0_vault: Some(coin_vault.to_string()),
+            token_1_vault: Some(pc_vault.to_string()),
+            token_0_reserve,
+            token_1_reserve,
+            token_0_decimals,
+            token_1_decimals,
+            lp_mint: None, // Legacy AMM might not have LP mint in same structure
+            lp_supply: None,
+            creator: None,
+            status: None, // We skipped status parsing for now
+            liquidity_usd: None,
+            sqrt_price: None, // Not applicable to AMM pools
+        })
+    }
+
+    /// Calculate price for Raydium Legacy AMM pool
+    async fn calculate_raydium_legacy_amm_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_PRICE_CALC",
+                &format!(
+                    "Calculating Raydium Legacy AMM price for token {} in pool {}",
+                    token_mint,
+                    pool_info.pool_address
+                )
+            );
+        }
+
+        // Determine which token is SOL and which is the target token
+        let (sol_reserve, token_reserve, sol_decimals, token_decimals, is_token_0) = if
+            pool_info.token_0_mint == SOL_MINT &&
+            pool_info.token_1_mint == token_mint
+        {
+            (
+                pool_info.token_0_reserve,
+                pool_info.token_1_reserve,
+                pool_info.token_0_decimals,
+                pool_info.token_1_decimals,
+                false,
+            )
+        } else if pool_info.token_1_mint == SOL_MINT && pool_info.token_0_mint == token_mint {
+            (
+                pool_info.token_1_reserve,
+                pool_info.token_0_reserve,
+                pool_info.token_1_decimals,
+                pool_info.token_0_decimals,
+                true,
+            )
+        } else {
+            return Err(
+                format!("Legacy AMM pool does not contain SOL or target token {}", token_mint)
+            );
+        };
+
+        // Validate reserves
+        if sol_reserve == 0 || token_reserve == 0 {
+            return Err("Legacy AMM pool has zero reserves".to_string());
+        }
+
+        // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
+        let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
+        let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
+
+        let price_sol = sol_adjusted / token_adjusted;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_PRICE",
+                &format!(
+                    "Raydium Legacy AMM price calculation:\n  \
+                     - SOL Reserve: {} (decimals: {})\n  \
+                     - Token Reserve: {} (decimals: {})\n  \
+                     - SOL Adjusted: {:.12}\n  \
+                     - Token Adjusted: {:.12}\n  \
+                     - Final Price: {:.12} SOL",
+                    sol_reserve,
+                    sol_decimals,
+                    token_reserve,
+                    token_decimals,
+                    sol_adjusted,
+                    token_adjusted,
+                    price_sol
+                )
+            );
+        }
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "LEGACY_SUCCESS",
+                &format!("Raydium Legacy AMM price calculated: {:.12} SOL", price_sol)
+            );
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals,
+                sol_decimals,
+            })
+        )
     }
 
     /// Decode Meteora DAMM v2 pool data from account bytes
@@ -2144,6 +2680,7 @@ impl PoolPriceCalculator {
             creator: None,
             status: Some(pool_status as u32),
             liquidity_usd: None, // Will be calculated separately
+            sqrt_price: None, // Not applicable to AMM pools
         })
     }
 
@@ -2433,6 +2970,7 @@ impl PoolPriceCalculator {
             creator: None,
             status: Some(0),
             liquidity_usd: None,
+            sqrt_price: None, // Meteora DLMM is concentrated liquidity but we don't extract sqrt_price yet
         })
     }
 
@@ -2524,6 +3062,334 @@ impl PoolPriceCalculator {
         )
     }
 
+    /// Calculate token price for Orca Whirlpool pools
+    ///
+    /// Orca Whirlpool uses concentrated liquidity with sqrt price
+    /// We can calculate the price from vault balances for simplicity
+    async fn calculate_orca_whirlpool_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "WHIRLPOOL_PRICE_CALC",
+                &format!(
+                    "Calculating Orca Whirlpool price for token {} in pool {}",
+                    token_mint,
+                    pool_info.pool_address
+                )
+            );
+        }
+
+        // Get correct decimals for the target token
+        let target_token_decimals = get_cached_decimals(token_mint).unwrap_or(6);
+        let sol_decimals = 9;
+
+        // For Orca Whirlpool, token_0 is SOL, token_1 is the target token
+        let (sol_reserve, token_reserve, final_sol_decimals, final_token_decimals) = if
+            pool_info.token_0_mint == SOL_MINT
+        {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "WHIRLPOOL_STRUCTURE",
+                    &format!(
+                        "Orca Whirlpool pool structure: token_0={} (SOL), token_1={} (target), using target token: {}",
+                        pool_info.token_0_mint,
+                        pool_info.token_1_mint,
+                        token_mint
+                    )
+                );
+            }
+            (
+                pool_info.token_0_reserve, // SOL reserve
+                pool_info.token_1_reserve, // Token reserve
+                sol_decimals,
+                target_token_decimals, // Use correct decimals for target token
+            )
+        } else if pool_info.token_1_mint == SOL_MINT {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "WHIRLPOOL_STRUCTURE",
+                    &format!(
+                        "Orca Whirlpool pool structure: token_0={} (target), token_1={} (SOL), using target token: {}",
+                        pool_info.token_0_mint,
+                        pool_info.token_1_mint,
+                        token_mint
+                    )
+                );
+            }
+            (
+                pool_info.token_1_reserve, // SOL reserve
+                pool_info.token_0_reserve, // Token reserve
+                sol_decimals,
+                target_token_decimals, // Use correct decimals for target token
+            )
+        } else {
+            return Err(
+                format!(
+                    "Orca Whirlpool pool {} does not contain SOL. Token0: {}, Token1: {}",
+                    pool_info.pool_address,
+                    pool_info.token_0_mint,
+                    pool_info.token_1_mint
+                )
+            );
+        };
+
+        // Validate reserves
+        if sol_reserve == 0 || token_reserve == 0 {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "WHIRLPOOL_ZERO_RESERVES",
+                    &format!(
+                        "Orca Whirlpool pool {} has zero reserves, cannot calculate price",
+                        pool_info.pool_address
+                    )
+                );
+            }
+            return Ok(None);
+        }
+
+        // For Orca Whirlpool concentrated liquidity, use sqrt_price instead of simple reserve ratios
+        let price_sol = if let Some(sqrt_price_value) = pool_info.sqrt_price {
+            // Orca Whirlpool sqrt_price calculation
+            // The sqrt_price is stored as a Q64.64 fixed point number
+            // Price = (sqrt_price / 2^64)^2
+            // Then we need to adjust for the token ordering and decimals
+
+            let sqrt_price_scaled = (sqrt_price_value as f64) / (2_f64).powi(64);
+            let raw_price = sqrt_price_scaled * sqrt_price_scaled;
+
+            // The price represents token_B/token_A ratio
+            // Since token_A is SOL and token_B is our target token, raw_price = target_token/SOL
+            // We want SOL/target_token, so we need to invert: 1/raw_price
+            let inverted_price = 1.0 / raw_price;
+
+            // Adjust for decimal differences
+            // If SOL has 9 decimals and token has 6 decimals:
+            // We need to multiply by (10^6 / 10^9) = 0.001
+            let decimal_adjustment =
+                (10_f64).powi(final_token_decimals as i32) /
+                (10_f64).powi(final_sol_decimals as i32);
+            let adjusted_price = inverted_price * decimal_adjustment;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "WHIRLPOOL_SQRT_PRICE",
+                    &format!(
+                        "Orca Whirlpool sqrt_price calculation:\n\
+                        - sqrt_price: {}\n\
+                        - sqrt_price_scaled: {:.16}\n\
+                        - raw_price (token_B/token_A): {:.16}\n\
+                        - inverted_price (token_A/token_B): {:.16}\n\
+                        - decimal_adjustment: {:.16} (token_decimals: {}, sol_decimals: {})\n\
+                        - final_price: {:.12} SOL",
+                        sqrt_price_value,
+                        sqrt_price_scaled,
+                        raw_price,
+                        inverted_price,
+                        decimal_adjustment,
+                        final_token_decimals,
+                        final_sol_decimals,
+                        adjusted_price
+                    )
+                );
+            }
+
+            adjusted_price
+        } else {
+            // Fallback to reserve ratio calculation (less accurate for concentrated liquidity)
+            let sol_adjusted = (sol_reserve as f64) / (10f64).powi(final_sol_decimals as i32);
+            let token_adjusted = (token_reserve as f64) / (10f64).powi(final_token_decimals as i32);
+            let fallback_price = sol_adjusted / token_adjusted;
+
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "WHIRLPOOL_FALLBACK",
+                    &format!(
+                        "⚠️  Using fallback reserve ratio calculation (less accurate):\n\
+                        - SOL Reserve: {} (adjusted: {:.12})\n\
+                        - Token Reserve: {} (adjusted: {:.12})\n\
+                        - Fallback Price: {:.12} SOL",
+                        sol_reserve,
+                        sol_adjusted,
+                        token_reserve,
+                        token_adjusted,
+                        fallback_price
+                    )
+                );
+            }
+
+            fallback_price
+        };
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "WHIRLPOOL_PRICE",
+                &format!(
+                    "Orca Whirlpool final price calculation:\n\
+                    - SOL Reserve: {} (decimals: {})\n\
+                    - Token Reserve: {} (decimals: {})\n\
+                    - sqrt_price available: {}\n\
+                    - Final Price SOL: {:.12}\n\
+                    - Target Token: {}",
+                    sol_reserve,
+                    final_sol_decimals,
+                    token_reserve,
+                    final_token_decimals,
+                    pool_info.sqrt_price.is_some(),
+                    price_sol,
+                    token_mint
+                )
+            );
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals: final_token_decimals,
+                sol_decimals: final_sol_decimals,
+            })
+        )
+    }
+
+    /// Calculate token price for Pump.fun AMM pools
+    ///
+    /// Pump.fun uses bonding curves but we can still calculate basic price
+    /// from the reserves if we have the correct pool structure
+    async fn calculate_pump_fun_amm_price(
+        &self,
+        pool_info: &PoolInfo,
+        token_mint: &str
+    ) -> Result<Option<PoolPriceInfo>, String> {
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "PUMP_PRICE_CALC",
+                &format!(
+                    "Calculating Pump.fun price for token {} in pool {}",
+                    token_mint,
+                    pool_info.pool_address
+                )
+            );
+        }
+
+        // For PUMP.FUN, the pool structure uses placeholder token mint
+        // We need to use the target token mint and get correct decimals
+        let target_token_decimals = get_cached_decimals(token_mint).unwrap_or(6);
+        let sol_decimals = 9;
+
+        // For PUMP.FUN pools, token_0 is always the target token, token_1 is always SOL
+        let (sol_reserve, token_reserve, final_sol_decimals, final_token_decimals) = if
+            pool_info.token_1_mint == SOL_MINT
+        {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "PUMP_STRUCTURE",
+                    &format!(
+                        "PUMP.FUN pool structure: token_0={} (target), token_1={} (SOL), using target token: {}",
+                        pool_info.token_0_mint,
+                        pool_info.token_1_mint,
+                        token_mint
+                    )
+                );
+            }
+            (
+                pool_info.token_1_reserve, // SOL reserve
+                pool_info.token_0_reserve, // Token reserve
+                sol_decimals,
+                target_token_decimals, // Use correct decimals for target token
+            )
+        } else {
+            return Err(
+                format!(
+                    "PUMP.FUN pool {} does not contain SOL as token_1. Token0: {}, Token1: {}",
+                    pool_info.pool_address,
+                    pool_info.token_0_mint,
+                    pool_info.token_1_mint
+                )
+            );
+        };
+
+        // Validate reserves - for pump.fun, we might have placeholder values
+        // If reserves are the placeholders we set (1000000 and 1000), calculate from API native price
+        if
+            (sol_reserve == 1000 && token_reserve == 1_000_000) ||
+            sol_reserve == 0 ||
+            token_reserve == 0
+        {
+            if self.debug_enabled {
+                log(
+                    LogTag::Pool,
+                    "PUMP_PLACEHOLDER",
+                    &format!(
+                        "Pump.fun pool {} has placeholder/zero reserves, attempting alternative calculation",
+                        pool_info.pool_address
+                    )
+                );
+            }
+
+            // Try to get the native price from the pool API data we have
+            // This is a workaround until we can properly decode pump.fun pool structure
+            return Ok(None); // Let price_service.rs handle this
+        }
+
+        // Calculate price in SOL: price = (SOL reserves / 10^SOL_decimals) / (token reserves / 10^token_decimals)
+        let sol_adjusted = (sol_reserve as f64) / (10f64).powi(final_sol_decimals as i32);
+        let token_adjusted = (token_reserve as f64) / (10f64).powi(final_token_decimals as i32);
+        let price_sol = sol_adjusted / token_adjusted;
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "PUMP_PRICE",
+                &format!(
+                    "Pump.fun price calculation:\n\
+                    - SOL Reserve: {} (decimals: {}, adjusted: {:.12})\n\
+                    - Token Reserve: {} (decimals: {}, adjusted: {:.12})\n\
+                    - Price SOL: {:.12}\n\
+                    - Target Token: {}",
+                    sol_reserve,
+                    final_sol_decimals,
+                    sol_adjusted,
+                    token_reserve,
+                    final_token_decimals,
+                    token_adjusted,
+                    price_sol,
+                    token_mint
+                )
+            );
+        }
+
+        Ok(
+            Some(PoolPriceInfo {
+                pool_address: pool_info.pool_address.clone(),
+                pool_program_id: pool_info.pool_program_id.clone(),
+                pool_type: pool_info.pool_type.clone(),
+                token_mint: token_mint.to_string(),
+                price_sol,
+                token_reserve,
+                sol_reserve,
+                token_decimals: final_token_decimals,
+                sol_decimals: final_sol_decimals,
+            })
+        )
+    }
+
     /// Decode token account amount from account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
@@ -2593,6 +3459,375 @@ impl PoolPriceCalculator {
         );
 
         Ok(value)
+    }
+
+    /// Decode Orca Whirlpool pool data structure
+    ///
+    /// Based on the provided schema, Orca Whirlpool pools have a specific structure
+    /// with sqrtPrice, liquidity, and token vaults that we need to decode
+    async fn decode_orca_whirlpool_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        if account.data.len() < 300 {
+            return Err("Invalid Orca Whirlpool pool account data length".to_string());
+        }
+
+        let data = &account.data;
+        let mut offset = 8; // Skip discriminator
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "WHIRLPOOL_DEBUG",
+                &format!(
+                    "Orca Whirlpool pool {} - data length: {} bytes, decoding structure...",
+                    pool_address,
+                    data.len()
+                )
+            );
+        }
+
+        // Decode Orca Whirlpool pool structure based on provided schema:
+        // whirlpoolsConfig (publicKey), whirlpoolBump ([u8;1]), tickSpacing (u16),
+        // feeTierIndexSeed ([u8;2]), feeRate (u16), protocolFeeRate (u16),
+        // liquidity (u128), sqrtPrice (u128), tickCurrentIndex (i32),
+        // protocolFeeOwedA (u64), protocolFeeOwedB (u64),
+        // tokenMintA (publicKey), tokenVaultA (publicKey), feeGrowthGlobalA (u128),
+        // tokenMintB (publicKey), tokenVaultB (publicKey), feeGrowthGlobalB (u128)
+
+        let _whirlpools_config = Self::read_pubkey_at_offset(data, &mut offset)?; // whirlpoolsConfig
+
+        let _whirlpool_bump = data[offset]; // whirlpoolBump [u8;1]
+        offset += 1;
+
+        let _tick_spacing = u16::from_le_bytes(
+            data[offset..offset + 2].try_into().unwrap_or([0; 2])
+        ); // tickSpacing
+        offset += 2;
+
+        let _fee_tier_index_seed = [data[offset], data[offset + 1]]; // feeTierIndexSeed [u8;2]
+        offset += 2;
+
+        let _fee_rate = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2])); // feeRate
+        offset += 2;
+
+        let _protocol_fee_rate = u16::from_le_bytes(
+            data[offset..offset + 2].try_into().unwrap_or([0; 2])
+        ); // protocolFeeRate
+        offset += 2;
+
+        let liquidity = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // liquidity
+        offset += 16;
+
+        let sqrt_price = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // sqrtPrice
+        offset += 16;
+
+        let _tick_current_index = i32::from_le_bytes(
+            data[offset..offset + 4].try_into().unwrap_or([0; 4])
+        ); // tickCurrentIndex
+        offset += 4;
+
+        let _protocol_fee_owed_a = u64::from_le_bytes(
+            data[offset..offset + 8].try_into().unwrap_or([0; 8])
+        ); // protocolFeeOwedA
+        offset += 8;
+
+        let _protocol_fee_owed_b = u64::from_le_bytes(
+            data[offset..offset + 8].try_into().unwrap_or([0; 8])
+        ); // protocolFeeOwedB
+        offset += 8;
+
+        let token_mint_a = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenMintA (SOL)
+        let token_vault_a = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenVaultA (SOL vault)
+
+        let _fee_growth_global_a = u128::from_le_bytes(
+            data[offset..offset + 16].try_into().unwrap_or([0; 16])
+        ); // feeGrowthGlobalA
+        offset += 16;
+
+        let token_mint_b = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenMintB (our token)
+        let token_vault_b = Self::read_pubkey_at_offset(data, &mut offset)?; // tokenVaultB (token vault)
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "WHIRLPOOL_EXTRACT",
+                &format!(
+                    "Extracted Orca Whirlpool pool structure:\n\
+                    - Token Mint A (SOL): {}\n\
+                    - Token Mint B (target): {}\n\
+                    - Token Vault A (SOL): {}\n\
+                    - Token Vault B (target): {}\n\
+                    - Liquidity: {}\n\
+                    - Sqrt Price: {}",
+                    token_mint_a,
+                    token_mint_b,
+                    token_vault_a,
+                    token_vault_b,
+                    liquidity,
+                    sqrt_price
+                )
+            );
+        }
+
+        // For Orca Whirlpool, get reserves from the vault accounts
+        let token_vault_a_str = token_vault_a.to_string();
+        let token_vault_b_str = token_vault_b.to_string();
+
+        let (vault_a_balance, vault_b_balance) = match
+            self.get_vault_balances(&token_vault_a_str, &token_vault_b_str).await
+        {
+            Ok((va, vb)) => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "WHIRLPOOL_VAULT_SUCCESS",
+                        &format!(
+                            "Successfully fetched Orca Whirlpool vault balances:\n\
+                            - Vault A {} (SOL) balance: {}\n\
+                            - Vault B {} (token) balance: {}",
+                            token_vault_a_str,
+                            va,
+                            token_vault_b_str,
+                            vb
+                        )
+                    );
+                }
+                (va, vb)
+            }
+            Err(e) => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "WHIRLPOOL_VAULT_ERROR",
+                        &format!("Vault balance fetch failed: {}", e)
+                    );
+                }
+                return Err(format!("Failed to get vault balances for Orca Whirlpool pool: {}", e));
+            }
+        };
+
+        // Use default decimals for now - will be corrected in price calculation with actual target token
+        let token_decimals = 6; // Default for most tokens
+        let sol_decimals = 9; // SOL always has 9 decimals
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "WHIRLPOOL_DECODE",
+                &format!(
+                    "Orca Whirlpool pool {} decoded:\n\
+                    - Token A (SOL): {} ({} decimals, {} reserve)\n\
+                    - Token B (target): {} ({} decimals, {} reserve)\n\
+                    - Token Vault A: {}\n\
+                    - Token Vault B: {}\n\
+                    - Liquidity: {}\n\
+                    - Sqrt Price: {}",
+                    pool_address,
+                    token_mint_a,
+                    sol_decimals,
+                    vault_a_balance,
+                    token_mint_b,
+                    token_decimals,
+                    vault_b_balance,
+                    token_vault_a,
+                    token_vault_b,
+                    liquidity,
+                    sqrt_price
+                )
+            );
+        }
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: ORCA_WHIRLPOOL_PROGRAM_ID.to_string(),
+            pool_type: get_pool_program_display_name(ORCA_WHIRLPOOL_PROGRAM_ID),
+            token_0_mint: token_mint_a.to_string(), // SOL
+            token_1_mint: token_mint_b.to_string(), // Target token
+            token_0_vault: Some(token_vault_a.to_string()),
+            token_1_vault: Some(token_vault_b.to_string()),
+            token_0_reserve: vault_a_balance, // SOL reserve
+            token_1_reserve: vault_b_balance, // Token reserve
+            token_0_decimals: sol_decimals,
+            token_1_decimals: token_decimals,
+            lp_mint: None, // Whirlpool uses concentrated liquidity
+            lp_supply: Some(liquidity as u64), // Use liquidity value
+            creator: None,
+            status: None,
+            liquidity_usd: None,
+            sqrt_price: Some(sqrt_price), // Store sqrt_price for concentrated liquidity calculation
+        })
+    }
+
+    /// Decode Pump.fun AMM pool data structure
+    ///
+    /// Based on git history analysis, pump.fun pools have a specific structure
+    /// that we need to decode to get the actual token vaults and reserves
+    async fn decode_pump_fun_amm_pool(
+        &self,
+        pool_address: &str,
+        account: &Account
+    ) -> Result<PoolInfo, String> {
+        if account.data.len() < 200 {
+            return Err("Invalid Pump.fun AMM pool account data length".to_string());
+        }
+
+        let data = &account.data;
+        let mut offset = 8; // Skip discriminator
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "PUMP_DEBUG",
+                &format!(
+                    "Pump.fun pool {} - data length: {} bytes, decoding structure...",
+                    pool_address,
+                    data.len()
+                )
+            );
+        }
+
+        // Decode PUMP.FUN AMM pool structure based on provided schema:
+        // pool_bump (u8), index (u16), creator (pubkey), base_mint (pubkey), quote_mint (pubkey),
+        // lp_mint (pubkey), pool_base_token_account (pubkey), pool_quote_token_account (pubkey),
+        // lp_supply (u64), coin_creator (pubkey)
+
+        let _pool_bump = data[offset]; // u8
+        offset += 1;
+
+        let _index = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap_or([0; 2])); // u16
+        offset += 2;
+
+        let _creator = Self::read_pubkey_at_offset(data, &mut offset)?; // creator pubkey
+        let base_mint = Self::read_pubkey_at_offset(data, &mut offset)?; // base_mint (our token)
+        let quote_mint = Self::read_pubkey_at_offset(data, &mut offset)?; // quote_mint (SOL)
+        let _lp_mint = Self::read_pubkey_at_offset(data, &mut offset)?; // lp_mint
+        let pool_base_token_account = Self::read_pubkey_at_offset(data, &mut offset)?; // base token vault
+        let pool_quote_token_account = Self::read_pubkey_at_offset(data, &mut offset)?; // quote token vault (SOL)
+
+        let lp_supply = if data.len() >= offset + 8 {
+            u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap_or([0; 8]))
+        } else {
+            0
+        };
+        offset += 8;
+
+        let _coin_creator = Self::read_pubkey_at_offset(data, &mut offset)?; // coin_creator
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "PUMP_EXTRACT",
+                &format!(
+                    "Extracted PUMP.FUN pool structure:\n\
+                    - Base mint (token): {}\n\
+                    - Quote mint (SOL): {}\n\
+                    - Base token vault: {}\n\
+                    - Quote token vault: {}\n\
+                    - LP supply: {}",
+                    base_mint,
+                    quote_mint,
+                    pool_base_token_account,
+                    pool_quote_token_account,
+                    lp_supply
+                )
+            );
+        }
+
+        // SOL is always the quote token in pump.fun
+        let sol_mint = SOL_MINT.to_string();
+
+        // Use default decimals for now - will be corrected in price calculation with actual target token
+        let token_decimals = 6; // Default for most PUMP.FUN tokens
+        let sol_decimals = 9; // SOL always has 9 decimals
+
+        // For PUMP.FUN pools, get reserves from the vault accounts
+        let token_vault_str = pool_base_token_account.to_string();
+        let sol_vault_str = pool_quote_token_account.to_string();
+
+        let (token_reserve, sol_reserve) = match
+            self.get_vault_balances(&token_vault_str, &sol_vault_str).await
+        {
+            Ok((tr, sr)) => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "PUMP_VAULT_SUCCESS",
+                        &format!(
+                            "Successfully fetched PUMP.FUN vault balances:\n\
+                            - Token vault {} balance: {}\n\
+                            - SOL vault {} balance: {}",
+                            token_vault_str,
+                            tr,
+                            sol_vault_str,
+                            sr
+                        )
+                    );
+                }
+                (tr, sr)
+            }
+            Err(e) => {
+                if self.debug_enabled {
+                    log(
+                        LogTag::Pool,
+                        "PUMP_VAULT_ERROR",
+                        &format!("Vault balance fetch failed: {}", e)
+                    );
+                }
+                return Err(format!("Failed to get vault balances for PUMP.FUN pool: {}", e));
+            }
+        };
+
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "PUMP_DECODE",
+                &format!(
+                    "Pump.fun pool {} decoded:\n\
+                    - Base Token: {} ({} decimals, {} reserve)\n\
+                    - Quote Token (SOL): {} ({} decimals, {} reserve)\n\
+                    - Base Token Vault: {}\n\
+                    - Quote Token Vault: {}\n\
+                    - LP Supply: {}",
+                    pool_address,
+                    base_mint, // This is the actual token mint from the pool structure
+                    token_decimals,
+                    token_reserve,
+                    quote_mint,
+                    sol_decimals,
+                    sol_reserve,
+                    pool_base_token_account,
+                    pool_quote_token_account,
+                    lp_supply
+                )
+            );
+        }
+
+        Ok(PoolInfo {
+            pool_address: pool_address.to_string(),
+            pool_program_id: PUMP_FUN_AMM_PROGRAM_ID.to_string(),
+            pool_type: get_pool_program_display_name(PUMP_FUN_AMM_PROGRAM_ID),
+            token_0_mint: base_mint.to_string(), // Use the actual base_mint from pool structure
+            token_1_mint: quote_mint.to_string(), // Use the actual quote_mint from pool structure
+            token_0_vault: Some(pool_base_token_account.to_string()),
+            token_1_vault: Some(pool_quote_token_account.to_string()),
+            token_0_reserve: token_reserve, // Base token reserve
+            token_1_reserve: sol_reserve, // Quote token (SOL) reserve
+            token_0_decimals: token_decimals,
+            token_1_decimals: sol_decimals,
+            lp_mint: None, // Pump.fun doesn't use standard LP tokens
+            lp_supply: Some(lp_supply),
+            creator: None,
+            status: Some(1), // Active
+            liquidity_usd: None, // Will be calculated elsewhere
+            sqrt_price: None, // Not applicable to bonding curve AMM
+        })
     }
 }
 

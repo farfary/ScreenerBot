@@ -635,45 +635,61 @@ fn strip_ansi_codes(text: &str) -> String {
     result
 }
 
-/// Helper function to wrap text at word boundaries
+/// Helper function to wrap text at word boundaries, respecting existing newlines
 fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
-    if text.len() <= max_width {
-        return vec![text.to_string()];
-    }
+    let mut result = Vec::new();
 
-    let mut lines = Vec::new();
-    let mut current_line = String::new();
+    // First, split by existing newlines to respect intentional line breaks
+    for line in text.split('\n') {
+        // Use stripped length for accurate width calculation
+        let line_display_length = strip_ansi_codes(line).len();
 
-    for word in text.split_whitespace() {
-        if current_line.is_empty() {
-            current_line = word.to_string();
-        } else if current_line.len() + word.len() + 1 <= max_width {
-            current_line.push(' ');
-            current_line.push_str(word);
+        if line_display_length <= max_width {
+            result.push(line.to_string());
         } else {
-            lines.push(current_line);
-            current_line = word.to_string();
+            // Only wrap lines that exceed max_width (based on display length, not raw length)
+            let mut current_line = String::new();
+
+            for word in line.split_whitespace() {
+                let word_display_length = strip_ansi_codes(word).len();
+                let current_display_length = strip_ansi_codes(&current_line).len();
+
+                if current_line.is_empty() {
+                    current_line = word.to_string();
+                } else if current_display_length + word_display_length + 1 <= max_width {
+                    current_line.push(' ');
+                    current_line.push_str(word);
+                } else {
+                    result.push(current_line);
+                    current_line = word.to_string();
+                }
+            }
+
+            if !current_line.is_empty() {
+                result.push(current_line);
+            }
         }
     }
 
-    if !current_line.is_empty() {
-        lines.push(current_line);
+    if result.is_empty() {
+        result.push(String::new());
     }
 
-    lines
+    result
 }
-
-/// Special logging function for price changes with enhanced colors and formatting
-/// Shows colored price changes for open positions without requiring debug mode
-/// Uses the same format as the main logger system for consistency
+/// Enhanced logging function for price changes with comprehensive position details
+/// Shows full symbol, both pool and API prices, pool information, and current P&L
+/// Displays information in two well-formatted lines for better readability
 pub fn log_price_change(
-    _mint: &str,
+    mint: &str,
     symbol: &str,
     old_price: f64,
     new_price: f64,
     price_source: &str,
     pool_type: Option<&str>,
-    pool_address: Option<&str>
+    pool_address: Option<&str>,
+    api_price: Option<f64>,
+    current_pnl: Option<(f64, f64)> // (pnl_sol, pnl_percent)
 ) {
     let price_change = new_price - old_price;
     let price_change_percent = if old_price != 0.0 {
@@ -682,77 +698,137 @@ pub fn log_price_change(
         0.0
     };
 
-    // Build the main message parts
-    let symbol_padded = format!("{:<8}", symbol.chars().take(8).collect::<String>());
-
-    // Price with emoji and color
-    let (emoji, price_text) = if price_change > 0.0 {
-        ("📈", format!("{:.12}", new_price).bright_green().bold())
+    // Price direction emoji and color
+    let (emoji, price_color) = if price_change > 0.0 {
+        ("🟢", "green")
     } else if price_change < 0.0 {
-        ("📉", format!("{:.12}", new_price).bright_red().bold())
+        ("🔴", "red")
     } else {
-        ("➡️", format!("{:.12}", new_price).bright_yellow().bold())
+        ("➡️", "yellow")
     };
 
-    // Change amount and percentage with colors
-    let change_text = if price_change > 0.0 {
-        format!("(+{:.12} SOL, +{:.4}%)", price_change, price_change_percent).bright_green()
-    } else if price_change < 0.0 {
-        format!("({:.12} SOL, {:.4}%)", price_change, price_change_percent).bright_red()
-    } else {
-        format!("(±{:.12} SOL, ±{:.4}%)", 0.0, 0.0).bright_yellow()
-    };
-
-    // Format pool type properly - use as-is if already properly formatted, otherwise format from dashes
-    let formatted_pool_type = pool_type.map(|pt| {
-        // If it already contains uppercase and spaces, it's likely already formatted
-        if pt.chars().any(|c| c.is_uppercase()) && pt.contains(' ') {
-            pt.to_string()
-        } else {
-            // Legacy formatting for dash-separated names like "raydium-cpmm"
-            pt.split('-')
-                .map(|word| {
-                    let mut chars = word.chars();
-                    match chars.next() {
-                        None => String::new(),
-                        Some(first) =>
-                            first.to_uppercase().collect::<String>() +
-                                &chars.as_str().to_uppercase(),
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(" ")
-        }
-    });
-
-    // Source info with proper pool type formatting
-    let source_text = match price_source {
-        "pool" => {
-            if
-                let (Some(formatted_type), Some(pool_addr)) = (
-                    formatted_pool_type.as_ref(),
-                    pool_address,
-                )
-            {
-                format!("🏊 {} Pool: {}", formatted_type, pool_addr).bright_cyan()
+    // Format pool type properly
+    let formatted_pool_type = pool_type
+        .map(|pt| {
+            if pt.chars().any(|c| c.is_uppercase()) && pt.contains(' ') {
+                pt.to_string()
             } else {
-                "🏊 Pool".bright_cyan()
+                pt.split('-')
+                    .map(|word| {
+                        let mut chars = word.chars();
+                        match chars.next() {
+                            None => String::new(),
+                            Some(first) =>
+                                first.to_uppercase().collect::<String>() +
+                                    &chars.as_str().to_uppercase(),
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ")
             }
-        }
-        "api" => "🌐 API".bright_magenta(),
-        _ => format!("📊 {}", price_source).bright_white(),
-    };
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
 
-    // Build complete message using exact logger format
-    let message = format!(
-        "{} {} {} {} {}",
-        symbol_padded.bright_white().bold(),
+    // Build line 1: Symbol, price change, and P&L information
+    let mut line1_parts = Vec::new();
+
+    // Symbol and price change
+    let price_part = format!(
+        "{} {} {:.10} SOL ({}SOL, {}%)",
         emoji,
-        price_text,
-        change_text,
-        source_text
+        format!("{}", symbol).bold(),
+        match price_color {
+            "green" => format!("{:.10}", new_price).green().bold(),
+            "red" => format!("{:.10}", new_price).red().bold(),
+            _ => format!("{:.10}", new_price).white().bold(),
+        },
+        match price_color {
+            "green" => format!("+{:.10} ", price_change).green().bold(),
+            "red" => format!("{:.10} ", price_change).red().bold(),
+            _ => format!("+{:.10} ", 0.0).white().bold(),
+        },
+        match price_color {
+            "green" => format!("+{:.2}", price_change_percent).green().bold(),
+            "red" => format!("{:.2}", price_change_percent).red().bold(),
+            _ => format!("+{:.2}", 0.0).white().bold(),
+        }
     );
+    line1_parts.push(price_part);
 
-    // Use standard logger with POSITION tag and PRICE type
-    log(LogTag::Other("POSITION".to_string()), "PRICE", &message);
+    // P&L section in first line
+    if let Some((pnl_sol, pnl_percent)) = current_pnl {
+        let pnl_text = if pnl_percent > 0.0 {
+            format!(
+                "💰 P&L: {} SOL ({}%)",
+                format!("+{:.6}", pnl_sol).green().bold(),
+                format!("+{:.2}", pnl_percent).green().bold()
+            )
+        } else if pnl_percent < 0.0 {
+            format!(
+                "💸 P&L: {} SOL ({}%)",
+                format!("{:.6}", pnl_sol).red().bold(),
+                format!("{:.2}", pnl_percent).red().bold()
+            )
+        } else {
+            format!(
+                "🟡 P&L: {} SOL ({}%)",
+                format!("±{:.6}", 0.0).white().bold(),
+                format!("±{:.2}", 0.0).white().bold()
+            )
+        };
+        line1_parts.push(pnl_text);
+    }
+
+    let line1 = line1_parts.join(" ");
+
+    // Build line 2: Pool vs API comparison and pool details only
+    let mut line2_parts = Vec::new();
+
+    // Price comparison section with consistent mono styling
+    if price_source == "pool" {
+        if let Some(api_price_val) = api_price {
+            let diff = new_price - api_price_val;
+            let diff_percent = if api_price_val != 0.0 {
+                (diff / api_price_val) * 100.0
+            } else {
+                0.0
+            };
+
+            line2_parts.push(format!("🏊 Pool: {}", format!("{:.10}", new_price).white().bold()));
+            line2_parts.push(
+                format!("🌐 API: {}", format!("{:.10}", api_price_val).white().bold())
+            );
+
+            let diff_text = if diff > 0.0 {
+                format!("(Pool {}%)", format!("+{:.2}", diff_percent).green().bold())
+            } else if diff < 0.0 {
+                format!("(Pool {}%)", format!("{:.2}", diff_percent).red().bold())
+            } else {
+                "(Perfect Match)".white().to_string()
+            };
+            line2_parts.push(diff_text);
+        } else {
+            line2_parts.push(format!("🏊 {} Pool", formatted_pool_type).dimmed().to_string());
+        }
+    } else {
+        line2_parts.push("🌐 API Price".dimmed().to_string());
+    }
+
+    // Pool details with better color
+    if pool_address.is_some() {
+        line2_parts.push(format!("[{}]", formatted_pool_type).dimmed().to_string());
+    }
+
+    // Join line2 parts with proper spacing
+    let line2 = line2_parts
+        .into_iter()
+        .map(|part| part.to_string())
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    // Combine both lines into a single message with newline separator
+    let combined_message = format!("{}\n{}", line1, line2);
+
+    // Log both lines using a single logger call
+    log(LogTag::Other("POSITION".to_string()), "PRICE", &combined_message);
 }
