@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 20;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.01;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -325,8 +325,6 @@ async fn ensure_tokens_populated() {
         }
     }
 }
-
-
 
 /// Enhanced Multi-Strategy Buy Signal Detection System with OHLCV Analysis
 /// Combines smart entry analysis with advanced OHLCV technical indicators
@@ -1067,28 +1065,6 @@ struct DipSignal {
     confidence: f64,
     details: String,
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// Checks if entry is allowed based on historical position data for this token
 /// Returns true only if current price is below both:
@@ -2526,6 +2502,30 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
         // Now process each position with async calls (mutex is released)
         for (index, mut position) in open_positions_data {
+            // First, check for external sells (tokens sold outside the bot)
+            if crate::positions::check_recent_transactions_for_position(&mut position).await {
+                log(
+                    LogTag::Trader,
+                    "EXTERNAL_SELL",
+                    &format!(
+                        "Detected external sell for {} ({}) - position closed automatically",
+                        position.symbol,
+                        position.mint
+                    )
+                );
+
+                // Update the global positions list with the closed position
+                if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                    if let Some(saved_position) = positions.get_mut(index) {
+                        *saved_position = position;
+                    }
+                    // Save positions to disk after external sell detection
+                    save_positions_to_file(&positions);
+                }
+
+                continue; // Skip to next position since this one is now closed
+            }
+
             // Get current price from safe price service
             if let Some(current_price) = get_token_price_blocking_safe(&position.mint).await {
                 if current_price > 0.0 && current_price.is_finite() {

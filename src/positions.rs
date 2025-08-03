@@ -105,7 +105,13 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
     }
 
     // For closed positions, prioritize sol_received for most accurate P&L
-    if let (Some(_), Some(sol_received)) = (position.exit_price, position.sol_received) {
+    if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
+        // Check for external sell (marked with exit_price = 0.0 and sol_received = 0.0)
+        if exit_price == 0.0 && sol_received == 0.0 {
+            // External sell detected - P&L is unknown
+            return (0.0, 0.0);
+        }
+
         // Use actual SOL invested vs SOL received for closed positions
         let sol_invested = position.entry_size_sol;
 
@@ -359,53 +365,39 @@ pub async fn check_recent_transactions_for_position(position: &mut Position) -> 
             )
         );
 
-        // TODO: In a more complete implementation, we would search recent transaction history
-        // to find the actual sell transaction signature. For now, we mark it as external sell.
-
-        // Mark position as closed but with proper exit transaction signature indicating external sell
+        // For external sells, we cannot accurately determine the actual sale price or proceeds
+        // Mark position as closed with unknown exit data
         let now = Utc::now();
         position.exit_time = Some(now);
         position.exit_transaction_signature = Some("EXTERNAL_SELL_DETECTED".to_string());
 
-        // Use the last known price as exit price if not set
-        if position.exit_price.is_none() {
-            // Fallback to entry price since LIST_TOKENS was moved to tokens module
-            // TODO: Implement proper async price lookup from tokens database
-            position.exit_price = Some(position.entry_price);
-            position.effective_exit_price = Some(position.entry_price);
-        }
+        // For external sells, set exit values to indicate unknown/external sale
+        // We cannot know the actual price they sold at or SOL received
+        position.exit_price = Some(0.0); // Mark as external sell (unknown price)
+        position.effective_exit_price = Some(0.0);
+        position.sol_received = Some(0.0); // Unknown SOL received
+        position.total_size_sol = 0.0; // Reset to indicate external sale
 
-        // Calculate P&L using unified function
-        if let Some(exit_price) = position.exit_price {
-            let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
+        log(
+            LogTag::Trader,
+            "EXTERNAL_SELL",
+            &format!(
+                "External sell detected for {} - Position closed (P&L unknown - sold externally)",
+                position.symbol
+            )
+        );
 
-            log(
-                LogTag::Trader,
-                if net_pnl_sol > 0.0 {
-                    "PROFIT"
-                } else {
-                    "LOSS"
-                },
-                &format!(
-                    "External sell detected for {} - P&L: {:.6} SOL ({:.2}%)",
-                    position.symbol,
-                    net_pnl_sol,
-                    net_pnl_percent
-                )
-            );
+        // Do NOT attempt to close ATA for external sells - we don't control the transaction
+        log(
+            LogTag::Trader,
+            "INFO",
+            &format!(
+                "Skipping ATA close for external sell of {} - not our transaction",
+                position.symbol
+            )
+        );
 
-            // Do NOT attempt to close ATA for external sells - we don't control the transaction
-            log(
-                LogTag::Trader,
-                "INFO",
-                &format!(
-                    "Skipping ATA close for external sell of {} - not our transaction",
-                    position.symbol
-                )
-            );
-
-            return true;
-        }
+        return true;
     }
 
     false
@@ -800,22 +792,22 @@ pub async fn close_position(
                 // Calculate actual P&L using unified function
                 position.exit_price = Some(exit_price);
                 position.effective_exit_price = Some(effective_exit_price);
-                position.sol_received = Some(crate::wallet::lamports_to_sol(clean_sol_received)); // Store ATA-cleaned SOL
+                position.sol_received = Some(crate::rpc::lamports_to_sol(clean_sol_received)); // Store ATA-cleaned SOL
 
                 let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
                 let is_profitable = net_pnl_sol > 0.0;
 
                 position.exit_price = Some(exit_price);
                 position.exit_time = Some(exit_time);
-                position.total_size_sol = crate::wallet::lamports_to_sol(sol_received);
+                position.total_size_sol = crate::rpc::lamports_to_sol(sol_received);
                 position.exit_transaction_signature = transaction_signature.clone();
                 position.effective_exit_price = Some(effective_exit_price);
 
                 let status_color = if is_profitable { "\x1b[32m" } else { "\x1b[31m" };
                 let status_text = if is_profitable { "PROFIT" } else { "LOSS" };
 
-                let actual_sol_received = crate::wallet::lamports_to_sol(clean_sol_received);
-                let total_sol_received = crate::wallet::lamports_to_sol(sol_received);
+                let actual_sol_received = crate::rpc::lamports_to_sol(clean_sol_received);
+                let total_sol_received = crate::rpc::lamports_to_sol(sol_received);
 
                 let log_message = format!(
                     "Closed position for {} ({}) - TX: {}, SOL From Sale: {:.6}, Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",

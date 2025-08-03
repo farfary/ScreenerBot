@@ -4,13 +4,18 @@
 /// for consistent RPC configuration and connection management.
 
 use crate::logger::{ log, LogTag };
-use crate::global::read_configs;
+use crate::global::{ read_configs, is_debug_wallet_enabled };
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{
     account::Account,
     pubkey::Pubkey,
     commitment_config::CommitmentConfig,
     client::SyncClient,
+    transaction::VersionedTransaction,
+    signer::Signer,
+    signature::Keypair,
+    transaction::Transaction,
+    hash::Hash,
 };
 use std::sync::Arc;
 use std::str::FromStr;
@@ -18,7 +23,133 @@ use std::collections::HashMap;
 use std::time::{ Duration, Instant };
 use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
+use base64::{ engine::general_purpose, Engine as _ };
+use reqwest;
+use serde_json;
+use bincode;
+use bs58;
+
+/// Structure to hold token account information
+#[derive(Debug)]
+pub struct TokenAccountInfo {
+    pub account: String,
+    pub mint: String,
+    pub balance: u64,
+    pub is_token_2022: bool,
+}
+
+/// Transaction details from RPC
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionDetails {
+    pub slot: u64,
+    pub transaction: TransactionData,
+    pub meta: Option<TransactionMeta>,
+}
+
+/// Transaction data structure
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionData {
+    pub message: serde_json::Value,
+    pub signatures: Vec<String>,
+}
+
+/// Transaction metadata with balance changes
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionMeta {
+    pub err: Option<serde_json::Value>,
+    #[serde(rename = "preBalances")]
+    pub pre_balances: Vec<u64>,
+    #[serde(rename = "postBalances")]
+    pub post_balances: Vec<u64>,
+    #[serde(rename = "preTokenBalances")]
+    pub pre_token_balances: Option<Vec<TokenBalance>>,
+    #[serde(rename = "postTokenBalances")]
+    pub post_token_balances: Option<Vec<TokenBalance>>,
+    pub fee: u64,
+    #[serde(rename = "logMessages")]
+    pub log_messages: Option<Vec<String>>,
+}
+
+/// Token balance information in transaction metadata
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenBalance {
+    #[serde(rename = "accountIndex")]
+    pub account_index: u32,
+    pub mint: String,
+    pub owner: Option<String>,
+    #[serde(rename = "programId")]
+    pub program_id: Option<String>,
+    #[serde(rename = "uiTokenAmount")]
+    pub ui_token_amount: UiTokenAmount,
+}
+
+/// Token amount with UI representation
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UiTokenAmount {
+    pub amount: String,
+    pub decimals: u8,
+    #[serde(rename = "uiAmount")]
+    pub ui_amount: Option<f64>,
+    #[serde(rename = "uiAmountString")]
+    pub ui_amount_string: Option<String>,
+}
 use tokio::sync::Notify;
+
+/// Error types for RPC and wallet operations
+#[derive(Debug)]
+pub enum SwapError {
+    ApiError(String),
+    NetworkError(reqwest::Error),
+    InvalidResponse(String),
+    InsufficientBalance(String),
+    SlippageExceeded(String),
+    InvalidAmount(String),
+    ConfigError(String),
+    TransactionError(String),
+    SigningError(String),
+    ParseError(String),
+}
+
+impl std::fmt::Display for SwapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SwapError::ApiError(msg) => write!(f, "API Error: {}", msg),
+            SwapError::NetworkError(err) => write!(f, "Network Error: {}", err),
+            SwapError::InvalidResponse(msg) => write!(f, "Invalid Response: {}", msg),
+            SwapError::InsufficientBalance(msg) => write!(f, "Insufficient Balance: {}", msg),
+            SwapError::SlippageExceeded(msg) => write!(f, "Slippage Exceeded: {}", msg),
+            SwapError::InvalidAmount(msg) => write!(f, "Invalid Amount: {}", msg),
+            SwapError::ConfigError(msg) => write!(f, "Config Error: {}", msg),
+            SwapError::TransactionError(msg) => write!(f, "Transaction Error: {}", msg),
+            SwapError::SigningError(msg) => write!(f, "Signing Error: {}", msg),
+            SwapError::ParseError(msg) => write!(f, "Parse Error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for SwapError {}
+
+impl From<reqwest::Error> for SwapError {
+    fn from(err: reqwest::Error) -> Self {
+        SwapError::NetworkError(err)
+    }
+}
+
+impl From<serde_json::Error> for SwapError {
+    fn from(err: serde_json::Error) -> Self {
+        SwapError::ParseError(format!("JSON parsing error: {}", err))
+    }
+}
+
+/// Converts lamports to SOL amount
+pub fn lamports_to_sol(lamports: u64) -> f64 {
+    (lamports as f64) / 1_000_000_000.0
+}
+
+/// Converts SOL amount to lamports (1 SOL = 1,000,000,000 lamports)
+pub fn sol_to_lamports(sol_amount: f64) -> u64 {
+    (sol_amount * 1_000_000_000.0) as u64
+}
 
 /// Statistics tracking for RPC usage
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -632,6 +763,1091 @@ impl RpcClient {
             }).await
             .map_err(|e| format!("Task error: {}", e))?
     }
+
+    /// Get SOL balance for wallet address using premium RPC
+    pub async fn get_sol_balance(&self, wallet_address: &str) -> Result<f64, SwapError> {
+        self.wait_for_rate_limit().await;
+        self.record_call("get_balance");
+
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!("Checking SOL balance for wallet: {}", &wallet_address[..8])
+            );
+        }
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getBalance",
+            "params": [wallet_address]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Use premium RPC URL first
+        let configs = read_configs("configs.json").map_err(|e|
+            SwapError::ConfigError(e.to_string())
+        )?;
+
+        let premium_rpc = &configs.rpc_url_premium;
+
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(balance_lamports) = value.as_u64() {
+                                let balance_sol = lamports_to_sol(balance_lamports);
+                                if is_debug_wallet_enabled() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "DEBUG",
+                                        &format!(
+                                            "SOL balance retrieved: {} lamports ({:.6} SOL) from premium RPC",
+                                            balance_lamports,
+                                            balance_sol
+                                        )
+                                    );
+                                }
+                                return Ok(balance_sol);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "ERROR",
+                    &format!("Failed to get balance from premium RPC: {}", e)
+                );
+            }
+        }
+
+        // Fallback to main RPC
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(balance_lamports) = value.as_u64() {
+                                let balance_sol = lamports_to_sol(balance_lamports);
+                                if is_debug_wallet_enabled() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "DEBUG",
+                                        &format!(
+                                            "SOL balance retrieved: {} lamports ({:.6} SOL) from main RPC",
+                                            balance_lamports,
+                                            balance_sol
+                                        )
+                                    );
+                                }
+                                return Ok(balance_sol);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(SwapError::NetworkError(e));
+            }
+        }
+
+        Err(SwapError::TransactionError("Failed to get balance from all RPC endpoints".to_string()))
+    }
+
+    /// Get token balance for wallet address using premium RPC
+    pub async fn get_token_balance(
+        &self,
+        wallet_address: &str,
+        mint: &str
+    ) -> Result<u64, SwapError> {
+        self.wait_for_rate_limit().await;
+        self.record_call("get_token_accounts_by_owner");
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenAccountsByOwner",
+            "params": [
+                wallet_address,
+                {
+                    "mint": mint
+                },
+                {
+                    "encoding": "jsonParsed",
+                    "commitment": "confirmed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Use premium RPC URL first
+        let configs = read_configs("configs.json").map_err(|e|
+            SwapError::ConfigError(e.to_string())
+        )?;
+
+        let premium_rpc = &configs.rpc_url_premium;
+
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                if let Some(account) = accounts.first() {
+                                    if let Some(account_data) = account.get("account") {
+                                        if let Some(data) = account_data.get("data") {
+                                            if let Some(parsed) = data.get("parsed") {
+                                                if let Some(info) = parsed.get("info") {
+                                                    if
+                                                        let Some(token_amount) =
+                                                            info.get("tokenAmount")
+                                                    {
+                                                        if
+                                                            let Some(amount_str) =
+                                                                token_amount.get("amount")
+                                                        {
+                                                            if
+                                                                let Some(amount_str) =
+                                                                    amount_str.as_str()
+                                                            {
+                                                                if
+                                                                    let Ok(amount) =
+                                                                        amount_str.parse::<u64>()
+                                                                {
+                                                                    return Ok(amount);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "ERROR",
+                    &format!("Failed to get token balance from premium RPC: {}", e)
+                );
+            }
+        }
+
+        // Fallback to main RPC
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                if let Some(account) = accounts.first() {
+                                    if let Some(account_data) = account.get("account") {
+                                        if let Some(data) = account_data.get("data") {
+                                            if let Some(parsed) = data.get("parsed") {
+                                                if let Some(info) = parsed.get("info") {
+                                                    if
+                                                        let Some(token_amount) =
+                                                            info.get("tokenAmount")
+                                                    {
+                                                        if
+                                                            let Some(amount_str) =
+                                                                token_amount.get("amount")
+                                                        {
+                                                            if
+                                                                let Some(amount_str) =
+                                                                    amount_str.as_str()
+                                                            {
+                                                                if
+                                                                    let Ok(amount) =
+                                                                        amount_str.parse::<u64>()
+                                                                {
+                                                                    return Ok(amount);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "WARNING",
+                    &format!("Failed to get token balance from main RPC: {}", e)
+                );
+            }
+        }
+
+        Ok(0) // Return 0 if no token account found or all RPCs failed
+    }
+
+    /// Get latest blockhash using premium RPC
+    pub async fn get_latest_blockhash(&self) -> Result<Hash, SwapError> {
+        self.wait_for_rate_limit().await;
+        self.record_call("get_latest_blockhash");
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getLatestBlockhash",
+            "params": [
+                {
+                    "commitment": "finalized"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Use premium RPC URL first
+        let configs = read_configs("configs.json").map_err(|e|
+            SwapError::ConfigError(e.to_string())
+        )?;
+
+        let premium_rpc = &configs.rpc_url_premium;
+
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if
+                                let Some(blockhash_str) = value
+                                    .get("blockhash")
+                                    .and_then(|b| b.as_str())
+                            {
+                                if let Ok(blockhash) = Hash::from_str(blockhash_str) {
+                                    return Ok(blockhash);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "ERROR",
+                    &format!("Failed to get latest blockhash from premium RPC: {}", e)
+                );
+            }
+        }
+
+        // Fallback to main RPC
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if
+                                let Some(blockhash_str) = value
+                                    .get("blockhash")
+                                    .and_then(|b| b.as_str())
+                            {
+                                if let Ok(blockhash) = Hash::from_str(blockhash_str) {
+                                    return Ok(blockhash);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(SwapError::NetworkError(e));
+            }
+        }
+
+        Err(
+            SwapError::TransactionError(
+                "Failed to get latest blockhash from all RPC endpoints".to_string()
+            )
+        )
+    }
+
+    /// Send transaction using premium RPC
+    pub async fn send_transaction(&self, transaction: &Transaction) -> Result<String, SwapError> {
+        self.wait_for_rate_limit().await;
+        self.record_call("send_transaction");
+
+        // Serialize transaction
+        let serialized_tx = bincode
+            ::serialize(transaction)
+            .map_err(|e|
+                SwapError::TransactionError(format!("Failed to serialize transaction: {}", e))
+            )?;
+
+        let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "sendTransaction",
+            "params": [
+                tx_base64,
+                {
+                    "encoding": "base64",
+                    "skipPreflight": false,
+                    "preflightCommitment": "processed",
+                    "maxRetries": 3
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Use premium RPC URL first
+        let configs = read_configs("configs.json").map_err(|e|
+            SwapError::ConfigError(e.to_string())
+        )?;
+
+        let premium_rpc = &configs.rpc_url_premium;
+
+        log(LogTag::Rpc, "INFO", "Sending transaction to premium RPC...");
+
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(signature) = result.as_str() {
+                                log(
+                                    LogTag::Rpc,
+                                    "SUCCESS",
+                                    &format!("Transaction sent successfully via premium RPC: {}", signature)
+                                );
+                                return Ok(signature.to_string());
+                            }
+                        }
+
+                        if let Some(error) = rpc_response.get("error") {
+                            let error_msg = error
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Unknown RPC error");
+                            log(LogTag::Rpc, "ERROR", &format!("Premium RPC error: {}", error_msg));
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "ERROR",
+                    &format!("Failed to send transaction to premium RPC: {}", e)
+                );
+            }
+        }
+
+        // Fallback to main RPC
+        log(LogTag::Rpc, "INFO", "Fallback: Sending transaction to main RPC...");
+
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(signature) = result.as_str() {
+                                log(
+                                    LogTag::Rpc,
+                                    "SUCCESS",
+                                    &format!("Transaction sent successfully via main RPC: {}", signature)
+                                );
+                                return Ok(signature.to_string());
+                            }
+                        }
+
+                        if let Some(error) = rpc_response.get("error") {
+                            let error_msg = error
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Unknown RPC error");
+                            return Err(
+                                SwapError::TransactionError(format!("RPC error: {}", error_msg))
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(SwapError::NetworkError(e));
+            }
+        }
+
+        Err(
+            SwapError::TransactionError(
+                "Failed to send transaction to all RPC endpoints".to_string()
+            )
+        )
+    }
+
+    /// Sign and send transaction using premium RPC
+    pub async fn sign_and_send_transaction(
+        &self,
+        swap_transaction_base64: &str
+    ) -> Result<String, SwapError> {
+        self.wait_for_rate_limit().await;
+        self.record_call("send_transaction");
+
+        let configs = read_configs("configs.json").map_err(|e|
+            SwapError::ConfigError(e.to_string())
+        )?;
+
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!(
+                    "Starting transaction signing: tx_length={} bytes",
+                    swap_transaction_base64.len()
+                )
+            );
+        }
+
+        log(
+            LogTag::Rpc,
+            "SIGN",
+            &format!(
+                "Signing transaction with wallet (length: {} bytes)",
+                swap_transaction_base64.len()
+            )
+        );
+
+        // Decode the base64 transaction
+        let transaction_bytes = base64::engine::general_purpose::STANDARD
+            .decode(swap_transaction_base64)
+            .map_err(|e| SwapError::SigningError(format!("Failed to decode transaction: {}", e)))?;
+
+        // Deserialize the VersionedTransaction
+        let mut transaction: VersionedTransaction = bincode
+            ::deserialize(&transaction_bytes)
+            .map_err(|e|
+                SwapError::SigningError(format!("Failed to deserialize transaction: {}", e))
+            )?;
+
+        // Create keypair from private key
+        let private_key_bytes = bs58
+            ::decode(&configs.main_wallet_private)
+            .into_vec()
+            .map_err(|e| SwapError::ConfigError(format!("Invalid private key format: {}", e)))?;
+
+        let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
+            SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+        )?;
+
+        // Sign the transaction
+        let signature = keypair.sign_message(&transaction.message.serialize());
+
+        if is_debug_wallet_enabled() {
+            log(
+                LogTag::Rpc,
+                "DEBUG",
+                &format!(
+                    "Transaction signed successfully: wallet_pubkey={}, signature={}",
+                    keypair.pubkey(),
+                    signature
+                )
+            );
+        }
+
+        // Add the signature to the transaction
+        if transaction.signatures.is_empty() {
+            transaction.signatures.push(signature);
+        } else {
+            transaction.signatures[0] = signature;
+        }
+
+        // Serialize the signed transaction back to base64
+        let signed_transaction_bytes = bincode
+            ::serialize(&transaction)
+            .map_err(|e|
+                SwapError::SigningError(format!("Failed to serialize signed transaction: {}", e))
+            )?;
+        let signed_transaction_base64 = base64::engine::general_purpose::STANDARD.encode(
+            &signed_transaction_bytes
+        );
+
+        // Send the signed transaction using our send method
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "sendTransaction",
+            "params": [
+                signed_transaction_base64,
+                {
+                    "encoding": "base64",
+                    "skipPreflight": false,
+                    "preflightCommitment": "processed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Use premium RPC URL first
+        let premium_rpc = &configs.rpc_url_premium;
+
+        log(LogTag::Rpc, "SEND", "Sending signed transaction to premium RPC");
+
+        match
+            client
+                .post(premium_rpc)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(tx_sig) = result.as_str() {
+                                log(
+                                    LogTag::Rpc,
+                                    "SUCCESS",
+                                    &format!("Transaction sent successfully via premium RPC: {}", tx_sig)
+                                );
+                                return Ok(tx_sig.to_string());
+                            }
+                        }
+
+                        if let Some(error) = rpc_response.get("error") {
+                            let error_msg = error
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Unknown RPC error");
+                            log(LogTag::Rpc, "ERROR", &format!("Premium RPC error: {}", error_msg));
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::Rpc, "ERROR", &format!("Failed to send to premium RPC: {}", e));
+            }
+        }
+
+        // Try fallback RPCs
+        for fallback_rpc in &configs.rpc_fallbacks {
+            log(LogTag::Rpc, "SEND", &format!("Trying fallback RPC: {}", fallback_rpc));
+
+            match
+                client
+                    .post(fallback_rpc)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(tx_sig) = result.as_str() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "SUCCESS",
+                                        &format!("Transaction sent via fallback RPC: {}", tx_sig)
+                                    );
+                                    return Ok(tx_sig.to_string());
+                                }
+                            }
+
+                            if let Some(error) = rpc_response.get("error") {
+                                let error_msg = error
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("Unknown RPC error");
+                                log(
+                                    LogTag::Rpc,
+                                    "ERROR",
+                                    &format!("Fallback RPC {} error: {}", fallback_rpc, error_msg)
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Fallback RPC {} failed: {}", fallback_rpc, e)
+                    );
+                }
+            }
+        }
+
+        // Try main RPC as last resort
+        log(LogTag::Rpc, "SEND", "Trying main RPC as last resort");
+
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(tx_sig) = result.as_str() {
+                                log(
+                                    LogTag::Rpc,
+                                    "SUCCESS",
+                                    &format!("Transaction sent via main RPC: {}", tx_sig)
+                                );
+                                return Ok(tx_sig.to_string());
+                            }
+                        }
+
+                        if let Some(error) = rpc_response.get("error") {
+                            let error_msg = error
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Unknown RPC error");
+                            return Err(
+                                SwapError::TransactionError(format!("RPC error: {}", error_msg))
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(SwapError::NetworkError(e));
+            }
+        }
+
+        Err(SwapError::TransactionError("All RPC endpoints failed".to_string()))
+    }
+
+    /// Gets all token accounts for a wallet (both SPL Token and Token-2022)
+    pub async fn get_all_token_accounts(
+        &self,
+        wallet_address: &str
+    ) -> Result<Vec<TokenAccountInfo>, SwapError> {
+        // Record call in stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getTokenAccountsByOwner");
+        }
+
+        let spl_token_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenAccountsByOwner",
+            "params": [
+                wallet_address,
+                {
+                    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let token_2022_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenAccountsByOwner",
+            "params": [
+                wallet_address,
+                {
+                    "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let mut all_accounts = Vec::new();
+
+        // Try premium RPC first if available, then fallbacks
+        let mut rpc_endpoints = Vec::new();
+        if let Some(premium) = &self.premium_url {
+            if !premium.is_empty() {
+                rpc_endpoints.push(premium.as_str());
+            }
+        }
+        rpc_endpoints.push(&self.rpc_url);
+        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
+
+        for rpc_url in &rpc_endpoints {
+            // Get SPL Token accounts
+            if
+                let Ok(response) = client
+                    .post(*rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(&spl_token_payload)
+                    .send().await
+            {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                for account in accounts {
+                                    if
+                                        let Some(parsed_info) = extract_token_account_info(
+                                            account,
+                                            false
+                                        )
+                                    {
+                                        all_accounts.push(parsed_info);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Get Token-2022 accounts
+            if
+                let Ok(response) = client
+                    .post(*rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(&token_2022_payload)
+                    .send().await
+            {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                for account in accounts {
+                                    if
+                                        let Some(parsed_info) = extract_token_account_info(
+                                            account,
+                                            true
+                                        )
+                                    {
+                                        all_accounts.push(parsed_info);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we got accounts from this RPC, break
+            if !all_accounts.is_empty() {
+                break;
+            }
+        }
+
+        log(
+            LogTag::Rpc,
+            "ATA",
+            &format!("Found {} total token accounts for wallet via RPC", all_accounts.len())
+        );
+        Ok(all_accounts)
+    }
+
+    /// Checks if a mint is a Token-2022 mint by checking its owner program
+    pub async fn is_token_2022_mint(&self, mint: &str) -> Result<bool, SwapError> {
+        // Record call in stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getAccountInfo");
+        }
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getAccountInfo",
+            "params": [
+                mint,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Try premium RPC first if available, then fallbacks
+        let mut rpc_endpoints = Vec::new();
+        if let Some(premium) = &self.premium_url {
+            if !premium.is_empty() {
+                rpc_endpoints.push(premium.as_str());
+            }
+        }
+        rpc_endpoints.push(&self.rpc_url);
+        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
+
+        for rpc_url in rpc_endpoints {
+            match
+                client
+                    .post(rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(value) = result.get("value") {
+                                if let Some(owner) = value.get("owner") {
+                                    if let Some(owner_str) = owner.as_str() {
+                                        // Token Extensions Program ID (Token-2022)
+                                        return Ok(
+                                            owner_str ==
+                                                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+
+        // Default to false if we can't determine
+        Ok(false)
+    }
+
+    /// Gets transaction details from RPC to analyze balance changes
+    pub async fn get_transaction_details(
+        &self,
+        transaction_signature: &str
+    ) -> Result<TransactionDetails, SwapError> {
+        // Record call in stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getTransaction");
+        }
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTransaction",
+            "params": [
+                transaction_signature,
+                {
+                    "encoding": "json",
+                    "maxSupportedTransactionVersion": 0
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Try premium RPC first if available, then fallbacks
+        let mut rpc_endpoints = Vec::new();
+        if let Some(premium) = &self.premium_url {
+            if !premium.is_empty() {
+                rpc_endpoints.push(premium.as_str());
+            }
+        }
+        rpc_endpoints.push(&self.rpc_url);
+        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
+
+        for rpc_url in &rpc_endpoints {
+            match
+                client
+                    .post(*rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        continue;
+                    }
+
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(error) = rpc_response.get("error") {
+                            log(
+                                LogTag::Rpc,
+                                "ERROR",
+                                &format!("RPC error getting transaction: {:?}", error)
+                            );
+                            continue;
+                        }
+
+                        if let Some(result) = rpc_response.get("result") {
+                            if result.is_null() {
+                                return Err(
+                                    SwapError::TransactionError(
+                                        "Transaction not found or not confirmed yet".to_string()
+                                    )
+                                );
+                            }
+
+                            let transaction_details: TransactionDetails = serde_json
+                                ::from_value(result.clone())
+                                .map_err(|e|
+                                    SwapError::InvalidResponse(
+                                        format!("Failed to parse transaction details: {}", e)
+                                    )
+                                )?;
+
+                            return Ok(transaction_details);
+                        }
+                    }
+                }
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+
+        Err(
+            SwapError::TransactionError(
+                "Failed to get transaction details from all RPC endpoints".to_string()
+            )
+        )
+    }
+
+    /// Gets the associated token account address for a wallet and mint
+    pub async fn get_associated_token_account(
+        &self,
+        wallet_address: &str,
+        mint: &str
+    ) -> Result<String, SwapError> {
+        // Record call in stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getTokenAccountsByOwner");
+        }
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenAccountsByOwner",
+            "params": [
+                wallet_address,
+                {
+                    "mint": mint
+                },
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+
+        // Try premium RPC first if available, then fallbacks
+        let mut rpc_endpoints = Vec::new();
+        if let Some(premium) = &self.premium_url {
+            if !premium.is_empty() {
+                rpc_endpoints.push(premium.as_str());
+            }
+        }
+        rpc_endpoints.push(&self.rpc_url);
+        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
+
+        for rpc_url in rpc_endpoints {
+            match
+                client
+                    .post(rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(value) = result.get("value") {
+                                if let Some(accounts) = value.as_array() {
+                                    if !accounts.is_empty() {
+                                        if let Some(account) = accounts.first() {
+                                            if let Some(pubkey) = account.get("pubkey") {
+                                                if let Some(pubkey_str) = pubkey.as_str() {
+                                                    return Ok(pubkey_str.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+
+        Err(SwapError::InvalidResponse("No associated token account found".to_string()))
+    }
 }
 
 /// Global RPC client instance
@@ -656,39 +1872,6 @@ pub fn init_rpc_client() -> Result<&'static RpcClient, String> {
                         "ERROR",
                         &format!("Failed to init RPC client from config: {}", e)
                     );
-                }
-            }
-        });
-
-        if let Some(error) = init_error {
-            Err(error)
-        } else {
-            Ok(GLOBAL_RPC_CLIENT.as_ref().unwrap())
-        }
-    }
-}
-
-/// Initialize global RPC client with custom URL (legacy method)
-/// Note: This method requires a valid URL parameter as hardcoded fallbacks have been removed
-pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> Result<&'static RpcClient, String> {
-    unsafe {
-        let mut init_error: Option<String> = None;
-
-        RPC_INIT.call_once(|| {
-            match rpc_url {
-                Some(url) => {
-                    log(
-                        LogTag::Rpc,
-                        "INIT",
-                        &format!("Initializing global RPC client with custom URL: {}", url)
-                    );
-                    GLOBAL_RPC_CLIENT = Some(RpcClient::new_with_url(url));
-                }
-                None => {
-                    init_error = Some(
-                        "No RPC URL provided and no hardcoded fallback available".to_string()
-                    );
-                    log(LogTag::Rpc, "ERROR", "Cannot initialize RPC client without URL parameter");
                 }
             }
         });
@@ -787,4 +1970,27 @@ mod tests {
         let invalid_pubkey = "invalid";
         assert!(parse_pubkey(invalid_pubkey).is_err());
     }
+}
+
+/// Extracts token account information from RPC response
+fn extract_token_account_info(
+    account: &serde_json::Value,
+    is_token_2022: bool
+) -> Option<TokenAccountInfo> {
+    let pubkey = account.get("pubkey")?.as_str()?;
+    let account_data = account.get("account")?;
+    let parsed = account_data.get("data")?.get("parsed")?;
+    let info = parsed.get("info")?;
+
+    let mint = info.get("mint")?.as_str()?;
+    let token_amount = info.get("tokenAmount")?;
+    let amount_str = token_amount.get("amount")?.as_str()?;
+    let balance = amount_str.parse::<u64>().ok()?;
+
+    Some(TokenAccountInfo {
+        account: pubkey.to_string(),
+        mint: mint.to_string(),
+        balance,
+        is_token_2022,
+    })
 }

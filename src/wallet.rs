@@ -2,7 +2,7 @@ use crate::global::{ read_configs, is_debug_wallet_enabled, is_debug_swap_enable
 use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
-use crate::rpc::get_premium_transaction_rpc;
+use crate::rpc::{ get_premium_transaction_rpc, SwapError, lamports_to_sol, sol_to_lamports };
 
 use reqwest;
 use serde::{ Deserialize, Serialize, Deserializer };
@@ -116,52 +116,6 @@ fn deserialize_optional_string_or_number<'de, D>(
     deserializer.deserialize_option(OptionalStringOrNumber)
 }
 
-/// Custom error types for swap operations
-#[derive(Debug)]
-pub enum SwapError {
-    ApiError(String),
-    NetworkError(reqwest::Error),
-    InvalidResponse(String),
-    InsufficientBalance(String),
-    SlippageExceeded(String),
-    InvalidAmount(String),
-    ConfigError(String),
-    TransactionError(String),
-    SigningError(String),
-    ParseError(String),
-}
-
-impl fmt::Display for SwapError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SwapError::ApiError(msg) => write!(f, "API Error: {}", msg),
-            SwapError::NetworkError(err) => write!(f, "Network Error: {}", err),
-            SwapError::InvalidResponse(msg) => write!(f, "Invalid Response: {}", msg),
-            SwapError::InsufficientBalance(msg) => write!(f, "Insufficient Balance: {}", msg),
-            SwapError::SlippageExceeded(msg) => write!(f, "Slippage Exceeded: {}", msg),
-            SwapError::InvalidAmount(msg) => write!(f, "Invalid Amount: {}", msg),
-            SwapError::ConfigError(msg) => write!(f, "Config Error: {}", msg),
-            SwapError::TransactionError(msg) => write!(f, "Transaction Error: {}", msg),
-            SwapError::SigningError(msg) => write!(f, "Signing Error: {}", msg),
-            SwapError::ParseError(msg) => write!(f, "Parse Error: {}", msg),
-        }
-    }
-}
-
-impl Error for SwapError {}
-
-impl From<reqwest::Error> for SwapError {
-    fn from(err: reqwest::Error) -> Self {
-        SwapError::NetworkError(err)
-    }
-}
-
-impl From<serde_json::Error> for SwapError {
-    fn from(err: serde_json::Error) -> Self {
-        SwapError::ParseError(format!("JSON parsing error: {}", err))
-    }
-}
-
 /// Quote information from the swap router
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SwapQuote {
@@ -273,72 +227,6 @@ pub struct SwapResult {
     pub error: Option<String>,
 }
 
-/// Transaction details from RPC
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TransactionDetails {
-    pub slot: u64,
-    pub transaction: TransactionData,
-    pub meta: Option<TransactionMeta>,
-}
-
-/// Transaction data structure
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TransactionData {
-    pub message: serde_json::Value,
-    pub signatures: Vec<String>,
-}
-
-/// Transaction metadata with balance changes
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TransactionMeta {
-    pub err: Option<serde_json::Value>,
-    #[serde(rename = "preBalances")]
-    pub pre_balances: Vec<u64>,
-    #[serde(rename = "postBalances")]
-    pub post_balances: Vec<u64>,
-    #[serde(rename = "preTokenBalances")]
-    pub pre_token_balances: Option<Vec<TokenBalance>>,
-    #[serde(rename = "postTokenBalances")]
-    pub post_token_balances: Option<Vec<TokenBalance>>,
-    pub fee: u64,
-    #[serde(rename = "logMessages")]
-    pub log_messages: Option<Vec<String>>,
-}
-
-/// Token balance information
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TokenBalance {
-    #[serde(rename = "accountIndex")]
-    pub account_index: u32,
-    pub mint: String,
-    pub owner: Option<String>,
-    #[serde(rename = "programId")]
-    pub program_id: Option<String>,
-    #[serde(rename = "uiTokenAmount")]
-    pub ui_token_amount: TokenAmount,
-}
-
-/// Token amount details
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TokenAmount {
-    pub amount: String,
-    pub decimals: u8,
-    #[serde(rename = "uiAmount")]
-    pub ui_amount: Option<f64>,
-    #[serde(rename = "uiAmountString")]
-    pub ui_amount_string: Option<String>,
-}
-
-/// Converts SOL amount to lamports (1 SOL = 1,000,000,000 lamports)
-pub fn sol_to_lamports(sol_amount: f64) -> u64 {
-    (sol_amount * 1_000_000_000.0) as u64
-}
-
-/// Converts lamports to SOL amount
-pub fn lamports_to_sol(lamports: u64) -> f64 {
-    (lamports as f64) / 1_000_000_000.0
-}
-
 /// Gets wallet address from configs by deriving from private key
 pub fn get_wallet_address() -> Result<String, SwapError> {
     let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
@@ -363,322 +251,18 @@ pub async fn sign_and_send_transaction(
     swap_transaction_base64: &str,
     rpc_url: &str
 ) -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "Starting transaction signing: tx_length={} bytes, rpc_url={}",
-                swap_transaction_base64.len(),
-                rpc_url
-            )
-        );
-    }
-
-    log(
-        LogTag::Wallet,
-        "SIGN",
-        &format!(
-            "Signing transaction with wallet (length: {} bytes)",
-            swap_transaction_base64.len()
-        )
-    );
-
-    // Decode the base64 transaction
-    let transaction_bytes = general_purpose::STANDARD
-        .decode(swap_transaction_base64)
-        .map_err(|e| SwapError::SigningError(format!("Failed to decode transaction: {}", e)))?;
-
-    // Deserialize the VersionedTransaction
-    let mut transaction: VersionedTransaction = bincode
-        ::deserialize(&transaction_bytes)
-        .map_err(|e| SwapError::SigningError(format!("Failed to deserialize transaction: {}", e)))?;
-
-    // Create keypair from private key
-    let private_key_bytes = bs58
-        ::decode(&configs.main_wallet_private)
-        .into_vec()
-        .map_err(|e| SwapError::ConfigError(format!("Invalid private key format: {}", e)))?;
-
-    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
-        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
-    )?;
-
-    // Get the recent blockhash from the transaction message (for reference)
-    let _recent_blockhash = match &transaction.message {
-        solana_sdk::message::VersionedMessage::Legacy(message) => message.recent_blockhash,
-        solana_sdk::message::VersionedMessage::V0(message) => message.recent_blockhash,
-    };
-
-    // Sign the transaction
-    let signature = keypair.sign_message(&transaction.message.serialize());
-
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "Transaction signed successfully: wallet_pubkey={}, signature={}",
-                keypair.pubkey(),
-                signature
-            )
-        );
-    }
-
-    // Add the signature to the transaction
-    if transaction.signatures.is_empty() {
-        transaction.signatures.push(signature);
-    } else {
-        transaction.signatures[0] = signature;
-    }
-
-    // Serialize the signed transaction back to base64
-    let signed_transaction_bytes = bincode
-        ::serialize(&transaction)
-        .map_err(|e|
-            SwapError::SigningError(format!("Failed to serialize signed transaction: {}", e))
-        )?;
-    let signed_transaction_base64 = general_purpose::STANDARD.encode(&signed_transaction_bytes);
-
-    log(LogTag::Wallet, "SEND", &format!("Sending signed transaction to RPC: {}", rpc_url));
-
-    // Send the signed transaction
-    let client = reqwest::Client::new();
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "sendTransaction",
-        "params": [
-            signed_transaction_base64,
-            {
-                "encoding": "base64",
-                "skipPreflight": false,
-                "preflightCommitment": "processed"
-            }
-        ]
-    });
-
-    // Try fallback RPCs first, main RPC as last resort
-    let mut _last_error: Option<SwapError> = None;
-
-    // Try the randomly selected RPC first if it's provided and not the main RPC
-    if !rpc_url.eq(&configs.rpc_url) {
-        match send_rpc_request(&client, rpc_url, &rpc_payload).await {
-            Ok(tx_sig) => {
-                log(
-                    LogTag::Wallet,
-                    "SUCCESS",
-                    &format!("Transaction sent successfully via selected RPC: {}", tx_sig)
-                );
-                return Ok(tx_sig);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "ERROR",
-                    &format!("Selected RPC {} failed: {}, trying other fallbacks...", rpc_url, e)
-                );
-                _last_error = Some(e);
-            }
-        }
-    }
-
-    // Try fallback RPCs (skip the one we already tried)
-    for fallback_rpc in &configs.rpc_fallbacks {
-        if fallback_rpc == rpc_url {
-            continue; // Skip if we already tried this RPC
-        }
-        match send_rpc_request(&client, fallback_rpc, &rpc_payload).await {
-            Ok(tx_sig) => {
-                log(
-                    LogTag::Wallet,
-                    "SUCCESS",
-                    &format!("Transaction sent via fallback RPC: {}", tx_sig)
-                );
-                return Ok(tx_sig);
-            }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "ERROR",
-                    &format!("Fallback RPC {} failed: {}", fallback_rpc, e)
-                );
-                _last_error = Some(e);
-            }
-        }
-    }
-
-    // Try main RPC as a last resort, only if all fallbacks failed and it's not the same as our rpc_url
-    if rpc_url != &configs.rpc_url {
-        log(LogTag::Wallet, "WARN", "All fallbacks failed, trying main RPC as last resort");
-        match send_rpc_request(&client, &configs.rpc_url, &rpc_payload).await {
-            Ok(tx_sig) => {
-                log(
-                    LogTag::Wallet,
-                    "SUCCESS",
-                    &format!("Transaction sent via main RPC: {}", tx_sig)
-                );
-                return Ok(tx_sig);
-            }
-            Err(e) => {
-                log(LogTag::Wallet, "ERROR", &format!("Main RPC failed: {}", e));
-                _last_error = Some(e);
-            }
-        }
-    }
-
-    // If all RPCs failed, return the last error
-    Err(
-        _last_error.unwrap_or_else(||
-            SwapError::TransactionError("All RPC endpoints failed".to_string())
-        )
-    )
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.sign_and_send_transaction(swap_transaction_base64).await
 }
 
 /// Gets transaction details from RPC to analyze balance changes
 async fn get_transaction_details(
-    client: &reqwest::Client,
+    _client: &reqwest::Client,
     transaction_signature: &str,
-    rpc_url: &str
-) -> Result<TransactionDetails, SwapError> {
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTransaction",
-        "params": [
-            transaction_signature,
-            {
-                "encoding": "json",
-                "maxSupportedTransactionVersion": 0
-            }
-        ]
-    });
-
-    let response = client
-        .post(rpc_url)
-        .header("Content-Type", "application/json")
-        .json(&rpc_payload)
-        .send().await
-        .map_err(|e| SwapError::NetworkError(e))?;
-
-    if !response.status().is_success() {
-        return Err(
-            SwapError::TransactionError(
-                format!("Failed to get transaction details: {}", response.status())
-            )
-        );
-    }
-
-    let rpc_response: serde_json::Value = response
-        .json().await
-        .map_err(|e| SwapError::NetworkError(e))?;
-
-    if let Some(error) = rpc_response.get("error") {
-        return Err(
-            SwapError::TransactionError(format!("RPC error getting transaction: {:?}", error))
-        );
-    }
-
-    if let Some(result) = rpc_response.get("result") {
-        if result.is_null() {
-            return Err(
-                SwapError::TransactionError(
-                    "Transaction not found or not confirmed yet".to_string()
-                )
-            );
-        }
-
-        let transaction_details: TransactionDetails = serde_json
-            ::from_value(result.clone())
-            .map_err(|e|
-                SwapError::InvalidResponse(format!("Failed to parse transaction details: {}", e))
-            )?;
-
-        return Ok(transaction_details);
-    }
-
-    Err(SwapError::TransactionError("Invalid transaction response format".to_string()))
-}
-
-/// Sends RPC request to a specific endpoint
-async fn send_rpc_request(
-    client: &reqwest::Client,
-    rpc_url: &str,
-    payload: &serde_json::Value
-) -> Result<String, SwapError> {
-    if is_debug_wallet_enabled() {
-        log(LogTag::Wallet, "DEBUG", &format!("Sending RPC request to: {}", rpc_url));
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "RPC payload: {}",
-                serde_json::to_string(payload).unwrap_or_else(|_| "Invalid JSON".to_string())
-            )
-        );
-    }
-
-    let response = client
-        .post(rpc_url)
-        .header("Content-Type", "application/json")
-        .json(payload)
-        .send().await
-        .map_err(|e| SwapError::NetworkError(e))?;
-
-    if is_debug_wallet_enabled() {
-        log(LogTag::Wallet, "DEBUG", &format!("RPC response status: {}", response.status()));
-    }
-
-    if !response.status().is_success() {
-        return Err(
-            SwapError::TransactionError(
-                format!("RPC request failed with status: {}", response.status())
-            )
-        );
-    }
-
-    let rpc_response: serde_json::Value = response
-        .json().await
-        .map_err(|e| SwapError::NetworkError(e))?;
-
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "RPC response: {}",
-                serde_json
-                    ::to_string(&rpc_response)
-                    .unwrap_or_else(|_| "Invalid JSON".to_string())
-                    [..(500).min(rpc_response.to_string().len())].to_string()
-            )
-        );
-    }
-
-    // Check for RPC errors
-    if let Some(error) = rpc_response.get("error") {
-        return Err(SwapError::TransactionError(format!("RPC error: {:?}", error)));
-    }
-
-    // Extract the transaction signature from the response
-    if let Some(result) = rpc_response.get("result") {
-        if let Some(signature) = result.as_str() {
-            if is_debug_wallet_enabled() {
-                log(
-                    LogTag::Wallet,
-                    "DEBUG",
-                    &format!("Transaction signature received: {}", signature)
-                );
-            }
-            return Ok(signature.to_string());
-        }
-    }
-
-    Err(SwapError::TransactionError("Invalid RPC response format".to_string()))
+    _rpc_url: &str
+) -> Result<crate::rpc::TransactionDetails, SwapError> {
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.get_transaction_details(transaction_signature).await
 }
 
 // calculate_effective_price function has been moved to transactions/analyzer.rs
@@ -1551,168 +1135,14 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
 
 /// Checks wallet balance for SOL
 pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!("Checking SOL balance for wallet: {}", &wallet_address[..8])
-        );
-    }
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getBalance",
-        "params": [wallet_address]
-    });
-
-    let client = reqwest::Client::new();
-
-    // Try main RPC first, then fallbacks
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
-
-    for rpc_url in rpc_endpoints {
-        match
-            client
-                .post(rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(balance_lamports) = value.as_u64() {
-                                let balance_sol = lamports_to_sol(balance_lamports);
-                                if is_debug_wallet_enabled() {
-                                    log(
-                                        LogTag::Wallet,
-                                        "DEBUG",
-                                        &format!(
-                                            "SOL balance retrieved: {} lamports ({:.6} SOL) from RPC: {}",
-                                            balance_lamports,
-                                            balance_sol,
-                                            rpc_url
-                                        )
-                                    );
-                                }
-                                return Ok(balance_sol);
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "WARNING",
-                    &format!("Failed to get balance from {}: {}", rpc_url, e)
-                );
-                continue;
-            }
-        }
-    }
-
-    Err(SwapError::TransactionError("Failed to get balance from all RPC endpoints".to_string()))
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.get_sol_balance(wallet_address).await
 }
 
 /// Checks wallet balance for a specific token
 pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTokenAccountsByOwner",
-        "params": [
-            wallet_address,
-            {
-                "mint": mint
-            },
-            {
-                "encoding": "jsonParsed",
-                "commitment": "confirmed"
-            }
-        ]
-    });
-
-    let client = reqwest::Client::new();
-
-    // Try main RPC first, then fallbacks
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
-
-    for rpc_url in rpc_endpoints {
-        match
-            client
-                .post(rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(accounts) = value.as_array() {
-                                if let Some(account) = accounts.first() {
-                                    if let Some(account_data) = account.get("account") {
-                                        if let Some(data) = account_data.get("data") {
-                                            if let Some(parsed) = data.get("parsed") {
-                                                if let Some(info) = parsed.get("info") {
-                                                    if
-                                                        let Some(token_amount) =
-                                                            info.get("tokenAmount")
-                                                    {
-                                                        if
-                                                            let Some(amount_str) =
-                                                                token_amount.get("amount")
-                                                        {
-                                                            if
-                                                                let Some(amount_str) =
-                                                                    amount_str.as_str()
-                                                            {
-                                                                if
-                                                                    let Ok(amount) =
-                                                                        amount_str.parse::<u64>()
-                                                                {
-                                                                    return Ok(amount);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "WARNING",
-                    &format!("Failed to get token balance from {}: {}", rpc_url, e)
-                );
-                continue;
-            }
-        }
-    }
-
-    Ok(0) // Return 0 if no token account found or all RPCs failed
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.get_token_balance(wallet_address, mint).await
 }
 
 /// Validates if the current price is near the expected price within tolerance
@@ -1938,155 +1368,12 @@ pub fn validate_quote_price(
     Ok(())
 }
 
-/// Structure to hold token account information
-#[derive(Debug)]
-pub struct TokenAccountInfo {
-    pub account: String,
-    pub mint: String,
-    pub balance: u64,
-    pub is_token_2022: bool,
-}
-
 /// Gets all token accounts for a wallet
 pub async fn get_all_token_accounts(
     wallet_address: &str
-) -> Result<Vec<TokenAccountInfo>, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTokenAccountsByOwner",
-        "params": [
-            wallet_address,
-            {
-                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-            },
-            {
-                "encoding": "jsonParsed"
-            }
-        ]
-    });
-
-    // Also get Token-2022 accounts
-    let rpc_payload_2022 =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTokenAccountsByOwner",
-        "params": [
-            wallet_address,
-            {
-                "programId": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-            },
-            {
-                "encoding": "jsonParsed"
-            }
-        ]
-    });
-
-    let client = reqwest::Client::new();
-    let mut all_accounts = Vec::new();
-
-    // Try main RPC first, then fallbacks
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
-
-    for rpc_url in &rpc_endpoints {
-        // Get SPL Token accounts
-        if
-            let Ok(response) = client
-                .post(*rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                if let Some(result) = rpc_response.get("result") {
-                    if let Some(value) = result.get("value") {
-                        if let Some(accounts) = value.as_array() {
-                            for account in accounts {
-                                if
-                                    let Some(parsed_info) = extract_token_account_info(
-                                        account,
-                                        false
-                                    )
-                                {
-                                    all_accounts.push(parsed_info);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Get Token-2022 accounts
-        if
-            let Ok(response) = client
-                .post(*rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload_2022)
-                .send().await
-        {
-            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                if let Some(result) = rpc_response.get("result") {
-                    if let Some(value) = result.get("value") {
-                        if let Some(accounts) = value.as_array() {
-                            for account in accounts {
-                                if
-                                    let Some(parsed_info) = extract_token_account_info(
-                                        account,
-                                        true
-                                    )
-                                {
-                                    all_accounts.push(parsed_info);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // If we got accounts from this RPC, break
-        if !all_accounts.is_empty() {
-            break;
-        }
-    }
-
-    log(
-        LogTag::Wallet,
-        "ATA",
-        &format!("Found {} total token accounts for wallet", all_accounts.len())
-    );
-    Ok(all_accounts)
-}
-
-/// Extracts token account information from RPC response
-fn extract_token_account_info(
-    account: &serde_json::Value,
-    is_token_2022: bool
-) -> Option<TokenAccountInfo> {
-    let pubkey = account.get("pubkey")?.as_str()?;
-    let account_data = account.get("account")?;
-    let parsed = account_data.get("data")?.get("parsed")?;
-    let info = parsed.get("info")?;
-
-    let mint = info.get("mint")?.as_str()?;
-    let token_amount = info.get("tokenAmount")?;
-    let amount_str = token_amount.get("amount")?.as_str()?;
-    let balance = amount_str.parse::<u64>().ok()?;
-
-    Some(TokenAccountInfo {
-        account: pubkey.to_string(),
-        mint: mint.to_string(),
-        balance,
-        is_token_2022,
-    })
+) -> Result<Vec<crate::rpc::TokenAccountInfo>, SwapError> {
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.get_all_token_accounts(wallet_address).await
 }
 
 /// Closes a single empty ATA (Associated Token Account) for a specific mint
@@ -2163,7 +1450,7 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
     }
 
     // Filter for empty accounts (balance = 0)
-    let empty_accounts: Vec<&TokenAccountInfo> = all_accounts
+    let empty_accounts: Vec<&crate::rpc::TokenAccountInfo> = all_accounts
         .iter()
         .filter(|account| account.balance == 0)
         .collect();
@@ -2326,123 +1613,15 @@ async fn get_associated_token_account(
     wallet_address: &str,
     mint: &str
 ) -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTokenAccountsByOwner",
-        "params": [
-            wallet_address,
-            {
-                "mint": mint
-            },
-            {
-                "encoding": "jsonParsed"
-            }
-        ]
-    });
-
-    let client = reqwest::Client::new();
-
-    // Try main RPC first, then fallbacks
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
-
-    for rpc_url in rpc_endpoints {
-        match
-            client
-                .post(rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(accounts) = value.as_array() {
-                                if !accounts.is_empty() {
-                                    if let Some(pubkey) = accounts[0].get("pubkey") {
-                                        if let Some(pubkey_str) = pubkey.as_str() {
-                                            return Ok(pubkey_str.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(_) => {
-                continue;
-            }
-        }
-    }
-
-    Err(SwapError::TransactionError("No associated token account found".to_string()))
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.get_associated_token_account(wallet_address, mint).await
 }
 
 /// Checks if a mint is a Token-2022 token by examining its program ID
-async fn is_token_2022_mint(mint: &str) -> Result<bool, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getAccountInfo",
-        "params": [
-            mint,
-            {
-                "encoding": "jsonParsed"
-            }
-        ]
-    });
-
-    let client = reqwest::Client::new();
-
-    // Try main RPC first, then fallbacks
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
-
-    for rpc_url in rpc_endpoints {
-        match
-            client
-                .post(rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(owner) = value.get("owner") {
-                                if let Some(owner_str) = owner.as_str() {
-                                    // Token Extensions Program ID (Token-2022)
-                                    return Ok(
-                                        owner_str == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(_) => {
-                continue;
-            }
-        }
-    }
-
-    // Default to false if we can't determine
-    Ok(false)
+/// Checks if a mint is a Token-2022 mint by checking its owner program
+pub async fn is_token_2022_mint(mint: &str) -> Result<bool, SwapError> {
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.is_token_2022_mint(mint).await
 }
 
 /// Closes ATA using proper Solana SDK for real ATA closing
@@ -2479,43 +1658,8 @@ async fn close_ata(
 
 /// Gets latest blockhash from Solana RPC
 pub async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {
-    let client = reqwest::Client::new();
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getLatestBlockhash",
-        "params": [
-            {
-                "commitment": "finalized"
-            }
-        ]
-    });
-
-    let response = client
-        .post(rpc_url)
-        .header("Content-Type", "application/json")
-        .json(&rpc_payload)
-        .send().await
-        .map_err(|e| SwapError::NetworkError(e))?;
-
-    let rpc_response: serde_json::Value = response
-        .json().await
-        .map_err(|e| SwapError::NetworkError(e))?;
-
-    if let Some(result) = rpc_response.get("result") {
-        if let Some(value) = result.get("value") {
-            if let Some(blockhash_str) = value.get("blockhash").and_then(|b| b.as_str()) {
-                let blockhash = solana_sdk::hash::Hash
-                    ::from_str(blockhash_str)
-                    .map_err(|e| SwapError::TransactionError(format!("Invalid blockhash: {}", e)))?;
-                return Ok(blockhash);
-            }
-        }
-    }
-
-    Err(SwapError::TransactionError("Failed to get latest blockhash".to_string()))
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.get_latest_blockhash().await
 }
 
 /// Sends close transaction via RPC
@@ -2523,89 +1667,8 @@ pub async fn send_close_transaction_via_rpc(
     transaction: &Transaction,
     configs: &crate::global::Configs
 ) -> Result<String, SwapError> {
-    let client = reqwest::Client::new();
-
-    // Serialize transaction
-    let serialized_tx = bincode
-        ::serialize(transaction)
-        .map_err(|e|
-            SwapError::TransactionError(format!("Failed to serialize transaction: {}", e))
-        )?;
-
-    let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
-
-    let rpc_payload =
-        serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "sendTransaction",
-        "params": [
-            tx_base64,
-            {
-                "encoding": "base64",
-                "skipPreflight": false,
-                "preflightCommitment": "processed",
-                "maxRetries": 3
-            }
-        ]
-    });
-
-    log(LogTag::Wallet, "ATA", "Sending close transaction to Solana network...");
-
-    // Try main RPC first, then fallbacks
-    let rpc_endpoints = std::iter
-        ::once(&configs.rpc_url)
-        .chain(configs.rpc_fallbacks.iter())
-        .collect::<Vec<_>>();
-
-    for (i, rpc_url) in rpc_endpoints.iter().enumerate() {
-        log(
-            LogTag::Wallet,
-            "ATA",
-            &format!("Trying RPC endpoint {} ({}/{})", rpc_url, i + 1, rpc_endpoints.len())
-        );
-
-        match
-            client
-                .post(*rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(signature) = result.as_str() {
-                            log(
-                                LogTag::Wallet,
-                                "SUCCESS",
-                                &format!(
-                                    "Transaction sent successfully via {}: {}",
-                                    rpc_url,
-                                    signature
-                                )
-                            );
-                            return Ok(signature.to_string());
-                        }
-                    }
-                    if let Some(error) = rpc_response.get("error") {
-                        log(
-                            LogTag::Wallet,
-                            "ERROR",
-                            &format!("RPC error from {}: {:?}", rpc_url, error)
-                        );
-                        continue;
-                    }
-                }
-            }
-            Err(e) => {
-                log(LogTag::Wallet, "ERROR", &format!("Network error with {}: {}", rpc_url, e));
-                continue;
-            }
-        }
-    }
-
-    Err(SwapError::TransactionError("All RPC endpoints failed to send transaction".to_string()))
+    let rpc_client = crate::rpc::get_rpc_client();
+    rpc_client.send_transaction(transaction).await
 }
 
 /// Builds and sends close account instruction using Solana SDK

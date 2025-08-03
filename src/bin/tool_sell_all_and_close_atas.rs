@@ -26,7 +26,8 @@
 use screenerbot::global::{ read_configs };
 use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
-use screenerbot::wallet::{ get_wallet_address, sell_token, close_token_account, SwapError };
+use screenerbot::wallet::{ get_wallet_address, sell_token, close_token_account };
+use screenerbot::rpc::SwapError;
 use reqwest;
 use serde_json;
 use std::env;

@@ -1,6 +1,7 @@
 use screenerbot::wallet::*;
 use screenerbot::global::*;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
+use screenerbot::rpc::SwapError;
 use std::str::FromStr;
 use solana_sdk::{
     pubkey::Pubkey,

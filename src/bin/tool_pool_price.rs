@@ -15,7 +15,7 @@ use screenerbot::tokens::api::{ get_token_pairs_from_api, init_dexscreener_api }
 use screenerbot::tokens::price_service::{ initialize_price_service };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
 use screenerbot::logger::{ log, LogTag, init_file_logging };
-use screenerbot::rpc::{ init_rpc_client, init_rpc_client_with_url, get_rpc_client };
+use screenerbot::rpc::{ init_rpc_client, get_rpc_client };
 use screenerbot::global::set_cmd_args;
 use clap::{ Arg, Command };
 use std::time::Duration;
@@ -120,26 +120,12 @@ async fn main() {
     }
     set_cmd_args(cmd_args);
 
-    // Initialize RPC client
-    let rpc_url = matches.get_one::<String>("rpc");
-    if let Some(url) = rpc_url {
-        match init_rpc_client_with_url(Some(url.as_str())) {
-            Ok(_) =>
-                log(
-                    LogTag::Pool,
-                    "INIT",
-                    &format!("RPC client initialized with custom URL: {}", url)
-                ),
-            Err(e) => {
-                eprintln!("Failed to initialize RPC client with custom URL: {}", e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        match init_rpc_client() {
-            Ok(_) => log(LogTag::Pool, "SUCCESS", "RPC client initialized from configuration"),
-            Err(e) =>
-                log(LogTag::Pool, "WARN", &format!("Config init failed, using fallback: {}", e)),
+    // Initialize RPC client from configuration
+    match init_rpc_client() {
+        Ok(_) => log(LogTag::Pool, "SUCCESS", "RPC client initialized from configuration"),
+        Err(e) => {
+            eprintln!("Failed to initialize RPC client: {}", e);
+            std::process::exit(1);
         }
     }
 

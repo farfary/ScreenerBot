@@ -1,12 +1,6 @@
 use screenerbot::{
-    wallet::{
-        buy_token,
-        sell_token,
-        get_sol_balance,
-        get_token_balance,
-        get_wallet_address,
-        lamports_to_sol,
-    },
+    wallet::{ buy_token, sell_token, get_sol_balance, get_token_balance, get_wallet_address },
+    rpc::{ lamports_to_sol, SwapError },
     tokens::{
         types::Token,
         price_service::get_token_price_safe,
