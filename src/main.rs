@@ -240,6 +240,13 @@ async fn main() {
     let cleanup_result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
         screenerbot::tokens::cleanup_price_cache().await;
         screenerbot::tokens::decimals::save_decimal_cache();
+
+        // Save RPC statistics to disk
+        if let Err(e) = screenerbot::rpc::save_global_rpc_stats() {
+            log(LogTag::System, "WARN", &format!("Failed to save RPC statistics: {}", e));
+        } else {
+            log(LogTag::System, "INFO", "RPC statistics saved to disk");
+        }
     }).await;
 
     match cleanup_result {

@@ -5,6 +5,7 @@ use crate::logger::{ log, LogTag };
 use crate::utils::*;
 use crate::global::STARTUP_TIME;
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
+use crate::rpc::get_global_rpc_stats;
 // TODO: Replace with new pool price system
 // use crate::pool_price_manager::refresh_open_position_prices;
 
@@ -120,6 +121,47 @@ pub struct AtaCleanupDisplay {
     failed_cache: String,
     #[tabled(rename = "⏰ Last Cleanup")]
     last_cleanup: String,
+}
+
+/// Display structure for RPC URL usage statistics
+#[derive(Tabled)]
+pub struct RpcUrlStatsDisplay {
+    #[tabled(rename = "🌐 RPC URL")]
+    rpc_url: String,
+    #[tabled(rename = "📞 Total Calls")]
+    total_calls: String,
+    #[tabled(rename = "📊 Percentage")]
+    percentage: String,
+    #[tabled(rename = "🎯 Status")]
+    status: String,
+}
+
+/// Display structure for RPC method usage statistics
+#[derive(Tabled)]
+pub struct RpcMethodStatsDisplay {
+    #[tabled(rename = "⚙️ RPC Method")]
+    method_name: String,
+    #[tabled(rename = "📞 Total Calls")]
+    total_calls: String,
+    #[tabled(rename = "📊 Percentage")]
+    percentage: String,
+    #[tabled(rename = "⚡ Avg/Sec")]
+    calls_per_second: String,
+}
+
+/// Display structure for RPC overview statistics
+#[derive(Tabled)]
+pub struct RpcOverviewDisplay {
+    #[tabled(rename = "📞 Total Calls")]
+    total_calls: String,
+    #[tabled(rename = "🌐 Active URLs")]
+    active_urls: String,
+    #[tabled(rename = "⚙️ Methods Used")]
+    methods_used: String,
+    #[tabled(rename = "⚡ Calls/Sec")]
+    calls_per_second: String,
+    #[tabled(rename = "⏰ Since Startup")]
+    uptime: String,
 }
 
 /// Background task to display positions table every 10 seconds
@@ -417,6 +459,11 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     ata_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", ata_table);
 
+    // Display RPC statistics if available
+    if let Some(rpc_stats) = get_global_rpc_stats() {
+        display_rpc_statistics(&rpc_stats);
+    }
+
     // Display frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
     if !active_cooldowns.is_empty() {
@@ -458,6 +505,104 @@ fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
     }
 
     (best_win_streak, worst_loss_streak)
+}
+
+/// Display RPC usage statistics
+fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
+    let total_calls = rpc_stats.total_calls();
+    if total_calls == 0 {
+        return; // No calls to display
+    }
+
+    // RPC Overview
+    let uptime = format_duration_compact(rpc_stats.startup_time, Utc::now());
+    let rpc_overview = RpcOverviewDisplay {
+        total_calls: format!("{}", total_calls),
+        active_urls: format!("{}", rpc_stats.calls_per_url.len()),
+        methods_used: format!("{}", rpc_stats.calls_per_method.len()),
+        calls_per_second: format!("{:.2}", rpc_stats.calls_per_second()),
+        uptime,
+    };
+
+    println!("\n📡 RPC Overview");
+    let mut overview_table = Table::new(vec![rpc_overview]);
+    overview_table
+        .with(Style::rounded())
+        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    println!("{}", overview_table);
+
+    // RPC URL Statistics (top 5)
+    let mut url_stats: Vec<_> = rpc_stats.calls_per_url.iter().collect();
+    url_stats.sort_by(|a, b| b.1.cmp(a.1)); // Sort by call count descending
+
+    if !url_stats.is_empty() {
+        let url_displays: Vec<_> = url_stats
+            .iter()
+            .take(5) // Show top 5 URLs
+            .map(|(url, calls)| {
+                let percentage = ((**calls as f64) / (total_calls as f64)) * 100.0;
+                let status = if url.contains("mainnet-beta.solana.com") {
+                    "🔴 FREE"
+                } else if url.contains("premium") || url.contains("paid") {
+                    "💎 PREMIUM"
+                } else {
+                    "🟡 CUSTOM"
+                };
+
+                // Truncate long URLs for display
+                let display_url = if url.len() > 40 {
+                    format!("{}...", &url[..37])
+                } else {
+                    url.to_string()
+                };
+
+                RpcUrlStatsDisplay {
+                    rpc_url: display_url,
+                    total_calls: format!("{}", calls),
+                    percentage: format!("{:.1}%", percentage),
+                    status: status.to_string(),
+                }
+            })
+            .collect();
+
+        println!("\n🌐 RPC URL Usage (Top 5)");
+        let mut url_table = Table::new(url_displays);
+        url_table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        println!("{}", url_table);
+    }
+
+    // RPC Method Statistics (top 10)
+    let mut method_stats: Vec<_> = rpc_stats.calls_per_method.iter().collect();
+    method_stats.sort_by(|a, b| b.1.cmp(a.1)); // Sort by call count descending
+
+    if !method_stats.is_empty() {
+        let method_displays: Vec<_> = method_stats
+            .iter()
+            .take(10) // Show top 10 methods
+            .map(|(method, calls)| {
+                let percentage = ((**calls as f64) / (total_calls as f64)) * 100.0;
+                let duration = Utc::now().signed_duration_since(rpc_stats.startup_time);
+                let seconds = duration.num_seconds() as f64;
+                let calls_per_second = if seconds > 0.0 { (**calls as f64) / seconds } else { 0.0 };
+
+                RpcMethodStatsDisplay {
+                    method_name: method.to_string(),
+                    total_calls: format!("{}", calls),
+                    percentage: format!("{:.1}%", percentage),
+                    calls_per_second: format!("{:.3}", calls_per_second),
+                }
+            })
+            .collect();
+
+        println!("\n⚙️ RPC Method Usage (Top 10)");
+        let mut method_table = Table::new(method_displays);
+        method_table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        println!("{}", method_table);
+    }
 }
 
 /// Calculate maximum drawdown percentage
@@ -605,4 +750,3 @@ fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> 
         format!("🔴 {}", base_status) // Devastating loss
     }
 }
-
