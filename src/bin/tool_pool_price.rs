@@ -100,6 +100,12 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("debug-pool-prices")
+                .long("debug-pool-prices")
+                .help("Enable pool price calculation debug output")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("test-direct")
                 .long("test-direct")
                 .help("Test pool directly via blockchain decoder (bypasses API discovery)")
@@ -117,6 +123,9 @@ async fn main() {
     }
     if matches.get_flag("debug-detailed") {
         cmd_args.push("--debug-detailed".to_string());
+    }
+    if matches.get_flag("debug-pool-prices") {
+        cmd_args.push("--debug-pool-prices".to_string());
     }
     set_cmd_args(cmd_args);
 

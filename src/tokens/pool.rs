@@ -1415,20 +1415,34 @@ impl PoolPriceCalculator {
         if self.debug_enabled {
             log(
                 LogTag::Pool,
-                "INFO",
-                &format!("Pool {} owned by program {}", pool_address, program_id)
+                "POOL_PROGRAM_ID",
+                &format!(
+                    "Pool {} owned by program {} (data length: {} bytes)",
+                    pool_address,
+                    program_id,
+                    account.data.len()
+                )
             );
         }
 
         // Decode based on program ID
         let pool_info = match program_id.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => {
+                if self.debug_enabled {
+                    log(LogTag::Pool, "DECODER_SELECT", "Using Raydium CPMM decoder");
+                }
                 self.decode_raydium_cpmm_pool(pool_address, &account).await?
             }
             METEORA_DAMM_V2_PROGRAM_ID => {
+                if self.debug_enabled {
+                    log(LogTag::Pool, "DECODER_SELECT", "Using Meteora DAMM v2 decoder");
+                }
                 self.decode_meteora_damm_v2_pool(pool_address, &account).await?
             }
             METEORA_DLMM_PROGRAM_ID => {
+                if self.debug_enabled {
+                    log(LogTag::Pool, "DECODER_SELECT", "Using Meteora DLMM decoder");
+                }
                 self.decode_meteora_dlmm_pool(pool_address, &account).await?
             }
             _ => {
@@ -2238,10 +2252,49 @@ impl PoolPriceCalculator {
         }
 
         // Extract pubkeys at known offsets (from hex dump analysis)
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_EXTRACT",
+                &format!("Extracting pubkeys from data length {}", data.len())
+            );
+        }
+
         let token_x_mint = extract_pubkey_at_offset(data, 88)?;
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_TOKEN_X",
+                &format!("Extracted token_x_mint: {}", token_x_mint)
+            );
+        }
+
         let token_y_mint = extract_pubkey_at_offset(data, 120)?;
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_TOKEN_Y",
+                &format!("Extracted token_y_mint: {}", token_y_mint)
+            );
+        }
+
         let reserve_x = extract_pubkey_at_offset(data, 152)?;
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_RESERVE_X",
+                &format!("Extracted reserve_x: {}", reserve_x)
+            );
+        }
+
         let reserve_y = extract_pubkey_at_offset(data, 184)?;
+        if self.debug_enabled {
+            log(
+                LogTag::Pool,
+                "METEORA_DLMM_RESERVE_Y",
+                &format!("Extracted reserve_y: {}", reserve_y)
+            );
+        }
 
         if self.debug_enabled {
             log(
