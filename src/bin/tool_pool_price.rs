@@ -123,8 +123,18 @@ async fn main() {
     // Initialize RPC client
     let rpc_url = matches.get_one::<String>("rpc");
     if let Some(url) = rpc_url {
-        init_rpc_client_with_url(Some(url.as_str()));
-        log(LogTag::Pool, "INIT", &format!("RPC client initialized with custom URL: {}", url));
+        match init_rpc_client_with_url(Some(url.as_str())) {
+            Ok(_) =>
+                log(
+                    LogTag::Pool,
+                    "INIT",
+                    &format!("RPC client initialized with custom URL: {}", url)
+                ),
+            Err(e) => {
+                eprintln!("Failed to initialize RPC client with custom URL: {}", e);
+                std::process::exit(1);
+            }
+        }
     } else {
         match init_rpc_client() {
             Ok(_) => log(LogTag::Pool, "SUCCESS", "RPC client initialized from configuration"),

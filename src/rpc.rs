@@ -15,11 +15,6 @@ use solana_sdk::{
 use std::sync::Arc;
 use std::str::FromStr;
 
-/// Default RPC URLs for different environments
-pub const MAINNET_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
-pub const HELIUS_RPC_URL: &str = "https://rpc.helius.xyz/?api-key=your-api-key";
-pub const QUICKNODE_RPC_URL: &str = "https://your-endpoint.solana.quiknode.pro/";
-
 /// Centralized RPC client with connection pooling and error handling
 pub struct SolanaRpcClient {
     client: Arc<RpcClient>,
@@ -33,8 +28,10 @@ impl SolanaRpcClient {
     /// Create new RPC client with configuration from configs.json
     pub fn new() -> Self {
         Self::from_config().unwrap_or_else(|e| {
-            log(LogTag::Rpc, "ERROR", &format!("Failed to load config, using fallback: {}", e));
-            Self::new_with_url(MAINNET_RPC_URL)
+            log(LogTag::Rpc, "ERROR", &format!("Failed to load config: {}", e));
+            panic!(
+                "Cannot initialize RPC client without valid configuration. Please check configs.json"
+            );
         })
     }
 
@@ -395,9 +392,8 @@ pub fn init_rpc_client() -> Result<&'static SolanaRpcClient, String> {
                     log(
                         LogTag::Rpc,
                         "ERROR",
-                        &format!("Failed to init from config, using fallback: {}", e)
+                        &format!("Failed to init RPC client from config: {}", e)
                     );
-                    GLOBAL_RPC_CLIENT = Some(SolanaRpcClient::new_with_url(MAINNET_RPC_URL));
                 }
             }
         });
@@ -411,13 +407,35 @@ pub fn init_rpc_client() -> Result<&'static SolanaRpcClient, String> {
 }
 
 /// Initialize global RPC client with custom URL (legacy method)
-pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> &'static SolanaRpcClient {
+/// Note: This method requires a valid URL parameter as hardcoded fallbacks have been removed
+pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> Result<&'static SolanaRpcClient, String> {
     unsafe {
+        let mut init_error: Option<String> = None;
+
         RPC_INIT.call_once(|| {
-            let url = rpc_url.unwrap_or(MAINNET_RPC_URL);
-            GLOBAL_RPC_CLIENT = Some(SolanaRpcClient::new_with_url(url));
+            match rpc_url {
+                Some(url) => {
+                    log(
+                        LogTag::Rpc,
+                        "INIT",
+                        &format!("Initializing global RPC client with custom URL: {}", url)
+                    );
+                    GLOBAL_RPC_CLIENT = Some(SolanaRpcClient::new_with_url(url));
+                }
+                None => {
+                    init_error = Some(
+                        "No RPC URL provided and no hardcoded fallback available".to_string()
+                    );
+                    log(LogTag::Rpc, "ERROR", "Cannot initialize RPC client without URL parameter");
+                }
+            }
         });
-        GLOBAL_RPC_CLIENT.as_ref().unwrap()
+
+        if let Some(error) = init_error {
+            Err(error)
+        } else {
+            Ok(GLOBAL_RPC_CLIENT.as_ref().unwrap())
+        }
     }
 }
 
@@ -447,8 +465,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_rpc_client_creation() {
-        let client = SolanaRpcClient::new();
+        // Use new_with_url since new() requires configs.json which may not exist in tests
+        let test_url = "https://api.mainnet-beta.solana.com";
+        let client = SolanaRpcClient::new_with_url(test_url);
         assert!(!client.url().is_empty());
+        assert_eq!(client.url(), test_url);
     }
 
     #[tokio::test]
