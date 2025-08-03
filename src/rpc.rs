@@ -307,15 +307,30 @@ impl RpcClient {
     /// Record an RPC call for statistics
     fn record_call(&self, method: &str) {
         if let Ok(mut stats) = self.stats.lock() {
-            stats.record_call(&self.rpc_url, method);
+            let url_to_record = if self.is_current_url_premium() {
+                format!("{}_PREMIUM", self.rpc_url)
+            } else {
+                self.rpc_url.clone()
+            };
+            stats.record_call(&url_to_record, method);
             // Stats are now auto-saved every 3 seconds by background service
         }
     }
 
-    /// Wait for rate limit if using main RPC
+    /// Check if current URL is a premium RPC (no rate limiting)
+    fn is_current_url_premium(&self) -> bool {
+        if let Some(premium_url) = &self.premium_url { self.rpc_url == *premium_url } else { false }
+    }
+
+    /// Wait for rate limit if using main RPC (excludes premium RPC)
     async fn wait_for_rate_limit(&self) {
-        // Only rate limit the main RPC URL, not fallbacks
+        // Only rate limit the main RPC URL, not fallbacks or premium URLs
         if self.current_url_index == 0 {
+            // Skip rate limiting for premium RPC URLs
+            if self.is_current_url_premium() {
+                return;
+            }
+
             // Check if we need to wait and get the wait duration
             let wait_duration = {
                 if let Ok(rate_limiter) = self.rate_limiter.lock() {
@@ -346,10 +361,14 @@ impl RpcClient {
         }
     }
 
-    /// Create a new client using premium URL (for wallet operations)
+    /// Create a new client using premium URL (for wallet operations - no rate limiting)
     pub fn create_premium_client(&self) -> Option<Arc<SolanaRpcClient>> {
         if let Some(premium_url) = &self.premium_url {
-            log(LogTag::Rpc, "PREMIUM", &format!("Using premium RPC: {}", premium_url));
+            log(
+                LogTag::Rpc,
+                "PREMIUM",
+                &format!("Using premium RPC (no rate limits): {}", premium_url)
+            );
             let client = SolanaRpcClient::new_with_commitment(
                 premium_url.clone(),
                 CommitmentConfig::confirmed()
