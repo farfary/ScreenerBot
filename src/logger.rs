@@ -703,19 +703,26 @@ pub fn log_price_change(
         format!("(±{:.12} SOL, ±{:.4}%)", 0.0, 0.0).bright_yellow()
     };
 
-    // Format pool type properly - "raydium-cpmm" becomes "Raydium CPMM"
+    // Format pool type properly - use as-is if already properly formatted, otherwise format from dashes
     let formatted_pool_type = pool_type.map(|pt| {
-        pt.split('-')
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    None => String::new(),
-                    Some(first) =>
-                        first.to_uppercase().collect::<String>() + &chars.as_str().to_uppercase(),
-                }
-            })
-            .collect::<Vec<String>>()
-            .join(" ")
+        // If it already contains uppercase and spaces, it's likely already formatted
+        if pt.chars().any(|c| c.is_uppercase()) && pt.contains(' ') {
+            pt.to_string()
+        } else {
+            // Legacy formatting for dash-separated names like "raydium-cpmm"
+            pt.split('-')
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        None => String::new(),
+                        Some(first) =>
+                            first.to_uppercase().collect::<String>() +
+                                &chars.as_str().to_uppercase(),
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ")
+        }
     });
 
     // Source info with proper pool type formatting

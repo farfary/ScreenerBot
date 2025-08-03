@@ -13,6 +13,8 @@ pub use pool::{
     PoolPriceResult,
     CachedPoolInfo,
     TokenAvailability,
+    // Pool program display name function
+    get_pool_program_display_name,
 };
 
 /// This module provides thread-safe access to token data and prices

@@ -44,6 +44,16 @@ pub const METEORA_DLMM_PROGRAM_ID: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9Yu
 // HELPER FUNCTIONS
 // =============================================================================
 
+/// Get display name for pool program ID
+pub fn get_pool_program_display_name(program_id: &str) -> String {
+    match program_id {
+        RAYDIUM_CPMM_PROGRAM_ID => "RAYDIUM CPMM".to_string(),
+        METEORA_DAMM_V2_PROGRAM_ID => "METEORA DAMM v2".to_string(),
+        METEORA_DLMM_PROGRAM_ID => "METEORA DLMM".to_string(),
+        _ => format!("UNKNOWN ({})", &program_id[..8]), // Show first 8 chars for unknown programs
+    }
+}
+
 /// Check if a token is a stable/system token that should be excluded from watch lists
 fn is_system_or_stable_token(mint: &str) -> bool {
     let system_tokens = [
@@ -185,7 +195,7 @@ impl CachedPoolInfo {
 pub struct PoolPriceResult {
     pub pool_address: String,
     pub dex_id: String,
-    pub pool_type: Option<String>, // Actual pool type from decoder (e.g., "Raydium CPMM", "Meteora DAMM v2")
+    pub pool_type: Option<String>, // Actual pool type from decoder (e.g., "RAYDIUM CPMM", "METEORA DAMM v2", "METEORA DLMM")
     pub token_address: String,
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,
@@ -1007,7 +1017,6 @@ impl PoolPriceService {
             format!("Failed to create pool calculator: {}", e)
         )?;
 
-
         // Calculate price from actual blockchain reserves
         match calculator.calculate_token_price(pool_address, token_mint).await {
             Ok(Some(pool_price_info)) => {
@@ -1762,7 +1771,7 @@ impl PoolPriceCalculator {
         Ok(PoolInfo {
             pool_address: pool_address.to_string(),
             pool_program_id: RAYDIUM_CPMM_PROGRAM_ID.to_string(),
-            pool_type: "Raydium CPMM".to_string(),
+            pool_type: get_pool_program_display_name(RAYDIUM_CPMM_PROGRAM_ID),
             token_0_mint,
             token_1_mint,
             token_0_vault: Some(token_0_vault),
@@ -2114,7 +2123,7 @@ impl PoolPriceCalculator {
         Ok(PoolInfo {
             pool_address: pool_address.to_string(),
             pool_program_id: METEORA_DAMM_V2_PROGRAM_ID.to_string(),
-            pool_type: "Meteora DAMM v2".to_string(),
+            pool_type: get_pool_program_display_name(METEORA_DAMM_V2_PROGRAM_ID),
             token_0_mint: token_a_mint,
             token_1_mint: token_b_mint,
             token_0_vault: Some(token_a_vault),
@@ -2348,7 +2357,7 @@ impl PoolPriceCalculator {
         Ok(PoolInfo {
             pool_address: pool_address.to_string(),
             pool_program_id: METEORA_DLMM_PROGRAM_ID.to_string(),
-            pool_type: "Meteora DLMM".to_string(),
+            pool_type: get_pool_program_display_name(METEORA_DLMM_PROGRAM_ID),
             token_0_mint: token_x_mint.to_string(),
             token_1_mint: token_y_mint.to_string(),
             token_0_vault: Some(reserve_x.to_string()),
