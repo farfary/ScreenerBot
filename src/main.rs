@@ -144,6 +144,14 @@ async fn main() {
         }
     };
 
+    // Start RPC stats auto-save background service
+    let shutdown_rpc_stats = shutdown.clone();
+    let rpc_stats_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "RPC stats auto-save service task started");
+        screenerbot::rpc::start_rpc_stats_auto_save_service(shutdown_rpc_stats).await;
+        log(LogTag::System, "INFO", "RPC stats auto-save service task ended");
+    });
+
     // Start ATA cleanup background service
     let shutdown_ata_cleanup = shutdown.clone();
     let ata_cleanup_handle = tokio::spawn(async move {
@@ -281,6 +289,15 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("Trader task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for RPC stats auto-save service
+            if let Err(e) = rpc_stats_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("RPC stats auto-save task failed to shutdown cleanly: {}", e)
                 );
             }
 

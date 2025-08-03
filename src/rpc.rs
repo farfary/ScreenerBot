@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::time::{ Duration, Instant };
 use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
+use tokio::sync::Notify;
 
 /// Statistics tracking for RPC usage
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +65,13 @@ impl RpcStats {
         } else {
             0.0
         }
+    }
+
+    /// Check if it's time to save (3 seconds since last save)
+    pub fn should_save(&self) -> bool {
+        let now = Utc::now();
+        let time_since_last_save = now.signed_duration_since(self.last_save_time);
+        time_since_last_save.num_seconds() >= 3
     }
 
     /// Save stats to disk
@@ -300,11 +308,7 @@ impl RpcClient {
     fn record_call(&self, method: &str) {
         if let Ok(mut stats) = self.stats.lock() {
             stats.record_call(&self.rpc_url, method);
-
-            // Auto-save every 100 calls
-            if stats.total_calls() % 100 == 0 {
-                let _ = stats.save_to_disk();
-            }
+            // Stats are now auto-saved every 3 seconds by background service
         }
     }
 
@@ -702,6 +706,35 @@ pub fn save_global_rpc_stats() -> Result<(), String> {
             Err("RPC client not initialized".to_string())
         }
     }
+}
+
+/// Start RPC stats auto-save background task
+pub async fn start_rpc_stats_auto_save_service(shutdown: Arc<tokio::sync::Notify>) {
+    log(LogTag::Rpc, "START", "Starting RPC stats auto-save service (every 3 seconds)");
+
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                log(LogTag::Rpc, "SHUTDOWN", "RPC stats auto-save service stopping");
+                // Final save before shutdown
+                if let Err(e) = save_global_rpc_stats() {
+                    log(LogTag::Rpc, "ERROR", &format!("Final stats save failed: {}", e));
+                } else {
+                    log(LogTag::Rpc, "INFO", "Final RPC stats saved before shutdown");
+                }
+                break;
+            }
+            _ = interval.tick() => {
+                if let Err(e) = save_global_rpc_stats() {
+                    log(LogTag::Rpc, "ERROR", &format!("Auto-save failed: {}", e));
+                }
+            }
+        }
+    }
+
+    log(LogTag::Rpc, "STOP", "RPC stats auto-save service stopped");
 }
 
 /// Parse string to Pubkey
