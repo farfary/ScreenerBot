@@ -8,7 +8,8 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_prices_enabled;
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_token_decimals_from_chain, get_cached_decimals };
-use solana_client::rpc_client::RpcClient;
+use crate::rpc::get_rpc_client;
+use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -1327,7 +1328,7 @@ impl std::fmt::Display for PoolStats {
 
 /// Advanced pool price calculator with multi-program support
 pub struct PoolPriceCalculator {
-    rpc_client: Arc<RpcClient>,
+    rpc_client: Arc<SolanaRpcClient>,
     pool_cache: Arc<RwLock<HashMap<String, PoolInfo>>>,
     price_cache: Arc<RwLock<HashMap<String, (f64, Instant)>>>,
     stats: Arc<RwLock<PoolStats>>,
@@ -1335,17 +1336,23 @@ pub struct PoolPriceCalculator {
 }
 
 impl PoolPriceCalculator {
-    /// Create new pool price calculator with default RPC
+    /// Create new pool price calculator using centralized RPC client
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        // Use primary RPC from configs
-        let rpc_url = Self::get_rpc_url()?;
-        Self::new_with_url(&rpc_url)
+        let rpc_client = get_rpc_client().client();
+
+        Ok(Self {
+            rpc_client,
+            pool_cache: Arc::new(RwLock::new(HashMap::new())),
+            price_cache: Arc::new(RwLock::new(HashMap::new())),
+            stats: Arc::new(RwLock::new(PoolStats::new())),
+            debug_enabled: false,
+        })
     }
 
-    /// Create new pool price calculator with custom RPC URL
+    /// Create new pool price calculator with custom RPC URL (legacy method for tools)
     pub fn new_with_url(rpc_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let rpc_client = Arc::new(
-            RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed())
+            SolanaRpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed())
         );
 
         Ok(Self {
@@ -1365,25 +1372,6 @@ impl PoolPriceCalculator {
             Some(url) => Self::new_with_url(url),
             None => Self::new(),
         }
-    }
-
-    /// Get RPC URL from configs
-    fn get_rpc_url() -> Result<String, Box<dyn std::error::Error>> {
-        // Try to read from configs.json
-        if let Ok(config_content) = std::fs::read_to_string("configs.json") {
-            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_content) {
-                if let Some(rpc_url) = config.get("solana_rpc_url").and_then(|v| v.as_str()) {
-                    return Ok(rpc_url.to_string());
-                }
-            }
-        }
-
-        // Fallback to environment variable or default
-        Ok(
-            std::env
-                ::var("SOLANA_RPC_URL")
-                .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string())
-        )
     }
 
     /// Enable debug mode

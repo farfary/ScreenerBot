@@ -5,7 +5,7 @@
 
 use crate::logger::{ log, LogTag };
 use crate::global::read_configs;
-use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{
     account::Account,
     pubkey::Pubkey,
@@ -16,15 +16,15 @@ use std::sync::Arc;
 use std::str::FromStr;
 
 /// Centralized RPC client with connection pooling and error handling
-pub struct SolanaRpcClient {
-    client: Arc<RpcClient>,
+pub struct RpcClient {
+    client: Arc<SolanaRpcClient>,
     rpc_url: String,
     premium_url: Option<String>,
     fallback_urls: Vec<String>,
     current_url_index: usize,
 }
 
-impl SolanaRpcClient {
+impl RpcClient {
     /// Create new RPC client with configuration from configs.json
     pub fn new() -> Self {
         Self::from_config().unwrap_or_else(|e| {
@@ -74,7 +74,7 @@ impl SolanaRpcClient {
     ) -> Result<Self, String> {
         log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with primary: {}", primary_url));
 
-        let client = RpcClient::new_with_commitment(
+        let client = SolanaRpcClient::new_with_commitment(
             primary_url.to_string(),
             CommitmentConfig::confirmed()
         );
@@ -92,7 +92,7 @@ impl SolanaRpcClient {
     pub fn new_with_url(rpc_url: &str) -> Self {
         log(LogTag::Rpc, "INIT", &format!("Initializing RPC client with URL: {}", rpc_url));
 
-        let client = RpcClient::new_with_commitment(
+        let client = SolanaRpcClient::new_with_commitment(
             rpc_url.to_string(),
             CommitmentConfig::confirmed()
         );
@@ -107,7 +107,7 @@ impl SolanaRpcClient {
     }
 
     /// Get the underlying RPC client
-    pub fn client(&self) -> Arc<RpcClient> {
+    pub fn client(&self) -> Arc<SolanaRpcClient> {
         self.client.clone()
     }
 
@@ -122,10 +122,10 @@ impl SolanaRpcClient {
     }
 
     /// Create a new client using premium URL (for wallet operations)
-    pub fn create_premium_client(&self) -> Option<Arc<RpcClient>> {
+    pub fn create_premium_client(&self) -> Option<Arc<SolanaRpcClient>> {
         if let Some(premium_url) = &self.premium_url {
             log(LogTag::Rpc, "PREMIUM", &format!("Using premium RPC: {}", premium_url));
-            let client = RpcClient::new_with_commitment(
+            let client = SolanaRpcClient::new_with_commitment(
                 premium_url.clone(),
                 CommitmentConfig::confirmed()
             );
@@ -187,7 +187,7 @@ impl SolanaRpcClient {
 
         log(LogTag::Rpc, "FALLBACK", &format!("Switching to URL: {}", new_url));
 
-        let new_client = RpcClient::new_with_commitment(
+        let new_client = SolanaRpcClient::new_with_commitment(
             new_url.clone(),
             CommitmentConfig::confirmed()
         );
@@ -373,16 +373,16 @@ impl SolanaRpcClient {
 }
 
 /// Global RPC client instance
-static mut GLOBAL_RPC_CLIENT: Option<SolanaRpcClient> = None;
+static mut GLOBAL_RPC_CLIENT: Option<RpcClient> = None;
 static RPC_INIT: std::sync::Once = std::sync::Once::new();
 
 /// Initialize global RPC client from configuration
-pub fn init_rpc_client() -> Result<&'static SolanaRpcClient, String> {
+pub fn init_rpc_client() -> Result<&'static RpcClient, String> {
     unsafe {
         let mut init_error: Option<String> = None;
 
         RPC_INIT.call_once(|| {
-            match SolanaRpcClient::from_config() {
+            match RpcClient::from_config() {
                 Ok(client) => {
                     log(LogTag::Rpc, "SUCCESS", "Global RPC client initialized from configuration");
                     GLOBAL_RPC_CLIENT = Some(client);
@@ -408,7 +408,7 @@ pub fn init_rpc_client() -> Result<&'static SolanaRpcClient, String> {
 
 /// Initialize global RPC client with custom URL (legacy method)
 /// Note: This method requires a valid URL parameter as hardcoded fallbacks have been removed
-pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> Result<&'static SolanaRpcClient, String> {
+pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> Result<&'static RpcClient, String> {
     unsafe {
         let mut init_error: Option<String> = None;
 
@@ -420,7 +420,7 @@ pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> Result<&'static Solana
                         "INIT",
                         &format!("Initializing global RPC client with custom URL: {}", url)
                     );
-                    GLOBAL_RPC_CLIENT = Some(SolanaRpcClient::new_with_url(url));
+                    GLOBAL_RPC_CLIENT = Some(RpcClient::new_with_url(url));
                 }
                 None => {
                     init_error = Some(
@@ -440,7 +440,7 @@ pub fn init_rpc_client_with_url(rpc_url: Option<&str>) -> Result<&'static Solana
 }
 
 /// Get global RPC client instance
-pub fn get_rpc_client() -> &'static SolanaRpcClient {
+pub fn get_rpc_client() -> &'static RpcClient {
     unsafe {
         if GLOBAL_RPC_CLIENT.is_none() {
             let _ = init_rpc_client(); // Initialize if not already done
@@ -467,7 +467,7 @@ mod tests {
     async fn test_rpc_client_creation() {
         // Use new_with_url since new() requires configs.json which may not exist in tests
         let test_url = "https://api.mainnet-beta.solana.com";
-        let client = SolanaRpcClient::new_with_url(test_url);
+        let client = RpcClient::new_with_url(test_url);
         assert!(!client.url().is_empty());
         assert_eq!(client.url(), test_url);
     }

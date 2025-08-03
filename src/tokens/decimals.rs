@@ -1,7 +1,7 @@
 /// Token decimals fetching from Solana blockchain
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_decimals_enabled;
-use solana_client::rpc_client::RpcClient;
+use crate::rpc::get_rpc_client;
 use solana_sdk::pubkey::Pubkey;
 use solana_program::program_pack::Pack;
 use spl_token::state::Mint;
@@ -269,21 +269,20 @@ fn should_cache_as_failed(error: &str) -> bool {
     true
 }
 
-/// Batch fetch token decimals from a specific RPC endpoint using get_multiple_accounts
-async fn batch_fetch_decimals_from_rpc(
-    rpc_url: &str,
+/// Batch fetch token decimals using the centralized RPC client with automatic fallback
+async fn batch_fetch_decimals_with_fallback(
     mint_pubkeys: &[Pubkey]
 ) -> Result<Vec<(Pubkey, Result<u8, String>)>, String> {
-    let client = RpcClient::new(rpc_url);
+    let rpc_client = get_rpc_client();
 
     // Split into chunks of 100 (Solana RPC limit)
     const MAX_ACCOUNTS_PER_CALL: usize = 100;
     let mut all_results = Vec::new();
 
     for chunk in mint_pubkeys.chunks(MAX_ACCOUNTS_PER_CALL) {
-        // Get multiple accounts in one RPC call
-        let accounts = client
-            .get_multiple_accounts(chunk)
+        // Get multiple accounts in one RPC call using centralized client
+        let accounts = rpc_client
+            .get_multiple_accounts(chunk).await
             .map_err(|e| format!("Failed to get multiple accounts: {}", e))?;
 
         // Process each account result
@@ -499,41 +498,25 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
         );
     }
 
-    // Use only mainnet RPC for decimal fetching (no premium, no fallbacks unless rate limited)
-    let mainnet_rpc = "https://api.mainnet-beta.solana.com";
-    let fallback_rpcs = vec!["https://rpc.ankr.com/solana", "https://solana-api.projectserum.com"];
-
+    // Use centralized RPC client with automatic fallback handling
     let mut fetch_results = Vec::new();
-    let mut remaining_mints = uncached_mints.clone();
     let mut new_cache_entries = HashMap::new();
 
-    // Start with mainnet, use fallbacks only for rate limits/network issues
-    let mut rpc_urls = vec![mainnet_rpc.to_string()];
-    rpc_urls.extend(fallback_rpcs.iter().map(|s| s.to_string()));
-
-    // Try each RPC endpoint until we get results
-    for rpc_url in &rpc_urls {
-        if remaining_mints.is_empty() {
-            break;
-        }
-
-        let remaining_pubkeys: Vec<Pubkey> = remaining_mints
+    if !uncached_mints.is_empty() {
+        let uncached_pubkeys: Vec<Pubkey> = uncached_mints
             .iter()
             .map(|(_, pubkey)| *pubkey)
             .collect();
 
-        match batch_fetch_decimals_from_rpc(rpc_url, &remaining_pubkeys).await {
+        match batch_fetch_decimals_with_fallback(&uncached_pubkeys).await {
             Ok(batch_results) => {
-                let mut successful_indices = Vec::new();
-
                 for (i, (_pubkey, decimals_result)) in batch_results.iter().enumerate() {
-                    let mint_str = &remaining_mints[i].0;
+                    let mint_str = &uncached_mints[i].0;
 
                     match decimals_result {
                         Ok(decimals) => {
                             new_cache_entries.insert(mint_str.clone(), *decimals);
                             fetch_results.push((mint_str.clone(), Ok(*decimals)));
-                            successful_indices.push(i);
 
                             // Remove from failed cache if it was previously failed
                             if is_token_already_failed(mint_str) {
@@ -555,104 +538,58 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
                             }
                         }
                         Err(e) => {
-                            // Check if this is a real error (account not found) vs rate limit
+                            // Cache failure for permanent errors
                             if should_cache_as_failed(e) {
-                                // Real error - cache failure and don't retry on other RPCs
                                 cache_failed_token(mint_str, e);
-                                fetch_results.push((mint_str.clone(), Err(e.clone())));
+                            }
+                            fetch_results.push((mint_str.clone(), Err(e.clone())));
 
-                                if is_debug_decimals_enabled() {
-                                    log(
-                                        LogTag::Decimals,
-                                        "REAL_ERROR",
-                                        &format!(
-                                            "Token {} failed with permanent error: {}",
-                                            mint_str,
-                                            e
-                                        )
-                                    );
-                                }
-                            } else {
-                                // Rate limit / network issue - will retry on next RPC
-                                if is_debug_decimals_enabled() {
-                                    log(
-                                        LogTag::Decimals,
-                                        "RETRY_ERROR",
-                                        &format!(
-                                            "Token {} failed with retryable error from {}: {}",
-                                            mint_str,
-                                            rpc_url,
-                                            e
-                                        )
-                                    );
-                                }
+                            if is_debug_decimals_enabled() {
+                                log(
+                                    LogTag::Decimals,
+                                    "FETCH_ERROR",
+                                    &format!("Token {} failed: {}", mint_str, e)
+                                );
                             }
                         }
                     }
                 }
 
-                // Collect indices to remove (successful + real failures)
-                let mut indices_to_remove = Vec::new();
-                for (i, (_pubkey, decimals_result)) in batch_results.iter().enumerate() {
-                    let mint_str = &remaining_mints[i].0;
-                    match decimals_result {
-                        Ok(_) => indices_to_remove.push(i), // Success
-                        Err(e) if should_cache_as_failed(e) => indices_to_remove.push(i), // Real failure, don't retry
-                        Err(_) => {} // Retryable error, keep in remaining list
-                    }
-                }
-
-                // Remove processed mints from remaining list (in reverse order to maintain indices)
-                indices_to_remove.sort_by(|a, b| b.cmp(a));
-                for &index in &indices_to_remove {
-                    remaining_mints.remove(index);
-                }
-
-                if !successful_indices.is_empty() && is_debug_decimals_enabled() {
+                if is_debug_decimals_enabled() && !fetch_results.is_empty() {
+                    let success_count = fetch_results
+                        .iter()
+                        .filter(|(_, r)| r.is_ok())
+                        .count();
                     log(
                         LogTag::Decimals,
                         "BATCH_SUCCESS",
                         &format!(
-                            "Successfully fetched decimals for {} tokens from {} (failed: {})",
-                            successful_indices.len(),
-                            rpc_url,
-                            batch_results.len() - successful_indices.len()
+                            "Successfully fetched decimals for {}/{} tokens using centralized RPC client",
+                            success_count,
+                            fetch_results.len()
                         )
                     );
                 }
             }
             Err(e) => {
-                if is_debug_decimals_enabled() {
-                    log(LogTag::Decimals, "RPC_ERROR", &format!("RPC {} failed: {}", rpc_url, e));
+                // If entire batch fails, mark all as failed with the batch error
+                let error_msg = format!("Batch fetch failed: {}", e);
+                for (mint_str, _) in &uncached_mints {
+                    if should_cache_as_failed(&error_msg) {
+                        cache_failed_token(mint_str, &error_msg);
+                    }
+                    fetch_results.push((mint_str.clone(), Err(error_msg.clone())));
                 }
 
-                // If this is a connection/rate limit error, continue to next RPC
-                // If it's a systemic error, fail all remaining tokens
-                if should_cache_as_failed(&e) {
-                    // Systemic error, cache all remaining as failed
-                    for (mint_str, _) in remaining_mints.drain(..) {
-                        cache_failed_token(&mint_str, &e);
-                        fetch_results.push((mint_str, Err(e.clone())));
-                    }
-                    break;
+                if is_debug_decimals_enabled() {
+                    log(
+                        LogTag::Decimals,
+                        "BATCH_ERROR",
+                        &format!("Batch fetch failed for {} tokens: {}", uncached_mints.len(), e)
+                    );
                 }
             }
         }
-    }
-
-    // Handle any remaining mints that weren't processed (timeout/network issues across all RPCs)
-    for (mint_str, _) in remaining_mints {
-        let error_msg = "All RPC endpoints failed";
-        if is_debug_decimals_enabled() {
-            log(
-                LogTag::Decimals,
-                "RPC_TIMEOUT",
-                &format!("All RPC endpoints failed for token {}, caching as failed", mint_str)
-            );
-        }
-
-        cache_failed_token(&mint_str, error_msg);
-        fetch_results.push((mint_str, Err(error_msg.to_string())));
     }
 
     // Update cache and save to disk if we have new entries or removed failed entries
