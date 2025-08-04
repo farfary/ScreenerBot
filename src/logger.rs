@@ -816,7 +816,7 @@ pub fn log_price_change(
 
     // Pool details with better color
     if pool_address.is_some() {
-        line2_parts.push(format!("[{}]", formatted_pool_type).dimmed().to_string());
+        line2_parts.push(format!("[ {} ]", formatted_pool_type).bright_yellow().to_string());
     }
 
     // Join line2 parts with proper spacing
