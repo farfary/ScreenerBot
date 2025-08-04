@@ -800,9 +800,9 @@ pub fn log_price_change(
             );
 
             let diff_text = if diff > 0.0 {
-                format!("(Pool {}%)", format!("+{:.2}", diff_percent).green().bold())
+                format!("( Pool {} % )", format!("+{:.2}", diff_percent).green().bold())
             } else if diff < 0.0 {
-                format!("(Pool {}%)", format!("{:.2}", diff_percent).red().bold())
+                format!("( Pool {} % )", format!("{:.2}", diff_percent).red().bold())
             } else {
                 "(Perfect Match)".white().to_string()
             };
