@@ -448,6 +448,14 @@ impl RpcClient {
         }
     }
 
+    /// Record an RPC call for statistics for a specific URL (used when actual endpoint differs from default)
+    fn record_call_for_url(&self, url: &str, method: &str) {
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(url, method);
+            // Stats are now auto-saved every 3 seconds by background service
+        }
+    }
+
     /// Check if current URL is a premium RPC (no rate limiting)
     fn is_current_url_premium(&self) -> bool {
         if let Some(premium_url) = &self.premium_url { self.rpc_url == *premium_url } else { false }
@@ -767,7 +775,6 @@ impl RpcClient {
     /// Get SOL balance for wallet address using premium RPC
     pub async fn get_sol_balance(&self, wallet_address: &str) -> Result<f64, SwapError> {
         self.wait_for_rate_limit().await;
-        self.record_call("get_balance");
 
         if is_debug_wallet_enabled() {
             log(
@@ -818,6 +825,8 @@ impl RpcClient {
                                         )
                                     );
                                 }
+                                // Record successful premium RPC call
+                                self.record_call_for_url(premium_rpc, "get_balance");
                                 return Ok(balance_sol);
                             }
                         }
@@ -858,6 +867,8 @@ impl RpcClient {
                                         )
                                     );
                                 }
+                                // Record successful main RPC call
+                                self.record_call_for_url(&configs.rpc_url, "get_balance");
                                 return Ok(balance_sol);
                             }
                         }
@@ -879,7 +890,6 @@ impl RpcClient {
         mint: &str
     ) -> Result<u64, SwapError> {
         self.wait_for_rate_limit().await;
-        self.record_call("get_token_accounts_by_owner");
 
         let rpc_payload =
             serde_json::json!({
@@ -940,6 +950,11 @@ impl RpcClient {
                                                                     let Ok(amount) =
                                                                         amount_str.parse::<u64>()
                                                                 {
+                                                                    // Record successful premium RPC call
+                                                                    self.record_call_for_url(
+                                                                        premium_rpc,
+                                                                        "get_token_accounts_by_owner"
+                                                                    );
                                                                     return Ok(amount);
                                                                 }
                                                             }
@@ -998,6 +1013,11 @@ impl RpcClient {
                                                                     let Ok(amount) =
                                                                         amount_str.parse::<u64>()
                                                                 {
+                                                                    // Record successful main RPC call
+                                                                    self.record_call_for_url(
+                                                                        &configs.rpc_url,
+                                                                        "get_token_accounts_by_owner"
+                                                                    );
                                                                     return Ok(amount);
                                                                 }
                                                             }
@@ -1028,7 +1048,6 @@ impl RpcClient {
     /// Get latest blockhash using premium RPC
     pub async fn get_latest_blockhash(&self) -> Result<Hash, SwapError> {
         self.wait_for_rate_limit().await;
-        self.record_call("get_latest_blockhash");
 
         let rpc_payload =
             serde_json::json!({
@@ -1124,7 +1143,6 @@ impl RpcClient {
     /// Send transaction using premium RPC
     pub async fn send_transaction(&self, transaction: &Transaction) -> Result<String, SwapError> {
         self.wait_for_rate_limit().await;
-        self.record_call("send_transaction");
 
         // Serialize transaction
         let serialized_tx = bincode
@@ -1256,7 +1274,6 @@ impl RpcClient {
         swap_transaction_base64: &str
     ) -> Result<String, SwapError> {
         self.wait_for_rate_limit().await;
-        self.record_call("send_transaction");
 
         let configs = read_configs("configs.json").map_err(|e|
             SwapError::ConfigError(e.to_string())
@@ -1376,6 +1393,8 @@ impl RpcClient {
                                     "SUCCESS",
                                     &format!("Transaction sent successfully via premium RPC: {}", tx_sig)
                                 );
+                                // Record successful premium RPC call
+                                self.record_call_for_url(premium_rpc, "send_transaction");
                                 return Ok(tx_sig.to_string());
                             }
                         }
@@ -1416,6 +1435,8 @@ impl RpcClient {
                                         "SUCCESS",
                                         &format!("Transaction sent via fallback RPC: {}", tx_sig)
                                     );
+                                    // Record successful fallback RPC call
+                                    self.record_call_for_url(fallback_rpc, "send_transaction");
                                     return Ok(tx_sig.to_string());
                                 }
                             }
@@ -1464,6 +1485,8 @@ impl RpcClient {
                                     "SUCCESS",
                                     &format!("Transaction sent via main RPC: {}", tx_sig)
                                 );
+                                // Record successful main RPC call
+                                self.record_call_for_url(&configs.rpc_url, "send_transaction");
                                 return Ok(tx_sig.to_string());
                             }
                         }
