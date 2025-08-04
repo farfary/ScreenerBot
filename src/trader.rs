@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 25;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.005;
+pub const TRADE_SIZE_SOL: f64 = 0.003;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000005;
@@ -452,8 +452,8 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     // Step 2: Enhanced Smart entry analysis with OHLCV integration
     let (is_smart_safe, smart_analysis) = is_token_safe_for_smart_entry_enhanced(token).await;
 
-    // RELAXED SMART ENTRY CHECK - Don't be too restrictive
-    if !is_smart_safe && smart_analysis.entry_confidence < 0.3 {
+    // RELAXED SMART ENTRY CHECK - Accept low confidence for moonshot gems
+    if !is_smart_safe && smart_analysis.entry_confidence < 0.2 {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Trader,

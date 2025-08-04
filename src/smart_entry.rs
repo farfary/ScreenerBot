@@ -13,7 +13,8 @@ use crate::ohlcv_analysis::{ AthDangerLevel };
 // DYNAMIC LIQUIDITY-BASED THRESHOLDS
 // =============================================================================
 
-/// Liquidity tiers for dynamic threshold calculation (18 tiers from $100 to $5M)
+/// Liquidity tiers for dynamic threshold calculation (24 tiers from $1 to $5M+)
+/// EXPANDED FOR GEM HUNTING: Added ultra-micro tiers to catch moonshot tokens
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiquidityTier {
     // Ultra High Liquidity Tiers ($2M - $5M)
@@ -40,9 +41,15 @@ pub enum LiquidityTier {
     MiniMicro, // $10K-$25K liquidity
     Tiny, // $5K-$10K liquidity
 
-    // Ultra Low Liquidity Tiers ($100 - $5K)
+    // Ultra Low Liquidity Tiers ($100 - $5K) - GEM TERRITORY!
     Nano, // $1K-$5K liquidity
-    Pico, // $100-$1K liquidity
+    Pico, // $500-$1K liquidity
+
+    // NEW: ULTRA-MICRO GEM HUNTING TIERS ($1 - $500) - MOONSHOT POTENTIAL!
+    UltraPico, // $100-$500 liquidity - TRUE GEMS!
+    Femto, // $25-$100 liquidity - ULTRA GEMS!
+    Atto, // $5-$25 liquidity - MEGA GEMS!
+    Yocto, // $1-$5 liquidity - LEGENDARY GEMS!
 }
 
 impl LiquidityTier {
@@ -66,13 +73,18 @@ impl LiquidityTier {
             x if x >= 10_000.0 => LiquidityTier::MiniMicro,
             x if x >= 5_000.0 => LiquidityTier::Tiny,
             x if x >= 1_000.0 => LiquidityTier::Nano,
-            _ => LiquidityTier::Pico,
+            x if x >= 500.0 => LiquidityTier::Pico,
+            // NEW GEM HUNTING TIERS - These are where 1000% gains happen!
+            x if x >= 100.0 => LiquidityTier::UltraPico, // $100-$500 - TRUE GEMS!
+            x if x >= 25.0 => LiquidityTier::Femto, // $25-$100 - ULTRA GEMS!
+            x if x >= 5.0 => LiquidityTier::Atto, // $5-$25 - MEGA GEMS!
+            _ => LiquidityTier::Yocto, // <$5 - LEGENDARY STATUS!
         }
     }
 
     /// Get dynamic dip threshold based on liquidity tier
-    /// OPTIMIZED FOR MORE TRADES: Much lower thresholds to catch opportunities
-    /// Range: 0.3% (ultra stable) to 8% (ultra volatile) - AGGRESSIVE FOR PROFITS
+    /// ULTRA AGGRESSIVE FOR GEM HUNTING: Expanded to catch massive moves (500-1000%)
+    /// Range: 0.3% (ultra stable) to 25% (legendary gems) - MOONSHOT HUNTER MODE!
     pub fn get_dip_threshold(&self) -> f64 {
         match self {
             // Ultra High Liquidity: Very stable, tiny dips are profitable
@@ -101,12 +113,20 @@ impl LiquidityTier {
 
             // Ultra Low Liquidity: Higher moves but still reasonable
             LiquidityTier::Nano => 6.0, // $1K-$5K: 6.0% dip
-            LiquidityTier::Pico => 8.0, // <$1K: 8.0% dip (MAX)
+            LiquidityTier::Pico => 8.0, // $500-$1K: 8.0% dip
+
+            // 🚀 NEW GEM HUNTING ULTRA-AGGRESSIVE THRESHOLDS 🚀
+            // These are where 500-1000% moves happen!
+            LiquidityTier::UltraPico => 12.0, // $100-$500: 12% dip - TRUE GEMS!
+            LiquidityTier::Femto => 15.0, // $25-$100: 15% dip - ULTRA GEMS!
+            LiquidityTier::Atto => 20.0, // $5-$25: 20% dip - MEGA GEMS!
+            LiquidityTier::Yocto => 25.0, // <$5: 25% dip - LEGENDARY MOONSHOTS!
         }
     }
 
     /// Get profit target range based on liquidity tier
-    /// Range from conservative (5%-20%) to ultra aggressive (50%-1000%)
+    /// ULTRA AGGRESSIVE FOR MOONSHOTS: Extended to capture 500-5000% gains
+    /// Range from conservative (5%-20%) to LEGENDARY (1000%-10000%+)
     pub fn get_profit_target_range(&self) -> (f64, f64) {
         match self {
             // Ultra High Liquidity: Conservative, stable returns
@@ -135,7 +155,14 @@ impl LiquidityTier {
 
             // Ultra Low Liquidity: Extreme volatility, moonshot potential
             LiquidityTier::Nano => (150.0, 1000.0), // $1K-$5K: 150%-1000%
-            LiquidityTier::Pico => (200.0, 1000.0), // <$1K: 200%-1000%
+            LiquidityTier::Pico => (200.0, 1500.0), // $500-$1K: 200%-1500%
+
+            // 🚀 NEW GEM HUNTING ULTRA-MOONSHOT TARGETS 🚀
+            // These are where LEGENDARY gains happen! (REALISTIC TARGETS)
+            LiquidityTier::UltraPico => (50.0, 500.0), // $100-$500: 50%-500% - TRUE GEMS!
+            LiquidityTier::Femto => (75.0, 1000.0), // $25-$100: 75%-1000% - ULTRA GEMS!
+            LiquidityTier::Atto => (100.0, 2000.0), // $5-$25: 100%-2000% - MEGA GEMS!
+            LiquidityTier::Yocto => (150.0, 2000.0), // <$5: 150%-2000% - LEGENDARY MOONSHOTS!
         }
     }
 }
@@ -377,10 +404,10 @@ impl SmartAthAnalysis {
             );
         }
 
-        // Check ATH proximity with more lenient thresholds for dip buying
-        let is_near_24h_ath = current_price >= estimated_24h_high * 0.75; // Within 25% (more lenient)
-        let is_near_6h_ath = current_price >= estimated_6h_high * 0.7; // Within 30% (more lenient)
-        let is_near_1h_ath = current_price >= estimated_1h_high * 0.65; // Within 35% (more lenient)
+        // Check ATH proximity with more lenient thresholds for dip buying and micro-caps
+        let is_near_24h_ath = current_price >= estimated_24h_high * 0.6; // Within 40% (more lenient for gems)
+        let is_near_6h_ath = current_price >= estimated_6h_high * 0.55; // Within 45% (more lenient for gems)
+        let is_near_1h_ath = current_price >= estimated_1h_high * 0.5; // Within 50% (more lenient for gems)
 
         if is_debug_entry_enabled() {
             log(
@@ -614,7 +641,7 @@ impl SmartEntryAnalysis {
         };
         confidence += ath_confidence * 0.3;
 
-        // Liquidity confidence (20% weight) - More granular scaling
+        // Liquidity confidence (20% weight) - More granular scaling with GEM HUNTING confidence
         let liquidity_confidence = match liquidity {
             // Ultra High Liquidity: Maximum confidence
             LiquidityTier::UltraWhale | LiquidityTier::MegaWhale | LiquidityTier::SuperWhale => 1.0,
@@ -632,9 +659,16 @@ impl SmartEntryAnalysis {
             LiquidityTier::Micro | LiquidityTier::MiniMicro => 0.4,
             LiquidityTier::Tiny => 0.3,
 
-            // Ultra Low Liquidity: Lower confidence
+            // Ultra Low Liquidity: Lower confidence but still tradeable
             LiquidityTier::Nano => 0.2,
-            LiquidityTier::Pico => 0.1,
+            LiquidityTier::Pico => 0.15,
+
+            // 🚀 GEM HUNTING ULTRA-MICRO TIERS: BOOSTED CONFIDENCE FOR MOONSHOTS! 🚀
+            // Higher confidence because these gems have massive upside potential
+            LiquidityTier::UltraPico => 0.7, // $100-$500: High confidence - gems can be stable
+            LiquidityTier::Femto => 0.6, // $25-$100: Good confidence with huge upside
+            LiquidityTier::Atto => 0.5, // $5-$25: Moderate confidence but legendary potential
+            LiquidityTier::Yocto => 0.4, // <$5: Lower confidence but god-tier potential
         };
         confidence += liquidity_confidence * 0.2;
 
@@ -656,12 +690,13 @@ impl SmartEntryAnalysis {
             return EntryAction::Avoid;
         }
 
-        // More relaxed conditions for BuyNow to enable more immediate trades
-        if confidence >= 0.65 && trend.overall_sentiment > 0.15 {
+        // More aggressive conditions for BuyNow to enable more immediate trades
+        // LOWERED THRESHOLDS for moonshot hunting
+        if confidence >= 0.4 && trend.overall_sentiment > 0.0 {
             EntryAction::BuyNow
-        } else if confidence >= 0.5 && trend.overall_sentiment > -0.1 {
+        } else if confidence >= 0.3 && trend.overall_sentiment > -0.2 {
             EntryAction::BuyOnDip
-        } else if confidence >= 0.4 {
+        } else if confidence >= 0.2 {
             EntryAction::Monitor
         } else {
             EntryAction::Avoid
@@ -688,7 +723,8 @@ pub fn get_smart_profit_target(token: &Token) -> (f64, f64) {
 /// Check if token is safe for entry using smart multi-timeframe analysis (Enhanced with OHLCV)
 pub async fn is_token_safe_for_smart_entry_enhanced(token: &Token) -> (bool, SmartEntryAnalysis) {
     let analysis = analyze_token_enhanced(token).await;
-    let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.5;
+    // ULTRA AGGRESSIVE: Lower confidence requirement to 0.3 for moonshot hunting
+    let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.3;
 
     if is_debug_entry_enabled() {
         log(
@@ -725,7 +761,8 @@ pub async fn is_token_safe_for_smart_entry_enhanced(token: &Token) -> (bool, Sma
 /// Check if token is safe for entry using smart multi-timeframe analysis (Original)
 pub fn is_token_safe_for_smart_entry(token: &Token) -> (bool, SmartEntryAnalysis) {
     let analysis = SmartEntryAnalysis::analyze_token(token);
-    let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.5;
+    // ULTRA AGGRESSIVE: Lower confidence requirement to 0.3 for moonshot hunting
+    let is_safe = analysis.is_safe_for_entry && analysis.entry_confidence >= 0.3;
 
     if is_debug_entry_enabled() {
         log(
@@ -1042,4 +1079,217 @@ pub async fn analyze_token_enhanced(token: &Token) -> SmartEntryAnalysis {
         entry_confidence,
         recommended_action,
     }
+}
+
+// =============================================================================
+// 🚀 NEW ULTRA-AGGRESSIVE GEM HUNTING STRATEGIES 🚀
+// =============================================================================
+
+/// Detect early momentum patterns that indicate potential moonshots
+/// Returns confidence score 0.0-1.0 if token shows early pump signals
+pub fn detect_early_momentum_signals(token: &Token) -> f64 {
+    let mut momentum_score = 0.0;
+
+    // Volume surge detection (based on 24h data)
+    if let Some(volume) = &token.volume {
+        if let Some(volume_24h) = volume.h24 {
+            // If 24h volume is substantial relative to market cap, it's getting attention
+            if let Some(market_cap) = token.market_cap {
+                let volume_to_mc_ratio = volume_24h / market_cap;
+                if volume_to_mc_ratio > 0.1 {
+                    // 10%+ volume/MC ratio
+                    momentum_score += 0.3;
+                }
+                if volume_to_mc_ratio > 0.5 {
+                    // 50%+ volume/MC ratio = hot token
+                    momentum_score += 0.4;
+                }
+            }
+        }
+    }
+
+    // Price change momentum (consistent upward movement)
+    if let Some(price_changes) = &token.price_change {
+        let mut positive_periods = 0;
+        let mut total_periods = 0;
+
+        // Check multiple timeframes for consistent gains
+        if let Some(m5) = price_changes.m5 {
+            total_periods += 1;
+            if m5 > 0.0 {
+                positive_periods += 1;
+            }
+        }
+        if let Some(h1) = price_changes.h1 {
+            total_periods += 1;
+            if h1 > 0.0 {
+                positive_periods += 1;
+            }
+        }
+        if let Some(h6) = price_changes.h6 {
+            total_periods += 1;
+            if h6 > 0.0 {
+                positive_periods += 1;
+            }
+        }
+
+        if total_periods > 0 {
+            let positive_ratio = (positive_periods as f64) / (total_periods as f64);
+            momentum_score += positive_ratio * 0.3;
+        }
+    }
+
+    momentum_score.min(1.0)
+}
+
+/// Detect volume spikes that indicate unusual attention
+/// Returns true if token shows unusual volume patterns
+pub fn detect_volume_spike_patterns(token: &Token) -> bool {
+    if let Some(volume) = &token.volume {
+        if let Some(h24) = volume.h24 {
+            if let Some(h6) = volume.h6 {
+                // 6h volume should be substantial portion of 24h volume for recent spike
+                let recent_volume_ratio = h6 / h24;
+                if recent_volume_ratio > 0.5 {
+                    // 50%+ of daily volume in last 6h
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Check if token is in "fresh gem" category - recently created but showing promise
+/// Returns true if token meets gem criteria
+pub fn is_fresh_gem_candidate(token: &Token) -> bool {
+    // Check token age (prefer newer tokens for gem potential)
+    if let Some(created_at) = &token.created_at {
+        let age_hours = chrono::Utc::now().signed_duration_since(*created_at).num_hours();
+
+        // Gems are typically fresh (less than 48 hours) but not brand new
+        if age_hours < 1 || age_hours > 48 {
+            return false;
+        }
+    }
+
+    // Must have some basic legitimacy indicators
+    let has_basic_info =
+        token.logo_url.is_some() || token.website.is_some() || !token.name.is_empty();
+
+    if !has_basic_info {
+        return false;
+    }
+
+    // Must have some liquidity but not too much (gems start small)
+    if let Some(liquidity) = &token.liquidity {
+        if let Some(usd) = liquidity.usd {
+            // Sweet spot: $25 - $10,000 for gem hunting
+            return usd >= 25.0 && usd <= 10_000.0;
+        }
+    }
+
+    false
+}
+
+/// Ultra-aggressive dip detection for micro-cap gems
+/// Returns urgency score 0.0-2.0 for extreme dip opportunities
+pub fn detect_ultra_aggressive_dip_signals(token: &Token, price_drop_percent: f64) -> f64 {
+    let liquidity_tier = LiquidityTier::from_liquidity(
+        token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0)
+    );
+
+    // Base urgency from liquidity-adjusted thresholds
+    let base_threshold = liquidity_tier.get_dip_threshold();
+    let mut urgency = if price_drop_percent >= base_threshold {
+        (price_drop_percent / base_threshold).min(2.0)
+    } else {
+        0.0
+    };
+
+    // ULTRA AGGRESSIVE BONUSES for micro gems
+    match liquidity_tier {
+        | LiquidityTier::UltraPico
+        | LiquidityTier::Femto
+        | LiquidityTier::Atto
+        | LiquidityTier::Yocto => {
+            // Massive dip bonus for ultra-micro tokens
+            if price_drop_percent >= 20.0 {
+                urgency += 0.8; // Big bonus for 20%+ dips
+            }
+            if price_drop_percent >= 30.0 {
+                urgency += 0.5; // Even bigger bonus for 30%+ dips
+            }
+
+            // Fresh gem bonus
+            if is_fresh_gem_candidate(token) {
+                urgency += 0.3;
+            }
+
+            // Momentum bonus
+            let momentum = detect_early_momentum_signals(token);
+            urgency += momentum * 0.4;
+
+            // Volume spike bonus
+            if detect_volume_spike_patterns(token) {
+                urgency += 0.2;
+            }
+        }
+        _ => {
+            // Standard bonuses for larger tokens
+            if price_drop_percent >= 15.0 {
+                urgency += 0.3;
+            }
+        }
+    }
+
+    urgency.min(2.0)
+}
+
+/// Check if token shows "moonshot potential" - combination of factors indicating 500-1000%+ potential
+/// Returns (is_moonshot_candidate: bool, confidence: f64)
+pub fn analyze_moonshot_potential(token: &Token) -> (bool, f64) {
+    let mut confidence = 0.0;
+
+    // 1. Must be small enough to moon (liquidity check)
+    let liquidity_usd = token.liquidity
+        .as_ref()
+        .and_then(|l| l.usd)
+        .unwrap_or(0.0);
+
+    if liquidity_usd > 50_000.0 {
+        return (false, 0.0); // Too big to be a moonshot gem
+    }
+
+    if liquidity_usd >= 100.0 && liquidity_usd <= 10_000.0 {
+        confidence += 0.4; // Sweet spot for gems
+    }
+
+    // 2. Fresh but not too fresh
+    if is_fresh_gem_candidate(token) {
+        confidence += 0.3;
+    }
+
+    // 3. Early momentum signals
+    let momentum = detect_early_momentum_signals(token);
+    confidence += momentum * 0.3;
+
+    // 4. Volume activity
+    if detect_volume_spike_patterns(token) {
+        confidence += 0.2;
+    }
+
+    // 5. Basic legitimacy (prevents complete scams)
+    let legitimacy_score =
+        (if token.logo_url.is_some() { 0.1 } else { 0.0 }) +
+        (if token.website.is_some() { 0.1 } else { 0.0 }) +
+        (if !token.name.is_empty() && token.name.len() > 2 { 0.1 } else { 0.0 });
+
+    confidence += legitimacy_score;
+
+    let is_candidate = confidence >= 0.6; // Need at least 60% confidence
+    (is_candidate, confidence)
 }

@@ -35,10 +35,12 @@ use chrono::{ Duration as ChronoDuration, Utc };
 
 // ===== AGE FILTERING PARAMETERS =====
 /// Minimum token age in seconds before trading
-pub const MIN_TOKEN_AGE_SECONDS: i64 = 60;
+/// LEGENDARY MODE: No age restriction - trade fresh gems immediately!
+pub const MIN_TOKEN_AGE_SECONDS: i64 = 0; // 0 seconds - catch gems the moment they're born!
 
 /// Maximum token age in seconds
-pub const MAX_TOKEN_AGE_SECONDS: i64 = 12 * 30 * 24 * 60 * 60;
+/// Extended to catch both new gems and established tokens
+pub const MAX_TOKEN_AGE_SECONDS: i64 = 24 * 30 * 24 * 60 * 60; // 2 years for bigger range
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
@@ -57,22 +59,32 @@ pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
 
 // ===== LIQUIDITY FILTERING PARAMETERS =====
 /// Minimum liquidity in USD required for trading
-pub const MIN_LIQUIDITY_USD: f64 = 1000.0;
+/// ULTRA AGGRESSIVE FOR MOONSHOT HUNTING: Reduced to $1 to catch legendary gems
+pub const MIN_LIQUIDITY_USD: f64 = 1.0; // LEGENDARY MOONSHOT MODE: Catch ANY gem with >$1!
+
+/// Alternative ultra-aggressive mode for catching micro-cap gems
+pub const ULTRA_AGGRESSIVE_MIN_LIQUIDITY_USD: f64 = 0.5; // For catching sub-$1 gems
+
+/// Gem hunting mode - even more aggressive for catching 500-1000% movers
+pub const GEM_HUNTING_MIN_LIQUIDITY_USD: f64 = 0.1; // God-tier aggressive mode
 
 // ===== RUGCHECK SECURITY PARAMETERS =====
 /// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
 /// Maximum allowed rugcheck risk score (0-100 scale) - HIGHER MEANS MORE RISKY
-/// This threshold overrides all other rugcheck analysis and immediately rejects high-risk tokens
-pub const MAX_RUGCHECK_RISK_SCORE: i32 = 80; // Allow max 20 risk score (low-medium risk)
+/// LEGENDARY MOONSHOT MODE: Accept maximum risk for legendary gains
+pub const MAX_RUGCHECK_RISK_SCORE: i32 = 100; // Accept ANY risk for moonshot potential!
 
 /// Emergency override for very risky tokens - any score above this is automatically rejected
-pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100; // Absolute maximum risk tolerance
+pub const EMERGENCY_MAX_RISK_SCORE: i32 = 100; // No emergency limit - we're fearless!
+
+/// GEM HUNTING MODE: Accept even riskier tokens for potential 1000% gains
+pub const GEM_HUNTING_MAX_RISK_SCORE: i32 = 100; // God-tier risk tolerance
 
 /// Maximum number of high-risk issues to tolerate
-pub const MAX_HIGH_RISK_ISSUES: usize = 1;
+pub const MAX_HIGH_RISK_ISSUES: usize = 10; // Accept many high-risk issues for gems
 
 /// Maximum number of critical-risk issues to tolerate
-pub const MAX_CRITICAL_RISK_ISSUES: usize = 0;
+pub const MAX_CRITICAL_RISK_ISSUES: usize = 5; // Accept critical issues for moonshot potential
 
 // ===== LP LOCK SECURITY PARAMETERS =====
 /// Minimum percentage of LP tokens that must be locked
@@ -174,6 +186,13 @@ pub enum FilterReason {
     LPLockRisk {
         lock_percentage: f64,
         minimum_required: f64,
+    },
+
+    // Holder concentration risks (NEW - for micro-cap protection)
+    WhaleConcentrationRisk {
+        holder_rank: usize, // 0 = top-5 total, 1+ = individual holder rank
+        percentage: f64,
+        max_allowed: f64,
     },
 
     // Trading requirements
@@ -315,20 +334,20 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         );
     }
 
-    // 5. Basic Price Validation (Simplified - ATH checking moved to trader)
+    // 5. Holder Distribution Validation (CRITICAL FOR MICRO-CAPS)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_5",
-            &format!("📈 Step 5: Checking basic price validity for {}", token.symbol)
+            &format!("👥 Step 5: Checking holder distribution for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_basic_price_data(token) {
+    if let Some(reason) = validate_holder_distribution(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_5",
-                &format!("❌ {}: FAILED Step 5 (Price Validation) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 5 (Holder Distribution) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -337,24 +356,24 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_5",
-            &format!("✅ {}: PASSED Step 5 (Price Validation)", token.symbol)
+            &format!("✅ {}: PASSED Step 5 (Holder Distribution)", token.symbol)
         );
     }
 
-    // 6. Price validation
+    // 6. Basic Price Validation (Simplified - ATH checking moved to trader)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_6",
-            &format!("💰 Step 6: Checking price data for {}", token.symbol)
+            &format!("📈 Step 6: Checking basic price validity for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_price_data(token) {
+    if let Some(reason) = validate_basic_price_data(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_6",
-                &format!("❌ {}: FAILED Step 6 (Price Data) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 6 (Price Validation) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -363,24 +382,50 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_6",
-            &format!("✅ {}: PASSED Step 6 (Price Data)", token.symbol)
+            &format!("✅ {}: PASSED Step 6 (Price Validation)", token.symbol)
         );
     }
 
-    // 7. Decimal availability validation
+    // 7. Price validation
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_7",
-            &format!("🔢 Step 7: Checking decimal availability for {}", token.symbol)
+            &format!("💰 Step 7: Checking price data for {}", token.symbol)
+        );
+    }
+    if let Some(reason) = validate_price_data(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT_STEP_7",
+                &format!("❌ {}: FAILED Step 7 (Price Data) - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_7",
+            &format!("✅ {}: PASSED Step 7 (Price Data)", token.symbol)
+        );
+    }
+
+    // 8. Decimal availability validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_8",
+            &format!("🔢 Step 8: Checking decimal availability for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_decimal_availability(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT_STEP_7",
-                &format!("❌ {}: FAILED Step 7 (Decimal Availability) - {:?}", token.symbol, reason)
+                "REJECT_STEP_8",
+                &format!("❌ {}: FAILED Step 8 (Decimal Availability) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -397,16 +442,25 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "STEP_8",
-            &format!("🔒 Step 8: Checking position constraints for {}", token.symbol)
+            "PASS_STEP_8",
+            &format!("✅ {}: PASSED Step 8 (Decimal Availability)", token.symbol)
+        );
+    }
+
+    // 9. Position constraints validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_9",
+            &format!("🔒 Step 9: Checking position constraints for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_position_constraints(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT_STEP_8",
-                &format!("❌ {}: FAILED Step 8 (Position Constraints) - {:?}", token.symbol, reason)
+                "REJECT_STEP_9",
+                &format!("❌ {}: FAILED Step 9 (Position Constraints) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -414,8 +468,8 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "PASS_STEP_8",
-            &format!("✅ {}: PASSED Step 8 (Position Constraints)", token.symbol)
+            "PASS_STEP_9",
+            &format!("✅ {}: PASSED Step 9 (Position Constraints)", token.symbol)
         );
     }
 
@@ -872,6 +926,175 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
     None
 }
 
+/// Validate holder distribution to prevent whale concentration risk
+/// CRITICAL FOR MICRO-CAPS: Ensure no single holder can cause >20% loss
+fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
+    // Get database connection for rugcheck data
+    let database = match TokenDatabase::new() {
+        Ok(db) => db,
+        Err(e) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_HOLDERS",
+                    &format!("Failed to connect to database for holders: {}", e)
+                );
+            }
+            return None; // Skip validation if database unavailable
+        }
+    };
+
+    // Get rugcheck data which includes holder information
+    let rugcheck_data = match database.get_rugcheck_data(&token.mint) {
+        Ok(Some(data)) => data,
+        Ok(None) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_HOLDERS",
+                    &format!("No rugcheck/holder data for token: {}", token.symbol)
+                );
+            }
+            return None; // No holder data - allow through (better than blocking)
+        }
+        Err(e) => {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_HOLDERS",
+                    &format!("Failed to get holder data for {}: {}", token.symbol, e)
+                );
+            }
+            return None; // Database error - allow through
+        }
+    };
+
+    // Check top holders for concentration risk
+    if let Some(top_holders) = &rugcheck_data.top_holders {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_HOLDERS",
+                &format!("Analyzing {} top holders for {}", top_holders.len(), token.symbol)
+            );
+        }
+
+        let mut total_top_holder_percentage = 0.0;
+        let mut dangerous_holders = Vec::new();
+
+        for (i, holder) in top_holders.iter().take(10).enumerate() {
+            if let Some(pct) = holder.pct {
+                total_top_holder_percentage += pct;
+
+                // Flag holders with >20% as dangerous for micro-caps
+                if pct > 20.0 {
+                    dangerous_holders.push((i + 1, pct));
+                }
+
+                if is_debug_filtering_enabled() {
+                    log(
+                        LogTag::Filtering,
+                        "DEBUG_HOLDERS",
+                        &format!("Holder #{}: {:.2}% (address: {})", i + 1, pct, &holder.address)
+                    );
+                }
+            }
+        }
+
+        // For micro-cap gems, be more lenient but still prevent obvious whale concentration
+        let liquidity_usd = token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+
+        // More lenient thresholds for micro-caps since they naturally have higher concentration
+        let (max_single_holder, max_top5_total) = if liquidity_usd < 1000.0 {
+            (40.0, 80.0) // Micro-caps: max 40% single, 80% top 5
+        } else if liquidity_usd < 10000.0 {
+            (30.0, 70.0) // Small caps: max 30% single, 70% top 5
+        } else {
+            (25.0, 60.0) // Larger tokens: max 25% single, 60% top 5
+        };
+
+        // Check for dangerous single holders
+        for (rank, pct) in &dangerous_holders {
+            if *pct > max_single_holder {
+                if is_debug_filtering_enabled() {
+                    log(
+                        LogTag::Filtering,
+                        "DEBUG_HOLDERS",
+                        &format!(
+                            "❌ Token {} rejected: Holder #{} has {:.2}% (max allowed: {:.1}%)",
+                            token.symbol,
+                            rank,
+                            pct,
+                            max_single_holder
+                        )
+                    );
+                }
+                return Some(FilterReason::WhaleConcentrationRisk {
+                    holder_rank: *rank,
+                    percentage: *pct,
+                    max_allowed: max_single_holder,
+                });
+            }
+        }
+
+        // Check total top 5 concentration
+        let top5_total: f64 = top_holders
+            .iter()
+            .take(5)
+            .filter_map(|h| h.pct)
+            .sum();
+
+        if top5_total > max_top5_total {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_HOLDERS",
+                    &format!(
+                        "❌ Token {} rejected: Top 5 holders control {:.2}% (max allowed: {:.1}%)",
+                        token.symbol,
+                        top5_total,
+                        max_top5_total
+                    )
+                );
+            }
+            return Some(FilterReason::WhaleConcentrationRisk {
+                holder_rank: 0, // 0 indicates top-5 total
+                percentage: top5_total,
+                max_allowed: max_top5_total,
+            });
+        }
+
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_HOLDERS",
+                &format!(
+                    "✅ Token {} holder distribution acceptable: Top holder: {:.2}%, Top 5: {:.2}%",
+                    token.symbol,
+                    dangerous_holders
+                        .first()
+                        .map(|(_, pct)| *pct)
+                        .unwrap_or(0.0),
+                    top5_total
+                )
+            );
+        }
+    } else {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_HOLDERS",
+                &format!("No top holder data available for {}, allowing through", token.symbol)
+            );
+        }
+    }
+
+    None
+}
+
 /// Validate price data availability and ranges
 fn validate_price_data(token: &Token) -> Option<FilterReason> {
     let current_price = token.price_dexscreener_sol.unwrap_or(0.0);
@@ -1254,6 +1477,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::AccountFrozen | FilterReason::TokenAccountFrozen => "Account Issues",
             FilterReason::RugcheckRisk { .. } => "Security Risks",
             FilterReason::LPLockRisk { .. } => "LP Lock Security",
+            FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
             FilterReason::LockAcquisitionFailed => "System Errors",
             FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",
         };
