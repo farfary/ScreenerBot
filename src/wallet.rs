@@ -20,6 +20,10 @@ use solana_sdk::{
 use spl_token::instruction::close_account;
 use bs58;
 use std::str::FromStr;
+use std::collections::HashSet;
+use std::sync::{ Arc as StdArc, Mutex as StdMutex };
+use once_cell::sync::Lazy;
+use chrono::{ Utc, DateTime };
 
 /// Configuration constants for swap operations
 pub const ANTI_MEV: bool = false; // Enable anti-MEV by default
@@ -27,6 +31,102 @@ pub const PARTNER: &str = "screenerbot"; // Partner identifier
 
 /// SOL token mint address (native Solana)
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+/// CRITICAL: Global tracking of pending transactions to prevent duplicates
+static PENDING_TRANSACTIONS: Lazy<StdArc<StdMutex<HashSet<String>>>> = Lazy::new(|| {
+    StdArc::new(StdMutex::new(HashSet::new()))
+});
+
+/// CRITICAL: Global tracking of recent transaction attempts to prevent rapid retries
+static RECENT_TRANSACTION_ATTEMPTS: Lazy<StdArc<StdMutex<HashSet<String>>>> = Lazy::new(|| {
+    StdArc::new(StdMutex::new(HashSet::new()))
+});
+
+/// Prevents duplicate transactions by checking if a similar swap is already pending
+fn check_and_reserve_transaction_slot(token_mint: &str, direction: &str) -> Result<(), SwapError> {
+    let transaction_key = format!("{}_{}", token_mint, direction);
+
+    if let Ok(mut pending) = PENDING_TRANSACTIONS.lock() {
+        if pending.contains(&transaction_key) {
+            return Err(
+                SwapError::TransactionError(
+                    format!(
+                        "Duplicate transaction prevented: {} already has a pending {} transaction",
+                        token_mint,
+                        direction
+                    )
+                )
+            );
+        }
+        pending.insert(transaction_key);
+        Ok(())
+    } else {
+        Err(SwapError::TransactionError("Failed to acquire transaction lock".to_string()))
+    }
+}
+
+/// Releases transaction slot after completion (success or failure)
+fn release_transaction_slot(token_mint: &str, direction: &str) {
+    let transaction_key = format!("{}_{}", token_mint, direction);
+
+    if let Ok(mut pending) = PENDING_TRANSACTIONS.lock() {
+        pending.remove(&transaction_key);
+    }
+}
+
+/// Checks for recent transaction attempts to prevent rapid retries
+fn check_recent_transaction_attempt(token_mint: &str, direction: &str) -> Result<(), SwapError> {
+    let attempt_key = format!("{}_{}", token_mint, direction);
+
+    if let Ok(mut recent) = RECENT_TRANSACTION_ATTEMPTS.lock() {
+        if recent.contains(&attempt_key) {
+            return Err(
+                SwapError::TransactionError(
+                    format!(
+                        "Recent transaction attempt detected for {} {}. Please wait before retrying.",
+                        token_mint,
+                        direction
+                    )
+                )
+            );
+        }
+        recent.insert(attempt_key.clone());
+
+        // Schedule removal after 30 seconds to allow retries
+        let attempt_key_for_cleanup = attempt_key.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            if let Ok(mut recent) = RECENT_TRANSACTION_ATTEMPTS.lock() {
+                recent.remove(&attempt_key_for_cleanup);
+            }
+        });
+
+        Ok(())
+    } else {
+        Err(SwapError::TransactionError("Failed to check recent attempts".to_string()))
+    }
+}
+
+/// RAII guard to ensure transaction slots are always released
+struct TransactionSlotGuard {
+    token_mint: String,
+    direction: String,
+}
+
+impl TransactionSlotGuard {
+    fn new(token_mint: &str, direction: &str) -> Self {
+        Self {
+            token_mint: token_mint.to_string(),
+            direction: direction.to_string(),
+        }
+    }
+}
+
+impl Drop for TransactionSlotGuard {
+    fn drop(&mut self) {
+        release_transaction_slot(&self.token_mint, &self.direction);
+    }
+}
 
 /// Custom deserializer for fields that can be either string or number
 fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -263,6 +363,249 @@ async fn get_transaction_details(
 ) -> Result<crate::rpc::TransactionDetails, SwapError> {
     let rpc_client = crate::rpc::get_rpc_client();
     rpc_client.get_transaction_details(transaction_signature).await
+}
+
+/// CRITICAL NEW FUNCTION: Verifies transaction confirmation and extracts actual amounts
+/// This function waits for transaction confirmation and returns actual blockchain results
+async fn verify_transaction_and_get_actual_amounts(
+    transaction_signature: &str,
+    input_mint: &str,
+    output_mint: &str,
+    configs: &crate::global::Configs
+) -> Result<(bool, Option<String>, Option<String>), SwapError> {
+    let wallet_address = get_wallet_address()?;
+    let max_retries = 30; // Wait up to 30 seconds (30 retries * 1 second)
+    let retry_delay = tokio::time::Duration::from_secs(1);
+
+    log(
+        LogTag::Wallet,
+        "VERIFY",
+        &format!(
+            "🔍 Waiting for transaction confirmation: {} (max {} seconds)",
+            transaction_signature,
+            max_retries
+        )
+    );
+
+    for attempt in 1..=max_retries {
+        // Wait before checking (except first attempt)
+        if attempt > 1 {
+            tokio::time::sleep(retry_delay).await;
+        }
+
+        match
+            get_transaction_details(
+                &reqwest::Client::new(),
+                transaction_signature,
+                &configs.rpc_url
+            ).await
+        {
+            Ok(tx_details) => {
+                // Check if transaction has metadata (confirmed)
+                if let Some(meta) = &tx_details.meta {
+                    // Check if transaction succeeded (err should be None for success)
+                    let transaction_success = meta.err.is_none();
+
+                    if !transaction_success {
+                        log(
+                            LogTag::Wallet,
+                            "FAILED",
+                            &format!(
+                                "❌ Transaction {} FAILED on-chain: {:?}",
+                                transaction_signature,
+                                meta.err
+                            )
+                        );
+                        return Ok((false, None, None));
+                    }
+
+                    log(
+                        LogTag::Wallet,
+                        "CONFIRMED",
+                        &format!(
+                            "✅ Transaction {} CONFIRMED successfully on attempt {}",
+                            transaction_signature,
+                            attempt
+                        )
+                    );
+
+                    // Extract actual amounts from transaction metadata
+                    let (actual_input, actual_output) = extract_actual_amounts_from_transaction(
+                        &tx_details,
+                        input_mint,
+                        output_mint,
+                        &wallet_address
+                    );
+
+                    return Ok((true, actual_input, actual_output));
+                } else {
+                    // Transaction not yet confirmed
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Wallet,
+                            "PENDING",
+                            &format!(
+                                "⏳ Transaction {} still pending... (attempt {}/{})",
+                                transaction_signature,
+                                attempt,
+                                max_retries
+                            )
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                if attempt < max_retries {
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Wallet,
+                            "PENDING",
+                            &format!(
+                                "⏳ Transaction {} not found yet, retrying... (attempt {}/{}) - {}",
+                                transaction_signature,
+                                attempt,
+                                max_retries,
+                                e
+                            )
+                        );
+                    }
+                } else {
+                    log(
+                        LogTag::Wallet,
+                        "ERROR",
+                        &format!(
+                            "❌ Failed to verify transaction {} after {} attempts: {}",
+                            transaction_signature,
+                            max_retries,
+                            e
+                        )
+                    );
+                    return Err(
+                        SwapError::TransactionError(
+                            format!("Transaction verification timeout after {} seconds", max_retries)
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    // Timeout reached
+    log(
+        LogTag::Wallet,
+        "TIMEOUT",
+        &format!(
+            "⏰ Transaction verification timeout for {} after {} seconds",
+            transaction_signature,
+            max_retries
+        )
+    );
+
+    Err(
+        SwapError::TransactionError(
+            format!("Transaction confirmation timeout after {} seconds", max_retries)
+        )
+    )
+}
+
+/// Extracts actual input/output amounts from confirmed transaction metadata
+fn extract_actual_amounts_from_transaction(
+    tx_details: &crate::rpc::TransactionDetails,
+    input_mint: &str,
+    output_mint: &str,
+    wallet_address: &str
+) -> (Option<String>, Option<String>) {
+    let meta = match &tx_details.meta {
+        Some(meta) => meta,
+        None => {
+            log(LogTag::Wallet, "ERROR", "Cannot extract amounts - no transaction metadata");
+            return (None, None);
+        }
+    };
+
+    // For SOL transactions, use pre/post balance differences
+    if input_mint == SOL_MINT || output_mint == SOL_MINT {
+        // Find wallet's account index in transaction
+        if let Ok(wallet_pubkey) = solana_sdk::pubkey::Pubkey::from_str(wallet_address) {
+            // Try to find wallet in account keys (this is simplified - in practice we'd need to parse the message)
+            // For now, assume wallet is the first account (fee payer)
+            if meta.pre_balances.len() > 0 && meta.post_balances.len() > 0 {
+                let sol_difference = if meta.post_balances[0] > meta.pre_balances[0] {
+                    meta.post_balances[0] - meta.pre_balances[0] // Gained SOL (sell transaction)
+                } else {
+                    meta.pre_balances[0] - meta.post_balances[0] // Lost SOL (buy transaction)
+                };
+
+                if input_mint == SOL_MINT {
+                    // SOL -> Token swap: return SOL spent and tokens received
+                    let sol_spent = sol_difference.to_string();
+                    let tokens_received = extract_token_amount_from_balances(
+                        meta,
+                        output_mint,
+                        false
+                    );
+                    return (Some(sol_spent), tokens_received);
+                } else {
+                    // Token -> SOL swap: return tokens spent and SOL received
+                    let tokens_spent = extract_token_amount_from_balances(meta, input_mint, true);
+                    let sol_received = sol_difference.to_string();
+                    return (tokens_spent, Some(sol_received));
+                }
+            }
+        }
+    }
+
+    // For token-to-token swaps or if SOL extraction failed, try token balance extraction
+    let input_amount = extract_token_amount_from_balances(meta, input_mint, true);
+    let output_amount = extract_token_amount_from_balances(meta, output_mint, false);
+
+    (input_amount, output_amount)
+}
+
+/// Extracts token amount changes from transaction token balance metadata
+fn extract_token_amount_from_balances(
+    meta: &crate::rpc::TransactionMeta,
+    mint: &str,
+    is_decrease: bool // true for input (decrease), false for output (increase)
+) -> Option<String> {
+    let pre_balances = meta.pre_token_balances.as_ref()?;
+    let post_balances = meta.post_token_balances.as_ref()?;
+
+    // Find token balance changes for the specific mint
+    for post_balance in post_balances {
+        if post_balance.mint == mint {
+            // Find corresponding pre-balance
+            let pre_amount = pre_balances
+                .iter()
+                .find(|pre| pre.account_index == post_balance.account_index && pre.mint == mint)
+                .map(|pre| pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0))
+                .unwrap_or(0);
+
+            let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+
+            let amount_change = if is_decrease {
+                // For input tokens, we want the decrease (pre - post)
+                if pre_amount > post_amount {
+                    pre_amount - post_amount
+                } else {
+                    0
+                }
+            } else {
+                // For output tokens, we want the increase (post - pre)
+                if post_amount > pre_amount {
+                    post_amount - pre_amount
+                } else {
+                    0
+                }
+            };
+
+            if amount_change > 0 {
+                return Some(amount_change.to_string());
+            }
+        }
+    }
+
+    None
 }
 
 // calculate_effective_price function has been moved to transactions/analyzer.rs
@@ -614,6 +957,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 }
 
 /// Executes a swap operation with a pre-fetched quote to avoid duplicate API calls
+/// NEW: Now includes transaction confirmation and actual result verification
 pub async fn execute_swap_with_quote(
     token: &Token,
     input_mint: &str,
@@ -661,22 +1005,106 @@ pub async fn execute_swap_with_quote(
 
     log(
         LogTag::Wallet,
-        "SUCCESS",
-        &format!("Transaction submitted successfully! TX: {}", transaction_signature)
+        "PENDING",
+        &format!("Transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
     );
 
-    Ok(SwapResult {
-        success: true,
-        transaction_signature: Some(transaction_signature),
-        input_amount: swap_data.quote.in_amount.clone(),
-        output_amount: swap_data.quote.out_amount.clone(),
-        price_impact: swap_data.quote.price_impact_pct.clone(),
-        fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-        execution_time: swap_data.quote.time_taken,
-        effective_price: None, // Will be calculated later
-        swap_data: Some(swap_data), // Include the complete swap data
-        error: None,
-    })
+    // CRITICAL FIX: Wait for transaction confirmation and verify actual results
+    match
+        verify_transaction_and_get_actual_amounts(
+            &transaction_signature,
+            input_mint,
+            output_mint,
+            &configs
+        ).await
+    {
+        Ok((confirmed_success, actual_input_amount, actual_output_amount)) => {
+            if confirmed_success {
+                // Clone the amounts to avoid move errors
+                let input_amount_str = actual_input_amount
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_else(|| swap_data.quote.in_amount.clone());
+                let output_amount_str = actual_output_amount
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_else(|| swap_data.quote.out_amount.clone());
+
+                log(
+                    LogTag::Wallet,
+                    "CONFIRMED",
+                    &format!(
+                        "✅ Transaction CONFIRMED on-chain! TX: {} | Actual Input: {} | Actual Output: {}",
+                        transaction_signature,
+                        input_amount_str,
+                        output_amount_str
+                    )
+                );
+
+                Ok(SwapResult {
+                    success: true,
+                    transaction_signature: Some(transaction_signature),
+                    // Use ACTUAL amounts from blockchain, not quote predictions
+                    input_amount: actual_input_amount.unwrap_or_else(||
+                        swap_data.quote.in_amount.clone()
+                    ),
+                    output_amount: actual_output_amount.unwrap_or_else(||
+                        swap_data.quote.out_amount.clone()
+                    ),
+                    price_impact: swap_data.quote.price_impact_pct.clone(),
+                    fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+                    execution_time: swap_data.quote.time_taken,
+                    effective_price: None, // Will be calculated later using actual amounts
+                    swap_data: Some(swap_data), // Include the complete swap data
+                    error: None,
+                })
+            } else {
+                log(
+                    LogTag::Wallet,
+                    "FAILED",
+                    &format!("❌ Transaction FAILED on-chain! TX: {}", transaction_signature)
+                );
+
+                Ok(SwapResult {
+                    success: false,
+                    transaction_signature: Some(transaction_signature),
+                    input_amount: swap_data.quote.in_amount.clone(),
+                    output_amount: "0".to_string(), // Zero output for failed transaction
+                    price_impact: swap_data.quote.price_impact_pct.clone(),
+                    fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+                    execution_time: swap_data.quote.time_taken,
+                    effective_price: None,
+                    swap_data: Some(swap_data),
+                    error: Some("Transaction failed on-chain".to_string()),
+                })
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::Wallet,
+                "ERROR",
+                &format!(
+                    "❌ Transaction verification failed for TX: {} - Error: {}",
+                    transaction_signature,
+                    e
+                )
+            );
+
+            // Return as failed transaction
+            Ok(SwapResult {
+                success: false,
+                transaction_signature: Some(transaction_signature),
+                input_amount: swap_data.quote.in_amount.clone(),
+                output_amount: "0".to_string(),
+                price_impact: swap_data.quote.price_impact_pct.clone(),
+                fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+                execution_time: swap_data.quote.time_taken,
+                effective_price: None,
+                swap_data: Some(swap_data),
+                error: Some(format!("Transaction verification failed: {}", e)),
+            })
+        }
+    }
 }
 
 /// Helper function to buy a token with SOL
@@ -701,6 +1129,13 @@ pub async fn buy_token(
             return Err(SwapError::InvalidAmount(format!("Invalid expected price: {:.10}", price)));
         }
     }
+
+    // CRITICAL FIX: Prevent duplicate transactions
+    check_recent_transaction_attempt(&token.mint, "buy")?;
+    check_and_reserve_transaction_slot(&token.mint, "buy")?;
+
+    // Ensure we release the slot regardless of outcome
+    let _slot_guard = TransactionSlotGuard::new(&token.mint, "buy");
 
     let wallet_address = get_wallet_address()?;
 
@@ -882,6 +1317,13 @@ pub async fn sell_token(
             );
         }
     }
+
+    // CRITICAL FIX: Prevent duplicate transactions
+    check_recent_transaction_attempt(&token.mint, "sell")?;
+    check_and_reserve_transaction_slot(&token.mint, "sell")?;
+
+    // Ensure we release the slot regardless of outcome
+    let _slot_guard = TransactionSlotGuard::new(&token.mint, "sell");
 
     let wallet_address = get_wallet_address()?;
 

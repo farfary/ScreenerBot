@@ -41,24 +41,16 @@
 //! - Prepare wallet for fresh trading cycles
 
 use screenerbot::{
-    logger::{log, LogTag, init_file_logging},
-    wallet::{
-        get_wallet_address, 
-        sell_token, 
-        close_single_ata,
-        get_all_token_accounts,
-    },
+    logger::{ log, LogTag, init_file_logging },
+    wallet::{ get_wallet_address, sell_token, close_single_ata, get_all_token_accounts },
     positions::get_open_positions,
-    tokens::{
-        api::{init_dexscreener_api, get_token_from_mint_global_api},
-        Token,
-    },
+    tokens::{ api::{ init_dexscreener_api, get_token_from_mint_global_api }, Token },
     rpc::init_rpc_client,
 };
-use std::{env, collections::HashSet};
+use std::{ env, collections::HashSet };
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use futures::stream::{self, StreamExt};
+use futures::stream::{ self, StreamExt };
 
 /// SOL token mint address (native Solana)
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -124,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize required systems
     log(LogTag::System, "INIT", "🔧 Initializing systems...");
-    
+
     // Initialize RPC client
     if let Err(e) = init_rpc_client() {
         log(LogTag::System, "ERROR", &format!("Failed to initialize RPC client: {}", e));
@@ -158,11 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|pos| pos.mint.clone())
         .collect();
 
-    log(
-        LogTag::System,
-        "POSITIONS", 
-        &format!("Found {} open positions:", open_positions.len())
-    );
+    log(LogTag::System, "POSITIONS", &format!("Found {} open positions:", open_positions.len()));
 
     if verbose {
         for position in &open_positions {
@@ -174,7 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     position.symbol,
                     position.name,
                     &position.mint[..8],
-                    &position.mint[position.mint.len()-8..]
+                    &position.mint[position.mint.len() - 8..]
                 )
             );
         }
@@ -217,7 +205,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Skip zero balance accounts
         if account.balance == 0 {
             if verbose {
-                log(LogTag::System, "SKIP", &format!("Skipping {} (zero balance)", &account.mint[..8]));
+                log(
+                    LogTag::System,
+                    "SKIP",
+                    &format!("Skipping {} (zero balance)", &account.mint[..8])
+                );
             }
             continue;
         }
@@ -236,7 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let token_info = TokenAccountInfo {
             mint: account.mint.clone(),
             balance: account.balance,
-            ui_amount: account.balance as f64 / 1_000_000_000.0, // Assume 9 decimals as default
+            ui_amount: (account.balance as f64) / 1_000_000_000.0, // Assume 9 decimals as default
             is_in_position,
             position_symbol: position_symbol.clone(),
         };
@@ -251,7 +243,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "CLASSIFY",
                 &format!(
                     "  {} {} ({}) - Balance: {:.6} - Status: {}",
-                    if is_in_position { "📍" } else { "🎯" },
+                    if is_in_position {
+                        "📍"
+                    } else {
+                        "🎯"
+                    },
                     symbol,
                     &account.mint[..8],
                     token_info.ui_amount,
@@ -284,7 +280,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     if tokens_to_sell.is_empty() {
-        log(LogTag::System, "SUCCESS", "✅ No non-position tokens found - all tokens are properly tracked!");
+        log(
+            LogTag::System,
+            "SUCCESS",
+            "✅ No non-position tokens found - all tokens are properly tracked!"
+        );
         return Ok(());
     }
 
@@ -298,7 +298,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "  {}. Mint: {}...{} | Balance: {:.6} tokens | Raw: {}",
                 i + 1,
                 &token.mint[..8],
-                &token.mint[token.mint.len()-8..],
+                &token.mint[token.mint.len() - 8..],
                 token.ui_amount,
                 token.balance
             )
@@ -359,7 +359,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process selling with 3 concurrent tasks
     let sell_semaphore = Arc::new(Semaphore::new(3));
-    let sell_results: Vec<_> = stream::iter(tokens_to_sell.iter().enumerate())
+    let sell_results: Vec<_> = stream
+        ::iter(tokens_to_sell.iter().enumerate())
         .map(|(i, token_info)| {
             let semaphore = sell_semaphore.clone();
             let token_info = (*token_info).clone();
@@ -369,12 +370,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         })
         .buffer_unordered(3)
-        .collect()
-        .await;
+        .collect().await;
 
     // Count successful and failed sells
-    results.successful_sells = sell_results.iter().filter(|&success| *success).count();
-    results.failed_sells = sell_results.iter().filter(|&success| !*success).count();
+    results.successful_sells = sell_results
+        .iter()
+        .filter(|&success| *success)
+        .count();
+    results.failed_sells = sell_results
+        .iter()
+        .filter(|&success| !*success)
+        .count();
 
     log(
         LogTag::System,
@@ -397,7 +403,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let close_semaphore = Arc::new(Semaphore::new(3));
-    let close_results: Vec<_> = stream::iter(successful_sell_indices.iter())
+    let close_results: Vec<_> = stream
+        ::iter(successful_sell_indices.iter())
         .map(|&i| {
             let semaphore = close_semaphore.clone();
             let token_info = tokens_to_sell[i].clone();
@@ -407,12 +414,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         })
         .buffer_unordered(3)
-        .collect()
-        .await;
+        .collect().await;
 
     // Count successful and failed ATA closes
-    results.successful_ata_closes = close_results.iter().filter(|&success| *success).count();
-    results.failed_ata_closes = close_results.iter().filter(|&success| !*success).count();
+    results.successful_ata_closes = close_results
+        .iter()
+        .filter(|&success| *success)
+        .count();
+    results.failed_ata_closes = close_results
+        .iter()
+        .filter(|&success| !*success)
+        .count();
 
     log(
         LogTag::System,
@@ -436,7 +448,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn sell_non_position_token(
     index: usize,
     token_info: &TokenAccountInfo,
-    total_count: usize,
+    total_count: usize
 ) -> bool {
     log(
         LogTag::Wallet,
@@ -446,7 +458,7 @@ async fn sell_non_position_token(
             index,
             total_count,
             &token_info.mint[..8],
-            &token_info.mint[token_info.mint.len()-8..],
+            &token_info.mint[token_info.mint.len() - 8..],
             token_info.ui_amount
         )
     );
@@ -546,7 +558,7 @@ async fn close_ata_for_token(_index: usize, token_info: &TokenAccountInfo) -> bo
         &format!(
             "🧹 Closing ATA for token {}...{}",
             &token_info.mint[..8],
-            &token_info.mint[token_info.mint.len()-8..]
+            &token_info.mint[token_info.mint.len() - 8..]
         )
     );
 
@@ -567,11 +579,7 @@ async fn close_ata_for_token(_index: usize, token_info: &TokenAccountInfo) -> bo
             log(
                 LogTag::Wallet,
                 "SUCCESS",
-                &format!(
-                    "✅ ATA closed for {} | TX: {}",
-                    &token_info.mint[..8],
-                    signature
-                )
+                &format!("✅ ATA closed for {} | TX: {}", &token_info.mint[..8], signature)
             );
             true
         }
@@ -579,11 +587,7 @@ async fn close_ata_for_token(_index: usize, token_info: &TokenAccountInfo) -> bo
             log(
                 LogTag::Wallet,
                 "ERROR",
-                &format!(
-                    "❌ Failed to close ATA for {}: {}",
-                    &token_info.mint[..8],
-                    e
-                )
+                &format!("❌ Failed to close ATA for {}: {}", &token_info.mint[..8], e)
             );
             false
         }
@@ -595,7 +599,7 @@ fn print_final_summary(results: &CleanupResults) {
     log(LogTag::System, "SUMMARY", "");
     log(LogTag::System, "SUMMARY", "🎯 NON-POSITION TOKEN CLEANUP SUMMARY");
     log(LogTag::System, "SUMMARY", "==========================================");
-    
+
     // Token analysis
     log(
         LogTag::System,
@@ -617,7 +621,7 @@ fn print_final_summary(results: &CleanupResults) {
             results.successful_sells,
             results.failed_sells,
             if results.tokens_to_sell > 0 {
-                (results.successful_sells as f64 / results.tokens_to_sell as f64) * 100.0
+                ((results.successful_sells as f64) / (results.tokens_to_sell as f64)) * 100.0
             } else {
                 0.0
             }
@@ -633,7 +637,7 @@ fn print_final_summary(results: &CleanupResults) {
             results.successful_ata_closes,
             results.failed_ata_closes,
             if results.successful_sells > 0 {
-                (results.successful_ata_closes as f64 / results.successful_sells as f64) * 100.0
+                ((results.successful_ata_closes as f64) / (results.successful_sells as f64)) * 100.0
             } else {
                 0.0
             }

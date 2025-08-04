@@ -520,13 +520,13 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
     let _guard = crate::trader::CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
     match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
         Ok(swap_result) => {
-            // Check if the transaction was actually successful on-chain
+            // CRITICAL FIX: Check if the transaction was actually successful on-chain
             if !swap_result.success {
                 log(
                     LogTag::Trader,
                     "ERROR",
                     &format!(
-                        "Transaction failed on-chain for {}: {}",
+                        "❌ Transaction failed on-chain for {}: {}",
                         token.symbol,
                         swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
                     )
@@ -534,16 +534,16 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 return;
             }
 
-            let effective_entry_price = price;
+            // CRITICAL FIX: Parse actual token amount from confirmed transaction (not quote)
             let token_amount = swap_result.output_amount.parse::<u64>().unwrap_or(0);
 
-            // Validate that we actually received tokens
+            // CRITICAL FIX: Validate that we actually received tokens from the confirmed transaction
             if token_amount == 0 {
                 log(
                     LogTag::Trader,
                     "ERROR",
                     &format!(
-                        "Transaction successful but no tokens received for {}. TX: {}",
+                        "❌ Transaction confirmed but no tokens received for {}. TX: {}",
                         token.symbol,
                         swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string())
                     )
@@ -551,61 +551,141 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 return;
             }
 
-            // Get smart profit targets for this token
-            let (profit_min, profit_max) = crate::smart_entry::get_smart_profit_target(token);
-            let liquidity_tier = crate::smart_entry::SmartEntryAnalysis::analyze_token(
-                token
-            ).liquidity_tier;
-
-            log(
-                LogTag::Trader,
-                "SUCCESS",
-                &format!(
-                    "Real swap executed for {}: TX: {}, Tokens: {}, Signal Price: {:.12} SOL, Effective Price: {:.12} SOL, Profit Target: {:.1}%-{:.1}%",
-                    token.symbol,
-                    swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string()),
-                    token_amount,
-                    price,
-                    effective_entry_price,
-                    profit_min,
-                    profit_max
-                )
-            );
-
-            let position = Position {
-                mint: token.mint.clone(),
-                symbol: token.symbol.clone(),
-                name: token.name.clone(),
-                entry_price: price, // Keep original signal price
-                entry_time: Utc::now(),
-                exit_price: None,
-                exit_time: None,
-                position_type: "buy".to_string(),
-                entry_size_sol: TRADE_SIZE_SOL,
-                total_size_sol: TRADE_SIZE_SOL,
-                price_highest: effective_entry_price, // Use effective price for tracking
-                price_lowest: effective_entry_price, // Use effective price for tracking
-                entry_transaction_signature: swap_result.transaction_signature,
-                exit_transaction_signature: None,
-                token_amount: Some(token_amount),
-                effective_entry_price: Some(effective_entry_price), // Actual transaction price
-                effective_exit_price: None,
-                sol_received: None, // Will be set when position is closed
-                profit_target_min: Some(profit_min),
-                profit_target_max: Some(profit_max),
-                liquidity_tier: Some(format!("{:?}", liquidity_tier)),
+            // CRITICAL FIX: Double-check wallet balance to ensure tokens were actually received
+            let wallet_address = match crate::wallet::get_wallet_address() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!("❌ Failed to get wallet address for balance verification: {}", e)
+                    );
+                    return;
+                }
             };
 
-            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                positions.push(position);
-                save_positions_to_file(&positions);
+            // Wait a moment for balance to update, then verify
+            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
+            match crate::wallet::get_token_balance(&wallet_address, &token.mint).await {
+                Ok(actual_balance) => {
+                    if actual_balance == 0 {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!(
+                                "❌ CRITICAL: Transaction {} reported success but wallet has 0 {} tokens! Not creating position.",
+                                swap_result.transaction_signature
+                                    .as_ref()
+                                    .unwrap_or(&"None".to_string()),
+                                token.symbol
+                            )
+                        );
+                        return;
+                    }
+
+                    // Use the actual wallet balance (might be different from reported amount due to fees/slippage)
+                    let verified_token_amount = actual_balance;
+
+                    log(
+                        LogTag::Trader,
+                        "VERIFIED",
+                        &format!(
+                            "✅ Balance verified: {} has {} tokens in wallet (reported: {}, actual: {})",
+                            token.symbol,
+                            verified_token_amount,
+                            token_amount,
+                            actual_balance
+                        )
+                    );
+
+                    // Use verified amount for position
+                    let final_token_amount = verified_token_amount;
+
+                    let effective_entry_price = price;
+
+                    // Get smart profit targets for this token
+                    let (profit_min, profit_max) =
+                        crate::smart_entry::get_smart_profit_target(token);
+                    let liquidity_tier = crate::smart_entry::SmartEntryAnalysis::analyze_token(
+                        token
+                    ).liquidity_tier;
+
+                    log(
+                        LogTag::Trader,
+                        "SUCCESS",
+                        &format!(
+                            "✅ POSITION CREATED: {} | TX: {} | Tokens: {} (verified) | Signal Price: {:.12} SOL | Effective Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}%",
+                            token.symbol,
+                            swap_result.transaction_signature
+                                .as_ref()
+                                .unwrap_or(&"None".to_string()),
+                            final_token_amount,
+                            price,
+                            effective_entry_price,
+                            profit_min,
+                            profit_max
+                        )
+                    );
+
+                    let position = Position {
+                        mint: token.mint.clone(),
+                        symbol: token.symbol.clone(),
+                        name: token.name.clone(),
+                        entry_price: price, // Keep original signal price
+                        entry_time: Utc::now(),
+                        exit_price: None,
+                        exit_time: None,
+                        position_type: "buy".to_string(),
+                        entry_size_sol: TRADE_SIZE_SOL,
+                        total_size_sol: TRADE_SIZE_SOL,
+                        price_highest: effective_entry_price, // Use effective price for tracking
+                        price_lowest: effective_entry_price, // Use effective price for tracking
+                        entry_transaction_signature: swap_result.transaction_signature,
+                        exit_transaction_signature: None,
+                        token_amount: Some(final_token_amount), // Use VERIFIED amount
+                        effective_entry_price: Some(effective_entry_price), // Actual transaction price
+                        effective_exit_price: None,
+                        sol_received: None, // Will be set when position is closed
+                        profit_target_min: Some(profit_min),
+                        profit_target_max: Some(profit_max),
+                        liquidity_tier: Some(format!("{:?}", liquidity_tier)),
+                    };
+
+                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                        positions.push(position);
+                        save_positions_to_file(&positions);
+                        log(
+                            LogTag::Trader,
+                            "SAVED",
+                            &format!("💾 Position saved to file for {}", token.symbol)
+                        );
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!(
+                            "❌ Failed to verify token balance after successful transaction for {}: {}. Not creating position.",
+                            token.symbol,
+                            e
+                        )
+                    );
+                    return;
+                }
             }
         }
         Err(e) => {
             log(
                 LogTag::Trader,
                 "ERROR",
-                &format!("Failed to execute buy swap for {} ({}): {}", token.symbol, token.mint, e)
+                &format!(
+                    "❌ Failed to execute buy swap for {} ({}): {}",
+                    token.symbol,
+                    token.mint,
+                    e
+                )
             );
         }
     }
@@ -766,13 +846,13 @@ pub async fn close_position(
         );
         match sell_token(token, token_amount, None).await {
             Ok(swap_result) => {
-                // Check if the sell transaction was actually successful on-chain
+                // CRITICAL FIX: Check if the sell transaction was actually successful on-chain
                 if !swap_result.success {
                     log(
                         LogTag::Trader,
                         "ERROR",
                         &format!(
-                            "Sell transaction failed on-chain for {}: {}",
+                            "❌ Sell transaction failed on-chain for {}: {}",
                             position.symbol,
                             swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
                         )
@@ -784,18 +864,56 @@ pub async fn close_position(
                 let sol_received = swap_result.output_amount.parse::<u64>().unwrap_or(0);
                 let transaction_signature = swap_result.transaction_signature.clone();
 
-                // Validate that we actually received SOL
+                // CRITICAL FIX: Validate that we actually received SOL from confirmed transaction
                 if sol_received == 0 {
                     log(
                         LogTag::Trader,
                         "ERROR",
                         &format!(
-                            "Sell transaction successful but no SOL received for {}. TX: {}",
+                            "❌ Sell transaction confirmed but no SOL received for {}. TX: {}",
                             position.symbol,
                             transaction_signature.as_ref().unwrap_or(&"None".to_string())
                         )
                     );
                     return false; // Failed to close properly
+                }
+
+                // CRITICAL FIX: Verify wallet balance to ensure tokens were actually sold
+                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
+                match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
+                    Ok(remaining_balance) => {
+                        if remaining_balance > 0 {
+                            log(
+                                LogTag::Trader,
+                                "WARNING",
+                                &format!(
+                                    "⚠️ Sell transaction succeeded but {} tokens remain in wallet for {}. This might indicate partial sell or dust amount.",
+                                    remaining_balance,
+                                    position.symbol
+                                )
+                            );
+                            // Continue anyway - partial sells are acceptable
+                        }
+
+                        log(
+                            LogTag::Trader,
+                            "VERIFIED",
+                            &format!("✅ Sell verified: {} tokens remaining in wallet after sell (expected: ~0)", remaining_balance)
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Trader,
+                            "WARNING",
+                            &format!(
+                                "⚠️ Could not verify post-sell balance for {}: {}",
+                                position.symbol,
+                                e
+                            )
+                        );
+                        // Continue anyway - the transaction was confirmed
+                    }
                 }
 
                 // Use total SOL received (without ATA separation)
@@ -822,7 +940,7 @@ pub async fn close_position(
                 let total_sol_received = crate::rpc::lamports_to_sol(sol_received);
 
                 let log_message = format!(
-                    "Closed position for {} ({}) - TX: {}, SOL From Sale: {:.6}, Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
+                    "✅ POSITION CLOSED: {} ({}) | TX: {} | SOL From Sale: {:.6} | Net Trading P&L: {}{:.6} SOL ({:.2}%)\x1b[0m",
                     position.symbol,
                     position.mint,
                     transaction_signature.as_ref().unwrap_or(&"None".to_string()),
@@ -840,7 +958,7 @@ pub async fn close_position(
                         LogTag::Trader,
                         "ATA",
                         &format!(
-                            "Attempting to close ATA for {} after successful sell (will reclaim ~0.002 SOL rent separately from trading P&L)",
+                            "🔄 Attempting to close ATA for {} after successful sell (will reclaim ~0.002 SOL rent separately from trading P&L)",
                             position.symbol
                         )
                     );
@@ -851,7 +969,7 @@ pub async fn close_position(
                                 LogTag::Trader,
                                 "SUCCESS",
                                 &format!(
-                                    "Successfully closed ATA for {} - Rent reclaimed: ~0.002 SOL (separate from trading P&L). TX: {}",
+                                    "✅ Successfully closed ATA for {} - Rent reclaimed: ~0.002 SOL (separate from trading P&L). TX: {}",
                                     position.symbol,
                                     close_tx
                                 )
@@ -862,7 +980,7 @@ pub async fn close_position(
                                 LogTag::Trader,
                                 "WARN",
                                 &format!(
-                                    "Failed to close ATA for {} (this is not critical): {}",
+                                    "⚠️ Failed to close ATA for {} (this is not critical): {}",
                                     position.symbol,
                                     e
                                 )
@@ -875,7 +993,7 @@ pub async fn close_position(
                         LogTag::Trader,
                         "INFO",
                         &format!(
-                            "ATA closing disabled for {} (AUTO_CLOSE_ATA_AFTER_SELL = false)",
+                            "ℹ️ ATA closing disabled for {} (AUTO_CLOSE_ATA_AFTER_SELL = false)",
                             position.symbol
                         )
                     );
