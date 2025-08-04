@@ -854,10 +854,12 @@ pub async fn buy_token(
     Ok(swap_result)
 }
 
-/// Helper function to sell a token for SOL
+/// Helper function to sell ALL tokens in wallet for SOL
+/// NOTE: This function sells the entire wallet balance, not just the position amount.
+/// This ensures complete position closure and prevents dust amounts from being left behind.
 pub async fn sell_token(
     token: &Token,
-    token_amount: u64, // Amount in token's smallest unit
+    token_amount: u64, // Position amount (used for validation only - actual sale uses full wallet balance)
     expected_sol_output: Option<f64>
 ) -> Result<SwapResult, SwapError> {
     // CRITICAL SAFETY CHECK: Validate expected SOL output if provided
@@ -883,16 +885,7 @@ pub async fn sell_token(
 
     let wallet_address = get_wallet_address()?;
 
-    // Check if trying to sell 0 tokens
-    if token_amount == 0 {
-        return Err(
-            SwapError::InvalidAmount(
-                "Cannot sell 0 tokens. Token amount must be greater than 0.".to_string()
-            )
-        );
-    }
-
-    // Check token balance before swap
+    // Check token balance before swap - we'll sell the entire wallet balance
     log(LogTag::Wallet, "BALANCE", &format!("Checking {} balance...", token.symbol));
     let token_balance = get_token_balance(&wallet_address, &token.mint).await?;
     log(
@@ -901,32 +894,43 @@ pub async fn sell_token(
         &format!("Current {} balance: {} tokens", token.symbol, token_balance)
     );
 
-    if token_balance < token_amount {
+    // Check if wallet has any tokens to sell
+    if token_balance == 0 {
         return Err(
             SwapError::InsufficientBalance(
-                format!(
-                    "Insufficient {} balance. Have: {} tokens, Need: {} tokens",
-                    token.symbol,
-                    token_balance,
-                    token_amount
-                )
+                format!("No {} tokens to sell. Wallet balance is 0.", token.symbol)
             )
         );
     }
+
+    // Use the entire wallet balance for selling instead of position amount
+    let actual_sell_amount = token_balance;
+
+    log(
+        LogTag::Wallet,
+        "BALANCE",
+        &format!(
+            "💰 SELL STRATEGY: Position amount: {} tokens, Wallet balance: {} tokens → Selling ALL {} tokens",
+            token_amount,
+            token_balance,
+            actual_sell_amount
+        )
+    );
 
     // Check current price if expected SOL output is provided
     if let Some(expected_sol) = expected_sol_output {
         log(LogTag::Wallet, "PRICE", "Validating expected SOL output...");
         match get_token_price_sol(&token.mint).await {
             Ok(current_price) => {
-                let estimated_sol_output = current_price * (token_amount as f64);
+                let estimated_sol_output = current_price * (actual_sell_amount as f64);
                 log(
                     LogTag::Wallet,
                     "PRICE",
                     &format!(
-                        "Estimated SOL output: {:.6} SOL, Expected: {:.6} SOL",
+                        "Estimated SOL output: {:.6} SOL, Expected: {:.6} SOL (based on {} tokens)",
                         estimated_sol_output,
-                        expected_sol
+                        expected_sol,
+                        actual_sell_amount
                     )
                 );
 
@@ -955,7 +959,7 @@ pub async fn sell_token(
     let request = SwapRequest {
         input_mint: token.mint.clone(),
         output_mint: SOL_MINT.to_string(),
-        input_amount: token_amount,
+        input_amount: actual_sell_amount,
         from_address: wallet_address.clone(),
         expected_price: expected_sol_output,
         ..Default::default()
@@ -965,17 +969,17 @@ pub async fn sell_token(
         LogTag::Wallet,
         "SWAP",
         &format!(
-            "Executing sell for {} ({}) - {} tokens -> SOL",
+            "Executing sell for {} ({}) - {} tokens -> SOL (selling ALL wallet balance)",
             token.symbol,
             token.name,
-            token_amount
+            actual_sell_amount
         )
     );
 
     log(
         LogTag::Wallet,
         "QUOTE",
-        &format!("Requesting sell quote: {} tokens {} -> SOL", token_amount, &token.symbol)
+        &format!("Requesting sell quote: {} tokens {} -> SOL", actual_sell_amount, &token.symbol)
     );
 
     // Get quote using the centralized function
@@ -986,7 +990,7 @@ pub async fn sell_token(
         "QUOTE",
         &format!(
             "Sell quote received: {} tokens -> {} SOL (Impact: {}%, Time: {:.3}s)",
-            token_amount,
+            actual_sell_amount,
             lamports_to_sol(swap_data.quote.out_amount.parse().unwrap_or(0)),
             swap_data.quote.price_impact_pct,
             swap_data.quote.time_taken
@@ -999,7 +1003,7 @@ pub async fn sell_token(
 
         // Convert expected total SOL to price per token for validation
         let token_decimals = swap_data.quote.in_decimals as u32;
-        let actual_tokens = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+        let actual_tokens = (actual_sell_amount as f64) / (10_f64).powi(token_decimals as i32);
         let expected_price_per_token = if actual_tokens > 0.0 {
             expected_sol_total / actual_tokens
         } else {
@@ -1017,7 +1021,7 @@ pub async fn sell_token(
             )
         );
 
-        validate_quote_price(&swap_data, token_amount, expected_price_per_token, false)?;
+        validate_quote_price(&swap_data, actual_sell_amount, expected_price_per_token, false)?;
         log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
     }
 
@@ -1028,7 +1032,7 @@ pub async fn sell_token(
         token,
         &token.mint,
         SOL_MINT,
-        token_amount,
+        actual_sell_amount,
         swap_data
     ).await?;
 
@@ -1055,7 +1059,7 @@ pub async fn sell_token(
                         if let Some(swap_data) = &swap_result.swap_data {
                             let token_decimals = swap_data.quote.in_decimals as u32;
                             let tokens_sold =
-                                (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+                                (actual_sell_amount as f64) / (10_f64).powi(token_decimals as i32);
                             let expected_price_per_token = expected_sol / tokens_sold;
                             let price_diff =
                                 ((effective_price - expected_price_per_token) /

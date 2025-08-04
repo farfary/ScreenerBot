@@ -467,7 +467,9 @@ impl RugcheckService {
 
     /// Update rugcheck data for expired tokens only (smart expiry-based updates)
     async fn update_all_rugcheck_data(&self) {
-        log(LogTag::Rugcheck, "UPDATE", "Starting periodic rugcheck data update");
+        if is_debug_rugcheck_enabled() {
+            log(LogTag::Rugcheck, "UPDATE", "Starting periodic rugcheck data update");
+        }
 
         // Get expired tokens that need updating (24+ hours old)
         let expired_mints = match self.get_expired_tokens().await {
@@ -479,15 +481,23 @@ impl RugcheckService {
         };
 
         if expired_mints.is_empty() {
-            log(LogTag::Rugcheck, "INFO", "No expired tokens found - all rugcheck data is current");
+            if is_debug_rugcheck_enabled() {
+                log(
+                    LogTag::Rugcheck,
+                    "INFO",
+                    "No expired tokens found - all rugcheck data is current"
+                );
+            }
             return;
         }
 
-        log(
-            LogTag::Rugcheck,
-            "INFO",
-            &format!("Found {} expired tokens to update", expired_mints.len())
-        );
+        if is_debug_rugcheck_enabled() {
+            log(
+                LogTag::Rugcheck,
+                "INFO",
+                &format!("Found {} expired tokens to update", expired_mints.len())
+            );
+        }
 
         // Update only expired rugcheck data
         if let Err(e) = self.update_rugcheck_data_for_mints(expired_mints).await {
@@ -502,11 +512,13 @@ impl RugcheckService {
     /// Update rugcheck data for specific list of mints
     pub async fn update_rugcheck_data_for_mints(&self, mints: Vec<String>) -> Result<(), String> {
         let total_mints = mints.len();
-        log(
-            LogTag::Rugcheck,
-            "START",
-            &format!("Starting rugcheck update for {} tokens", total_mints)
-        );
+        if is_debug_rugcheck_enabled() {
+            log(
+                LogTag::Rugcheck,
+                "START",
+                &format!("Starting rugcheck update for {} tokens", total_mints)
+            );
+        }
 
         let mut success_count = 0;
         let mut error_count = 0;
