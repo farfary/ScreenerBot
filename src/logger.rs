@@ -734,7 +734,7 @@ pub fn log_price_change(
 
     // Symbol and price change
     let price_part = format!(
-        "{} {} {:.10} SOL ({}SOL, {}%)",
+        "{} {} {:.10} SOL ( {}SOL, {} % )",
         emoji,
         format!("{}", symbol).bold(),
         match price_color {
@@ -759,19 +759,19 @@ pub fn log_price_change(
     if let Some((pnl_sol, pnl_percent)) = current_pnl {
         let pnl_text = if pnl_percent > 0.0 {
             format!(
-                "💰 P&L: {} SOL ({}%)",
+                "💰 P&L: {} SOL ( {} % )",
                 format!("+{:.6}", pnl_sol).green().bold(),
                 format!("+{:.2}", pnl_percent).green().bold()
             )
         } else if pnl_percent < 0.0 {
             format!(
-                "💸 P&L: {} SOL ({}%)",
+                "💸 P&L: {} SOL ( {} % )",
                 format!("{:.6}", pnl_sol).red().bold(),
                 format!("{:.2}", pnl_percent).red().bold()
             )
         } else {
             format!(
-                "🟡 P&L: {} SOL ({}%)",
+                "🟡 P&L: {} SOL ( {} % )",
                 format!("±{:.6}", 0.0).white().bold(),
                 format!("±{:.2}", 0.0).white().bold()
             )
