@@ -1,7 +1,7 @@
-use screenerbot::wallet::*;
 use screenerbot::global::*;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
-use screenerbot::rpc::SwapError;
+use screenerbot::rpc::{ SwapError, get_rpc_client, init_rpc_client };
+use screenerbot::wallet::{ get_wallet_address };
 use std::str::FromStr;
 use solana_sdk::{
     pubkey::Pubkey,
@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get wallet address from configs
     let wallet_address = match get_wallet_address() {
-        Ok(addr) => addr,
+        Ok(addr) => addr.clone(),
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to get wallet address: {}", e));
             return Err(e.into());
@@ -43,10 +43,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "INFO", &format!("Wallet: {}", wallet_address));
 
+    // Initialize RPC client
+    init_rpc_client()?;
+    let rpc_client = get_rpc_client();
+
     // Step 1: Analyze all token accounts
     log(LogTag::System, "ANALYZE", "🔍 Analyzing all token accounts...");
 
-    let accounts = match get_all_token_accounts(&wallet_address).await {
+    let accounts = match rpc_client.get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to get token accounts: {}", e));
@@ -404,7 +408,8 @@ async fn build_and_send_close_instruction_fixed(
     };
 
     // Get recent blockhash via RPC
-    let recent_blockhash = get_latest_blockhash(&configs.rpc_url).await?;
+    let rpc_client = screenerbot::rpc::get_rpc_client();
+    let recent_blockhash = rpc_client.get_latest_blockhash().await?;
 
     // Build transaction
     let transaction = Transaction::new_signed_with_payer(
@@ -414,6 +419,8 @@ async fn build_and_send_close_instruction_fixed(
         recent_blockhash
     );
 
-    // Send transaction via RPC
-    send_close_transaction_via_rpc(&transaction, &configs).await
+    // Send transaction via RPC with proper error handling
+    let rpc_client = screenerbot::rpc::get_rpc_client();
+    let signature = rpc_client.send_transaction(&transaction).await?;
+    Ok(signature)
 }

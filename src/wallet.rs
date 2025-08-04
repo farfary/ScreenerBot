@@ -14,7 +14,7 @@ use solana_sdk::{
     transaction::VersionedTransaction,
     signer::Signer,
     pubkey::Pubkey,
-    instruction::Instruction,
+    instruction::{ Instruction, AccountMeta },
     transaction::Transaction,
 };
 use spl_token::instruction::close_account;
@@ -2024,8 +2024,11 @@ pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<Str
 
     log(LogTag::Wallet, "ATA", &format!("Found token account to close: {}", token_account));
 
-    // Determine if this is a Token-2022 token by checking the token program
-    let is_token_2022 = is_token_2022_mint(mint).await.unwrap_or(false);
+    // Determine if this is a Token-2022 account by checking the token ACCOUNT's program (not the mint)
+    let rpc_client = crate::rpc::get_rpc_client();
+    let is_token_2022 = rpc_client
+        .is_token_account_token_2022(&token_account).await
+        .unwrap_or(false);
 
     if is_token_2022 {
         log(LogTag::Wallet, "ATA", "Detected Token-2022, using Token Extensions program");
@@ -2063,13 +2066,6 @@ async fn get_associated_token_account(
     rpc_client.get_associated_token_account(wallet_address, mint).await
 }
 
-/// Checks if a mint is a Token-2022 token by examining its program ID
-/// Checks if a mint is a Token-2022 mint by checking its owner program
-pub async fn is_token_2022_mint(mint: &str) -> Result<bool, SwapError> {
-    let rpc_client = crate::rpc::get_rpc_client();
-    rpc_client.is_token_2022_mint(mint).await
-}
-
 /// Closes ATA using proper Solana SDK for real ATA closing
 async fn close_ata(
     wallet_address: &str,
@@ -2100,21 +2096,6 @@ async fn close_ata(
             Err(e)
         }
     }
-}
-
-/// Gets latest blockhash from Solana RPC
-pub async fn get_latest_blockhash(rpc_url: &str) -> Result<solana_sdk::hash::Hash, SwapError> {
-    let rpc_client = crate::rpc::get_rpc_client();
-    rpc_client.get_latest_blockhash().await
-}
-
-/// Sends close transaction via RPC
-pub async fn send_close_transaction_via_rpc(
-    transaction: &Transaction,
-    configs: &crate::global::Configs
-) -> Result<String, SwapError> {
-    let rpc_client = crate::rpc::get_rpc_client();
-    rpc_client.send_transaction(transaction).await
 }
 
 /// Builds and sends close account instruction using Solana SDK
@@ -2172,7 +2153,8 @@ async fn build_and_send_close_instruction(
     );
 
     // Get recent blockhash via RPC
-    let recent_blockhash = get_latest_blockhash(&configs.rpc_url).await?;
+    let rpc_client = crate::rpc::get_rpc_client();
+    let recent_blockhash = rpc_client.get_latest_blockhash().await?;
 
     // Build transaction
     let transaction = Transaction::new_signed_with_payer(
@@ -2185,7 +2167,7 @@ async fn build_and_send_close_instruction(
     log(LogTag::Wallet, "ATA", "Built and signed close transaction");
 
     // Send transaction via RPC
-    send_close_transaction_via_rpc(&transaction, &configs).await
+    rpc_client.send_transaction(&transaction).await
 }
 
 /// Builds close instruction for Token-2022 accounts
@@ -2193,13 +2175,25 @@ fn build_token_2022_close_instruction(
     token_account: &Pubkey,
     owner: &Pubkey
 ) -> Result<Instruction, SwapError> {
-    // Token-2022 uses the same close account instruction format
+    // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
     let token_2022_program_id = Pubkey::from_str(
         "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
     ).map_err(|e| SwapError::TransactionError(format!("Invalid Token-2022 program ID: {}", e)))?;
 
-    close_account(&token_2022_program_id, token_account, owner, owner, &[]).map_err(|e|
-        SwapError::TransactionError(format!("Failed to build Token-2022 close instruction: {}", e))
-    )
+    // Manually build the close account instruction for Token-2022
+    // CloseAccount instruction: [9] (instruction discriminator)
+    let instruction_data = vec![9u8]; // CloseAccount instruction ID
+
+    let accounts = vec![
+        AccountMeta::new(*token_account, false), // Token account to close
+        AccountMeta::new(*owner, false), // Destination for lamports
+        AccountMeta::new_readonly(*owner, true) // Authority (signer)
+    ];
+
+    Ok(Instruction {
+        program_id: token_2022_program_id,
+        accounts,
+        data: instruction_data,
+    })
 }

@@ -580,6 +580,19 @@ impl RpcClient {
         true
     }
 
+    /// Check if error is specifically a 429 rate limit error
+    fn is_rate_limit_error(error: &str) -> bool {
+        let error_lower = error.to_lowercase();
+        error_lower.contains("429") ||
+            error_lower.contains("too many requests") ||
+            error_lower.contains("rate limit")
+    }
+
+    /// Check if HTTP response indicates rate limiting
+    fn is_rate_limit_response(response: &reqwest::Response) -> bool {
+        response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+    }
+
     /// Get all available URLs (primary + fallbacks)
     pub fn get_all_urls(&self) -> Vec<String> {
         let mut urls = vec![self.rpc_url.clone()];
@@ -832,6 +845,8 @@ impl RpcClient {
             SwapError::ConfigError(e.to_string())
         )?;
 
+        let mut should_fallback = false;
+
         match
             client
                 .post(&configs.rpc_url)
@@ -840,7 +855,15 @@ impl RpcClient {
                 .send().await
         {
             Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit, falling back to premium"
+                    );
+                } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(value) = result.get("value") {
                             if let Some(balance_lamports) = value.as_u64() {
@@ -865,8 +888,30 @@ impl RpcClient {
                 }
             }
             Err(e) => {
-                log(LogTag::Rpc, "ERROR", &format!("Failed to get balance from main RPC: {}", e));
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get balance from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Err(SwapError::NetworkError(e));
+                }
             }
+        }
+
+        // Only fallback to premium RPC on 429/rate limit errors
+        if !should_fallback {
+            return Err(
+                SwapError::TransactionError("Failed to get balance from main RPC".to_string())
+            );
         }
 
         // Fallback to premium RPC
@@ -944,6 +989,8 @@ impl RpcClient {
             SwapError::ConfigError(e.to_string())
         )?;
 
+        let mut should_fallback = false;
+
         match
             client
                 .post(&configs.rpc_url)
@@ -952,7 +999,15 @@ impl RpcClient {
                 .send().await
         {
             Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for token balance, falling back to premium"
+                    );
+                } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(value) = result.get("value") {
                             if let Some(accounts) = value.as_array() {
@@ -993,17 +1048,39 @@ impl RpcClient {
                                     }
                                 }
                             }
+                            // No token account found, return 0 (don't fallback for missing accounts)
+                            self.record_call_for_url(
+                                &configs.rpc_url,
+                                "get_token_accounts_by_owner"
+                            );
+                            return Ok(0);
                         }
                     }
                 }
             }
             Err(e) => {
-                log(
-                    LogTag::Rpc,
-                    "ERROR",
-                    &format!("Failed to get token balance from main RPC: {}", e)
-                );
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for token balance: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get token balance from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Ok(0); // Return 0 for non-rate-limit errors
+                }
             }
+        }
+
+        // Only fallback to premium RPC on 429/rate limit errors
+        if !should_fallback {
+            return Ok(0); // Return 0 if main RPC failed for non-rate-limit reasons
         }
 
         // Fallback to premium RPC
@@ -1074,7 +1151,7 @@ impl RpcClient {
         Ok(0) // Return 0 if no token account found or all RPCs failed
     }
 
-    /// Get latest blockhash using premium RPC
+    /// Get latest blockhash using main RPC first
     pub async fn get_latest_blockhash(&self) -> Result<Hash, SwapError> {
         self.wait_for_rate_limit().await;
 
@@ -1092,22 +1169,30 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
 
-        // Use premium RPC URL first
+        // Use main RPC URL first
         let configs = read_configs("configs.json").map_err(|e|
             SwapError::ConfigError(e.to_string())
         )?;
 
-        let premium_rpc = &configs.rpc_url_premium;
+        let mut should_fallback = false;
 
         match
             client
-                .post(premium_rpc)
+                .post(&configs.rpc_url)
                 .header("Content-Type", "application/json")
                 .json(&rpc_payload)
                 .send().await
         {
             Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for blockhash, falling back to premium"
+                    );
+                } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                     if let Some(result) = rpc_response.get("result") {
                         if let Some(value) = result.get("value") {
                             if
@@ -1124,18 +1209,40 @@ impl RpcClient {
                 }
             }
             Err(e) => {
-                log(
-                    LogTag::Rpc,
-                    "ERROR",
-                    &format!("Failed to get latest blockhash from premium RPC: {}", e)
-                );
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for blockhash: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get latest blockhash from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Err(SwapError::NetworkError(e));
+                }
             }
         }
 
-        // Fallback to main RPC
+        // Only fallback to premium RPC on 429/rate limit errors
+        if !should_fallback {
+            return Err(
+                SwapError::TransactionError(
+                    "Failed to get latest blockhash from main RPC".to_string()
+                )
+            );
+        }
+
+        // Fallback to premium RPC
+        let premium_rpc = &configs.rpc_url_premium;
+
         match
             client
-                .post(&configs.rpc_url)
+                .post(premium_rpc)
                 .header("Content-Type", "application/json")
                 .json(&rpc_payload)
                 .send().await
@@ -1584,77 +1691,102 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
         let mut all_accounts = Vec::new();
+        let mut should_fallback = false;
 
-        // Try premium RPC first if available, then fallbacks
-        let mut rpc_endpoints = Vec::new();
-        if let Some(premium) = &self.premium_url {
-            if !premium.is_empty() {
-                rpc_endpoints.push(premium.as_str());
+        // Try main RPC first
+        for payload in [&spl_token_payload, &token_2022_payload] {
+            match
+                client
+                    .post(&self.rpc_url)
+                    .header("Content-Type", "application/json")
+                    .json(payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    // Check if response indicates rate limiting
+                    if Self::is_rate_limit_response(&response) {
+                        should_fallback = true;
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            "Main RPC returned 429 rate limit for token accounts, will fallback to premium"
+                        );
+                        break;
+                    } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(value) = result.get("value") {
+                                if let Some(accounts) = value.as_array() {
+                                    let is_token_2022 = payload == &token_2022_payload;
+                                    for account in accounts {
+                                        if
+                                            let Some(parsed_info) = extract_token_account_info(
+                                                account,
+                                                is_token_2022
+                                            )
+                                        {
+                                            all_accounts.push(parsed_info);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if Self::is_rate_limit_error(&error_msg) {
+                        should_fallback = true;
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            &format!("Main RPC rate limited for token accounts: {}, will fallback to premium", error_msg)
+                        );
+                        break;
+                    } else {
+                        log(
+                            LogTag::Rpc,
+                            "ERROR",
+                            &format!("Failed to get token accounts from main RPC (non-rate-limit): {}", error_msg)
+                        );
+                        return Err(SwapError::NetworkError(e));
+                    }
+                }
             }
         }
-        rpc_endpoints.push(&self.rpc_url);
-        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
 
-        for rpc_url in &rpc_endpoints {
-            // Get SPL Token accounts
-            if
-                let Ok(response) = client
-                    .post(*rpc_url)
-                    .header("Content-Type", "application/json")
-                    .json(&spl_token_payload)
-                    .send().await
-            {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(accounts) = value.as_array() {
-                                for account in accounts {
-                                    if
-                                        let Some(parsed_info) = extract_token_account_info(
-                                            account,
-                                            false
-                                        )
-                                    {
-                                        all_accounts.push(parsed_info);
+        // Only fallback to premium RPC on 429/rate limit errors
+        if should_fallback {
+            log(LogTag::Rpc, "INFO", "Falling back to premium RPC for token accounts");
+            if let Some(premium_url) = &self.premium_url {
+                for payload in [&spl_token_payload, &token_2022_payload] {
+                    if
+                        let Ok(response) = client
+                            .post(premium_url)
+                            .header("Content-Type", "application/json")
+                            .json(payload)
+                            .send().await
+                    {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(value) = result.get("value") {
+                                    if let Some(accounts) = value.as_array() {
+                                        let is_token_2022 = payload == &token_2022_payload;
+                                        for account in accounts {
+                                            if
+                                                let Some(parsed_info) = extract_token_account_info(
+                                                    account,
+                                                    is_token_2022
+                                                )
+                                            {
+                                                all_accounts.push(parsed_info);
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-
-            // Get Token-2022 accounts
-            if
-                let Ok(response) = client
-                    .post(*rpc_url)
-                    .header("Content-Type", "application/json")
-                    .json(&token_2022_payload)
-                    .send().await
-            {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(accounts) = value.as_array() {
-                                for account in accounts {
-                                    if
-                                        let Some(parsed_info) = extract_token_account_info(
-                                            account,
-                                            true
-                                        )
-                                    {
-                                        all_accounts.push(parsed_info);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If we got accounts from this RPC, break
-            if !all_accounts.is_empty() {
-                break;
             }
         }
 
@@ -1664,6 +1796,126 @@ impl RpcClient {
             &format!("Found {} total token accounts for wallet via RPC", all_accounts.len())
         );
         Ok(all_accounts)
+    }
+
+    /// Checks if a token account (not mint) is a Token-2022 account by checking the account owner
+    pub async fn is_token_account_token_2022(
+        &self,
+        token_account: &str
+    ) -> Result<bool, SwapError> {
+        // Record call in stats
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getAccountInfo");
+        }
+
+        let rpc_payload =
+            serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getAccountInfo",
+            "params": [
+                token_account,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let mut should_fallback = false;
+
+        // Try main RPC first
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for token account info, falling back to premium"
+                    );
+                } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(owner) = value.get("owner") {
+                                if let Some(owner_str) = owner.as_str() {
+                                    // Token Extensions Program ID (Token-2022)
+                                    return Ok(
+                                        owner_str == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for token account info: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get token account info from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Ok(false); // Default to false for non-rate-limit errors
+                }
+            }
+        }
+
+        // Only fallback to premium RPC on 429/rate limit errors
+        if should_fallback {
+            if let Some(premium_url) = &self.premium_url {
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
+                {
+                    Ok(response) => {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(value) = result.get("value") {
+                                    if let Some(owner) = value.get("owner") {
+                                        if let Some(owner_str) = owner.as_str() {
+                                            // Token Extensions Program ID (Token-2022)
+                                            return Ok(
+                                                owner_str ==
+                                                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            &format!("Failed to get token account info from premium RPC: {}", e)
+                        );
+                    }
+                }
+            }
+        }
+
+        // Default to false if we can't determine
+        Ok(false)
     }
 
     /// Checks if a mint is a Token-2022 mint by checking its owner program
@@ -1687,44 +1939,94 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
+        let mut should_fallback = false;
 
-        // Try premium RPC first if available, then fallbacks
-        let mut rpc_endpoints = Vec::new();
-        if let Some(premium) = &self.premium_url {
-            if !premium.is_empty() {
-                rpc_endpoints.push(premium.as_str());
-            }
-        }
-        rpc_endpoints.push(&self.rpc_url);
-        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
-
-        for rpc_url in rpc_endpoints {
-            match
-                client
-                    .post(rpc_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send().await
-            {
-                Ok(response) => {
-                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                        if let Some(result) = rpc_response.get("result") {
-                            if let Some(value) = result.get("value") {
-                                if let Some(owner) = value.get("owner") {
-                                    if let Some(owner_str) = owner.as_str() {
-                                        // Token Extensions Program ID (Token-2022)
-                                        return Ok(
-                                            owner_str ==
-                                                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-                                        );
-                                    }
+        // Try main RPC first
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for account info, falling back to premium"
+                    );
+                } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(owner) = value.get("owner") {
+                                if let Some(owner_str) = owner.as_str() {
+                                    // Token Extensions Program ID (Token-2022)
+                                    return Ok(
+                                        owner_str == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                    );
                                 }
                             }
                         }
                     }
                 }
-                Err(_) => {
-                    continue;
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for account info: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get account info from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Ok(false); // Default to false for non-rate-limit errors
+                }
+            }
+        }
+
+        // Only fallback to premium RPC on 429/rate limit errors
+        if should_fallback {
+            if let Some(premium_url) = &self.premium_url {
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
+                {
+                    Ok(response) => {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(value) = result.get("value") {
+                                    if let Some(owner) = value.get("owner") {
+                                        if let Some(owner_str) = owner.as_str() {
+                                            // Token Extensions Program ID (Token-2022)
+                                            return Ok(
+                                                owner_str ==
+                                                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            &format!("Failed to get account info from premium RPC: {}", e)
+                        );
+                    }
                 }
             }
         }
@@ -1758,30 +2060,26 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
+        let mut should_fallback = false;
 
-        // Try premium RPC first if available, then fallbacks
-        let mut rpc_endpoints = Vec::new();
-        if let Some(premium) = &self.premium_url {
-            if !premium.is_empty() {
-                rpc_endpoints.push(premium.as_str());
-            }
-        }
-        rpc_endpoints.push(&self.rpc_url);
-        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
-
-        for rpc_url in &rpc_endpoints {
-            match
-                client
-                    .post(*rpc_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send().await
-            {
-                Ok(response) => {
-                    if !response.status().is_success() {
-                        continue;
-                    }
-
+        // Try main RPC first
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for transaction details, falling back to premium"
+                    );
+                } else if response.status().is_success() {
                     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                         if let Some(error) = rpc_response.get("error") {
                             log(
@@ -1789,7 +2087,9 @@ impl RpcClient {
                                 "ERROR",
                                 &format!("RPC error getting transaction: {:?}", error)
                             );
-                            continue;
+                            return Err(
+                                SwapError::TransactionError(format!("RPC error: {:?}", error))
+                            );
                         }
 
                         if let Some(result) = rpc_response.get("result") {
@@ -1813,15 +2113,92 @@ impl RpcClient {
                         }
                     }
                 }
-                Err(_) => {
-                    continue;
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for transaction details: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get transaction details from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Err(SwapError::NetworkError(e));
+                }
+            }
+        }
+
+        // Only fallback to premium RPC on 429/rate limit errors
+        if should_fallback {
+            if let Some(premium_url) = &self.premium_url {
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                                if let Some(error) = rpc_response.get("error") {
+                                    log(
+                                        LogTag::Rpc,
+                                        "ERROR",
+                                        &format!(
+                                            "RPC error getting transaction from premium: {:?}",
+                                            error
+                                        )
+                                    );
+                                    return Err(
+                                        SwapError::TransactionError(
+                                            format!("RPC error: {:?}", error)
+                                        )
+                                    );
+                                }
+
+                                if let Some(result) = rpc_response.get("result") {
+                                    if result.is_null() {
+                                        return Err(
+                                            SwapError::TransactionError(
+                                                "Transaction not found or not confirmed yet".to_string()
+                                            )
+                                        );
+                                    }
+
+                                    let transaction_details: TransactionDetails = serde_json
+                                        ::from_value(result.clone())
+                                        .map_err(|e|
+                                            SwapError::InvalidResponse(
+                                                format!("Failed to parse transaction details: {}", e)
+                                            )
+                                        )?;
+
+                                    return Ok(transaction_details);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            &format!("Failed to get transaction details from premium RPC: {}", e)
+                        );
+                    }
                 }
             }
         }
 
         Err(
             SwapError::TransactionError(
-                "Failed to get transaction details from all RPC endpoints".to_string()
+                "Failed to get transaction details from main RPC".to_string()
             )
         )
     }
@@ -1854,35 +2231,88 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
+        let mut should_fallback = false;
 
-        // Try premium RPC first if available, then fallbacks
-        let mut rpc_endpoints = Vec::new();
-        if let Some(premium) = &self.premium_url {
-            if !premium.is_empty() {
-                rpc_endpoints.push(premium.as_str());
+        // Try main RPC first
+        match
+            client
+                .post(&self.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                // Check if response indicates rate limiting
+                if Self::is_rate_limit_response(&response) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        "Main RPC returned 429 rate limit for associated token account, falling back to premium"
+                    );
+                } else if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                if !accounts.is_empty() {
+                                    if let Some(account) = accounts.first() {
+                                        if let Some(pubkey) = account.get("pubkey") {
+                                            if let Some(pubkey_str) = pubkey.as_str() {
+                                                return Ok(pubkey_str.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // If no accounts found, this is not an error - return the standard error
+                    return Err(
+                        SwapError::InvalidResponse("No associated token account found".to_string())
+                    );
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if Self::is_rate_limit_error(&error_msg) {
+                    should_fallback = true;
+                    log(
+                        LogTag::Rpc,
+                        "WARNING",
+                        &format!("Main RPC rate limited for associated token account: {}, falling back to premium", error_msg)
+                    );
+                } else {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Failed to get associated token account from main RPC (non-rate-limit): {}", error_msg)
+                    );
+                    return Err(SwapError::NetworkError(e));
+                }
             }
         }
-        rpc_endpoints.push(&self.rpc_url);
-        rpc_endpoints.extend(self.fallback_urls.iter().map(|s| s.as_str()));
 
-        for rpc_url in rpc_endpoints {
-            match
-                client
-                    .post(rpc_url)
-                    .header("Content-Type", "application/json")
-                    .json(&rpc_payload)
-                    .send().await
-            {
-                Ok(response) => {
-                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                        if let Some(result) = rpc_response.get("result") {
-                            if let Some(value) = result.get("value") {
-                                if let Some(accounts) = value.as_array() {
-                                    if !accounts.is_empty() {
-                                        if let Some(account) = accounts.first() {
-                                            if let Some(pubkey) = account.get("pubkey") {
-                                                if let Some(pubkey_str) = pubkey.as_str() {
-                                                    return Ok(pubkey_str.to_string());
+        // Only fallback to premium RPC on 429/rate limit errors
+        if should_fallback {
+            if let Some(premium_url) = &self.premium_url {
+                match
+                    client
+                        .post(premium_url)
+                        .header("Content-Type", "application/json")
+                        .json(&rpc_payload)
+                        .send().await
+                {
+                    Ok(response) => {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(value) = result.get("value") {
+                                    if let Some(accounts) = value.as_array() {
+                                        if !accounts.is_empty() {
+                                            if let Some(account) = accounts.first() {
+                                                if let Some(pubkey) = account.get("pubkey") {
+                                                    if let Some(pubkey_str) = pubkey.as_str() {
+                                                        return Ok(pubkey_str.to_string());
+                                                    }
                                                 }
                                             }
                                         }
@@ -1891,9 +2321,13 @@ impl RpcClient {
                             }
                         }
                     }
-                }
-                Err(_) => {
-                    continue;
+                    Err(e) => {
+                        log(
+                            LogTag::Rpc,
+                            "WARNING",
+                            &format!("Failed to get associated token account from premium RPC: {}", e)
+                        );
+                    }
                 }
             }
         }
