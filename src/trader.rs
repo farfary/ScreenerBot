@@ -118,6 +118,57 @@ pub const PRICE_CACHE_LOCK_TIMEOUT_MS: u64 = 2000;
 /// Task collection timeout for concurrent operations (seconds)
 pub const TASK_COLLECTION_TIMEOUT_SECS: u64 = 120;
 
+/// Token check result collection timeout (seconds)
+pub const TOKEN_CHECK_COLLECTION_TIMEOUT_SECS: u64 = 120;
+
+/// Individual token check handle timeout (seconds)
+pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 120;
+
+/// Buy operations collection timeout (seconds)
+pub const BUY_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 120;
+
+/// Individual buy operation timeout (seconds)
+pub const BUY_OPERATION_TIMEOUT_SECS: u64 = 120;
+
+/// Sell operations collection timeout (seconds)
+pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 120;
+
+/// Individual sell operation timeout (seconds)
+pub const SELL_OPERATION_TIMEOUT_SECS: u64 = 120;
+
+/// Sell semaphore acquire timeout (seconds)
+pub const SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 5;
+
+/// Buy semaphore acquire timeout (seconds)
+pub const BUY_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 120;
+
+/// Individual sell task handle timeout (seconds)
+pub const SELL_TASK_HANDLE_TIMEOUT_SECS: u64 = 120;
+
+/// Entry monitor cycle timeout warning threshold (seconds)
+pub const ENTRY_CYCLE_TIMEOUT_WARNING_SECS: u64 = 5;
+
+/// Entry monitor cycle minimum wait time (milliseconds)
+pub const ENTRY_CYCLE_MIN_WAIT_MS: u64 = 100;
+
+/// Token processing shutdown check delay (milliseconds)
+pub const TOKEN_PROCESSING_SHUTDOWN_CHECK_MS: u64 = 10;
+
+/// Task shutdown check delay (milliseconds)
+pub const TASK_SHUTDOWN_CHECK_MS: u64 = 1;
+
+/// Buy operation shutdown check delay (milliseconds)
+pub const BUY_OPERATION_SHUTDOWN_CHECK_MS: u64 = 1;
+
+/// Sell operation shutdown check delay (milliseconds)
+pub const SELL_OPERATION_SHUTDOWN_CHECK_MS: u64 = 1;
+
+/// Collection shutdown check delay (milliseconds)
+pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
+
+/// Trader graceful shutdown timeout (seconds)
+pub const TRADER_GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 5;
+
 // -----------------------------------------------------------------------------
 // Wallet Management Configuration
 // -----------------------------------------------------------------------------
@@ -1332,7 +1383,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         });
 
         // Safety check - if processing is taking too long, log it
-        if cycle_start.elapsed() > Duration::from_secs(5) {
+        if cycle_start.elapsed() > Duration::from_secs(ENTRY_CYCLE_TIMEOUT_WARNING_SECS) {
             log(
                 LogTag::Trader,
                 "WARN",
@@ -1374,7 +1425,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Calculate how long we've spent in this cycle
             let cycle_duration = cycle_start.elapsed();
             let wait_time = if cycle_duration >= Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) {
-                Duration::from_millis(100)
+                Duration::from_millis(ENTRY_CYCLE_MIN_WAIT_MS)
             } else {
                 Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
             };
@@ -1430,7 +1481,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Note: tokens are still sorted by liquidity from highest to lowest
         for (index, token) in tokens.iter().enumerate() {
             // Check for shutdown before spawning tasks
-            if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
+            if
+                check_shutdown_or_delay(
+                    &shutdown,
+                    Duration::from_millis(TOKEN_PROCESSING_SHUTDOWN_CHECK_MS)
+                ).await
+            {
                 log(LogTag::Trader, "INFO", "new entries monitor shutting down...");
                 break 'outer;
             }
@@ -1471,7 +1527,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 let _permit = permit; // This will be automatically dropped when the task completes
 
                 // Check for shutdown before starting task
-                if check_shutdown_or_delay(&shutdown_clone, Duration::from_millis(1)).await {
+                if
+                    check_shutdown_or_delay(
+                        &shutdown_clone,
+                        Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
+                    ).await
+                {
                     return None;
                 }
 
@@ -1543,7 +1604,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             if
                                 check_shutdown_or_delay(
                                     &shutdown_clone,
-                                    Duration::from_millis(1)
+                                    Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
                                 ).await
                             {
                                 return None;
@@ -1601,7 +1662,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             if
                                 check_shutdown_or_delay(
                                     &shutdown_clone,
-                                    Duration::from_millis(1)
+                                    Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
                                 ).await
                             {
                                 return None;
@@ -1810,7 +1871,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     if
                                         check_shutdown_or_delay(
                                             &shutdown_clone,
-                                            Duration::from_millis(1)
+                                            Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
                                         ).await
                                     {
                                         return None;
@@ -1914,7 +1975,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 if
                                     check_shutdown_or_delay(
                                         &shutdown_clone,
-                                        Duration::from_millis(1)
+                                        Duration::from_millis(TASK_SHUTDOWN_CHECK_MS)
                                     ).await
                                 {
                                     if is_debug_entry_enabled() {
@@ -2026,57 +2087,74 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         );
 
         // Process the results of all tasks with overall timeout
-        let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
-            // This maintains the priority of processing high-liquidity tokens first
-            log(
-                LogTag::Trader,
-                "INFO",
-                &format!("Waiting for {} token checks to complete", handles.len())
-                    .dimmed()
-                    .to_string()
-            );
+        let collection_result = tokio::time::timeout(
+            Duration::from_secs(TOKEN_CHECK_COLLECTION_TIMEOUT_SECS),
+            async {
+                // This maintains the priority of processing high-liquidity tokens first
+                log(
+                    LogTag::Trader,
+                    "INFO",
+                    &format!("Waiting for {} token checks to complete", handles.len())
+                        .dimmed()
+                        .to_string()
+                );
 
-            let mut opportunities = Vec::new();
+                let mut opportunities = Vec::new();
 
-            for handle in handles {
-                // Skip any tasks that failed or if shutdown signal received
-                if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
-                    log(
-                        LogTag::Trader,
-                        "INFO",
-                        "new entries monitor shutting down during result collection..."
-                    );
-                    return opportunities; // Return what we have so far
-                }
+                for handle in handles {
+                    // Skip any tasks that failed or if shutdown signal received
+                    if
+                        check_shutdown_or_delay(
+                            &shutdown,
+                            Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                        ).await
+                    {
+                        log(
+                            LogTag::Trader,
+                            "INFO",
+                            "new entries monitor shutting down during result collection..."
+                        );
+                        return opportunities; // Return what we have so far
+                    }
 
-                // Add timeout for each handle to prevent getting stuck on a single task
-                match tokio::time::timeout(Duration::from_secs(120), handle).await {
-                    Ok(task_result) => {
-                        match task_result {
-                            Ok(Some((token, price, percent_change))) => {
-                                opportunities.push((token, price, percent_change));
-                            }
-                            Ok(None) => {
-                                // No opportunity found for this token, continue
-                            }
-                            Err(e) => {
-                                log(
-                                    LogTag::Trader,
-                                    "ERROR",
-                                    &format!("Token check task failed: {}", e)
-                                );
+                    // Add timeout for each handle to prevent getting stuck on a single task
+                    match
+                        tokio::time::timeout(
+                            Duration::from_secs(TOKEN_CHECK_HANDLE_TIMEOUT_SECS),
+                            handle
+                        ).await
+                    {
+                        Ok(task_result) => {
+                            match task_result {
+                                Ok(Some((token, price, percent_change))) => {
+                                    opportunities.push((token, price, percent_change));
+                                }
+                                Ok(None) => {
+                                    // No opportunity found for this token, continue
+                                }
+                                Err(e) => {
+                                    log(
+                                        LogTag::Trader,
+                                        "ERROR",
+                                        &format!("Token check task failed: {}", e)
+                                    );
+                                }
                             }
                         }
-                    }
-                    Err(_) => {
-                        // Task timed out after 5 seconds
-                        log(LogTag::Trader, "WARN", "Token check task timed out after 5 seconds");
+                        Err(_) => {
+                            // Task timed out after 5 seconds
+                            log(
+                                LogTag::Trader,
+                                "WARN",
+                                "Token check task timed out after 5 seconds"
+                            );
+                        }
                     }
                 }
-            }
 
-            opportunities
-        }).await;
+                opportunities
+            }
+        ).await;
 
         let mut opportunities = match collection_result {
             Ok(opportunities) => opportunities,
@@ -2255,7 +2333,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 // Process all buy orders concurrently
                 for (token, price, percent_change) in opportunities_to_process {
                     // Check for shutdown before spawning tasks
-                    if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                    if
+                        check_shutdown_or_delay(
+                            &shutdown,
+                            Duration::from_millis(BUY_OPERATION_SHUTDOWN_CHECK_MS)
+                        ).await
+                    {
                         log(
                             LogTag::Trader,
                             "INFO",
@@ -2267,7 +2350,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     // Get permit from semaphore to limit concurrency with timeout
                     let permit = match
                         tokio::time::timeout(
-                            Duration::from_secs(120),
+                            Duration::from_secs(BUY_SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
                             semaphore.clone().acquire_owned()
                         ).await
                     {
@@ -2299,7 +2382,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Check for shutdown before starting buy operation (non-blocking check)
                         let shutdown_check = tokio::time::timeout(
-                            Duration::from_millis(1),
+                            Duration::from_millis(BUY_OPERATION_SHUTDOWN_CHECK_MS),
                             shutdown_for_task.notified()
                         ).await;
                         if shutdown_check.is_ok() {
@@ -2313,9 +2396,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Wrap the buy operation in a timeout
                         match
-                            tokio::time::timeout(Duration::from_secs(120), async {
-                                open_position(&token, price, percent_change).await
-                            }).await
+                            tokio::time::timeout(
+                                Duration::from_secs(BUY_OPERATION_TIMEOUT_SECS),
+                                async {
+                                    open_position(&token, price, percent_change).await
+                                }
+                            ).await
                         {
                             Ok(_) => {
                                 log(
@@ -2346,59 +2432,80 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 );
 
                 // Collect results from all concurrent buy operations with overall timeout
-                let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
-                    let mut completed = 0;
-                    let mut successful = 0;
-                    let total_handles = handles.len();
+                let collection_result = tokio::time::timeout(
+                    Duration::from_secs(BUY_OPERATIONS_COLLECTION_TIMEOUT_SECS),
+                    async {
+                        let mut completed = 0;
+                        let mut successful = 0;
+                        let total_handles = handles.len();
 
-                    for handle in handles {
-                        // Skip if shutdown signal received
-                        if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
-                            log(
-                                LogTag::Trader,
-                                "INFO",
-                                "new entries monitor shutting down during buy result collection..."
-                            );
-                            break;
-                        }
+                        for handle in handles {
+                            // Skip if shutdown signal received
+                            if
+                                check_shutdown_or_delay(
+                                    &shutdown,
+                                    Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                                ).await
+                            {
+                                log(
+                                    LogTag::Trader,
+                                    "INFO",
+                                    "new entries monitor shutting down during buy result collection..."
+                                );
+                                break;
+                            }
 
-                        // Add timeout for each handle to prevent getting stuck
-                        match tokio::time::timeout(Duration::from_secs(120), handle).await {
-                            Ok(task_result) => {
-                                match task_result {
-                                    Ok(success) => {
-                                        if success {
-                                            successful += 1;
+                            // Add timeout for each handle to prevent getting stuck
+                            match
+                                tokio::time::timeout(
+                                    Duration::from_secs(BUY_OPERATION_TIMEOUT_SECS),
+                                    handle
+                                ).await
+                            {
+                                Ok(task_result) => {
+                                    match task_result {
+                                        Ok(success) => {
+                                            if success {
+                                                successful += 1;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log(
+                                                LogTag::Trader,
+                                                "ERROR",
+                                                &format!("Buy task failed: {}", e)
+                                            );
                                         }
                                     }
-                                    Err(e) => {
-                                        log(
-                                            LogTag::Trader,
-                                            "ERROR",
-                                            &format!("Buy task failed: {}", e)
-                                        );
-                                    }
+                                }
+                                Err(_) => {
+                                    log(
+                                        LogTag::Trader,
+                                        "WARN",
+                                        "Buy task timed out after 5 seconds"
+                                    );
                                 }
                             }
-                            Err(_) => {
-                                log(LogTag::Trader, "WARN", "Buy task timed out after 5 seconds");
+
+                            completed += 1;
+                            if completed % 2 == 0 || completed == total_handles {
+                                log(
+                                    LogTag::Trader,
+                                    "INFO",
+                                    &format!(
+                                        "Completed {}/{} buy operations",
+                                        completed,
+                                        total_handles
+                                    )
+                                        .dimmed()
+                                        .to_string()
+                                );
                             }
                         }
 
-                        completed += 1;
-                        if completed % 2 == 0 || completed == total_handles {
-                            log(
-                                LogTag::Trader,
-                                "INFO",
-                                &format!("Completed {}/{} buy operations", completed, total_handles)
-                                    .dimmed()
-                                    .to_string()
-                            );
-                        }
+                        (completed, successful)
                     }
-
-                    (completed, successful)
-                }).await;
+                ).await;
 
                 match collection_result {
                     Ok((completed, successful)) => {
@@ -2434,7 +2541,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 "WARN",
                 &format!("Token checking cycle took longer than interval: {:?}", cycle_duration)
             );
-            Duration::from_millis(100)
+            Duration::from_millis(ENTRY_CYCLE_MIN_WAIT_MS)
         } else {
             // Otherwise wait for the remaining interval time
             Duration::from_secs(ENTRY_MONITOR_INTERVAL_SECS) - cycle_duration
@@ -2679,7 +2786,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             // Process all sell orders concurrently
             for (index, position, token, exit_price, exit_time) in positions_to_close {
                 // Check for shutdown before spawning tasks
-                if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
+                if
+                    check_shutdown_or_delay(
+                        &shutdown,
+                        Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS)
+                    ).await
+                {
                     log(
                         LogTag::Trader,
                         "INFO",
@@ -2691,7 +2803,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 // Get permit from semaphore to limit concurrency with timeout
                 let permit = match
                     tokio::time::timeout(
-                        Duration::from_secs(5),
+                        Duration::from_secs(SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
                         semaphore.clone().acquire_owned()
                     ).await
                 {
@@ -2749,7 +2861,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     // Check for shutdown before starting sell operation (non-blocking check)
                     let shutdown_check = tokio::time::timeout(
-                        Duration::from_millis(1),
+                        Duration::from_millis(SELL_OPERATION_SHUTDOWN_CHECK_MS),
                         shutdown_for_task.notified()
                     ).await;
                     if shutdown_check.is_ok() {
@@ -2763,9 +2875,12 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
                     // Wrap the sell operation in a timeout
                     match
-                        tokio::time::timeout(Duration::from_secs(120), async {
-                            close_position(&mut position, &token, exit_price, exit_time).await
-                        }).await
+                        tokio::time::timeout(
+                            Duration::from_secs(SELL_OPERATION_TIMEOUT_SECS),
+                            async {
+                                close_position(&mut position, &token, exit_price, exit_time).await
+                            }
+                        ).await
                     {
                         Ok(success) => {
                             if success {
@@ -2806,48 +2921,61 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
 
             // Collect results from all concurrent sell operations with overall timeout
             // Increased timeout to 60 seconds to accommodate multiple 15-second sell operations
-            let collection_result = tokio::time::timeout(Duration::from_secs(120), async {
-                let mut completed_positions = Vec::new();
+            let collection_result = tokio::time::timeout(
+                Duration::from_secs(SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS),
+                async {
+                    let mut completed_positions = Vec::new();
 
-                for handle in handles {
-                    // Skip if shutdown signal received
-                    if check_shutdown_or_delay(&shutdown, Duration::from_millis(1)).await {
-                        log(
-                            LogTag::Trader,
-                            "INFO",
-                            "open positions monitor shutting down during sell result collection..."
-                        );
-                        break;
-                    }
+                    for handle in handles {
+                        // Skip if shutdown signal received
+                        if
+                            check_shutdown_or_delay(
+                                &shutdown,
+                                Duration::from_millis(COLLECTION_SHUTDOWN_CHECK_MS)
+                            ).await
+                        {
+                            log(
+                                LogTag::Trader,
+                                "INFO",
+                                "open positions monitor shutting down during sell result collection..."
+                            );
+                            break;
+                        }
 
-                    // Add timeout for each handle to prevent getting stuck
-                    // Increased timeout to 15 seconds to allow for transaction verification and ATA closing
-                    match tokio::time::timeout(Duration::from_secs(120), handle).await {
-                        Ok(task_result) => {
-                            match task_result {
-                                Ok(Some((index, updated_position))) => {
-                                    completed_positions.push((index, updated_position));
-                                }
-                                Ok(None) => {
-                                    // Position failed to close, continue
-                                }
-                                Err(e) => {
-                                    log(
-                                        LogTag::Trader,
-                                        "ERROR",
-                                        &format!("Sell task failed: {}", e)
-                                    );
+                        // Add timeout for each handle to prevent getting stuck
+                        // Increased timeout to 15 seconds to allow for transaction verification and ATA closing
+                        match
+                            tokio::time::timeout(
+                                Duration::from_secs(SELL_TASK_HANDLE_TIMEOUT_SECS),
+                                handle
+                            ).await
+                        {
+                            Ok(task_result) => {
+                                match task_result {
+                                    Ok(Some((index, updated_position))) => {
+                                        completed_positions.push((index, updated_position));
+                                    }
+                                    Ok(None) => {
+                                        // Position failed to close, continue
+                                    }
+                                    Err(e) => {
+                                        log(
+                                            LogTag::Trader,
+                                            "ERROR",
+                                            &format!("Sell task failed: {}", e)
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        Err(_) => {
-                            log(LogTag::Trader, "WARN", "Sell task timed out after 60 seconds");
+                            Err(_) => {
+                                log(LogTag::Trader, "WARN", "Sell task timed out after 60 seconds");
+                            }
                         }
                     }
-                }
 
-                completed_positions
-            }).await;
+                    completed_positions
+                }
+            ).await;
 
             let completed_positions = match collection_result {
                 Ok(positions) => positions,
@@ -2920,9 +3048,12 @@ pub async fn trader(shutdown: Arc<Notify>) {
     log(LogTag::Trader, "INFO", "Trader shutting down...");
 
     // Give tasks a chance to shutdown gracefully
-    let graceful_timeout = tokio::time::timeout(Duration::from_secs(5), async {
-        let _ = tokio::try_join!(entries_task, positions_task, display_task);
-    });
+    let graceful_timeout = tokio::time::timeout(
+        Duration::from_secs(TRADER_GRACEFUL_SHUTDOWN_TIMEOUT_SECS),
+        async {
+            let _ = tokio::try_join!(entries_task, positions_task, display_task);
+        }
+    );
 
     match graceful_timeout.await {
         Ok(_) => {
