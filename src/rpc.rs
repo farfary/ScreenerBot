@@ -158,6 +158,8 @@ pub struct RpcStats {
     pub calls_per_url: HashMap<String, u64>,
     /// Total calls per RPC method
     pub calls_per_method: HashMap<String, u64>,
+    /// Method calls per URL (URL -> Method -> Count)
+    pub calls_per_url_per_method: HashMap<String, HashMap<String, u64>>,
     /// Statistics since startup
     pub startup_time: DateTime<Utc>,
     /// Last save time
@@ -169,6 +171,7 @@ impl Default for RpcStats {
         Self {
             calls_per_url: HashMap::new(),
             calls_per_method: HashMap::new(),
+            calls_per_url_per_method: HashMap::new(),
             startup_time: Utc::now(),
             last_save_time: Utc::now(),
         }
@@ -180,6 +183,16 @@ impl RpcStats {
     pub fn record_call(&mut self, url: &str, method: &str) {
         *self.calls_per_url.entry(url.to_string()).or_insert(0) += 1;
         *self.calls_per_method.entry(method.to_string()).or_insert(0) += 1;
+
+        // Track method calls per URL
+        self.calls_per_url_per_method
+            .entry(url.to_string())
+            .or_insert_with(HashMap::new)
+            .entry(method.to_string())
+            .and_modify(|count| {
+                *count += 1;
+            })
+            .or_insert(1);
     }
 
     /// Get total calls across all URLs
@@ -196,6 +209,16 @@ impl RpcStats {
         } else {
             0.0
         }
+    }
+
+    /// Get method calls for a specific URL
+    pub fn get_method_calls_for_url(&self, url: &str) -> HashMap<String, u64> {
+        self.calls_per_url_per_method.get(url).cloned().unwrap_or_default()
+    }
+
+    /// Get all URLs that have method call data
+    pub fn get_urls_with_method_data(&self) -> Vec<String> {
+        self.calls_per_url_per_method.keys().cloned().collect()
     }
 
     /// Check if it's time to save (3 seconds since last save)
@@ -238,6 +261,16 @@ impl RpcStats {
                         // Merge method stats
                         for (method, count) in loaded_stats.calls_per_method {
                             *self.calls_per_method.entry(method).or_insert(0) += count;
+                        }
+
+                        // Merge method calls per URL stats
+                        for (url, method_counts) in loaded_stats.calls_per_url_per_method {
+                            let url_entry = self.calls_per_url_per_method
+                                .entry(url)
+                                .or_insert_with(HashMap::new);
+                            for (method, count) in method_counts {
+                                *url_entry.entry(method).or_insert(0) += count;
+                            }
                         }
 
                         log(
@@ -772,7 +805,7 @@ impl RpcClient {
             .map_err(|e| format!("Task error: {}", e))?
     }
 
-    /// Get SOL balance for wallet address using premium RPC
+    /// Get SOL balance for wallet address using main RPC first
     pub async fn get_sol_balance(&self, wallet_address: &str) -> Result<f64, SwapError> {
         self.wait_for_rate_limit().await;
 
@@ -794,11 +827,49 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
 
-        // Use premium RPC URL first
+        // Use main RPC URL first
         let configs = read_configs("configs.json").map_err(|e|
             SwapError::ConfigError(e.to_string())
         )?;
 
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(balance_lamports) = value.as_u64() {
+                                let balance_sol = lamports_to_sol(balance_lamports);
+                                if is_debug_wallet_enabled() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "DEBUG",
+                                        &format!(
+                                            "SOL balance retrieved: {} lamports ({:.6} SOL) from main RPC",
+                                            balance_lamports,
+                                            balance_sol
+                                        )
+                                    );
+                                }
+                                // Record successful main RPC call
+                                self.record_call_for_url(&configs.rpc_url, "get_balance");
+                                return Ok(balance_sol);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::Rpc, "ERROR", &format!("Failed to get balance from main RPC: {}", e));
+            }
+        }
+
+        // Fallback to premium RPC
         let premium_rpc = &configs.rpc_url_premium;
 
         match
@@ -834,48 +905,6 @@ impl RpcClient {
                 }
             }
             Err(e) => {
-                log(
-                    LogTag::Rpc,
-                    "ERROR",
-                    &format!("Failed to get balance from premium RPC: {}", e)
-                );
-            }
-        }
-
-        // Fallback to main RPC
-        match
-            client
-                .post(&configs.rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(balance_lamports) = value.as_u64() {
-                                let balance_sol = lamports_to_sol(balance_lamports);
-                                if is_debug_wallet_enabled() {
-                                    log(
-                                        LogTag::Rpc,
-                                        "DEBUG",
-                                        &format!(
-                                            "SOL balance retrieved: {} lamports ({:.6} SOL) from main RPC",
-                                            balance_lamports,
-                                            balance_sol
-                                        )
-                                    );
-                                }
-                                // Record successful main RPC call
-                                self.record_call_for_url(&configs.rpc_url, "get_balance");
-                                return Ok(balance_sol);
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
                 return Err(SwapError::NetworkError(e));
             }
         }
@@ -883,7 +912,7 @@ impl RpcClient {
         Err(SwapError::TransactionError("Failed to get balance from all RPC endpoints".to_string()))
     }
 
-    /// Get token balance for wallet address using premium RPC
+    /// Get token balance for wallet address using main RPC first
     pub async fn get_token_balance(
         &self,
         wallet_address: &str,
@@ -910,11 +939,74 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
 
-        // Use premium RPC URL first
+        // Use main RPC URL first
         let configs = read_configs("configs.json").map_err(|e|
             SwapError::ConfigError(e.to_string())
         )?;
 
+        match
+            client
+                .post(&configs.rpc_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send().await
+        {
+            Ok(response) => {
+                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                    if let Some(result) = rpc_response.get("result") {
+                        if let Some(value) = result.get("value") {
+                            if let Some(accounts) = value.as_array() {
+                                if let Some(account) = accounts.first() {
+                                    if let Some(account_data) = account.get("account") {
+                                        if let Some(data) = account_data.get("data") {
+                                            if let Some(parsed) = data.get("parsed") {
+                                                if let Some(info) = parsed.get("info") {
+                                                    if
+                                                        let Some(token_amount) =
+                                                            info.get("tokenAmount")
+                                                    {
+                                                        if
+                                                            let Some(amount_str) =
+                                                                token_amount.get("amount")
+                                                        {
+                                                            if
+                                                                let Some(amount_str) =
+                                                                    amount_str.as_str()
+                                                            {
+                                                                if
+                                                                    let Ok(amount) =
+                                                                        amount_str.parse::<u64>()
+                                                                {
+                                                                    // Record successful main RPC call
+                                                                    self.record_call_for_url(
+                                                                        &configs.rpc_url,
+                                                                        "get_token_accounts_by_owner"
+                                                                    );
+                                                                    return Ok(amount);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Rpc,
+                    "ERROR",
+                    &format!("Failed to get token balance from main RPC: {}", e)
+                );
+            }
+        }
+
+        // Fallback to premium RPC
         let premium_rpc = &configs.rpc_url_premium;
 
         match
@@ -973,71 +1065,8 @@ impl RpcClient {
             Err(e) => {
                 log(
                     LogTag::Rpc,
-                    "ERROR",
-                    &format!("Failed to get token balance from premium RPC: {}", e)
-                );
-            }
-        }
-
-        // Fallback to main RPC
-        match
-            client
-                .post(&configs.rpc_url)
-                .header("Content-Type", "application/json")
-                .json(&rpc_payload)
-                .send().await
-        {
-            Ok(response) => {
-                if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
-                    if let Some(result) = rpc_response.get("result") {
-                        if let Some(value) = result.get("value") {
-                            if let Some(accounts) = value.as_array() {
-                                if let Some(account) = accounts.first() {
-                                    if let Some(account_data) = account.get("account") {
-                                        if let Some(data) = account_data.get("data") {
-                                            if let Some(parsed) = data.get("parsed") {
-                                                if let Some(info) = parsed.get("info") {
-                                                    if
-                                                        let Some(token_amount) =
-                                                            info.get("tokenAmount")
-                                                    {
-                                                        if
-                                                            let Some(amount_str) =
-                                                                token_amount.get("amount")
-                                                        {
-                                                            if
-                                                                let Some(amount_str) =
-                                                                    amount_str.as_str()
-                                                            {
-                                                                if
-                                                                    let Ok(amount) =
-                                                                        amount_str.parse::<u64>()
-                                                                {
-                                                                    // Record successful main RPC call
-                                                                    self.record_call_for_url(
-                                                                        &configs.rpc_url,
-                                                                        "get_token_accounts_by_owner"
-                                                                    );
-                                                                    return Ok(amount);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Rpc,
                     "WARNING",
-                    &format!("Failed to get token balance from main RPC: {}", e)
+                    &format!("Failed to get token balance from premium RPC: {}", e)
                 );
             }
         }
