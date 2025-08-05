@@ -203,7 +203,7 @@ use crate::utils::*;
 use crate::filtering::{ should_buy_token, log_filtering_summary };
 use crate::tokens::get_token_rugcheck_data_safe;
 use crate::tokens::rugcheck::{ is_token_safe_for_trading, get_high_risk_issues };
-use crate::entry::{ should_buy_simple };
+use crate::entry::{ should_buy };
 
 // =============================================================================
 // IMPORTS AND DEPENDENCIES
@@ -441,7 +441,7 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     }
 
     // Simple entry analysis
-    let is_safe_for_entry = should_buy_simple(token);
+    let is_safe_for_entry = should_buy(token).await;
 
     if !is_safe_for_entry {
         if is_debug_trader_enabled() {

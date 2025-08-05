@@ -276,6 +276,7 @@ pub struct PoolPriceService {
     price_cache: Arc<RwLock<HashMap<String, PoolPriceResult>>>,
     availability_cache: Arc<RwLock<HashMap<String, TokenAvailability>>>,
     watch_list: Arc<RwLock<HashMap<String, WatchListEntry>>>,
+    price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
     monitoring_active: Arc<RwLock<bool>>,
 }
 
@@ -287,6 +288,7 @@ impl PoolPriceService {
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             availability_cache: Arc::new(RwLock::new(HashMap::new())),
             watch_list: Arc::new(RwLock::new(HashMap::new())),
+            price_history: Arc::new(RwLock::new(HashMap::new())),
             monitoring_active: Arc::new(RwLock::new(false)),
         }
     }
@@ -493,6 +495,38 @@ impl PoolPriceService {
         if watch_list.remove(token_address).is_some() {
             log(LogTag::Pool, "UNWATCH", &format!("Removed {} from watch list", token_address));
         }
+    }
+
+    /// Get recent price history for a token
+    pub async fn get_recent_price_history(&self, token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
+        let history = self.price_history.read().await;
+        history.get(token_address).cloned().unwrap_or_default()
+    }
+
+    /// Add price to history (called internally when prices are updated)
+    async fn add_price_to_history(&self, token_address: &str, price: f64) {
+        let mut history = self.price_history.write().await;
+        let entry = history.entry(token_address.to_string()).or_insert_with(Vec::new);
+
+        entry.push((Utc::now(), price));
+
+        // Keep only last 10 price points for -10% drop detection
+        if entry.len() > 10 {
+            entry.remove(0);
+        }
+    }
+
+    /// Clean up old price history entries
+    async fn cleanup_price_history(&self) {
+        let mut history = self.price_history.write().await;
+        let cutoff = Utc::now() - chrono::Duration::hours(1); // Keep 1 hour of history
+
+        for entry in history.values_mut() {
+            entry.retain(|(timestamp, _)| *timestamp > cutoff);
+        }
+
+        // Remove empty entries
+        history.retain(|_, entry| !entry.is_empty());
     }
 
     /// Get pool price for a token (main entry point)
@@ -717,6 +751,25 @@ impl PoolPriceService {
                                 LogTag::Pool,
                                 "WATCH_SUCCESS",
                                 &format!("✅ Updated watch list timestamp for {} after successful price retrieval", token_address)
+                            );
+                        }
+                    }
+                }
+
+                // Add price to history for -10% drop detection
+                if let Some(price_sol) = pool_result.price_sol {
+                    if price_sol > 0.0 && price_sol.is_finite() {
+                        self.add_price_to_history(token_address, price_sol).await;
+
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "HISTORY_ADD",
+                                &format!(
+                                    "📈 Added price {:.12} SOL to history for {}",
+                                    price_sol,
+                                    token_address
+                                )
                             );
                         }
                     }

@@ -15,6 +15,65 @@ use screenerbot::{
 use std::env;
 use tokio;
 
+/// Print comprehensive help menu for the Debug Swap Tool
+fn print_help() {
+    println!("🚀 Debug Swap Tool");
+    println!("=====================================");
+    println!("Comprehensive testing and debugging tool for swap operations with detailed");
+    println!("wallet balance tracking, transaction analysis, and ATA detection validation.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_debug_swap -- <TOKEN_MINT> [OPTIONS]");
+    println!("");
+    println!("ARGUMENTS:");
+    println!("    <TOKEN_MINT>       Token mint address to test swaps with");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h         Show this help message");
+    println!("    --debug-swap       Enable detailed swap operation logging");
+    println!("    --debug-wallet     Enable detailed wallet balance tracking");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Test basic swap with USDC");
+    println!("    cargo run --bin tool_debug_swap -- EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    println!("");
+    println!("    # Full debug mode with detailed logging");
+    println!(
+        "    cargo run --bin tool_debug_swap -- EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v --debug-swap --debug-wallet"
+    );
+    println!("");
+    println!("    # Test with a specific token (example: Bonk)");
+    println!(
+        "    cargo run --bin tool_debug_swap -- DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 --debug-swap"
+    );
+    println!("");
+    println!("TESTING WORKFLOW:");
+    println!("    1. Validates token metadata and price data");
+    println!("    2. Records initial wallet balances (SOL + tokens)");
+    println!("    3. Executes buy transaction with {:.6} SOL", TEST_SOL_AMOUNT);
+    println!("    4. Analyzes transaction for ATA detection accuracy");
+    println!("    5. Validates post-buy balances and token acquisition");
+    println!("    6. Executes sell transaction with acquired tokens");
+    println!("    7. Analyzes sell transaction and ATA rent recovery");
+    println!("    8. Compares final vs initial balances");
+    println!("");
+    println!("SAFETY FEATURES:");
+    println!("    • Small test amount ({:.6} SOL) to minimize risk", TEST_SOL_AMOUNT);
+    println!("    • {}% maximum slippage protection", MAX_PRICE_SLIPPAGE);
+    println!("    • Comprehensive balance validation at each step");
+    println!("    • Automatic ATA detection and rent calculation");
+    println!("    • Transaction failure analysis and recovery");
+    println!("");
+    println!("DEBUG OUTPUT:");
+    println!("    • Token metadata and price information");
+    println!("    • Detailed wallet balance changes");
+    println!("    • Transaction signatures and confirmation status");
+    println!("    • ATA detection confidence scores");
+    println!("    • Effective price calculations and slippage analysis");
+    println!("    • P&L breakdown including ATA rent recovery");
+    println!("");
+}
+
 /// Test configuration
 const TEST_SOL_AMOUNT: f64 = 0.001; // 0.001 SOL for testing
 const MAX_PRICE_SLIPPAGE: f64 = 10.0; // 10% maximum acceptable slippage
@@ -26,13 +85,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Parse command line arguments
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <TOKEN_MINT_ADDRESS> [--debug-swap] [--debug-wallet]", args[0]);
-        eprintln!(
-            "Example: {} EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v --debug-swap --debug-wallet",
-            args[0]
-        );
-        std::process::exit(1);
+
+    // Check for help flag
+    if args.len() < 2 || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        if args.len() < 2 {
+            std::process::exit(1);
+        } else {
+            std::process::exit(0);
+        }
     }
 
     let token_mint = &args[1];

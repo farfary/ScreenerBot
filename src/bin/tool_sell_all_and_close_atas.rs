@@ -35,6 +35,59 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use futures::stream::{ self, StreamExt };
 
+/// Print comprehensive help menu for the Sell All and Close ATAs Tool
+fn print_help() {
+    println!("💰 Sell All Tokens and Close ATAs Tool");
+    println!("=====================================");
+    println!("Comprehensive wallet cleanup utility that sells all tokens for SOL and");
+    println!("closes all Associated Token Accounts (ATAs) to reclaim rent SOL.");
+    println!("");
+    println!("⚠️  WARNING: This tool will attempt to sell ALL tokens in your wallet!");
+    println!("    Use with extreme caution and understand the risks involved.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_sell_all_and_close_atas [OPTIONS]");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h          Show this help message");
+    println!("    --dry-run, -d      Simulate operations without executing transactions");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Simulate cleanup to see what would happen");
+    println!("    cargo run --bin tool_sell_all_and_close_atas -- --dry-run");
+    println!("");
+    println!("    # Execute full wallet cleanup (DANGEROUS)");
+    println!("    cargo run --bin tool_sell_all_and_close_atas");
+    println!("");
+    println!("OPERATIONS PERFORMED:");
+    println!("    1. Scan wallet for all SPL Token and Token-2022 accounts");
+    println!("    2. Identify tokens with non-zero balances");
+    println!("    3. Sell all tokens for SOL using GMGN swap service");
+    println!("    4. Close all Associated Token Accounts (empty and non-empty)");
+    println!("    5. Reclaim rent SOL from closed ATAs (~0.00203928 SOL each)");
+    println!("");
+    println!("SAFETY FEATURES:");
+    println!("    • Skips SOL (native token) - cannot sell SOL for SOL");
+    println!("    • Validates token balances before attempting sales");
+    println!("    • Detailed progress reporting for each operation");
+    println!("    • Graceful error handling for failed transactions");
+    println!("    • Supports both SPL Token and Token-2022 programs");
+    println!("    • Concurrent processing with rate limiting");
+    println!("");
+    println!("ESTIMATED OUTCOMES:");
+    println!("    • SOL received from token sales (varies by token values)");
+    println!("    • Rent SOL reclaimed from closed ATAs");
+    println!("    • Clean wallet with only SOL remaining");
+    println!("");
+    println!("RISK WARNINGS:");
+    println!("    • Irreversible operation - tokens will be permanently sold");
+    println!("    • Market slippage may result in lower SOL amounts");
+    println!("    • Some tokens may fail to sell due to liquidity issues");
+    println!("    • Failed transactions still consume transaction fees");
+    println!("    • Use --dry-run first to understand the impact");
+    println!("");
+}
+
 /// SOL token mint address (native Solana)
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
@@ -50,6 +103,13 @@ struct TokenAccount {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
+
+    // Check for help flag
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        std::process::exit(0);
+    }
+
     let dry_run = args.contains(&"--dry-run".to_string()) || args.contains(&"-d".to_string());
 
     log(LogTag::System, "INFO", "WALLET CLEANUP UTILITY");

@@ -1,96 +1,151 @@
-/// Simple entry logic for ScreenerBot
+/// Pool-based entry logic for ScreenerBot
 ///
-/// This module provides a basic entry decision function that can be called from the trader.
-/// Replaces the complex smart_entry.rs with a straightforward approach.
+/// This module provides pool price-based entry decisions with -10% drop detection.
+/// Uses real-time blockchain pool data for trading decisions while API data is used only for validation.
 
 use crate::tokens::Token;
+use crate::tokens::pool::get_pool_service;
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_trader_enabled;
 
-/// Simple entry decision function
-/// Returns true if the token should be bought based on basic criteria
-pub fn should_buy_simple(token: &Token) -> bool {
-    // Basic safety checks
-    if token.price_dexscreener_sol.unwrap_or(0.0) <= 0.0 {
-        return false;
-    }
+/// Pool-based entry decision function with -10% drop detection
+/// Returns true if the token should be bought based on pool price movement
+pub async fn should_buy(token: &Token) -> bool {
+    // Get pool service for real-time price data
+    let pool_service = get_pool_service();
 
-    // Check minimum liquidity requirement ($1000 USD)
-    let liquidity_usd = token.liquidity
-        .as_ref()
-        .and_then(|l| l.usd)
-        .unwrap_or(0.0);
-
-    if liquidity_usd < 1000.0 {
+    // Check if pool price is available for this token
+    if !pool_service.check_token_availability(&token.mint).await {
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "ENTRY_REJECT",
-                &format!("❌ {} rejected: Low liquidity ${:.0}", token.symbol, liquidity_usd)
+                &format!("❌ {} rejected: No pool price available", token.symbol)
             );
         }
         return false;
     }
 
-    // Check if price is not at recent highs (avoid buying at ATH)
-    // Use simple heuristic: if 24h change is less than +50%, it's probably not at ATH
-    let h24_change = token.price_change
-        .as_ref()
-        .and_then(|pc| pc.h24)
-        .unwrap_or(0.0);
+    // Get current pool price
+    let current_pool_price = match pool_service.get_pool_price(&token.mint, None).await {
+        Some(pool_result) => {
+            match pool_result.price_sol {
+                Some(price) if price > 0.0 && price.is_finite() => price,
+                _ => {
+                    if is_debug_trader_enabled() {
+                        log(
+                            LogTag::Trader,
+                            "ENTRY_REJECT",
+                            &format!("❌ {} rejected: Invalid pool price", token.symbol)
+                        );
+                    }
+                    return false;
+                }
+            }
+        }
+        None => {
+            if is_debug_trader_enabled() {
+                log(
+                    LogTag::Trader,
+                    "ENTRY_REJECT",
+                    &format!("❌ {} rejected: Pool price calculation failed", token.symbol)
+                );
+            }
+            return false;
+        }
+    };
 
-    if h24_change > 50.0 {
+    // Get recent price history for -10% drop detection
+    let price_history = pool_service.get_recent_price_history(&token.mint).await;
+
+    if price_history.len() < 2 {
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "ENTRY_REJECT",
-                &format!("❌ {} rejected: Too high 24h gain {:.1}%", token.symbol, h24_change)
+                &format!(
+                    "❌ {} rejected: Insufficient price history for drop detection",
+                    token.symbol
+                )
             );
         }
         return false;
     }
 
-    // Check that 5-minute trend is not strongly bearish
-    let m5_change = token.price_change
-        .as_ref()
-        .and_then(|pc| pc.m5)
-        .unwrap_or(0.0);
+    // Find recent high (highest price in last 5 data points)
+    let recent_high = price_history
+        .iter()
+        .rev()
+        .take(5)
+        .map(|(_, price)| *price)
+        .fold(0.0f64, f64::max);
 
-    if m5_change < -10.0 {
+    if recent_high <= 0.0 {
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "ENTRY_REJECT",
-                &format!("❌ {} rejected: Strong 5m drop {:.1}%", token.symbol, m5_change)
+                &format!("❌ {} rejected: Invalid recent high price", token.symbol)
             );
         }
         return false;
     }
 
-    if is_debug_trader_enabled() {
-        log(
-            LogTag::Trader,
-            "ENTRY_ACCEPT",
-            &format!(
-                "✅ {} accepted: Liquidity ${:.0}, 24h {:.1}%, 5m {:.1}%",
-                token.symbol,
-                liquidity_usd,
-                h24_change,
-                m5_change
-            )
-        );
-    }
+    // Calculate price drop percentage
+    let price_drop_percent = ((recent_high - current_pool_price) / recent_high) * 100.0;
 
-    true
+    // Check for -10% drop trigger
+    if price_drop_percent >= 10.0 {
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_ACCEPT",
+                &format!(
+                    "✅ {} accepted: -{:.1}% drop detected (high: {:.12}, current: {:.12} SOL)",
+                    token.symbol,
+                    price_drop_percent,
+                    recent_high,
+                    current_pool_price
+                )
+            );
+        }
+        return true;
+    } else {
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_REJECT",
+                &format!(
+                    "❌ {} rejected: Only -{:.1}% drop (need -10%+, high: {:.12}, current: {:.12} SOL)",
+                    token.symbol,
+                    price_drop_percent,
+                    recent_high,
+                    current_pool_price
+                )
+            );
+        }
+        return false;
+    }
 }
 
-/// Get simple profit target range based on liquidity
+/// Get profit target range based on pool liquidity
 /// Returns (min_profit%, max_profit%)
-pub fn get_profit_target(token: &Token) -> (f64, f64) {
-    let liquidity_usd = token.liquidity
-        .as_ref()
-        .and_then(|l| l.usd)
-        .unwrap_or(0.0);
+pub async fn get_profit_target(token: &Token) -> (f64, f64) {
+    // Get pool service for real-time liquidity data
+    let pool_service = get_pool_service();
+
+    // Try to get current pool data for accurate liquidity
+    let liquidity_usd = if
+        let Some(pool_result) = pool_service.get_pool_price(&token.mint, None).await
+    {
+        pool_result.liquidity_usd
+    } else {
+        // Fallback to API liquidity data
+        token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0)
+    };
 
     // Simple tiered profit targets based on liquidity
     match liquidity_usd {

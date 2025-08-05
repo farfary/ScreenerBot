@@ -436,7 +436,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                     let effective_entry_price = price;
 
                     // Get simple profit targets for this token
-                    let (profit_min, profit_max) = crate::entry::get_profit_target(token);
+                    let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
 
                     log(
                         LogTag::Trader,

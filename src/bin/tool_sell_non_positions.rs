@@ -52,6 +52,69 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use futures::stream::{ self, StreamExt };
 
+/// Print comprehensive help menu for the Sell Non-Position Tokens Tool
+fn print_help() {
+    println!("💼 Sell Non-Position Tokens Tool");
+    println!("=====================================");
+    println!("Targeted wallet cleanup utility that sells only tokens NOT part of open");
+    println!("trading positions, while preserving active trades and reclaiming rent SOL.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_sell_non_positions [OPTIONS]");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h          Show this help message");
+    println!("    --dry-run          Simulate operations without executing transactions");
+    println!("    --verbose          Enable detailed logging with position cross-reference");
+    println!("    --force            Execute sales even if some validations fail");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Preview what would be sold (safe mode)");
+    println!("    cargo run --bin tool_sell_non_positions -- --dry-run");
+    println!("");
+    println!("    # Execute cleanup with detailed logging");
+    println!("    cargo run --bin tool_sell_non_positions -- --verbose");
+    println!("");
+    println!("    # Force sell even with validation warnings");
+    println!("    cargo run --bin tool_sell_non_positions -- --force");
+    println!("");
+    println!("OPERATIONS PERFORMED:");
+    println!("    1. Load all open positions from positions.json");
+    println!("    2. Scan wallet for all token accounts with balances > 0");
+    println!("    3. Cross-reference tokens against open positions");
+    println!("    4. Identify tokens NOT part of any trading position");
+    println!("    5. Sell non-position tokens for SOL using GMGN");
+    println!("    6. Close empty ATAs to reclaim rent SOL");
+    println!("");
+    println!("SAFETY FEATURES:");
+    println!("    • Preserves ALL tokens that are part of open positions");
+    println!("    • Skips SOL (native token) completely");
+    println!("    • Validates token balances before selling");
+    println!("    • Detailed position cross-reference reporting");
+    println!("    • Graceful error handling for failed operations");
+    println!("    • Estimates rent SOL reclaimed (~0.00203928 SOL per ATA)");
+    println!("");
+    println!("POSITION PROTECTION:");
+    println!("    • Reads positions.json to identify protected tokens");
+    println!("    • Cross-validates each token against open position list");
+    println!("    • Never sells tokens with active buy/sell positions");
+    println!("    • Preserves tokens even if position tracking is incomplete");
+    println!("");
+    println!("USE CASES:");
+    println!("    • Clean up tokens acquired outside the trading bot");
+    println!("    • Remove dust tokens that didn't get properly tracked");
+    println!("    • Reclaim rent SOL from forgotten token accounts");
+    println!("    • Prepare wallet for fresh trading cycles");
+    println!("    • Manage tokens from manual trades or airdrops");
+    println!("");
+    println!("VALIDATION CHECKS:");
+    println!("    • Position file existence and validity");
+    println!("    • Token balance verification before sales");
+    println!("    • ATA ownership and closure eligibility");
+    println!("    • Cross-reference protection against position conflicts");
+    println!("");
+}
+
 /// SOL token mint address (native Solana)
 const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
@@ -85,6 +148,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Parse command line arguments
     let args: Vec<String> = env::args().collect();
+
+    // Check for help flag
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        std::process::exit(0);
+    }
+
     let dry_run = args.contains(&"--dry-run".to_string()) || args.contains(&"-d".to_string());
     let verbose = args.contains(&"--verbose".to_string()) || args.contains(&"-v".to_string());
     let force = args.contains(&"--force".to_string()) || args.contains(&"-f".to_string());

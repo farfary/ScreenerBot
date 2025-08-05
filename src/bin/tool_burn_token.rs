@@ -40,6 +40,73 @@ impl From<Box<dyn std::error::Error>> for BurnError {
     }
 }
 
+/// Print comprehensive help menu for the Token Burn Tool
+fn print_help() {
+    println!("🔥 Token Burn Tool");
+    println!("=====================================");
+    println!("Advanced token burning utility that permanently destroys tokens by reducing");
+    println!("the total supply. Supports both SPL Token and Token-2022 programs.");
+    println!("");
+    println!("⚠️  WARNING: Token burning is IRREVERSIBLE and PERMANENT!");
+    println!("    Burned tokens cannot be recovered under any circumstances.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_burn_token -- <MINT_ADDRESS> [OPTIONS]");
+    println!("");
+    println!("ARGUMENTS:");
+    println!("    <MINT_ADDRESS>     Token mint address to burn tokens from");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h         Show this help message");
+    println!("    --dry-run         Simulate burn without executing transaction");
+    println!("    --force           Execute actual burn transaction");
+    println!("    --verbose         Enable detailed logging and analysis");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Test burn simulation for a specific token");
+    println!(
+        "    cargo run --bin tool_burn_token -- ChoNKscpdU3hPd1N3q8a3FPvPcuj5fsg1dA5WnHbTvZV --dry-run"
+    );
+    println!("");
+    println!("    # Execute actual token burn with detailed logging");
+    println!(
+        "    cargo run --bin tool_burn_token -- ChoNKscpdU3hPd1N3q8a3FPvPcuj5fsg1dA5WnHbTvZV --force --verbose"
+    );
+    println!("");
+    println!("    # Quick burn without extra logging");
+    println!(
+        "    cargo run --bin tool_burn_token -- ChoNKscpdU3hPd1N3q8a3FPvPcuj5fsg1dA5WnHbTvZV --force"
+    );
+    println!("");
+    println!("BURN PROCESS:");
+    println!("    1. Validates token mint address and program ownership");
+    println!("    2. Checks wallet token balance and burn authority");
+    println!("    3. Calculates total tokens available for burning");
+    println!("    4. Creates burn instruction with proper program ID");
+    println!("    5. Submits transaction to permanently destroy tokens");
+    println!("    6. Confirms transaction and reports burned amount");
+    println!("");
+    println!("SAFETY FEATURES:");
+    println!("    • Validates mint address format before processing");
+    println!("    • Checks token balance to prevent zero-amount burns");
+    println!("    • Automatic program detection (SPL Token vs Token-2022)");
+    println!("    • Dry-run mode for safe testing");
+    println!("    • Multi-RPC fallback for transaction reliability");
+    println!("");
+    println!("VALIDATION CHECKS:");
+    println!("    • Token account existence and ownership");
+    println!("    • Sufficient token balance for burn operation");
+    println!("    • Proper burn authority permissions");
+    println!("    • Token program compatibility");
+    println!("");
+    println!("RISK WARNINGS:");
+    println!("    • Burned tokens are permanently removed from circulation");
+    println!("    • No way to recover or 'unburn' tokens after transaction");
+    println!("    • Failed transactions still consume transaction fees");
+    println!("    • Use --dry-run first to validate burn parameters");
+    println!("");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), BurnError> {
     // Initialize logger
@@ -50,17 +117,15 @@ async fn main() -> Result<(), BurnError> {
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
 
+    // Check for help flag
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        return Ok(());
+    }
+
     if args.len() < 2 {
-        log(
-            LogTag::System,
-            "ERROR",
-            "Usage: tool_burn_token <MINT_ADDRESS> [--dry-run] [--force] [--verbose]"
-        );
-        log(
-            LogTag::System,
-            "EXAMPLE",
-            "tool_burn_token ChoNKscpdU3hPd1N3q8a3FPvPcuj5fsg1dA5WnHbTvZV --force"
-        );
+        print_help();
+        log(LogTag::System, "ERROR", "❌ Please provide a token mint address");
         return Ok(());
     }
 

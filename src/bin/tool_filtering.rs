@@ -26,6 +26,66 @@ use std::time::Instant;
 use colored::*;
 use tokio;
 
+/// Print comprehensive help menu for the Filtering Analysis Tool
+fn print_help() {
+    println!("🔍 Token Filtering Analysis Tool");
+    println!("=====================================");
+    println!("Comprehensive analysis tool for the token filtering system performance,");
+    println!("database statistics, rugcheck data distribution, and filter effectiveness.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_filtering [TOKEN_MINT] [OPTIONS]");
+    println!("");
+    println!("ARGUMENTS:");
+    println!("    [TOKEN_MINT]       Optional token mint to analyze specific filtering");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h         Show this help message");
+    println!("    --debug-filtering  Enable detailed step-by-step filtering logs");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Analyze complete filtering system performance");
+    println!("    cargo run --bin tool_filtering");
+    println!("");
+    println!("    # Test specific token filtering with debug output");
+    println!(
+        "    cargo run --bin tool_filtering -- EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v --debug-filtering"
+    );
+    println!("");
+    println!("    # Quick analysis of Bonk token filtering");
+    println!("    cargo run --bin tool_filtering -- DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263");
+    println!("");
+    println!("ANALYSIS FEATURES:");
+    println!("    • Complete database token statistics");
+    println!("    • Filter pass/fail rates and reasons");
+    println!("    • Rugcheck risk score distribution");
+    println!("    • Metadata completeness analysis");
+    println!("    • Liquidity and volume statistical breakdown");
+    println!("    • Age distribution and filtering impact");
+    println!("    • High-risk token identification");
+    println!("");
+    println!("FILTERING VALIDATION:");
+    println!("    • 7-step filtering process analysis");
+    println!("    • Step-by-step rejection reason tracking");
+    println!("    • Security analysis effectiveness");
+    println!("    • ATH proximity filtering performance");
+    println!("    • Position constraint validation");
+    println!("");
+    println!("STATISTICAL OUTPUT:");
+    println!("    • Pass/fail percentages for each filter step");
+    println!("    • Average liquidity and volume metrics");
+    println!("    • Risk score distribution charts");
+    println!("    • Metadata field availability percentages");
+    println!("    • Performance timing for filter operations");
+    println!("");
+    println!("SAFETY ANALYSIS:");
+    println!("    • High-risk token detection accuracy");
+    println!("    • LP lock validation effectiveness");
+    println!("    • Authority risk assessment coverage");
+    println!("    • Freeze/mint authority safety checks");
+    println!("");
+}
+
 #[derive(Debug, Default)]
 struct FilteringStats {
     total_tokens: usize,
@@ -562,6 +622,15 @@ async fn run_filtering_analysis() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() {
+    // Parse command line arguments
+    let args: Vec<String> = std::env::args().collect();
+
+    // Check for help flag
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        std::process::exit(0);
+    }
+
     if let Err(e) = run_filtering_analysis().await {
         eprintln!("{}: {}", "Error".bright_red().bold(), e);
         std::process::exit(1);

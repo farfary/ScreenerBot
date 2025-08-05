@@ -10,6 +10,69 @@ use screenerbot::tokens::pool::{ get_pool_service, init_pool_service };
 use std::env;
 use tokio::time::{ sleep, Duration };
 
+/// Print comprehensive help menu for the Pool Watch List Management Tool
+fn print_help() {
+    println!("🔧 Pool Watch List Management Tool");
+    println!("=====================================");
+    println!("Management and monitoring tool for the pool price service watch list");
+    println!("with automatic cleanup features and priority tracking.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_pool_watch_list -- <COMMAND> [ARGS] [OPTIONS]");
+    println!("");
+    println!("COMMANDS:");
+    println!("    add <token> [priority]     Add token to watch list with optional priority");
+    println!("    remove <token>             Remove specific token from watch list");
+    println!("    list                      Show current watch list with details");
+    println!("    stats                     Display watch list statistics and performance");
+    println!("    cleanup                   Manually cleanup expired watch list entries");
+    println!("    monitor [duration]        Monitor watch list changes for specified seconds");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h                Show this help message");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Add SOL with high priority");
+    println!(
+        "    cargo run --bin tool_pool_watch_list -- add So11111111111111111111111111111111111111112 10"
+    );
+    println!("");
+    println!("    # Add USDC with default priority");
+    println!(
+        "    cargo run --bin tool_pool_watch_list -- add EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    );
+    println!("");
+    println!("    # Monitor watch list for 60 seconds");
+    println!("    cargo run --bin tool_pool_watch_list -- monitor 60");
+    println!("");
+    println!("    # Show current watch list status");
+    println!("    cargo run --bin tool_pool_watch_list -- list");
+    println!("");
+    println!("    # Manual cleanup of expired entries");
+    println!("    cargo run --bin tool_pool_watch_list -- cleanup");
+    println!("");
+    println!("WATCH LIST FEATURES:");
+    println!("    • Priority-based token monitoring (1-10 scale)");
+    println!("    • Automatic 5-minute expiry for inactive tokens");
+    println!("    • Background cleanup service integration");
+    println!("    • Real-time pool price tracking for watched tokens");
+    println!("    • Request frequency tracking and optimization");
+    println!("");
+    println!("MONITORING OUTPUT:");
+    println!("    • Current watch list size and token count");
+    println!("    • Priority distribution and average priority");
+    println!("    • Last update timestamps for each token");
+    println!("    • Success/failure rates for price updates");
+    println!("    • Cleanup statistics and expired entry counts");
+    println!("");
+    println!("AUTOMATIC FEATURES:");
+    println!("    • Tokens auto-removed after 5 minutes without price updates");
+    println!("    • Background monitoring service integration");
+    println!("    • Priority-based update frequency optimization");
+    println!("    • Failed request tracking and retry logic");
+    println!("");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
@@ -17,31 +80,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        println!("🔧 Pool Watch List Management Tool");
-        println!();
-        println!("Usage:");
-        println!("  {} add <token_address> [priority]     - Add token to watch list", args[0]);
-        println!("  {} remove <token_address>             - Remove token from watch list", args[0]);
-        println!("  {} list                               - Show current watch list", args[0]);
-        println!("  {} stats                              - Show watch list statistics", args[0]);
-        println!(
-            "  {} cleanup                            - Manually cleanup expired entries",
-            args[0]
-        );
-        println!(
-            "  {} monitor [duration_seconds]         - Monitor watch list for changes",
-            args[0]
-        );
-        println!();
-        println!("Examples:");
-        println!("  {} add So11111111111111111111111111111111111111112 10", args[0]);
-        println!("  {} monitor 60  # Monitor for 60 seconds", args[0]);
-        println!();
-        println!(
-            "Note: Tokens are automatically removed after 5 minutes without successful price updates"
-        );
-        return Ok(());
+    // Check for help flag
+    if args.len() < 2 || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        if args.len() < 2 {
+            return Ok(());
+        } else {
+            std::process::exit(0);
+        }
     }
 
     // Load configuration

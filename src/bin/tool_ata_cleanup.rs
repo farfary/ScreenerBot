@@ -11,15 +11,63 @@ use solana_sdk::{
 };
 use spl_token::instruction::close_account;
 
+/// Print help menu for the ATA Cleanup Tool
+fn print_help() {
+    println!("🧹 ATA Cleanup Tool");
+    println!("=====================================");
+    println!("Analyzes and cleans up empty Associated Token Accounts (ATAs) to reclaim rent.");
+    println!("Supports both SPL Token and Token-2022 programs with automatic detection.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_ata_cleanup [OPTIONS]");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h          Show this help message");
+    println!("    --dry-run          Simulate cleanup without sending transactions");
+    println!("    --force            Execute actual cleanup transactions");
+    println!("    --verbose          Enable detailed logging for each account");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Analyze wallet and show what would be cleaned");
+    println!("    cargo run --bin tool_ata_cleanup -- --dry-run");
+    println!("");
+    println!("    # Execute cleanup with detailed output");
+    println!("    cargo run --bin tool_ata_cleanup -- --force --verbose");
+    println!("");
+    println!("    # Quick analysis without detailed account info");
+    println!("    cargo run --bin tool_ata_cleanup");
+    println!("");
+    println!("SAFETY FEATURES:");
+    println!("    • Only closes accounts with zero balance");
+    println!("    • Validates program ownership before closing");
+    println!("    • Automatic Token-2022 vs SPL Token detection");
+    println!("    • 500ms delay between transactions to avoid spam");
+    println!("    • Multi-RPC fallback for reliability");
+    println!("");
+    println!("OUTPUT:");
+    println!("    • Account analysis and balance verification");
+    println!("    • Estimated SOL rent reclaim (~0.00203928 SOL per ATA)");
+    println!("    • Transaction signatures for successful closures");
+    println!("    • Detection error warnings if any occur");
+    println!("");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logger
     init_file_logging();
 
-    log(LogTag::System, "TOOL", "🧹 Starting ATA Cleanup Tool");
-
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
+    let help_requested = args.contains(&"--help".to_string()) || args.contains(&"-h".to_string());
+
+    if help_requested {
+        print_help();
+        return Ok(());
+    }
+
+    log(LogTag::System, "TOOL", "🧹 Starting ATA Cleanup Tool");
+
     let dry_run = args.contains(&"--dry-run".to_string());
     let force = args.contains(&"--force".to_string());
     let verbose = args.contains(&"--verbose".to_string());

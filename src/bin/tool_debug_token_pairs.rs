@@ -8,16 +8,78 @@ use reqwest;
 use serde_json::Value;
 use screenerbot::logger::{ log, LogTag };
 
+/// Print comprehensive help menu for the Debug Token Pairs Tool
+fn print_help() {
+    println!("🔍 Debug Token Pairs Tool");
+    println!("=====================================");
+    println!("Diagnostic tool for analyzing DexScreener API responses and identifying");
+    println!("parsing issues with token pair data, missing fields, and data structure problems.");
+    println!("");
+    println!("USAGE:");
+    println!("    cargo run --bin tool_debug_token_pairs -- <TOKEN_ADDRESS> [OPTIONS]");
+    println!("");
+    println!("ARGUMENTS:");
+    println!("    <TOKEN_ADDRESS>    Token mint address to analyze");
+    println!("");
+    println!("OPTIONS:");
+    println!("    --help, -h         Show this help message");
+    println!("");
+    println!("EXAMPLES:");
+    println!("    # Analyze USDC token pairs");
+    println!(
+        "    cargo run --bin tool_debug_token_pairs -- EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    );
+    println!("");
+    println!("    # Debug specific token with potential parsing issues");
+    println!(
+        "    cargo run --bin tool_debug_token_pairs -- 3jX3imAgQKvkXCwWezrJzzfZXrtAg7rqoFxyPzSuPGpp"
+    );
+    println!("");
+    println!("    # Analyze Bonk token data structure");
+    println!(
+        "    cargo run --bin tool_debug_token_pairs -- DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
+    );
+    println!("");
+    println!("ANALYSIS OUTPUT:");
+    println!("    • Raw API response size and structure");
+    println!("    • Number of pairs found for the token");
+    println!("    • Missing field detection (pairCreatedAt, etc.)");
+    println!("    • Field completeness analysis for each pair");
+    println!("    • Liquidity and volume data validation");
+    println!("    • Pool address and DEX identification");
+    println!("    • Price data accuracy and timestamp validation");
+    println!("");
+    println!("DIAGNOSTIC FEATURES:");
+    println!("    • Identifies missing pairCreatedAt timestamps");
+    println!("    • Validates URL and image field formats");
+    println!("    • Checks for null/undefined values in critical fields");
+    println!("    • Analyzes data type mismatches");
+    println!("    • Reports malformed JSON structures");
+    println!("");
+    println!("COMMON USE CASES:");
+    println!("    • Debugging parser failures in main bot");
+    println!("    • Validating new token compatibility");
+    println!("    • Investigating API response inconsistencies");
+    println!("    • Analyzing field availability across different tokens");
+    println!("    • Troubleshooting timestamp parsing issues");
+    println!("");
+}
+
 const DEXSCREENER_BASE_URL: &str = "https://api.dexscreener.com/latest/dex";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get token address from command line
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        eprintln!("Usage: {} <TOKEN_ADDRESS>", args[0]);
-        eprintln!("Example: {} 3jX3imAgQKvkXCwWezrJzzfZXrtAg7rqoFxyPzSuPGpp", args[0]);
-        std::process::exit(1);
+
+    // Check for help flag
+    if args.len() != 2 || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        if args.len() != 2 {
+            std::process::exit(1);
+        } else {
+            std::process::exit(0);
+        }
     }
 
     let token_address = &args[1];

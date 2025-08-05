@@ -6,7 +6,7 @@ use crate::tokens::{
     is_token_safe_for_trading_safe,
     get_high_risk_issues,
     TokenDatabase,
-    get_token_price_safe,
+    pool::get_pool_service,
 };
 use chrono::Utc;
 use serde::{ Serialize, Deserialize };
@@ -158,10 +158,15 @@ impl SafetyLevel {
 
 /// Analyze token comprehensively using all available data sources
 pub async fn analyze_token_comprehensive(mint: &str) -> Result<TokenAnalysis, String> {
-    // Get token price
-    let current_price = get_token_price_safe(mint).await.ok_or_else(||
-        format!("Failed to get current price for token: {}", mint)
-    )?;
+    // Get token price using pool service for real-time accuracy
+    let pool_service = get_pool_service();
+    let current_price = if let Some(pool_result) = pool_service.get_pool_price(mint, None).await {
+        pool_result.price_sol.ok_or_else(||
+            format!("Pool price calculation failed for token: {}", mint)
+        )?
+    } else {
+        return Err(format!("Failed to get pool price for token: {}", mint));
+    };
 
     if current_price <= 0.0 || !current_price.is_finite() {
         return Err(format!("Invalid current price for token: {}: {}", mint, current_price));
