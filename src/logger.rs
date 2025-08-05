@@ -56,6 +56,8 @@ const ENABLE_RPC_LOGS: bool = true;
 const ENABLE_OHLCV_LOGS: bool = true;
 const ENABLE_DECIMALS_LOGS: bool = true;
 const ENABLE_SWAP_LOGS: bool = true;
+const ENABLE_ENTRY_LOGS: bool = true;
+const ENABLE_RL_LEARN_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -281,6 +283,8 @@ pub enum LogTag {
     Ohlcv,
     Decimals,
     Swap,
+    Entry,
+    RlLearn,
     Other(String),
 }
 
@@ -303,6 +307,8 @@ impl std::fmt::Display for LogTag {
             LogTag::Ohlcv => format!("{:<8}", "OHLCV").bright_green().bold(), // 📈 OHLCV chart green
             LogTag::Decimals => format!("{:<8}", "DECIMALS").bright_white().bold(), // 🔢 Decimals white
             LogTag::Swap => format!("{:<8}", "SWAP").bright_magenta().bold(), // 🔄 Swap magenta
+            LogTag::Entry => format!("{:<8}", "ENTRY").bright_yellow().bold(), // 🚪 Entry yellow
+            LogTag::RlLearn => format!("{:<8}", "RL_LEARN").bright_cyan().bold(), // 🤖 AI cyan
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -329,6 +335,8 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Ohlcv => ENABLE_OHLCV_LOGS,
         LogTag::Decimals => ENABLE_DECIMALS_LOGS,
         LogTag::Swap => ENABLE_SWAP_LOGS,
+        LogTag::Entry => ENABLE_ENTRY_LOGS,
+        LogTag::RlLearn => ENABLE_RL_LEARN_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
     };
 
@@ -435,6 +443,14 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Swap =>
             format!("{:<width$}", "SWAP", width = TAG_WIDTH)
                 .bright_magenta()
+                .bold(),
+        LogTag::Entry =>
+            format!("{:<width$}", "ENTRY", width = TAG_WIDTH)
+                .bright_yellow()
+                .bold(),
+        LogTag::RlLearn =>
+            format!("{:<width$}", "RL_LEARN", width = TAG_WIDTH)
+                .bright_cyan()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
@@ -564,6 +580,8 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Ohlcv => "OHLCV",
         LogTag::Decimals => "DECIMALS",
         LogTag::Swap => "SWAP",
+        LogTag::Entry => "ENTRY",
+        LogTag::RlLearn => "RL_LEARN",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);

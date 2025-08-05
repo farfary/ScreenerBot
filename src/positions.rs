@@ -4,6 +4,8 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
 use crate::wallet::{ buy_token, sell_token };
+use crate::rl_learning::{ get_trading_learner, record_completed_trade };
+use crate::entry::get_rugcheck_score_for_token;
 
 use once_cell::sync::Lazy;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
@@ -830,6 +832,20 @@ pub async fn close_position(
                     );
                 }
 
+                // Record this trade for RL learning after successful closure
+                if let Err(e) = record_position_for_learning(position).await {
+                    log(
+                        LogTag::Trader,
+                        "WARNING",
+                        &format!(
+                            "Failed to record learning data for {} (not critical): {}",
+                            position.symbol,
+                            e
+                        )
+                    );
+                    // Don't fail the position close if learning record fails
+                }
+
                 return true; // Successfully closed
             }
             Err(e) => {
@@ -935,6 +951,42 @@ pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
     }
 
     active_cooldowns
+}
+
+/// Records a completed trade for RL learning
+async fn record_position_for_learning(position: &Position) -> Result<(), String> {
+    // Only record if we have exit data (entry data is always available)
+    if position.exit_price.is_none() || position.exit_time.is_none() {
+        return Err("Incomplete position data".to_string());
+    }
+
+    let entry_price = position.entry_price;
+    let exit_price = position.exit_price.unwrap();
+    let entry_time = position.entry_time;
+    let exit_time = position.exit_time.unwrap();
+
+    // Get additional data needed for RL learning
+    // For now, use placeholder values - in a real implementation, we'd store these at entry time
+    let liquidity_usd = 1000.0; // Default liquidity estimate
+    let volume_24h = 50000.0; // Default volume estimate
+    let market_cap = None; // Unknown market cap
+    let rugcheck_score = get_rugcheck_score_for_token(&position.mint).await;
+
+    // Record the trade using the RL system
+    record_completed_trade(
+        &position.mint,
+        &position.symbol,
+        entry_price,
+        exit_price,
+        entry_time,
+        exit_time,
+        liquidity_usd,
+        volume_24h,
+        market_cap,
+        rugcheck_score
+    ).await;
+
+    Ok(())
 }
 
 /// Gets all open position mints

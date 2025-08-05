@@ -2,23 +2,39 @@
 ///
 /// This module provides pool price-based entry decisions with -10% drop detection.
 /// Uses real-time blockchain pool data for trading decisions while API data is used only for validation.
+/// Now enhanced with reinforcement learning predictions for improved entry timing.
 
 use crate::tokens::Token;
 use crate::tokens::pool::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_trader_enabled;
+use crate::global::{ is_debug_trader_enabled, is_debug_entry_enabled };
+use crate::rl_learning::{ get_trading_learner, collect_market_features };
+use crate::tokens::cache::TokenDatabase;
 use chrono::{ DateTime, Utc };
+
+/// Helper function to get rugcheck score for a token
+pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
+    match TokenDatabase::new() {
+        Ok(database) => {
+            match database.get_rugcheck_data(mint) {
+                Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
+                _ => None,
+            }
+        }
+        Err(_) => None,
+    }
+}
 
 /// Pool-based entry decision function with -10% drop detection
 /// Returns true if the token should be bought based on pool price movement
 pub async fn should_buy(token: &Token) -> bool {
     // 0. ABSOLUTE FIRST: Check blacklist and exclusion status
     if is_token_excluded_from_trading(&token.mint) {
-        if is_debug_trader_enabled() {
+        if is_debug_entry_enabled() {
             log(
-                LogTag::Trader,
-                "ENTRY_REJECT",
+                LogTag::Entry,
+                "BLACKLIST_REJECT",
                 &format!("❌ {} rejected: Token is blacklisted or excluded", token.symbol)
             );
         }
@@ -30,10 +46,10 @@ pub async fn should_buy(token: &Token) -> bool {
 
     // Check if pool price is available for this token
     if !pool_service.check_token_availability(&token.mint).await {
-        if is_debug_trader_enabled() {
+        if is_debug_entry_enabled() {
             log(
-                LogTag::Trader,
-                "ENTRY_REJECT",
+                LogTag::Entry,
+                "POOL_UNAVAILABLE",
                 &format!("❌ {} rejected: No pool price available", token.symbol)
             );
         }
@@ -46,10 +62,10 @@ pub async fn should_buy(token: &Token) -> bool {
             match pool_result.price_sol {
                 Some(price) if price > 0.0 && price.is_finite() => price,
                 _ => {
-                    if is_debug_trader_enabled() {
+                    if is_debug_entry_enabled() {
                         log(
-                            LogTag::Trader,
-                            "ENTRY_REJECT",
+                            LogTag::Entry,
+                            "INVALID_PRICE",
                             &format!("❌ {} rejected: Invalid pool price", token.symbol)
                         );
                     }
@@ -58,10 +74,10 @@ pub async fn should_buy(token: &Token) -> bool {
             }
         }
         None => {
-            if is_debug_trader_enabled() {
+            if is_debug_entry_enabled() {
                 log(
-                    LogTag::Trader,
-                    "ENTRY_REJECT",
+                    LogTag::Entry,
+                    "PRICE_CALC_FAILED",
                     &format!("❌ {} rejected: Pool price calculation failed", token.symbol)
                 );
             }
@@ -81,26 +97,27 @@ pub async fn should_buy(token: &Token) -> bool {
     ).await;
 
     if let Some(reason) = entry_decision {
-        if is_debug_trader_enabled() {
+        if is_debug_entry_enabled() {
             log(
-                LogTag::Trader,
+                LogTag::Entry,
                 "ENTRY_ACCEPT",
                 &format!(
-                    "✅ {} accepted: {} (current: {:.12} SOL)",
+                    "✅ {} accepted: {} (price: {:.12} SOL, history: {} points)",
                     token.symbol,
                     reason,
-                    current_pool_price
+                    current_pool_price,
+                    price_history.len()
                 )
             );
         }
         return true;
     } else {
-        if is_debug_trader_enabled() {
+        if is_debug_entry_enabled() {
             log(
-                LogTag::Trader,
-                "ENTRY_REJECT",
+                LogTag::Entry,
+                "NO_SIGNAL",
                 &format!(
-                    "❌ {} rejected: No valid entry signal (current: {:.12} SOL, history: {} points)",
+                    "❌ {} rejected: No valid entry signal (price: {:.12} SOL, history: {} points)",
                     token.symbol,
                     current_pool_price,
                     price_history.len()
@@ -360,11 +377,18 @@ pub fn get_entry_threshold(token: &Token) -> f64 {
     base_threshold.max(3.0).min(15.0)
 }
 
-/// Enhanced entry decision with confidence scoring
+/// Enhanced entry decision with confidence scoring and reinforcement learning
 /// Returns (should_enter, confidence_score, reason)
 pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
     // Check blacklist first
     if is_token_excluded_from_trading(&token.mint) {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "BLACKLIST_REJECT",
+                &format!("❌ {} rejected: Token blacklisted or excluded", token.symbol)
+            );
+        }
         return (false, 0.0, "Token blacklisted or excluded".to_string());
     }
 
@@ -372,6 +396,13 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
 
     // Check pool availability
     if !pool_service.check_token_availability(&token.mint).await {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "POOL_UNAVAILABLE",
+                &format!("❌ {} rejected: No pool available", token.symbol)
+            );
+        }
         return (false, 0.0, "No pool price available".to_string());
     }
 
@@ -381,22 +412,49 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
             match pool_result.price_sol {
                 Some(price) if price > 0.0 && price.is_finite() => price,
                 _ => {
+                    if is_debug_entry_enabled() {
+                        log(
+                            LogTag::Entry,
+                            "INVALID_PRICE",
+                            &format!("❌ {} rejected: Invalid pool price", token.symbol)
+                        );
+                    }
                     return (false, 0.0, "Invalid pool price".to_string());
                 }
             }
         }
         None => {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "PRICE_CALC_FAILED",
+                    &format!("❌ {} rejected: Pool price calculation failed", token.symbol)
+                );
+            }
             return (false, 0.0, "Pool price calculation failed".to_string());
         }
     };
 
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
 
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "CONFIDENCE_START",
+            &format!(
+                "🎯 Starting confidence analysis for {} (price: {:.12} SOL, history: {} points)",
+                token.symbol,
+                current_pool_price,
+                price_history.len()
+            )
+        );
+    }
+
     // Calculate confidence score based on multiple factors
     let mut confidence: f64 = 0.0;
     let mut reasons = Vec::new();
 
-    // Factor 1: Price history analysis (0-40 points)
+    // Factor 1: Price history analysis (0-35 points)
     if
         let Some(reason) = analyze_entry_signals(
             &token.symbol,
@@ -419,65 +477,189 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
         }
     }
 
-    // Factor 2: Liquidity score (0-25 points)
+    // Factor 2: Liquidity score (0-20 points)
     let liquidity_usd = token.liquidity
         .as_ref()
         .and_then(|l| l.usd)
         .unwrap_or(0.0);
     let liquidity_score = match liquidity_usd {
-        x if x >= 1_000_000.0 => 25.0,
-        x if x >= 500_000.0 => 20.0,
-        x if x >= 100_000.0 => 15.0,
-        x if x >= 50_000.0 => 10.0,
+        x if x >= 1_000_000.0 => 20.0,
+        x if x >= 500_000.0 => 16.0,
+        x if x >= 100_000.0 => 12.0,
+        x if x >= 50_000.0 => 8.0,
         _ => 0.0,
     };
     confidence += liquidity_score;
     if liquidity_score > 0.0 {
         reasons.push(format!("Liquidity: ${:.0}", liquidity_usd));
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "FACTOR_2",
+                &format!(
+                    "💧 {} Liquidity: ${:.0} (+{:.1} pts)",
+                    token.symbol,
+                    liquidity_usd,
+                    liquidity_score
+                )
+            );
+        }
     }
 
-    // Factor 3: Token age factor (0-15 points)
+    // Factor 3: Token age factor (0-10 points)
     if let Some(created_at) = token.created_at {
         let age_hours = (Utc::now() - created_at).num_hours();
         let age_score = match age_hours {
-            1..=24 => 15.0, // Sweet spot for new tokens
-            25..=168 => 10.0, // Still good
-            169..=720 => 5.0, // Older but stable
+            1..=24 => 10.0, // Sweet spot for new tokens
+            25..=168 => 7.0, // Still good
+            169..=720 => 4.0, // Older but stable
             _ => 0.0,
         };
         confidence += age_score;
         if age_score > 0.0 {
             reasons.push(format!("Age: {}h", age_hours));
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "FACTOR_3",
+                    &format!("⏰ {} Age: {}h (+{:.1} pts)", token.symbol, age_hours, age_score)
+                );
+            }
         }
     }
 
-    // Factor 4: Price data quality (0-10 points)
+    // Factor 4: Price data quality (0-8 points)
     let data_quality = match price_history.len() {
         0 => 2.0, // New token, limited data
-        1 => 4.0, // Minimal data
-        2..=3 => 6.0, // Some data
-        4..=5 => 8.0, // Good data
-        _ => 10.0, // Excellent data
+        1 => 3.0, // Minimal data
+        2..=3 => 5.0, // Some data
+        4..=5 => 7.0, // Good data
+        _ => 8.0, // Excellent data
     };
     confidence += data_quality;
     reasons.push(format!("Data points: {}", price_history.len()));
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "FACTOR_4",
+            &format!(
+                "📊 {} Data quality: {} points (+{:.1} pts)",
+                token.symbol,
+                price_history.len(),
+                data_quality
+            )
+        );
+    }
 
-    // Factor 5: Volume/Activity bonus (0-10 points)
+    // Factor 5: Volume/Activity bonus (0-7 points)
     if let Some(volume) = &token.volume {
         if let Some(h24) = volume.h24 {
             let volume_score = if h24 >= 100_000.0 {
-                10.0
-            } else if h24 >= 50_000.0 {
                 7.0
+            } else if h24 >= 50_000.0 {
+                5.0
             } else if h24 >= 10_000.0 {
-                4.0
+                3.0
             } else {
                 0.0
             };
             confidence += volume_score;
             if volume_score > 0.0 {
                 reasons.push(format!("24h volume: ${:.0}", h24));
+                if is_debug_entry_enabled() {
+                    log(
+                        LogTag::Entry,
+                        "FACTOR_5",
+                        &format!(
+                            "📈 {} Volume: ${:.0} (+{:.1} pts)",
+                            token.symbol,
+                            h24,
+                            volume_score
+                        )
+                    );
+                }
             }
+        }
+    }
+
+    // Factor 6: Reinforcement Learning Score (0-20 points) - NEW!
+    let rl_learner = get_trading_learner();
+    if rl_learner.is_model_ready() {
+        // Collect market features for RL prediction
+        if
+            let Some(
+                (
+                    price_change_5min,
+                    price_change_10min,
+                    price_change_30min,
+                    pool_price,
+                    price_drop_detected,
+                    _,
+                ),
+            ) = collect_market_features(
+                &token.mint,
+                &token.symbol,
+                current_pool_price,
+                liquidity_usd,
+                token.volume
+                    .as_ref()
+                    .and_then(|v| v.h24)
+                    .unwrap_or(0.0),
+                token.market_cap.map(|mc| mc as f64),
+                get_rugcheck_score_for_token(&token.mint).await
+            ).await
+        {
+            // Get RL learning score (0.0 to 1.0)
+            let rl_score = rl_learner.get_learning_score(
+                &token.mint,
+                current_pool_price,
+                (price_change_5min, price_change_10min, price_change_30min),
+                liquidity_usd,
+                token.volume
+                    .as_ref()
+                    .and_then(|v| v.h24)
+                    .unwrap_or(0.0),
+                token.market_cap.map(|mc| mc as f64),
+                get_rugcheck_score_for_token(&token.mint).await,
+                pool_price,
+                price_drop_detected,
+                confidence / 100.0 // Pass current confidence as baseline
+            ).await;
+
+            // Convert RL score to points (0-20)
+            let rl_points = rl_score * 20.0;
+            confidence += rl_points;
+
+            if rl_points > 10.0 {
+                reasons.push(format!("RL-AI: {:.1}%", rl_score * 100.0));
+            }
+
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "FACTOR_6",
+                    &format!(
+                        "🤖 {} RL Score: {:.1}% (+{:.1} pts) - Features: price_changes({:.2}%, {:.2}%, {:.2}%), liquidity: ${:.0}",
+                        token.symbol,
+                        rl_score * 100.0,
+                        rl_points,
+                        price_change_5min,
+                        price_change_10min,
+                        price_change_30min,
+                        liquidity_usd
+                    )
+                );
+            }
+        }
+    } else {
+        // Model not ready, log learning progress
+        let record_count = rl_learner.get_record_count();
+        if is_debug_entry_enabled() && record_count > 0 {
+            log(
+                LogTag::Entry,
+                "RL_LEARNING",
+                &format!("🤖 {} RL model training: {}/50 records", token.symbol, record_count)
+            );
         }
     }
 
@@ -487,6 +669,24 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
     // Entry threshold: require at least 60% confidence
     let should_enter = confidence >= 60.0;
     let reason_str = reasons.join(", ");
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "FINAL_DECISION",
+            &format!(
+                "🎯 {} Final confidence: {:.1}% -> {} (factors: {})",
+                token.symbol,
+                confidence,
+                if should_enter {
+                    "✅ ENTER"
+                } else {
+                    "❌ SKIP"
+                },
+                reason_str
+            )
+        );
+    }
 
     (should_enter, confidence, reason_str)
 }

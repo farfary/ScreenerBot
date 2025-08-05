@@ -163,6 +163,22 @@ async fn main() {
         log(LogTag::System, "INFO", "ATA cleanup service task ended");
     });
 
+    // Start reinforcement learning background service
+    let shutdown_rl_learning = shutdown.clone();
+    let rl_learning_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "Reinforcement learning service task started");
+        screenerbot::rl_learning::start_learning_service(shutdown_rl_learning).await;
+        log(LogTag::System, "INFO", "Reinforcement learning service task ended");
+    });
+
+    // Start RL auto-save background service
+    let shutdown_rl_autosave = shutdown.clone();
+    let rl_autosave_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "RL auto-save service task started");
+        screenerbot::rl_learning::start_rl_auto_save_service(shutdown_rl_autosave).await;
+        log(LogTag::System, "INFO", "RL auto-save service task ended");
+    });
+
     let trader_handle = tokio::spawn(async move {
         log(LogTag::System, "INFO", "Trader task started");
         trader(shutdown_trader).await;
@@ -310,6 +326,24 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for RL learning service
+            if let Err(e) = rl_learning_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("RL learning task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for RL auto-save service
+            if let Err(e) = rl_autosave_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("RL auto-save task failed to shutdown cleanly: {}", e)
                 );
             }
 

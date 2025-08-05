@@ -101,6 +101,15 @@ pub fn is_debug_entry_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() { args.contains(&"--debug-entry".to_string()) } else { false }
 }
 
+/// Check if debug RL learning mode is enabled via command line args
+pub fn is_debug_rl_learn_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-rl-learn".to_string())
+    } else {
+        false
+    }
+}
+
 /// Check if debug OHLCV mode is enabled via command line args
 pub fn is_debug_ohlcv_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() { args.contains(&"--debug-ohlcv".to_string()) } else { false }
