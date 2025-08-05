@@ -47,10 +47,8 @@ pub const MAX_TOKEN_AGE_SECONDS: i64 = 24 * 30 * 24 * 60 * 60; // 2 years for bi
 /// Cooldown period after closing position before re-entering same token (minutes)
 pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 6 * 60; // 24 hours
 
-// Note: MAX_OPEN_POSITIONS is imported from trader module above
 
 // ===== PRICE ACTION FILTERING PARAMETERS =====
-// Note: ATH checking moved to trader for more intelligent analysis
 
 /// Minimum price in SOL to consider valid
 pub const MIN_VALID_PRICE_SOL: f64 = 0.0000000000001;
@@ -65,7 +63,7 @@ pub const MIN_LIQUIDITY_USD: f64 = 1.0; // LEGENDARY MOONSHOT MODE: Catch ANY ge
 
 /// Maximum liquidity in USD - EXCLUDE BIG STABLE TOKENS that won't moon
 /// MOONSHOT FOCUS: Cap at $75K to avoid large, stable tokens with low volatility
-pub const MAX_LIQUIDITY_USD: f64 = 75_000.0; // Focus on micro-caps with moonshot potential!
+pub const MAX_LIQUIDITY_USD: f64 = 50_000.0; // Focus on micro-caps with moonshot potential!
 
 /// Alternative ultra-aggressive mode for catching micro-cap gems
 pub const ULTRA_AGGRESSIVE_MIN_LIQUIDITY_USD: f64 = 0.5; // For catching sub-$1 gems
@@ -75,7 +73,7 @@ pub const GEM_HUNTING_MIN_LIQUIDITY_USD: f64 = 0.1; // God-tier aggressive mode
 
 /// MARKET CAP FILTERING - Avoid large market cap tokens that won't have big moves
 /// Maximum market cap in USD to focus on micro-cap gems
-pub const MAX_MARKET_CAP_USD: f64 = 500_000.0; // $500K max market cap for moonshot hunting
+pub const MAX_MARKET_CAP_USD: f64 = 5_000_000.0; // $500K max market cap for moonshot hunting
 
 /// Minimum volume/liquidity ratio for activity detection
 /// High ratio indicates active trading despite small liquidity (pump signals)
