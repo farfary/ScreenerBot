@@ -880,7 +880,10 @@ impl TradingLearner {
 
                 // Calculate volatility (price change between consecutive points)
                 if let Some(prev_price) = previous_price {
-                    volatility_sum += ((price - prev_price) / prev_price).abs();
+                    volatility_sum += (
+                        ((*price as f64) - (prev_price as f64)) /
+                        (prev_price as f64)
+                    ).abs();
                     volatility_count += 1;
                 }
                 previous_price = Some(*price);
