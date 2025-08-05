@@ -8,6 +8,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_pool_prices_enabled;
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_token_decimals_from_chain, get_cached_decimals };
+use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
@@ -68,22 +69,6 @@ pub fn get_pool_program_display_name(program_id: &str) -> String {
         PUMP_FUN_AMM_PROGRAM_ID => "PUMP.FUN AMM".to_string(),
         _ => format!("UNKNOWN ({})", &program_id[..8]), // Show first 8 chars for unknown programs
     }
-}
-
-/// Check if a token is a stable/system token that should be excluded from watch lists
-fn is_system_or_stable_token(mint: &str) -> bool {
-    let system_tokens = [
-        "So11111111111111111111111111111111111111112", // SOL
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
-        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
-        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
-        "11111111111111111111111111111111", // System Program (invalid token)
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
-    ];
-
-    system_tokens.contains(&mint)
 }
 
 // =============================================================================

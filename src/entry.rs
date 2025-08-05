@@ -5,12 +5,25 @@
 
 use crate::tokens::Token;
 use crate::tokens::pool::get_pool_service;
+use crate::tokens::is_token_excluded_from_trading;
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_trader_enabled;
 
 /// Pool-based entry decision function with -10% drop detection
 /// Returns true if the token should be bought based on pool price movement
 pub async fn should_buy(token: &Token) -> bool {
+    // 0. ABSOLUTE FIRST: Check blacklist and exclusion status
+    if is_token_excluded_from_trading(&token.mint) {
+        if is_debug_trader_enabled() {
+            log(
+                LogTag::Trader,
+                "ENTRY_REJECT",
+                &format!("❌ {} rejected: Token is blacklisted or excluded", token.symbol)
+            );
+        }
+        return false;
+    }
+
     // Get pool service for real-time price data
     let pool_service = get_pool_service();
 

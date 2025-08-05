@@ -3,6 +3,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::is_debug_discovery_enabled;
 use crate::tokens::api::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
+use crate::tokens::is_token_excluded_from_trading;
 use tokio::time::{ sleep, Duration };
 use std::sync::Arc;
 
@@ -574,14 +575,21 @@ impl TokenDiscovery {
         all_mints.dedup();
         let deduplicated_count = all_mints.len();
 
+        // Filter out blacklisted/excluded tokens
+        let before_blacklist_count = all_mints.len();
+        all_mints.retain(|mint| !is_token_excluded_from_trading(mint));
+        let after_blacklist_count = all_mints.len();
+        let blacklisted_count = before_blacklist_count - after_blacklist_count;
+
         log(
             LogTag::Discovery,
             "DEDUP",
             &format!(
-                "Deduplicated {} -> {} unique mints (removed {} duplicates)",
+                "Processed mints: {} → {} deduplicated → {} after blacklist filter (removed {} blacklisted)",
                 original_count,
                 deduplicated_count,
-                original_count - deduplicated_count
+                after_blacklist_count,
+                blacklisted_count
             )
         );
 

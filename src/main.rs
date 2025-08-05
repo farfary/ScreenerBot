@@ -9,6 +9,9 @@ async fn main() {
     // Initialize file logging system first
     init_file_logging();
 
+    // Initialize centralized blacklist system with system/stable tokens
+    screenerbot::tokens::initialize_system_stable_blacklist();
+
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
     // Set up emergency shutdown handler (second Ctrl+C will force kill)

@@ -1,6 +1,7 @@
 /// Token decimals fetching from Solana blockchain
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_decimals_enabled;
+use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
 use solana_sdk::pubkey::Pubkey;
 use solana_program::program_pack::Pack;
@@ -349,22 +350,6 @@ fn parse_token_2022_mint(data: &[u8]) -> Result<u8, String> {
 
     // Decimals are at offset 44 in both SPL Token and SPL Token-2022
     Ok(data[44])
-}
-
-/// Check if a token is a stable/system token that should be excluded from discovery
-fn is_system_or_stable_token(mint: &str) -> bool {
-    let system_tokens = [
-        "So11111111111111111111111111111111111111112", // SOL
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
-        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
-        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
-        "11111111111111111111111111111111", // System Program (invalid token)
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
-    ];
-
-    system_tokens.contains(&mint)
 }
 
 /// Batch fetch decimals for multiple tokens using efficient batch RPC calls

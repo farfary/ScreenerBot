@@ -9,6 +9,7 @@ use crate::global::is_debug_price_service_enabled;
 use crate::tokens::types::ApiToken;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::pool::{ get_pool_service, PoolPriceResult };
+use crate::tokens::is_system_or_stable_token;
 use crate::positions::is_open_position;
 use tokio::sync::RwLock;
 use std::collections::{ HashMap, HashSet };
@@ -29,22 +30,6 @@ const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
-/// Check if a token is a stable/system token that should be excluded from watch lists
-fn is_system_or_stable_token(mint: &str) -> bool {
-    let system_tokens = [
-        "So11111111111111111111111111111111111111112", // SOL
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
-        "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
-        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
-        "11111111111111111111111111111111", // System Program (invalid token)
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
-    ];
-
-    system_tokens.contains(&mint)
-}
 
 // =============================================================================
 // PRICE CACHE ENTRY

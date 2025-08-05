@@ -23,6 +23,18 @@ pub const MAX_LOW_LIQUIDITY_COUNT: u32 = 5;
 /// Blacklist file path
 pub const BLACKLIST_FILE: &str = "token_blacklist.json";
 
+/// System and stable tokens that should always be excluded from trading
+pub const SYSTEM_STABLE_TOKENS: &[&str] = &[
+    "So11111111111111111111111111111111111111112", // SOL
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+    "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
+    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+    "11111111111111111111111111111111", // System Program (invalid token)
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 Program
+];
+
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
@@ -45,6 +57,8 @@ pub enum BlacklistReason {
     LowLiquidity,
     PoorPerformance,
     ManualBlacklist,
+    SystemToken,     // System/program tokens
+    StableToken,     // Stable coins and major tokens
 }
 
 /// Individual liquidity check record
@@ -148,6 +162,8 @@ impl TokenBlacklist {
             BlacklistReason::LowLiquidity => "Low Liquidity",
             BlacklistReason::PoorPerformance => "Poor Performance",
             BlacklistReason::ManualBlacklist => "Manual",
+            BlacklistReason::SystemToken => "System Token",
+            BlacklistReason::StableToken => "Stable Token",
         };
 
         let entry = BlacklistEntry {
@@ -255,6 +271,8 @@ impl TokenBlacklist {
                 BlacklistReason::LowLiquidity => "LowLiquidity",
                 BlacklistReason::PoorPerformance => "PoorPerformance",
                 BlacklistReason::ManualBlacklist => "ManualBlacklist",
+                BlacklistReason::SystemToken => "SystemToken",
+                BlacklistReason::StableToken => "StableToken",
             };
             *reason_counts.entry(reason_str.to_string()).or_insert(0) += 1;
         }
@@ -395,4 +413,106 @@ pub fn add_to_blacklist_manual(mint: &str, symbol: &str) -> bool {
             false
         }
     }
+}
+
+// =============================================================================
+// CENTRALIZED TOKEN EXCLUSION SYSTEM
+// =============================================================================
+
+/// Check if token is a system or stable token that should be excluded from trading
+pub fn is_system_or_stable_token(mint: &str) -> bool {
+    SYSTEM_STABLE_TOKENS.contains(&mint)
+}
+
+/// Check if token should be excluded from trading (blacklisted OR system/stable)
+/// This is the main function that should be used everywhere for token exclusion checks
+pub fn is_token_excluded_from_trading(mint: &str) -> bool {
+    // Check system/stable tokens first (fastest)
+    if is_system_or_stable_token(mint) {
+        return true;
+    }
+    
+    // Check dynamic blacklist
+    is_token_blacklisted(mint)
+}
+
+/// Add system/stable token to blacklist for permanent exclusion
+pub fn add_system_token_to_blacklist(mint: &str, symbol: &str) -> bool {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(mut blacklist) => {
+            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::SystemToken);
+
+            if let Err(e) = blacklist.save() {
+                log(
+                    LogTag::Blacklist,
+                    "WARN",
+                    &format!("Failed to save blacklist after adding system token: {}", e)
+                );
+                false
+            } else {
+                true
+            }
+        }
+        Err(_) => {
+            log(LogTag::Blacklist, "WARN", "Could not acquire blacklist lock for system token");
+            false
+        }
+    }
+}
+
+/// Add stable token to blacklist for permanent exclusion
+pub fn add_stable_token_to_blacklist(mint: &str, symbol: &str) -> bool {
+    match TOKEN_BLACKLIST.try_lock() {
+        Ok(mut blacklist) => {
+            blacklist.add_to_blacklist(mint, symbol, BlacklistReason::StableToken);
+
+            if let Err(e) = blacklist.save() {
+                log(
+                    LogTag::Blacklist,
+                    "WARN",
+                    &format!("Failed to save blacklist after adding stable token: {}", e)
+                );
+                false
+            } else {
+                true
+            }
+        }
+        Err(_) => {
+            log(LogTag::Blacklist, "WARN", "Could not acquire blacklist lock for stable token");
+            false
+        }
+    }
+}
+
+/// Initialize system and stable tokens in blacklist (run at startup)
+pub fn initialize_system_stable_blacklist() {
+    for &mint in SYSTEM_STABLE_TOKENS {
+        if !is_token_blacklisted(mint) {
+            let symbol = match mint {
+                "So11111111111111111111111111111111111111112" => "SOL",
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => "USDC",
+                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" => "USDT",
+                "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj" => "stSOL",
+                "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" => "mSOL",
+                "11111111111111111111111111111111" => "SYSTEM",
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "TOKEN_PROGRAM",
+                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => "TOKEN_2022",
+                _ => "UNKNOWN"
+            };
+            
+            let reason = match mint {
+                "11111111111111111111111111111111" | 
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" | 
+                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => BlacklistReason::SystemToken,
+                _ => BlacklistReason::StableToken,
+            };
+            
+            if let Ok(mut blacklist) = TOKEN_BLACKLIST.try_lock() {
+                blacklist.add_to_blacklist(mint, symbol, reason);
+                let _ = blacklist.save(); // Ignore save errors during initialization
+            }
+        }
+    }
+    
+    log(LogTag::Blacklist, "INIT", "System and stable tokens initialized in blacklist");
 }

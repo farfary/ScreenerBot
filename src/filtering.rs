@@ -7,6 +7,7 @@ use crate::tokens::{
     TokenDatabase,
     rugcheck::{ is_token_safe_for_trading, get_high_risk_issues },
     get_token_decimals_sync,
+    is_token_excluded_from_trading,
 };
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_filtering_enabled;
@@ -139,6 +140,12 @@ pub const PRICE_HISTORY_LOCK_TIMEOUT_MS: u64 = 3000;
 /// Reasons why a token might be filtered out
 #[derive(Debug, Clone)]
 pub enum FilterReason {
+    // Blacklist/exclusion filters (HIGHEST PRIORITY)
+    TokenBlacklisted {
+        reason: String,
+    },
+    SystemOrStableToken,
+    
     // Basic validation failures
     EmptySymbol,
     EmptyMint,
@@ -258,7 +265,33 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         );
     }
 
-    // 1. RUGCHECK SECURITY VALIDATION (FIRST - HIGHEST PRIORITY)
+    // 0. BLACKLIST AND EXCLUSION CHECK (ABSOLUTE FIRST - HIGHEST PRIORITY)
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_0",
+            &format!("🚫 Step 0: Checking blacklist/exclusion for {}", token.symbol)
+        );
+    }
+    if let Some(reason) = validate_blacklist_exclusion(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT_STEP_0",
+                &format!("❌ {}: FAILED Step 0 (Blacklist/Exclusion) - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_0",
+            &format!("✅ {}: PASSED Step 0 (Blacklist/Exclusion)", token.symbol)
+        );
+    }
+
+    // 1. RUGCHECK SECURITY VALIDATION (SECOND - HIGHEST PRIORITY)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
@@ -530,6 +563,53 @@ fn validate_basic_price_data(token: &Token) -> Option<FilterReason> {
             current_price,
             maximum_price: MAX_VALID_PRICE_SOL,
         });
+    }
+
+    None
+}
+
+/// Validate blacklist and exclusion status (ABSOLUTE HIGHEST PRIORITY)
+fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
+    // Check if token is excluded from trading (blacklisted OR system/stable)
+    if is_token_excluded_from_trading(&token.mint) {
+        // Determine if it's a system/stable token or blacklisted
+        if crate::tokens::is_system_or_stable_token(&token.mint) {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_BLACKLIST",
+                    &format!("🚫 Token {} is a system or stable token - excluded", token.symbol)
+                );
+            }
+            return Some(FilterReason::SystemOrStableToken);
+        } else {
+            // It's in the dynamic blacklist
+            let reason_description = if let Some(stats) = crate::tokens::get_blacklist_stats() {
+                format!("Blacklisted (total: {})", stats.total_blacklisted)
+            } else {
+                "Blacklisted".to_string()
+            };
+            
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_BLACKLIST",
+                    &format!("🚫 Token {} is blacklisted - {}", token.symbol, reason_description)
+                );
+            }
+            
+            return Some(FilterReason::TokenBlacklisted {
+                reason: reason_description,
+            });
+        }
+    }
+
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "DEBUG_BLACKLIST",
+            &format!("✅ Token {} passed blacklist/exclusion check", token.symbol)
+        );
     }
 
     None
@@ -1558,6 +1638,8 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
 
     for (_, reason) in rejected {
         let reason_type = match reason {
+            | FilterReason::TokenBlacklisted { .. }
+            | FilterReason::SystemOrStableToken => "Blacklist/Exclusion",
             | FilterReason::EmptySymbol
             | FilterReason::EmptyMint
             | FilterReason::EmptyLogoUrl

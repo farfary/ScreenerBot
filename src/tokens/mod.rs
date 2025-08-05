@@ -70,6 +70,10 @@ pub use blacklist::{
     is_token_blacklisted,
     check_and_track_liquidity,
     get_blacklist_stats,
+    add_to_blacklist_manual,
+    is_system_or_stable_token,
+    is_token_excluded_from_trading,
+    initialize_system_stable_blacklist,
 };
 pub use rugcheck::{
     RugcheckService,
