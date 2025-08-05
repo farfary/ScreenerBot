@@ -62,11 +62,23 @@ pub const MAX_VALID_PRICE_SOL: f64 = 0.1;
 /// ULTRA AGGRESSIVE FOR MOONSHOT HUNTING: Reduced to $1 to catch legendary gems
 pub const MIN_LIQUIDITY_USD: f64 = 1.0; // LEGENDARY MOONSHOT MODE: Catch ANY gem with >$1!
 
+/// Maximum liquidity in USD - EXCLUDE BIG STABLE TOKENS that won't moon
+/// MOONSHOT FOCUS: Cap at $75K to avoid large, stable tokens with low volatility
+pub const MAX_LIQUIDITY_USD: f64 = 75_000.0; // Focus on micro-caps with moonshot potential!
+
 /// Alternative ultra-aggressive mode for catching micro-cap gems
 pub const ULTRA_AGGRESSIVE_MIN_LIQUIDITY_USD: f64 = 0.5; // For catching sub-$1 gems
 
 /// Gem hunting mode - even more aggressive for catching 500-1000% movers
 pub const GEM_HUNTING_MIN_LIQUIDITY_USD: f64 = 0.1; // God-tier aggressive mode
+
+/// MARKET CAP FILTERING - Avoid large market cap tokens that won't have big moves
+/// Maximum market cap in USD to focus on micro-cap gems
+pub const MAX_MARKET_CAP_USD: f64 = 500_000.0; // $500K max market cap for moonshot hunting
+
+/// Minimum volume/liquidity ratio for activity detection
+/// High ratio indicates active trading despite small liquidity (pump signals)
+pub const MIN_VOLUME_LIQUIDITY_RATIO: f64 = 0.1; // 10% minimum volume/liquidity ratio
 
 // ===== RUGCHECK SECURITY PARAMETERS =====
 /// IMPORTANT: Rugcheck scores are RISK scores - higher values mean MORE risk, not less!
@@ -88,10 +100,10 @@ pub const MAX_CRITICAL_RISK_ISSUES: usize = 5; // Accept critical issues for moo
 
 // ===== LP LOCK SECURITY PARAMETERS =====
 /// Minimum percentage of LP tokens that must be locked
-pub const MIN_LP_LOCK_PERCENTAGE: f64 = 80.0;
+pub const MIN_LP_LOCK_PERCENTAGE: f64 = 50.0;
 
 /// Minimum percentage for new/risky tokens
-pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 90.0;
+pub const MIN_LP_LOCK_PERCENTAGE_NEW_TOKENS: f64 = 50.0;
 
 // ===== HISTORICAL PERFORMANCE PARAMETERS =====
 /// Maximum acceptable loss rate for historical performance (0.0-1.0)
@@ -146,6 +158,14 @@ pub enum FilterReason {
     InsufficientLiquidity {
         current_usd: f64,
         minimum_required: f64,
+    },
+    TooHighLiquidity {
+        current_usd: f64,
+        maximum_allowed: f64,
+    },
+    TooHighMarketCap {
+        current_usd: f64,
+        maximum_allowed: f64,
     },
     MissingLiquidityData,
     MissingPriceData,
@@ -876,10 +896,11 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
             LogTag::Filtering,
             "DEBUG_LIQUIDITY",
             &format!(
-                "💧 Liquidity check for {}: ${:.2} (min: ${:.2})",
+                "💧 Liquidity check for {}: ${:.2} (min: ${:.2}, max: ${:.2})",
                 token.symbol,
                 liquidity_usd,
-                MIN_LIQUIDITY_USD
+                MIN_LIQUIDITY_USD,
+                MAX_LIQUIDITY_USD
             )
         );
     }
@@ -915,11 +936,92 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
         });
     }
 
+    // NEW: Apply maximum liquidity requirement - AVOID BIG STABLE TOKENS
+    if liquidity_usd > MAX_LIQUIDITY_USD {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "DEBUG_LIQUIDITY",
+                &format!(
+                    "❌ Token {} too high liquidity (stable token): ${:.2} > ${:.2} maximum",
+                    token.symbol,
+                    liquidity_usd,
+                    MAX_LIQUIDITY_USD
+                )
+            );
+        }
+        return Some(FilterReason::TooHighLiquidity {
+            current_usd: liquidity_usd,
+            maximum_allowed: MAX_LIQUIDITY_USD,
+        });
+    }
+
+    // NEW: Check market cap if available - AVOID HIGH MARKET CAP TOKENS
+    if let Some(market_cap) = token.market_cap {
+        if market_cap > MAX_MARKET_CAP_USD {
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_LIQUIDITY",
+                    &format!(
+                        "❌ Token {} too high market cap: ${:.2} > ${:.2} maximum",
+                        token.symbol,
+                        market_cap,
+                        MAX_MARKET_CAP_USD
+                    )
+                );
+            }
+            return Some(FilterReason::TooHighMarketCap {
+                current_usd: market_cap,
+                maximum_allowed: MAX_MARKET_CAP_USD,
+            });
+        }
+    }
+
+    // NEW: Check volume/liquidity ratio for activity (pump detection)
+    if let Some(volume_stats) = &token.volume {
+        if let Some(volume_24h) = volume_stats.h24 {
+            let volume_liquidity_ratio = volume_24h / liquidity_usd;
+
+            if is_debug_filtering_enabled() {
+                log(
+                    LogTag::Filtering,
+                    "DEBUG_LIQUIDITY",
+                    &format!(
+                        "💹 Token {} volume/liquidity ratio: {:.3} (24h vol: ${:.2})",
+                        token.symbol,
+                        volume_liquidity_ratio,
+                        volume_24h
+                    )
+                );
+            }
+
+            // BONUS: High volume/liquidity ratio indicates activity despite small size (good for gems)
+            if volume_liquidity_ratio >= MIN_VOLUME_LIQUIDITY_RATIO * 5.0 {
+                if is_debug_filtering_enabled() {
+                    log(
+                        LogTag::Filtering,
+                        "DEBUG_LIQUIDITY",
+                        &format!(
+                            "🚀 Token {} shows high activity (ratio: {:.3}) - POTENTIAL GEM!",
+                            token.symbol,
+                            volume_liquidity_ratio
+                        )
+                    );
+                }
+            }
+        }
+    }
+
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "DEBUG_LIQUIDITY",
-            &format!("✅ Token {} liquidity adequate (${:.2})", token.symbol, liquidity_usd)
+            &format!(
+                "✅ Token {} liquidity optimal for gem hunting (${:.2})",
+                token.symbol,
+                liquidity_usd
+            )
         );
     }
 
@@ -1467,6 +1569,8 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             | FilterReason::MissingPriceData => "Price Issues",
             | FilterReason::ZeroLiquidity
             | FilterReason::InsufficientLiquidity { .. }
+            | FilterReason::TooHighLiquidity { .. }
+            | FilterReason::TooHighMarketCap { .. }
             | FilterReason::MissingLiquidityData => "Liquidity Issues",
             | FilterReason::TooYoung { .. }
             | FilterReason::TooOld { .. }

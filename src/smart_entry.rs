@@ -83,44 +83,41 @@ impl LiquidityTier {
     }
 
     /// Get dynamic dip threshold based on liquidity tier
-    /// ULTRA AGGRESSIVE FOR GEM HUNTING: Expanded to catch massive moves (500-1000%)
-    /// Range: 0.3% (ultra stable) to 25% (legendary gems) - MOONSHOT HUNTER MODE!
+    /// ULTRA AGGRESSIVE FOR GEM HUNTING: Optimized to focus on micro-caps with moonshot potential
+    /// Range: 2.0% (large tokens - avoid) to 15% (legendary gems) - MOONSHOT HUNTER MODE!
     pub fn get_dip_threshold(&self) -> f64 {
         match self {
-            // Ultra High Liquidity: Very stable, tiny dips are profitable
-            LiquidityTier::UltraWhale => 0.3, // $5M+: 0.3% dip (AGGRESSIVE)
-            LiquidityTier::MegaWhale => 0.4, // $3.5M-$5M: 0.4% dip
-            LiquidityTier::SuperWhale => 0.5, // $2M-$3.5M: 0.5% dip
+            // Ultra High Liquidity: AVOID THESE - Not moonshot material (higher thresholds to discourage)
+            LiquidityTier::UltraWhale => 10.0, // $5M+: 10% required (DISCOURAGE)
+            LiquidityTier::MegaWhale => 8.0, // $3.5M-$5M: 8% required (DISCOURAGE)
+            LiquidityTier::SuperWhale => 6.0, // $2M-$3.5M: 6% required (DISCOURAGE)
 
-            // High Liquidity: Small moves generate good profits
-            LiquidityTier::Whale => 0.6, // $1.5M-$2M: 0.6% dip
-            LiquidityTier::LargeWhale => 0.8, // $1M-$1.5M: 0.8% dip
-            LiquidityTier::MediumWhale => 1.0, // $750K-$1M: 1.0% dip
-            LiquidityTier::SmallWhale => 1.2, // $500K-$750K: 1.2% dip
+            // High Liquidity: Limited moonshot potential (moderate thresholds)
+            LiquidityTier::Whale => 5.0, // $1.5M-$2M: 5% required
+            LiquidityTier::LargeWhale => 4.0, // $1M-$1.5M: 4% required
+            LiquidityTier::MediumWhale => 3.5, // $750K-$1M: 3.5% required
+            LiquidityTier::SmallWhale => 3.0, // $500K-$750K: 3.0% required
 
-            // Medium Liquidity: Still very tradeable
-            LiquidityTier::Massive => 1.5, // $300K-$500K: 1.5% dip
-            LiquidityTier::Large => 1.8, // $200K-$300K: 1.8% dip
-            LiquidityTier::MediumLarge => 2.0, // $150K-$200K: 2.0% dip
-            LiquidityTier::Medium => 2.2, // $100K-$150K: 2.2% dip
-            LiquidityTier::MediumSmall => 2.5, // $75K-$100K: 2.5% dip
-            LiquidityTier::Small => 3.0, // $50K-$75K: 3.0% dip
+            // Medium Liquidity: Some moonshot potential (moderate-aggressive thresholds)
+            LiquidityTier::Massive => 2.5, // $300K-$500K: 2.5% required
+            LiquidityTier::Large => 2.2, // $200K-$300K: 2.2% required
+            LiquidityTier::MediumLarge => 2.0, // $150K-$200K: 2.0% required
+            LiquidityTier::Medium => 1.8, // $100K-$150K: 1.8% required
 
-            // Low Liquidity: Still profitable with moderate drops
-            LiquidityTier::Micro => 3.5, // $25K-$50K: 3.5% dip
-            LiquidityTier::MiniMicro => 4.0, // $10K-$25K: 4.0% dip
-            LiquidityTier::Tiny => 5.0, // $5K-$10K: 5.0% dip
+            // GEM TERRITORY: FOCUS HERE - High moonshot potential (aggressive thresholds)
+            LiquidityTier::MediumSmall => 1.5, // $75K-$100K: 1.5% required ⭐
+            LiquidityTier::Small => 1.2, // $50K-$75K: 1.2% required ⭐⭐
+            LiquidityTier::Micro => 1.0, // $25K-$50K: 1.0% required ⭐⭐⭐
+            LiquidityTier::MiniMicro => 0.8, // $10K-$25K: 0.8% required 🚀
+            LiquidityTier::Tiny => 0.6, // $5K-$10K: 0.6% required 🚀🚀
 
-            // Ultra Low Liquidity: Higher moves but still reasonable
-            LiquidityTier::Nano => 6.0, // $1K-$5K: 6.0% dip
-            LiquidityTier::Pico => 8.0, // $500-$1K: 8.0% dip
-
-            // 🚀 NEW GEM HUNTING ULTRA-AGGRESSIVE THRESHOLDS 🚀
-            // These are where 500-1000% moves happen!
-            LiquidityTier::UltraPico => 12.0, // $100-$500: 12% dip - TRUE GEMS!
-            LiquidityTier::Femto => 15.0, // $25-$100: 15% dip - ULTRA GEMS!
-            LiquidityTier::Atto => 20.0, // $5-$25: 20% dip - MEGA GEMS!
-            LiquidityTier::Yocto => 25.0, // <$5: 25% dip - LEGENDARY MOONSHOTS!
+            // LEGENDARY GEM TERRITORY: MAXIMUM MOONSHOT POTENTIAL (ultra-aggressive thresholds)
+            LiquidityTier::Nano => 0.5, // $1K-$5K: 0.5% required 🌙
+            LiquidityTier::Pico => 0.4, // $500-$1K: 0.4% required 🌙🌙
+            LiquidityTier::UltraPico => 0.3, // $100-$500: 0.3% required 🌙🌙🌙
+            LiquidityTier::Femto => 0.2, // $25-$100: 0.2% required 💎💎💎
+            LiquidityTier::Atto => 0.15, // $5-$25: 0.15% required 🦄🦄🦄
+            LiquidityTier::Yocto => 0.1, // <$5: 0.1% required ⚡⚡⚡ LEGENDARY STATUS!
         }
     }
 
@@ -129,40 +126,37 @@ impl LiquidityTier {
     /// Range from conservative (5%-20%) to LEGENDARY (1000%-10000%+)
     pub fn get_profit_target_range(&self) -> (f64, f64) {
         match self {
-            // Ultra High Liquidity: Conservative, stable returns
-            LiquidityTier::UltraWhale => (5.0, 20.0), // $5M+: 5%-20%
-            LiquidityTier::MegaWhale => (6.0, 25.0), // $3.5M-$5M: 6%-25%
-            LiquidityTier::SuperWhale => (8.0, 30.0), // $2M-$3.5M: 8%-30%
+            // Ultra High Liquidity: DISCOURAGE - Lower returns (not moonshot material)
+            LiquidityTier::UltraWhale => (2.0, 10.0), // $5M+: 2%-10% (AVOID - too stable)
+            LiquidityTier::MegaWhale => (3.0, 12.0), // $3.5M-$5M: 3%-12% (AVOID)
+            LiquidityTier::SuperWhale => (4.0, 15.0), // $2M-$3.5M: 4%-15% (AVOID)
 
-            // High Liquidity: Moderate returns with good stability
-            LiquidityTier::Whale => (10.0, 35.0), // $1.5M-$2M: 10%-35%
-            LiquidityTier::LargeWhale => (12.0, 40.0), // $1M-$1.5M: 12%-40%
-            LiquidityTier::MediumWhale => (15.0, 50.0), // $750K-$1M: 15%-50%
-            LiquidityTier::SmallWhale => (18.0, 60.0), // $500K-$750K: 18%-60%
+            // High Liquidity: Limited moonshot potential (moderate returns)
+            LiquidityTier::Whale => (5.0, 20.0), // $1.5M-$2M: 5%-20%
+            LiquidityTier::LargeWhale => (6.0, 25.0), // $1M-$1.5M: 6%-25%
+            LiquidityTier::MediumWhale => (8.0, 30.0), // $750K-$1M: 8%-30%
+            LiquidityTier::SmallWhale => (10.0, 40.0), // $500K-$750K: 10%-40%
 
-            // Medium Liquidity: Higher returns with moderate risk
-            LiquidityTier::Massive => (20.0, 75.0), // $300K-$500K: 20%-75%
-            LiquidityTier::Large => (25.0, 100.0), // $200K-$300K: 25%-100%
-            LiquidityTier::MediumLarge => (30.0, 125.0), // $150K-$200K: 30%-125%
-            LiquidityTier::Medium => (35.0, 150.0), // $100K-$150K: 35%-150%
-            LiquidityTier::MediumSmall => (40.0, 200.0), // $75K-$100K: 40%-200%
-            LiquidityTier::Small => (50.0, 250.0), // $50K-$75K: 50%-250%
+            // Medium Liquidity: Some moonshot potential (moderate-high returns)
+            LiquidityTier::Massive => (12.0, 50.0), // $300K-$500K: 12%-50%
+            LiquidityTier::Large => (15.0, 60.0), // $200K-$300K: 15%-60%
+            LiquidityTier::MediumLarge => (18.0, 75.0), // $150K-$200K: 18%-75%
+            LiquidityTier::Medium => (20.0, 100.0), // $100K-$150K: 20%-100%
 
-            // Low Liquidity: High volatility, high reward potential
-            LiquidityTier::Micro => (60.0, 350.0), // $25K-$50K: 60%-350%
-            LiquidityTier::MiniMicro => (75.0, 500.0), // $10K-$25K: 75%-500%
-            LiquidityTier::Tiny => (100.0, 750.0), // $5K-$10K: 100%-750%
+            // GEM TERRITORY: FOCUS HERE - High moonshot potential ⭐⭐⭐
+            LiquidityTier::MediumSmall => (25.0, 150.0), // $75K-$100K: 25%-150% ⭐
+            LiquidityTier::Small => (30.0, 200.0), // $50K-$75K: 30%-200% ⭐⭐
+            LiquidityTier::Micro => (40.0, 300.0), // $25K-$50K: 40%-300% ⭐⭐⭐
+            LiquidityTier::MiniMicro => (50.0, 500.0), // $10K-$25K: 50%-500% 🚀
+            LiquidityTier::Tiny => (75.0, 750.0), // $5K-$10K: 75%-750% 🚀🚀
 
-            // Ultra Low Liquidity: Extreme volatility, moonshot potential
-            LiquidityTier::Nano => (150.0, 1000.0), // $1K-$5K: 150%-1000%
-            LiquidityTier::Pico => (200.0, 1500.0), // $500-$1K: 200%-1500%
-
-            // 🚀 NEW GEM HUNTING ULTRA-MOONSHOT TARGETS 🚀
-            // These are where LEGENDARY gains happen! (REALISTIC TARGETS)
-            LiquidityTier::UltraPico => (50.0, 500.0), // $100-$500: 50%-500% - TRUE GEMS!
-            LiquidityTier::Femto => (75.0, 1000.0), // $25-$100: 75%-1000% - ULTRA GEMS!
-            LiquidityTier::Atto => (100.0, 2000.0), // $5-$25: 100%-2000% - MEGA GEMS!
-            LiquidityTier::Yocto => (150.0, 2000.0), // <$5: 150%-2000% - LEGENDARY MOONSHOTS!
+            // LEGENDARY GEM TERRITORY: MAXIMUM MOONSHOT POTENTIAL 🌙💎🦄
+            LiquidityTier::Nano => (100.0, 1000.0), // $1K-$5K: 100%-1000% 🌙
+            LiquidityTier::Pico => (150.0, 1500.0), // $500-$1K: 150%-1500% 🌙🌙
+            LiquidityTier::UltraPico => (200.0, 2000.0), // $100-$500: 200%-2000% 🌙🌙🌙
+            LiquidityTier::Femto => (300.0, 3000.0), // $25-$100: 300%-3000% 💎💎💎
+            LiquidityTier::Atto => (500.0, 5000.0), // $5-$25: 500%-5000% 🦄🦄🦄
+            LiquidityTier::Yocto => (1000.0, 10000.0), // <$5: 1000%-10000% ⚡⚡⚡ LEGENDARY!
         }
     }
 }
