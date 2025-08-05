@@ -7,7 +7,11 @@
 
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_monitor_enabled;
-use crate::tokens::api::get_global_dexscreener_api;
+use crate::tokens::api::{
+    get_global_dexscreener_api,
+    MAX_TOKENS_PER_API_CALL,
+    API_CALLS_PER_MONITORING_CYCLE,
+};
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
 use crate::tokens::price_service::{ get_priority_tokens_safe, update_tokens_prices_safe };
@@ -17,31 +21,20 @@ use tokio::sync::Semaphore;
 use std::sync::Arc;
 
 // =============================================================================
-// ENHANCED CONFIGURATION CONSTANTS
+// MONITORING CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// Rate limit for DexScreener info API (per minute)
-pub const INFO_RATE_LIMIT: usize = 300;
-
-/// API calls to use per monitoring cycle (conservative for 5-second intervals)
-/// With 5-second cycles, we have 720 cycles per hour, so 20 calls per cycle = 1440 calls/hour
-/// This is well within the 300 calls/minute (18,000 calls/hour) rate limit
-pub const INFO_CALLS_PER_CYCLE: usize = 30;
-
-/// Enhanced monitoring cycle duration in seconds (5 seconds for real-time price updates)
+/// Enhanced monitoring cycle duration in seconds (2 seconds for real-time price updates)
 pub const ENHANCED_CYCLE_DURATION_SECONDS: u64 = 2;
 
 /// Database cleanup interval in seconds (1 minute)
 pub const CLEANUP_INTERVAL_SECONDS: u64 = 60;
 
-/// Maximum tokens to process per API call (reduced for frequent updates)
-pub const MAX_TOKENS_PER_BATCH: usize = 30;
+/// High liquidity threshold for monitoring prioritization (USD)
+pub const MONITOR_HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
 
-/// High liquidity threshold for prioritization (USD)
-pub const HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
-
-/// Maximum number of tokens to monitor per cycle (reduced for 5-second intervals)
-pub const MAX_TOKENS_PER_CYCLE: usize = 150;
+/// Maximum number of tokens to monitor per cycle (reduced for 2-second intervals)
+pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 150;
 
 // =============================================================================
 // ENHANCED TOKEN MONITOR
@@ -58,7 +51,7 @@ impl TokenMonitor {
     /// Create new enhanced token monitor instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let database = TokenDatabase::new()?;
-        let rate_limiter = Arc::new(Semaphore::new(INFO_CALLS_PER_CYCLE));
+        let rate_limiter = Arc::new(Semaphore::new(API_CALLS_PER_MONITORING_CYCLE));
 
         Ok(Self {
             database,
@@ -68,9 +61,9 @@ impl TokenMonitor {
         })
     }
 
-    /// Start enhanced monitoring loop with priority queue (5-second intervals)
+    /// Start enhanced monitoring loop with priority queue (2-second intervals)
     pub async fn start_enhanced_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
-        log(LogTag::Monitor, "START", "Enhanced token monitor started with 5-second price updates");
+        log(LogTag::Monitor, "START", "Enhanced token monitor started with 2-second price updates");
 
         loop {
             tokio::select! {
@@ -142,7 +135,7 @@ impl TokenMonitor {
         let mut errors = 0;
 
         // Process in batches
-        for chunk in priority_mints.chunks(MAX_TOKENS_PER_BATCH) {
+        for chunk in priority_mints.chunks(MAX_TOKENS_PER_API_CALL) {
             // Acquire rate limit permit
             let _permit = self.rate_limiter.acquire().await.unwrap();
 
@@ -245,7 +238,7 @@ impl TokenMonitor {
     async fn monitor_for_new_entries(&mut self) -> Result<(), String> {
         // Get high liquidity tokens from database for new entry detection
         let high_liquidity_tokens = self.database
-            .get_tokens_by_liquidity_threshold(HIGH_LIQUIDITY_THRESHOLD).await
+            .get_tokens_by_liquidity_threshold(MONITOR_HIGH_LIQUIDITY_THRESHOLD).await
             .map_err(|e| format!("Failed to get high liquidity tokens: {}", e))?;
 
         if high_liquidity_tokens.is_empty() {
@@ -257,7 +250,7 @@ impl TokenMonitor {
         let mut new_entry_candidates: Vec<ApiToken> = high_liquidity_tokens
             .into_iter()
             .filter(|token| !is_token_blacklisted(&token.mint))
-            .take(MAX_TOKENS_PER_CYCLE) // Use comprehensive monitoring limit
+            .take(MAX_TOKENS_PER_MONITOR_CYCLE) // Use comprehensive monitoring limit
             .collect();
 
         if new_entry_candidates.is_empty() {
@@ -301,7 +294,7 @@ impl TokenMonitor {
         let mut processed = 0;
         let mut updated = 0;
 
-        for chunk in new_entry_candidates.chunks(MAX_TOKENS_PER_BATCH) {
+        for chunk in new_entry_candidates.chunks(MAX_TOKENS_PER_API_CALL) {
             // Check if we still have rate limit budget
             if self.rate_limiter.available_permits() == 0 {
                 log(

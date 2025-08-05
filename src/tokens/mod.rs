@@ -46,6 +46,11 @@ pub use api::{
     get_token_pairs_from_api,
     init_dexscreener_api,
     get_global_dexscreener_api,
+    // API configuration constants
+    DEXSCREENER_RATE_LIMIT_PER_MINUTE,
+    DEXSCREENER_DISCOVERY_RATE_LIMIT,
+    MAX_TOKENS_PER_API_CALL,
+    API_CALLS_PER_MONITORING_CYCLE,
 };
 pub use discovery::{ TokenDiscovery, start_token_discovery, discover_tokens_once };
 pub use monitor::{
@@ -109,13 +114,6 @@ pub const ENABLE_POOL_PRICES: bool = true;
 
 /// Primary price source configuration
 pub const USE_DEXSCREENER_PRIMARY: bool = true;
-
-/// Rate limits for DexScreener API
-pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 250; // 300 requests per minute for tokens
-pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 50; // 60 requests per minute for discovery
-
-/// Batch size for API calls
-pub const MAX_TOKENS_PER_BATCH: usize = 30; // DexScreener supports up to 30 tokens per call
 
 /// Price validation thresholds
 pub const MAX_PRICE_DEVIATION_PERCENT: f64 = 50.0; // Maximum deviation between sources
@@ -507,10 +505,10 @@ pub async fn get_all_tokens_by_liquidity() -> Result<Vec<ApiToken>, String> {
 pub async fn start_enhanced_monitoring(
     shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    log(LogTag::System, "START", "Starting enhanced token monitoring with 5-second price updates");
+    log(LogTag::System, "START", "Starting enhanced token monitoring with 2-second price updates");
 
     let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // Every 5 seconds
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2)); // Every 2 seconds
 
         loop {
             tokio::select! {
@@ -556,7 +554,7 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
         format!("Failed to get global API client: {}", e)
     )?;
 
-    // Process tokens in batches (smaller batch size for 5-second intervals)
+    // Process tokens in batches (smaller batch size for 2-second intervals)
     let batch_size = 10;
     let mut total_updated = 0;
 

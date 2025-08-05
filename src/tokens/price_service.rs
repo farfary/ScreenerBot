@@ -27,6 +27,9 @@ const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 10;
 /// Time to keep watching a token after last request (in seconds)
 const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
 
+/// Liquidity threshold for price service watch list prioritization (USD)
+const PRICE_SERVICE_LIQUIDITY_THRESHOLD: f64 = 10000.0;
+
 // Note: Removed POOL_PRICE_LIMIT_PER_CYCLE constraint to allow unlimited pool calculations
 // since we can efficiently batch 100 account fetches per RPC call, the previous limit of 10
 // was artificially restricting real-time price accuracy for open positions
@@ -717,8 +720,9 @@ impl TokenPriceService {
         // Add some high liquidity tokens if we have space
         if priority_tokens.len() < 100 {
             if
-                let Ok(high_liquidity_tokens) =
-                    self.database.get_tokens_by_liquidity_threshold(10000.0).await
+                let Ok(high_liquidity_tokens) = self.database.get_tokens_by_liquidity_threshold(
+                    PRICE_SERVICE_LIQUIDITY_THRESHOLD
+                ).await
             {
                 for token in high_liquidity_tokens.into_iter().take(50) {
                     if !is_token_blacklisted(&token.mint) && !priority_tokens.contains(&token.mint) {

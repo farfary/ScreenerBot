@@ -3,6 +3,22 @@
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_api_enabled;
 use crate::wallet::SOL_MINT;
+
+// =============================================================================
+// DEXSCREENER API CONFIGURATION CONSTANTS
+// =============================================================================
+
+/// DexScreener API rate limit (requests per minute)
+pub const DEXSCREENER_RATE_LIMIT_PER_MINUTE: usize = 300;
+
+/// DexScreener discovery API rate limit (requests per minute)
+pub const DEXSCREENER_DISCOVERY_RATE_LIMIT: usize = 60;
+
+/// Maximum tokens per API call (DexScreener API constraint)
+pub const MAX_TOKENS_PER_API_CALL: usize = 30;
+
+/// API calls per monitoring cycle (based on rate limits)
+pub const API_CALLS_PER_MONITORING_CYCLE: usize = 30;
 use crate::tokens::types::{
     TokenInfo,
     VolumeStats,
@@ -44,7 +60,7 @@ impl DexScreenerApi {
                 .user_agent("ScreenerBot/1.0")
                 .build()
                 .expect("Failed to create HTTP client"),
-            rate_limiter: Arc::new(Semaphore::new(300)), // 300 requests per minute
+            rate_limiter: Arc::new(Semaphore::new(DEXSCREENER_RATE_LIMIT_PER_MINUTE)),
             stats: ApiStats::new(),
             last_request_time: None,
         }
@@ -77,8 +93,8 @@ impl DexScreenerApi {
         let start_time = Instant::now();
         let mut total_errors = 0;
 
-        // Process in chunks of 30 (DexScreener API limit)
-        for (chunk_idx, chunk) in mints.chunks(30).enumerate() {
+        // Process in chunks of MAX_TOKENS_PER_API_CALL (DexScreener API limit)
+        for (chunk_idx, chunk) in mints.chunks(MAX_TOKENS_PER_API_CALL).enumerate() {
             match self.get_tokens_info(chunk).await {
                 Ok(tokens) => {
                     for token in tokens {
@@ -98,7 +114,7 @@ impl DexScreenerApi {
                                 "Batch {} failed (tokens {}-{}): {}",
                                 chunk_idx + 1,
                                 chunk_idx * 30 + 1,
-                                chunk_idx * 30 + chunk.len(),
+                                chunk_idx * MAX_TOKENS_PER_API_CALL + chunk.len(),
                                 e
                             )
                         );
@@ -164,8 +180,14 @@ impl DexScreenerApi {
             return Ok(Vec::new());
         }
 
-        if mints.len() > 30 {
-            return Err("Too many tokens requested (max 30)".to_string());
+        if mints.len() > MAX_TOKENS_PER_API_CALL {
+            return Err(
+                format!(
+                    "Too many tokens requested: {}. Maximum is {}",
+                    mints.len(),
+                    MAX_TOKENS_PER_API_CALL
+                )
+            );
         }
 
         let mint_list = mints.join(",");
@@ -751,8 +773,6 @@ pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, 
         )
         .map(|api| api.clone())
 }
-
-
 
 /// Helper function to get token price using global API
 pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {

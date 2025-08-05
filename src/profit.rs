@@ -55,11 +55,11 @@ const TIME_DECAY_FACTOR: f64 = 0.05; // Slower profit target reduction (more pat
 const INSTANT_SELL_PROFIT: f64 = 2000.0; // 2000%+ = instant sell
 const MEGA_PROFIT_THRESHOLD: f64 = 1000.0; // 1000%+ = very urgent
 
-// 📊 LIQUIDITY THRESHOLDS FOR SAFETY CLASSIFICATION (INCREASED)
-const HIGH_LIQUIDITY_THRESHOLD: f64 = 200_000.0; // Increased threshold
-const MEDIUM_HIGH_LIQUIDITY_THRESHOLD: f64 = 100_000.0; // Increased threshold
-const MEDIUM_LIQUIDITY_THRESHOLD: f64 = 50_000.0; // Increased threshold
-const LOW_LIQUIDITY_THRESHOLD: f64 = 10_000.0; // Increased threshold
+// 📊 LIQUIDITY THRESHOLDS FOR PROFIT CALCULATIONS AND SAFETY CLASSIFICATION
+const PROFIT_HIGH_LIQUIDITY_THRESHOLD: f64 = 200_000.0; // For profit calculations
+const PROFIT_MEDIUM_HIGH_LIQUIDITY_THRESHOLD: f64 = 100_000.0; // For profit calculations
+const PROFIT_MEDIUM_LIQUIDITY_THRESHOLD: f64 = 50_000.0; // For profit calculations
+const PROFIT_LOW_LIQUIDITY_THRESHOLD: f64 = 10_000.0; // For profit calculations
 
 // 🔍 ATH DANGER DETECTION - MORE TOLERANT
 const ATH_DANGER_THRESHOLD: f64 = 85.0; // >85% of ATH = dangerous (was 75%)
@@ -345,10 +345,10 @@ fn calculate_comprehensive_safety_score(
         .and_then(|l| l.usd)
         .unwrap_or(0.0);
     let liquidity_contribution = match liquidity_usd {
-        l if l >= HIGH_LIQUIDITY_THRESHOLD => 25.0,
-        l if l >= MEDIUM_HIGH_LIQUIDITY_THRESHOLD => 20.0,
-        l if l >= MEDIUM_LIQUIDITY_THRESHOLD => 15.0,
-        l if l >= LOW_LIQUIDITY_THRESHOLD => 10.0,
+        l if l >= PROFIT_HIGH_LIQUIDITY_THRESHOLD => 25.0,
+        l if l >= PROFIT_MEDIUM_HIGH_LIQUIDITY_THRESHOLD => 20.0,
+        l if l >= PROFIT_MEDIUM_LIQUIDITY_THRESHOLD => 15.0,
+        l if l >= PROFIT_LOW_LIQUIDITY_THRESHOLD => 10.0,
         _ => 5.0,
     };
     safety_score += liquidity_contribution;
@@ -540,10 +540,10 @@ fn estimate_ath_proximity(
 /// Calculate volatility factor based on liquidity
 fn calculate_volatility_factor(liquidity_usd: f64) -> f64 {
     match liquidity_usd {
-        l if l >= HIGH_LIQUIDITY_THRESHOLD => 0.5, // Low volatility
-        l if l >= MEDIUM_HIGH_LIQUIDITY_THRESHOLD => 0.7, // Medium-low volatility
-        l if l >= MEDIUM_LIQUIDITY_THRESHOLD => 1.0, // Normal volatility
-        l if l >= LOW_LIQUIDITY_THRESHOLD => 1.5, // High volatility
+        l if l >= PROFIT_HIGH_LIQUIDITY_THRESHOLD => 0.5, // Low volatility
+        l if l >= PROFIT_MEDIUM_HIGH_LIQUIDITY_THRESHOLD => 0.7, // Medium-low volatility
+        l if l >= PROFIT_MEDIUM_LIQUIDITY_THRESHOLD => 1.0, // Normal volatility
+        l if l >= PROFIT_LOW_LIQUIDITY_THRESHOLD => 1.5, // High volatility
         _ => 2.0, // Very high volatility
     }
 }
@@ -888,7 +888,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     }
 
     // Low liquidity warning
-    if token_analysis.liquidity_usd < LOW_LIQUIDITY_THRESHOLD {
+    if token_analysis.liquidity_usd < PROFIT_LOW_LIQUIDITY_THRESHOLD {
         risk_urgency = risk_urgency.max(0.3);
         risk_reasons.push(format!("LOW LIQUIDITY (${:.0})", token_analysis.liquidity_usd));
     }

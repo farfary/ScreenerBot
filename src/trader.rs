@@ -60,7 +60,7 @@
 pub const MAX_OPEN_POSITIONS: usize = 50;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.001;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.00001;
@@ -69,7 +69,7 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.00001;
 pub const SWAP_FEE_PERCENT: f64 = 0.0;
 
 /// Default slippage tolerance for swaps
-pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
+pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 3.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding

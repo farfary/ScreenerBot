@@ -226,10 +226,6 @@ pub async fn trigger_immediate_ata_cleanup() -> Result<
 > {
     log(LogTag::Wallet, "ATA_SERVICE", "Manual ATA cleanup triggered...");
 
-    let wallet_address = get_wallet_address().map_err(
-        |e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>
-    )?;
-
     // Perform manual cleanup using the same logic as periodic cleanup
     perform_ata_cleanup().await?;
 

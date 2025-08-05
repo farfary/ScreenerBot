@@ -84,25 +84,6 @@ fn add_mint_to_frozen_cooldown(mint: &str) {
     }
 }
 
-/// Gets remaining balance check cooldown time for a mint
-fn get_remaining_balance_check_cooldown_minutes(mint: &str) -> Option<i64> {
-    if let Ok(cooldowns) = BALANCE_CHECK_COOLDOWNS.lock() {
-        if let Some(last_check_time) = cooldowns.get(mint) {
-            let now = Utc::now();
-            let minutes_since_last_check = (now - *last_check_time).num_minutes();
-            if minutes_since_last_check < BALANCE_CHECK_COOLDOWN_MINUTES {
-                Some(BALANCE_CHECK_COOLDOWN_MINUTES - minutes_since_last_check)
-            } else {
-                None // Cooldown expired
-            }
-        } else {
-            None // No previous check recorded
-        }
-    } else {
-        None
-    }
-}
-
 /// Removes expired cooldowns and returns remaining time for a mint
 fn get_remaining_cooldown_minutes(mint: &str) -> Option<i64> {
     if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
