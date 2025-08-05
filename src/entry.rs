@@ -17,7 +17,7 @@ pub async fn should_buy(token: &Token) -> bool {
     if is_token_excluded_from_trading(&token.mint) {
         if is_debug_trader_enabled() {
             log(
-                LogTag::Entry,
+                LogTag::Trader,
                 "ENTRY_REJECT",
                 &format!("❌ {} rejected: Token is blacklisted or excluded", token.symbol)
             );
@@ -32,7 +32,7 @@ pub async fn should_buy(token: &Token) -> bool {
     if !pool_service.check_token_availability(&token.mint).await {
         if is_debug_trader_enabled() {
             log(
-                LogTag::Entry,
+                LogTag::Trader,
                 "ENTRY_REJECT",
                 &format!("❌ {} rejected: No pool price available", token.symbol)
             );
@@ -48,7 +48,7 @@ pub async fn should_buy(token: &Token) -> bool {
                 _ => {
                     if is_debug_trader_enabled() {
                         log(
-                            LogTag::Entry,
+                            LogTag::Trader,
                             "ENTRY_REJECT",
                             &format!("❌ {} rejected: Invalid pool price", token.symbol)
                         );
@@ -60,7 +60,7 @@ pub async fn should_buy(token: &Token) -> bool {
         None => {
             if is_debug_trader_enabled() {
                 log(
-                    LogTag::Entry,
+                    LogTag::Trader,
                     "ENTRY_REJECT",
                     &format!("❌ {} rejected: Pool price calculation failed", token.symbol)
                 );
@@ -83,7 +83,7 @@ pub async fn should_buy(token: &Token) -> bool {
     if let Some(reason) = entry_decision {
         if is_debug_trader_enabled() {
             log(
-                LogTag::Entry,
+                LogTag::Trader,
                 "ENTRY_ACCEPT",
                 &format!(
                     "✅ {} accepted: {} (current: {:.12} SOL)",
@@ -97,7 +97,7 @@ pub async fn should_buy(token: &Token) -> bool {
     } else {
         if is_debug_trader_enabled() {
             log(
-                LogTag::Entry,
+                LogTag::Trader,
                 "ENTRY_REJECT",
                 &format!(
                     "❌ {} rejected: No valid entry signal (current: {:.12} SOL, history: {} points)",
