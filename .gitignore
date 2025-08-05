@@ -9,3 +9,6 @@
 .cache_trades/*
 logs/*
 .cache_ohlcvs/*
+.cache_prices/*
+.DS_Store
+Cargo.lock
