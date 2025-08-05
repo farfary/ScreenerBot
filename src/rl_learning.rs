@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
 use std::sync::{ Arc, Mutex };
 use std::path::Path;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{ Hash, Hasher };
 use chrono::{ DateTime, Utc };
 use tokio::time::{ Duration, interval };
 use tokio::sync::Notify;
@@ -15,7 +17,7 @@ use smartcore::api::{ SupervisedEstimator, Predictor };
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_trader_enabled, is_debug_rl_learn_enabled };
-use crate::tokens::pool::get_pool_service;
+use crate::tokens::pool::{ get_pool_service, get_price_history_for_rl_learning };
 use crate::positions::get_open_positions;
 
 /// Model performance metrics for tracking training quality
@@ -111,13 +113,26 @@ pub struct EntryAnalysis {
     pub confidence: f64, // Confidence in the analysis (0.0-1.0)
 }
 
-/// Persistent state structure for saving/loading RL data
+/// Model configuration for recreation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub n_trees: usize,
+    pub max_depth: Option<usize>,
+    pub min_samples_split: usize,
+    pub min_samples_leaf: usize,
+    pub feature_count: usize,
+    pub trained_at: DateTime<Utc>,
+    pub training_data_hash: u64, // Hash of training data to detect changes
+}
+
+/// Enhanced persistent state with model configuration
 #[derive(Debug, Serialize, Deserialize)]
 struct RlPersistentState {
     records: Vec<LearningRecord>, // Convert from VecDeque for JSON serialization
     is_trained: bool,
     last_training_time: Option<DateTime<Utc>>,
     model_metrics: Option<ModelMetrics>,
+    model_config: Option<ModelConfig>, // Model recreation parameters
     version: u32, // For future compatibility
 }
 
@@ -149,6 +164,37 @@ pub struct LearningRecord {
     pub success: bool, // Whether trade was profitable
 }
 
+impl Hash for LearningRecord {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Hash all the non-f64 fields normally
+        self.timestamp.hash(state);
+        self.token_mint.hash(state);
+        self.token_symbol.hash(state);
+        self.success.hash(state);
+
+        // For f64 fields, convert to bits for hashing
+        self.current_price.to_bits().hash(state);
+        self.price_change_5min.to_bits().hash(state);
+        self.price_change_10min.to_bits().hash(state);
+        self.price_change_30min.to_bits().hash(state);
+        self.liquidity_usd.to_bits().hash(state);
+        self.volume_24h.to_bits().hash(state);
+        self.pool_price.to_bits().hash(state);
+        self.price_drop_detected.to_bits().hash(state);
+        self.confidence_score.to_bits().hash(state);
+        self.actual_profit_percent.to_bits().hash(state);
+        self.hold_duration_minutes.to_bits().hash(state);
+
+        // For Option<f64> fields
+        if let Some(mc) = self.market_cap {
+            mc.to_bits().hash(state);
+        }
+        if let Some(rs) = self.rugcheck_score {
+            rs.to_bits().hash(state);
+        }
+    }
+}
+
 /// Simple RL learning system that uses Random Forest to predict trading outcomes
 #[derive(Debug)]
 pub struct TradingLearner {
@@ -169,7 +215,7 @@ impl TradingLearner {
             is_trained: Arc::new(Mutex::new(false)),
             model_metrics: Arc::new(Mutex::new(None)),
             max_records: 1000, // Keep last 1000 trading records
-            min_records_for_training: 50, // Need at least 50 records to start training
+            min_records_for_training: 5, // Reduced to start training with your current data
             last_save_time: Arc::new(Mutex::new(Utc::now())),
         };
 
@@ -216,12 +262,35 @@ impl TradingLearner {
 
         let last_training_time = model_metrics.as_ref().map(|m| m.training_time);
 
+        // Get model configuration if trained
+        let model_config = if is_trained {
+            // Calculate hash of training data for change detection
+            let mut hasher = DefaultHasher::new();
+            for record in &records_data {
+                record.hash(&mut hasher);
+            }
+            let training_data_hash = hasher.finish();
+
+            Some(ModelConfig {
+                n_trees: 50,
+                max_depth: None,
+                min_samples_split: 2,
+                min_samples_leaf: 1,
+                feature_count: 11, // 11 features used in training
+                trained_at: last_training_time.unwrap_or_else(Utc::now),
+                training_data_hash,
+            })
+        } else {
+            None
+        };
+
         // Create persistent state
         let state = RlPersistentState {
             records: records_data,
             is_trained,
             last_training_time,
             model_metrics,
+            model_config,
             version: 1,
         };
 
@@ -322,9 +391,66 @@ impl TradingLearner {
             *metrics_guard = state.model_metrics.clone();
         }
 
-        // If we had a trained model, we need to retrain since we can't serialize the actual model
-        if state.is_trained {
-            // Reset training status - we'll retrain with loaded data
+        // Smart model recreation logic
+        if state.is_trained && state.model_config.is_some() {
+            // Check if we should retrain based on data changes
+            let model_config = state.model_config.as_ref().unwrap();
+
+            // Calculate current data hash
+            let mut hasher = DefaultHasher::new();
+            for record in &state.records {
+                record.hash(&mut hasher);
+            }
+            let current_data_hash = hasher.finish();
+
+            let should_retrain =
+                current_data_hash != model_config.training_data_hash ||
+                (state.records.len() as f64) > (model_config.feature_count as f64) * 1.5;
+
+            if should_retrain {
+                // Reset training status - we'll retrain with new/changed data
+                if let Ok(mut trained_guard) = self.is_trained.lock() {
+                    *trained_guard = false;
+                }
+
+                if is_debug_rl_learn_enabled() {
+                    log(
+                        LogTag::RlLearn,
+                        "RETRAIN_DATA_CHANGED",
+                        &format!(
+                            "🔄 Data changed or grew significantly - will retrain (records: {} vs trained: {})",
+                            state.records.len(),
+                            model_config.feature_count
+                        )
+                    );
+                }
+
+                // Trigger immediate retraining if we have enough data
+                if state.records.len() >= self.min_records_for_training {
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(2)).await; // Small delay to finish loading
+                        if let Err(e) = get_trading_learner().train_model().await {
+                            log(LogTag::RlLearn, "ERROR", &format!("Auto-retrain failed: {}", e));
+                        }
+                    });
+                }
+            } else {
+                // Data unchanged, recreate model with same parameters
+                if is_debug_rl_learn_enabled() {
+                    log(
+                        LogTag::RlLearn,
+                        "RETRAIN_SAME_DATA",
+                        "🔄 Data unchanged - will recreate model with same parameters"
+                    );
+                }
+
+                // Still need to retrain since we can't serialize the actual model
+                if let Ok(mut trained_guard) = self.is_trained.lock() {
+                    *trained_guard = false;
+                }
+            }
+        } else if state.is_trained {
+            // Legacy: no model config, always retrain
             if let Ok(mut trained_guard) = self.is_trained.lock() {
                 *trained_guard = false;
             }
@@ -332,8 +458,8 @@ impl TradingLearner {
             if is_debug_rl_learn_enabled() {
                 log(
                     LogTag::RlLearn,
-                    "RETRAIN_NEEDED",
-                    "🔄 Model was previously trained - will retrain with loaded data"
+                    "RETRAIN_LEGACY",
+                    "🔄 Legacy model detected - will retrain with loaded data"
                 );
             }
         }
@@ -750,11 +876,31 @@ impl TradingLearner {
         market_cap: Option<f64>,
         rugcheck_score: Option<f64>
     ) -> EntryAnalysis {
-        let pool_service = get_pool_service();
-        let price_history = pool_service.get_recent_price_history(token_mint).await;
+        // Use comprehensive disk-based price history for better analysis
+        let price_history = get_price_history_for_rl_learning(token_mint).await;
+
+        if is_debug_rl_learn_enabled() {
+            log(
+                LogTag::RlLearn,
+                "ENTRY_ANALYSIS_START",
+                &format!(
+                    "🎯 Entry analysis for {} using {} price history entries",
+                    token_mint,
+                    price_history.len()
+                )
+            );
+        }
 
         // Calculate comprehensive price analysis
         let mut price_analysis = self.analyze_price_patterns(&price_history, current_price);
+
+        // Get real-time pool price
+        let pool_service = get_pool_service();
+        if let Some(price_result) = pool_service.get_pool_price(token_mint, None).await {
+            if let Some(pool_price) = price_result.price_sol {
+                price_analysis.pool_price = pool_price;
+            }
+        }
 
         // Get real-time pool price
         if let Some(price_result) = pool_service.get_pool_price(token_mint, None).await {

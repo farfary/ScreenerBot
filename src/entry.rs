@@ -85,6 +85,58 @@ pub async fn should_buy(token: &Token) -> bool {
         }
     };
 
+    // RL Learning Integration - Get RL entry analysis
+    let rl_score = {
+        use crate::rl_learning::get_simple_entry_score;
+
+        get_simple_entry_score(
+            &token.mint,
+            current_pool_price,
+            token.liquidity
+                .as_ref()
+                .and_then(|l| l.usd)
+                .unwrap_or(1000.0),
+            token.volume
+                .as_ref()
+                .and_then(|v| v.h24)
+                .unwrap_or(50000.0),
+            token.market_cap,
+            get_rugcheck_score_for_token(&token.mint).await
+        ).await
+    };
+
+    // RL Entry Threshold (60% confidence needed)
+    const RL_ENTRY_THRESHOLD: f64 = 0.6;
+
+    if rl_score < RL_ENTRY_THRESHOLD {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry,
+                "RL_REJECT",
+                &format!(
+                    "❌ {} rejected by RL: Score {:.1}% < {:.1}% threshold",
+                    token.symbol,
+                    rl_score * 100.0,
+                    RL_ENTRY_THRESHOLD * 100.0
+                )
+            );
+        }
+        return false;
+    }
+
+    if is_debug_entry_enabled() {
+        log(
+            LogTag::Entry,
+            "RL_ACCEPT",
+            &format!(
+                "✅ {} RL approved: Score {:.1}% >= {:.1}% threshold",
+                token.symbol,
+                rl_score * 100.0,
+                RL_ENTRY_THRESHOLD * 100.0
+            )
+        );
+    }
+
     // Get recent price history for advanced entry analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
 
