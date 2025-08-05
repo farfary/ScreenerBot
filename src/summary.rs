@@ -131,16 +131,16 @@ pub struct PoolServiceDisplay {
     pool_cache: String,
     #[tabled(rename = "💰 Price Cache")]
     price_cache: String,
-    #[tabled(rename = "👀 Watched")]
-    watched_tokens: String,
-    #[tabled(rename = "⏰ Expired")]
-    expired_tokens: String,
-    #[tabled(rename = "❓ Unchecked")]
-    never_checked: String,
-    #[tabled(rename = "🎯 Success Rate")]
+    #[tabled(rename = "� Total Requests")]
+    total_requests: String,
+    #[tabled(rename = "✅ Success Rate")]
     success_rate: String,
-    #[tabled(rename = "� Availability")]
-    availability_cache: String,
+    #[tabled(rename = "🔄 Cache Hits")]
+    cache_hit_rate: String,
+    #[tabled(rename = "⛓️ Blockchain")]
+    blockchain_calcs: String,
+    #[tabled(rename = "📈 Price History")]
+    price_history: String,
 }
 
 /// Display structure for RPC URL usage statistics
@@ -456,33 +456,26 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 
     // Get pool service statistics
     let pool_service = get_pool_service();
-    let (pool_cache_count, price_cache_count, availability_cache_count) =
+    let (pool_cache_count, price_cache_count, _availability_cache_count) =
         pool_service.get_cache_stats().await;
-    let (watch_list_total, watch_list_expired, watch_list_never_checked) =
-        pool_service.get_watch_list_stats().await;
-
-    // Calculate active watch list (total - expired)
-    let active_watched = watch_list_total.saturating_sub(watch_list_expired);
-
-    // Calculate success rate based on active monitoring
-    let monitoring_success_rate = if watch_list_total > 0 {
-        ((active_watched as f64) / (watch_list_total as f64)) * 100.0
-    } else {
-        0.0
-    };
+    let enhanced_stats = pool_service.get_enhanced_stats().await;
 
     let pool_service_stats = PoolServiceDisplay {
         pool_cache: format!("{} pools", pool_cache_count),
         price_cache: format!("{} prices", price_cache_count),
-        watched_tokens: format!("{} active", active_watched),
-        expired_tokens: format!("{} stale", watch_list_expired),
-        never_checked: format!("{} pending", watch_list_never_checked),
-        success_rate: if watch_list_total > 0 {
-            format!("{:.1}%", monitoring_success_rate)
+        total_requests: format!("{}", enhanced_stats.total_price_requests),
+        success_rate: if enhanced_stats.total_price_requests > 0 {
+            format!("{:.1}%", enhanced_stats.get_success_rate())
         } else {
             "N/A".to_string()
         },
-        availability_cache: format!("{} checked", availability_cache_count),
+        cache_hit_rate: if enhanced_stats.total_price_requests > 0 {
+            format!("{:.1}%", enhanced_stats.get_cache_hit_rate())
+        } else {
+            "0.0%".to_string()
+        },
+        blockchain_calcs: format!("{}", enhanced_stats.blockchain_calculations),
+        price_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
     };
 
     // Display all tables

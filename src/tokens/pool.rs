@@ -263,6 +263,56 @@ pub struct PoolPriceService {
     watch_list: Arc<RwLock<HashMap<String, WatchListEntry>>>,
     price_history: Arc<RwLock<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>,
     monitoring_active: Arc<RwLock<bool>>,
+    // Enhanced statistics tracking
+    stats: Arc<RwLock<PoolServiceStats>>,
+}
+
+/// Pool service comprehensive statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolServiceStats {
+    pub total_price_requests: u64,
+    pub successful_calculations: u64,
+    pub failed_calculations: u64,
+    pub cache_hits: u64,
+    pub blockchain_calculations: u64,
+    pub api_fallbacks: u64,
+    pub tokens_with_price_history: u64,
+    pub total_price_history_entries: u64,
+    pub last_updated: DateTime<Utc>,
+}
+
+impl Default for PoolServiceStats {
+    fn default() -> Self {
+        Self {
+            total_price_requests: 0,
+            successful_calculations: 0,
+            failed_calculations: 0,
+            cache_hits: 0,
+            blockchain_calculations: 0,
+            api_fallbacks: 0,
+            tokens_with_price_history: 0,
+            total_price_history_entries: 0,
+            last_updated: Utc::now(),
+        }
+    }
+}
+
+impl PoolServiceStats {
+    pub fn get_success_rate(&self) -> f64 {
+        if self.total_price_requests == 0 {
+            0.0
+        } else {
+            ((self.successful_calculations as f64) / (self.total_price_requests as f64)) * 100.0
+        }
+    }
+
+    pub fn get_cache_hit_rate(&self) -> f64 {
+        if self.total_price_requests == 0 {
+            0.0
+        } else {
+            ((self.cache_hits as f64) / (self.total_price_requests as f64)) * 100.0
+        }
+    }
 }
 
 impl PoolPriceService {
@@ -275,6 +325,7 @@ impl PoolPriceService {
             watch_list: Arc::new(RwLock::new(HashMap::new())),
             price_history: Arc::new(RwLock::new(HashMap::new())),
             monitoring_active: Arc::new(RwLock::new(false)),
+            stats: Arc::new(RwLock::new(PoolServiceStats::default())),
         }
     }
 
@@ -532,12 +583,18 @@ impl PoolPriceService {
             );
         }
 
+        let mut was_cache_hit = false;
+        let mut was_blockchain = false;
+
         // Check price cache first
         {
             let price_cache = self.price_cache.read().await;
             if let Some(cached_price) = price_cache.get(token_address) {
                 let age = Utc::now() - cached_price.calculated_at;
                 if age.num_seconds() <= PRICE_CACHE_TTL_SECONDS {
+                    was_cache_hit = true;
+                    self.record_price_request(true, was_cache_hit, was_blockchain).await;
+
                     if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
@@ -594,6 +651,7 @@ impl PoolPriceService {
 
         // Check if token has available pools
         if !self.check_token_availability(token_address).await {
+            self.record_price_request(false, was_cache_hit, was_blockchain).await;
             if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
@@ -615,6 +673,10 @@ impl PoolPriceService {
         // Calculate pool price
         match self.calculate_pool_price(token_address).await {
             Ok(pool_result) => {
+                let has_price = pool_result.price_sol.is_some();
+                was_blockchain = pool_result.source == "pool";
+                self.record_price_request(has_price, was_cache_hit, was_blockchain).await;
+
                 if is_debug_pool_prices_enabled() {
                     if let Some(price_sol) = pool_result.price_sol {
                         // Log the pool price calculation
@@ -726,25 +788,35 @@ impl PoolPriceService {
                     }
                 }
 
-                // Update watch list timestamp if this token is being watched and price was successful
-                if pool_result.price_sol.is_some() {
-                    let mut watch_list = self.watch_list.write().await;
-                    if let Some(entry) = watch_list.get_mut(token_address) {
-                        entry.last_price_check = Some(Utc::now());
-                        if is_debug_pool_prices_enabled() {
-                            log(
-                                LogTag::Pool,
-                                "WATCH_SUCCESS",
-                                &format!("✅ Updated watch list timestamp for {} after successful price retrieval", token_address)
-                            );
-                        }
-                    }
-                }
-
-                // Add price to history for -10% drop detection
+                // Add price to history and manage watch list for -10% drop detection
                 if let Some(price_sol) = pool_result.price_sol {
                     if price_sol > 0.0 && price_sol.is_finite() {
                         self.add_price_to_history(token_address, price_sol).await;
+
+                        // Automatically add frequently used tokens to watch list for monitoring
+                        // This helps populate the watch list with actively traded tokens
+                        let mut watch_list = self.watch_list.write().await;
+                        if !watch_list.contains_key(token_address) {
+                            watch_list.insert(token_address.to_string(), WatchListEntry {
+                                token_address: token_address.to_string(),
+                                added_at: Utc::now(),
+                                priority: 50, // Medium priority for automatically added tokens
+                                last_price_check: Some(Utc::now()),
+                            });
+
+                            if is_debug_pool_prices_enabled() {
+                                log(
+                                    LogTag::Pool,
+                                    "AUTO_WATCH",
+                                    &format!("📡 Auto-added {} to watch list (frequently requested)", token_address)
+                                );
+                            }
+                        } else {
+                            // Update existing watch list entry timestamp
+                            if let Some(entry) = watch_list.get_mut(token_address) {
+                                entry.last_price_check = Some(Utc::now());
+                            }
+                        }
 
                         if is_debug_pool_prices_enabled() {
                             log(
@@ -763,6 +835,7 @@ impl PoolPriceService {
                 Some(pool_result)
             }
             Err(e) => {
+                self.record_price_request(false, was_cache_hit, was_blockchain).await;
                 if is_debug_pool_prices_enabled() {
                     log(
                         LogTag::Pool,
@@ -1324,6 +1397,44 @@ impl PoolPriceService {
         let availability_cache = self.availability_cache.read().await;
 
         (pool_cache.len(), price_cache.len(), availability_cache.len())
+    }
+
+    /// Get enhanced pool service statistics
+    pub async fn get_enhanced_stats(&self) -> PoolServiceStats {
+        // Update real-time statistics
+        let mut stats = self.stats.write().await;
+        let price_history = self.price_history.read().await;
+
+        stats.tokens_with_price_history = price_history.len() as u64;
+        stats.total_price_history_entries = price_history
+            .values()
+            .map(|v| v.len() as u64)
+            .sum();
+        stats.last_updated = Utc::now();
+
+        stats.clone()
+    }
+
+    /// Record a price request (internal tracking)
+    async fn record_price_request(&self, success: bool, was_cache_hit: bool, was_blockchain: bool) {
+        let mut stats = self.stats.write().await;
+        stats.total_price_requests += 1;
+
+        if success {
+            stats.successful_calculations += 1;
+        } else {
+            stats.failed_calculations += 1;
+        }
+
+        if was_cache_hit {
+            stats.cache_hits += 1;
+        }
+
+        if was_blockchain {
+            stats.blockchain_calculations += 1;
+        } else if success {
+            stats.api_fallbacks += 1;
+        }
     }
 
     /// Calculate price directly from a specific pool address (bypasses API discovery)
