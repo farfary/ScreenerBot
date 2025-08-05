@@ -136,8 +136,6 @@ pub struct Configs {
     pub rpc_url: String,
     pub rpc_url_premium: String,
     pub rpc_fallbacks: Vec<String>,
-    pub websocket_url: String,
-    pub websocket_fallbacks: Vec<String>,
 }
 
 /// Reads the configs.json file from the project root and returns a Configs object

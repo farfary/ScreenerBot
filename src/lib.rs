@@ -1,4 +1,4 @@
-// #![allow(warnings)]
+#![allow(warnings)]
 
 pub mod global;
 pub mod utils;
@@ -12,5 +12,5 @@ pub mod profit;
 pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;
-pub mod smart_entry;
+pub mod entry;
 pub mod ohlcv_analysis;

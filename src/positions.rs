@@ -24,17 +24,8 @@ static FROZEN_ACCOUNT_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<U
     || { StdArc::new(StdMutex::new(HashMap::new())) }
 );
 
-/// Static global: balance check cooldown tracking
-/// Maps mint address to timestamp of last balance check to prevent excessive checking
-static BALANCE_CHECK_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(
-    || { StdArc::new(StdMutex::new(HashMap::new())) }
-);
-
 /// Cooldown duration for frozen account errors (15 minutes)
 const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
-
-/// Cooldown duration for balance checks (5 minutes)
-const BALANCE_CHECK_COOLDOWN_MINUTES: i64 = 5;
 
 /// Checks if a mint is currently in cooldown due to frozen account error
 fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
@@ -48,24 +39,6 @@ fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
         }
     }
     false
-}
-
-/// Checks if a balance check is allowed for a specific mint (rate limiting)
-fn is_balance_check_allowed(mint: &str) -> bool {
-    if let Ok(mut cooldowns) = BALANCE_CHECK_COOLDOWNS.lock() {
-        if let Some(last_check_time) = cooldowns.get(mint) {
-            let now = Utc::now();
-            let minutes_since_last_check = (now - *last_check_time).num_minutes();
-            if minutes_since_last_check < BALANCE_CHECK_COOLDOWN_MINUTES {
-                return false; // Still in cooldown
-            }
-        }
-        // Update last check time
-        cooldowns.insert(mint.to_string(), Utc::now());
-        true
-    } else {
-        false
-    }
 }
 
 /// Adds a mint to frozen account cooldown tracking
@@ -134,12 +107,6 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
     // For closed positions, prioritize sol_received for most accurate P&L
     if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
-        // Check for external sell (marked with exit_price = 0.0 and sol_received = 0.0)
-        if exit_price == 0.0 && sol_received == 0.0 {
-            // External sell detected - P&L is unknown
-            return (0.0, 0.0);
-        }
-
         // Use actual SOL invested vs SOL received for closed positions
         let sol_invested = position.entry_size_sol;
 
@@ -277,123 +244,6 @@ pub struct Position {
     pub profit_target_min: Option<f64>, // Minimum profit target percentage
     pub profit_target_max: Option<f64>, // Maximum profit target percentage
     pub liquidity_tier: Option<String>, // Liquidity tier for reference
-}
-
-/// Checks recent transactions to see if position was already closed
-/// Enhanced version with strict validation to prevent phantom sells
-pub async fn check_recent_transactions_for_position(position: &mut Position) -> bool {
-    // Rate limiting: only check balance every 5 minutes per position
-    if !is_balance_check_allowed(&position.mint) {
-        if is_debug_trader_enabled() {
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!(
-                    "Balance check skipped for {} - cooldown active (checks every {} minutes)",
-                    position.symbol,
-                    BALANCE_CHECK_COOLDOWN_MINUTES
-                )
-            );
-        }
-        return false;
-    }
-
-    // Get wallet address
-    let wallet_address = match crate::wallet::get_wallet_address() {
-        Ok(addr) => addr,
-        Err(_) => {
-            log(LogTag::Trader, "ERROR", "Failed to get wallet address for transaction check");
-            return false;
-        }
-    };
-
-    // Don't auto-close positions that are too new - they need time for balance to settle
-    let min_age_for_auto_close = chrono::Duration::seconds(30);
-    let position_age = Utc::now() - position.entry_time;
-
-    if position_age < min_age_for_auto_close {
-        log(
-            LogTag::Trader,
-            "DEBUG",
-            &format!(
-                "Position {} too new ({:.1}s) for auto-close detection - skipping",
-                position.symbol,
-                position_age.num_seconds()
-            )
-        );
-        return false;
-    }
-
-    // Perform a single balance check (reduced from 3 checks)
-    let balance = match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
-        Ok(balance) => {
-            log(
-                LogTag::Trader,
-                "DEBUG",
-                &format!("Balance check for {}: {} tokens", position.symbol, balance)
-            );
-            balance
-        }
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "WARN",
-                &format!("Balance check failed for {}: {}", position.symbol, e)
-            );
-            return false;
-        }
-    };
-
-    let stored_amount = position.token_amount.unwrap_or(0);
-
-    // Only proceed if we have 0 tokens but position shows we should have tokens
-    if balance == 0 && stored_amount > 0 {
-        log(
-            LogTag::Trader,
-            "WARNING",
-            &format!(
-                "Zero balance detected for {} (stored: {}) - investigating external sell",
-                position.symbol,
-                stored_amount
-            )
-        );
-
-        // For external sells, we cannot accurately determine the actual sale price or proceeds
-        // Mark position as closed with unknown exit data
-        let now = Utc::now();
-        position.exit_time = Some(now);
-        position.exit_transaction_signature = Some("EXTERNAL_SELL_DETECTED".to_string());
-
-        // For external sells, set exit values to indicate unknown/external sale
-        // We cannot know the actual price they sold at or SOL received
-        position.exit_price = Some(0.0); // Mark as external sell (unknown price)
-        position.effective_exit_price = Some(0.0);
-        position.sol_received = Some(0.0); // Unknown SOL received
-        position.total_size_sol = 0.0; // Reset to indicate external sale
-
-        log(
-            LogTag::Trader,
-            "EXTERNAL_SELL",
-            &format!(
-                "External sell detected for {} - Position closed (P&L unknown - sold externally)",
-                position.symbol
-            )
-        );
-
-        // Do NOT attempt to close ATA for external sells - we don't control the transaction
-        log(
-            LogTag::Trader,
-            "INFO",
-            &format!(
-                "Skipping ATA close for external sell of {} - not our transaction",
-                position.symbol
-            )
-        );
-
-        return true;
-    }
-
-    false
 }
 
 /// Updates position with current price to track extremes
@@ -585,12 +435,8 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
 
                     let effective_entry_price = price;
 
-                    // Get smart profit targets for this token
-                    let (profit_min, profit_max) =
-                        crate::smart_entry::get_smart_profit_target(token);
-                    let liquidity_tier = crate::smart_entry::SmartEntryAnalysis::analyze_token(
-                        token
-                    ).liquidity_tier;
+                    // Get simple profit targets for this token
+                    let (profit_min, profit_max) = crate::entry::get_profit_target(token);
 
                     log(
                         LogTag::Trader,
@@ -630,7 +476,24 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                         sol_received: None, // Will be set when position is closed
                         profit_target_min: Some(profit_min),
                         profit_target_max: Some(profit_max),
-                        liquidity_tier: Some(format!("{:?}", liquidity_tier)),
+                        liquidity_tier: Some(
+                            format!(
+                                "{}",
+                                token.liquidity
+                                    .as_ref()
+                                    .and_then(|l| l.usd)
+                                    .map(|usd| (
+                                        if usd >= 100_000.0 {
+                                            "HIGH"
+                                        } else if usd >= 50_000.0 {
+                                            "MEDIUM"
+                                        } else {
+                                            "LOW"
+                                        }
+                                    ))
+                                    .unwrap_or("UNKNOWN")
+                            )
+                        ),
                     };
 
                     if let Ok(mut positions) = SAVED_POSITIONS.lock() {
@@ -768,19 +631,6 @@ pub async fn close_position(
                     actual_balance
                 )
             );
-
-            // Before marking as total loss, check if transaction might have already completed
-            if check_recent_transactions_for_position(position).await {
-                log(
-                    LogTag::Trader,
-                    "SUCCESS",
-                    &format!(
-                        "Successfully detected and updated completed transaction for {}",
-                        position.symbol
-                    )
-                );
-                return true;
-            }
 
             // DO NOT mark position as sold if we can't actually execute a sell transaction
             // This prevents phantom sells and P&L corruption
@@ -1019,15 +869,10 @@ pub async fn close_position(
                         LogTag::Trader,
                         "INFO",
                         &format!(
-                            "Insufficient balance error for {} - checking if transaction already completed",
+                            "Insufficient balance error for {} - position may have been sold externally",
                             position.symbol
                         )
                     );
-
-                    // Check if the position was already closed via a recent transaction
-                    if check_recent_transactions_for_position(position).await {
-                        return true; // Position was successfully closed
-                    }
                 }
 
                 log(
@@ -1079,33 +924,6 @@ pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
                 expired_mints.push(mint.clone());
             } else {
                 let remaining_minutes = FROZEN_ACCOUNT_COOLDOWN_MINUTES - minutes_since_cooldown;
-                active_cooldowns.push((mint.clone(), remaining_minutes));
-            }
-        }
-
-        // Remove expired cooldowns
-        for mint in expired_mints {
-            cooldowns.remove(&mint);
-        }
-    }
-
-    active_cooldowns
-}
-
-/// Gets active balance check cooldowns for debugging
-pub fn get_active_balance_check_cooldowns() -> Vec<(String, i64)> {
-    let mut active_cooldowns = Vec::new();
-
-    if let Ok(mut cooldowns) = BALANCE_CHECK_COOLDOWNS.lock() {
-        let now = Utc::now();
-        let mut expired_mints = Vec::new();
-
-        for (mint, last_check_time) in cooldowns.iter() {
-            let minutes_since_last_check = (now - *last_check_time).num_minutes();
-            if minutes_since_last_check >= BALANCE_CHECK_COOLDOWN_MINUTES {
-                expired_mints.push(mint.clone());
-            } else {
-                let remaining_minutes = BALANCE_CHECK_COOLDOWN_MINUTES - minutes_since_last_check;
                 active_cooldowns.push((mint.clone(), remaining_minutes));
             }
         }

@@ -107,6 +107,16 @@ fn check_recent_transaction_attempt(token_mint: &str, direction: &str) -> Result
     }
 }
 
+/// Clears recent transaction attempts to allow immediate retry
+/// Used internally for automatic retry logic with increased slippage
+fn clear_recent_transaction_attempt(token_mint: &str, direction: &str) {
+    let attempt_key = format!("{}_{}", token_mint, direction);
+
+    if let Ok(mut recent) = RECENT_TRANSACTION_ATTEMPTS.lock() {
+        recent.remove(&attempt_key);
+    }
+}
+
 /// RAII guard to ensure transaction slots are always released
 struct TransactionSlotGuard {
     token_mint: String,
@@ -1289,13 +1299,128 @@ pub async fn buy_token(
     Ok(swap_result)
 }
 
-/// Helper function to sell ALL tokens in wallet for SOL
+/// Helper function to sell ALL tokens in wallet for SOL with automatic slippage retry
 /// NOTE: This function sells the entire wallet balance, not just the position amount.
 /// This ensures complete position closure and prevents dust amounts from being left behind.
+/// FEATURES: Auto-retry with increased slippage (15% -> 25% -> 35% -> 50%) until success
 pub async fn sell_token(
     token: &Token,
     token_amount: u64, // Position amount (used for validation only - actual sale uses full wallet balance)
     expected_sol_output: Option<f64>
+) -> Result<SwapResult, SwapError> {
+    // Define slippage progression for retries
+    let slippage_levels = vec![15.0, 25.0, 35.0, 50.0]; // Progressive slippage increase
+    let max_attempts = slippage_levels.len();
+
+    log(
+        LogTag::Wallet,
+        "SELL_START",
+        &format!(
+            "🎯 Starting sell with auto-retry: {} ({}) | Progressive slippage: {:?}%",
+            token.symbol,
+            token.name,
+            slippage_levels
+        )
+    );
+
+    for (attempt, slippage) in slippage_levels.iter().enumerate() {
+        let attempt_num = attempt + 1;
+
+        log(
+            LogTag::Wallet,
+            "RETRY",
+            &format!(
+                "🔄 SELL ATTEMPT {}/{}: {} with {:.1}% slippage",
+                attempt_num,
+                max_attempts,
+                token.symbol,
+                slippage
+            )
+        );
+
+        // Clear recent transaction attempts for retries (but not on first attempt)
+        if attempt > 0 {
+            clear_recent_transaction_attempt(&token.mint, "sell");
+        }
+
+        match sell_token_with_slippage(token, token_amount, expected_sol_output, *slippage).await {
+            Ok(swap_result) => {
+                if swap_result.success {
+                    log(
+                        LogTag::Wallet,
+                        "SUCCESS",
+                        &format!(
+                            "✅ SELL SUCCESS on attempt {}/{}: {} completed with {:.1}% slippage",
+                            attempt_num,
+                            max_attempts,
+                            token.symbol,
+                            slippage
+                        )
+                    );
+                    return Ok(swap_result);
+                } else {
+                    log(
+                        LogTag::Wallet,
+                        "FAILED",
+                        &format!(
+                            "❌ SELL FAILED on attempt {}/{}: {} with {:.1}% slippage - {}",
+                            attempt_num,
+                            max_attempts,
+                            token.symbol,
+                            slippage,
+                            swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
+                        )
+                    );
+                }
+            }
+            Err(e) => {
+                log(
+                    LogTag::Wallet,
+                    "ERROR",
+                    &format!(
+                        "❌ SELL ERROR on attempt {}/{}: {} with {:.1}% slippage - {}",
+                        attempt_num,
+                        max_attempts,
+                        token.symbol,
+                        slippage,
+                        e
+                    )
+                );
+
+                // If this is the last attempt, return the error
+                if attempt_num == max_attempts {
+                    return Err(e);
+                }
+            }
+        }
+
+        // Wait before next retry (progressive delay: 2s, 4s, 6s)
+        if attempt_num < max_attempts {
+            let delay_seconds = (attempt_num as u64) * 2;
+            log(
+                LogTag::Wallet,
+                "RETRY",
+                &format!("⏳ Waiting {}s before next attempt...", delay_seconds)
+            );
+            tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)).await;
+        }
+    }
+
+    // This should never be reached due to the error return in the loop
+    Err(
+        SwapError::TransactionError(
+            format!("All sell attempts failed for {} after {} retries", token.symbol, max_attempts)
+        )
+    )
+}
+
+/// Internal helper function to sell tokens with specific slippage
+/// This is the actual implementation that was previously the main sell_token function
+async fn sell_token_with_slippage(
+    token: &Token,
+    token_amount: u64, // Position amount (used for validation only - actual sale uses full wallet balance)
+    expected_sol_output: Option<f64>,
+    slippage: f64
 ) -> Result<SwapResult, SwapError> {
     // CRITICAL SAFETY CHECK: Validate expected SOL output if provided
     if let Some(expected_sol) = expected_sol_output {
@@ -1403,6 +1528,7 @@ pub async fn sell_token(
         output_mint: SOL_MINT.to_string(),
         input_amount: actual_sell_amount,
         from_address: wallet_address.clone(),
+        slippage: slippage, // Use custom slippage for this attempt
         expected_price: expected_sol_output,
         ..Default::default()
     };
@@ -1411,17 +1537,23 @@ pub async fn sell_token(
         LogTag::Wallet,
         "SWAP",
         &format!(
-            "Executing sell for {} ({}) - {} tokens -> SOL (selling ALL wallet balance)",
+            "Executing sell for {} ({}) - {} tokens -> SOL (selling ALL wallet balance) with {:.1}% slippage",
             token.symbol,
             token.name,
-            actual_sell_amount
+            actual_sell_amount,
+            slippage
         )
     );
 
     log(
         LogTag::Wallet,
         "QUOTE",
-        &format!("Requesting sell quote: {} tokens {} -> SOL", actual_sell_amount, &token.symbol)
+        &format!(
+            "Requesting sell quote: {} tokens {} -> SOL with {:.1}% slippage",
+            actual_sell_amount,
+            &token.symbol,
+            slippage
+        )
     );
 
     // Get quote using the centralized function

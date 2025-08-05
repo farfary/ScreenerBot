@@ -8,7 +8,6 @@ use crate::logger::{ log, LogTag, log_price_change };
 use crate::global::is_debug_price_service_enabled;
 use crate::tokens::types::ApiToken;
 use crate::tokens::cache::TokenDatabase;
-use crate::tokens::blacklist::is_token_blacklisted;
 use crate::tokens::pool::{ get_pool_service, PoolPriceResult };
 use crate::positions::is_open_position;
 use tokio::sync::RwLock;
@@ -26,13 +25,6 @@ const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 10;
 
 /// Time to keep watching a token after last request (in seconds)
 const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
-
-/// Liquidity threshold for price service watch list prioritization (USD)
-const PRICE_SERVICE_LIQUIDITY_THRESHOLD: f64 = 10000.0;
-
-// Note: Removed POOL_PRICE_LIMIT_PER_CYCLE constraint to allow unlimited pool calculations
-// since we can efficiently batch 100 account fetches per RPC call, the previous limit of 10
-// was artificially restricting real-time price accuracy for open positions
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -716,21 +708,6 @@ impl TokenPriceService {
             }
         }
         drop(watch_list);
-
-        // Add some high liquidity tokens if we have space
-        if priority_tokens.len() < 100 {
-            if
-                let Ok(high_liquidity_tokens) = self.database.get_tokens_by_liquidity_threshold(
-                    PRICE_SERVICE_LIQUIDITY_THRESHOLD
-                ).await
-            {
-                for token in high_liquidity_tokens.into_iter().take(50) {
-                    if !is_token_blacklisted(&token.mint) && !priority_tokens.contains(&token.mint) {
-                        priority_tokens.push(token.mint);
-                    }
-                }
-            }
-        }
 
         priority_tokens
     }

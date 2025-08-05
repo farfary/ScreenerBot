@@ -303,31 +303,158 @@ impl RpcStats {
     }
 }
 
-/// Rate limiter for RPC calls
+/// Enhanced rate limiter for RPC calls with adaptive backoff and 429 prevention
 pub struct RpcRateLimiter {
-    main_rpc_interval: Duration,
+    /// Base interval between calls for main RPC
+    base_interval: Duration,
+    /// Current dynamic interval (adjusted based on 429 responses)
+    current_interval: Duration,
+    /// Maximum interval we'll back off to
+    max_interval: Duration,
+    /// Last call timestamp for main RPC
     last_main_call: Option<Instant>,
+    /// Track consecutive 429 errors for exponential backoff
+    consecutive_429s: u32,
+    /// Track successful calls to reduce interval back to normal
+    consecutive_successes: u32,
+    /// Per-URL rate limiting
+    url_last_calls: std::collections::HashMap<String, Instant>,
+    /// Per-URL intervals (some URLs may have different limits)
+    url_intervals: std::collections::HashMap<String, Duration>,
+    /// Backoff multiplier for 429 responses
+    backoff_multiplier: f64,
 }
 
 impl RpcRateLimiter {
     pub fn new(calls_per_second: u64) -> Self {
-        let interval_duration = Duration::from_millis(1000 / calls_per_second.max(1));
+        let base_interval = Duration::from_millis(1000 / calls_per_second.max(1));
         Self {
-            main_rpc_interval: interval_duration,
+            base_interval,
+            current_interval: base_interval,
+            max_interval: Duration::from_secs(30), // Maximum 30 second backoff
             last_main_call: None,
+            consecutive_429s: 0,
+            consecutive_successes: 0,
+            url_last_calls: std::collections::HashMap::new(),
+            url_intervals: std::collections::HashMap::new(),
+            backoff_multiplier: 2.0, // Double the interval on each 429
         }
     }
 
-    /// Wait for rate limit before making a call to main RPC
+    /// Create a more conservative rate limiter to prevent 429 errors
+    pub fn new_conservative() -> Self {
+        Self::new(5) // Start with 5 calls per second, very conservative
+    }
+
+    /// Wait for rate limit before making a call to main RPC with adaptive backoff
     pub async fn wait_for_main_rpc(&mut self) {
         if let Some(last_call) = self.last_main_call {
             let elapsed = last_call.elapsed();
-            if elapsed < self.main_rpc_interval {
-                let wait_duration = self.main_rpc_interval - elapsed;
+            if elapsed < self.current_interval {
+                let wait_duration = self.current_interval - elapsed;
+                log(
+                    LogTag::Rpc,
+                    "RATE_LIMIT",
+                    &format!(
+                        "Rate limiting main RPC: waiting {:.2}ms (current interval: {:.2}ms, 429s: {})",
+                        wait_duration.as_millis(),
+                        self.current_interval.as_millis(),
+                        self.consecutive_429s
+                    )
+                );
                 tokio::time::sleep(wait_duration).await;
             }
         }
         self.last_main_call = Some(Instant::now());
+    }
+
+    /// Wait for rate limit for a specific URL
+    pub async fn wait_for_url(&mut self, url: &str) {
+        let url_interval = self.url_intervals.get(url).unwrap_or(&self.current_interval).clone();
+
+        if let Some(last_call) = self.url_last_calls.get(url) {
+            let elapsed = last_call.elapsed();
+            if elapsed < url_interval {
+                let wait_duration = url_interval - elapsed;
+                log(
+                    LogTag::Rpc,
+                    "RATE_LIMIT",
+                    &format!(
+                        "Rate limiting URL {}: waiting {:.2}ms",
+                        url,
+                        wait_duration.as_millis()
+                    )
+                );
+                tokio::time::sleep(wait_duration).await;
+            }
+        }
+        self.url_last_calls.insert(url.to_string(), Instant::now());
+    }
+
+    /// Record a 429 error and increase backoff
+    pub fn record_429_error(&mut self, url: Option<&str>) {
+        self.consecutive_429s += 1;
+        self.consecutive_successes = 0;
+
+        // Exponential backoff with jitter
+        let backoff_factor = self.backoff_multiplier.powi(self.consecutive_429s as i32);
+        let new_interval_ms = ((self.base_interval.as_millis() as f64) * backoff_factor) as u64;
+
+        // Add 10% jitter to prevent thundering herd
+        let jitter = ((new_interval_ms as f64) * 0.1) as u64;
+        let jittered_interval = Duration::from_millis(new_interval_ms + jitter);
+
+        self.current_interval = std::cmp::min(jittered_interval, self.max_interval);
+
+        if let Some(url) = url {
+            // Also update per-URL interval
+            self.url_intervals.insert(url.to_string(), self.current_interval);
+        }
+
+        log(
+            LogTag::Rpc,
+            "RATE_LIMIT",
+            &format!(
+                "429 error #{}: increased interval to {:.2}ms (max: {:.2}ms)",
+                self.consecutive_429s,
+                self.current_interval.as_millis(),
+                self.max_interval.as_millis()
+            )
+        );
+    }
+
+    /// Record a successful call and gradually reduce backoff
+    pub fn record_success(&mut self, url: Option<&str>) {
+        self.consecutive_successes += 1;
+
+        // After 5 consecutive successes, reduce interval back towards normal
+        if self.consecutive_successes >= 5 {
+            self.consecutive_429s = self.consecutive_429s.saturating_sub(1);
+            self.consecutive_successes = 0;
+
+            if self.consecutive_429s == 0 {
+                self.current_interval = self.base_interval;
+                log(LogTag::Rpc, "RATE_LIMIT", "Rate limit backoff reset to normal");
+            } else {
+                let backoff_factor = self.backoff_multiplier.powi(self.consecutive_429s as i32);
+                let new_interval_ms = ((self.base_interval.as_millis() as f64) *
+                    backoff_factor) as u64;
+                self.current_interval = Duration::from_millis(new_interval_ms);
+                log(
+                    LogTag::Rpc,
+                    "RATE_LIMIT",
+                    &format!(
+                        "Reduced rate limit backoff to {:.2}ms (429s remaining: {})",
+                        self.current_interval.as_millis(),
+                        self.consecutive_429s
+                    )
+                );
+            }
+
+            if let Some(url) = url {
+                self.url_intervals.insert(url.to_string(), self.current_interval);
+            }
+        }
     }
 
     /// Check if we need to wait for rate limit (without waiting)
@@ -337,6 +464,34 @@ impl RpcRateLimiter {
         } else {
             false
         }
+    }
+
+    /// Get current interval for main RPC
+    pub fn get_current_interval(&self) -> Duration {
+        self.current_interval
+    }
+
+    /// Get current backoff status
+    pub fn get_backoff_status(&self) -> (u32, Duration) {
+        (self.consecutive_429s, self.current_interval)
+    }
+
+    /// Force reset rate limiter (useful after switching RPC endpoints)
+    pub fn reset(&mut self) {
+        self.current_interval = self.base_interval;
+        self.consecutive_429s = 0;
+        self.consecutive_successes = 0;
+        log(LogTag::Rpc, "RATE_LIMIT", "Rate limiter reset");
+    }
+
+    /// Set a custom interval for a specific URL (useful for premium RPCs)
+    pub fn set_url_interval(&mut self, url: &str, interval: Duration) {
+        self.url_intervals.insert(url.to_string(), interval);
+        log(
+            LogTag::Rpc,
+            "RATE_LIMIT",
+            &format!("Set custom interval for {}: {:.2}ms", url, interval.as_millis())
+        );
     }
 }
 
@@ -348,7 +503,7 @@ pub struct RpcClient {
     fallback_urls: Vec<String>,
     current_url_index: usize,
     stats: Arc<std::sync::Mutex<RpcStats>>,
-    rate_limiter: Arc<std::sync::Mutex<RpcRateLimiter>>,
+    rate_limiter: Arc<tokio::sync::Mutex<RpcRateLimiter>>,
 }
 
 impl RpcClient {
@@ -416,7 +571,7 @@ impl RpcClient {
             fallback_urls,
             current_url_index: 0,
             stats: Arc::new(std::sync::Mutex::new(stats)),
-            rate_limiter: Arc::new(std::sync::Mutex::new(RpcRateLimiter::new(10))), // 10 calls per second default
+            rate_limiter: Arc::new(tokio::sync::Mutex::new(RpcRateLimiter::new_conservative())), // Conservative rate limiting to prevent 429s
         })
     }
 
@@ -439,7 +594,7 @@ impl RpcClient {
             fallback_urls: Vec::new(),
             current_url_index: 0,
             stats: Arc::new(std::sync::Mutex::new(stats)),
-            rate_limiter: Arc::new(std::sync::Mutex::new(RpcRateLimiter::new(10))), // 10 calls per second default
+            rate_limiter: Arc::new(tokio::sync::Mutex::new(RpcRateLimiter::new_conservative())), // Conservative rate limiting to prevent 429s
         }
     }
 
@@ -471,11 +626,8 @@ impl RpcClient {
     /// Record an RPC call for statistics
     fn record_call(&self, method: &str) {
         if let Ok(mut stats) = self.stats.lock() {
-            let url_to_record = if self.is_current_url_premium() {
-                format!("{}_PREMIUM", self.rpc_url)
-            } else {
-                self.rpc_url.clone()
-            };
+            // Always use the actual RPC URL, not a modified version
+            let url_to_record = self.rpc_url.clone();
             stats.record_call(&url_to_record, method);
             // Stats are now auto-saved every 3 seconds by background service
         }
@@ -494,7 +646,7 @@ impl RpcClient {
         if let Some(premium_url) = &self.premium_url { self.rpc_url == *premium_url } else { false }
     }
 
-    /// Wait for rate limit if using main RPC (excludes premium RPC)
+    /// Wait for rate limit if using main RPC (excludes premium RPC) with adaptive backoff
     async fn wait_for_rate_limit(&self) {
         // Only rate limit the main RPC URL, not fallbacks or premium URLs
         if self.current_url_index == 0 {
@@ -503,34 +655,63 @@ impl RpcClient {
                 return;
             }
 
-            // Check if we need to wait and get the wait duration
-            let wait_duration = {
-                if let Ok(rate_limiter) = self.rate_limiter.lock() {
-                    if let Some(last_call) = rate_limiter.last_main_call {
-                        let elapsed = last_call.elapsed();
-                        if elapsed < rate_limiter.main_rpc_interval {
-                            Some(rate_limiter.main_rpc_interval - elapsed)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }; // Lock is released here
+            // Use the enhanced rate limiter with adaptive backoff
+            let mut rate_limiter = self.rate_limiter.lock().await;
+            rate_limiter.wait_for_main_rpc().await;
+        }
+    }
 
-            // Wait if needed
-            if let Some(duration) = wait_duration {
-                tokio::time::sleep(duration).await;
-            }
-
-            // Update last call time
-            if let Ok(mut rate_limiter) = self.rate_limiter.lock() {
-                rate_limiter.last_main_call = Some(Instant::now());
+    /// Wait for rate limit for a specific URL
+    async fn wait_for_rate_limit_url(&self, url: &str) {
+        // Skip rate limiting for premium RPC URLs
+        if let Some(premium_url) = &self.premium_url {
+            if url == premium_url {
+                return;
             }
         }
+
+        let mut rate_limiter = self.rate_limiter.lock().await;
+        rate_limiter.wait_for_url(url).await;
+    }
+
+    /// Record a successful RPC call for adaptive rate limiting
+    fn record_success(&self, url: Option<&str>) {
+        let rate_limiter = self.rate_limiter.clone();
+        let url = url.map(|s| s.to_string());
+        tokio::spawn(async move {
+            let mut rate_limiter = rate_limiter.lock().await;
+            rate_limiter.record_success(url.as_deref());
+        });
+    }
+
+    /// Record a 429 error for adaptive rate limiting
+    fn record_429_error(&self, url: Option<&str>) {
+        let rate_limiter = self.rate_limiter.clone();
+        let url = url.map(|s| s.to_string());
+        tokio::spawn(async move {
+            let mut rate_limiter = rate_limiter.lock().await;
+            rate_limiter.record_429_error(url.as_deref());
+        });
+    }
+
+    /// Get current rate limiter status for debugging
+    pub async fn get_rate_limiter_status(&self) -> Option<(u32, Duration)> {
+        let rate_limiter = self.rate_limiter.lock().await;
+        Some(rate_limiter.get_backoff_status())
+    }
+
+    /// Set a custom rate limit interval for premium URLs
+    pub async fn set_premium_rate_limit(&self, interval: Duration) {
+        if let Some(premium_url) = &self.premium_url {
+            let mut rate_limiter = self.rate_limiter.lock().await;
+            rate_limiter.set_url_interval(premium_url, interval);
+        }
+    }
+
+    /// Reset rate limiter (useful when switching networks or after prolonged downtime)
+    pub async fn reset_rate_limiter(&self) {
+        let mut rate_limiter = self.rate_limiter.lock().await;
+        rate_limiter.reset();
     }
 
     /// Create a new client using premium URL (for wallet operations - no rate limiting)
@@ -601,7 +782,7 @@ impl RpcClient {
     }
 
     /// Switch to next fallback URL
-    pub fn switch_to_fallback(&mut self) -> Result<(), String> {
+    pub async fn switch_to_fallback(&mut self) -> Result<(), String> {
         if self.fallback_urls.is_empty() {
             return Err("No fallback URLs available".to_string());
         }
@@ -627,6 +808,9 @@ impl RpcClient {
         if let Ok(mut stats) = self.stats.lock() {
             stats.record_call(&new_url, "switch_fallback");
         }
+
+        // Reset rate limiter when switching endpoints to avoid carrying over 429 penalties
+        self.reset_rate_limiter().await;
 
         Ok(())
     }
@@ -689,7 +873,7 @@ impl RpcClient {
                     log(LogTag::Rpc, "ERROR", &format!("RPC call failed on {}: {}", self.url(), e));
 
                     if attempt < max_attempts - 1 {
-                        if let Err(switch_err) = self.switch_to_fallback() {
+                        if let Err(switch_err) = self.switch_to_fallback().await {
                             log(
                                 LogTag::Rpc,
                                 "ERROR",
@@ -731,7 +915,7 @@ impl RpcClient {
                     );
 
                     if attempt < max_attempts - 1 {
-                        if let Err(switch_err) = self.switch_to_fallback() {
+                        if let Err(switch_err) = self.switch_to_fallback().await {
                             log(
                                 LogTag::Rpc,
                                 "ERROR",
@@ -771,7 +955,7 @@ impl RpcClient {
                     );
 
                     if attempt < max_attempts - 1 {
-                        if let Err(switch_err) = self.switch_to_fallback() {
+                        if let Err(switch_err) = self.switch_to_fallback().await {
                             log(
                                 LogTag::Rpc,
                                 "ERROR",
@@ -858,6 +1042,7 @@ impl RpcClient {
                 // Check if response indicates rate limiting
                 if Self::is_rate_limit_response(&response) {
                     should_fallback = true;
+                    self.record_429_error(Some(&configs.rpc_url)); // Record 429 for adaptive backoff
                     log(
                         LogTag::Rpc,
                         "WARNING",
@@ -881,6 +1066,7 @@ impl RpcClient {
                                 }
                                 // Record successful main RPC call
                                 self.record_call_for_url(&configs.rpc_url, "get_balance");
+                                self.record_success(Some(&configs.rpc_url)); // Record success for adaptive rate limiting
                                 return Ok(balance_sol);
                             }
                         }
@@ -891,6 +1077,7 @@ impl RpcClient {
                 let error_msg = e.to_string();
                 if Self::is_rate_limit_error(&error_msg) {
                     should_fallback = true;
+                    self.record_429_error(Some(&configs.rpc_url)); // Record 429 for adaptive backoff
                     log(
                         LogTag::Rpc,
                         "WARNING",
@@ -943,6 +1130,7 @@ impl RpcClient {
                                 }
                                 // Record successful premium RPC call
                                 self.record_call_for_url(premium_rpc, "get_balance");
+                                self.record_success(Some(premium_rpc)); // Record success for adaptive rate limiting
                                 return Ok(balance_sol);
                             }
                         }

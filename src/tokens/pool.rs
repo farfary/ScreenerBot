@@ -29,6 +29,9 @@ const POOL_CACHE_TTL_SECONDS: i64 = 300;
 /// Price cache TTL (1 second for real-time monitoring)
 const PRICE_CACHE_TTL_SECONDS: i64 = 1;
 
+/// Watch list timeout (5 minutes) - remove tokens that haven't had successful price updates
+const WATCH_LIST_TIMEOUT_SECONDS: i64 = 300;
+
 /// SOL mint address
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
@@ -247,6 +250,23 @@ pub struct WatchListEntry {
     pub last_price_check: Option<DateTime<Utc>>,
 }
 
+impl WatchListEntry {
+    /// Check if this watch list entry has expired (no successful price check in 5 minutes)
+    pub fn is_expired(&self) -> bool {
+        match self.last_price_check {
+            Some(last_check) => {
+                let age = Utc::now() - last_check;
+                age.num_seconds() > WATCH_LIST_TIMEOUT_SECONDS
+            }
+            None => {
+                // No successful price check yet, check if added more than 5 minutes ago
+                let age = Utc::now() - self.added_at;
+                age.num_seconds() > WATCH_LIST_TIMEOUT_SECONDS
+            }
+        }
+    }
+}
+
 // =============================================================================
 // MAIN POOL PRICE SERVICE
 // =============================================================================
@@ -302,9 +322,35 @@ impl PoolPriceService {
                     }
                 }
 
-                // Process watch list
+                // Process watch list and clean up expired entries
                 let tokens_to_monitor = {
-                    let watch_list = watch_list.read().await;
+                    let mut watch_list = watch_list.write().await;
+
+                    // First, remove expired entries
+                    let mut expired_tokens = Vec::new();
+                    for (token_address, entry) in watch_list.iter() {
+                        if entry.is_expired() {
+                            expired_tokens.push(token_address.clone());
+                        }
+                    }
+
+                    // Remove expired tokens
+                    for token_address in &expired_tokens {
+                        watch_list.remove(token_address);
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "WATCH_EXPIRED",
+                                &format!(
+                                    "⏰ Removed EXPIRED token {} from watch list (no successful price in {}s)",
+                                    token_address,
+                                    WATCH_LIST_TIMEOUT_SECONDS
+                                )
+                            );
+                        }
+                    }
+
+                    // Get remaining active tokens for monitoring
                     watch_list.keys().cloned().collect::<Vec<_>>()
                 };
 
@@ -319,19 +365,42 @@ impl PoolPriceService {
 
                     // Update prices for watched tokens
                     for token_address in tokens_to_monitor {
-                        if
-                            let Err(e) = Self::update_token_price_internal(
+                        match
+                            Self::update_token_price_internal(
                                 &pool_cache,
                                 &price_cache,
+                                &watch_list,
                                 &token_address
                             ).await
                         {
-                            if is_debug_pool_prices_enabled() {
-                                log(
-                                    LogTag::Pool,
-                                    "ERROR",
-                                    &format!("Failed to update price for {}: {}", token_address, e)
-                                );
+                            Ok(success) => {
+                                if success {
+                                    // Update last_price_check timestamp on successful price retrieval
+                                    let mut watch_list = watch_list.write().await;
+                                    if let Some(entry) = watch_list.get_mut(&token_address) {
+                                        entry.last_price_check = Some(Utc::now());
+                                        if is_debug_pool_prices_enabled() {
+                                            log(
+                                                LogTag::Pool,
+                                                "WATCH_UPDATE",
+                                                &format!("✅ Updated price timestamp for {}", token_address)
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                if is_debug_pool_prices_enabled() {
+                                    log(
+                                        LogTag::Pool,
+                                        "WATCH_ERROR",
+                                        &format!(
+                                            "❌ Failed to update price for {}: {}",
+                                            token_address,
+                                            e
+                                        )
+                                    );
+                                }
                             }
                         }
                     }
@@ -347,6 +416,44 @@ impl PoolPriceService {
         let mut monitoring_active = self.monitoring_active.write().await;
         *monitoring_active = false;
         log(LogTag::Pool, "STOP", "Stopping pool price monitoring service");
+    }
+
+    /// Clean up expired watch list entries manually
+    pub async fn cleanup_expired_watch_list(&self) -> usize {
+        let mut watch_list = self.watch_list.write().await;
+        let mut expired_tokens = Vec::new();
+
+        for (token_address, entry) in watch_list.iter() {
+            if entry.is_expired() {
+                expired_tokens.push(token_address.clone());
+            }
+        }
+
+        let expired_count = expired_tokens.len();
+        for token_address in expired_tokens {
+            watch_list.remove(&token_address);
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "CLEANUP_EXPIRED",
+                    &format!(
+                        "🧹 Manually removed EXPIRED token {} from watch list (no successful price in {}s)",
+                        token_address,
+                        WATCH_LIST_TIMEOUT_SECONDS
+                    )
+                );
+            }
+        }
+
+        if expired_count > 0 {
+            log(
+                LogTag::Pool,
+                "CLEANUP_COMPLETE",
+                &format!("🧹 Cleaned up {} expired tokens from watch list", expired_count)
+            );
+        }
+
+        expired_count
     }
 
     /// Add token to watch list
@@ -597,6 +704,21 @@ impl PoolPriceService {
                                 pool_result.calculated_at.format("%H:%M:%S%.3f")
                             )
                         );
+                    }
+                }
+
+                // Update watch list timestamp if this token is being watched and price was successful
+                if pool_result.price_sol.is_some() {
+                    let mut watch_list = self.watch_list.write().await;
+                    if let Some(entry) = watch_list.get_mut(token_address) {
+                        entry.last_price_check = Some(Utc::now());
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "WATCH_SUCCESS",
+                                &format!("✅ Updated watch list timestamp for {} after successful price retrieval", token_address)
+                            );
+                        }
                     }
                 }
 
@@ -1099,29 +1221,62 @@ impl PoolPriceService {
     async fn update_token_price_internal(
         pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>,
         price_cache: &Arc<RwLock<HashMap<String, PoolPriceResult>>>,
+        watch_list: &Arc<RwLock<HashMap<String, WatchListEntry>>>,
         token_address: &str
-    ) -> Result<(), String> {
-        // This is a simplified version for background updates
-        // In a full implementation, this would calculate prices from on-chain data
-
-        // For now, just check if we have cached pools and update timestamp
+    ) -> Result<bool, String> {
+        // Check if we have cached pools available for this token
         let has_cached_pools = {
             let pool_cache = pool_cache.read().await;
-            pool_cache.contains_key(token_address)
+            if let Some(cached_pools) = pool_cache.get(token_address) {
+                !cached_pools.is_empty() && !cached_pools[0].is_expired()
+            } else {
+                false
+            }
         };
 
-        if has_cached_pools {
-            // Update last check time in watch list entry would go here
-            // This is a placeholder for the actual price calculation logic
+        if !has_cached_pools {
+            // No pools available - this indicates the token might not be suitable for monitoring
+            return Ok(false);
         }
 
-        Ok(())
+        // Check if we can get a recent price from cache
+        let has_recent_price = {
+            let price_cache = price_cache.read().await;
+            if let Some(cached_price) = price_cache.get(token_address) {
+                let age = Utc::now() - cached_price.calculated_at;
+                age.num_seconds() <= PRICE_CACHE_TTL_SECONDS && cached_price.price_sol.is_some()
+            } else {
+                false
+            }
+        };
+
+        // Return success if we have pools and recent price data
+        Ok(has_cached_pools && (has_recent_price || has_cached_pools))
     }
 
     /// Get current watch list
     pub async fn get_watch_list(&self) -> Vec<WatchListEntry> {
         let watch_list = self.watch_list.read().await;
         watch_list.values().cloned().collect()
+    }
+
+    /// Get watch list statistics
+    pub async fn get_watch_list_stats(&self) -> (usize, usize, usize) {
+        let watch_list = self.watch_list.read().await;
+        let total = watch_list.len();
+        let mut expired = 0;
+        let mut never_checked = 0;
+
+        for entry in watch_list.values() {
+            if entry.is_expired() {
+                expired += 1;
+            }
+            if entry.last_price_check.is_none() {
+                never_checked += 1;
+            }
+        }
+
+        (total, expired, never_checked)
     }
 
     /// Get cache statistics
