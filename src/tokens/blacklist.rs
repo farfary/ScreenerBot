@@ -57,8 +57,8 @@ pub enum BlacklistReason {
     LowLiquidity,
     PoorPerformance,
     ManualBlacklist,
-    SystemToken,     // System/program tokens
-    StableToken,     // Stable coins and major tokens
+    SystemToken, // System/program tokens
+    StableToken, // Stable coins and major tokens
 }
 
 /// Individual liquidity check record
@@ -431,7 +431,7 @@ pub fn is_token_excluded_from_trading(mint: &str) -> bool {
     if is_system_or_stable_token(mint) {
         return true;
     }
-    
+
     // Check dynamic blacklist
     is_token_blacklisted(mint)
 }
@@ -497,22 +497,22 @@ pub fn initialize_system_stable_blacklist() {
                 "11111111111111111111111111111111" => "SYSTEM",
                 "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "TOKEN_PROGRAM",
                 "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => "TOKEN_2022",
-                _ => "UNKNOWN"
+                _ => "UNKNOWN",
             };
-            
+
             let reason = match mint {
-                "11111111111111111111111111111111" | 
-                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" | 
-                "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => BlacklistReason::SystemToken,
+                | "11111111111111111111111111111111"
+                | "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                | "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => BlacklistReason::SystemToken,
                 _ => BlacklistReason::StableToken,
             };
-            
+
             if let Ok(mut blacklist) = TOKEN_BLACKLIST.try_lock() {
                 blacklist.add_to_blacklist(mint, symbol, reason);
                 let _ = blacklist.save(); // Ignore save errors during initialization
             }
         }
     }
-    
+
     log(LogTag::Blacklist, "INIT", "System and stable tokens initialized in blacklist");
 }

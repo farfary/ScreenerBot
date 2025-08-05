@@ -6,6 +6,7 @@ use crate::utils::*;
 use crate::global::STARTUP_TIME;
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
+use crate::tokens::pool::get_pool_service;
 // TODO: Replace with new pool price system
 // use crate::pool_price_manager::refresh_open_position_prices;
 
@@ -121,6 +122,25 @@ pub struct AtaCleanupDisplay {
     failed_cache: String,
     #[tabled(rename = "⏰ Last Cleanup")]
     last_cleanup: String,
+}
+
+/// Display structure for pool service statistics
+#[derive(Tabled)]
+pub struct PoolServiceDisplay {
+    #[tabled(rename = "🏊 Pool Cache")]
+    pool_cache: String,
+    #[tabled(rename = "💰 Price Cache")]
+    price_cache: String,
+    #[tabled(rename = "👀 Watched")]
+    watched_tokens: String,
+    #[tabled(rename = "⏰ Expired")]
+    expired_tokens: String,
+    #[tabled(rename = "❓ Unchecked")]
+    never_checked: String,
+    #[tabled(rename = "🎯 Success Rate")]
+    success_rate: String,
+    #[tabled(rename = "� Availability")]
+    availability_cache: String,
 }
 
 /// Display structure for RPC URL usage statistics
@@ -434,6 +454,37 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         last_cleanup: ata_stats.last_cleanup_time.unwrap_or_else(|| "Never".to_string()),
     };
 
+    // Get pool service statistics
+    let pool_service = get_pool_service();
+    let (pool_cache_count, price_cache_count, availability_cache_count) =
+        pool_service.get_cache_stats().await;
+    let (watch_list_total, watch_list_expired, watch_list_never_checked) =
+        pool_service.get_watch_list_stats().await;
+
+    // Calculate active watch list (total - expired)
+    let active_watched = watch_list_total.saturating_sub(watch_list_expired);
+
+    // Calculate success rate based on active monitoring
+    let monitoring_success_rate = if watch_list_total > 0 {
+        ((active_watched as f64) / (watch_list_total as f64)) * 100.0
+    } else {
+        0.0
+    };
+
+    let pool_service_stats = PoolServiceDisplay {
+        pool_cache: format!("{} pools", pool_cache_count),
+        price_cache: format!("{} prices", price_cache_count),
+        watched_tokens: format!("{} active", active_watched),
+        expired_tokens: format!("{} stale", watch_list_expired),
+        never_checked: format!("{} pending", watch_list_never_checked),
+        success_rate: if watch_list_total > 0 {
+            format!("{:.1}%", monitoring_success_rate)
+        } else {
+            "N/A".to_string()
+        },
+        availability_cache: format!("{} checked", availability_cache_count),
+    };
+
     // Display all tables
     println!("\n📊 Bot Overview");
     let mut overview_table = Table::new(vec![overview]);
@@ -458,6 +509,11 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     let mut ata_table = Table::new(vec![ata_cleanup]);
     ata_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", ata_table);
+
+    println!("\n🏊 Pool Service Statistics");
+    let mut pool_table = Table::new(vec![pool_service_stats]);
+    pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    println!("{}", pool_table);
 
     // Display RPC statistics if available
     if let Some(rpc_stats) = get_global_rpc_stats() {
@@ -728,25 +784,15 @@ impl OpenPositionDisplay {
 fn get_profit_status_emoji(_pnl_sol: f64, pnl_percent: f64, is_closed: bool) -> String {
     let base_status = if is_closed { "CLOSED" } else { "OPEN" };
 
-    if pnl_percent >= 50.0 {
-        format!("🚀 {}", base_status) // Moon shot gains
-    } else if pnl_percent >= 20.0 {
-        format!("🔥 {}", base_status) // Hot gains
-    } else if pnl_percent >= 10.0 {
-        format!("💰 {}", base_status) // Good profits
-    } else if pnl_percent >= 5.0 {
-        format!("📈 {}", base_status) // Modest gains
+    if pnl_percent >= 15.0 {
+        format!("🚀 {}", base_status) // Rocket gains (15%+)
     } else if pnl_percent >= 0.0 {
-        format!("✅ {}", base_status) // Small gains
-    } else if pnl_percent >= -5.0 {
-        format!("⚠️ {}", base_status) // Small loss
+        format!("✅ {}", base_status) // Positive gains (0-15%)
     } else if pnl_percent >= -10.0 {
-        format!("📉 {}", base_status) // Moderate loss
-    } else if pnl_percent >= -20.0 {
-        format!("❌ {}", base_status) // Significant loss
+        format!("⚠️ {}", base_status) // Small loss (0 to -10%)
     } else if pnl_percent >= -50.0 {
-        format!("💀 {}", base_status) // Major loss
+        format!("❌ {}", base_status) // Negative loss (-10 to -50%)
     } else {
-        format!("🔴 {}", base_status) // Devastating loss
+        format!("💀 {}", base_status) // Very loss (-50%+)
     }
 }
