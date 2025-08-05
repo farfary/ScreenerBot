@@ -145,7 +145,7 @@ pub enum FilterReason {
         reason: String,
     },
     SystemOrStableToken,
-    
+
     // Basic validation failures
     EmptySymbol,
     EmptyMint,
@@ -589,7 +589,7 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
             } else {
                 "Blacklisted".to_string()
             };
-            
+
             if is_debug_filtering_enabled() {
                 log(
                     LogTag::Filtering,
@@ -597,7 +597,7 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
                     &format!("🚫 Token {} is blacklisted - {}", token.symbol, reason_description)
                 );
             }
-            
+
             return Some(FilterReason::TokenBlacklisted {
                 reason: reason_description,
             });
@@ -1638,8 +1638,8 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
 
     for (_, reason) in rejected {
         let reason_type = match reason {
-            | FilterReason::TokenBlacklisted { .. }
-            | FilterReason::SystemOrStableToken => "Blacklist/Exclusion",
+            FilterReason::TokenBlacklisted { .. } | FilterReason::SystemOrStableToken =>
+                "Blacklist/Exclusion",
             | FilterReason::EmptySymbol
             | FilterReason::EmptyMint
             | FilterReason::EmptyLogoUrl
