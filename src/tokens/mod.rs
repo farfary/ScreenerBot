@@ -33,7 +33,7 @@ pub mod monitor;
 pub mod cache;
 pub mod types;
 pub mod blacklist;
-pub mod price_service;
+pub mod price;
 pub mod decimals;
 pub mod rugcheck;
 pub mod ohlcvs;
@@ -92,7 +92,7 @@ pub use ohlcvs::{
     is_ohlcv_data_available,
     get_latest_ohlcv,
 };
-pub use price_service::{
+pub use price::{
     initialize_price_service,
     get_token_price_safe,
     get_token_price_blocking_safe,
@@ -470,7 +470,7 @@ pub async fn get_current_token_price(mint: &str) -> Option<f64> {
 pub async fn get_current_token_prices_batch(
     mints: &[String]
 ) -> std::collections::HashMap<String, Option<f64>> {
-    price_service::get_token_prices_batch_safe(mints).await
+    price::get_token_prices_batch_safe(mints).await
 }
 
 /// Get all tokens by liquidity using database directly (for compatibility)
@@ -649,7 +649,7 @@ async fn start_cache_cleanup_task(
                 }
                 
                 _ = interval.tick() => {
-                    let removed_count = price_service::cleanup_price_cache().await;
+                    let removed_count = price::cleanup_price_cache().await;
                     if removed_count > 0 {
                         log(LogTag::System, "CLEANUP", 
                             &format!("Cleaned up {} expired cache entries", removed_count));

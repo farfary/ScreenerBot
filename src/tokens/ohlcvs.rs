@@ -29,7 +29,7 @@
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_ohlcv_enabled;
 use crate::tokens::pool::{ get_pool_service };
-use crate::tokens::price_service::{ get_priority_tokens_safe };
+use crate::tokens::price::{ get_priority_tokens_safe };
 use tokio::sync::{ RwLock, Notify };
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;

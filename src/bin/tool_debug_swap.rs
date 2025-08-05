@@ -3,7 +3,7 @@ use screenerbot::{
     rpc::{ lamports_to_sol, SwapError },
     tokens::{
         types::Token,
-        price_service::get_token_price_safe,
+        price::get_token_price_safe,
         decimals::get_token_decimals_from_chain,
         api::{ init_dexscreener_api, get_token_from_mint_global_api },
     },

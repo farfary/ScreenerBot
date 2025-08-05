@@ -14,7 +14,7 @@ use crate::tokens::api::{
 };
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
-use crate::tokens::price_service::{ get_priority_tokens_safe, update_tokens_prices_safe };
+use crate::tokens::price::{ get_priority_tokens_safe, update_tokens_prices_safe };
 use crate::tokens::types::*;
 use tokio::time::{ sleep, Duration };
 use tokio::sync::Semaphore;

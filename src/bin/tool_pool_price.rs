@@ -12,7 +12,7 @@
 
 use screenerbot::tokens::pool::{ get_pool_service, init_pool_service };
 use screenerbot::tokens::api::{ get_token_pairs_from_api, init_dexscreener_api };
-use screenerbot::tokens::price_service::{ initialize_price_service };
+use screenerbot::tokens::price::{ initialize_price_service };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::rpc::{ init_rpc_client, get_rpc_client };
@@ -942,7 +942,7 @@ async fn compare_pool_api_prices(
 
     // Get API price (this returns SOL price) - use the blocking version to ensure we get the price
     let api_price_sol =
-        screenerbot::tokens::price_service::get_token_price_blocking_safe(token_address).await;
+        screenerbot::tokens::price::get_token_price_blocking_safe(token_address).await;
     log(LogTag::Pool, "API", &format!("API price: {:.12} SOL", api_price_sol.unwrap_or(0.0)));
 
     // Get pool price with detailed debugging
