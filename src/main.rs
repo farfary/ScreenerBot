@@ -89,6 +89,15 @@ async fn main() {
 
     log(LogTag::System, "INFO", "Thread-safe price service initialized successfully");
 
+    // Initialize and start pool service for real-time price calculations and history caching
+    let pool_service = screenerbot::tokens::pool::init_pool_service();
+    pool_service.start_monitoring().await;
+    log(
+        LogTag::System,
+        "INFO",
+        "Pool price service with disk caching initialized and monitoring started"
+    );
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_trader = shutdown.clone();
     let shutdown_tokens = shutdown.clone();
@@ -265,6 +274,11 @@ async fn main() {
 
     // Cleanup price service on shutdown (with timeout)
     let cleanup_result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        // Stop pool monitoring service and save price history caches
+        let pool_service = screenerbot::tokens::pool::get_pool_service();
+        pool_service.stop_monitoring().await;
+        log(LogTag::System, "INFO", "Pool monitoring service stopped and price history saved");
+
         screenerbot::tokens::cleanup_price_cache().await;
         screenerbot::tokens::decimals::save_decimal_cache();
 

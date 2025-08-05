@@ -101,7 +101,43 @@ impl EntryRecommendation {
     }
 }
 
-/// Comprehensive entry analysis result
+/// Comprehensive entry timing prediction
+#[derive(Debug, Clone)]
+pub struct EntryTimingPrediction {
+    pub is_good_entry_time: bool, // Should we enter now?
+    pub entry_quality_score: f64, // 0.0-1.0 quality of entry timing
+    pub predicted_profit_target: f64, // Predicted profit percentage at entry
+    pub predicted_hold_duration: f64, // Predicted hold time in hours
+    pub risk_level: f64, // Predicted risk level (0.0-1.0)
+    pub confidence: f64, // Model confidence in prediction (0.0-1.0)
+}
+
+/// Exit timing prediction for smart position management
+#[derive(Debug, Clone)]
+pub struct ExitTimingPrediction {
+    pub should_exit_now: bool, // Should we exit immediately?
+    pub exit_urgency_score: f64, // 0.0-1.0 (1.0 = exit immediately)
+    pub predicted_recovery_probability: f64, // 0.0-1.0 chance of recovery
+    pub predicted_recovery_time_hours: f64, // Expected time to recovery
+    pub predicted_recovery_price: f64, // Expected recovery price level
+    pub opportunity_cost_score: f64, // 0.0-1.0 (higher = better opportunities available)
+    pub support_level: Option<f64>, // Detected support price level
+    pub resistance_level: Option<f64>, // Detected resistance price level
+    pub min_loss_exit_price: f64, // Best exit price to minimize loss
+    pub confidence: f64, // Model confidence
+}
+
+/// Position management recommendation
+#[derive(Debug, Clone, PartialEq)]
+pub enum PositionAction {
+    Hold, // Continue holding, good prospects
+    HoldForRecovery, // Hold and wait for recovery to support level
+    ExitAtSupport, // Exit if price reaches support level
+    ExitNow, // Exit immediately for opportunity cost
+    ExitEmergency, // Exit immediately due to high risk
+}
+
+/// Comprehensive entry analysis result with enhanced predictions
 #[derive(Debug, Clone)]
 pub struct EntryAnalysis {
     pub rl_score: f64, // RL model prediction score (0.0-1.0)
@@ -111,6 +147,8 @@ pub struct EntryAnalysis {
     pub price_analysis: PriceAnalysis,
     pub recommendation: EntryRecommendation,
     pub confidence: f64, // Confidence in the analysis (0.0-1.0)
+    pub timing_prediction: EntryTimingPrediction, // NEW: Detailed timing prediction
+    pub should_enter: bool, // NEW: Final entry decision
 }
 
 /// Model configuration for recreation
@@ -195,11 +233,16 @@ impl Hash for LearningRecord {
     }
 }
 
-/// Simple RL learning system that uses Random Forest to predict trading outcomes
+/// Enhanced RL learning system with multiple prediction models
 #[derive(Debug)]
 pub struct TradingLearner {
     records: Arc<Mutex<VecDeque<LearningRecord>>>,
-    model: Arc<Mutex<Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>>>,
+    // Profit prediction model (predicts profit percentage)
+    profit_model: Arc<Mutex<Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>>>,
+    // Entry timing model (predicts entry quality 0.0-1.0)
+    timing_model: Arc<Mutex<Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>>>,
+    // Hold duration model (predicts how long to hold in hours)
+    duration_model: Arc<Mutex<Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>>>,
     is_trained: Arc<Mutex<bool>>,
     model_metrics: Arc<Mutex<Option<ModelMetrics>>>,
     max_records: usize,
@@ -211,7 +254,9 @@ impl TradingLearner {
     pub fn new() -> Self {
         let mut instance = Self {
             records: Arc::new(Mutex::new(VecDeque::new())),
-            model: Arc::new(Mutex::new(None)),
+            profit_model: Arc::new(Mutex::new(None)),
+            timing_model: Arc::new(Mutex::new(None)),
+            duration_model: Arc::new(Mutex::new(None)),
             is_trained: Arc::new(Mutex::new(false)),
             model_metrics: Arc::new(Mutex::new(None)),
             max_records: 1000, // Keep last 1000 trading records
@@ -584,7 +629,7 @@ impl TradingLearner {
         Ok((feature_matrix, targets, num_features))
     }
 
-    /// Train the model with current records
+    /// Train multiple models with current records (profit, timing, duration)
     pub async fn train_model(&self) -> Result<(), String> {
         let records = {
             let records_guard = self.records
@@ -615,18 +660,19 @@ impl TradingLearner {
             records_guard.clone()
         };
 
-        // Prepare training data
+        // Prepare training data for all models
         if is_debug_rl_learn_enabled() {
             log(
                 LogTag::RlLearn,
                 "TRAINING_START",
-                &format!("🎯 Starting model training with {} records", records.len())
+                &format!("🎯 Starting multi-model training with {} records", records.len())
             );
         }
 
-        let (features, targets, num_features) = self.prepare_training_data(&records)?;
+        let (features, profit_targets, timing_targets, duration_targets, num_features) =
+            self.prepare_multi_model_training_data(&records)?;
 
-        // Train Random Forest model
+        // Common Random Forest parameters
         let parameters = RandomForestRegressorParameters {
             n_trees: 50, // 50 trees for good performance
             max_depth: Some(10), // Limit depth to prevent overfitting
@@ -637,14 +683,47 @@ impl TradingLearner {
             seed: 42, // Fixed seed for reproducibility
         };
 
-        let model = RandomForestRegressor::fit(&features, &targets, parameters).map_err(|e|
-            format!("Failed to train model: {:?}", e)
-        )?;
+        // Train profit prediction model
+        let profit_model = RandomForestRegressor::fit(
+            &features,
+            &profit_targets,
+            parameters.clone()
+        ).map_err(|e| format!("Failed to train profit model: {:?}", e))?;
 
-        // Update model and training status
+        // Train entry timing model (quality score 0.0-1.0)
+        let timing_model = RandomForestRegressor::fit(
+            &features,
+            &timing_targets,
+            parameters.clone()
+        ).map_err(|e| format!("Failed to train timing model: {:?}", e))?;
+
+        // Train hold duration model
+        let duration_model = RandomForestRegressor::fit(
+            &features,
+            &duration_targets,
+            parameters
+        ).map_err(|e| format!("Failed to train duration model: {:?}", e))?;
+
+        // Update all models
         {
-            let mut model_guard = self.model.lock().map_err(|_| "Failed to lock model for update")?;
-            *model_guard = Some(model);
+            let mut profit_guard = self.profit_model
+                .lock()
+                .map_err(|_| "Failed to lock profit model")?;
+            *profit_guard = Some(profit_model);
+        }
+
+        {
+            let mut timing_guard = self.timing_model
+                .lock()
+                .map_err(|_| "Failed to lock timing model")?;
+            *timing_guard = Some(timing_model);
+        }
+
+        {
+            let mut duration_guard = self.duration_model
+                .lock()
+                .map_err(|_| "Failed to lock duration model")?;
+            *duration_guard = Some(duration_model);
         }
 
         {
@@ -674,7 +753,7 @@ impl TradingLearner {
             LogTag::RlLearn,
             "TRAINING_SUCCESS",
             &format!(
-                "🎓 Successfully trained Random Forest model: {} records, {} features, 50 trees",
+                "🎓 Successfully trained multi-model system: {} records, {} features, 3 models x 50 trees each",
                 records.len(),
                 num_features
             )
@@ -682,20 +761,89 @@ impl TradingLearner {
 
         // Save to disk after successful training
         if let Err(e) = self.save_to_disk() {
-            if is_debug_rl_learn_enabled() {
-                log(
-                    LogTag::RlLearn,
-                    "SAVE_ERROR",
-                    &format!("❌ Failed to save RL data after training: {}", e)
-                );
-            }
+            log(
+                LogTag::RlLearn,
+                "SAVE_ERROR_AFTER_TRAINING",
+                &format!("⚠️ Failed to save after training: {}", e)
+            );
         }
 
         Ok(())
     }
 
-    /// Predict profit percentage for a potential trade
-    pub async fn predict_profit(
+    /// Prepare training data for multiple models (profit, timing, duration)
+    fn prepare_multi_model_training_data(
+        &self,
+        records: &VecDeque<LearningRecord>
+    ) -> Result<(DenseMatrix<f64>, Vec<f64>, Vec<f64>, Vec<f64>, usize), String> {
+        if records.is_empty() {
+            return Err("No records available for training".to_string());
+        }
+
+        let mut features = Vec::new();
+        let mut profit_targets = Vec::new();
+        let mut timing_targets = Vec::new(); // 0.0-1.0 quality score
+        let mut duration_targets = Vec::new(); // Hours
+
+        for record in records.iter() {
+            // Same feature vector as before
+            let feature_vector = vec![
+                record.current_price,
+                record.price_change_5min,
+                record.price_change_10min,
+                record.price_change_30min,
+                record.liquidity_usd,
+                record.volume_24h,
+                record.market_cap.unwrap_or(0.0),
+                record.rugcheck_score.unwrap_or(50.0),
+                record.pool_price,
+                record.price_drop_detected,
+                record.confidence_score
+            ];
+
+            // Validate features are finite
+            if feature_vector.iter().all(|&f| f.is_finite()) {
+                features.push(feature_vector);
+
+                // Target 1: Profit percentage (as-is)
+                profit_targets.push(record.actual_profit_percent);
+
+                // Target 2: Entry timing quality (0.0-1.0)
+                // Good entry = profitable + reasonable hold time
+                let timing_quality = if record.success {
+                    // Profitable trades get higher scores
+                    let profit_score = (record.actual_profit_percent / 100.0).min(1.0).max(0.0);
+                    let duration_score = if record.hold_duration_minutes <= 60.0 {
+                        1.0 // Quick profits get max score
+                    } else if record.hold_duration_minutes <= 180.0 {
+                        0.8 // Reasonable duration
+                    } else {
+                        0.6 // Longer but still profitable
+                    };
+                    (profit_score * 0.7 + duration_score * 0.3).min(1.0)
+                } else {
+                    // Losing trades get low scores
+                    0.1 + (record.actual_profit_percent / -100.0).max(0.0) * 0.3
+                };
+                timing_targets.push(timing_quality);
+
+                // Target 3: Hold duration in hours
+                duration_targets.push(record.hold_duration_minutes / 60.0);
+            }
+        }
+
+        let num_features = if !features.is_empty() { features[0].len() } else { 0 };
+
+        // Convert to DenseMatrix
+        let feature_matrix = DenseMatrix::from_2d_vec(&features).map_err(|e|
+            format!("Failed to create feature matrix: {}", e)
+        )?;
+
+        Ok((feature_matrix, profit_targets, timing_targets, duration_targets, num_features))
+    }
+
+    /// Comprehensive entry prediction using all three models
+    pub async fn predict_entry_timing(
         &self,
         token_mint: &str,
         current_price: f64,
@@ -707,23 +855,30 @@ impl TradingLearner {
         pool_price: f64,
         price_drop_detected: f64,
         confidence_score: f64
-    ) -> Result<f64, String> {
-        // Check if model is trained
+    ) -> Result<EntryTimingPrediction, String> {
+        // Check if models are trained
         let is_trained = self.is_trained
             .lock()
             .map_err(|_| "Failed to lock training status")?
             .clone();
 
         if !is_trained {
-            return Err("Model not yet trained".to_string());
+            return Ok(EntryTimingPrediction {
+                is_good_entry_time: false,
+                entry_quality_score: 0.5, // Neutral default
+                predicted_profit_target: 10.0, // Conservative default
+                predicted_hold_duration: 2.0, // 2 hours default
+                risk_level: 0.5, // Medium risk
+                confidence: 0.1, // Low confidence - not trained
+            });
         }
 
-        // Create feature vector first with same validation as training
+        // Create feature vector
         let features = vec![
-            current_price.max(0.0).min(1e10), // Cap extreme values
-            price_changes.0.max(-1000.0).min(1000.0), // 5-min change
-            price_changes.1.max(-1000.0).min(1000.0), // 10-min change
-            price_changes.2.max(-1000.0).min(1000.0), // 30-min change
+            current_price.max(0.0).min(1e10),
+            price_changes.0.max(-1000.0).min(1000.0),
+            price_changes.1.max(-1000.0).min(1000.0),
+            price_changes.2.max(-1000.0).min(1000.0),
             if liquidity_usd > 0.0 {
                 liquidity_usd.log10().max(0.0)
             } else {
@@ -739,10 +894,10 @@ impl TradingLearner {
             } else {
                 0.0
             },
-            rugcheck_score.unwrap_or(50.0).max(0.0).min(100.0) as f64, // Cap risk score
-            pool_price.max(0.0).min(1e10), // Cap pool price
-            price_drop_detected.max(0.0).min(100.0), // Use actual drop percentage, not binary
-            confidence_score.max(0.0).min(1.0) // Cap confidence
+            rugcheck_score.unwrap_or(50.0).max(0.0).min(100.0),
+            pool_price.max(0.0).min(1e10),
+            price_drop_detected.max(0.0).min(100.0),
+            confidence_score.max(0.0).min(1.0)
         ];
 
         // Validate all features are finite
@@ -751,47 +906,619 @@ impl TradingLearner {
             .map(|f| if f.is_finite() { f } else { 0.0 })
             .collect();
 
-        // Use model within lock scope without cloning
-        let model_guard = self.model.lock().map_err(|_| "Failed to lock model for prediction")?;
-
-        let model = model_guard.as_ref().ok_or("Model not available")?;
-
         // Convert to matrix (1 row, 11 columns)
         let feature_matrix = DenseMatrix::from_2d_array(&[&valid_features]).map_err(|e|
             format!("Failed to create prediction matrix: {}", e)
         )?;
 
-        // Make prediction
-        let prediction = model
-            .predict(&feature_matrix)
-            .map_err(|e| format!("Failed to make prediction: {:?}", e))?;
+        // Get predictions from all three models
+        let predicted_profit = {
+            let profit_guard = self.profit_model.lock().map_err(|_| "Failed to lock profit model")?;
+            let model = profit_guard.as_ref().ok_or("Profit model not available")?;
+            model
+                .predict(&feature_matrix)
+                .map_err(|e| format!("Profit prediction failed: {:?}", e))?[0]
+        };
 
-        let predicted_profit = prediction[0];
+        let predicted_timing_quality = {
+            let timing_guard = self.timing_model.lock().map_err(|_| "Failed to lock timing model")?;
+            let model = timing_guard.as_ref().ok_or("Timing model not available")?;
+            model
+                .predict(&feature_matrix)
+                .map_err(|e| format!("Timing prediction failed: {:?}", e))?[0]
+        };
 
-        // Update prediction count in metrics
-        if let Ok(mut metrics_guard) = self.model_metrics.lock() {
-            if let Some(ref mut metrics) = metrics_guard.as_mut() {
-                metrics.last_prediction_count += 1;
-            }
-        }
+        let predicted_duration = {
+            let duration_guard = self.duration_model
+                .lock()
+                .map_err(|_| "Failed to lock duration model")?;
+            let model = duration_guard.as_ref().ok_or("Duration model not available")?;
+            model
+                .predict(&feature_matrix)
+                .map_err(|e| format!("Duration prediction failed: {:?}", e))?[0]
+        };
+
+        // Process predictions
+        let timing_quality = predicted_timing_quality.max(0.0).min(1.0);
+        let predicted_profit_capped = predicted_profit.max(-99.0).min(1000.0);
+        let duration_hours = predicted_duration.max(0.1).min(48.0);
+
+        // Calculate risk level based on predictions and market data
+        let risk_level = self.calculate_risk_level(
+            predicted_profit_capped,
+            timing_quality,
+            rugcheck_score.unwrap_or(50.0),
+            liquidity_usd
+        );
+
+        // Determine if this is a good entry time
+        let is_good_entry_time =
+            timing_quality >= 0.6 && predicted_profit_capped >= 5.0 && risk_level <= 0.7;
+
+        // Calculate model confidence based on training data and predictions
+        let model_confidence = self.calculate_model_confidence(
+            timing_quality,
+            predicted_profit_capped
+        );
 
         if is_debug_rl_learn_enabled() {
             log(
                 LogTag::RlLearn,
                 "PREDICTION",
                 &format!(
-                    "🔮 {} prediction: {:.2}% profit (features: price:{:.12}, liq:${:.0}, vol:${:.0}, risk:{:.0})",
-                    token_mint,
-                    predicted_profit,
-                    current_price,
-                    liquidity_usd,
-                    volume_24h,
-                    rugcheck_score.unwrap_or(100.0)
+                    "🔮 {} predictions: Profit: {:.1}%, Quality: {:.1}%, Duration: {:.1}h, Risk: {:.1}%, Entry: {}",
+                    token_mint[..8].to_string(),
+                    predicted_profit_capped,
+                    timing_quality * 100.0,
+                    duration_hours,
+                    risk_level * 100.0,
+                    if is_good_entry_time {
+                        "✅ YES"
+                    } else {
+                        "❌ NO"
+                    }
                 )
             );
         }
 
-        Ok(predicted_profit)
+        Ok(EntryTimingPrediction {
+            is_good_entry_time,
+            entry_quality_score: timing_quality,
+            predicted_profit_target: predicted_profit_capped.abs(), // Use absolute value for target
+            predicted_hold_duration: duration_hours,
+            risk_level,
+            confidence: model_confidence,
+        })
+    }
+
+    /// Calculate risk level based on predictions and market data
+    fn calculate_risk_level(
+        &self,
+        predicted_profit: f64,
+        timing_quality: f64,
+        rugcheck_score: f64,
+        liquidity_usd: f64
+    ) -> f64 {
+        let mut risk = 0.5; // Base medium risk
+
+        // Profit-based risk (negative expected profit = higher risk)
+        if predicted_profit < 0.0 {
+            risk += 0.3;
+        } else if predicted_profit < 5.0 {
+            risk += 0.1;
+        } else {
+            risk -= 0.1;
+        }
+
+        // Timing quality risk
+        if timing_quality < 0.3 {
+            risk += 0.2;
+        } else if timing_quality > 0.7 {
+            risk -= 0.2;
+        }
+
+        // Rugcheck risk (higher score = higher risk)
+        let rugcheck_risk = rugcheck_score / 100.0;
+        risk += rugcheck_risk * 0.3;
+
+        // Liquidity risk
+        if liquidity_usd < 10_000.0 {
+            risk += 0.2;
+        } else if liquidity_usd > 100_000.0 {
+            risk -= 0.1;
+        }
+
+        risk.max(0.0).min(1.0)
+    }
+
+    /// Calculate model confidence based on predictions
+    fn calculate_model_confidence(&self, timing_quality: f64, predicted_profit: f64) -> f64 {
+        let record_count = self.get_record_count();
+
+        // Base confidence from training data amount
+        let data_confidence = if record_count >= 50 {
+            0.9
+        } else if record_count >= 20 {
+            0.7
+        } else if record_count >= 10 {
+            0.5
+        } else {
+            0.3
+        };
+
+        // Adjust based on prediction consistency
+        let prediction_confidence = if timing_quality > 0.8 || timing_quality < 0.2 {
+            0.9 // Very confident predictions
+        } else if timing_quality > 0.6 || timing_quality < 0.4 {
+            0.7 // Moderately confident
+        } else {
+            0.5 // Less confident near middle
+        };
+
+        (data_confidence + prediction_confidence) / 2.0
+    }
+
+    /// Predict optimal exit timing for existing positions
+    pub async fn predict_exit_timing(
+        &self,
+        token_mint: &str,
+        entry_price: f64,
+        current_price: f64,
+        current_pnl_percent: f64,
+        position_age_hours: f64,
+        liquidity_usd: f64,
+        volume_24h: f64,
+        market_cap: Option<f64>,
+        rugcheck_score: Option<f64>
+    ) -> Result<ExitTimingPrediction, String> {
+        // Get price history for technical analysis
+        let price_history = get_price_history_for_rl_learning(token_mint).await;
+
+        // Calculate support/resistance levels
+        let (support_level, resistance_level) = self.calculate_support_resistance(
+            &price_history,
+            current_price
+        );
+
+        // Calculate recovery probability based on historical patterns
+        let recovery_probability = self.calculate_recovery_probability(
+            &price_history,
+            entry_price,
+            current_price,
+            current_pnl_percent,
+            position_age_hours
+        );
+
+        // Predict recovery time and price
+        let (recovery_time_hours, recovery_price) = self.predict_recovery_dynamics(
+            &price_history,
+            entry_price,
+            current_price,
+            support_level
+        );
+
+        // Calculate opportunity cost (how many good entry opportunities we're missing)
+        let opportunity_cost_score = self.calculate_opportunity_cost_score().await;
+
+        // Find minimum loss exit price
+        let min_loss_exit_price = self.find_minimum_loss_exit_price(
+            &price_history,
+            entry_price,
+            current_price,
+            support_level
+        );
+
+        // Calculate exit urgency based on multiple factors
+        let exit_urgency_score = self.calculate_exit_urgency(
+            current_pnl_percent,
+            position_age_hours,
+            recovery_probability,
+            opportunity_cost_score,
+            liquidity_usd
+        );
+
+        // Make final exit decision
+        let should_exit_now = self.should_exit_position(
+            current_pnl_percent,
+            position_age_hours,
+            recovery_probability,
+            opportunity_cost_score,
+            exit_urgency_score
+        );
+
+        // Calculate model confidence for exit prediction
+        let confidence = self.calculate_exit_confidence(
+            &price_history,
+            recovery_probability,
+            opportunity_cost_score
+        );
+
+        if is_debug_rl_learn_enabled() {
+            log(
+                LogTag::RlLearn,
+                "EXIT_PREDICTION",
+                &format!(
+                    "🚪 {} exit analysis: PnL: {:.1}%, Age: {:.1}h, Recovery: {:.1}%, Urgency: {:.1}%, Exit: {}",
+                    token_mint[..8].to_string(),
+                    current_pnl_percent,
+                    position_age_hours,
+                    recovery_probability * 100.0,
+                    exit_urgency_score * 100.0,
+                    if should_exit_now {
+                        "✅ YES"
+                    } else {
+                        "❌ HOLD"
+                    }
+                )
+            );
+        }
+
+        Ok(ExitTimingPrediction {
+            should_exit_now,
+            exit_urgency_score,
+            predicted_recovery_probability: recovery_probability,
+            predicted_recovery_time_hours: recovery_time_hours,
+            predicted_recovery_price: recovery_price,
+            opportunity_cost_score,
+            support_level,
+            resistance_level,
+            min_loss_exit_price,
+            confidence,
+        })
+    }
+
+    /// Calculate support and resistance levels from price history
+    fn calculate_support_resistance(
+        &self,
+        price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+        current_price: f64
+    ) -> (Option<f64>, Option<f64>) {
+        if price_history.len() < 20 {
+            return (None, None);
+        }
+
+        let prices: Vec<f64> = price_history
+            .iter()
+            .map(|(_, price)| *price)
+            .collect();
+
+        // Find local minima and maxima
+        let mut support_levels = Vec::new();
+        let mut resistance_levels = Vec::new();
+
+        for i in 2..prices.len() - 2 {
+            let price = prices[i];
+
+            // Check for local minimum (support)
+            if
+                price <= prices[i - 2] &&
+                price <= prices[i - 1] &&
+                price <= prices[i + 1] &&
+                price <= prices[i + 2]
+            {
+                support_levels.push(price);
+            }
+
+            // Check for local maximum (resistance)
+            if
+                price >= prices[i - 2] &&
+                price >= prices[i - 1] &&
+                price >= prices[i + 1] &&
+                price >= prices[i + 2]
+            {
+                resistance_levels.push(price);
+            }
+        }
+
+        // Find nearest support and resistance to current price
+        let nearest_support = support_levels
+            .into_iter()
+            .filter(|&s| s <= current_price * 1.05) // Within 5% below current
+            .max_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let nearest_resistance = resistance_levels
+            .into_iter()
+            .filter(|&r| r >= current_price * 0.95) // Within 5% above current
+            .min_by(|a, b| a.partial_cmp(b).unwrap());
+
+        (nearest_support, nearest_resistance)
+    }
+
+    /// Calculate probability of price recovery based on historical patterns
+    fn calculate_recovery_probability(
+        &self,
+        price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+        entry_price: f64,
+        current_price: f64,
+        current_pnl_percent: f64,
+        position_age_hours: f64
+    ) -> f64 {
+        if current_pnl_percent >= 0.0 {
+            return 1.0; // Already recovered
+        }
+
+        if price_history.len() < 10 {
+            return 0.3; // Low confidence without history
+        }
+
+        // Count recovery instances in similar situations
+        let mut similar_situations = 0;
+        let mut recoveries = 0;
+
+        let loss_threshold = current_pnl_percent.abs();
+
+        for window in price_history.windows(20) {
+            if window.len() < 20 {
+                continue;
+            }
+
+            let start_price = window[0].1;
+            let min_price = window
+                .iter()
+                .map(|(_, p)| *p)
+                .fold(f64::INFINITY, f64::min);
+            let end_price = window[19].1;
+
+            let max_loss = ((min_price - start_price) / start_price) * 100.0;
+
+            // Similar loss situation
+            if max_loss.abs() >= loss_threshold * 0.7 && max_loss.abs() <= loss_threshold * 1.3 {
+                similar_situations += 1;
+
+                // Check if it recovered to break-even or better
+                if end_price >= start_price * 0.98 {
+                    // Within 2% of break-even
+                    recoveries += 1;
+                }
+            }
+        }
+
+        if similar_situations == 0 {
+            // Estimate based on position age and loss severity
+            let age_factor = if position_age_hours < 1.0 { 0.8 } else { 0.6 };
+            let loss_factor = if loss_threshold < 20.0 { 0.7 } else { 0.4 };
+            return age_factor * loss_factor;
+        }
+
+        ((recoveries as f64) / (similar_situations as f64)).min(0.9)
+    }
+
+    /// Predict recovery time and target price
+    fn predict_recovery_dynamics(
+        &self,
+        price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+        entry_price: f64,
+        current_price: f64,
+        support_level: Option<f64>
+    ) -> (f64, f64) {
+        // Default estimates
+        let mut recovery_time_hours = 2.0;
+        let mut recovery_price = entry_price * 0.95; // Target 95% of entry price
+
+        if let Some(support) = support_level {
+            // If we have support level, use it as recovery target
+            if support > current_price {
+                recovery_price = support;
+            }
+        }
+
+        // Analyze historical recovery patterns
+        if price_history.len() >= 50 {
+            let mut recovery_times = Vec::new();
+
+            for i in 0..price_history.len() - 20 {
+                let start_price = price_history[i].1;
+                let start_time = price_history[i].0;
+
+                // Find subsequent recovery to 95% of start price
+                for j in i + 1..price_history.len() {
+                    if price_history[j].1 >= start_price * 0.95 {
+                        let recovery_duration =
+                            ((price_history[j].0 - start_time).num_minutes() as f64) / 60.0;
+                        if recovery_duration > 0.1 && recovery_duration < 24.0 {
+                            recovery_times.push(recovery_duration);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if !recovery_times.is_empty() {
+                // Use median recovery time
+                recovery_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                recovery_time_hours = recovery_times[recovery_times.len() / 2];
+            }
+        }
+
+        (recovery_time_hours, recovery_price)
+    }
+
+    /// Calculate opportunity cost of holding position
+    async fn calculate_opportunity_cost_score(&self) -> f64 {
+        // Get current number of open positions
+        let open_positions = get_open_positions();
+
+        let position_count = open_positions.len();
+        let max_positions = 20; // From MAX_OPEN_POSITIONS
+
+        // Higher opportunity cost when we're near position limit
+        let position_pressure = if position_count >= max_positions {
+            1.0 // Maximum pressure, need to free slots
+        } else if position_count >= max_positions - 2 {
+            0.8 // High pressure
+        } else if position_count >= max_positions - 5 {
+            0.5 // Medium pressure
+        } else {
+            0.2 // Low pressure
+        };
+
+        // Additional factors: market activity, available good opportunities
+        // For now, use position pressure as primary indicator
+        position_pressure
+    }
+
+    /// Find the best exit price to minimize losses
+    fn find_minimum_loss_exit_price(
+        &self,
+        price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+        entry_price: f64,
+        current_price: f64,
+        support_level: Option<f64>
+    ) -> f64 {
+        // If already profitable, current price is fine
+        if current_price >= entry_price {
+            return current_price;
+        }
+
+        // If we have strong support level, target that
+        if let Some(support) = support_level {
+            if support > current_price && support < entry_price {
+                return support;
+            }
+        }
+
+        // Look for recent bounce levels in price history
+        if price_history.len() >= 20 {
+            let recent_prices: Vec<f64> = price_history
+                .iter()
+                .rev()
+                .take(50) // Last 50 data points
+                .map(|(_, price)| *price)
+                .collect();
+
+            // Find the highest recent price below entry price
+            let best_recent = recent_prices
+                .iter()
+                .filter(|&&p| p > current_price && p < entry_price)
+                .max_by(|a, b| a.partial_cmp(b).unwrap());
+
+            if let Some(&best_price) = best_recent {
+                return best_price;
+            }
+        }
+
+        // Fallback: target 95% of entry price as reasonable exit
+        entry_price * 0.95
+    }
+
+    /// Calculate exit urgency score
+    fn calculate_exit_urgency(
+        &self,
+        current_pnl_percent: f64,
+        position_age_hours: f64,
+        recovery_probability: f64,
+        opportunity_cost_score: f64,
+        liquidity_usd: f64
+    ) -> f64 {
+        let mut urgency = 0.0;
+
+        // Age-based urgency (30+ min = time pressure)
+        if position_age_hours >= 0.5 {
+            // 30 minutes
+            let age_urgency = ((position_age_hours - 0.5) / 2.0).min(0.4); // Max 0.4 from age
+            urgency += age_urgency;
+        }
+
+        // Loss-based urgency
+        if current_pnl_percent < 0.0 {
+            let loss_urgency = (current_pnl_percent.abs() / 50.0).min(0.3); // Max 0.3 from loss
+            urgency += loss_urgency;
+        }
+
+        // Opportunity cost urgency
+        urgency += opportunity_cost_score * 0.4; // Max 0.4 from opportunity cost
+
+        // Recovery probability adjustment (lower recovery = higher urgency)
+        urgency += (1.0 - recovery_probability) * 0.2; // Max 0.2 from low recovery chance
+
+        // Liquidity urgency (low liquidity = higher urgency)
+        let liquidity_urgency = if liquidity_usd < 10_000.0 {
+            0.2
+        } else if liquidity_usd < 50_000.0 {
+            0.1
+        } else {
+            0.0
+        };
+        urgency += liquidity_urgency;
+
+        urgency.min(1.0)
+    }
+
+    /// Make final exit decision
+    fn should_exit_position(
+        &self,
+        current_pnl_percent: f64,
+        position_age_hours: f64,
+        recovery_probability: f64,
+        opportunity_cost_score: f64,
+        exit_urgency_score: f64
+    ) -> bool {
+        // Never exit if profitable (handled elsewhere)
+        if current_pnl_percent >= 0.0 {
+            return false;
+        }
+
+        // Emergency exit for extreme losses
+        if current_pnl_percent <= -70.0 {
+            return true;
+        }
+
+        // Exit if urgency is very high
+        if exit_urgency_score >= 0.8 {
+            return true;
+        }
+
+        // Exit if position is old AND (low recovery chance OR high opportunity cost)
+        if
+            position_age_hours >= 1.0 && // 1 hour old
+            (recovery_probability < 0.3 || opportunity_cost_score > 0.7)
+        {
+            return true;
+        }
+
+        // Exit if we're near position limit and recovery is uncertain
+        if opportunity_cost_score > 0.8 && recovery_probability < 0.5 {
+            return true;
+        }
+
+        false
+    }
+
+    /// Calculate confidence in exit prediction
+    fn calculate_exit_confidence(
+        &self,
+        price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+        recovery_probability: f64,
+        opportunity_cost_score: f64
+    ) -> f64 {
+        let record_count = self.get_record_count();
+
+        // Base confidence from training data
+        let data_confidence = if record_count >= 50 {
+            0.8
+        } else if record_count >= 20 {
+            0.6
+        } else {
+            0.4
+        };
+
+        // History-based confidence
+        let history_confidence = if price_history.len() >= 100 {
+            0.9
+        } else if price_history.len() >= 50 {
+            0.7
+        } else {
+            0.5
+        };
+
+        // Prediction consistency confidence
+        let prediction_confidence = if recovery_probability > 0.8 || recovery_probability < 0.2 {
+            0.9 // Very confident in extreme predictions
+        } else {
+            0.6 // Less confident in middle range
+        };
+
+        (data_confidence + history_confidence + prediction_confidence) / 3.0
     }
 
     /// Get a learning score (0.0 to 1.0) that can be used alongside existing entry logic
@@ -809,7 +1536,7 @@ impl TradingLearner {
         confidence_score: f64
     ) -> f64 {
         match
-            self.predict_profit(
+            self.predict_entry_timing(
                 token_mint,
                 current_price,
                 price_changes,
@@ -822,10 +1549,15 @@ impl TradingLearner {
                 confidence_score
             ).await
         {
-            Ok(predicted_profit) => {
-                // Convert profit prediction to score (0.0 to 1.0)
-                // Positive profits get higher scores, capped at 1.0
-                let score = (predicted_profit / 100.0 + 0.5).clamp(0.0, 1.0);
+            Ok(timing_prediction) => {
+                // Convert timing prediction to score (0.0 to 1.0)
+                // Use entry quality score and consider predicted profit
+                let profit_bonus = if timing_prediction.predicted_profit_target > 10.0 {
+                    0.1
+                } else {
+                    0.0
+                };
+                let score = (timing_prediction.entry_quality_score + profit_bonus).clamp(0.0, 1.0);
                 score
             }
             Err(_) => {
@@ -837,10 +1569,32 @@ impl TradingLearner {
 
     /// Check if the learning system is ready to make predictions
     pub fn is_model_ready(&self) -> bool {
-        self.is_trained
+        let is_trained = self.is_trained
             .lock()
             .map(|guard| *guard)
-            .unwrap_or(false)
+            .unwrap_or(false);
+
+        // Check if at least one model is available
+        if is_trained {
+            let profit_ready = self.profit_model
+                .lock()
+                .map(|guard| guard.is_some())
+                .unwrap_or(false);
+
+            let timing_ready = self.timing_model
+                .lock()
+                .map(|guard| guard.is_some())
+                .unwrap_or(false);
+
+            let duration_ready = self.duration_model
+                .lock()
+                .map(|guard| guard.is_some())
+                .unwrap_or(false);
+
+            profit_ready || timing_ready || duration_ready
+        } else {
+            false
+        }
     }
 
     /// Get current number of learning records
@@ -951,6 +1705,15 @@ impl TradingLearner {
             price_analysis: price_analysis.clone(),
             recommendation: self.get_entry_recommendation(combined_score, &price_analysis),
             confidence: self.calculate_confidence(&price_analysis, rl_score),
+            timing_prediction: EntryTimingPrediction {
+                is_good_entry_time: combined_score >= 0.6,
+                entry_quality_score: timing_score,
+                predicted_profit_target: 10.0, // Default for compatibility
+                predicted_hold_duration: 2.0, // Default for compatibility
+                risk_level: risk_score,
+                confidence: self.calculate_confidence(&price_analysis, rl_score),
+            },
+            should_enter: combined_score >= 0.6 && timing_score >= 0.5,
         }
     }
 
@@ -1626,14 +2389,105 @@ pub async fn record_completed_trade(
                 LogTag::RlLearn,
                 "TRADE_RECORDED",
                 &format!(
-                    "📈 Recorded completed trade: {} {:.2}% profit in {:.1}min (entry: {:.12} SOL, exit: {:.12} SOL)",
+                    "📝 Recorded trade: {} {:.2}% profit in {:.1} minutes",
                     token_symbol,
                     profit_percent,
-                    hold_duration_minutes,
-                    entry_price,
-                    exit_price
+                    hold_duration_minutes
                 )
             );
+        }
+    }
+}
+
+/// Get RL-assisted exit recommendation for existing positions
+pub async fn get_rl_exit_recommendation(
+    token_mint: &str,
+    entry_price: f64,
+    current_price: f64,
+    current_pnl_percent: f64,
+    position_age_hours: f64,
+    liquidity_usd: f64,
+    volume_24h: f64,
+    market_cap: Option<f64>,
+    rugcheck_score: Option<f64>
+) -> Result<ExitTimingPrediction, String> {
+    let learner = get_trading_learner();
+
+    learner.predict_exit_timing(
+        token_mint,
+        entry_price,
+        current_price,
+        current_pnl_percent,
+        position_age_hours,
+        liquidity_usd,
+        volume_24h,
+        market_cap,
+        rugcheck_score
+    ).await
+}
+
+/// Get position action recommendation based on RL analysis
+pub async fn get_position_action_recommendation(
+    token_mint: &str,
+    entry_price: f64,
+    current_price: f64,
+    current_pnl_percent: f64,
+    position_age_hours: f64,
+    liquidity_usd: f64,
+    volume_24h: f64,
+    market_cap: Option<f64>,
+    rugcheck_score: Option<f64>
+) -> PositionAction {
+    match
+        get_rl_exit_recommendation(
+            token_mint,
+            entry_price,
+            current_price,
+            current_pnl_percent,
+            position_age_hours,
+            liquidity_usd,
+            volume_24h,
+            market_cap,
+            rugcheck_score
+        ).await
+    {
+        Ok(prediction) => {
+            // Make position recommendation based on prediction
+            if prediction.should_exit_now {
+                if current_pnl_percent <= -50.0 || prediction.exit_urgency_score >= 0.9 {
+                    PositionAction::ExitEmergency
+                } else {
+                    PositionAction::ExitNow
+                }
+            } else if prediction.predicted_recovery_probability < 0.3 && position_age_hours >= 1.0 {
+                // Low recovery chance after 1 hour = exit at best available price
+                if let Some(support) = prediction.support_level {
+                    if current_price <= support * 1.02 {
+                        // Within 2% of support
+                        PositionAction::ExitAtSupport
+                    } else {
+                        PositionAction::HoldForRecovery
+                    }
+                } else {
+                    PositionAction::ExitNow
+                }
+            } else if prediction.predicted_recovery_probability >= 0.6 {
+                // Good recovery chance = hold
+                PositionAction::Hold
+            } else {
+                // Medium recovery chance = hold for recovery
+                PositionAction::HoldForRecovery
+            }
+        }
+        Err(_) => {
+            // Fallback to simple logic if RL fails
+            if position_age_hours >= 2.0 && current_pnl_percent < -30.0 {
+                PositionAction::ExitNow
+            } else if position_age_hours >= 0.5 && current_pnl_percent < -50.0 {
+                PositionAction::ExitEmergency
+            } else {
+                PositionAction::Hold
+            }
         }
     }
 }

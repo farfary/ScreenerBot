@@ -606,6 +606,136 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     let minutes_held = (duration.num_seconds() as f64) / 60.0;
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🤖 RL-ENHANCED EXIT ANALYSIS FOR 30+ MINUTE POSITIONS
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    // For positions older than 30 minutes, use RL-based exit analysis
+    if minutes_held >= 30.0 {
+        use crate::rl_learning::get_rl_exit_recommendation;
+
+        // Get comprehensive token data for RL analysis
+        let (liquidity_usd, volume_24h, market_cap, rugcheck_score) = match
+            analyze_token_for_rl(&position.mint).await
+        {
+            Ok((liq, vol, mc, rs)) => (liq, vol, mc, rs),
+            Err(_) => (50000.0, 200000.0, None, Some(50.0)), // Safe defaults
+        };
+
+        // Get RL exit recommendation
+        if
+            let Ok(exit_prediction) = get_rl_exit_recommendation(
+                &position.mint,
+                entry_price,
+                current_price,
+                pnl_percent,
+                minutes_held / 60.0, // Convert to hours
+                liquidity_usd,
+                volume_24h,
+                market_cap,
+                rugcheck_score
+            ).await
+        {
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "RL_EXIT_ANALYSIS",
+                    &format!(
+                        "🤖 RL analysis for {} (age: {:.1}min, PnL: {:.2}%): Exit: {}, Urgency: {:.1}%, Recovery: {:.1}%, Support: {:?}",
+                        position.symbol,
+                        minutes_held,
+                        pnl_percent,
+                        if exit_prediction.should_exit_now {
+                            "✅ YES"
+                        } else {
+                            "❌ NO"
+                        },
+                        exit_prediction.exit_urgency_score * 100.0,
+                        exit_prediction.predicted_recovery_probability * 100.0,
+                        exit_prediction.support_level
+                    )
+                );
+            }
+
+            // Smart exit decision based on RL analysis
+            if exit_prediction.should_exit_now {
+                if pnl_percent > 0.0 {
+                    // Profitable position - exit based on RL urgency
+                    log(
+                        LogTag::Profit,
+                        "RL_PROFIT_EXIT",
+                        &format!(
+                            "RL PROFIT EXIT: {:.2}% profit, {:.1}min held, urgency: {:.1}%, opportunity cost: {:.1}%",
+                            pnl_percent,
+                            minutes_held,
+                            exit_prediction.exit_urgency_score * 100.0,
+                            exit_prediction.opportunity_cost_score * 100.0
+                        )
+                    );
+                    return (
+                        exit_prediction.exit_urgency_score,
+                        format!(
+                            "RL PROFIT EXIT: {:.2}% profit - RL recommends exit for better opportunities",
+                            pnl_percent
+                        ),
+                    );
+                } else if pnl_percent > -55.0 {
+                    // Loss position but not at stop loss - smart loss minimization
+                    let min_loss_target = exit_prediction.min_loss_exit_price;
+                    let current_distance = (
+                        ((current_price - min_loss_target) / min_loss_target) *
+                        100.0
+                    ).abs();
+
+                    if
+                        current_distance <= 2.0 ||
+                        exit_prediction.predicted_recovery_probability < 0.3
+                    {
+                        log(
+                            LogTag::Profit,
+                            "RL_LOSS_EXIT",
+                            &format!(
+                                "RL LOSS MINIMIZATION: {:.2}% loss, low recovery chance ({:.1}%), taking controlled exit",
+                                pnl_percent,
+                                exit_prediction.predicted_recovery_probability * 100.0
+                            )
+                        );
+                        return (
+                            exit_prediction.exit_urgency_score,
+                            format!(
+                                "RL SMART EXIT: {:.2}% loss - minimizing loss with low recovery chance",
+                                pnl_percent
+                            ),
+                        );
+                    }
+                }
+            } else if pnl_percent < 0.0 && exit_prediction.predicted_recovery_probability >= 0.6 {
+                // Loss position but good recovery chance - hold for recovery
+                if is_debug_profit_enabled() {
+                    log(
+                        LogTag::Profit,
+                        "RL_RECOVERY_HOLD",
+                        &format!(
+                            "RL RECOVERY HOLD: {:.2}% loss, but {:.1}% recovery chance in {:.1}h, holding for support: {:?}",
+                            pnl_percent,
+                            exit_prediction.predicted_recovery_probability * 100.0,
+                            exit_prediction.predicted_recovery_time_hours,
+                            exit_prediction.support_level
+                        )
+                    );
+                }
+                return (
+                    0.0,
+                    format!(
+                        "RL RECOVERY HOLD: {:.2}% loss - {:.0}% recovery chance",
+                        pnl_percent,
+                        exit_prediction.predicted_recovery_probability * 100.0
+                    ),
+                );
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🛡️ STOP LOSS PROTECTION - ABSOLUTE PRIORITY
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
@@ -1094,12 +1224,52 @@ fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> (f64, String) {
         pnl_percent,
         minutes_held,
         target_profit,
-        if minutes_held >= 20.0 && pnl_percent > 0.0 {
-            " - TIME PRESSURE!"
+        if time_boost > 0.0 {
+            format!(" +{:.0}% time urgency", time_boost * 100.0)
         } else {
-            ""
+            "".to_string()
         }
     );
 
     (urgency, reason)
+}
+
+// ================================================================================================
+// 🤖 RL INTEGRATION HELPER FUNCTIONS
+// ================================================================================================
+
+/// Helper function to extract token data for RL analysis
+pub async fn analyze_token_for_rl(
+    mint: &str
+) -> Result<(f64, f64, Option<f64>, Option<f64>), String> {
+    // Get token data from database
+    let database = TokenDatabase::new().map_err(|e|
+        format!("Failed to initialize database: {}", e)
+    )?;
+
+    let token_data = database
+        .get_token_by_mint(mint)
+        .map_err(|e| format!("Failed to get token data: {}", e))?
+        .ok_or_else(|| format!("Token not found in database: {}", mint))?;
+
+    // Extract basic market data
+    let liquidity_usd = token_data.liquidity
+        .as_ref()
+        .and_then(|l| l.usd)
+        .unwrap_or(50000.0); // Default to safe value
+
+    let volume_24h = token_data.volume
+        .as_ref()
+        .and_then(|v| v.h24)
+        .unwrap_or(200000.0); // Default to safe value
+
+    let market_cap = token_data.market_cap;
+
+    // Get rugcheck risk score (remember: higher = more risk)
+    let rugcheck_score = match get_token_rugcheck_data_safe(mint).await {
+        Ok(Some(data)) => data.score_normalised.or(data.score).map(|s| s as f64),
+        _ => Some(50.0), // Default medium risk
+    };
+
+    Ok((liquidity_usd, volume_24h, market_cap, rugcheck_score))
 }
