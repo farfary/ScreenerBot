@@ -3,20 +3,73 @@ name = "screenerbot"
 version = "0.1.0"
 edition = "2021"
 
+# Workspace optimization for faster builds
+[workspace]
+resolver = "2"
 
-[profile.release]
-opt-level = "z"      # optimize for size
-lto = true           # link-time optimization
-codegen-units = 1    # one unit → best for LTO
-panic = "abort"      # drop unwinding
-strip = "symbols"    # remove symbol table
-
+# Development profile - Fastest compilation for debugging
 [profile.dev]
 opt-level = 0         # No optimizations, fastest compile
-debug = true          # Keep debug info for better error messages
+debug = 2             # Full debug info for better error messages
 incremental = true    # Enable incremental compilation
-codegen-units = 16    # More parallelism for faster builds
+codegen-units = 256   # Maximum parallelism for fastest builds
 lto = false           # Disable link-time optimization
+panic = "unwind"      # Keep unwinding for better debugging
+split-debuginfo = "unpacked"  # Fast debug info on supported platforms
+
+# Fast debug profile - Slightly optimized dev builds
+[profile.fast-dev]
+inherits = "dev"
+opt-level = 1         # Light optimization for better runtime performance
+debug = 1             # Line numbers only for faster compile
+codegen-units = 128   # High parallelism
+
+# Testing profile - Fast builds with some optimization
+[profile.test]
+inherits = "dev"
+opt-level = 1         # Light optimization for reasonable test performance
+debug = 1             # Line numbers for test debugging
+incremental = true    # Incremental compilation
+codegen-units = 64    # Good parallelism
+lto = false           # No LTO for faster builds
+
+# Fast release profile for development/testing (RECOMMENDED FOR DEVELOPMENT)
+[profile.fast-release]
+inherits = "release"
+opt-level = 2         # Good optimization without excessive compile time
+lto = "thin"          # Fast link-time optimization
+codegen-units = 16    # Balance between build speed and optimization
+panic = "abort"       # Smaller binary size
+debug = true          # Keep debug info for debugging
+incremental = true    # Incremental compilation for faster rebuilds
+strip = "none"        # Keep symbols for debugging
+
+# Benchmark profile - High performance for benchmarking
+[profile.bench]
+inherits = "release"
+opt-level = 3         # Maximum optimization
+lto = "fat"           # Full link-time optimization
+codegen-units = 1     # Single unit for best optimization
+debug = false         # No debug info
+incremental = false   # Full optimization
+
+# Production release profile - Maximum optimization
+[profile.release]
+opt-level = 3         # Maximum optimization
+lto = "fat"           # Full link-time optimization for best performance
+codegen-units = 1     # Single unit for maximum optimization
+panic = "abort"       # Smaller binary size, faster execution
+strip = "symbols"     # Remove symbols for smaller binary
+debug = false         # No debug info for production
+incremental = false   # Full optimization, no incremental builds
+
+# Distribution profile - Smallest possible binary
+[profile.dist]
+inherits = "release"
+opt-level = "z"       # Optimize for size
+lto = "fat"           # Full LTO
+strip = "symbols"     # Strip all symbols
+panic = "abort"       # Reduce binary size
 
 
 [lib]
@@ -39,93 +92,135 @@ path = "src/bin/tool_ata_cleanup.rs"
 name = "tool_pool_price"
 path = "src/bin/tool_pool_price.rs"
 
+[[bin]]
+name = "tool_price_history_cache"
+path = "src/bin/tool_price_history_cache.rs"
+
 
 [dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
-tokio = { version = "1", features = ["full"] }
+# Core async runtime with minimal features for faster builds
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "net"] }
+
+# Essential dependencies
 anyhow = "1.0"
-bs58 = "0.4"
-ctrlc = "3.2"
-dotenv = "0.15"
-env_logger = "0.10"
-log = "0.4"
-rusqlite = { version = "0.29", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
-tiny_http = "0.12"
 serde_json = "1.0"
-async-trait = "0.1"
-reqwest = { version = "0.11", features = ["json", "rustls-tls-webpki-roots"] }
-thiserror = "1.0"
-clap = { version = "4.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
 once_cell = "1.19"
-rand = "0.8"
-colored = "2.0"
+
+# Optimized HTTP client
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+
+# Database with bundled sqlite for faster builds
+rusqlite = { version = "0.29", features = ["bundled"] }
+
+# Crypto dependencies optimized
+bs58 = "0.4"
 base64 = "0.21"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+
+# CLI and logging - minimal features
+clap = { version = "4.0", features = ["derive"] }
+colored = "2.0"
+log = "0.4"
+
+# System dependencies
+ctrlc = "3.2"
+rand = "0.8"
 bincode = "1.3.3"
+thiserror = "1.0"
+async-trait = "0.1"
 
-# Added for date/time usage (in e.g. holder_finder code)
-chrono = "0.4"
-chrono-tz = "0.6"
+# Solana dependencies - with full features needed for trading
+solana-sdk = { version = "2.3.1", features = ["full"] }
+solana-client = { version = "2.1.0" }
+solana-program = { version = "2.3.0" }
+solana-account-decoder = { version = "2.2.7" }
+solana-transaction-status = { version = "2.3.3" }
 
-# Solana dependencies (matching your current SDK)
-solana-sdk = "2.3.1"
-solana-client = "2.1.0"
-solana-program = "2.3.0"
-
-# SPL Token 2022 with zk-ops enabled (confidential support)
-spl-token-2022 = { version = "8.0.1", default-features = false, features = ["no-entrypoint", "zk-ops"] }
-
-# Required by zk-ops feature in spl-token-2022
-spl-token-confidential-transfer-ciphertext-arithmetic = "0.3.0"
-
-# Token program and associated token accounts (legacy-compatible)
+# SPL Token dependencies - minimal features
+spl-token-2022 = { version = "8.0.1", default-features = false, features = ["no-entrypoint"] }
 spl-token = { version = "8.0.0", default-features = false, features = ["no-entrypoint"] }
 spl-associated-token-account = { version = "6.0.0", default-features = false, features = ["no-entrypoint"] }
-solana-transaction-status = "2.3.3"
+spl-token-confidential-transfer-ciphertext-arithmetic = "0.3.0"
 
-# UI / Other dependencies
-calamine = "0.18"
-
-# Web server dependencies
-axum = { version = "0.7", features = ["ws"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "fs"] }
-tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+# Web and networking - minimal features
+axum = { version = "0.7", features = ["ws"], default-features = false, optional = true }
+tower = { version = "0.4", default-features = false, optional = true }
+tower-http = { version = "0.5", features = ["cors"], default-features = false, optional = true }
+tokio-tungstenite = { version = "0.21", features = ["__rustls-tls"], default-features = false, optional = true }
 futures = "0.3"
-uuid = { version = "1.0", features = ["v4"] }
-parking_lot = "0.12"
-rfd = "0.12"
-regex = "1.10"
-jup-ag = "0.8.0"
-
-rayon = "1.7"
-teloxide = { version = "0.9.1", features = ["macros"] }
-tokio-util = { version = "0.6", features = ["codec"] }
-num-format = "0.4"
-
 futures-util = "0.3"
 url = "2.4"
-lazy_static = "1.4"
-glob = "0.3"
-firebase-rs = "2.2.1"
-google-cloud-auth = "0.7"
-gcp_auth = "0.12"
-csv = "1.3.1"
-ureq = "2.9.1"
-htmlescape = "0.3"
-solana-account-decoder = "2.2.7"
 
-serde_with = "3.12.0"
-fern = "0.7.1"
-dirs = "6.0.0"
-console = "0.15.11"
-ed25519-dalek = "2.1.1"
-indicatif = "0.17.11"
+# Machine learning - minimal features
+smartcore = { version = "0.4.2" }
+
+# Utility dependencies
+uuid = { version = "1.0", features = ["v4"], default-features = false }
+parking_lot = "0.12"
+regex = "1.10"
+rayon = "1.7"
+lazy_static = "1.4"
+
+# File and data processing
+csv = "1.3.1"
 toml = "0.8.23"
+glob = "0.3"
+dirs = "6.0.0"
+calamine = { version = "0.18", optional = true }
+
+# Terminal and display
+console = "0.15.11"
+crossterm = "0.29.0"
+indicatif = "0.17.11"
 prettytable-rs = "0.10.0"
 comfy-table = "7.1.4"
-borsh = "1.3"   # Use the official borsh crate
-crossterm = "0.29.0"
-tabled = "0.20"  # Latest version for modern table formatting
+tabled = "0.20"
 owo-colors = "4"
+
+# Serialization
+borsh = "1.3"
+serde_with = "3.12.0"
+
+# Optional heavy dependencies (can be disabled for faster builds)
+teloxide = { version = "0.9.1", features = ["macros"], optional = true }
+jup-ag = { version = "0.8.0", optional = true }
+firebase-rs = { version = "2.2.1", optional = true }
+google-cloud-auth = { version = "0.7", optional = true }
+gcp_auth = { version = "0.12", optional = true }
+fern = { version = "0.7.1", optional = true }
+rfd = { version = "0.12", optional = true }
+tiny_http = { version = "0.12", optional = true }
+dotenv = { version = "0.15", optional = true }
+env_logger = { version = "0.10", optional = true }
+tokio-util = { version = "0.6", features = ["codec"], optional = true }
+num-format = { version = "0.4", optional = true }
+chrono-tz = { version = "0.6", optional = true }
+ureq = { version = "2.9.1", optional = true }
+htmlescape = { version = "0.3", optional = true }
+openssl = { version = "0.10", features = ["vendored"], optional = true }
+
+# Feature flags for optional dependencies
+[features]
+default = ["web", "telegram", "logging"]
+
+# Core features
+web = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tokio-tungstenite", "dep:tiny_http"]
+telegram = ["dep:teloxide", "dep:tokio-util", "dep:num-format"]
+logging = ["dep:fern", "dep:env_logger", "dep:dotenv"]
+
+# Optional heavy features that can be disabled for faster builds
+firebase = ["dep:firebase-rs", "dep:google-cloud-auth", "dep:gcp_auth"]
+jupiter = ["dep:jup-ag"]
+ui = ["dep:rfd", "dep:calamine"]
+time-zones = ["dep:chrono-tz"]
+http-client = ["dep:ureq", "dep:htmlescape"]
+crypto-extra = ["dep:openssl"]
+
+# Fast build profile - minimal features
+fast = []
+
+# Full feature set
+full = ["web", "telegram", "logging", "firebase", "jupiter", "ui", "time-zones", "http-client", "crypto-extra"]
 
