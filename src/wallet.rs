@@ -6,6 +6,17 @@ use crate::rpc::SwapError;
 pub use crate::swaps::interface::SwapResult;
 pub use crate::swaps::get_wallet_address;
 
+// Multi-wallet system exports
+pub use crate::multi_wallet::{
+    multi_wallet_buy_token,
+    multi_wallet_sell_token,
+    list_wallet_backups,
+    archive_old_wallets,
+    MultiWalletBuyResult,
+    WalletBackup,
+    USE_MULTI_WALLET,
+};
+
 use solana_sdk::{
     signature::Keypair,
     signer::Signer,

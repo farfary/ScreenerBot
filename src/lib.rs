@@ -5,6 +5,7 @@ pub mod utils;
 pub mod trader;
 pub mod logger;
 pub mod wallet;
+pub mod multi_wallet;
 pub mod summary;
 pub mod positions;
 pub mod tokens;
