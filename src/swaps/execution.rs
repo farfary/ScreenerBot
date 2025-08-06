@@ -396,11 +396,9 @@ pub async fn execute_swap_with_quote(
         )
     );
 
-    // Sign and send the transaction using premium RPC
-    let selected_rpc = get_premium_transaction_rpc(&configs);
+    // Sign and send the transaction using global RPC client
     let transaction_signature = sign_and_send_transaction(
-        &swap_data.raw_tx.swap_transaction,
-        &selected_rpc
+        &swap_data.raw_tx.swap_transaction
     ).await?;
 
     log(
