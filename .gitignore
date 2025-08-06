@@ -20,3 +20,20 @@ data/
 
 # Build artifacts
 Cargo.lock
+
+# Large database files (anywhere in project)
+*.db
+*.sqlite
+*.sqlite3
+
+# Large cache files
+*cache*.json
+.dexscreener_cache.json
+cache_tokens.db
+
+# Log files (anywhere in project)
+*.log
+
+# Backup files
+*_backup.*
+*.backup
