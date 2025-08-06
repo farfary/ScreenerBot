@@ -50,6 +50,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 
+                // Analyze all fees paid
+                println!("\n💳 Fee Analysis:");
+                analyze_all_fees(&details);
+                
                 // Analyze token transfers
                 println!("\n🔄 Token Transfer Analysis:");
                 analyze_token_transfers(&details);
@@ -66,6 +70,217 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     Ok(())
+}
+
+fn analyze_all_fees(details: &screenerbot::rpc::TransactionDetails) {
+    if let Some(meta) = &details.meta {
+        println!("📊 Comprehensive Fee Breakdown:");
+        
+        // 1. Transaction fee (already shown above, but let's detail it)
+        let transaction_fee_sol = meta.fee as f64 / 1_000_000_000.0;
+        println!("  🏦 Transaction Fee: {:.9} SOL ({} lamports)", 
+            transaction_fee_sol, meta.fee);
+        
+        let mut total_fees_lamports = meta.fee;
+        let mut fee_details = Vec::new();
+        
+        // 2. Look for compute budget instructions that set priority fees
+        if let Ok(message) = serde_json::from_value::<serde_json::Value>(details.transaction.message.clone()) {
+            if let Some(instructions) = message.get("instructions").and_then(|i| i.as_array()) {
+                for (i, instruction) in instructions.iter().enumerate() {
+                    if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|p| p.as_u64()) {
+                        if let Some(account_keys) = message.get("accountKeys").and_then(|keys| keys.as_array()) {
+                            if (program_id_index as usize) < account_keys.len() {
+                                if let Some(program_id) = account_keys[program_id_index as usize].as_str() {
+                                    if program_id == "ComputeBudget111111111111111111111111111111" {
+                                        if let Some(data) = instruction.get("data").and_then(|d| d.as_str()) {
+                                            if let Ok(decoded_bytes) = bs58::decode(data).into_vec() {
+                                                analyze_compute_budget_fees(&decoded_bytes, i + 1, &mut fee_details);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 3. Look for rent payments in SOL balance changes
+        let mut rent_payments = Vec::new();
+        if !meta.pre_balances.is_empty() && !meta.post_balances.is_empty() {
+            for (i, (pre, post)) in meta.pre_balances.iter().zip(meta.post_balances.iter()).enumerate() {
+                let change = *post as i64 - *pre as i64;
+                if change < 0 {
+                    let loss_lamports = (-change) as u64;
+                    let loss_sol = loss_lamports as f64 / 1_000_000_000.0;
+                    
+                    // Check if this might be rent payment (common amounts: ~0.00203928 SOL for token accounts)
+                    if loss_lamports >= 2_000_000 && loss_lamports <= 3_000_000 {
+                        rent_payments.push((i, loss_lamports, loss_sol, "Token Account Creation"));
+                    } else if loss_lamports >= 890_000 && loss_lamports <= 1_500_000 {
+                        rent_payments.push((i, loss_lamports, loss_sol, "System Account Creation"));
+                    } else if loss_sol > 0.0001 && loss_sol < 0.01 {
+                        rent_payments.push((i, loss_lamports, loss_sol, "Potential Rent/Fee"));
+                    }
+                }
+            }
+        }
+        
+        // 4. Look for swap/trading fees in logs
+        let mut trading_fees = Vec::new();
+        if let Some(log_messages) = &meta.log_messages {
+            for (i, log) in log_messages.iter().enumerate() {
+                // Look for fee-related messages in logs
+                if log.contains("fee") || log.contains("Fee") {
+                    trading_fees.push((i, log.clone()));
+                }
+            }
+        }
+        
+        // 5. Account creation costs (ATA creation, new accounts)
+        let mut account_creation_costs = Vec::new();
+        if let Some(log_messages) = &meta.log_messages {
+            let mut ata_creations = 0;
+            let mut account_creations = 0;
+            
+            for log in log_messages {
+                if log.contains("InitializeAccount") || log.contains("CreateIdempotent") {
+                    ata_creations += 1;
+                } else if log.contains("CreateAccount") || log.contains("Allocate") {
+                    account_creations += 1;
+                }
+            }
+            
+            if ata_creations > 0 {
+                let ata_rent = 2_039_280_u64 * ata_creations as u64; // Standard ATA rent
+                account_creation_costs.push(("Associated Token Accounts", ata_creations, ata_rent));
+                total_fees_lamports += ata_rent;
+            }
+            
+            if account_creations > 0 {
+                let account_rent = 890_880_u64 * account_creations as u64; // Approximate system account rent
+                account_creation_costs.push(("System Accounts", account_creations, account_rent));
+                total_fees_lamports += account_rent;
+            }
+        }
+        
+        // Display all fee components
+        if !fee_details.is_empty() {
+            println!("\n  ⚡ Compute Budget Fees:");
+            for detail in &fee_details {
+                println!("    {}", detail);
+            }
+        }
+        
+        if !rent_payments.is_empty() {
+            println!("\n  🏠 Rent/Account Costs:");
+            for (account_idx, lamports, sol, description) in &rent_payments {
+                println!("    Account {}: {:.9} SOL ({} lamports) - {}", 
+                    account_idx, sol, lamports, description);
+            }
+        }
+        
+        if !account_creation_costs.is_empty() {
+            println!("\n  🆕 Account Creation Costs:");
+            for (account_type, count, total_lamports) in &account_creation_costs {
+                let total_sol = *total_lamports as f64 / 1_000_000_000.0;
+                println!("    {} x{}: {:.9} SOL ({} lamports)", 
+                    account_type, count, total_sol, total_lamports);
+            }
+        }
+        
+        if !trading_fees.is_empty() {
+            println!("\n  💱 Trading/Protocol Fees (from logs):");
+            for (log_idx, log_msg) in &trading_fees {
+                println!("    Log {}: {}", log_idx, log_msg);
+            }
+        }
+        
+        // 6. Total fee summary
+        let total_fees_sol = total_fees_lamports as f64 / 1_000_000_000.0;
+        println!("\n  💰 Total Estimated Fees: {:.9} SOL ({} lamports)", 
+            total_fees_sol, total_fees_lamports);
+        
+        // 7. Fee breakdown percentage
+        if total_fees_lamports > 0 {
+            println!("\n  📊 Fee Breakdown:");
+            let tx_fee_percent = (meta.fee as f64 / total_fees_lamports as f64) * 100.0;
+            println!("    Network Transaction Fee: {:.2}%", tx_fee_percent);
+            
+            for (account_type, _count, lamports) in &account_creation_costs {
+                let percent = (*lamports as f64 / total_fees_lamports as f64) * 100.0;
+                println!("    {}: {:.2}%", account_type, percent);
+            }
+        }
+        
+        // 8. Fee efficiency analysis
+        if let (Some(pre_token_balances), Some(post_token_balances)) = 
+            (&meta.pre_token_balances, &meta.post_token_balances) {
+            
+            // Try to estimate the trade volume for fee efficiency
+            let mut total_trade_volume_sol = 0.0;
+            
+            for post_balance in post_token_balances {
+                if let Some(pre_balance) = pre_token_balances.iter()
+                    .find(|pb| pb.account_index == post_balance.account_index) {
+                    
+                    let pre_amount = pre_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                    let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                    
+                    if pre_amount != post_amount {
+                        let change = (post_amount as i64 - pre_amount as i64).abs() as u64;
+                        let decimals = post_balance.ui_token_amount.decimals;
+                        let change_formatted = change as f64 / 10_f64.powi(decimals as i32);
+                        
+                        // Rough estimation: assume 1 token unit = some SOL value
+                        // This is very rough without price data
+                        if post_balance.mint == "So11111111111111111111111111111111111111112" {
+                            total_trade_volume_sol += change_formatted;
+                        }
+                    }
+                }
+            }
+            
+            if total_trade_volume_sol > 0.0 {
+                let fee_percentage = (total_fees_sol / total_trade_volume_sol) * 100.0;
+                println!("\n  📈 Fee Efficiency:");
+                println!("    Estimated Trade Volume: {:.6} SOL", total_trade_volume_sol);
+                println!("    Total Fees as % of Volume: {:.4}%", fee_percentage);
+            }
+        }
+    }
+}
+
+fn analyze_compute_budget_fees(data: &[u8], instruction_num: usize, fee_details: &mut Vec<String>) {
+    if data.len() >= 4 {
+        let instruction_type = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        match instruction_type {
+            2 => { // SetComputeUnitPrice
+                if data.len() >= 12 {
+                    let price = u64::from_le_bytes([
+                        data[4], data[5], data[6], data[7],
+                        data[8], data[9], data[10], data[11]
+                    ]);
+                    fee_details.push(format!(
+                        "Instruction #{}: Priority fee set to {} micro-lamports per CU", 
+                        instruction_num, price
+                    ));
+                }
+            }
+            3 => { // SetComputeUnitLimit
+                if data.len() >= 8 {
+                    let limit = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+                    fee_details.push(format!(
+                        "Instruction #{}: Compute unit limit set to {} CU", 
+                        instruction_num, limit
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 fn analyze_token_transfers(details: &screenerbot::rpc::TransactionDetails) {
