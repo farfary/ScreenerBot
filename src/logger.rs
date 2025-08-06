@@ -285,6 +285,7 @@ pub enum LogTag {
     Swap,
     Entry,
     RlLearn,
+    Test,
     Other(String),
 }
 
@@ -309,6 +310,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Swap => format!("{:<8}", "SWAP").bright_magenta().bold(), // 🔄 Swap magenta
             LogTag::Entry => format!("{:<8}", "ENTRY").bright_yellow().bold(), // 🚪 Entry yellow
             LogTag::RlLearn => format!("{:<8}", "RL_LEARN").bright_cyan().bold(), // 🤖 AI cyan
+            LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(), // 🧪 Test blue
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)
@@ -338,6 +340,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Entry => ENABLE_ENTRY_LOGS,
         LogTag::RlLearn => ENABLE_RL_LEARN_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
+        LogTag::Test => true, // Always enable test logs
     };
 
     if !tag_enabled {
@@ -451,6 +454,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::RlLearn =>
             format!("{:<width$}", "RL_LEARN", width = TAG_WIDTH)
                 .bright_cyan()
+                .bold(),
+        LogTag::Test =>
+            format!("{:<width$}", "TEST", width = TAG_WIDTH)
+                .bright_blue()
                 .bold(),
         LogTag::Other(ref s) =>
             format!("{:<width$}", s, width = TAG_WIDTH)
@@ -582,6 +589,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Swap => "SWAP",
         LogTag::Entry => "ENTRY",
         LogTag::RlLearn => "RL_LEARN",
+        LogTag::Test => "TEST",
         LogTag::Other(ref s) => s,
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);

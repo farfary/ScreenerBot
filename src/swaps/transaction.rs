@@ -5,7 +5,7 @@ use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol, sol_to_lamports};
-use crate::swaps::types::{SwapData, SwapRequest, SwapApiResponse, SOL_MINT};
+use crate::swaps::types::{SwapData, SwapRequest, SOL_MINT};
 use crate::swaps::{
     INITIAL_CONFIRMATION_DELAY_MS, MAX_CONFIRMATION_DELAY_SECS, CONFIRMATION_BACKOFF_MULTIPLIER,
     CONFIRMATION_TIMEOUT_SECS, RATE_LIMIT_BASE_DELAY_SECS, RATE_LIMIT_INCREMENT_SECS,

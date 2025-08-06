@@ -1,16 +1,17 @@
 /// Swap module for handling multiple DEX routers
-/// Supports GMGN and Jupiter routers with unified interface
+/// Supports GMGN and Jupiter routers with automatic best route selection
 
 pub mod gmgn;
 pub mod jupiter;
-pub mod interface;
-pub mod types;
-pub mod transaction;
-pub mod pricing;
-pub mod execution;
+pub mod interface; // Main swap interface with clean single-purpose functions
+pub mod types; // Common swap structures and types
+pub mod transaction; // Transaction management and verification
+pub mod pricing; // Price calculation and validation functions
+pub mod execution; // Swap execution and quote management
+pub mod test_swaps_full; // Comprehensive test suite for both GMGN and Jupiter
 
 #[cfg(test)]
-pub mod tests;
+pub mod tests; // Comprehensive test suite for swap operations
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
@@ -45,51 +46,33 @@ pub const EARLY_ATTEMPT_DELAY_MS: u64 = 1000;
 pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
 
 // =============================================================================
-// RE-EXPORTS - Clean interface for external use
+// SWAP ROUTER TYPES AND STRUCTURES
 // =============================================================================
 
-// Main swap functions
+// Re-export main swap functions and types
 pub use interface::{buy_token, sell_token, SwapResult};
-
-// Common types and structures
-pub use types::{
-    SwapData, SwapQuote, RawTransaction, SwapRequest, 
-    GMGNApiResponse, JupiterQuoteResponse, JupiterSwapResponse, 
-    SOL_MINT, ANTI_MEV, PARTNER
-};
-
-// Transaction utilities
+pub use types::{SwapData, SwapQuote, RawTransaction, SwapRequest, GMGNApiResponse, JupiterQuoteResponse, JupiterSwapResponse, SOL_MINT, ANTI_MEV, PARTNER};
 pub use transaction::{
     check_and_reserve_transaction_slot, check_recent_transaction_attempt, 
     clear_recent_transaction_attempt, TransactionSlotGuard, get_wallet_address,
     sign_and_send_transaction, verify_transaction_and_get_actual_amounts
 };
-
-// Pricing functions
 pub use pricing::{
     validate_price_near_expected, calculate_effective_price_buy, calculate_effective_price_sell,
     validate_quote_price, get_token_price_sol
 };
-
-// Execution functions
 pub use execution::{get_swap_quote, execute_swap_with_quote};
-
-// Router-specific functions
 pub use gmgn::{get_gmgn_quote, execute_gmgn_swap, gmgn_sign_and_send_transaction, GMGNSwapResult};
 pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send_transaction, JupiterSwapResult};
 
-// =============================================================================
-// UNIFIED ROUTER INTERFACE
-// =============================================================================
-
-/// Represents available swap routers
+/// Represents a router type for swap operations
 #[derive(Debug, Clone, PartialEq)]
 pub enum RouterType {
     GMGN,
     Jupiter,
 }
 
-/// Unified quote structure for comparing routes
+/// Unified swap quote structure for comparing routes across different routers
 #[derive(Debug, Clone)]
 pub struct UnifiedQuote {
     pub router: RouterType,
@@ -100,18 +83,18 @@ pub struct UnifiedQuote {
     pub price_impact_pct: f64,
     pub fee_lamports: u64,
     pub slippage_bps: u16,
-    pub route_plan: String,
-    pub execution_data: QuoteExecutionData,
+    pub route_plan: String, // JSON string of route information
+    pub execution_data: QuoteExecutionData, // Router-specific execution data
 }
 
-/// Router-specific execution data
+/// Quote execution data - contains router-specific swap information
 #[derive(Debug, Clone)]
 pub enum QuoteExecutionData {
-    GMGN(types::SwapData),
-    Jupiter(types::SwapData),
+    GMGN(types::SwapData),            // GMGN swap data using unified format
+    Jupiter(types::SwapData),         // Jupiter swap data using unified format
 }
 
-/// Unified swap result
+/// Unified swap result structure
 #[derive(Debug)]
 pub struct UnifiedSwapResult {
     pub success: bool,
@@ -126,11 +109,7 @@ pub struct UnifiedSwapResult {
     pub error: Option<String>,
 }
 
-// =============================================================================
-// SIMPLIFIED BEST QUOTE FUNCTIONS
-// =============================================================================
-
-/// Get the best quote from available routers (simplified implementation)
+/// Gets quotes from all available routers and returns the best one
 pub async fn get_best_quote(
     input_mint: &str,
     output_mint: &str,
@@ -151,7 +130,9 @@ pub async fn get_best_quote(
         )
     );
 
-    // For now, just use GMGN as the primary router
+    let mut quotes = Vec::new();
+
+    // Get GMGN quote
     match gmgn::get_gmgn_quote(
         input_mint,
         output_mint,
@@ -174,28 +155,67 @@ pub async fn get_best_quote(
                 route_plan: format!("GMGN Route: {}", serde_json::to_string(&gmgn_data.quote.route_plan).unwrap_or_default()),
                 execution_data: QuoteExecutionData::GMGN(gmgn_data),
             };
-
-            log(
-                LogTag::Swap,
-                "BEST_ROUTE",
-                &format!(
-                    "✅ GMGN route found: output: {}, impact: {:.2}%, fee: {} lamports",
-                    unified_quote.output_amount,
-                    unified_quote.price_impact_pct,
-                    unified_quote.fee_lamports
-                )
-            );
-
-            Ok(unified_quote)
+            quotes.push(unified_quote);
         }
         Err(e) => {
-            log(LogTag::Swap, "ERROR", &format!("GMGN quote failed: {}", e));
-            Err(e)
+            log(LogTag::Swap, "WARNING", &format!("GMGN quote failed: {}", e));
         }
     }
+
+    // Get Jupiter quote using full API integration
+    match jupiter::execute_jupiter_swap(
+        input_mint,
+        output_mint,
+        input_amount,
+        from_address,
+        jupiter::get_optimal_slippage_bps(slippage),
+        true, // Use dynamic features for better pricing
+    ).await {
+        Ok(jupiter_data) => {
+            let unified_quote = UnifiedQuote {
+                router: RouterType::Jupiter,
+                input_mint: input_mint.to_string(),
+                output_mint: output_mint.to_string(),
+                input_amount,
+                output_amount: jupiter_data.quote.out_amount.parse().unwrap_or(0),
+                price_impact_pct: jupiter_data.quote.price_impact_pct.parse().unwrap_or(0.0),
+                fee_lamports: jupiter_data.raw_tx.prioritization_fee_lamports,
+                slippage_bps: jupiter_data.quote.slippage_bps.parse().unwrap_or(0),
+                route_plan: format!("Jupiter Route: {}", serde_json::to_string(&jupiter_data.quote.route_plan).unwrap_or_default()),
+                execution_data: QuoteExecutionData::Jupiter(jupiter_data),
+            };
+            quotes.push(unified_quote);
+        }
+        Err(e) => {
+            log(LogTag::Swap, "WARNING", &format!("Jupiter quote failed: {}", e));
+        }
+    }
+
+    if quotes.is_empty() {
+        return Err(SwapError::ApiError("No routers available for quote".to_string()));
+    }
+
+    // Select best quote based on output amount (more tokens = better)
+    let best_quote = quotes.into_iter()
+        .max_by_key(|q| q.output_amount)
+        .unwrap();
+
+    log(
+        LogTag::Swap,
+        "BEST_ROUTE",
+        &format!(
+            "✅ Best route found: {:?} (output: {}, impact: {:.2}%, fee: {} lamports)",
+            best_quote.router,
+            best_quote.output_amount,
+            best_quote.price_impact_pct,
+            best_quote.fee_lamports
+        )
+    );
+
+    Ok(best_quote)
 }
 
-/// Execute swap with unified quote (simplified implementation)
+/// Executes a swap using the best available router
 pub async fn execute_best_swap(
     token: &Token,
     input_mint: &str,
@@ -234,7 +254,8 @@ pub async fn execute_best_swap(
             }
         }
         QuoteExecutionData::Jupiter(jupiter_data) => {
-            match jupiter::execute_jupiter_swap(token, input_mint, output_mint, input_amount, jupiter_data).await {
+            // Jupiter data already contains the transaction, we need to sign and send it
+            match jupiter::send_jupiter_transaction(token, &jupiter_data).await {
                 Ok(result) => Ok(UnifiedSwapResult {
                     success: result.success,
                     router_used: RouterType::Jupiter,

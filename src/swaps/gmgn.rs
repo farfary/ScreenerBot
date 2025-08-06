@@ -6,7 +6,7 @@ use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
 use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled, is_debug_wallet_enabled};
 use super::transaction::{sign_and_send_transaction, verify_transaction_and_get_actual_amounts};
-use super::types::{SwapData, SwapQuote, SwapRequest, SwapApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number, PARTNER, SOL_MINT};
+use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number, PARTNER, SOL_MINT};
 
 use serde::{Deserialize, Serialize};
 use reqwest;
@@ -24,6 +24,36 @@ pub struct GMGNSwapResult {
     pub effective_price: Option<f64>, // Price per token in SOL
     pub swap_data: Option<SwapData>, // Complete swap data for reference
     pub error: Option<String>,
+}
+
+/// GMGN-specific transaction signing and sending
+/// Uses GMGN swap transaction format and premium RPC endpoints
+pub async fn gmgn_sign_and_send_transaction(
+    swap_transaction_base64: &str,
+    configs: &crate::global::Configs
+) -> Result<String, SwapError> {
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "GMGN_SIGN_START",
+            &format!("🔵 GMGN: Signing and sending transaction (length: {} chars)", swap_transaction_base64.len())
+        );
+    }
+
+    // Use premium RPC for GMGN transactions
+    let selected_rpc = get_premium_transaction_rpc(configs);
+    
+    // Get RPC client and sign transaction
+    let rpc_client = crate::rpc::get_rpc_client();
+    let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
+    
+    log(
+        LogTag::Swap,
+        "GMGN_SIGN_SUCCESS",
+        &format!("✅ GMGN: Transaction signed and sent successfully: {}", signature)
+    );
+    
+    Ok(signature)
 }
 
 /// Gets a swap quote from the GMGN router API with retry logic
@@ -85,7 +115,7 @@ pub async fn get_gmgn_quote(
         match client.get(&url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
-                    match response.json::<SwapApiResponse>().await {
+                    match response.json::<GMGNApiResponse>().await {
                         Ok(api_response) => {
                             if api_response.code == 0 {
                                 if let Some(data) = api_response.data {
@@ -178,11 +208,10 @@ pub async fn execute_gmgn_swap(
 
     let start_time = std::time::Instant::now();
 
-    // Sign and send the transaction using premium RPC
-    let selected_rpc = get_premium_transaction_rpc(&configs);
-    let transaction_signature = sign_and_send_transaction(
+    // Sign and send the transaction using GMGN-specific method
+    let transaction_signature = gmgn_sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
-        &selected_rpc
+        &configs
     ).await?;
 
     log(

@@ -158,13 +158,53 @@ pub struct SwapData {
     pub sol_cost: Option<String>,
 }
 
-/// API response structure
+/// GMGN API response structure
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SwapApiResponse {
+pub struct GMGNApiResponse {
     pub code: i32,
     pub msg: String,
     pub tid: Option<String>,
     pub data: Option<SwapData>,
+}
+
+/// Jupiter API response structure for quotes
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JupiterQuoteResponse {
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+    #[serde(rename = "inAmount")]
+    pub in_amount: String,
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+    #[serde(rename = "outAmount")]
+    pub out_amount: String,
+    #[serde(rename = "otherAmountThreshold")]
+    pub other_amount_threshold: String,
+    #[serde(rename = "swapMode")]
+    pub swap_mode: String,
+    #[serde(rename = "slippageBps")]
+    pub slippage_bps: u16,
+    #[serde(rename = "platformFee")]
+    pub platform_fee: Option<serde_json::Value>,
+    #[serde(rename = "priceImpactPct")]
+    pub price_impact_pct: String,
+    #[serde(rename = "routePlan")]
+    pub route_plan: Vec<serde_json::Value>,
+    #[serde(rename = "contextSlot")]
+    pub context_slot: Option<u64>,
+    #[serde(rename = "timeTaken")]
+    pub time_taken: Option<f64>,
+}
+
+/// Jupiter API response structure for swap transactions
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JupiterSwapResponse {
+    #[serde(rename = "swapTransaction")]
+    pub swap_transaction: String,
+    #[serde(rename = "lastValidBlockHeight")]
+    pub last_valid_block_height: u64,
+    #[serde(rename = "prioritizationFeeLamports")]
+    pub prioritization_fee_lamports: u64,
 }
 
 /// Swap request parameters

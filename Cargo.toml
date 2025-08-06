@@ -96,6 +96,10 @@ path = "src/bin/tool_pool_price.rs"
 name = "tool_price_history_cache"
 path = "src/bin/tool_price_history_cache.rs"
 
+[[bin]]
+name = "test_swaps_full"
+path = "src/bin/test_swaps_full.rs"
+
 
 [dependencies]
 # Core async runtime with minimal features for faster builds

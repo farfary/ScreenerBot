@@ -5,7 +5,7 @@ use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
-use crate::swaps::types::{SwapData, SwapRequest, SwapApiResponse, SOL_MINT, ANTI_MEV, PARTNER};
+use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse, SOL_MINT, ANTI_MEV, PARTNER};
 use crate::swaps::interface::SwapResult;
 use crate::swaps::transaction::{sign_and_send_transaction, verify_transaction_and_get_actual_amounts};
 
@@ -218,8 +218,8 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 }
 
                 // Try to parse the JSON response with better error handling
-                let api_response: SwapApiResponse = match
-                    serde_json::from_str::<SwapApiResponse>(&response_text)
+                let api_response: GMGNApiResponse = match
+                    serde_json::from_str::<GMGNApiResponse>(&response_text)
                 {
                     Ok(response) => {
                         if is_debug_swap_enabled() {
