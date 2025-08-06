@@ -42,7 +42,8 @@
 
 use screenerbot::{
     logger::{ log, LogTag, init_file_logging },
-    wallet::{ get_wallet_address, sell_token, close_single_ata, get_all_token_accounts },
+    wallet::{ get_wallet_address, close_single_ata, get_all_token_accounts },
+    swaps::sell_token,
     positions::get_open_positions,
     tokens::{ api::{ init_dexscreener_api, get_token_from_mint_global_api }, Token },
     rpc::init_rpc_client,

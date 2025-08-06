@@ -2,7 +2,7 @@
 /// Handles token information retrieval with rate limiting and caching
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_api_enabled;
-use crate::wallet::SOL_MINT;
+use crate::swaps::types::SOL_MINT;
 
 // =============================================================================
 // DEXSCREENER API CONFIGURATION CONSTANTS

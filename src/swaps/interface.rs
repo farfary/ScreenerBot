@@ -5,8 +5,9 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
 use crate::global::{is_debug_wallet_enabled, is_debug_swap_enabled};
-use crate::wallet::{get_wallet_address, get_token_balance, SOL_MINT};
+use crate::wallet::{get_wallet_address, get_token_balance};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
+use super::types::{SwapData, SOL_MINT};
 use crate::trader::{SLIPPAGE_TOLERANCE_PERCENT, SWAP_FEE_PERCENT};
 
 /// Result of a swap operation (compatible with existing wallet::SwapResult)
@@ -20,7 +21,7 @@ pub struct SwapResult {
     pub fee_lamports: u64,
     pub execution_time: f64,
     pub effective_price: Option<f64>, // Price per token in SOL
-    pub swap_data: Option<crate::wallet::SwapData>, // Complete swap data for reference
+    pub swap_data: Option<SwapData>, // Complete swap data for reference
     pub error: Option<String>,
 }
 

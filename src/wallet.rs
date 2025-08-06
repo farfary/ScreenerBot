@@ -3,7 +3,16 @@ use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
 use crate::rpc::{ get_premium_transaction_rpc, SwapError, lamports_to_sol, sol_to_lamports };
-use crate::swaps::{get_best_quote, execute_best_swap, UnifiedSwapResult};
+use crate::swaps::{
+    get_best_quote, execute_best_swap, UnifiedSwapResult,
+    INITIAL_CONFIRMATION_DELAY_MS, MAX_CONFIRMATION_DELAY_SECS, CONFIRMATION_BACKOFF_MULTIPLIER,
+    CONFIRMATION_TIMEOUT_SECS, RATE_LIMIT_BASE_DELAY_SECS, RATE_LIMIT_INCREMENT_SECS,
+    EARLY_ATTEMPT_DELAY_MS, EARLY_ATTEMPTS_COUNT
+};
+use crate::swaps::types::{SwapData, SwapRequest, SwapApiResponse, SOL_MINT, ANTI_MEV, PARTNER, deserialize_string_or_number, deserialize_optional_string_or_number};
+
+// Re-export for backward compatibility
+pub use crate::swaps::interface::SwapResult;
 
 use reqwest;
 use serde::{ Deserialize, Serialize, Deserializer };
@@ -25,13 +34,6 @@ use std::collections::HashSet;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
 use once_cell::sync::Lazy;
 use chrono::{ Utc, DateTime };
-
-/// Configuration constants for swap operations
-pub const ANTI_MEV: bool = false; // Enable anti-MEV by default
-pub const PARTNER: &str = "screenerbot"; // Partner identifier
-
-/// SOL token mint address (native Solana)
-pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
 /// CRITICAL: Global tracking of pending transactions to prevent duplicates
 static PENDING_TRANSACTIONS: Lazy<StdArc<StdMutex<HashSet<String>>>> = Lazy::new(|| {
@@ -139,205 +141,6 @@ impl Drop for TransactionSlotGuard {
     }
 }
 
-/// Custom deserializer for fields that can be either string or number
-fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
-    where D: Deserializer<'de>
-{
-    use serde::de::{ self, Visitor };
-    use std::fmt;
-
-    struct StringOrNumber;
-
-    impl<'de> Visitor<'de> for StringOrNumber {
-        type Value = String;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("a string or number")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<String, E> where E: de::Error {
-            Ok(value.to_owned())
-        }
-
-        fn visit_i64<E>(self, value: i64) -> Result<String, E> where E: de::Error {
-            Ok(value.to_string())
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<String, E> where E: de::Error {
-            Ok(value.to_string())
-        }
-
-        fn visit_f64<E>(self, value: f64) -> Result<String, E> where E: de::Error {
-            Ok(value.to_string())
-        }
-    }
-
-    deserializer.deserialize_any(StringOrNumber)
-}
-
-/// Custom deserializer for optional fields that can be either string or number
-fn deserialize_optional_string_or_number<'de, D>(
-    deserializer: D
-) -> Result<Option<String>, D::Error>
-    where D: Deserializer<'de>
-{
-    use serde::de::{ self, Visitor };
-    use std::fmt;
-
-    struct OptionalStringOrNumber;
-
-    impl<'de> Visitor<'de> for OptionalStringOrNumber {
-        type Value = Option<String>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("an optional string or number")
-        }
-
-        fn visit_none<E>(self) -> Result<Option<String>, E> where E: de::Error {
-            Ok(None)
-        }
-
-        fn visit_some<D>(self, deserializer: D) -> Result<Option<String>, D::Error>
-            where D: Deserializer<'de>
-        {
-            deserialize_string_or_number(deserializer).map(Some)
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Option<String>, E> where E: de::Error {
-            Ok(Some(value.to_owned()))
-        }
-
-        fn visit_i64<E>(self, value: i64) -> Result<Option<String>, E> where E: de::Error {
-            Ok(Some(value.to_string()))
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<Option<String>, E> where E: de::Error {
-            Ok(Some(value.to_string()))
-        }
-
-        fn visit_f64<E>(self, value: f64) -> Result<Option<String>, E> where E: de::Error {
-            Ok(Some(value.to_string()))
-        }
-
-        fn visit_unit<E>(self) -> Result<Option<String>, E> where E: de::Error {
-            Ok(None)
-        }
-    }
-
-    deserializer.deserialize_option(OptionalStringOrNumber)
-}
-
-/// Quote information from the swap router
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SwapQuote {
-    #[serde(rename = "inputMint")]
-    pub input_mint: String,
-    #[serde(rename = "inAmount")]
-    pub in_amount: String,
-    #[serde(rename = "outputMint")]
-    pub output_mint: String,
-    #[serde(rename = "outAmount")]
-    pub out_amount: String,
-    #[serde(rename = "otherAmountThreshold")]
-    pub other_amount_threshold: String,
-    #[serde(rename = "inDecimals")]
-    pub in_decimals: u8,
-    #[serde(rename = "outDecimals")]
-    pub out_decimals: u8,
-    #[serde(rename = "swapMode")]
-    pub swap_mode: String,
-    #[serde(rename = "slippageBps", deserialize_with = "deserialize_string_or_number")]
-    pub slippage_bps: String,
-    #[serde(rename = "platformFee")]
-    pub platform_fee: Option<String>,
-    #[serde(rename = "priceImpactPct")]
-    pub price_impact_pct: String,
-    #[serde(rename = "routePlan")]
-    pub route_plan: serde_json::Value,
-    #[serde(rename = "contextSlot")]
-    pub context_slot: Option<u64>,
-    #[serde(rename = "timeTaken")]
-    pub time_taken: f64,
-}
-
-/// Raw transaction data from the swap router
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RawTransaction {
-    #[serde(rename = "swapTransaction")]
-    pub swap_transaction: String,
-    #[serde(rename = "lastValidBlockHeight")]
-    pub last_valid_block_height: u64,
-    #[serde(rename = "prioritizationFeeLamports")]
-    pub prioritization_fee_lamports: u64,
-    #[serde(rename = "recentBlockhash")]
-    pub recent_blockhash: String,
-    pub version: Option<String>,
-}
-
-/// Complete swap response data
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SwapData {
-    pub quote: SwapQuote,
-    pub raw_tx: RawTransaction,
-    pub amount_in_usd: Option<String>,
-    pub amount_out_usd: Option<String>,
-    pub jito_order_id: Option<String>,
-    #[serde(deserialize_with = "deserialize_optional_string_or_number")]
-    pub sol_cost: Option<String>,
-}
-
-/// API response structure
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SwapApiResponse {
-    pub code: i32,
-    pub msg: String,
-    pub tid: Option<String>,
-    pub data: Option<SwapData>,
-}
-
-/// Swap request parameters
-#[derive(Debug, Clone)]
-pub struct SwapRequest {
-    pub input_mint: String,
-    pub output_mint: String,
-    pub input_amount: u64, // Amount in smallest unit (lamports for SOL, raw amount for tokens)
-    pub from_address: String,
-    pub slippage: f64,
-    pub fee: f64,
-    pub is_anti_mev: bool,
-    pub expected_price: Option<f64>,
-}
-
-impl Default for SwapRequest {
-    fn default() -> Self {
-        Self {
-            input_mint: SOL_MINT.to_string(),
-            output_mint: String::new(),
-            input_amount: 0,
-            from_address: String::new(),
-            slippage: SLIPPAGE_TOLERANCE_PERCENT,
-            fee: SWAP_FEE_PERCENT,
-            is_anti_mev: ANTI_MEV,
-            expected_price: None,
-        }
-    }
-}
-
-/// Result of a swap operation
-#[derive(Debug)]
-pub struct SwapResult {
-    pub success: bool,
-    pub transaction_signature: Option<String>,
-    pub input_amount: String,
-    pub output_amount: String,
-    pub price_impact: String,
-    pub fee_lamports: u64,
-    pub execution_time: f64,
-    pub effective_price: Option<f64>, // Price per token in SOL
-    pub swap_data: Option<SwapData>, // Complete swap data for reference
-    pub error: Option<String>,
-}
-
 /// Gets wallet address from configs by deriving from private key
 pub fn get_wallet_address() -> Result<String, SwapError> {
     let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
@@ -378,6 +181,7 @@ async fn get_transaction_details(
 
 /// CRITICAL NEW FUNCTION: Verifies transaction confirmation and extracts actual amounts
 /// This function waits for transaction confirmation and returns actual blockchain results
+/// Uses smart exponential backoff to prevent rate limiting with configurable delays
 pub async fn verify_transaction_and_get_actual_amounts(
     transaction_signature: &str,
     input_mint: &str,
@@ -385,33 +189,58 @@ pub async fn verify_transaction_and_get_actual_amounts(
     configs: &crate::global::Configs
 ) -> Result<(bool, Option<String>, Option<String>), SwapError> {
     let wallet_address = get_wallet_address()?;
-    let max_retries = 30; // Wait up to 30 seconds (30 retries * 1 second)
-    let retry_delay = tokio::time::Duration::from_secs(1);
+    let max_duration = tokio::time::Duration::from_secs(CONFIRMATION_TIMEOUT_SECS);
+    let start_time = tokio::time::Instant::now();
+    
+    // Configurable delay parameters from swaps module
+    let initial_delay = tokio::time::Duration::from_millis(INITIAL_CONFIRMATION_DELAY_MS);
+    let max_delay = tokio::time::Duration::from_secs(MAX_CONFIRMATION_DELAY_SECS);
+    let backoff_multiplier = CONFIRMATION_BACKOFF_MULTIPLIER;
+    
+    let mut current_delay = initial_delay;
+    let mut attempt = 1;
+    let mut consecutive_rate_limits = 0;
 
     log(
         LogTag::Wallet,
         "VERIFY",
         &format!(
-            "🔍 Waiting for transaction confirmation: {} (max {} seconds)",
-            transaction_signature,
-            max_retries
+            "🔍 Waiting for transaction confirmation: {} (smart retry with configurable delays)",
+            transaction_signature
         )
     );
 
-    for attempt in 1..=max_retries {
-        // Wait before checking (except first attempt)
-        if attempt > 1 {
-            tokio::time::sleep(retry_delay).await;
+    loop {
+        // Check if we've exceeded the total timeout
+        if start_time.elapsed() >= max_duration {
+            break;
         }
 
-        match
-            get_transaction_details(
-                &reqwest::Client::new(),
-                transaction_signature,
-                &configs.rpc_url
-            ).await
-        {
+        // Wait before checking (except first attempt)
+        if attempt > 1 {
+            // Increase delay if we're hitting rate limits
+            if consecutive_rate_limits > 2 {
+                let rate_limit_delay = RATE_LIMIT_BASE_DELAY_SECS + consecutive_rate_limits * RATE_LIMIT_INCREMENT_SECS;
+                current_delay = std::cmp::min(max_delay, tokio::time::Duration::from_secs(rate_limit_delay));
+                log(
+                    LogTag::Wallet,
+                    "RATE_LIMIT",
+                    &format!("⚠️ Multiple rate limits detected, using longer delay: {}s", current_delay.as_secs())
+                );
+            }
+            
+            tokio::time::sleep(current_delay).await;
+        }
+
+        match get_transaction_details(
+            &reqwest::Client::new(),
+            transaction_signature,
+            &configs.rpc_url
+        ).await {
             Ok(tx_details) => {
+                // Reset rate limit counter on successful call
+                consecutive_rate_limits = 0;
+                
                 // Check if transaction has metadata (confirmed)
                 if let Some(meta) = &tx_details.meta {
                     // Check if transaction succeeded (err should be None for success)
@@ -434,9 +263,10 @@ pub async fn verify_transaction_and_get_actual_amounts(
                         LogTag::Wallet,
                         "CONFIRMED",
                         &format!(
-                            "✅ Transaction {} CONFIRMED successfully on attempt {}",
+                            "✅ Transaction {} CONFIRMED successfully on attempt {} after {:.1}s",
                             transaction_signature,
-                            attempt
+                            attempt,
+                            start_time.elapsed().as_secs_f64()
                         )
                     );
 
@@ -450,55 +280,80 @@ pub async fn verify_transaction_and_get_actual_amounts(
 
                     return Ok((true, actual_input, actual_output));
                 } else {
-                    // Transaction not yet confirmed
+                    // Transaction not yet confirmed - use configurable delays for early attempts
+                    if attempt <= EARLY_ATTEMPTS_COUNT {
+                        current_delay = tokio::time::Duration::from_millis(EARLY_ATTEMPT_DELAY_MS);
+                    } else {
+                        current_delay = std::cmp::min(max_delay, 
+                            tokio::time::Duration::from_millis(
+                                (current_delay.as_millis() as f64 * backoff_multiplier) as u64
+                            )
+                        );
+                    }
+                    
                     if is_debug_swap_enabled() {
                         log(
                             LogTag::Wallet,
                             "PENDING",
                             &format!(
-                                "⏳ Transaction {} still pending... (attempt {}/{})",
+                                "⏳ Transaction {} still pending... (attempt {}, next check in {:.1}s)",
                                 transaction_signature,
                                 attempt,
-                                max_retries
+                                current_delay.as_secs_f64()
                             )
                         );
                     }
                 }
             }
             Err(e) => {
-                if attempt < max_retries {
+                // Check if this is a rate limit error
+                let error_str = e.to_string().to_lowercase();
+                if error_str.contains("429") || error_str.contains("rate limit") || error_str.contains("too many requests") {
+                    consecutive_rate_limits += 1;
+                    // Use configurable delay for rate limits
+                    let rate_limit_delay = RATE_LIMIT_BASE_DELAY_SECS + consecutive_rate_limits * RATE_LIMIT_INCREMENT_SECS;
+                    current_delay = tokio::time::Duration::from_secs(rate_limit_delay);
+                    
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Wallet,
+                            "RATE_LIMIT",
+                            &format!(
+                                "⚠️ Rate limit hit (attempt {}), waiting {}s before retry",
+                                attempt,
+                                current_delay.as_secs()
+                            )
+                        );
+                    }
+                } else {
+                    // Reset rate limit counter for non-rate-limit errors
+                    consecutive_rate_limits = 0;
+                    
+                    // For other errors, use exponential backoff but shorter than rate limits
+                    current_delay = std::cmp::min(max_delay, 
+                        tokio::time::Duration::from_millis(
+                            (current_delay.as_millis() as f64 * backoff_multiplier) as u64
+                        )
+                    );
+                    
                     if is_debug_swap_enabled() {
                         log(
                             LogTag::Wallet,
                             "PENDING",
                             &format!(
-                                "⏳ Transaction {} not found yet, retrying... (attempt {}/{}) - {}",
+                                "⏳ Transaction {} not found yet (attempt {}, next check in {:.1}s) - {}",
                                 transaction_signature,
                                 attempt,
-                                max_retries,
+                                current_delay.as_secs_f64(),
                                 e
                             )
                         );
                     }
-                } else {
-                    log(
-                        LogTag::Wallet,
-                        "ERROR",
-                        &format!(
-                            "❌ Failed to verify transaction {} after {} attempts: {}",
-                            transaction_signature,
-                            max_retries,
-                            e
-                        )
-                    );
-                    return Err(
-                        SwapError::TransactionError(
-                            format!("Transaction verification timeout after {} seconds", max_retries)
-                        )
-                    );
                 }
             }
         }
+        
+        attempt += 1;
     }
 
     // Timeout reached
@@ -506,15 +361,16 @@ pub async fn verify_transaction_and_get_actual_amounts(
         LogTag::Wallet,
         "TIMEOUT",
         &format!(
-            "⏰ Transaction verification timeout for {} after {} seconds",
+            "⏰ Transaction verification timeout for {} after {:.1}s ({} attempts)",
             transaction_signature,
-            max_retries
+            start_time.elapsed().as_secs_f64(),
+            attempt - 1
         )
     );
 
     Err(
         SwapError::TransactionError(
-            format!("Transaction confirmation timeout after {} seconds", max_retries)
+            format!("Transaction confirmation timeout after {:.1}s", start_time.elapsed().as_secs_f64())
         )
     )
 }
@@ -1118,599 +974,11 @@ pub async fn execute_swap_with_quote(
     }
 }
 
-/// DUPLICATE FUNCTION - TO BE REMOVED - Use swap interface instead
-pub async fn buy_token(
-    token: &Token,
-    amount_sol: f64,
-    expected_price: Option<f64>
-) -> Result<SwapResult, SwapError> {
-    // CRITICAL SAFETY CHECK: Validate expected price if provided
-    if let Some(price) = expected_price {
-        if price <= 0.0 || !price.is_finite() {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!(
-                    "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
-                    token.symbol,
-                    token.mint,
-                    price
-                )
-            );
-            return Err(SwapError::InvalidAmount(format!("Invalid expected price: {:.10}", price)));
-        }
-    }
 
-    // CRITICAL FIX: Prevent duplicate transactions
-    check_recent_transaction_attempt(&token.mint, "buy")?;
-    check_and_reserve_transaction_slot(&token.mint, "buy")?;
 
-    // Ensure we release the slot regardless of outcome
-    let _slot_guard = TransactionSlotGuard::new(&token.mint, "buy");
 
-    let wallet_address = get_wallet_address()?;
 
-    log(
-        LogTag::Wallet,
-        "BUY",
-        &format!(
-            "🎯 Starting token purchase: {} ({}) | Amount: {:.6} SOL | Expected price: {}",
-            token.symbol,
-            token.name,
-            amount_sol,
-            expected_price.map(|p| format!("{:.8} SOL", p)).unwrap_or_else(|| "Any".to_string())
-        )
-    );
 
-    // Check SOL balance before swap
-    log(LogTag::Wallet, "BALANCE", "💰 Checking SOL balance...");
-    let sol_balance = get_sol_balance(&wallet_address).await?;
-    log(LogTag::Wallet, "BALANCE", &format!("💰 Current SOL balance: {:.6} SOL", sol_balance));
-
-    if sol_balance < amount_sol {
-        log(
-            LogTag::Wallet,
-            "ERROR",
-            &format!(
-                "❌ Insufficient SOL balance! Have: {:.6} SOL, Need: {:.6} SOL (Deficit: {:.6} SOL)",
-                sol_balance,
-                amount_sol,
-                amount_sol - sol_balance
-            )
-        );
-        return Err(
-            SwapError::InsufficientBalance(
-                format!(
-                    "Insufficient SOL balance. Have: {:.6} SOL, Need: {:.6} SOL",
-                    sol_balance,
-                    amount_sol
-                )
-            )
-        );
-    }
-
-    log(
-        LogTag::Wallet,
-        "SUCCESS",
-        &format!(
-            "✅ SOL balance sufficient! Available: {:.6} SOL, Required: {:.6} SOL",
-            sol_balance,
-            amount_sol
-        )
-    );
-
-    // Get quote once and use it for both price validation and execution
-    log(
-        LogTag::Wallet,
-        "QUOTE",
-        &format!(
-            "📊 Requesting best swap quote: {} SOL → {} | Mint: {}...{}",
-            amount_sol,
-            token.symbol,
-            &token.mint[..8],
-            &token.mint[token.mint.len() - 8..]
-        )
-    );
-
-    // Get best quote from all available routers
-    let best_quote = get_best_quote(
-        SOL_MINT,
-        &token.mint,
-        sol_to_lamports(amount_sol),
-        &wallet_address,
-        SLIPPAGE_TOLERANCE_PERCENT,
-        SWAP_FEE_PERCENT,
-        ANTI_MEV,
-    ).await?;
-
-    log(
-        LogTag::Wallet,
-        "QUOTE",
-        &format!(
-            "📋 Best quote received via {:?}: Input: {} | Output: {} | Price Impact: {:.4}% | Fee: {} lamports",
-            best_quote.router,
-            best_quote.input_amount,
-            best_quote.output_amount,
-            best_quote.price_impact_pct,
-            best_quote.fee_lamports
-        )
-    );
-
-    // Validate expected price if provided (using cached quote)
-    if let Some(expected) = expected_price {
-        log(LogTag::Wallet, "PRICE", "🔍 Validating current token price...");
-        validate_best_quote_price(&best_quote, expected, true)?;
-        log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
-    }
-
-    log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with best quote via {:?}...", best_quote.router));
-
-    let unified_result = execute_best_swap(
-        token,
-        SOL_MINT,
-        &token.mint,
-        sol_to_lamports(amount_sol),
-        best_quote
-    ).await?;
-
-    // Convert UnifiedSwapResult to SwapResult for backward compatibility
-    let mut swap_result = SwapResult {
-        success: unified_result.success,
-        transaction_signature: unified_result.transaction_signature,
-        input_amount: unified_result.input_amount,
-        output_amount: unified_result.output_amount,
-        price_impact: unified_result.price_impact,
-        fee_lamports: unified_result.fee_lamports,
-        execution_time: unified_result.execution_time,
-        effective_price: unified_result.effective_price,
-        swap_data: None, // Will be set below if needed
-        error: unified_result.error,
-    };
-
-    // Calculate and set the effective price in the swap result
-    if swap_result.success {
-        match calculate_effective_price_buy(&swap_result) {
-            Ok(effective_price) => {
-                // Update the swap result with the calculated effective price
-                swap_result.effective_price = Some(effective_price);
-
-                log(
-                    LogTag::Wallet,
-                    "PRICE",
-                    &format!(
-                        "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token",
-                        effective_price,
-                        token.symbol
-                    )
-                );
-
-                if is_debug_wallet_enabled() {
-                    if let Some(expected) = expected_price {
-                        let price_diff = ((effective_price - expected) / expected) * 100.0;
-                        log(
-                            LogTag::Wallet,
-                            "DEBUG",
-                            &format!(
-                                "📊 PRICE ANALYSIS:\n  🎯 Expected: {:.10} SOL\n  💰 Actual: {:.10} SOL\n  📈 Difference: {:.2}%",
-                                expected,
-                                effective_price,
-                                price_diff
-                            )
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "WARNING",
-                    &format!("Failed to calculate effective price: {}", e)
-                );
-                // Keep effective_price as None if calculation fails
-            }
-        }
-    }
-
-    Ok(swap_result)
-}
-
-/// DUPLICATE FUNCTION - TO BE REMOVED - Use swap interface instead
-/// Helper function to sell ALL tokens in wallet for SOL with automatic slippage retry
-/// NOTE: This function sells the entire wallet balance, not just the position amount.
-/// This ensures complete position closure and prevents dust amounts from being left behind.
-/// FEATURES: Auto-retry with increased slippage (15% -> 25% -> 35% -> 50%) until success
-pub async fn sell_token(
-    token: &Token,
-    token_amount: u64, // Position amount (used for validation only - actual sale uses full wallet balance)
-    expected_sol_output: Option<f64>
-) -> Result<SwapResult, SwapError> {
-    // Define slippage progression for retries
-    let slippage_levels = vec![15.0, 25.0, 35.0, 50.0]; // Progressive slippage increase
-    let max_attempts = slippage_levels.len();
-
-    log(
-        LogTag::Wallet,
-        "SELL_START",
-        &format!(
-            "🎯 Starting sell with auto-retry: {} ({}) | Progressive slippage: {:?}%",
-            token.symbol,
-            token.name,
-            slippage_levels
-        )
-    );
-
-    for (attempt, slippage) in slippage_levels.iter().enumerate() {
-        let attempt_num = attempt + 1;
-
-        log(
-            LogTag::Wallet,
-            "RETRY",
-            &format!(
-                "🔄 SELL ATTEMPT {}/{}: {} with {:.1}% slippage",
-                attempt_num,
-                max_attempts,
-                token.symbol,
-                slippage
-            )
-        );
-
-        // Clear recent transaction attempts for retries (but not on first attempt)
-        if attempt > 0 {
-            clear_recent_transaction_attempt(&token.mint, "sell");
-        }
-
-        match sell_token_with_slippage(token, token_amount, expected_sol_output, *slippage).await {
-            Ok(swap_result) => {
-                if swap_result.success {
-                    log(
-                        LogTag::Wallet,
-                        "SUCCESS",
-                        &format!(
-                            "✅ SELL SUCCESS on attempt {}/{}: {} completed with {:.1}% slippage",
-                            attempt_num,
-                            max_attempts,
-                            token.symbol,
-                            slippage
-                        )
-                    );
-                    return Ok(swap_result);
-                } else {
-                    log(
-                        LogTag::Wallet,
-                        "FAILED",
-                        &format!(
-                            "❌ SELL FAILED on attempt {}/{}: {} with {:.1}% slippage - {}",
-                            attempt_num,
-                            max_attempts,
-                            token.symbol,
-                            slippage,
-                            swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
-                        )
-                    );
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "ERROR",
-                    &format!(
-                        "❌ SELL ERROR on attempt {}/{}: {} with {:.1}% slippage - {}",
-                        attempt_num,
-                        max_attempts,
-                        token.symbol,
-                        slippage,
-                        e
-                    )
-                );
-
-                // If this is the last attempt, return the error
-                if attempt_num == max_attempts {
-                    return Err(e);
-                }
-            }
-        }
-
-        // Wait before next retry (progressive delay: 2s, 4s, 6s)
-        if attempt_num < max_attempts {
-            let delay_seconds = (attempt_num as u64) * 2;
-            log(
-                LogTag::Wallet,
-                "RETRY",
-                &format!("⏳ Waiting {}s before next attempt...", delay_seconds)
-            );
-            tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)).await;
-        }
-    }
-
-    // This should never be reached due to the error return in the loop
-    Err(
-        SwapError::TransactionError(
-            format!("All sell attempts failed for {} after {} retries", token.symbol, max_attempts)
-        )
-    )
-}
-
-/// DUPLICATE FUNCTION - TO BE REMOVED - Use swap interface instead  
-/// Internal helper function to sell tokens with specific slippage
-/// This is the actual implementation that was previously the main sell_token function
-async fn sell_token_with_slippage(
-    token: &Token,
-    token_amount: u64, // Position amount (used for validation only - actual sale uses full wallet balance)
-    expected_sol_output: Option<f64>,
-    slippage: f64
-) -> Result<SwapResult, SwapError> {
-    // CRITICAL SAFETY CHECK: Validate expected SOL output if provided
-    if let Some(expected_sol) = expected_sol_output {
-        if expected_sol <= 0.0 || !expected_sol.is_finite() {
-            log(
-                LogTag::Wallet,
-                "ERROR",
-                &format!(
-                    "❌ REFUSING TO SELL: Invalid expected_sol_output for {} ({}). Expected SOL = {:.10}",
-                    token.symbol,
-                    token.mint,
-                    expected_sol
-                )
-            );
-            return Err(
-                SwapError::InvalidAmount(
-                    format!("Invalid expected SOL output: {:.10}", expected_sol)
-                )
-            );
-        }
-    }
-
-    // CRITICAL FIX: Prevent duplicate transactions
-    check_recent_transaction_attempt(&token.mint, "sell")?;
-    check_and_reserve_transaction_slot(&token.mint, "sell")?;
-
-    // Ensure we release the slot regardless of outcome
-    let _slot_guard = TransactionSlotGuard::new(&token.mint, "sell");
-
-    let wallet_address = get_wallet_address()?;
-
-    // Check token balance before swap - we'll sell the entire wallet balance
-    log(LogTag::Wallet, "BALANCE", &format!("Checking {} balance...", token.symbol));
-    let token_balance = get_token_balance(&wallet_address, &token.mint).await?;
-    log(
-        LogTag::Wallet,
-        "BALANCE",
-        &format!("Current {} balance: {} tokens", token.symbol, token_balance)
-    );
-
-    // Check if wallet has any tokens to sell
-    if token_balance == 0 {
-        return Err(
-            SwapError::InsufficientBalance(
-                format!("No {} tokens to sell. Wallet balance is 0.", token.symbol)
-            )
-        );
-    }
-
-    // Use the entire wallet balance for selling instead of position amount
-    let actual_sell_amount = token_balance;
-
-    log(
-        LogTag::Wallet,
-        "BALANCE",
-        &format!(
-            "💰 SELL STRATEGY: Position amount: {} tokens, Wallet balance: {} tokens → Selling ALL {} tokens",
-            token_amount,
-            token_balance,
-            actual_sell_amount
-        )
-    );
-
-    // Check current price if expected SOL output is provided
-    if let Some(expected_sol) = expected_sol_output {
-        log(LogTag::Wallet, "PRICE", "Validating expected SOL output...");
-        match get_token_price_sol(&token.mint).await {
-            Ok(current_price) => {
-                let estimated_sol_output = current_price * (actual_sell_amount as f64);
-                log(
-                    LogTag::Wallet,
-                    "PRICE",
-                    &format!(
-                        "Estimated SOL output: {:.6} SOL, Expected: {:.6} SOL (based on {} tokens)",
-                        estimated_sol_output,
-                        expected_sol,
-                        actual_sell_amount
-                    )
-                );
-
-                // Use 5% tolerance for price validation
-                if !validate_price_near_expected(estimated_sol_output, expected_sol, 5.0) {
-                    let price_diff = ((estimated_sol_output - expected_sol) / expected_sol) * 100.0;
-                    return Err(
-                        SwapError::SlippageExceeded(
-                            format!(
-                                "Estimated SOL output {:.6} differs from expected {:.6} by {:.2}% (tolerance: 5%)",
-                                estimated_sol_output,
-                                expected_sol,
-                                price_diff
-                            )
-                        )
-                    );
-                }
-                log(LogTag::Wallet, "PRICE", "✅ Price validation passed");
-            }
-            Err(e) => {
-                log(LogTag::Wallet, "WARNING", &format!("Could not validate price: {}", e));
-            }
-        }
-    }
-
-    let request = SwapRequest {
-        input_mint: token.mint.clone(),
-        output_mint: SOL_MINT.to_string(),
-        input_amount: actual_sell_amount,
-        from_address: wallet_address.clone(),
-        slippage: slippage, // Use custom slippage for this attempt
-        expected_price: expected_sol_output,
-        ..Default::default()
-    };
-
-    log(
-        LogTag::Wallet,
-        "SWAP",
-        &format!(
-            "Executing sell for {} ({}) - {} tokens -> SOL (selling ALL wallet balance) with {:.1}% slippage",
-            token.symbol,
-            token.name,
-            actual_sell_amount,
-            slippage
-        )
-    );
-
-    log(
-        LogTag::Wallet,
-        "QUOTE",
-        &format!(
-            "Requesting sell quote: {} tokens {} -> SOL with {:.1}% slippage",
-            actual_sell_amount,
-            &token.symbol,
-            slippage
-        )
-    );
-
-    // Get best quote using the unified swap system
-    let best_quote = crate::swaps::get_best_quote(
-        &request.input_mint,
-        &request.output_mint,
-        request.input_amount,
-        &request.from_address,
-        request.slippage,
-        request.fee,
-        request.is_anti_mev,
-    ).await?;
-
-    log(
-        LogTag::Wallet,
-        "QUOTE",
-        &format!(
-            "Best sell quote received from {}: {} tokens -> {} SOL",
-            match best_quote.router {
-                crate::swaps::RouterType::GMGN => "GMGN",
-                crate::swaps::RouterType::Jupiter => "Jupiter",
-            },
-            actual_sell_amount,
-            lamports_to_sol(best_quote.output_amount)
-        )
-    );
-
-    // Validate expected output if provided (using cached quote)
-    if let Some(expected_sol_total) = expected_sol_output {
-        log(LogTag::Wallet, "PRICE", "🔍 Validating expected SOL output...");
-
-        // Get token decimals from cache
-        let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
-        
-        // Convert expected total SOL to price per token for validation
-        let actual_tokens = (actual_sell_amount as f64) / (10_f64).powi(token_decimals as i32);
-        let expected_price_per_token = if actual_tokens > 0.0 {
-            expected_sol_total / actual_tokens
-        } else {
-            0.0
-        };
-
-        log(
-            LogTag::Wallet,
-            "DEBUG",
-            &format!(
-                "Sell validation: {} total SOL / {:.6} tokens = {:.12} SOL per token",
-                expected_sol_total,
-                actual_tokens,
-                expected_price_per_token
-            )
-        );
-
-        validate_best_quote_price(&best_quote, expected_price_per_token, false)?;
-        log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
-    }
-
-    log(LogTag::Wallet, "SWAP", "🚀 Executing sell with validated quote...");
-
-    // Use the unified execution function
-    let unified_result = crate::swaps::execute_best_swap(
-        token,
-        &token.mint,
-        SOL_MINT,
-        actual_sell_amount,
-        best_quote,
-    ).await?;
-
-    // Convert UnifiedSwapResult to SwapResult for compatibility
-    let mut swap_result = SwapResult {
-        success: unified_result.success,
-        transaction_signature: unified_result.transaction_signature,
-        input_amount: unified_result.input_amount,
-        output_amount: unified_result.output_amount,
-        price_impact: unified_result.price_impact,
-        fee_lamports: unified_result.fee_lamports,
-        execution_time: unified_result.execution_time,
-        effective_price: unified_result.effective_price,
-        swap_data: None, // Will be populated later if needed
-        error: unified_result.error,
-    };
-
-    // Calculate and set the effective price in the swap result
-    if swap_result.success {
-        // Calculate effective price manually since we don't have SwapData in unified result
-        let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
-        let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
-        
-        if input_tokens_raw > 0 && output_lamports > 0 {
-            let output_sol = lamports_to_sol(output_lamports);
-            
-            // Get token decimals from cache
-            let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
-            let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
-            let effective_price = output_sol / input_tokens;
-            
-            swap_result.effective_price = Some(effective_price);
-
-            log(
-                LogTag::Wallet,
-                "PRICE",
-                &format!(
-                    "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token",
-                    effective_price,
-                    token.symbol
-                )
-            );
-
-            if is_debug_wallet_enabled() {
-                if let Some(expected_sol) = expected_sol_output {
-                    let tokens_sold = input_tokens;
-                    let expected_price_per_token = expected_sol / tokens_sold;
-                    let price_diff =
-                        ((effective_price - expected_price_per_token) /
-                            expected_price_per_token) *
-                        100.0;
-                    log(
-                        LogTag::Wallet,
-                        "DEBUG",
-                        &format!(
-                            "📊 SELL PRICE ANALYSIS:\n  🎯 Expected Price: {:.10} SOL per token\n  💰 Actual Price: {:.10} SOL per token\n  📈 Difference: {:.2}%\n  🔢 Token Decimals: {}",
-                            expected_price_per_token,
-                            effective_price,
-                            price_diff,
-                            token_decimals
-                        )
-                    );
-                }
-            }
-        } else {
-            log(
-                LogTag::Wallet,
-                "WARNING",
-                "Could not calculate effective price: invalid input/output amounts"
-            );
-        }
-    }
-
-    Ok(swap_result)
-}
 
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)

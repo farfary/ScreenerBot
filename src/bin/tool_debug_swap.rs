@@ -1,5 +1,6 @@
 use screenerbot::{
-    wallet::{ buy_token, sell_token, get_sol_balance, get_token_balance, get_wallet_address },
+    wallet::{ get_sol_balance, get_token_balance, get_wallet_address },
+    swaps::{ buy_token, sell_token },
     rpc::lamports_to_sol,
     tokens::{
         types::Token,

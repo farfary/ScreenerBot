@@ -4,13 +4,47 @@
 pub mod gmgn;
 pub mod jupiter;
 pub mod interface; // Main swap interface with clean single-purpose functions
+pub mod types; // Common swap structures and types
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
 use crate::logger::{log, LogTag};
 
-// Re-export main swap functions
+// =============================================================================
+// TRANSACTION CONFIRMATION DELAY CONFIGURATION
+// =============================================================================
+
+/// Initial delay before first transaction confirmation check
+pub const INITIAL_CONFIRMATION_DELAY_MS: u64 = 500;
+
+/// Maximum delay between confirmation checks (cap for exponential backoff)
+pub const MAX_CONFIRMATION_DELAY_SECS: u64 = 8;
+
+/// Exponential backoff multiplier for confirmation delays
+pub const CONFIRMATION_BACKOFF_MULTIPLIER: f64 = 1.5;
+
+/// Total timeout for transaction confirmation (in seconds)
+pub const CONFIRMATION_TIMEOUT_SECS: u64 = 60;
+
+/// Base delay for rate limit errors (in seconds)
+pub const RATE_LIMIT_BASE_DELAY_SECS: u64 = 5;
+
+/// Additional delay per consecutive rate limit error (in seconds)
+pub const RATE_LIMIT_INCREMENT_SECS: u64 = 2;
+
+/// Delay for first few attempts (in milliseconds)
+pub const EARLY_ATTEMPT_DELAY_MS: u64 = 1000;
+
+/// Number of attempts to use early delay before switching to exponential backoff
+pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
+
+// =============================================================================
+// SWAP ROUTER TYPES AND STRUCTURES
+// =============================================================================
+
+// Re-export main swap functions and types
 pub use interface::{buy_token, sell_token, SwapResult};
+pub use types::{SwapData, SwapQuote, RawTransaction, SwapRequest, SwapApiResponse, SOL_MINT, ANTI_MEV, PARTNER};
 
 /// Represents a router type for swap operations
 #[derive(Debug, Clone, PartialEq)]
@@ -37,7 +71,7 @@ pub struct UnifiedQuote {
 /// Router-specific execution data for performing swaps
 #[derive(Debug, Clone)]
 pub enum QuoteExecutionData {
-    GMGN(gmgn::SwapData),
+    GMGN(types::SwapData),
     Jupiter(jupiter::JupiterSwapData), // Placeholder for Jupiter data
 }
 
@@ -71,8 +105,8 @@ pub async fn get_best_quote(
         "BEST_QUOTE",
         &format!(
             "🔍 Finding best route: {} -> {} (amount: {})",
-            if input_mint == crate::wallet::SOL_MINT { "SOL" } else { &input_mint[..8] },
-            if output_mint == crate::wallet::SOL_MINT { "SOL" } else { &output_mint[..8] },
+            if input_mint == types::SOL_MINT { "SOL" } else { &input_mint[..8] },
+            if output_mint == types::SOL_MINT { "SOL" } else { &output_mint[..8] },
             input_amount
         )
     );
@@ -175,8 +209,8 @@ pub async fn execute_best_swap(
         &format!(
             "🚀 Executing swap via {:?}: {} -> {} (amount: {})",
             quote.router,
-            if input_mint == crate::wallet::SOL_MINT { "SOL" } else { &input_mint[..8] },
-            if output_mint == crate::wallet::SOL_MINT { "SOL" } else { &output_mint[..8] },
+            if input_mint == types::SOL_MINT { "SOL" } else { &input_mint[..8] },
+            if output_mint == types::SOL_MINT { "SOL" } else { &output_mint[..8] },
             input_amount
         )
     );
