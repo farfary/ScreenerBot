@@ -243,8 +243,8 @@ pub async fn get_best_quote(
         }
     }
 
-    // Get Raydium quote
-    log(LogTag::Swap, "QUOTE_RAYDIUM", "🟣 Getting Raydium quote...");
+    // Get Raydium quote (NOTE: Direct Raydium API is deprecated)
+    log(LogTag::Swap, "QUOTE_RAYDIUM", "🟣 Getting Raydium quote... (NOTE: Direct API is deprecated)");
     match raydium::get_raydium_quote(
         input_mint,
         output_mint,
@@ -282,7 +282,7 @@ pub async fn get_best_quote(
             quotes.push(unified_quote);
         }
         Err(e) => {
-            log(LogTag::Swap, "QUOTE_RAYDIUM_ERROR", &format!("❌ Raydium quote failed: {}", e));
+            log(LogTag::Swap, "QUOTE_RAYDIUM_ERROR", &format!("❌ Raydium quote failed (deprecated API): {}", e));
         }
     }
 

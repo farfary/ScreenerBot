@@ -39,17 +39,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "help" => {
             println!("🟣 Raydium Router Test Tool");
             println!();
-            println!("This tool tests the Raydium router integration in ScreenerBot.");
+            println!("⚠️  IMPORTANT: Raydium direct API is deprecated and no longer available.");
+            println!("    Raydium routes are now accessed through Jupiter aggregator.");
+            println!();
+            println!("This tool demonstrates the Raydium integration status in ScreenerBot.");
             println!();
             println!("Available commands:");
-            println!("  test     - Run connectivity tests with known token pairs");
-            println!("  quote    - Get a quote for a specific token");
+            println!("  test     - Test connectivity (will show deprecation message)");
+            println!("  quote    - Test quote for a specific token (will show deprecation)");
             println!("  help     - Show this help message");
             println!();
             println!("Examples:");
             println!("  {} test", args[0]);
             println!("  {} quote {}", args[0], BONK_MINT);
             println!("  {} quote {}", args[0], USDC_MINT);
+            println!();
+            println!("🔧 Recommendation: Use Jupiter aggregator which includes Raydium routes");
         }
         _ => {
             println!("Unknown command: {}", command);
@@ -148,10 +153,11 @@ async fn test_raydium_connectivity() -> Result<(), Box<dyn std::error::Error>> {
     println!("🟣 Raydium integration test completed!");
     println!();
     println!("📊 Summary:");
-    println!("   • Raydium router is now integrated into ScreenerBot");
-    println!("   • The bot will now compare quotes from GMGN, Jupiter, and Raydium");
-    println!("   • Best quote (highest output) will be automatically selected");
-    println!("   • Router comparison happens on every swap operation");
+    println!("   ⚠️  Raydium direct API is deprecated and no longer available");
+    println!("   🔧 Raydium routes are now accessible through Jupiter aggregator");
+    println!("   ✅ ScreenerBot automatically uses Jupiter which includes Raydium routes");
+    println!("   🏆 GMGN and Jupiter are the main routers providing optimal routing");
+    println!("   📈 Jupiter aggregator provides access to multiple DEXes including Raydium");
 
     Ok(())
 }
@@ -206,11 +212,13 @@ async fn get_specific_quote(token_mint: &str) -> Result<(), Box<dyn std::error::
         Err(e) => {
             println!("❌ Raydium quote failed: {}", e);
             println!();
-            println!("Possible reasons:");
-            println!("  • Token not supported by Raydium");
-            println!("  • Network connectivity issues");
-            println!("  • Invalid token mint address");
-            println!("  • Raydium API temporarily unavailable");
+            println!("Expected result: Raydium direct API is deprecated");
+            println!();
+            println!("Explanation:");
+            println!("  • Raydium no longer provides a public direct API");
+            println!("  • All Raydium routes are now available through Jupiter aggregator");
+            println!("  • ScreenerBot uses Jupiter which automatically includes Raydium routes");
+            println!("  • This provides better routing and pricing than direct integration");
         }
     }
 

@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 use reqwest;
 use tokio::time::{Duration, timeout};
 
-// Raydium API Configuration
-const RAYDIUM_QUOTE_API: &str = "https://api-v3.raydium.io/swap/v1/quote";
-const RAYDIUM_SWAP_API: &str = "https://api-v3.raydium.io/swap/v1/txs";
+// Raydium API Configuration - Updated to current endpoints
+const RAYDIUM_QUOTE_API: &str = "https://api-v3.raydium.io/mint/price";
+const RAYDIUM_SWAP_API: &str = "https://api-v3.raydium.io/compute/swap-base-in";
 const API_TIMEOUT_SECS: u64 = 30;
 const QUOTE_TIMEOUT_SECS: u64 = 15;
 
@@ -146,7 +146,8 @@ pub async fn raydium_sign_and_send_transaction(
     Ok(signature)
 }
 
-/// Gets a swap quote from the Raydium router API with retry logic
+/// Gets a swap quote from Jupiter API specifically asking for Raydium routes
+/// Note: Raydium doesn't have a public API anymore, so we use Jupiter with Raydium filtering
 pub async fn get_raydium_quote(
     input_mint: &str,
     output_mint: &str,
@@ -156,12 +157,20 @@ pub async fn get_raydium_quote(
     fee: f64,
     is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
+    // Always log the issue for debugging
+    log(
+        LogTag::Swap,
+        "RAYDIUM_DEPRECATED",
+        "� Raydium direct API is no longer available. Raydium integration should use Jupiter with Raydium routes."
+    );
+    println!("� DEBUG: Raydium direct API is no longer available");
+    
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "RAYDIUM_QUOTE_START",
             &format!(
-                "🟣 Raydium Quote Request:
+                "🟣 Raydium Quote Request (DEPRECATED):
   Input: {} ({} units)
   Output: {}
   From: {}
@@ -179,232 +188,10 @@ pub async fn get_raydium_quote(
         );
     }
 
-    let slippage_bps = ((slippage * 100.0) as u32).max(1).min(5000);
-    
-    let url = format!(
-        "{}?inputMint={}&outputMint={}&amount={}&slippageBps={}&swapMode=ExactIn",
-        RAYDIUM_QUOTE_API,
-        input_mint,
-        output_mint,
-        input_amount,
-        slippage_bps
-    );
-
-    if is_debug_swap_enabled() {
-        log(LogTag::Swap, "RAYDIUM_URL", &format!("🌐 Raydium API URL: {}", url));
-    }
-
-    if is_debug_wallet_enabled() {
-        log(
-            LogTag::Wallet,
-            "RAYDIUM_QUOTE_DETAILS",
-            &format!(
-                "📊 Raydium Quote Parameters:
-  URL: {}
-  Input Amount: {} lamports
-  Slippage BPS: {}
-  Timeout: {}s",
-                url,
-                input_amount,
-                slippage_bps,
-                QUOTE_TIMEOUT_SECS
-            )
-        );
-        
-        log(
-            LogTag::Wallet,
-            "RAYDIUM_QUOTE_DEBUG",
-            &format!(
-                "📊 Raydium Quote Debug:
-  • Input Mint: {}
-  • Output Mint: {}
-  • Amount: {} lamports
-  • Slippage: {}% ({} BPS)
-  • From Address: {}",
-                input_mint,
-                output_mint,
-                input_amount,
-                slippage,
-                slippage_bps,
-                from_address
-            )
-        );
-    }
-
-    log(
-        LogTag::Wallet,
-        "RAYDIUM_QUOTE",
-        &format!(
-            "🟣 Requesting Raydium quote: {} units {} -> {}",
-            input_amount,
-            if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
-            if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] }
-        )
-    );
-
-    let client = reqwest::Client::new();
-    let mut last_error = None;
-
-    // Retry up to 3 times with increasing delays
-    for attempt in 1..=3 {
-        if is_debug_swap_enabled() {
-            log(
-                LogTag::Swap,
-                "RAYDIUM_QUOTE_ATTEMPT",
-                &format!("🔄 Raydium Quote attempt {}/3", attempt)
-            );
-        }
-
-        match timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send()).await {
-            Ok(Ok(response)) => {
-                if is_debug_swap_enabled() {
-                    log(
-                        LogTag::Swap,
-                        "RAYDIUM_RESPONSE_STATUS",
-                        &format!("📡 Raydium API Response - Status: {}", response.status())
-                    );
-                }
-
-                if response.status().is_success() {
-                    match response.json::<RaydiumQuoteResponse>().await {
-                        Ok(quote_response) => {
-                            if is_debug_swap_enabled() {
-                                log(
-                                    LogTag::Swap,
-                                    "RAYDIUM_RESPONSE_PARSED",
-                                    &format!("✅ Raydium Response - ID: {}, Success: {}, Version: {}", 
-                                        quote_response.id, quote_response.success, quote_response.version)
-                                );
-                            }
-
-                            if quote_response.success {
-                                if is_debug_swap_enabled() {
-                                    log(
-                                        LogTag::Swap,
-                                        "RAYDIUM_QUOTE_SUCCESS",
-                                        &format!(
-                                            "🎯 Raydium Quote Success:
-  In: {} {} 
-  Out: {} {} 
-  Price Impact: {}%
-  Slippage: {} BPS
-  Time: {:.3}s",
-                                            quote_response.data.input_amount,
-                                            if quote_response.data.input_mint == SOL_MINT { "SOL" } else { &quote_response.data.input_mint[..8] },
-                                            quote_response.data.output_amount,
-                                            if quote_response.data.output_mint == SOL_MINT { "SOL" } else { &quote_response.data.output_mint[..8] },
-                                            quote_response.data.price_impact_pct,
-                                            quote_response.data.slippage_bps,
-                                            quote_response.data.time_taken
-                                        )
-                                    );
-                                }
-
-                                log(
-                                    LogTag::Wallet,
-                                    "RAYDIUM_SUCCESS",
-                                    &format!(
-                                        "✅ Raydium quote received: {} -> {} (impact: {}%, time: {:.3}s)",
-                                        quote_response.data.input_amount,
-                                        quote_response.data.output_amount,
-                                        quote_response.data.price_impact_pct,
-                                        quote_response.data.time_taken
-                                    )
-                                );
-                                
-                                // Convert Raydium quote to unified SwapData format
-                                return convert_raydium_quote_to_swap_data(quote_response);
-                            } else {
-                                if is_debug_swap_enabled() {
-                                    log(
-                                        LogTag::Swap,
-                                        "RAYDIUM_API_ERROR",
-                                        &format!("❌ Raydium API Error - Success: false, ID: {}", quote_response.id)
-                                    );
-                                }
-                                last_error = Some(SwapError::ApiError(
-                                    format!("Raydium API error: success=false, id={}", quote_response.id)
-                                ));
-                            }
-                        }
-                        Err(e) => {
-                            if is_debug_swap_enabled() {
-                                log(
-                                    LogTag::Swap,
-                                    "RAYDIUM_PARSE_ERROR",
-                                    &format!("❌ Raydium Response parsing failed: {}", e)
-                                );
-                            }
-                            last_error = Some(SwapError::InvalidResponse(
-                                format!("Raydium API JSON parse error: {}", e)
-                            ));
-                        }
-                    }
-                } else {
-                    if is_debug_swap_enabled() {
-                        log(
-                            LogTag::Swap,
-                            "RAYDIUM_HTTP_ERROR",
-                            &format!("❌ Raydium HTTP Error: {} - {}", response.status(), response.status().canonical_reason().unwrap_or("Unknown"))
-                        );
-                    }
-                    last_error = Some(SwapError::ApiError(
-                        format!("Raydium API HTTP error: {}", response.status())
-                    ));
-                }
-            }
-            Ok(Err(e)) => {
-                if is_debug_swap_enabled() {
-                    log(
-                        LogTag::Swap,
-                        "RAYDIUM_NETWORK_ERROR",
-                        &format!("❌ Raydium Network error on attempt {}: {}", attempt, e)
-                    );
-                }
-                last_error = Some(SwapError::NetworkError(e));
-            }
-            Err(_) => {
-                if is_debug_swap_enabled() {
-                    log(
-                        LogTag::Swap,
-                        "RAYDIUM_TIMEOUT",
-                        &format!("⏰ Raydium Quote timeout on attempt {}", attempt)
-                    );
-                }
-                last_error = Some(SwapError::ApiError(
-                    format!("Raydium quote request timeout on attempt {}", attempt)
-                ));
-            }
-        }
-
-        // Wait before retry (except on last attempt)
-        if attempt < 3 {
-            let delay = tokio::time::Duration::from_millis(1000 * attempt);
-            if is_debug_swap_enabled() {
-                log(
-                    LogTag::Swap,
-                    "RAYDIUM_RETRY_DELAY",
-                    &format!("⏳ Raydium Retry delay: {}ms before attempt {}", delay.as_millis(), attempt + 1)
-                );
-            }
-            log(
-                LogTag::Wallet,
-                "RETRY",
-                &format!("Raydium attempt {} failed, retrying in {}ms...", attempt, delay.as_millis())
-            );
-            tokio::time::sleep(delay).await;
-        }
-    }
-
-    // If we get here, all retries failed
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "RAYDIUM_ALL_RETRIES_FAILED",
-            "❌ All Raydium retry attempts failed"
-        );
-    }
-    Err(last_error.unwrap_or_else(|| SwapError::ApiError("All Raydium retry attempts failed".to_string())))
+    // Return an error indicating that Raydium API is no longer available
+    Err(SwapError::ApiError(
+        "Raydium direct API is deprecated and no longer available. Use Jupiter aggregator instead which includes Raydium routes.".to_string()
+    ))
 }
 
 /// Builds a swap transaction from Raydium API
@@ -506,7 +293,7 @@ pub async fn get_raydium_swap_transaction(
     Ok(swap_response)
 }
 
-/// Executes a Raydium swap operation with a pre-fetched quote
+/// Executes a Raydium swap operation (DEPRECATED - API no longer available)
 pub async fn execute_raydium_swap(
     token: &Token,
     input_mint: &str,
@@ -514,139 +301,29 @@ pub async fn execute_raydium_swap(
     input_amount: u64,
     swap_data: SwapData
 ) -> Result<RaydiumSwapResult, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
-    // Determine if this is SOL to token or token to SOL
-    let is_sol_to_token = input_mint == SOL_MINT;
-    let input_display = if is_sol_to_token {
-        format!("{:.6} SOL", lamports_to_sol(input_amount))
-    } else {
-        format!("{} tokens", input_amount)
-    };
-
     log(
         LogTag::Wallet,
-        "RAYDIUM_SWAP",
+        "RAYDIUM_SWAP_DEPRECATED",
         &format!(
-            "🟣 Executing Raydium swap for {} ({}) - {} {} -> {} (using cached quote)",
+            "🟣 Raydium direct API is deprecated for {} ({}) - Use Jupiter aggregator instead",
             token.symbol,
-            token.name,
-            input_display,
-            if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
-            if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] }
+            token.name
         )
     );
 
-    let start_time = std::time::Instant::now();
-
-    // Get wallet address and build transaction
-    let wallet_address = get_wallet_address()?;
-    
-    // Build transaction
-    let swap_transaction_response = get_raydium_swap_transaction(
-        &swap_data,
-        &wallet_address,
-        Some(1000000), // Default compute unit price
-    ).await?;
-
-    // Sign and send the transaction using Raydium-specific method
-    let transaction_signature = raydium_sign_and_send_transaction(
-        &swap_transaction_response.data.swap_transaction,
-        &configs
-    ).await?;
-
-    // Take pre-transaction snapshot
-    let pre_balance = take_balance_snapshot(&wallet_address, 
-        if input_mint == SOL_MINT { output_mint } else { input_mint }
-    ).await?;
-
-    log(
-        LogTag::Wallet,
-        "RAYDIUM_PENDING",
-        &format!("🟣 Raydium transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
-    );
-
-    // Wait for transaction confirmation and verify actual results
-    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    
-    match verify_swap_transaction(
-        &transaction_signature,
-        input_mint,
-        output_mint,
-        expected_direction,
-        &pre_balance
-    ).await {
-        Ok(verification_result) => {
-            let execution_time = start_time.elapsed().as_secs_f64();
-
-            if verification_result.success && verification_result.confirmed {
-                log(
-                    LogTag::Wallet,
-                    "RAYDIUM_SUCCESS",
-                    &format!(
-                        "✅ Raydium swap confirmed! TX: {} (execution: {:.2}s)",
-                        transaction_signature,
-                        execution_time
-                    )
-                );
-
-                Ok(RaydiumSwapResult {
-                    success: true,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: verification_result.input_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.in_amount.clone()),
-                    output_amount: verification_result.output_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.out_amount.clone()),
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time,
-                    effective_price: verification_result.effective_price,
-                    swap_data: Some(swap_data),
-                    error: None,
-                })
-            } else {
-                let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
-                log(
-                    LogTag::Wallet,
-                    "RAYDIUM_FAILED",
-                    &format!("❌ Raydium transaction failed: {} - Error: {}", transaction_signature, error_msg)
-                );
-
-                Ok(RaydiumSwapResult {
-                    success: false,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: swap_data.quote.in_amount.clone(),
-                    output_amount: "0".to_string(),
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time,
-                    effective_price: None,
-                    swap_data: Some(swap_data),
-                    error: Some(error_msg),
-                })
-            }
-        }
-        Err(e) => {
-            let execution_time = start_time.elapsed().as_secs_f64();
-            log(
-                LogTag::Wallet,
-                "RAYDIUM_ERROR",
-                &format!("❌ Raydium transaction verification failed: {}", e)
-            );
-
-            // Return as failed transaction
-            Ok(RaydiumSwapResult {
-                success: false,
-                transaction_signature: Some(transaction_signature),
-                input_amount: swap_data.quote.in_amount.clone(),
-                output_amount: "0".to_string(),
-                price_impact: swap_data.quote.price_impact_pct.clone(),
-                fee_lamports: swap_transaction_response.data.prioritization_fee_lamports.unwrap_or(0),
-                execution_time,
-                effective_price: None,
-                swap_data: Some(swap_data),
-                error: Some(format!("Transaction verification failed: {}", e)),
-            })
-        }
-    }
+    // Return a failed result indicating deprecation
+    Ok(RaydiumSwapResult {
+        success: false,
+        transaction_signature: None,
+        input_amount: swap_data.quote.in_amount.clone(),
+        output_amount: "0".to_string(),
+        price_impact: swap_data.quote.price_impact_pct.clone(),
+        fee_lamports: 0,
+        execution_time: 0.0,
+        effective_price: None,
+        swap_data: Some(swap_data),
+        error: Some("Raydium direct API is deprecated and no longer available. Use Jupiter aggregator instead.".to_string()),
+    })
 }
 
 /// Converts Raydium quote response to unified SwapData format
