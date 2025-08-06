@@ -37,4 +37,3 @@ cache_tokens.db
 # Backup files
 *_backup.*
 *.backup
-.DS_Store
