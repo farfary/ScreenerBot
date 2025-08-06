@@ -61,6 +61,10 @@ path = "src/bin/test_swaps_full.rs"
 name = "test_dual_router_comparison"
 path = "src/bin/test_dual_router_comparison.rs"
 
+[[bin]]
+name = "test_jupiter_swap_real"
+path = "src/bin/test_jupiter_swap_real.rs"
+
 
 [dependencies]
 # Core async runtime with minimal features for faster builds
