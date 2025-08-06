@@ -12,3 +12,10 @@ logs/*
 .cache_prices/*
 .DS_Store
 Cargo.lock
+ata_failed_cache.json
+ata_failed_cache.json
+decimal_cache.json
+positions.json
+rl_learning_records.json
+rpc_stats.json
+tokens.db

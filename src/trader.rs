@@ -78,8 +78,8 @@ pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 10.0;
 /// Minimum hold time before considering sell (seconds) - reduced for flexibility
 pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 30.0;
 
-/// Maximum hold time extended for longer-term profit taking (48 hours)
-pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 1.0 * 60.0 * 60.0; // 48 hours
+/// Maximum hold time extended for longer-term profit taking (1 hour)
+pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 1.0 * 60.0 * 60.0; // 1 hour (3600 seconds)
 
 /// Time after which time decay pressure starts - now 2 hours for better patience
 pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
@@ -130,20 +130,20 @@ pub const BUY_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 120;
 /// Individual buy operation timeout (seconds)
 pub const BUY_OPERATION_TIMEOUT_SECS: u64 = 120;
 
-/// Sell operations collection timeout (seconds)
-pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 120;
+/// Sell operations collection timeout (seconds) - must accommodate multiple 3-min operations
+pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 240;
 
-/// Individual sell operation timeout (seconds)
-pub const SELL_OPERATION_TIMEOUT_SECS: u64 = 120;
+/// Individual sell operation timeout (seconds) - increased for trading safety
+pub const SELL_OPERATION_TIMEOUT_SECS: u64 = 180;
 
-/// Sell semaphore acquire timeout (seconds)
-pub const SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 5;
+/// Sell semaphore acquire timeout (seconds) - increased for safety
+pub const SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 30;
 
-/// Buy semaphore acquire timeout (seconds)
-pub const BUY_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 120;
+/// Buy semaphore acquire timeout (seconds) - increased for safety
+pub const BUY_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 180;
 
-/// Individual sell task handle timeout (seconds)
-pub const SELL_TASK_HANDLE_TIMEOUT_SECS: u64 = 120;
+/// Individual sell task handle timeout (seconds) - must be longer than operation timeout
+pub const SELL_TASK_HANDLE_TIMEOUT_SECS: u64 = 200;
 
 /// Entry monitor cycle timeout warning threshold (seconds)
 pub const ENTRY_CYCLE_TIMEOUT_WARNING_SECS: u64 = 5;
@@ -289,6 +289,48 @@ impl Drop for CriticalOperationGuard {
                 "🔓 UNPROTECTED: Critical operation finished (remaining operations: {})",
                 count - 1
             )
+        );
+    }
+}
+
+// =============================================================================
+// MEMORY MANAGEMENT AND CLEANUP
+// =============================================================================
+
+/// Clean up old price history data to prevent memory leaks
+/// Removes data older than PRICE_HISTORY_DURATION_HOURS and limits per-token entries
+pub fn cleanup_price_history() {
+    let cutoff_time = Utc::now() - ChronoDuration::hours(PRICE_HISTORY_DURATION_HOURS);
+    const MAX_ENTRIES_PER_TOKEN: usize = 1000; // Limit entries per token
+
+    if let Ok(mut price_history) = PRICE_HISTORY_24H.try_lock() {
+        let mut tokens_to_remove = Vec::new();
+
+        for (mint, history) in price_history.iter_mut() {
+            // Remove old entries
+            history.retain(|(timestamp, _)| *timestamp >= cutoff_time);
+
+            // Limit number of entries per token
+            if history.len() > MAX_ENTRIES_PER_TOKEN {
+                let excess = history.len() - MAX_ENTRIES_PER_TOKEN;
+                history.drain(0..excess);
+            }
+
+            // Mark empty histories for removal
+            if history.is_empty() {
+                tokens_to_remove.push(mint.clone());
+            }
+        }
+
+        // Remove empty token histories
+        for mint in tokens_to_remove {
+            price_history.remove(&mint);
+        }
+
+        log(
+            LogTag::Trader,
+            "CLEANUP",
+            &format!("Price history cleanup completed: {} tokens tracked", price_history.len())
         );
     }
 }
@@ -1401,11 +1443,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             }
                         }
                         Err(_) => {
-                            // Task timed out after 5 seconds
+                            // Task timed out after the specified timeout
                             log(
                                 LogTag::Trader,
                                 "WARN",
-                                "Token check task timed out after 5 seconds"
+                                &format!("Token check task timed out after {} seconds", TOKEN_CHECK_TASK_TIMEOUT_SECS)
                             );
                         }
                     }
@@ -1418,7 +1460,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let mut opportunities = match collection_result {
             Ok(opportunities) => opportunities,
             Err(_) => {
-                log(LogTag::Trader, "ERROR", "Token check collection timed out after 60 seconds");
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!("Token check collection timed out after {} seconds", TOKEN_CHECK_COLLECTION_TIMEOUT_SECS)
+                );
                 Vec::new() // Return empty if timeout
             }
         };
@@ -1637,6 +1683,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     let handle = tokio::spawn(async move {
                         let _permit = permit; // Keep permit alive for duration of task
 
+                        // CRITICAL OPERATION PROTECTION - Prevent shutdown during buy
+                        let _guard = CriticalOperationGuard::new(&format!("BUY_{}", token.symbol));
+
                         let token_symbol = token.symbol.clone();
 
                         // Check for shutdown before starting buy operation (non-blocking check)
@@ -1674,7 +1723,11 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 log(
                                     LogTag::Trader,
                                     "ERROR",
-                                    &format!("Buy operation for {} timed out after 20 seconds", token_symbol)
+                                    &format!(
+                                        "Buy operation for {} timed out after {} seconds",
+                                        token_symbol,
+                                        BUY_OPERATION_TIMEOUT_SECS
+                                    )
                                 );
                                 false
                             }
@@ -1741,7 +1794,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     log(
                                         LogTag::Trader,
                                         "WARN",
-                                        "Buy task timed out after 5 seconds"
+                                        &format!("Buy task timed out after {} seconds", BUY_OPERATION_TIMEOUT_SECS)
                                     );
                                 }
                             }
@@ -1784,7 +1837,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            "Buy operations collection timed out after 30 seconds"
+                            &format!("Buy operations collection timed out after {} seconds", BUY_OPERATIONS_COLLECTION_TIMEOUT_SECS)
                         );
                     }
                 }
@@ -1955,6 +2008,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             minimal_token,
                             current_price,
                             now,
+                            sell_urgency, // Include urgency score for safeguard logic
                         ));
                     } else {
                         // log(
@@ -2019,7 +2073,14 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             let mut handles = Vec::new();
 
             // Process all sell orders concurrently
-            for (index, position, token, exit_price, exit_time) in positions_to_close {
+            for (
+                index,
+                position,
+                token,
+                exit_price,
+                exit_time,
+                sell_urgency,
+            ) in positions_to_close {
                 // Check for shutdown before spawning tasks
                 if
                     check_shutdown_or_delay(
@@ -2067,32 +2128,30 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                 let handle = tokio::spawn(async move {
                     let _permit = permit; // Keep permit alive for duration of task
 
+                    // CRITICAL OPERATION PROTECTION - Prevent shutdown during sell
+                    let _guard = CriticalOperationGuard::new(&format!("SELL_{}", token.symbol));
+
                     let mut position = position;
                     let token_symbol = token.symbol.clone();
 
-                    // FINAL SAFEGUARD: Only allow sales at profit (>0%) or significant loss (<=-55%)
+                    // EXECUTION SAFEGUARD: Only execute sales recommended by profit system
+                    // All sell decisions should come from profit.rs, trader only executes
                     let (_, final_pnl_percent) = calculate_position_pnl(
                         &position,
                         Some(exit_price)
                     );
 
-                    // Block sales only if it's a small loss (between 0% and -55%)
-                    if
-                        final_pnl_percent <= 0.0 &&
-                        final_pnl_percent > crate::profit::STOP_LOSS_PERCENT
-                    {
-                        log(
-                            LogTag::Trader,
-                            "SAFEGUARD",
-                            &format!(
-                                "Blocking sale of {} - P&L {:.2}% is a small loss (between 0% and {:.2}%)",
-                                token_symbol,
-                                final_pnl_percent,
-                                crate::profit::STOP_LOSS_PERCENT
-                            )
-                        );
-                        return None; // Abort the sale - small loss, hold until bigger loss or profit
-                    }
+                    // Log the execution details for debugging
+                    log(
+                        LogTag::Trader,
+                        "EXECUTION",
+                        &format!(
+                            "Executing sale of {} - P&L {:.2}% with urgency {:.2} (decision from profit system)",
+                            token_symbol,
+                            final_pnl_percent,
+                            sell_urgency
+                        )
+                    );
 
                     // Check for shutdown before starting sell operation (non-blocking check)
                     let shutdown_check = tokio::time::timeout(
@@ -2138,7 +2197,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                             log(
                                 LogTag::Trader,
                                 "ERROR",
-                                &format!("Sell operation for {} timed out after 15 seconds", token_symbol)
+                                &format!(
+                                    "Sell operation for {} timed out after {} seconds",
+                                    token_symbol,
+                                    SELL_OPERATION_TIMEOUT_SECS
+                                )
                             );
                             None
                         }
@@ -2203,7 +2266,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 }
                             }
                             Err(_) => {
-                                log(LogTag::Trader, "WARN", "Sell task timed out after 60 seconds");
+                                log(
+                                    LogTag::Trader,
+                                    "WARN",
+                                    &format!("Sell task timed out after {} seconds", SELL_TASK_HANDLE_TIMEOUT_SECS)
+                                );
                             }
                         }
                     }
@@ -2218,7 +2285,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     log(
                         LogTag::Trader,
                         "ERROR",
-                        "Sell operations collection timed out after 60 seconds"
+                        &format!("Sell operations collection timed out after {} seconds", SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS)
                     );
                     Vec::new()
                 }
@@ -2258,6 +2325,32 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     }
 }
 
+/// Background task for periodic memory cleanup
+/// Runs cleanup_price_history() every 15 minutes to prevent memory leaks
+pub async fn monitor_memory_cleanup(shutdown: Arc<Notify>) {
+    log(LogTag::Trader, "INFO", "Starting memory cleanup monitoring...");
+
+    let mut interval = tokio::time::interval(Duration::from_secs(900)); // 15 minutes
+    interval.tick().await; // Skip first immediate tick
+
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                debug_trader_log("MEMORY_CLEANUP", "🧹 Starting periodic cleanup");
+                cleanup_price_history();
+                debug_trader_log("MEMORY_CLEANUP", "🧹 Cleanup completed");
+            }
+            _ = shutdown.notified() => {
+                log(LogTag::Trader, "INFO", "Memory cleanup monitor shutting down...");
+                // Perform final cleanup before shutdown
+                cleanup_price_history();
+                log(LogTag::Trader, "INFO", "Final cleanup completed, monitor stopped");
+                break;
+            }
+        }
+    }
+}
+
 /// Main trader function that spawns both monitoring tasks
 pub async fn trader(shutdown: Arc<Notify>) {
     log(LogTag::Trader, "INFO", "Starting trader with background tasks...");
@@ -2277,6 +2370,11 @@ pub async fn trader(shutdown: Arc<Notify>) {
         monitor_positions_display(shutdown_clone).await;
     });
 
+    let shutdown_clone = shutdown.clone();
+    let cleanup_task = tokio::spawn(async move {
+        monitor_memory_cleanup(shutdown_clone).await;
+    });
+
     // Wait for shutdown signal
     shutdown.notified().await;
 
@@ -2286,7 +2384,7 @@ pub async fn trader(shutdown: Arc<Notify>) {
     let graceful_timeout = tokio::time::timeout(
         Duration::from_secs(TRADER_GRACEFUL_SHUTDOWN_TIMEOUT_SECS),
         async {
-            let _ = tokio::try_join!(entries_task, positions_task, display_task);
+            let _ = tokio::try_join!(entries_task, positions_task, display_task, cleanup_task);
         }
     );
 

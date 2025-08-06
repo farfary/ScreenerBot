@@ -92,11 +92,7 @@ async fn main() {
     // Initialize and start pool service for real-time price calculations and history caching
     let pool_service = screenerbot::tokens::pool::init_pool_service();
     pool_service.start_monitoring().await;
-    log(
-        LogTag::System,
-        "INFO",
-        "Pool price service with disk caching initialized and monitoring started"
-    );
+    log(LogTag::System, "INFO", "Pool price service with disk caching initialized and monitoring started");
 
     let shutdown = Arc::new(Notify::new());
     let shutdown_trader = shutdown.clone();
