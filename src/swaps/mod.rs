@@ -9,6 +9,9 @@ pub mod transaction; // Transaction management and verification
 pub mod pricing; // Price calculation and validation functions
 pub mod execution; // Swap execution and quote management
 
+#[cfg(test)]
+pub mod tests; // Comprehensive test suite for swap operations
+
 use crate::tokens::Token;
 use crate::rpc::SwapError;
 use crate::logger::{log, LogTag};
