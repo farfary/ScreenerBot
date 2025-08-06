@@ -15,3 +15,4 @@ pub mod ata_cleanup;
 pub mod entry;
 pub mod ohlcv_analysis;
 pub mod rl_learning;
+pub mod swaps;

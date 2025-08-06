@@ -3,6 +3,7 @@ use crate::tokens::Token;
 use crate::logger::{ log, LogTag };
 use crate::trader::{ SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT };
 use crate::rpc::{ get_premium_transaction_rpc, SwapError, lamports_to_sol, sol_to_lamports };
+use crate::swaps::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 
 use reqwest;
 use serde::{ Deserialize, Serialize, Deserializer };
@@ -377,7 +378,7 @@ async fn get_transaction_details(
 
 /// CRITICAL NEW FUNCTION: Verifies transaction confirmation and extracts actual amounts
 /// This function waits for transaction confirmation and returns actual blockchain results
-async fn verify_transaction_and_get_actual_amounts(
+pub async fn verify_transaction_and_get_actual_amounts(
     transaction_signature: &str,
     input_mint: &str,
     output_mint: &str,
@@ -1199,20 +1200,11 @@ pub async fn buy_token(
     );
 
     // Get quote once and use it for both price validation and execution
-    let request = SwapRequest {
-        input_mint: SOL_MINT.to_string(),
-        output_mint: token.mint.clone(),
-        input_amount: sol_to_lamports(amount_sol),
-        from_address: wallet_address.clone(),
-        expected_price,
-        ..Default::default()
-    };
-
     log(
         LogTag::Wallet,
         "QUOTE",
         &format!(
-            "📊 Requesting swap quote: {} SOL → {} | Mint: {}...{}",
+            "📊 Requesting best swap quote: {} SOL → {} | Mint: {}...{}",
             amount_sol,
             token.symbol,
             &token.mint[..8],
@@ -1220,37 +1212,60 @@ pub async fn buy_token(
         )
     );
 
-    // Get quote once
-    let swap_data = get_swap_quote(&request).await?;
+    // Get best quote from all available routers
+    let best_quote = get_best_quote(
+        SOL_MINT,
+        &token.mint,
+        sol_to_lamports(amount_sol),
+        &wallet_address,
+        SLIPPAGE_TOLERANCE_PERCENT,
+        SWAP_FEE_PERCENT,
+        ANTI_MEV,
+    ).await?;
 
     log(
         LogTag::Wallet,
         "QUOTE",
         &format!(
-            "📋 Quote received: Input: {} | Output: {} | Price Impact: {:.4}% | Fee: {} lamports",
-            swap_data.quote.in_amount,
-            swap_data.quote.out_amount,
-            swap_data.quote.price_impact_pct,
-            swap_data.raw_tx.prioritization_fee_lamports
+            "📋 Best quote received via {:?}: Input: {} | Output: {} | Price Impact: {:.4}% | Fee: {} lamports",
+            best_quote.router,
+            best_quote.input_amount,
+            best_quote.output_amount,
+            best_quote.price_impact_pct,
+            best_quote.fee_lamports
         )
     );
 
     // Validate expected price if provided (using cached quote)
     if let Some(expected) = expected_price {
         log(LogTag::Wallet, "PRICE", "🔍 Validating current token price...");
-        validate_quote_price(&swap_data, sol_to_lamports(amount_sol), expected, true)?;
+        validate_best_quote_price(&best_quote, expected, true)?;
         log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
     }
 
-    log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with validated quote..."));
+    log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with best quote via {:?}...", best_quote.router));
 
-    let mut swap_result = execute_swap_with_quote(
+    let unified_result = execute_best_swap(
         token,
         SOL_MINT,
         &token.mint,
         sol_to_lamports(amount_sol),
-        swap_data
+        best_quote
     ).await?;
+
+    // Convert UnifiedSwapResult to SwapResult for backward compatibility
+    let mut swap_result = SwapResult {
+        success: unified_result.success,
+        transaction_signature: unified_result.transaction_signature,
+        input_amount: unified_result.input_amount,
+        output_amount: unified_result.output_amount,
+        price_impact: unified_result.price_impact,
+        fee_lamports: unified_result.fee_lamports,
+        execution_time: unified_result.execution_time,
+        effective_price: unified_result.effective_price,
+        swap_data: None, // Will be set below if needed
+        error: unified_result.error,
+    };
 
     // Calculate and set the effective price in the swap result
     if swap_result.success {
@@ -1556,18 +1571,28 @@ async fn sell_token_with_slippage(
         )
     );
 
-    // Get quote using the centralized function
-    let swap_data = get_swap_quote(&request).await?;
+    // Get best quote using the unified swap system
+    let best_quote = crate::swaps::get_best_quote(
+        &request.input_mint,
+        &request.output_mint,
+        request.input_amount,
+        &request.from_address,
+        request.slippage,
+        request.fee,
+        request.is_anti_mev,
+    ).await?;
 
     log(
         LogTag::Wallet,
         "QUOTE",
         &format!(
-            "Sell quote received: {} tokens -> {} SOL (Impact: {}%, Time: {:.3}s)",
+            "Best sell quote received from {}: {} tokens -> {} SOL",
+            match best_quote.router {
+                crate::swaps::RouterType::GMGN => "GMGN",
+                crate::swaps::RouterType::Jupiter => "Jupiter",
+            },
             actual_sell_amount,
-            lamports_to_sol(swap_data.quote.out_amount.parse().unwrap_or(0)),
-            swap_data.quote.price_impact_pct,
-            swap_data.quote.time_taken
+            lamports_to_sol(best_quote.output_amount)
         )
     );
 
@@ -1575,8 +1600,10 @@ async fn sell_token_with_slippage(
     if let Some(expected_sol_total) = expected_sol_output {
         log(LogTag::Wallet, "PRICE", "🔍 Validating expected SOL output...");
 
+        // Get token decimals from cache
+        let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
+        
         // Convert expected total SOL to price per token for validation
-        let token_decimals = swap_data.quote.in_decimals as u32;
         let actual_tokens = (actual_sell_amount as f64) / (10_f64).powi(token_decimals as i32);
         let expected_price_per_token = if actual_tokens > 0.0 {
             expected_sol_total / actual_tokens
@@ -1595,79 +1622,88 @@ async fn sell_token_with_slippage(
             )
         );
 
-        validate_quote_price(&swap_data, actual_sell_amount, expected_price_per_token, false)?;
+        validate_best_quote_price(&best_quote, expected_price_per_token, false)?;
         log(LogTag::Wallet, "SUCCESS", "✅ Price validation passed!");
     }
 
     log(LogTag::Wallet, "SWAP", "🚀 Executing sell with validated quote...");
 
-    // Use the centralized execution function
-    let mut swap_result = execute_swap_with_quote(
+    // Use the unified execution function
+    let unified_result = crate::swaps::execute_best_swap(
         token,
         &token.mint,
         SOL_MINT,
         actual_sell_amount,
-        swap_data
+        best_quote,
     ).await?;
+
+    // Convert UnifiedSwapResult to SwapResult for compatibility
+    let mut swap_result = SwapResult {
+        success: unified_result.success,
+        transaction_signature: unified_result.transaction_signature,
+        input_amount: unified_result.input_amount,
+        output_amount: unified_result.output_amount,
+        price_impact: unified_result.price_impact,
+        fee_lamports: unified_result.fee_lamports,
+        execution_time: unified_result.execution_time,
+        effective_price: unified_result.effective_price,
+        swap_data: None, // Will be populated later if needed
+        error: unified_result.error,
+    };
 
     // Calculate and set the effective price in the swap result
     if swap_result.success {
-        match calculate_effective_price_sell(&swap_result) {
-            Ok(effective_price) => {
-                // Update the swap result with the calculated effective price
-                swap_result.effective_price = Some(effective_price);
+        // Calculate effective price manually since we don't have SwapData in unified result
+        let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
+        let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
+        
+        if input_tokens_raw > 0 && output_lamports > 0 {
+            let output_sol = lamports_to_sol(output_lamports);
+            
+            // Get token decimals from cache
+            let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
+            let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
+            let effective_price = output_sol / input_tokens;
+            
+            swap_result.effective_price = Some(effective_price);
 
-                log(
-                    LogTag::Wallet,
-                    "PRICE",
-                    &format!(
-                        "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token",
-                        effective_price,
-                        token.symbol
-                    )
-                );
+            log(
+                LogTag::Wallet,
+                "PRICE",
+                &format!(
+                    "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token",
+                    effective_price,
+                    token.symbol
+                )
+            );
 
-                if is_debug_wallet_enabled() {
-                    if let Some(expected_sol) = expected_sol_output {
-                        // Get actual token decimals from swap data
-                        if let Some(swap_data) = &swap_result.swap_data {
-                            let token_decimals = swap_data.quote.in_decimals as u32;
-                            let tokens_sold =
-                                (actual_sell_amount as f64) / (10_f64).powi(token_decimals as i32);
-                            let expected_price_per_token = expected_sol / tokens_sold;
-                            let price_diff =
-                                ((effective_price - expected_price_per_token) /
-                                    expected_price_per_token) *
-                                100.0;
-                            log(
-                                LogTag::Wallet,
-                                "DEBUG",
-                                &format!(
-                                    "📊 SELL PRICE ANALYSIS:\n  🎯 Expected Price: {:.10} SOL per token\n  💰 Actual Price: {:.10} SOL per token\n  📈 Difference: {:.2}%\n  🔢 Token Decimals: {}",
-                                    expected_price_per_token,
-                                    effective_price,
-                                    price_diff,
-                                    token_decimals
-                                )
-                            );
-                        } else {
-                            log(
-                                LogTag::Wallet,
-                                "ERROR",
-                                "Cannot validate price without swap data decimals"
-                            );
-                        }
-                    }
+            if is_debug_wallet_enabled() {
+                if let Some(expected_sol) = expected_sol_output {
+                    let tokens_sold = input_tokens;
+                    let expected_price_per_token = expected_sol / tokens_sold;
+                    let price_diff =
+                        ((effective_price - expected_price_per_token) /
+                            expected_price_per_token) *
+                        100.0;
+                    log(
+                        LogTag::Wallet,
+                        "DEBUG",
+                        &format!(
+                            "📊 SELL PRICE ANALYSIS:\n  🎯 Expected Price: {:.10} SOL per token\n  💰 Actual Price: {:.10} SOL per token\n  📈 Difference: {:.2}%\n  🔢 Token Decimals: {}",
+                            expected_price_per_token,
+                            effective_price,
+                            price_diff,
+                            token_decimals
+                        )
+                    );
                 }
             }
-            Err(e) => {
-                log(
-                    LogTag::Wallet,
-                    "WARNING",
-                    &format!("Failed to calculate effective price: {}", e)
-                );
-                // Keep effective_price as None if calculation fails
-            }
+        } else {
+            log(
+                LogTag::Wallet,
+                "WARNING",
+                "Could not calculate effective price: invalid input/output amounts"
+            );
         }
     }
 
@@ -1692,20 +1728,18 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
     let wallet_address = get_wallet_address()?;
     let small_amount = 0.001; // 0.001 SOL
 
-    let request = SwapRequest {
-        input_mint: SOL_MINT.to_string(),
-        output_mint: token_mint.to_string(),
-        input_amount: sol_to_lamports(small_amount),
-        from_address: wallet_address,
-        ..Default::default()
-    };
+    // Get best quote using the unified swap system
+    let quote = crate::swaps::get_best_quote(
+        SOL_MINT,
+        token_mint,
+        sol_to_lamports(small_amount),
+        &wallet_address,
+        1.0, // 1% slippage for price checking
+        0.0, // No fee for quote
+        false, // No anti-MEV for price checking
+    ).await?;
 
-    let quote = get_swap_quote(&request).await?;
-    let output_lamports: u64 = quote.quote.out_amount
-        .parse()
-        .map_err(|_| SwapError::InvalidResponse("Invalid output amount".to_string()))?;
-
-    let output_tokens = output_lamports as f64;
+    let output_tokens = quote.output_amount as f64;
     let price_per_token = (small_amount * 1_000_000_000.0) / output_tokens; // Price in lamports per token
 
     Ok(price_per_token / 1_000_000_000.0) // Convert back to SOL
@@ -2328,4 +2362,65 @@ fn build_token_2022_close_instruction(
         accounts,
         data: instruction_data,
     })
+}
+
+/// Validates the price from a unified quote against expected price
+pub fn validate_best_quote_price(
+    quote: &crate::swaps::UnifiedQuote,
+    expected_price: f64,
+    is_sol_to_token: bool,
+) -> Result<(), SwapError> {
+    log(
+        LogTag::Wallet,
+        "VALIDATE",
+        &format!(
+            "Validating {:?} quote price - Expected: {:.12} SOL/token",
+            quote.router,
+            expected_price
+        )
+    );
+
+    let actual_price_per_token = if is_sol_to_token {
+        // For SOL to token: price = SOL spent / tokens received
+        let input_sol = lamports_to_sol(quote.input_amount);
+        if quote.output_amount > 0 {
+            input_sol / (quote.output_amount as f64)
+        } else {
+            0.0
+        }
+    } else {
+        // For token to SOL: price = SOL received / tokens spent
+        let output_sol = lamports_to_sol(quote.output_amount);
+        if quote.input_amount > 0 {
+            output_sol / (quote.input_amount as f64)
+        } else {
+            0.0
+        }
+    };
+
+    let price_difference = (((actual_price_per_token - expected_price) / expected_price) * 100.0).abs();
+
+    log(
+        LogTag::Wallet,
+        "VALIDATE",
+        &format!(
+            "Quote validation - Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
+            expected_price,
+            actual_price_per_token,
+            price_difference
+        )
+    );
+
+    if price_difference > SLIPPAGE_TOLERANCE_PERCENT {
+        return Err(SwapError::SlippageExceeded(
+            format!(
+                "{:?} price difference {:.2}% exceeds tolerance {:.2}%",
+                quote.router,
+                price_difference,
+                SLIPPAGE_TOLERANCE_PERCENT
+            )
+        ));
+    }
+
+    Ok(())
 }
