@@ -166,9 +166,6 @@ pub const SELL_OPERATION_SHUTDOWN_CHECK_MS: u64 = 1;
 /// Collection shutdown check delay (milliseconds)
 pub const COLLECTION_SHUTDOWN_CHECK_MS: u64 = 1;
 
-/// Trader graceful shutdown timeout (seconds)
-pub const TRADER_GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 5;
-
 // -----------------------------------------------------------------------------
 // Wallet Management Configuration
 // -----------------------------------------------------------------------------
@@ -187,7 +184,7 @@ use crate::tokens::{
     monitor_tokens_once,
     get_token_price_blocking_safe,
     sync_watch_list_with_trader,
-    pool::{get_pool_service, get_price_history_for_rl_learning},
+    pool::{ get_pool_service, get_price_history_for_rl_learning },
 };
 use crate::positions::{
     Position,
@@ -198,7 +195,6 @@ use crate::positions::{
     close_position,
     SAVED_POSITIONS,
 };
-use crate::summary::*;
 use crate::utils::*;
 
 use crate::filtering::{ should_buy_token, log_filtering_summary };
@@ -896,7 +892,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Get previous price from pool service price history
                             let prev_price = {
                                 let pool_service = get_pool_service();
-                                let price_history = pool_service.get_recent_price_history(&token.mint).await;
+                                let price_history = pool_service.get_recent_price_history(
+                                    &token.mint
+                                ).await;
                                 if price_history.len() >= 2 {
                                     // Get the second-to-last price (previous price)
                                     Some(price_history[price_history.len() - 2].1)
@@ -1168,7 +1166,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 // Calculate price change using pool service price history
                                 let change = {
                                     let pool_service = get_pool_service();
-                                    let price_history = pool_service.get_recent_price_history(&token.mint).await;
+                                    let price_history = pool_service.get_recent_price_history(
+                                        &token.mint
+                                    ).await;
                                     if price_history.len() >= 2 {
                                         let prev_price = price_history[price_history.len() - 2].1;
                                         if prev_price > 0.0 {
@@ -2196,52 +2196,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         {
             log(LogTag::Trader, "INFO", "open positions monitor shutting down...");
             break;
-        }
-    }
-}
-
-/// Main trader function that spawns both monitoring tasks
-pub async fn trader(shutdown: Arc<Notify>) {
-    log(LogTag::Trader, "INFO", "Starting trader with background tasks...");
-
-    let shutdown_clone = shutdown.clone();
-    let entries_task = tokio::spawn(async move {
-        monitor_new_entries(shutdown_clone).await;
-    });
-
-    let shutdown_clone = shutdown.clone();
-    let positions_task = tokio::spawn(async move {
-        monitor_open_positions(shutdown_clone).await;
-    });
-
-    let shutdown_clone = shutdown.clone();
-    let display_task = tokio::spawn(async move {
-        monitor_positions_display(shutdown_clone).await;
-    });
-
-    // Wait for shutdown signal
-    shutdown.notified().await;
-
-    log(LogTag::Trader, "INFO", "Trader shutting down...");
-
-    // Give tasks a chance to shutdown gracefully
-    let graceful_timeout = tokio::time::timeout(
-        Duration::from_secs(TRADER_GRACEFUL_SHUTDOWN_TIMEOUT_SECS),
-        async {
-            let _ = tokio::try_join!(entries_task, positions_task, display_task);
-        }
-    );
-
-    match graceful_timeout.await {
-        Ok(_) => {
-            log(LogTag::Trader, "INFO", "Trader tasks finished gracefully");
-        }
-        Err(_) => {
-            log(LogTag::Trader, "WARN", "Trader tasks did not finish gracefully, aborting");
-            // Force abort if graceful shutdown fails
-            // entries_task.abort(); // These might already be finished
-            // positions_task.abort();
-            // display_task.abort();
         }
     }
 }

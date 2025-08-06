@@ -1,4 +1,3 @@
-use screenerbot::trader::trader;
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 
 use std::sync::Arc;
@@ -92,10 +91,13 @@ async fn main() {
     // Initialize and start pool service for real-time price calculations and history caching
     let pool_service = screenerbot::tokens::pool::init_pool_service();
     pool_service.start_monitoring().await;
-    log(LogTag::System, "INFO", "Pool price service with disk caching initialized and monitoring started");
+    log(
+        LogTag::System,
+        "INFO",
+        "Pool price service with disk caching initialized and monitoring started"
+    );
 
     let shutdown = Arc::new(Notify::new());
-    let shutdown_trader = shutdown.clone();
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
 
@@ -184,10 +186,26 @@ async fn main() {
         log(LogTag::System, "INFO", "RL auto-save service task ended");
     });
 
-    let trader_handle = tokio::spawn(async move {
-        log(LogTag::System, "INFO", "Trader task started");
-        trader(shutdown_trader).await;
-        log(LogTag::System, "INFO", "Trader task ended");
+    // Start trader tasks (moved from trader() function for centralized management)
+    let shutdown_entries = shutdown.clone();
+    let entries_handle = tokio::spawn(async move {
+        log(LogTag::Trader, "INFO", "New entries monitor task started");
+        screenerbot::trader::monitor_new_entries(shutdown_entries).await;
+        log(LogTag::Trader, "INFO", "New entries monitor task ended");
+    });
+
+    let shutdown_positions = shutdown.clone();
+    let positions_handle = tokio::spawn(async move {
+        log(LogTag::Trader, "INFO", "Open positions monitor task started");
+        screenerbot::trader::monitor_open_positions(shutdown_positions).await;
+        log(LogTag::Trader, "INFO", "Open positions monitor task ended");
+    });
+
+    let shutdown_display = shutdown.clone();
+    let display_handle = tokio::spawn(async move {
+        log(LogTag::Trader, "INFO", "Positions display task started");
+        screenerbot::summary::monitor_positions_display(shutdown_display).await;
+        log(LogTag::Trader, "INFO", "Positions display task ended");
     });
 
     log(
@@ -312,12 +330,28 @@ async fn main() {
     let shutdown_timeout = tokio::time::timeout(
         std::time::Duration::from_secs(task_timeout_seconds),
         async {
-            // Wait for trader task
-            if let Err(e) = trader_handle.await {
+            // Wait for trader tasks
+            if let Err(e) = entries_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
-                    &format!("Trader task failed to shutdown cleanly: {}", e)
+                    &format!("New entries monitor task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            if let Err(e) = positions_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Open positions monitor task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            if let Err(e) = display_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Positions display task failed to shutdown cleanly: {}", e)
                 );
             }
 
