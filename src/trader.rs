@@ -57,10 +57,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 12;
+pub const MAX_OPEN_POSITIONS: usize = 15;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.01;
+pub const TRADE_SIZE_SOL: f64 = 0.002;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000015;
