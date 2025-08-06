@@ -49,12 +49,6 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
     rpc_client.get_token_balance(wallet_address, mint).await
 }
 
-
-
-
-
-
-
 /// Gets all token accounts for a wallet
 pub async fn get_all_token_accounts(
     wallet_address: &str
