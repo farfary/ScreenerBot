@@ -1,8 +1,9 @@
 /// Swap module for handling multiple DEX routers
-/// Supports GMGN and Jupiter routers with unified interface
+/// Supports GMGN, Jupiter, and Raydium routers with unified interface
 
 pub mod gmgn;
 pub mod jupiter;
+pub mod raydium;
 pub mod interface;
 pub mod types;
 pub mod transaction;
@@ -77,6 +78,7 @@ pub use execution::{get_swap_quote, execute_swap_with_quote};
 // Router-specific functions
 pub use gmgn::{get_gmgn_quote, execute_gmgn_swap, gmgn_sign_and_send_transaction, GMGNSwapResult};
 pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send_transaction, JupiterSwapResult};
+pub use raydium::{get_raydium_quote, execute_raydium_swap, raydium_sign_and_send_transaction, RaydiumSwapResult};
 
 // =============================================================================
 // UNIFIED ROUTER INTERFACE
@@ -87,6 +89,7 @@ pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send
 pub enum RouterType {
     GMGN,
     Jupiter,
+    Raydium,
 }
 
 /// Unified quote structure for comparing routes
@@ -109,6 +112,7 @@ pub struct UnifiedQuote {
 pub enum QuoteExecutionData {
     GMGN(types::SwapData),
     Jupiter(types::SwapData),
+    Raydium(types::SwapData),
 }
 
 /// Unified swap result
@@ -239,9 +243,52 @@ pub async fn get_best_quote(
         }
     }
 
+    // Get Raydium quote
+    log(LogTag::Swap, "QUOTE_RAYDIUM", "🟣 Getting Raydium quote...");
+    match raydium::get_raydium_quote(
+        input_mint,
+        output_mint,
+        input_amount,
+        from_address,
+        slippage,
+        fee,
+        is_anti_mev,
+    ).await {
+        Ok(raydium_data) => {
+            let unified_quote = UnifiedQuote {
+                router: RouterType::Raydium,
+                input_mint: input_mint.to_string(),
+                output_mint: output_mint.to_string(),
+                input_amount,
+                output_amount: raydium_data.quote.out_amount.parse().unwrap_or(0),
+                price_impact_pct: raydium_data.quote.price_impact_pct.parse().unwrap_or(0.0),
+                fee_lamports: raydium_data.raw_tx.prioritization_fee_lamports,
+                slippage_bps: raydium_data.quote.slippage_bps.parse().unwrap_or(0),
+                route_plan: format!("Raydium Route: {}", serde_json::to_string(&raydium_data.quote.route_plan).unwrap_or_default()),
+                execution_data: QuoteExecutionData::Raydium(raydium_data),
+            };
+            
+            log(
+                LogTag::Swap,
+                "QUOTE_RAYDIUM_SUCCESS",
+                &format!(
+                    "✅ Raydium quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    unified_quote.output_amount,
+                    unified_quote.price_impact_pct,
+                    unified_quote.fee_lamports
+                )
+            );
+            
+            quotes.push(unified_quote);
+        }
+        Err(e) => {
+            log(LogTag::Swap, "QUOTE_RAYDIUM_ERROR", &format!("❌ Raydium quote failed: {}", e));
+        }
+    }
+
     // Check if we have any quotes
     if quotes.is_empty() {
-        let error_msg = "No routers available for quote - both GMGN and Jupiter failed";
+        let error_msg = "No routers available for quote - GMGN, Jupiter, and Raydium all failed";
         log(LogTag::Swap, "QUOTE_ERROR", &format!("❌ {}", error_msg));
         return Err(SwapError::ApiError(error_msg.to_string()));
     }
@@ -258,7 +305,7 @@ pub async fn get_best_quote(
             LogTag::Swap,
             "QUOTE_COMPARISON",
             &format!(
-                "⚖️ Quote comparison: GMGN vs Jupiter - Winner: {:?}",
+                "⚖️ Quote comparison: GMGN vs Jupiter vs Raydium - Winner: {:?}",
                 best_quote.router
             )
         );
@@ -337,6 +384,23 @@ pub async fn execute_best_swap(
                 Ok(result) => Ok(UnifiedSwapResult {
                     success: result.success,
                     router_used: RouterType::Jupiter,
+                    transaction_signature: result.transaction_signature,
+                    input_amount: result.input_amount,
+                    output_amount: result.output_amount,
+                    price_impact: result.price_impact,
+                    fee_lamports: result.fee_lamports,
+                    execution_time: result.execution_time,
+                    effective_price: result.effective_price,
+                    error: result.error,
+                }),
+                Err(e) => Err(e),
+            }
+        }
+        QuoteExecutionData::Raydium(raydium_data) => {
+            match raydium::execute_raydium_swap(token, input_mint, output_mint, input_amount, raydium_data).await {
+                Ok(result) => Ok(UnifiedSwapResult {
+                    success: result.success,
+                    router_used: RouterType::Raydium,
                     transaction_signature: result.transaction_signature,
                     input_amount: result.input_amount,
                     output_amount: result.output_amount,
