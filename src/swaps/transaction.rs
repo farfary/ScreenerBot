@@ -670,8 +670,35 @@ pub async fn take_balance_snapshot(
 pub async fn sign_and_send_transaction(
     swap_transaction_base64: &str,
 ) -> Result<String, SwapError> {
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_SIGN_START",
+            &format!("✍️ Signing transaction (length: {} chars)", swap_transaction_base64.len())
+        );
+    }
+
     let rpc_client = get_rpc_client();
-    rpc_client.sign_and_send_transaction(swap_transaction_base64).await
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_SENDING",
+            "📤 Sending signed transaction to blockchain..."
+        );
+    }
+    
+    let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_SENT",
+            &format!("✅ Transaction sent successfully - Signature: {}", signature)
+        );
+    }
+    
+    Ok(signature)
 }
 
 /// MAIN FUNCTION: Comprehensive transaction verification and analysis
@@ -691,11 +718,12 @@ pub async fn verify_swap_transaction(
             LogTag::Wallet,
             "VERIFY_START",
             &format!(
-                "🔍 Starting transaction verification for {}\n  Direction: {}\n  Route: {} -> {}",
+                "🔍 Starting transaction verification for {}\n  Direction: {}\n  Route: {} -> {}\n  Wallet: {}",
                 transaction_signature,
                 expected_direction,
                 if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
-                if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] }
+                if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] },
+                &wallet_address[..8]
             )
         );
     }
@@ -772,16 +800,20 @@ pub async fn verify_swap_transaction(
         &wallet_address
     )?;
 
-    // Step 6: Calculate effective price
-    let effective_price = calculate_effective_price(
+    // Step 6: Calculate effective price using the unified function
+    let effective_price = crate::swaps::pricing::calculate_effective_price_from_raw(
         expected_direction,
         blockchain_input_amount,
         blockchain_output_amount,
         sol_spent,
         sol_received,
         ata_rent_reclaimed,
-        input_mint,
-        output_mint
+        if input_mint == SOL_MINT { 9 } else { 
+            crate::tokens::decimals::get_token_decimals_from_chain(input_mint).await.unwrap_or(9) as u32
+        },
+        if output_mint == SOL_MINT { 9 } else { 
+            crate::tokens::decimals::get_token_decimals_from_chain(output_mint).await.unwrap_or(9) as u32
+        }
     );
 
     // Step 7: Validate results consistency
@@ -1293,38 +1325,6 @@ fn detect_ata_closure(
     (ata_detected, estimated_ata_rent)
 }
 
-/// Calculate effective price per token accounting for fees and ATA rent
-fn calculate_effective_price(
-    expected_direction: &str,
-    input_amount: Option<u64>,
-    output_amount: Option<u64>,
-    sol_spent: Option<u64>,
-    sol_received: Option<u64>,
-    ata_rent_reclaimed: u64,
-    input_mint: &str,
-    output_mint: &str
-) -> Option<f64> {
-    if expected_direction == "buy" {
-        // Buy: calculate SOL per token
-        if let (Some(sol_spent_val), Some(tokens_received)) = (sol_spent, output_amount) {
-            if tokens_received > 0 {
-                let sol_for_tokens = lamports_to_sol(sol_spent_val);
-                return Some(sol_for_tokens / tokens_received as f64);
-            }
-        }
-    } else {
-        // Sell: calculate SOL per token
-        if let (Some(tokens_sold), Some(sol_received_val)) = (input_amount, sol_received) {
-            if tokens_sold > 0 {
-                let net_sol_received = lamports_to_sol(sol_received_val);
-                return Some(net_sol_received / tokens_sold as f64);
-            }
-        }
-    }
-
-    None
-}
-
 /// Validate transaction results for consistency
 fn validate_transaction_results(
     expected_direction: &str,
@@ -1371,46 +1371,4 @@ fn validate_transaction_results(
     Ok(())
 }
 
-/// LEGACY COMPATIBILITY: Wrapper for old interface
-/// This function maintains compatibility with existing code
-pub async fn verify_transaction_and_get_actual_amounts(
-    transaction_signature: &str,
-    input_mint: &str,
-    output_mint: &str,
-    configs: &crate::global::Configs
-) -> Result<(bool, Option<String>, Option<String>), SwapError> {
-    let wallet_address = get_wallet_address()?;
-    
-    // Take pre-transaction snapshot (for legacy compatibility, we'll use current balances)
-    let pre_balance = take_balance_snapshot(&wallet_address, 
-        if input_mint == SOL_MINT { output_mint } else { input_mint }
-    ).await?;
 
-    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    
-    match verify_swap_transaction(
-        transaction_signature,
-        input_mint,
-        output_mint,
-        expected_direction,
-        &pre_balance
-    ).await {
-        Ok(result) => {
-            if result.success {
-                let input_str = result.input_amount.map(|n| n.to_string());
-                let output_str = result.output_amount.map(|n| n.to_string());
-                Ok((true, input_str, output_str))
-            } else {
-                Ok((false, None, None))
-            }
-        }
-        Err(e) => {
-            log(
-                LogTag::Wallet,
-                "LEGACY_ERROR",
-                &format!("Legacy transaction verification failed: {}", e)
-            );
-            Ok((false, None, None))
-        }
-    }
-}

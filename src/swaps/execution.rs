@@ -7,7 +7,7 @@ use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
 use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse, SOL_MINT, ANTI_MEV, PARTNER};
 use crate::swaps::interface::SwapResult;
-use crate::swaps::transaction::{sign_and_send_transaction, verify_transaction_and_get_actual_amounts};
+use crate::swaps::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
 
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
@@ -49,18 +49,19 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
             LogTag::Swap,
             "QUOTE_START",
             &format!(
-                "🔍 Getting swap quote\n  📊 Amount: {} units\n  💱 Route: {} -> {}\n  ⚙️ Slippage: {}%, Fee: {}%, Anti-MEV: {}",
-                request.input_amount,
+                "� Generic Quote Request:\n  Input: {} ({} units)\n  Output: {}\n  From: {}\n  Slippage: {}%\n  Fee: {}%\n  Anti-MEV: {}",
                 if request.input_mint == SOL_MINT {
                     "SOL"
                 } else {
                     &request.input_mint[..8]
                 },
+                request.input_amount,
                 if request.output_mint == SOL_MINT {
                     "SOL"
                 } else {
                     &request.output_mint[..8]
                 },
+                &request.from_address[..8],
                 request.slippage,
                 request.fee,
                 request.is_anti_mev
@@ -124,6 +125,14 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
     // Retry up to 3 times with increasing delays
     for attempt in 1..=3 {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "QUOTE_ATTEMPT",
+                &format!("🔄 Generic Quote attempt {}/3", attempt)
+            );
+        }
+
         match client.get(&url).send().await {
             Ok(response) => {
                 if is_debug_swap_enabled() {
@@ -139,6 +148,13 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 }
 
                 if !response.status().is_success() {
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "QUOTE_HTTP_ERROR",
+                            &format!("❌ HTTP Error: {} - {}", response.status(), response.status().canonical_reason().unwrap_or("Unknown"))
+                        );
+                    }
                     let status_code = response.status().as_u16();
                     let error_text = response
                         .text().await
@@ -396,6 +412,12 @@ pub async fn execute_swap_with_quote(
         )
     );
 
+    // Take pre-transaction snapshot for verification
+    let wallet_address = get_wallet_address()?;
+    let pre_balance = take_balance_snapshot(&wallet_address, 
+        if input_mint == SOL_MINT { output_mint } else { input_mint }
+    ).await?;
+
     // Sign and send the transaction using global RPC client
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction
@@ -408,24 +430,23 @@ pub async fn execute_swap_with_quote(
     );
 
     // CRITICAL FIX: Wait for transaction confirmation and verify actual results
-    match
-        verify_transaction_and_get_actual_amounts(
-            &transaction_signature,
-            input_mint,
-            output_mint,
-            &configs
-        ).await
-    {
-        Ok((confirmed_success, actual_input_amount, actual_output_amount)) => {
-            if confirmed_success {
-                // Clone the amounts to avoid move errors
-                let input_amount_str = actual_input_amount
-                    .as_ref()
-                    .cloned()
+    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
+    
+    match verify_swap_transaction(
+        &transaction_signature,
+        input_mint,
+        output_mint,
+        expected_direction,
+        &pre_balance
+    ).await {
+        Ok(verification_result) => {
+            if verification_result.success && verification_result.confirmed {
+                // Use verified amounts from blockchain
+                let input_amount_str = verification_result.input_amount
+                    .map(|n| n.to_string())
                     .unwrap_or_else(|| swap_data.quote.in_amount.clone());
-                let output_amount_str = actual_output_amount
-                    .as_ref()
-                    .cloned()
+                let output_amount_str = verification_result.output_amount
+                    .map(|n| n.to_string())
                     .unwrap_or_else(|| swap_data.quote.out_amount.clone());
 
                 log(
@@ -442,25 +463,22 @@ pub async fn execute_swap_with_quote(
                 Ok(SwapResult {
                     success: true,
                     transaction_signature: Some(transaction_signature),
-                    // Use ACTUAL amounts from blockchain, not quote predictions
-                    input_amount: actual_input_amount.unwrap_or_else(||
-                        swap_data.quote.in_amount.clone()
-                    ),
-                    output_amount: actual_output_amount.unwrap_or_else(||
-                        swap_data.quote.out_amount.clone()
-                    ),
+                    // Use ACTUAL amounts from blockchain verification
+                    input_amount: input_amount_str,
+                    output_amount: output_amount_str,
                     price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+                    fee_lamports: verification_result.transaction_fee,
                     execution_time: swap_data.quote.time_taken,
-                    effective_price: None, // Will be calculated later using actual amounts
+                    effective_price: verification_result.effective_price, // From blockchain verification
                     swap_data: Some(swap_data), // Include the complete swap data
                     error: None,
                 })
             } else {
+                let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
                 log(
                     LogTag::Wallet,
                     "FAILED",
-                    &format!("❌ Transaction FAILED on-chain! TX: {}", transaction_signature)
+                    &format!("❌ Transaction FAILED on-chain! TX: {} - Error: {}", transaction_signature, error_msg)
                 );
 
                 Ok(SwapResult {
@@ -469,7 +487,7 @@ pub async fn execute_swap_with_quote(
                     input_amount: swap_data.quote.in_amount.clone(),
                     output_amount: "0".to_string(), // Zero output for failed transaction
                     price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
+                    fee_lamports: verification_result.transaction_fee,
                     execution_time: swap_data.quote.time_taken,
                     effective_price: None,
                     swap_data: Some(swap_data),

@@ -141,7 +141,13 @@ pub async fn buy_token(
             }
         }
 
-        match calculate_effective_price_buy(&swap_result) {
+        match crate::swaps::pricing::calculate_effective_price(
+            &swap_result,
+            SOL_MINT,
+            &token.mint,
+            "buy",
+            None, // No ATA rent for buy operations
+        ).await {
             Ok(effective_price) => {
                 // Update the swap result with the calculated effective price
                 swap_result.effective_price = Some(effective_price);
@@ -436,40 +442,4 @@ async fn sell_token_with_slippage(
     }
 
     Ok(swap_result)
-}
-
-/// Calculate effective price per token from a buy swap result
-fn calculate_effective_price_buy(swap_result: &SwapResult) -> Result<f64, SwapError> {
-    if !swap_result.success {
-        return Err(SwapError::InvalidAmount("Cannot calculate price from failed swap".to_string()));
-    }
-
-    // Parse input amount (SOL in lamports)
-    let input_lamports: u64 = swap_result.input_amount
-        .parse()
-        .map_err(|_| SwapError::ParseError("Invalid input amount in swap result".to_string()))?;
-
-    // Parse output amount (tokens in smallest unit)
-    let output_tokens_raw: u64 = swap_result.output_amount
-        .parse()
-        .map_err(|_| SwapError::ParseError("Invalid output amount in swap result".to_string()))?;
-
-    if output_tokens_raw == 0 {
-        return Err(
-            SwapError::InvalidAmount("Cannot calculate price with zero token output".to_string())
-        );
-    }
-
-    // Convert lamports to SOL
-    let input_sol = lamports_to_sol(input_lamports);
-
-    // For effective price calculation, we need token decimals
-    // Default to 9 if not available (most tokens use 9 decimals)
-    let token_decimals = 9; // TODO: Get from swap_data or token metadata
-    let output_tokens = (output_tokens_raw as f64) / (10_f64).powi(token_decimals);
-
-    // Calculate effective price: SOL per token
-    let effective_price = input_sol / output_tokens;
-
-    Ok(effective_price)
 }

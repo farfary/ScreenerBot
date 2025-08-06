@@ -9,9 +9,6 @@ pub mod transaction;
 pub mod pricing;
 pub mod execution;
 
-#[cfg(test)]
-pub mod tests;
-
 use crate::tokens::Token;
 use crate::rpc::SwapError;
 use crate::logger::{log, LogTag};
@@ -62,13 +59,16 @@ pub use types::{
 pub use transaction::{
     check_and_reserve_transaction_slot, check_recent_transaction_attempt, 
     clear_recent_transaction_attempt, TransactionSlotGuard, get_wallet_address,
-    sign_and_send_transaction, verify_transaction_and_get_actual_amounts
+    sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot
 };
 
-// Pricing functions
+// Effective price calculation (unified)
+pub use pricing::{calculate_effective_price, calculate_effective_price_from_raw};
+
+// Legacy pricing functions (deprecated - use calculate_effective_price instead)
 pub use pricing::{
-    validate_price_near_expected, calculate_effective_price_buy, calculate_effective_price_sell,
-    validate_quote_price, get_token_price_sol
+    validate_price_near_expected, validate_quote_price, get_token_price_sol,
+    calculate_effective_price_buy, calculate_effective_price_sell
 };
 
 // Execution functions

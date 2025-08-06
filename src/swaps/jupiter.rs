@@ -5,7 +5,7 @@
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
-use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
+use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, is_debug_wallet_enabled, read_configs};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, SOL_MINT, JupiterQuoteResponse, JupiterSwapResponse};
 
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,9 @@ pub async fn jupiter_sign_and_send_transaction(
             LogTag::Swap,
             "JUPITER_SIGN_START",
             &format!(
-                "🟡 Jupiter: Signing transaction (length: {} chars, priority fee: {:?}, compute limit: {:?})",
+                "🟡 Jupiter: Signing transaction (length: {} chars)
+  Priority Fee: {:?} lamports
+  Compute Limit: {:?}",
                 swap_transaction_base64.len(),
                 priority_fee_lamports,
                 compute_unit_limit
@@ -53,9 +55,25 @@ pub async fn jupiter_sign_and_send_transaction(
         );
     }
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_SIGNING",
+            "✍️ Jupiter: Signing transaction with wallet keypair..."
+        );
+    }
+
     // Get RPC client and sign transaction
     let rpc_client = crate::rpc::get_rpc_client();
     let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_TRANSACTION_SENT",
+            &format!("📤 Jupiter: Transaction sent to blockchain - Signature: {}", signature)
+        );
+    }
     
     log(
         LogTag::Swap,
@@ -81,11 +99,14 @@ pub async fn get_jupiter_quote(
             LogTag::Swap,
             "JUPITER_QUOTE_START",
             &format!(
-                "🟡 Jupiter Quote: {} -> {} (amount: {}, slippage: {:.1}%)",
+                "🟡 Jupiter Quote Request:\n  Input: {} ({} units)\n  Output: {}\n  From: {}\n  Slippage: {}%\n  Fee: {}%\n  Anti-MEV: {}",
                 if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
-                if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] },
                 input_amount,
-                slippage
+                if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] },
+                &from_address[..8],
+                slippage,
+                fee,
+                is_anti_mev
             )
         );
     }
@@ -107,29 +128,113 @@ pub async fn get_jupiter_quote(
             .join("&")
     );
 
+    if is_debug_swap_enabled() {
+        log(LogTag::Swap, "JUPITER_URL", &format!("🌐 Jupiter API URL: {}", url));
+    }
+
     if is_debug_api_enabled() {
         log(LogTag::Swap, "JUPITER_API", &format!("Jupiter Quote URL: {}", url));
     }
 
+    if is_debug_wallet_enabled() {
+        log(
+            LogTag::Wallet,
+            "JUPITER_QUOTE_DETAILS",
+            &format!(
+                "📊 Jupiter Quote Parameters:\n  URL: {}\n  Input Amount: {} lamports\n  Slippage BPS: {}\n  Timeout: {}s",
+                url,
+                input_amount,
+                slippage_bps,
+                QUOTE_TIMEOUT_SECS
+            )
+        );
+    }
+
     let client = reqwest::Client::new();
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_REQUEST_SEND",
+            "📤 Jupiter: Sending quote request..."
+        );
+    }
+    
     let response = timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send())
         .await
-        .map_err(|_| SwapError::ApiError("Jupiter quote request timeout".to_string()))?
-        .map_err(|e| SwapError::NetworkError(e))?;
+        .map_err(|_| {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "JUPITER_TIMEOUT", "⏰ Jupiter quote request timeout");
+            }
+            SwapError::ApiError("Jupiter quote request timeout".to_string())
+        })?
+        .map_err(|e| {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "JUPITER_NETWORK_ERROR", &format!("❌ Jupiter network error: {}", e));
+            }
+            SwapError::NetworkError(e)
+        })?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_RESPONSE_STATUS",
+            &format!("📡 Jupiter API Response - Status: {}", response.status())
+        );
+    }
 
     if !response.status().is_success() {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_HTTP_ERROR",
+                &format!("❌ Jupiter HTTP Error: {} - {}", response.status(), response.status().canonical_reason().unwrap_or("Unknown"))
+            );
+        }
         return Err(SwapError::ApiError(
             format!("Jupiter API error: {}", response.status())
         ));
     }
 
     // Parse response
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_PARSING",
+            "🔄 Jupiter: Parsing JSON response..."
+        );
+    }
+    
     let quote_response: JupiterQuoteResponse = response.json().await
-        .map_err(|e| SwapError::InvalidResponse(
-            format!("Failed to parse Jupiter quote response: {}", e)
-        ))?;
+        .map_err(|e| {
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "JUPITER_PARSE_ERROR",
+                    &format!("❌ Jupiter Response parsing failed: {}", e)
+                );
+            }
+            SwapError::InvalidResponse(
+                format!("Failed to parse Jupiter quote response: {}", e)
+            )
+        })?;
 
     if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_QUOTE_SUCCESS",
+            &format!(
+                "🎯 Jupiter Quote Success:\n  In: {} {} \n  Out: {} {} \n  Price Impact: {}%\n  Slippage: {} BPS\n  Time: {:.3}s",
+                quote_response.in_amount,
+                if quote_response.input_mint == SOL_MINT { "SOL" } else { &quote_response.input_mint[..8] },
+                quote_response.out_amount,
+                if quote_response.output_mint == SOL_MINT { "SOL" } else { &quote_response.output_mint[..8] },
+                quote_response.price_impact_pct,
+                quote_response.slippage_bps,
+                quote_response.time_taken.unwrap_or(0.0)
+            )
+        );
+        
         log(
             LogTag::Swap,
             "JUPITER_SUCCESS",
@@ -256,6 +361,12 @@ pub async fn execute_jupiter_swap(
         None,
     ).await?;
 
+    // Take pre-transaction snapshot
+    let wallet_address = crate::swaps::transaction::get_wallet_address()?;
+    let pre_balance = crate::swaps::transaction::take_balance_snapshot(&wallet_address, 
+        if input_mint == SOL_MINT { output_mint } else { input_mint }
+    ).await?;
+
     log(
         LogTag::Swap,
         "JUPITER_PENDING",
@@ -263,18 +374,21 @@ pub async fn execute_jupiter_swap(
     );
 
     // Wait for transaction confirmation and verify actual results
-    match crate::swaps::transaction::verify_transaction_and_get_actual_amounts(
+    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
+    
+    match crate::swaps::transaction::verify_swap_transaction(
         &transaction_signature,
         input_mint,
         output_mint,
-        &configs
+        expected_direction,
+        &pre_balance
     ).await {
-        Ok((success, actual_input, actual_output)) => {
+        Ok(verification_result) => {
             let execution_time = start_time.elapsed().as_secs_f64();
 
-            if success {
-                let input_str = actual_input.unwrap_or_else(|| swap_data.quote.in_amount.clone());
-                let output_str = actual_output.unwrap_or_else(|| swap_data.quote.out_amount.clone());
+            if verification_result.success && verification_result.confirmed {
+                let input_str = verification_result.input_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.in_amount.clone());
+                let output_str = verification_result.output_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.out_amount.clone());
 
                 log(
                     LogTag::Swap,
@@ -291,17 +405,18 @@ pub async fn execute_jupiter_swap(
                     input_amount: input_str,
                     output_amount: output_str,
                     price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: jupiter_tx.prioritization_fee_lamports,
+                    fee_lamports: verification_result.transaction_fee,
                     execution_time,
-                    effective_price: None, // Will be calculated separately
+                    effective_price: verification_result.effective_price,
                     swap_data: Some(swap_data),
                     error: None,
                 })
             } else {
+                let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
                 log(
                     LogTag::Swap,
                     "JUPITER_FAILED",
-                    &format!("❌ Jupiter transaction failed on-chain: {}", transaction_signature)
+                    &format!("❌ Jupiter transaction failed on-chain: {} - Error: {}", transaction_signature, error_msg)
                 );
 
                 Ok(JupiterSwapResult {
@@ -310,11 +425,11 @@ pub async fn execute_jupiter_swap(
                     input_amount: String::new(),
                     output_amount: String::new(),
                     price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: jupiter_tx.prioritization_fee_lamports,
+                    fee_lamports: verification_result.transaction_fee,
                     execution_time,
                     effective_price: None,
                     swap_data: Some(swap_data),
-                    error: Some("Transaction failed on-chain".to_string()),
+                    error: Some(error_msg),
                 })
             }
         }
