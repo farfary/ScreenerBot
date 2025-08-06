@@ -5,7 +5,7 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
 use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled, is_debug_wallet_enabled};
-use crate::wallet::{sign_and_send_transaction, verify_transaction_and_get_actual_amounts};
+use super::transaction::{sign_and_send_transaction, verify_transaction_and_get_actual_amounts};
 use super::types::{SwapData, SwapQuote, SwapRequest, SwapApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number, PARTNER, SOL_MINT};
 
 use serde::{Deserialize, Serialize};

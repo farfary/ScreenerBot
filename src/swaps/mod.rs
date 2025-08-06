@@ -5,6 +5,9 @@ pub mod gmgn;
 pub mod jupiter;
 pub mod interface; // Main swap interface with clean single-purpose functions
 pub mod types; // Common swap structures and types
+pub mod transaction; // Transaction management and verification
+pub mod pricing; // Price calculation and validation functions
+pub mod execution; // Swap execution and quote management
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
@@ -45,6 +48,16 @@ pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
 // Re-export main swap functions and types
 pub use interface::{buy_token, sell_token, SwapResult};
 pub use types::{SwapData, SwapQuote, RawTransaction, SwapRequest, SwapApiResponse, SOL_MINT, ANTI_MEV, PARTNER};
+pub use transaction::{
+    check_and_reserve_transaction_slot, check_recent_transaction_attempt, 
+    clear_recent_transaction_attempt, TransactionSlotGuard, get_wallet_address,
+    sign_and_send_transaction, verify_transaction_and_get_actual_amounts
+};
+pub use pricing::{
+    validate_price_near_expected, calculate_effective_price_buy, calculate_effective_price_sell,
+    validate_quote_price, get_token_price_sol
+};
+pub use execution::{get_swap_quote, execute_swap_with_quote};
 
 /// Represents a router type for swap operations
 #[derive(Debug, Clone, PartialEq)]

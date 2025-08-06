@@ -5,7 +5,8 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
 use crate::global::{is_debug_wallet_enabled, is_debug_swap_enabled};
-use crate::wallet::{get_wallet_address, get_token_balance};
+use crate::wallet::get_token_balance;
+use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 use super::types::{SwapData, SOL_MINT};
 use crate::trader::{SLIPPAGE_TOLERANCE_PERCENT, SWAP_FEE_PERCENT};
@@ -49,11 +50,11 @@ pub async fn buy_token(
     }
 
     // CRITICAL FIX: Prevent duplicate transactions
-    crate::wallet::check_recent_transaction_attempt(&token.mint, "buy")?;
-    crate::wallet::check_and_reserve_transaction_slot(&token.mint, "buy")?;
+    check_recent_transaction_attempt(&token.mint, "buy")?;
+    check_and_reserve_transaction_slot(&token.mint, "buy")?;
 
     // Ensure we release the slot regardless of outcome
-    let _guard = crate::wallet::TransactionSlotGuard::new(&token.mint, "buy");
+    let _guard = TransactionSlotGuard::new(&token.mint, "buy");
 
     if is_debug_swap_enabled() {
         log(
@@ -238,7 +239,7 @@ pub async fn sell_token(
 
                 // If this isn't the last attempt, wait and clear recent attempt to allow retry
                 if attempt < slippages.len() - 1 {
-                    crate::wallet::clear_recent_transaction_attempt(&token.mint, "sell");
+                    clear_recent_transaction_attempt(&token.mint, "sell");
                     tokio::time::sleep(tokio::time::Duration::from_secs((attempt + 1) as u64 * 2)).await;
                 } else {
                     // Last attempt failed
@@ -268,11 +269,11 @@ async fn sell_token_with_slippage(
     slippage: f64
 ) -> Result<SwapResult, SwapError> {
     // CRITICAL FIX: Prevent duplicate transactions
-    crate::wallet::check_recent_transaction_attempt(&token.mint, "sell")?;
-    crate::wallet::check_and_reserve_transaction_slot(&token.mint, "sell")?;
+    check_recent_transaction_attempt(&token.mint, "sell")?;
+    check_and_reserve_transaction_slot(&token.mint, "sell")?;
 
     // Ensure we release the slot regardless of outcome
-    let _guard = crate::wallet::TransactionSlotGuard::new(&token.mint, "sell");
+    let _guard = TransactionSlotGuard::new(&token.mint, "sell");
 
     if is_debug_swap_enabled() {
         log(
