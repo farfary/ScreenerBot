@@ -187,6 +187,7 @@ use crate::tokens::{
     monitor_tokens_once,
     get_token_price_blocking_safe,
     sync_watch_list_with_trader,
+    pool::{get_pool_service, get_price_history_for_rl_learning},
 };
 use crate::positions::{
     Position,
@@ -210,7 +211,6 @@ use crate::entry::{ should_buy };
 // =============================================================================
 
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
 use chrono::{ Utc, Duration as ChronoDuration, DateTime };
 use std::sync::Arc;
@@ -221,16 +221,6 @@ use colored::Colorize;
 // =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
 // =============================================================================
-
-/// Static global: price history for each token (mint), stores Vec<(timestamp, price)>
-pub static PRICE_HISTORY_24H: Lazy<
-    StdArc<StdMutex<HashMap<String, Vec<(DateTime<Utc>, f64)>>>>
-> = Lazy::new(|| StdArc::new(StdMutex::new(HashMap::new())));
-
-/// Static global: last known prices for each token
-pub static LAST_PRICES: Lazy<StdArc<StdMutex<HashMap<String, f64>>>> = Lazy::new(|| {
-    StdArc::new(StdMutex::new(HashMap::new()))
-});
 
 /// Static global: tracks critical trading operations in progress to prevent force shutdown
 pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = Lazy::new(||
@@ -296,44 +286,6 @@ impl Drop for CriticalOperationGuard {
 // =============================================================================
 // MEMORY MANAGEMENT AND CLEANUP
 // =============================================================================
-
-/// Clean up old price history data to prevent memory leaks
-/// Removes data older than PRICE_HISTORY_DURATION_HOURS and limits per-token entries
-pub fn cleanup_price_history() {
-    let cutoff_time = Utc::now() - ChronoDuration::hours(PRICE_HISTORY_DURATION_HOURS);
-    const MAX_ENTRIES_PER_TOKEN: usize = 1000; // Limit entries per token
-
-    if let Ok(mut price_history) = PRICE_HISTORY_24H.try_lock() {
-        let mut tokens_to_remove = Vec::new();
-
-        for (mint, history) in price_history.iter_mut() {
-            // Remove old entries
-            history.retain(|(timestamp, _)| *timestamp >= cutoff_time);
-
-            // Limit number of entries per token
-            if history.len() > MAX_ENTRIES_PER_TOKEN {
-                let excess = history.len() - MAX_ENTRIES_PER_TOKEN;
-                history.drain(0..excess);
-            }
-
-            // Mark empty histories for removal
-            if history.is_empty() {
-                tokens_to_remove.push(mint.clone());
-            }
-        }
-
-        // Remove empty token histories
-        for mint in tokens_to_remove {
-            price_history.remove(&mint);
-        }
-
-        log(
-            LogTag::Trader,
-            "CLEANUP",
-            &format!("Price history cleanup completed: {} tokens tracked", price_history.len())
-        );
-    }
-}
 
 // =============================================================================
 // DEBUG LOGGING CONFIGURATION
@@ -925,39 +877,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 .and_then(|l| l.usd)
                                 .unwrap_or(0.0);
 
-                            // Update price history with proper error handling and timeout
-                            let now = Utc::now();
-                            match
-                                tokio::time::timeout(
-                                    Duration::from_millis(PRICE_CACHE_LOCK_TIMEOUT_MS),
-                                    async {
-                                        PRICE_HISTORY_24H.try_lock()
-                                    }
-                                ).await
-                            {
-                                Ok(Ok(mut hist)) => {
-                                    let entry = hist
-                                        .entry(token.mint.clone())
-                                        .or_insert_with(Vec::new);
-                                    entry.push((now, current_price));
-
-                                    // Retain only last 24h
-                                    let cutoff =
-                                        now - ChronoDuration::hours(PRICE_HISTORY_DURATION_HOURS);
-                                    entry.retain(|(ts, _)| *ts >= cutoff);
-                                }
-                                Ok(Err(_)) | Err(_) => {
-                                    // If we can't get the lock within 500ms, just log and continue
-                                    log(
-                                        LogTag::Trader,
-                                        "WARN",
-                                        &format!(
-                                            "Could not acquire price history lock for {} within timeout",
-                                            token.symbol
-                                        )
-                                    );
-                                }
-                            }
+                            // Price history is now handled by the pool service automatically
+                            // No manual tracking needed here
 
                             // Check for shutdown after price history update
                             if
@@ -972,18 +893,15 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Check for entry opportunity using should_buy function
                             let mut buy_urgency = 0.0;
 
-                            // First, get the previous price and release the lock
+                            // Get previous price from pool service price history
                             let prev_price = {
-                                match
-                                    tokio::time::timeout(
-                                        Duration::from_millis(PRICE_CACHE_LOCK_TIMEOUT_MS),
-                                        async {
-                                            LAST_PRICES.try_lock()
-                                        }
-                                    ).await
-                                {
-                                    Ok(Ok(last_prices)) => { last_prices.get(&token.mint).copied() }
-                                    _ => None,
+                                let pool_service = get_pool_service();
+                                let price_history = pool_service.get_recent_price_history(&token.mint).await;
+                                if price_history.len() >= 2 {
+                                    // Get the second-to-last price (previous price)
+                                    Some(price_history[price_history.len() - 2].1)
+                                } else {
+                                    None
                                 }
                             };
 
@@ -1209,52 +1127,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 );
                             }
 
-                            // Update price in cache
-                            match
-                                tokio::time::timeout(
-                                    Duration::from_millis(PRICE_CACHE_LOCK_TIMEOUT_MS),
-                                    async {
-                                        LAST_PRICES.try_lock()
-                                    }
-                                ).await
-                            {
-                                Ok(Ok(mut last_prices)) => {
-                                    // Add debug info before updating price
-                                    debug_trader_log(
-                                        "PRICE_UPDATE_BEFORE",
-                                        &format!(
-                                            "Token {} ({}): BEFORE UPDATE - old_price_in_cache={:.10}, new_current_price={:.10}",
-                                            token.symbol,
-                                            token.mint,
-                                            last_prices.get(&token.mint).copied().unwrap_or(0.0),
-                                            current_price
-                                        )
-                                    );
-
-                                    last_prices.insert(token.mint.clone(), current_price);
-
-                                    debug_trader_log(
-                                        "PRICE_UPDATE_AFTER",
-                                        &format!(
-                                            "Token {} ({}): AFTER UPDATE - cache now contains: {:.10}",
-                                            token.symbol,
-                                            token.mint,
-                                            current_price
-                                        )
-                                    );
-                                }
-                                Ok(Err(_)) | Err(_) => {
-                                    // If we can't get the lock within 500ms, just log and continue
-                                    log(
-                                        LogTag::Trader,
-                                        "WARN",
-                                        &format!(
-                                            "Could not acquire last_prices lock for {} within timeout",
-                                            token.symbol
-                                        )
-                                    );
-                                }
-                            }
+                            // Price tracking is now handled by the pool service automatically
 
                             // Return the token and price if buy signal detected
                             if buy_urgency > 0.0 {
@@ -1292,8 +1165,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     return None;
                                 }
 
-                                let change = if let Ok(last_prices) = LAST_PRICES.try_lock() {
-                                    if let Some(&prev_price) = last_prices.get(&token.mint) {
+                                // Calculate price change using pool service price history
+                                let change = {
+                                    let pool_service = get_pool_service();
+                                    let price_history = pool_service.get_recent_price_history(&token.mint).await;
+                                    if price_history.len() >= 2 {
+                                        let prev_price = price_history[price_history.len() - 2].1;
                                         if prev_price > 0.0 {
                                             ((current_price - prev_price) / prev_price) * 100.0
                                         } else {
@@ -1302,8 +1179,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     } else {
                                         0.0
                                     }
-                                } else {
-                                    0.0
                                 };
 
                                 if is_debug_entry_enabled() {
@@ -2325,32 +2200,6 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     }
 }
 
-/// Background task for periodic memory cleanup
-/// Runs cleanup_price_history() every 15 minutes to prevent memory leaks
-pub async fn monitor_memory_cleanup(shutdown: Arc<Notify>) {
-    log(LogTag::Trader, "INFO", "Starting memory cleanup monitoring...");
-
-    let mut interval = tokio::time::interval(Duration::from_secs(900)); // 15 minutes
-    interval.tick().await; // Skip first immediate tick
-
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                debug_trader_log("MEMORY_CLEANUP", "🧹 Starting periodic cleanup");
-                cleanup_price_history();
-                debug_trader_log("MEMORY_CLEANUP", "🧹 Cleanup completed");
-            }
-            _ = shutdown.notified() => {
-                log(LogTag::Trader, "INFO", "Memory cleanup monitor shutting down...");
-                // Perform final cleanup before shutdown
-                cleanup_price_history();
-                log(LogTag::Trader, "INFO", "Final cleanup completed, monitor stopped");
-                break;
-            }
-        }
-    }
-}
-
 /// Main trader function that spawns both monitoring tasks
 pub async fn trader(shutdown: Arc<Notify>) {
     log(LogTag::Trader, "INFO", "Starting trader with background tasks...");
@@ -2370,11 +2219,6 @@ pub async fn trader(shutdown: Arc<Notify>) {
         monitor_positions_display(shutdown_clone).await;
     });
 
-    let shutdown_clone = shutdown.clone();
-    let cleanup_task = tokio::spawn(async move {
-        monitor_memory_cleanup(shutdown_clone).await;
-    });
-
     // Wait for shutdown signal
     shutdown.notified().await;
 
@@ -2384,7 +2228,7 @@ pub async fn trader(shutdown: Arc<Notify>) {
     let graceful_timeout = tokio::time::timeout(
         Duration::from_secs(TRADER_GRACEFUL_SHUTDOWN_TIMEOUT_SECS),
         async {
-            let _ = tokio::try_join!(entries_task, positions_task, display_task, cleanup_task);
+            let _ = tokio::try_join!(entries_task, positions_task, display_task);
         }
     );
 
