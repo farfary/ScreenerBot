@@ -127,14 +127,15 @@ pub const TOKEN_CHECK_HANDLE_TIMEOUT_SECS: u64 = 120;
 /// Buy operations collection timeout (seconds)
 pub const BUY_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 120;
 
-/// Individual buy operation timeout (seconds)
-pub const BUY_OPERATION_TIMEOUT_SECS: u64 = 120;
+/// Individual buy operation timeout (seconds) - extended for smart timeout handling
+pub const BUY_OPERATION_SMART_TIMEOUT_SECS: u64 = 600; // 10 minutes total allowance for complex operations
 
 /// Sell operations collection timeout (seconds) - must accommodate multiple 3-min operations
 pub const SELL_OPERATIONS_COLLECTION_TIMEOUT_SECS: u64 = 240;
 
-/// Individual sell operation timeout (seconds) - increased for trading safety
-pub const SELL_OPERATION_TIMEOUT_SECS: u64 = 180;
+/// Individual sell operation timeout (seconds) - removed for smart timeout handling
+/// Now using step-based timeout detection instead of total operation timeout
+pub const SELL_OPERATION_SMART_TIMEOUT_SECS: u64 = 600; // 10 minutes total allowance for complex operations
 
 /// Sell semaphore acquire timeout (seconds) - increased for safety
 pub const SELL_SEMAPHORE_ACQUIRE_TIMEOUT_SECS: u64 = 30;
@@ -1580,7 +1581,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         // Wrap the buy operation in a timeout
                         match
                             tokio::time::timeout(
-                                Duration::from_secs(BUY_OPERATION_TIMEOUT_SECS),
+                                Duration::from_secs(BUY_OPERATION_SMART_TIMEOUT_SECS),
                                 async {
                                     open_position(&token, price, percent_change).await
                                 }
@@ -1601,7 +1602,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     &format!(
                                         "Buy operation for {} timed out after {} seconds",
                                         token_symbol,
-                                        BUY_OPERATION_TIMEOUT_SECS
+                                        BUY_OPERATION_SMART_TIMEOUT_SECS
                                     )
                                 );
                                 false
@@ -1645,7 +1646,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             // Add timeout for each handle to prevent getting stuck
                             match
                                 tokio::time::timeout(
-                                    Duration::from_secs(BUY_OPERATION_TIMEOUT_SECS),
+                                    Duration::from_secs(BUY_OPERATION_SMART_TIMEOUT_SECS),
                                     handle
                                 ).await
                             {
@@ -1669,7 +1670,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     log(
                                         LogTag::Trader,
                                         "WARN",
-                                        &format!("Buy task timed out after {} seconds", BUY_OPERATION_TIMEOUT_SECS)
+                                        &format!("Buy task timed out after {} seconds", BUY_OPERATION_SMART_TIMEOUT_SECS)
                                     );
                                 }
                             }
@@ -2045,7 +2046,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     // Wrap the sell operation in a timeout
                     match
                         tokio::time::timeout(
-                            Duration::from_secs(SELL_OPERATION_TIMEOUT_SECS),
+                            Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
                             async {
                                 close_position(&mut position, &token, exit_price, exit_time).await
                             }
@@ -2075,7 +2076,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                                 &format!(
                                     "Sell operation for {} timed out after {} seconds",
                                     token_symbol,
-                                    SELL_OPERATION_TIMEOUT_SECS
+                                    SELL_OPERATION_SMART_TIMEOUT_SECS
                                 )
                             );
                             None

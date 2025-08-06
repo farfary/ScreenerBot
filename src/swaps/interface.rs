@@ -1,4 +1,4 @@
-/// Main swap interface - clean single-purpose functions
+/// Main swap interface - clean single-purpose functions with transaction monitoring
 /// This module provides the main swap functions used by the trading system
 
 use crate::tokens::Token;
@@ -6,7 +6,7 @@ use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
 use crate::global::{is_debug_wallet_enabled, is_debug_swap_enabled};
 use crate::utils::get_token_balance;
-use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard};
+use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard, TransactionMonitoringService};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 use super::types::{SwapData, SOL_MINT};
 use crate::trader::{SLIPPAGE_TOLERANCE_PERCENT, SWAP_FEE_PERCENT};
@@ -123,6 +123,24 @@ pub async fn buy_token(
 
     // Calculate and set the effective price in the swap result
     if swap_result.success {
+        // Add transaction to monitoring service
+        if let Some(ref signature) = swap_result.transaction_signature {
+            if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
+                signature,
+                &token.mint,
+                "buy",
+                SOL_MINT,
+                &token.mint,
+                true, // position related
+            ).await {
+                log(LogTag::Wallet, "MONITOR_WARNING", 
+                    &format!("Failed to add buy transaction to monitoring: {}", e));
+            } else {
+                log(LogTag::Wallet, "MONITOR_ADDED", 
+                    &format!("✅ Buy transaction {} added to monitoring", &signature[..8]));
+            }
+        }
+
         match calculate_effective_price_buy(&swap_result) {
             Ok(effective_price) => {
                 // Update the swap result with the calculated effective price
@@ -361,6 +379,24 @@ async fn sell_token_with_slippage(
 
     // Calculate and set the effective price in the swap result
     if swap_result.success {
+        // Add transaction to monitoring service
+        if let Some(ref signature) = swap_result.transaction_signature {
+            if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
+                signature,
+                &token.mint,
+                "sell",
+                &token.mint,
+                SOL_MINT,
+                true, // position related
+            ).await {
+                log(LogTag::Wallet, "MONITOR_WARNING", 
+                    &format!("Failed to add sell transaction to monitoring: {}", e));
+            } else {
+                log(LogTag::Wallet, "MONITOR_ADDED", 
+                    &format!("✅ Sell transaction {} added to monitoring", &signature[..8]));
+            }
+        }
+
         // Calculate effective price manually since we don't have SwapData in unified result
         let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
         let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);

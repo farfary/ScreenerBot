@@ -170,6 +170,16 @@ async fn main() {
         log(LogTag::System, "INFO", "ATA cleanup service task ended");
     });
 
+    // Start transaction monitoring service
+    let shutdown_transaction_monitor = shutdown.clone();
+    let transaction_monitor_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "Transaction monitoring service task started");
+        if let Err(e) = screenerbot::swaps::transaction::TransactionMonitoringService::start_monitoring_service(shutdown_transaction_monitor).await {
+            log(LogTag::System, "ERROR", &format!("Transaction monitoring service failed: {}", e));
+        }
+        log(LogTag::System, "INFO", "Transaction monitoring service task ended");
+    });
+
     // Start reinforcement learning background service
     let shutdown_rl_learning = shutdown.clone();
     let rl_learning_handle = tokio::spawn(async move {
@@ -370,6 +380,15 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for transaction monitoring service
+            if let Err(e) = transaction_monitor_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Transaction monitoring task failed to shutdown cleanly: {}", e)
                 );
             }
 

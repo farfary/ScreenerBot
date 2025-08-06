@@ -4,6 +4,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
 use crate::swaps::{ buy_token, sell_token };
+use crate::swaps::transaction::TransactionMonitoringService;
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
 
@@ -246,6 +247,9 @@ pub struct Position {
     pub profit_target_min: Option<f64>, // Minimum profit target percentage
     pub profit_target_max: Option<f64>, // Maximum profit target percentage
     pub liquidity_tier: Option<String>, // Liquidity tier for reference
+    // Transaction verification status
+    pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
+    pub transaction_exit_verified: bool, // Whether exit transaction is fully verified
 }
 
 /// Updates position with current price to track extremes
@@ -496,6 +500,9 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                                     .unwrap_or("UNKNOWN")
                             )
                         ),
+                        // Transaction verification status - default to false, will be updated by monitoring service
+                        transaction_entry_verified: false,
+                        transaction_exit_verified: false,
                     };
 
                     if let Ok(mut positions) = SAVED_POSITIONS.lock() {
