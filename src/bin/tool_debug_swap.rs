@@ -1,6 +1,6 @@
 use screenerbot::{
     wallet::{ buy_token, sell_token, get_sol_balance, get_token_balance, get_wallet_address },
-    rpc::{ lamports_to_sol, SwapError },
+    rpc::lamports_to_sol,
     tokens::{
         types::Token,
         price::get_token_price_safe,
@@ -450,15 +450,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("❌ Sell transaction failed: {}", e));
-            log(LogTag::System, "WARNING", "Will attempt to continue with partial test...");
-
-            // Still check final balances even if sell failed
-            check_final_balances(
-                &wallet_address,
-                &token,
-                initial_sol_balance,
-                initial_token_balance
-            ).await;
+            log(LogTag::System, "WARNING", "Cannot display complete swap results - sell failed");
+            
+            // Display only buy results
+            log(LogTag::System, "INFO", "");
+            log(LogTag::System, "INFO", "📊 PARTIAL RESULTS (BUY ONLY)");
+            log(LogTag::System, "INFO", "==================================================");
+            log(LogTag::System, "INFO", &format!("Buy transaction success: {}", buy_result.success));
+            if let Some(tx) = &buy_result.transaction_signature {
+                log(LogTag::System, "INFO", &format!("Buy TX: {}", tx));
+            }
+            log(LogTag::System, "INFO", &format!("Buy input amount: {} lamports", buy_result.input_amount));
+            log(LogTag::System, "INFO", &format!("Buy output amount: {} tokens", buy_result.output_amount));
+            
             std::process::exit(1);
         }
     };
@@ -467,11 +471,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", "⏳ Waiting 5 seconds for transaction to settle...");
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-    // Check final balances and calculate results
-    check_final_balances(&wallet_address, &token, initial_sol_balance, initial_token_balance).await;
+    // Check final balances using only swap results
+    check_final_balances(&wallet_address, &token, initial_sol_balance, initial_token_balance, &buy_result, &sell_result).await;
 
-    // Calculate and display swap metrics
-    calculate_swap_metrics(&buy_result, &sell_result, TEST_SOL_AMOUNT, initial_sol_balance).await;
+    // Display swap metrics using only swap results
+    display_swap_metrics(&buy_result, &sell_result).await;
 
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "SUCCESS", "🎉 Swap debug test completed successfully!");
@@ -479,12 +483,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Check final balances after all transactions
+/// Check final balances using only swap results (no calculations in debug tool)
 async fn check_final_balances(
     wallet_address: &str,
     token: &Token,
     initial_sol_balance: f64,
-    initial_token_balance: u64
+    initial_token_balance: u64,
+    buy_result: &screenerbot::wallet::SwapResult,
+    sell_result: &screenerbot::wallet::SwapResult
 ) {
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "📊 FINAL BALANCE CHECK");
@@ -521,40 +527,34 @@ async fn check_final_balances(
         )
     );
 
-    // Analyze the results
-    let sol_loss = initial_sol_balance - final_sol_balance;
-    let token_change = (final_token_balance as i64) - (initial_token_balance as i64);
-
-    if sol_loss > 0.0 {
-        log(LogTag::System, "INFO", &format!("Net SOL cost: {:.6} SOL", sol_loss));
-        let loss_percentage = (sol_loss / TEST_SOL_AMOUNT) * 100.0;
-        log(LogTag::System, "INFO", &format!("Loss percentage: {:.2}%", loss_percentage));
-
-        if loss_percentage > MAX_PRICE_SLIPPAGE {
-            log(
-                LogTag::System,
-                "WARNING",
-                &format!(
-                    "⚠️ High slippage detected: {:.2}% > {:.1}%",
-                    loss_percentage,
-                    MAX_PRICE_SLIPPAGE
-                )
-            );
-        } else {
-            log(
-                LogTag::System,
-                "SUCCESS",
-                &format!(
-                    "✅ Acceptable slippage: {:.2}% <= {:.1}%",
-                    loss_percentage,
-                    MAX_PRICE_SLIPPAGE
-                )
-            );
-        }
-    } else {
-        log(LogTag::System, "SUCCESS", &format!("✅ Net SOL gain: {:.6} SOL", -sol_loss));
+    // Use swap results directly - no custom calculations
+    log(LogTag::System, "INFO", "");
+    log(LogTag::System, "INFO", "💱 SWAP RESULTS SUMMARY");
+    log(LogTag::System, "INFO", "==================================================");
+    
+    // Buy transaction results
+    log(LogTag::System, "INFO", &format!("Buy transaction success: {}", buy_result.success));
+    if let Some(tx) = &buy_result.transaction_signature {
+        log(LogTag::System, "INFO", &format!("Buy TX: {}", tx));
+    }
+    log(LogTag::System, "INFO", &format!("Buy input amount: {} lamports", buy_result.input_amount));
+    log(LogTag::System, "INFO", &format!("Buy output amount: {} tokens", buy_result.output_amount));
+    if let Some(price) = buy_result.effective_price {
+        log(LogTag::System, "INFO", &format!("Buy effective price: {:.10} SOL per token", price));
+    }
+    
+    // Sell transaction results
+    log(LogTag::System, "INFO", &format!("Sell transaction success: {}", sell_result.success));
+    if let Some(tx) = &sell_result.transaction_signature {
+        log(LogTag::System, "INFO", &format!("Sell TX: {}", tx));
+    }
+    log(LogTag::System, "INFO", &format!("Sell input amount: {} tokens", sell_result.input_amount));
+    log(LogTag::System, "INFO", &format!("Sell output amount: {} lamports", sell_result.output_amount));
+    if let Some(price) = sell_result.effective_price {
+        log(LogTag::System, "INFO", &format!("Sell effective price: {:.10} SOL per token", price));
     }
 
+    let token_change = (final_token_balance as i64) - (initial_token_balance as i64);
     if token_change == 0 {
         log(
             LogTag::System,
@@ -570,152 +570,44 @@ async fn check_final_balances(
     }
 }
 
-/// Calculate and display detailed swap metrics
-async fn calculate_swap_metrics(
+/// Display swap metrics using only swap results (no calculations in debug tool)
+async fn display_swap_metrics(
     buy_result: &screenerbot::wallet::SwapResult,
-    sell_result: &screenerbot::wallet::SwapResult,
-    _test_amount: f64,
-    _initial_sol_balance: f64
+    sell_result: &screenerbot::wallet::SwapResult
 ) {
     log(LogTag::System, "INFO", "");
-    log(LogTag::System, "INFO", "📈 SWAP METRICS");
+    log(LogTag::System, "INFO", "📈 SWAP METRICS FROM RESULTS");
     log(LogTag::System, "INFO", "==================================================");
 
-    // Parse amounts from string results
-    let buy_input_lamports = buy_result.input_amount.parse::<u64>().unwrap_or(0);
-    let buy_output_tokens = buy_result.output_amount.parse::<u64>().unwrap_or(0);
-    let sell_input_tokens = sell_result.input_amount.parse::<u64>().unwrap_or(0);
-    let sell_output_lamports = sell_result.output_amount.parse::<u64>().unwrap_or(0);
-
-    let buy_input_sol = lamports_to_sol(buy_input_lamports);
-    let sell_output_sol = lamports_to_sol(sell_output_lamports);
-
+    // Display buy transaction results directly
     log(LogTag::System, "INFO", &format!("Buy transaction:"));
-    log(
-        LogTag::System,
-        "INFO",
-        &format!("  Input:  {:.6} SOL ({} lamports)", buy_input_sol, buy_input_lamports)
-    );
-    log(LogTag::System, "INFO", &format!("  Output: {} tokens", buy_output_tokens));
+    log(LogTag::System, "INFO", &format!("  Success: {}", buy_result.success));
+    log(LogTag::System, "INFO", &format!("  Input amount: {} (from swap result)", buy_result.input_amount));
+    log(LogTag::System, "INFO", &format!("  Output amount: {} (from swap result)", buy_result.output_amount));
     log(LogTag::System, "INFO", &format!("  Price impact: {}%", buy_result.price_impact));
     log(LogTag::System, "INFO", &format!("  Fee: {} lamports", buy_result.fee_lamports));
+    log(LogTag::System, "INFO", &format!("  Execution time: {:.3}s", buy_result.execution_time));
+    if let Some(price) = buy_result.effective_price {
+        log(LogTag::System, "INFO", &format!("  Effective price: {:.10} SOL per token", price));
+    }
 
+    // Display sell transaction results directly
     log(LogTag::System, "INFO", &format!("Sell transaction:"));
-    log(LogTag::System, "INFO", &format!("  Input:  {} tokens", sell_input_tokens));
-    log(
-        LogTag::System,
-        "INFO",
-        &format!("  Output: {:.6} SOL ({} lamports)", sell_output_sol, sell_output_lamports)
-    );
+    log(LogTag::System, "INFO", &format!("  Success: {}", sell_result.success));
+    log(LogTag::System, "INFO", &format!("  Input amount: {} (from swap result)", sell_result.input_amount));
+    log(LogTag::System, "INFO", &format!("  Output amount: {} (from swap result)", sell_result.output_amount));
     log(LogTag::System, "INFO", &format!("  Price impact: {}%", sell_result.price_impact));
     log(LogTag::System, "INFO", &format!("  Fee: {} lamports", sell_result.fee_lamports));
-
-    // Display effective prices from SwapResult (calculated with correct decimals)
-    if let Some(buy_effective_price) = buy_result.effective_price {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("Effective buy price: {:.10} SOL per token", buy_effective_price)
-        );
-    } else {
-        log(LogTag::System, "WARNING", "Buy effective price not available");
+    log(LogTag::System, "INFO", &format!("  Execution time: {:.3}s", sell_result.execution_time));
+    if let Some(price) = sell_result.effective_price {
+        log(LogTag::System, "INFO", &format!("  Effective price: {:.10} SOL per token", price));
     }
 
-    if let Some(sell_effective_price) = sell_result.effective_price {
-        log(
-            LogTag::System,
-            "INFO",
-            &format!("Effective sell price: {:.10} SOL per token", sell_effective_price)
-        );
-
-        // Compare buy and sell prices if both are available
-        if let Some(buy_effective_price) = buy_result.effective_price {
-            let price_difference_percent = if buy_effective_price > 0.0 {
-                ((sell_effective_price - buy_effective_price) / buy_effective_price) * 100.0
-            } else {
-                0.0
-            };
-
-            log(
-                LogTag::System,
-                "INFO",
-                &format!(
-                    "📈 Price difference: {:.2}% (buy: {:.10}, sell: {:.10})",
-                    price_difference_percent,
-                    buy_effective_price,
-                    sell_effective_price
-                )
-            );
-        }
-    } else {
-        log(LogTag::System, "WARNING", "Sell effective price not available");
-
-        // Fallback: Calculate manually with proper decimal handling
-        if buy_output_tokens > 0 && sell_input_tokens > 0 {
-            // Get token decimals from buy result
-            if let Some(swap_data) = &buy_result.swap_data {
-                let token_decimals = swap_data.quote.out_decimals as u32;
-
-                // Calculate effective prices manually with correct decimals
-                let buy_tokens_actual =
-                    (buy_output_tokens as f64) / (10_f64).powi(token_decimals as i32);
-                let sell_tokens_actual =
-                    (sell_input_tokens as f64) / (10_f64).powi(token_decimals as i32);
-
-                let buy_price_manual = buy_input_sol / buy_tokens_actual;
-                let sell_price_manual = sell_output_sol / sell_tokens_actual;
-
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "Manual effective buy price: {:.10} SOL per token (with {} decimals)",
-                        buy_price_manual,
-                        token_decimals
-                    )
-                );
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "Manual effective sell price: {:.10} SOL per token (with {} decimals)",
-                        sell_price_manual,
-                        token_decimals
-                    )
-                );
-
-                let manual_price_diff = if buy_price_manual > 0.0 {
-                    ((sell_price_manual - buy_price_manual) / buy_price_manual) * 100.0
-                } else {
-                    0.0
-                };
-
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!(
-                        "📈 Manual price difference: {:.2}% (buy: {:.10}, sell: {:.10})",
-                        manual_price_diff,
-                        buy_price_manual,
-                        sell_price_manual
-                    )
-                );
-            }
-        }
-    }
-
-    // Calculate round-trip efficiency
+    // Summary using swap results
+    let total_execution_time = buy_result.execution_time + sell_result.execution_time;
     let total_fees_lamports = buy_result.fee_lamports + sell_result.fee_lamports;
     let total_fees_sol = lamports_to_sol(total_fees_lamports);
-    log(
-        LogTag::System,
-        "INFO",
-        &format!("Total fees: {:.6} SOL ({} lamports)", total_fees_sol, total_fees_lamports)
-    );
-
-    let round_trip_efficiency = (sell_output_sol / buy_input_sol) * 100.0;
-    log(LogTag::System, "INFO", &format!("Round-trip efficiency: {:.2}%", round_trip_efficiency));
-
-    let total_execution_time = buy_result.execution_time + sell_result.execution_time;
+    
+    log(LogTag::System, "INFO", &format!("Total fees: {:.6} SOL ({} lamports)", total_fees_sol, total_fees_lamports));
     log(LogTag::System, "INFO", &format!("Total execution time: {:.3}s", total_execution_time));
 }

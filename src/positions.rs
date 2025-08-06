@@ -3,7 +3,7 @@ use crate::global::*;
 use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
-use crate::wallet::{ buy_token, sell_token };
+use crate::swaps::{ buy_token, sell_token };
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
 

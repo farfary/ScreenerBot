@@ -44,7 +44,7 @@ static RECENT_TRANSACTION_ATTEMPTS: Lazy<StdArc<StdMutex<HashSet<String>>>> = La
 });
 
 /// Prevents duplicate transactions by checking if a similar swap is already pending
-fn check_and_reserve_transaction_slot(token_mint: &str, direction: &str) -> Result<(), SwapError> {
+pub fn check_and_reserve_transaction_slot(token_mint: &str, direction: &str) -> Result<(), SwapError> {
     let transaction_key = format!("{}_{}", token_mint, direction);
 
     if let Ok(mut pending) = PENDING_TRANSACTIONS.lock() {
@@ -76,7 +76,7 @@ fn release_transaction_slot(token_mint: &str, direction: &str) {
 }
 
 /// Checks for recent transaction attempts to prevent rapid retries
-fn check_recent_transaction_attempt(token_mint: &str, direction: &str) -> Result<(), SwapError> {
+pub fn check_recent_transaction_attempt(token_mint: &str, direction: &str) -> Result<(), SwapError> {
     let attempt_key = format!("{}_{}", token_mint, direction);
 
     if let Ok(mut recent) = RECENT_TRANSACTION_ATTEMPTS.lock() {
@@ -110,7 +110,7 @@ fn check_recent_transaction_attempt(token_mint: &str, direction: &str) -> Result
 
 /// Clears recent transaction attempts to allow immediate retry
 /// Used internally for automatic retry logic with increased slippage
-fn clear_recent_transaction_attempt(token_mint: &str, direction: &str) {
+pub fn clear_recent_transaction_attempt(token_mint: &str, direction: &str) {
     let attempt_key = format!("{}_{}", token_mint, direction);
 
     if let Ok(mut recent) = RECENT_TRANSACTION_ATTEMPTS.lock() {
@@ -119,13 +119,13 @@ fn clear_recent_transaction_attempt(token_mint: &str, direction: &str) {
 }
 
 /// RAII guard to ensure transaction slots are always released
-struct TransactionSlotGuard {
+pub struct TransactionSlotGuard {
     token_mint: String,
     direction: String,
 }
 
 impl TransactionSlotGuard {
-    fn new(token_mint: &str, direction: &str) -> Self {
+    pub fn new(token_mint: &str, direction: &str) -> Self {
         Self {
             token_mint: token_mint.to_string(),
             direction: direction.to_string(),
@@ -1118,7 +1118,7 @@ pub async fn execute_swap_with_quote(
     }
 }
 
-/// Helper function to buy a token with SOL
+/// DUPLICATE FUNCTION - TO BE REMOVED - Use swap interface instead
 pub async fn buy_token(
     token: &Token,
     amount_sol: f64,
@@ -1314,6 +1314,7 @@ pub async fn buy_token(
     Ok(swap_result)
 }
 
+/// DUPLICATE FUNCTION - TO BE REMOVED - Use swap interface instead
 /// Helper function to sell ALL tokens in wallet for SOL with automatic slippage retry
 /// NOTE: This function sells the entire wallet balance, not just the position amount.
 /// This ensures complete position closure and prevents dust amounts from being left behind.
@@ -1429,6 +1430,7 @@ pub async fn sell_token(
     )
 }
 
+/// DUPLICATE FUNCTION - TO BE REMOVED - Use swap interface instead  
 /// Internal helper function to sell tokens with specific slippage
 /// This is the actual implementation that was previously the main sell_token function
 async fn sell_token_with_slippage(

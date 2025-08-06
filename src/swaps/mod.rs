@@ -3,10 +3,14 @@
 
 pub mod gmgn;
 pub mod jupiter;
+pub mod interface; // Main swap interface with clean single-purpose functions
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
 use crate::logger::{log, LogTag};
+
+// Re-export main swap functions
+pub use interface::{buy_token, sell_token, SwapResult};
 
 /// Represents a router type for swap operations
 #[derive(Debug, Clone, PartialEq)]
