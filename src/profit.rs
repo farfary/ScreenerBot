@@ -70,7 +70,7 @@ const MEGA_PROFIT_THRESHOLD: f64 = 1000.0; // 1000%+ = very urgent
 // FIXED: No override of MIN_HOLD_TIME - fast profits only apply AFTER minimum hold
 const FAST_PROFIT_THRESHOLD: f64 = 3.0; // 3%+ profit at 1+ minute = fast exit
 const FAST_PROFIT_TIME_LIMIT: f64 = 1.0; // Must be held for 1+ minute minimum
-const SPEED_PROFIT_THRESHOLD: f64 = 5.0; // 5%+ profit at 1+ minute = speed exit  
+const SPEED_PROFIT_THRESHOLD: f64 = 5.0; // 5%+ profit at 1+ minute = speed exit
 const SPEED_PROFIT_TIME_LIMIT: f64 = 1.0; // Changed from 0.5 to respect MIN_HOLD_TIME
 const MOMENTUM_MIN_TIME_SECONDS: f64 = 5.0; // Minimum 5 seconds before momentum calculation
 
@@ -1025,7 +1025,14 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 )
             );
         }
-        return (0.0, format!("Holding for minimum time: {:.1}s of {:.0}s required", minutes_held * 60.0, MIN_HOLD_TIME * 60.0));
+        return (
+            0.0,
+            format!(
+                "Holding for minimum time: {:.1}s of {:.0}s required",
+                minutes_held * 60.0,
+                MIN_HOLD_TIME * 60.0
+            ),
+        );
     }
 
     // � SPEED PROFIT EXIT: >5% profit in <30 seconds = mega urgent (MOST SPECIFIC CHECK FIRST)
@@ -1075,10 +1082,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     if minutes_held < 2.0 && pnl_percent > 0.0 {
         // Prevent division by zero and ensure minimum time for meaningful momentum calculation
         let time_seconds = (minutes_held * 60.0).max(MOMENTUM_MIN_TIME_SECONDS);
-        
+
         // Calculate momentum factor: faster gains = higher urgency
         let momentum_factor = pnl_percent / time_seconds; // % per second
-        
+
         // Dynamic threshold based on momentum
         let dynamic_threshold = if momentum_factor > 0.1 {
             // Very high momentum (>0.1% per second) = lower threshold
@@ -1113,7 +1120,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 ),
             );
         }
-    }    // ═══════════════════════════════════════════════════════════════════════════════════════
+    } // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🚀 INSTANT MEGA-PROFIT EXITS
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
@@ -1297,7 +1304,6 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                         highest_profit_percent,
                         safety_level
                     ),
-                );
                 );
             }
         }
