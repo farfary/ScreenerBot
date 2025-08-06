@@ -16,7 +16,7 @@ use smartcore::ensemble::random_forest_regressor::{
 use smartcore::api::{ SupervisedEstimator, Predictor };
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ is_debug_trader_enabled, is_debug_rl_learn_enabled };
+use crate::global::{ is_debug_trader_enabled, is_debug_rl_learn_enabled, RL_LEARNING_RECORDS };
 use crate::tokens::pool::{ get_pool_service, get_price_history_for_rl_learning };
 use crate::positions::get_open_positions;
 
@@ -280,8 +280,7 @@ impl TradingLearner {
 
     /// Save RL data to disk for persistence
     pub fn save_to_disk(&self) -> Result<(), String> {
-        const DATA_FILE: &str = "rl_learning_records.json";
-        const TEMP_FILE: &str = "rl_learning_records.json.tmp";
+        const TEMP_SUFFIX: &str = ".tmp";
 
         // Gather data from protected fields
         let records_data = {
@@ -345,13 +344,14 @@ impl TradingLearner {
             .map_err(|e| format!("Failed to serialize RL data: {}", e))?;
 
         // Write to temporary file first (atomic operation)
+        let temp_file = format!("{}{}", RL_LEARNING_RECORDS, TEMP_SUFFIX);
         std::fs
-            ::write(TEMP_FILE, json_data)
+            ::write(&temp_file, json_data)
             .map_err(|e| format!("Failed to write RL data to temp file: {}", e))?;
 
         // Rename temp file to final file (atomic operation)
         std::fs
-            ::rename(TEMP_FILE, DATA_FILE)
+            ::rename(&temp_file, RL_LEARNING_RECORDS)
             .map_err(|e| format!("Failed to rename RL data file: {}", e))?;
 
         // Update last save time
@@ -377,10 +377,8 @@ impl TradingLearner {
 
     /// Load RL data from disk for persistence
     pub fn load_from_disk(&self) -> Result<(), String> {
-        const DATA_FILE: &str = "rl_learning_records.json";
-
         // Check if file exists
-        if !Path::new(DATA_FILE).exists() {
+        if !Path::new(RL_LEARNING_RECORDS).exists() {
             if is_debug_rl_learn_enabled() {
                 log(
                     LogTag::RlLearn,
@@ -393,7 +391,7 @@ impl TradingLearner {
 
         // Read and parse file
         let file_content = std::fs
-            ::read_to_string(DATA_FILE)
+            ::read_to_string(RL_LEARNING_RECORDS)
             .map_err(|e| format!("Failed to read RL data file: {}", e))?;
 
         let state: RlPersistentState = serde_json
