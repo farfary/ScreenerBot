@@ -2380,19 +2380,37 @@ pub fn validate_best_quote_price(
         )
     );
 
+    // Get token decimals from the execution data
+    let (input_decimals, output_decimals) = match &quote.execution_data {
+        crate::swaps::QuoteExecutionData::GMGN(gmgn_data) => {
+            (gmgn_data.quote.in_decimals, gmgn_data.quote.out_decimals)
+        }
+        crate::swaps::QuoteExecutionData::Jupiter(_) => {
+            // For Jupiter, we'll need to implement this later
+            // For now, assume SOL (9 decimals) and common token decimals (6)
+            if is_sol_to_token {
+                (9u8, 6u8) // SOL to token
+            } else {
+                (6u8, 9u8) // Token to SOL
+            }
+        }
+    };
+
     let actual_price_per_token = if is_sol_to_token {
         // For SOL to token: price = SOL spent / tokens received
-        let input_sol = lamports_to_sol(quote.input_amount);
-        if quote.output_amount > 0 {
-            input_sol / (quote.output_amount as f64)
+        let input_sol = (quote.input_amount as f64) / (10_f64).powi(input_decimals as i32);
+        let output_tokens = (quote.output_amount as f64) / (10_f64).powi(output_decimals as i32);
+        if output_tokens > 0.0 {
+            input_sol / output_tokens
         } else {
             0.0
         }
     } else {
         // For token to SOL: price = SOL received / tokens spent
-        let output_sol = lamports_to_sol(quote.output_amount);
-        if quote.input_amount > 0 {
-            output_sol / (quote.input_amount as f64)
+        let input_tokens = (quote.input_amount as f64) / (10_f64).powi(input_decimals as i32);
+        let output_sol = (quote.output_amount as f64) / (10_f64).powi(output_decimals as i32);
+        if input_tokens > 0.0 {
+            output_sol / input_tokens
         } else {
             0.0
         }
