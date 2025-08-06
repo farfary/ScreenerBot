@@ -4,7 +4,7 @@
 /// for consistent RPC configuration and connection management.
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ read_configs, is_debug_wallet_enabled };
+use crate::global::{ read_configs, is_debug_wallet_enabled, RPC_STATS };
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{
     account::Account,
@@ -236,7 +236,7 @@ impl RpcStats {
             .map_err(|e| format!("Failed to serialize RPC stats: {}", e))?;
 
         std::fs
-            ::write("rpc_stats.json", json_data)
+            ::write(RPC_STATS, json_data)
             .map_err(|e| format!("Failed to write RPC stats file: {}", e))?;
 
         Ok(())
@@ -244,7 +244,7 @@ impl RpcStats {
 
     /// Load stats from disk, merging with current stats
     pub fn load_from_disk(&mut self) -> Result<(), String> {
-        match std::fs::read_to_string("rpc_stats.json") {
+        match std::fs::read_to_string(RPC_STATS) {
             Ok(data) => {
                 match serde_json::from_str::<RpcStats>(&data) {
                     Ok(loaded_stats) => {
@@ -519,9 +519,7 @@ impl RpcClient {
 
     /// Create new RPC client from configs.json
     pub fn from_config() -> Result<Self, String> {
-        let configs = read_configs("configs.json").map_err(|e|
-            format!("Failed to read configs: {}", e)
-        )?;
+        let configs = read_configs().map_err(|e| format!("Failed to read configs: {}", e))?;
 
         let mut all_urls = vec![configs.rpc_url.clone()];
         all_urls.extend(configs.rpc_fallbacks.clone());
@@ -1025,9 +1023,7 @@ impl RpcClient {
         let client = reqwest::Client::new();
 
         // Use main RPC URL first
-        let configs = read_configs("configs.json").map_err(|e|
-            SwapError::ConfigError(e.to_string())
-        )?;
+        let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
         let mut should_fallback = false;
 
@@ -1173,9 +1169,7 @@ impl RpcClient {
         let client = reqwest::Client::new();
 
         // Use main RPC URL first
-        let configs = read_configs("configs.json").map_err(|e|
-            SwapError::ConfigError(e.to_string())
-        )?;
+        let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
         let mut should_fallback = false;
 
@@ -1358,9 +1352,7 @@ impl RpcClient {
         let client = reqwest::Client::new();
 
         // Use main RPC URL first
-        let configs = read_configs("configs.json").map_err(|e|
-            SwapError::ConfigError(e.to_string())
-        )?;
+        let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
         let mut should_fallback = false;
 
@@ -1496,9 +1488,7 @@ impl RpcClient {
         let client = reqwest::Client::new();
 
         // Use premium RPC URL first
-        let configs = read_configs("configs.json").map_err(|e|
-            SwapError::ConfigError(e.to_string())
-        )?;
+        let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
         let premium_rpc = &configs.rpc_url_premium;
 
@@ -1599,9 +1589,7 @@ impl RpcClient {
     ) -> Result<String, SwapError> {
         self.wait_for_rate_limit().await;
 
-        let configs = read_configs("configs.json").map_err(|e|
-            SwapError::ConfigError(e.to_string())
-        )?;
+        let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
         if is_debug_wallet_enabled() {
             log(

@@ -308,7 +308,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Check which program owns a token account (corrected detection logic)
 async fn check_token_account_program(token_account: &str) -> Result<bool, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     let rpc_payload =
         serde_json::json!({
@@ -398,7 +398,7 @@ async fn build_and_send_close_instruction_fixed(
     token_account: &str,
     is_token_2022: bool
 ) -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     // Parse addresses
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|

@@ -27,7 +27,7 @@
 /// ```
 
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_ohlcv_enabled;
+use crate::global::{ is_debug_ohlcv_enabled, CACHE_OHLCVS_DIR };
 use crate::tokens::pool::{ get_pool_service };
 use crate::tokens::price::{ get_priority_tokens_safe };
 use tokio::sync::{ RwLock, Notify };
@@ -57,7 +57,7 @@ const API_RATE_LIMIT_PER_MINUTE: u32 = 30;
 const API_RATE_LIMIT_DELAY_MS: u64 = 2000;
 
 /// Cache directory for OHLCV data
-const CACHE_DIR: &str = ".cache_ohlcvs";
+const CACHE_DIR: &str = CACHE_OHLCVS_DIR;
 
 /// Data retention period (24 hours)
 const DATA_RETENTION_HOURS: i64 = 24;

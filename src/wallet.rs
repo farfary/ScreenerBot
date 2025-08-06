@@ -339,7 +339,7 @@ pub struct SwapResult {
 
 /// Gets wallet address from configs by deriving from private key
 pub fn get_wallet_address() -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     // Decode the private key from base58
     let private_key_bytes = bs58
@@ -975,7 +975,7 @@ pub async fn execute_swap_with_quote(
     input_amount: u64,
     swap_data: SwapData
 ) -> Result<SwapResult, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     // Determine if this is SOL to token or token to SOL
     let is_sol_to_token = input_mint == SOL_MINT;
@@ -2236,7 +2236,7 @@ async fn build_and_send_close_instruction(
     token_account: &str,
     is_token_2022: bool
 ) -> Result<String, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     // Parse addresses
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e|

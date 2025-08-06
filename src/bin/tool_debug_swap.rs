@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", &format!("Test amount: {:.6} SOL", TEST_SOL_AMOUNT));
 
     // Validate configuration
-    let _configs = match read_configs("configs.json") {
+    let _configs = match read_configs() {
         Ok(configs) => configs,
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to read configs: {}", e));

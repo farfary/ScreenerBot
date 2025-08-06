@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 use chrono::{ DateTime, Utc, Duration as ChronoDuration };
 use crate::logger::{ log, LogTag };
+use crate::global::TOKEN_BLACKLIST as TOKEN_BLACKLIST_FILE;
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -21,7 +22,7 @@ pub const MIN_AGE_HOURS: i64 = 2;
 pub const MAX_LOW_LIQUIDITY_COUNT: u32 = 5;
 
 /// Blacklist file path
-pub const BLACKLIST_FILE: &str = "token_blacklist.json";
+pub const BLACKLIST_FILE: &str = TOKEN_BLACKLIST_FILE;
 
 /// System and stable tokens that should always be excluded from trading
 pub const SYSTEM_STABLE_TOKENS: &[&str] = &[

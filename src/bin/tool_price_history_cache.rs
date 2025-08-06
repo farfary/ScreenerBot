@@ -1,5 +1,5 @@
 use screenerbot::{
-    global::{ read_configs, set_cmd_args },
+    global::{ read_configs, set_cmd_args, CACHE_PRICES_DIR },
     logger::{ log, LogTag },
     tokens::{
         pool::{
@@ -77,7 +77,7 @@ fn print_help() {
     println!();
     println!("⚠️  Safety Information:");
     println!("  🟢 Low-Risk: All commands are read-only or maintenance operations");
-    println!("  💾 Cache Location: .cache_prices/ directory");
+    println!("  💾 Cache Location: {} directory", CACHE_PRICES_DIR);
     println!("  🕒 Cache Duration: 2 hours maximum per token");
     println!("  📊 Change Detection: Only records when price changes");
 }
@@ -87,7 +87,7 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
     println!("===========================================");
 
     // Initialize required systems
-    let _configs = read_configs("configs.json")?;
+    let _configs = read_configs()?;
     init_rpc_client()?;
     let _ = init_dexscreener_api().await;
 
@@ -231,7 +231,7 @@ async fn show_cache_stats() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Price History Cache Statistics");
     println!("=================================");
 
-    let cache_dir = std::path::Path::new(".cache_prices");
+    let cache_dir = std::path::Path::new(CACHE_PRICES_DIR);
 
     if !cache_dir.exists() {
         println!("📁 Cache directory does not exist");

@@ -592,7 +592,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Gets all token accounts for the given wallet address
 async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     let rpc_payload =
         serde_json::json!({
@@ -713,7 +713,7 @@ async fn get_all_token_accounts(wallet_address: &str) -> Result<Vec<TokenAccount
 
 /// Also get Token-2022 accounts (Token Extensions Program)
 async fn get_token_2022_accounts(wallet_address: &str) -> Result<Vec<TokenAccount>, SwapError> {
-    let configs = read_configs("configs.json").map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     let rpc_payload =
         serde_json::json!({

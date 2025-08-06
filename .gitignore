@@ -1,5 +1,13 @@
 /target
 .DS_Store
+
+# Log files
+logs/*
+
+# Data directory (contains all bot-generated files)
+data/
+
+# Legacy cache files (now in data/cache_*)
 .pool_cache.json
 .solana_pairs_cache.json
 .token_decimals_cache.json
@@ -7,15 +15,8 @@
 .blacklist.json
 .cache_ohlcv/*
 .cache_trades/*
-logs/*
 .cache_ohlcvs/*
 .cache_prices/*
-.DS_Store
+
+# Build artifacts
 Cargo.lock
-ata_failed_cache.json
-ata_failed_cache.json
-decimal_cache.json
-positions.json
-rl_learning_records.json
-rpc_stats.json
-tokens.db

@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Load configuration
-    let _configs = read_configs("configs.json")?;
+    let _configs = read_configs()?;
 
     // Initialize pool service
     init_pool_service();

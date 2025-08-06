@@ -8,7 +8,7 @@ use screenerbot::{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Read configs to initialize systems
-    let _configs = read_configs("configs.json").expect("Failed to read configs");
+    let _configs = read_configs().expect("Failed to read configs");
 
     log(LogTag::System, "INFO", "🧪 Starting RL persistence test");
 

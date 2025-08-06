@@ -5,7 +5,7 @@
 /// calculates prices from pool reserves, and maintains a watch list for continuous monitoring.
 
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_pool_prices_enabled;
+use crate::global::{ is_debug_pool_prices_enabled, CACHE_PRICES_DIR };
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_token_decimals_from_chain, get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
@@ -36,7 +36,7 @@ const PRICE_CACHE_TTL_SECONDS: i64 = 1;
 const WATCH_LIST_TIMEOUT_SECONDS: i64 = 300;
 
 /// Price history cache settings
-const PRICE_HISTORY_CACHE_DIR: &str = ".cache_prices";
+const PRICE_HISTORY_CACHE_DIR: &str = CACHE_PRICES_DIR;
 const PRICE_HISTORY_MAX_AGE_HOURS: i64 = 2; // 2 hours maximum
 const PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 5; // Save every 5 seconds
 const PRICE_HISTORY_MAX_ENTRIES: usize = 1440; // Max entries (2 hours * 60 min * 12 entries/min = 1440)

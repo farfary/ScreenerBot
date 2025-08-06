@@ -1,6 +1,7 @@
 /// Price caching system for the centralized pricing module
 use crate::tokens::types::*;
 use crate::logger::{ log, LogTag };
+use crate::global::TOKENS_DATABASE;
 use std::collections::HashMap;
 use std::time::{ Duration, Instant };
 use chrono::{ DateTime, Utc };
@@ -334,7 +335,7 @@ unsafe impl Sync for TokenDatabase {}
 impl TokenDatabase {
     /// Create new token database instance
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let connection = Connection::open("tokens.db")?;
+        let connection = Connection::open(TOKENS_DATABASE)?;
 
         // Create tables if they don't exist
         connection.execute(

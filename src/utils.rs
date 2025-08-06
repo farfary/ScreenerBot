@@ -5,6 +5,7 @@ use std::fs;
 use serde_json;
 use crate::positions::*;
 use crate::logger::{ log, LogTag };
+use crate::global::POSITIONS_FILE;
 
 /// Format a duration (from Option<DateTime<Utc>>) as a human-readable age string (y d h m s)
 pub fn format_age_string(created_at: Option<DateTime<Utc>>) -> String {
@@ -59,21 +60,27 @@ pub async fn delay_with_shutdown(shutdown: &Notify, duration: Duration) {
 
 pub fn save_positions_to_file(positions: &Vec<Position>) {
     if let Ok(json) = serde_json::to_string_pretty(positions) {
-        if let Err(e) = fs::write("positions.json", json) {
-            log(LogTag::Trader, "ERROR", &format!("Failed to write positions.json: {}", e));
+        if let Err(e) = fs::write(POSITIONS_FILE, json) {
+            log(LogTag::Trader, "ERROR", &format!("Failed to write {}: {}", POSITIONS_FILE, e));
         }
     }
 }
 
 pub fn load_positions_from_file() -> Vec<Position> {
-    match fs::read_to_string("positions.json") {
-        Ok(content) => {
-            serde_json::from_str(&content).unwrap_or_else(|e| {
-                log(LogTag::Trader, "ERROR", &format!("Failed to parse positions.json: {}", e));
-                Vec::new()
-            })
-        }
-        Err(_) => Vec::new(), // File doesn't exist yet
+    match fs::read_to_string(POSITIONS_FILE) {
+        Ok(content) =>
+            match serde_json::from_str::<Vec<Position>>(&content) {
+                Ok(positions) => positions,
+                Err(e) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!("Failed to parse {}: {}", POSITIONS_FILE, e)
+                    );
+                    Vec::new()
+                }
+            }
+        Err(_) => Vec::new(), // Return empty vector if file doesn't exist
     }
 }
 

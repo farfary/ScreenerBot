@@ -6,6 +6,7 @@
 
 use crate::logger::{ log, LogTag };
 use crate::wallet::get_wallet_address;
+use crate::global::ATA_FAILED_CACHE;
 
 use std::sync::{ Arc, Mutex, LazyLock };
 use std::collections::HashSet;
@@ -19,7 +20,7 @@ use chrono;
 /// Configuration constants for ATA cleanup service
 const ATA_CLEANUP_INTERVAL_MINUTES: u64 = 5; // Check every 5 minutes
 const ATA_CLEANUP_STARTUP_DELAY_SECONDS: u64 = 30; // Wait 30 seconds before first cleanup
-const ATA_FAILED_CACHE_FILE: &str = "ata_failed_cache.json"; // Cache file for failed ATA closures
+const ATA_FAILED_CACHE_FILE: &str = ATA_FAILED_CACHE; // Cache file for failed ATA closures
 
 /// Global statistics for ATA cleanup operations
 static ATA_STATS: LazyLock<Mutex<AtaCleanupStats>> = LazyLock::new(||

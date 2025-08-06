@@ -488,7 +488,7 @@ async fn main() -> Result<(), BurnError> {
     }
 
     // Load wallet keypair
-    let configs = match read_configs("configs.json") {
+    let configs = match read_configs() {
         Ok(configs) => configs,
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to read configs: {}", e));

@@ -410,7 +410,7 @@ async fn run_filtering_analysis() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "Starting Filtering System Analysis...".bright_green().bold());
 
     // Initialize systems
-    let _configs = read_configs("configs.json")?;
+    let _configs = read_configs()?;
     init_dexscreener_api().await?;
 
     // Connect to database

@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize required services
     log(LogTag::RlLearn, "INIT", "Initializing services for RL analysis...");
 
-    let configs = read_configs("configs.json")?;
+    let configs = read_configs()?;
     init_dexscreener_api().await?;
     init_rpc_client()?;
     initialize_price_service().await?;

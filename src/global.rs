@@ -12,6 +12,64 @@ pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| { Mutex::new(env::a
 // Startup timestamp to track when the bot started for trading logic
 pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 
+// ================================================================================================
+// 📁 CENTRALIZED DATA PATHS - ALL FILE AND FOLDER PATHS IN ONE PLACE
+// ================================================================================================
+
+/// Data directory for all bot-generated files
+pub const DATA_DIR: &str = "data";
+
+/// Configuration files
+pub const CONFIG_FILE: &str = "data/configs.json";
+
+/// Database files
+pub const TOKENS_DATABASE: &str = "data/tokens.db";
+
+/// Cache files
+pub const ATA_FAILED_CACHE: &str = "data/ata_failed_cache.json";
+pub const DECIMAL_CACHE: &str = "data/decimal_cache.json";
+pub const TOKEN_BLACKLIST: &str = "data/token_blacklist.json";
+pub const RPC_STATS: &str = "data/rpc_stats.json";
+
+/// Position and trading data
+pub const POSITIONS_FILE: &str = "data/positions.json";
+pub const RL_LEARNING_RECORDS: &str = "data/rl_learning_records.json";
+pub const ENTRY_ANALYSIS: &str = "data/entry_analysis.json";
+
+/// Cache directories
+pub const CACHE_PRICES_DIR: &str = "data/cache_prices";
+pub const CACHE_OHLCVS_DIR: &str = "data/cache_ohlcvs";
+
+/// Log directory
+pub const LOGS_DIR: &str = "logs";
+
+/// Test output file
+pub const TEST_OUTPUT: &str = "data/test_output.log";
+
+/// Function to ensure data directory and subdirectories exist
+pub fn ensure_data_directories() -> Result<(), Box<dyn std::error::Error>> {
+    // Create main data directory
+    fs::create_dir_all(DATA_DIR)?;
+
+    // Create cache subdirectories
+    fs::create_dir_all(CACHE_PRICES_DIR)?;
+    fs::create_dir_all(CACHE_OHLCVS_DIR)?;
+
+    // Create logs directory
+    fs::create_dir_all(LOGS_DIR)?;
+
+    Ok(())
+}
+
+/// Get the full path for a data file (convenience function)
+pub fn get_data_path(filename: &str) -> String {
+    format!("{}/{}", DATA_DIR, filename)
+}
+
+// ================================================================================================
+// 🚀 DEBUG FLAGS SYSTEM
+// ================================================================================================
+
 /// Set command arguments (used for tools and testing)
 pub fn set_cmd_args(args: Vec<String>) {
     if let Ok(mut cmd_args) = CMD_ARGS.lock() {
@@ -147,8 +205,17 @@ pub struct Configs {
     pub rpc_fallbacks: Vec<String>,
 }
 
-/// Reads the configs.json file from the project root and returns a Configs object
-pub fn read_configs<P: AsRef<Path>>(path: P) -> Result<Configs, Box<dyn std::error::Error>> {
+/// Reads the configs.json file from the data directory and returns a Configs object
+pub fn read_configs() -> Result<Configs, Box<dyn std::error::Error>> {
+    let data = fs::read_to_string(CONFIG_FILE)?;
+    let configs: Configs = serde_json::from_str(&data)?;
+    Ok(configs)
+}
+
+/// Backward compatibility function - reads configs from specified path
+pub fn read_configs_from_path<P: AsRef<Path>>(
+    path: P
+) -> Result<Configs, Box<dyn std::error::Error>> {
     let data = fs::read_to_string(path)?;
     let configs: Configs = serde_json::from_str(&data)?;
     Ok(configs)

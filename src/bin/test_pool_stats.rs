@@ -6,7 +6,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize dependencies
     println!("🔄 Initializing services...");
 
-    let _configs = read_configs("configs.json")?;
+    let _configs = read_configs()?;
     init_rpc_client()?;
     init_dexscreener_api().await?;
 

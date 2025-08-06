@@ -1,6 +1,6 @@
 /// Token decimals fetching from Solana blockchain
 use crate::logger::{ log, LogTag };
-use crate::global::is_debug_decimals_enabled;
+use crate::global::{ is_debug_decimals_enabled, DECIMAL_CACHE as DECIMAL_CACHE_FILE };
 use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
 use solana_sdk::pubkey::Pubkey;
@@ -14,7 +14,7 @@ use std::fs;
 use std::path::Path;
 use serde::{ Serialize, Deserialize };
 
-const CACHE_FILE_NAME: &str = "decimal_cache.json";
+const CACHE_FILE_NAME: &str = DECIMAL_CACHE_FILE;
 
 #[derive(Serialize, Deserialize)]
 struct DecimalCacheData {
