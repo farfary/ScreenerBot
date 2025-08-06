@@ -257,19 +257,35 @@ async fn analyze_entry_signals(
         .collect();
 
     let recent_high = recent_prices.iter().fold(0.0f64, |a, &b| a.max(b));
-    let recent_low = recent_prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+    let recent_low = if recent_prices.is_empty() {
+        f64::INFINITY
+    } else {
+        recent_prices.iter().fold(f64::INFINITY, |a, &b| a.min(b))
+    };
 
+    // Validate fold results
     if recent_high <= 0.0 || !recent_high.is_finite() {
+        return None;
+    }
+    
+    // Check for empty data causing invalid low value
+    if recent_low == f64::INFINITY || !recent_low.is_finite() {
         return None;
     }
 
     // Calculate key metrics
     let drop_from_high = ((recent_high - current_price) / recent_high) * 100.0;
     let rise_from_low = if recent_low > 0.0 && recent_low.is_finite() {
-        ((current_price - recent_low) / recent_low) * 100.0
+        let result = ((current_price - recent_low) / recent_low) * 100.0;
+        if result.is_finite() { result } else { 0.0 }
     } else {
         0.0
     };
+
+    // Validate that calculated percentages are finite
+    if !drop_from_high.is_finite() {
+        return None;
+    }
 
     // Strategy 3a: Classic -10% drop detection (enhanced)
     if drop_from_high >= 10.0 {
@@ -323,7 +339,18 @@ async fn analyze_entry_signals(
         // If we haven't seen price updates recently but token is still active
         if time_since_last >= 2 && time_since_last <= 10 {
             let avg_price = recent_prices.iter().sum::<f64>() / (recent_prices.len() as f64);
+            
+            // Validate average price calculation
+            if !avg_price.is_finite() || avg_price <= 0.0 {
+                return None;
+            }
+            
             let price_deviation = ((current_price - avg_price).abs() / avg_price) * 100.0;
+            
+            // Validate deviation calculation
+            if !price_deviation.is_finite() {
+                return None;
+            }
 
             // Significant deviation from recent average
             if price_deviation >= 3.0 {
@@ -351,17 +378,47 @@ fn analyze_price_trend(prices: &[f64]) -> TrendSignal {
         return TrendSignal::NoSignal;
     }
 
-    // Calculate moving averages
+    // Calculate moving averages with validation
     let short_ma = prices.iter().rev().take(3).sum::<f64>() / 3.0;
     let long_ma = prices.iter().sum::<f64>() / (prices.len() as f64);
 
+    // Validate moving averages
+    if !short_ma.is_finite() || !long_ma.is_finite() {
+        return TrendSignal::NoSignal;
+    }
+
     let current_price = prices[prices.len() - 1];
-    let max_price = prices.iter().fold(0.0f64, |a, &b| a.max(b));
-    let min_price = prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+    
+    // Validate current price
+    if !current_price.is_finite() || current_price <= 0.0 {
+        return TrendSignal::NoSignal;
+    }
+    
+    let max_price = if prices.is_empty() {
+        0.0
+    } else {
+        prices.iter().fold(0.0f64, |a, &b| a.max(b))
+    };
+    let min_price = if prices.is_empty() {
+        f64::INFINITY  
+    } else {
+        prices.iter().fold(f64::INFINITY, |a, &b| a.min(b))
+    };
+
+    // Validate min/max calculations
+    if !max_price.is_finite() || max_price <= 0.0 || 
+       !min_price.is_finite() || min_price == f64::INFINITY {
+        return TrendSignal::NoSignal;
+    }
 
     // Oversold condition: price near bottom of range with upward short MA
     let range = max_price - min_price;
-    let position_in_range = if range > 0.0 { (current_price - min_price) / range } else { 0.5 };
+    let position_in_range = if range > 0.0 && range.is_finite() { 
+        let result = (current_price - min_price) / range;
+        if result.is_finite() && result >= 0.0 && result <= 1.0 { result } else { 0.5 }
+    } else { 
+        0.5 
+    };
 
     if position_in_range <= 0.3 && short_ma > long_ma {
         return TrendSignal::Oversold;
@@ -373,7 +430,11 @@ fn analyze_price_trend(prices: &[f64]) -> TrendSignal {
     }
 
     // Volatility breakout: significant price movement with volume
-    let volatility = range / long_ma;
+    let volatility = if long_ma > 0.0 && long_ma.is_finite() {
+        range / long_ma
+    } else {
+        0.0 // Avoid division by zero or invalid long_ma
+    };
     if volatility >= 0.05 && position_in_range >= 0.4 && position_in_range <= 0.6 {
         return TrendSignal::VolatilityBreakout;
     }
@@ -715,8 +776,13 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
         }
     }
 
-    // Normalize confidence to 0-100 scale
-    confidence = confidence.min(100.0);
+    // Normalize confidence to 0-100 scale and validate result
+    confidence = confidence.min(100.0).max(0.0);
+    
+    // Validate confidence is finite and within bounds
+    if !confidence.is_finite() {
+        confidence = 0.0;
+    }
 
     // Entry threshold: require at least 60% confidence
     let should_enter = confidence >= 60.0;
