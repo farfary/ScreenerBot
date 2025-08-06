@@ -198,12 +198,107 @@ fn analyze_all_fees(details: &screenerbot::rpc::TransactionDetails) {
             }
         }
         
-        // 6. Total fee summary
+        // 6. Calculate actual SOL spent on tokens (excluding reclaimable costs)
+        let mut net_sol_spent = 0.0;
+        let mut reclaimable_ata_rent = 0.0;
+        let mut permanent_costs = 0.0;
+        
+        // Transaction fee is permanent cost
+        permanent_costs += transaction_fee_sol;
+        
+        // ATA rent is reclaimable, so subtract from total
+        for (account_type, count, total_lamports) in &account_creation_costs {
+            let cost_sol = *total_lamports as f64 / 1_000_000_000.0;
+            if account_type.contains("Associated Token Accounts") {
+                reclaimable_ata_rent += cost_sol;
+            } else {
+                permanent_costs += cost_sol;
+            }
+        }
+        
+        // Calculate net SOL spent on tokens from balance changes
+        if !meta.pre_balances.is_empty() && !meta.post_balances.is_empty() {
+            for (_i, (pre, post)) in meta.pre_balances.iter().zip(meta.post_balances.iter()).enumerate() {
+                let change = *post as i64 - *pre as i64;
+                if change < 0 {
+                    let loss_sol = (-change) as f64 / 1_000_000_000.0;
+                    net_sol_spent += loss_sol;
+                }
+            }
+        }
+        
+        // Account creation/closure analysis
+        analyze_account_lifecycle(&details, &mut permanent_costs, &mut reclaimable_ata_rent);
+        
+        // Total fee summary
         let total_fees_sol = total_fees_lamports as f64 / 1_000_000_000.0;
         println!("\n  💰 Total Estimated Fees: {:.9} SOL ({} lamports)", 
             total_fees_sol, total_fees_lamports);
         
-        // 7. Fee breakdown percentage
+        // 7. Net SOL analysis
+        println!("\n  🧮 Net SOL Analysis:");
+        println!("    💸 Total SOL Spent: {:.9} SOL", net_sol_spent);
+        println!("    🔄 Reclaimable ATA Rent: {:.9} SOL", reclaimable_ata_rent);
+        println!("    🔥 Permanent Costs: {:.9} SOL", permanent_costs);
+        
+        let actual_token_cost = net_sol_spent - reclaimable_ata_rent;
+        if actual_token_cost > 0.0 {
+            println!("    ⭐ Net SOL for Tokens: {:.9} SOL", actual_token_cost);
+            
+            // Calculate efficiency based on net cost
+            if let (Some(pre_token_balances), Some(post_token_balances)) = 
+                (&meta.pre_token_balances, &meta.post_token_balances) {
+                
+                let mut token_value_received = 0.0;
+                
+                // Try to estimate token value received
+                for post_balance in post_token_balances {
+                    if let Some(pre_balance) = pre_token_balances.iter()
+                        .find(|pb| pb.account_index == post_balance.account_index) {
+                        
+                        let pre_amount = pre_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                        let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                        
+                        if post_amount > pre_amount {
+                            let gain = post_amount - pre_amount;
+                            let decimals = post_balance.ui_token_amount.decimals;
+                            let gain_formatted = gain as f64 / 10_f64.powi(decimals as i32);
+                            
+                            // For USDC/USDT (6 decimals), treat 1:1 with USD
+                            if decimals == 6 && (post_balance.mint.contains("USDC") || 
+                                post_balance.mint.contains("USDT") || 
+                                post_balance.mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") {
+                                // Rough USD to SOL conversion (very approximate)
+                                token_value_received += gain_formatted * 0.01; // Assume 1 USD = 0.01 SOL
+                            }
+                        }
+                    } else {
+                        // New token account
+                        let amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                        if amount > 0 {
+                            let decimals = post_balance.ui_token_amount.decimals;
+                            let amount_formatted = amount as f64 / 10_f64.powi(decimals as i32);
+                            
+                            if decimals == 6 && (post_balance.mint.contains("USDC") || 
+                                post_balance.mint.contains("USDT") || 
+                                post_balance.mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") {
+                                token_value_received += amount_formatted * 0.01;
+                            }
+                        }
+                    }
+                }
+                
+                if token_value_received > 0.0 {
+                    let net_trade_efficiency = (actual_token_cost / token_value_received) * 100.0;
+                    println!("    📊 Estimated Token Value: {:.6} SOL equivalent", token_value_received);
+                    println!("    💹 Net Trading Cost: {:.4}% of token value", net_trade_efficiency);
+                }
+            }
+        } else {
+            println!("    ✅ Net Gain: {:.9} SOL (after reclaimable rent)", -actual_token_cost);
+        }
+        
+        // 8. Fee breakdown percentage
         if total_fees_lamports > 0 {
             println!("\n  📊 Fee Breakdown:");
             let tx_fee_percent = (meta.fee as f64 / total_fees_lamports as f64) * 100.0;
@@ -215,7 +310,7 @@ fn analyze_all_fees(details: &screenerbot::rpc::TransactionDetails) {
             }
         }
         
-        // 8. Fee efficiency analysis
+        // 9. Fee efficiency analysis (original)
         if let (Some(pre_token_balances), Some(post_token_balances)) = 
             (&meta.pre_token_balances, &meta.post_token_balances) {
             
@@ -279,6 +374,132 @@ fn analyze_compute_budget_fees(data: &[u8], instruction_num: usize, fee_details:
                 }
             }
             _ => {}
+        }
+    }
+}
+
+fn analyze_account_lifecycle(details: &screenerbot::rpc::TransactionDetails, permanent_costs: &mut f64, reclaimable_rent: &mut f64) {
+    println!("\n  🏗️ Account Lifecycle Analysis:");
+    
+    if let Some(meta) = &details.meta {
+        let mut accounts_created = 0;
+        let mut accounts_closed = 0;
+        let mut ata_created = 0;
+        let mut ata_closed = 0;
+        let mut system_accounts_created = 0;
+        
+        // Analyze from logs
+        if let Some(log_messages) = &meta.log_messages {
+            for (i, log) in log_messages.iter().enumerate() {
+                if log.contains("InitializeAccount3") || log.contains("InitializeAccount2") || log.contains("InitializeAccount") {
+                    if !log.contains("InitializeMultisig") {
+                        ata_created += 1;
+                        println!("    🆕 Log {}: ATA account created", i);
+                    }
+                } else if log.contains("CreateIdempotent") {
+                    ata_created += 1;
+                    println!("    🆕 Log {}: ATA account created (idempotent)", i);
+                } else if log.contains("CloseAccount") {
+                    ata_closed += 1;
+                    println!("    🗑️ Log {}: Token account closed", i);
+                } else if log.contains("CreateAccount") || log.contains("Allocate") {
+                    system_accounts_created += 1;
+                    println!("    🆕 Log {}: System account created", i);
+                }
+            }
+        }
+        
+        // Analyze from balance changes to detect account creation/closure
+        if !meta.pre_balances.is_empty() && !meta.post_balances.is_empty() {
+            // Check for new accounts (0 pre-balance, non-zero post-balance)
+            for (i, (pre, post)) in meta.pre_balances.iter().zip(meta.post_balances.iter()).enumerate() {
+                if *pre == 0 && *post > 0 {
+                    accounts_created += 1;
+                    let post_sol = *post as f64 / 1_000_000_000.0;
+                    
+                    // Determine account type by rent amount
+                    if *post >= 2_000_000 && *post <= 3_000_000 {
+                        println!("    💰 Account {}: Token account created with {:.9} SOL rent", i, post_sol);
+                    } else if *post >= 800_000 && *post <= 1_500_000 {
+                        println!("    💰 Account {}: System account created with {:.9} SOL rent", i, post_sol);
+                    } else if *post > 0 {
+                        println!("    💰 Account {}: Account created with {:.9} SOL", i, post_sol);
+                    }
+                } else if *pre > 0 && *post == 0 {
+                    accounts_closed += 1;
+                    let pre_sol = *pre as f64 / 1_000_000_000.0;
+                    
+                    // This SOL was reclaimed
+                    *reclaimable_rent += pre_sol;
+                    println!("    ♻️ Account {}: Account closed, {:.9} SOL reclaimed", i, pre_sol);
+                }
+            }
+        }
+        
+        // Analyze token account changes
+        if let (Some(pre_token_balances), Some(post_token_balances)) = 
+            (&meta.pre_token_balances, &meta.post_token_balances) {
+            
+            // Find new token accounts
+            for post_balance in post_token_balances {
+                let found_in_pre = pre_token_balances.iter()
+                    .any(|pre| pre.account_index == post_balance.account_index);
+                
+                if !found_in_pre {
+                    println!("    🎯 New token account {} for mint: {}", 
+                        post_balance.account_index, 
+                        &post_balance.mint[..8]);
+                }
+            }
+            
+            // Find closed token accounts
+            for pre_balance in pre_token_balances {
+                let found_in_post = post_token_balances.iter()
+                    .any(|post| post.account_index == pre_balance.account_index);
+                
+                if !found_in_post {
+                    println!("    🗑️ Token account {} closed for mint: {}", 
+                        pre_balance.account_index, 
+                        &pre_balance.mint[..8]);
+                }
+            }
+        }
+        
+        // Summary
+        println!("\n    📊 Account Lifecycle Summary:");
+        println!("      🆕 Total Accounts Created: {}", accounts_created);
+        println!("      🗑️ Total Accounts Closed: {}", accounts_closed);
+        
+        if ata_created > 0 {
+            let ata_rent_total = ata_created as f64 * 0.002039280; // Standard ATA rent
+            println!("      🎯 ATA Accounts Created: {} (Rent: {:.9} SOL)", ata_created, ata_rent_total);
+        }
+        
+        if ata_closed > 0 {
+            let ata_rent_reclaimed = ata_closed as f64 * 0.002039280;
+            println!("      ♻️ ATA Accounts Closed: {} (Rent Reclaimed: {:.9} SOL)", ata_closed, ata_rent_reclaimed);
+        }
+        
+        if system_accounts_created > 0 {
+            let system_rent_total = system_accounts_created as f64 * 0.000890880; // Approximate system account rent
+            println!("      🏛️ System Accounts Created: {} (Rent: {:.9} SOL)", system_accounts_created, system_rent_total);
+            *permanent_costs += system_rent_total;
+        }
+        
+        // Calculate net account rent impact
+        let net_ata_impact = (ata_created - ata_closed) as f64 * 0.002039280;
+        if net_ata_impact > 0.0 {
+            println!("      📈 Net ATA Rent Locked: {:.9} SOL", net_ata_impact);
+        } else if net_ata_impact < 0.0 {
+            println!("      📉 Net ATA Rent Freed: {:.9} SOL", -net_ata_impact);
+        } else {
+            println!("      ⚖️ Net ATA Rent Impact: 0 SOL (balanced)");
+        }
+        
+        // Efficiency analysis
+        if accounts_created > 0 {
+            let avg_rent_per_account = (ata_created as f64 * 0.002039280 + system_accounts_created as f64 * 0.000890880) / accounts_created as f64;
+            println!("      💡 Average Rent per Account: {:.9} SOL", avg_rent_per_account);
         }
     }
 }
