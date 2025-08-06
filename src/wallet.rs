@@ -6,17 +6,6 @@ use crate::rpc::SwapError;
 pub use crate::swaps::interface::SwapResult;
 pub use crate::swaps::get_wallet_address;
 
-// Multi-wallet system exports
-pub use crate::multi_wallet::{
-    multi_wallet_buy_token,
-    multi_wallet_sell_token,
-    list_wallet_backups,
-    archive_old_wallets,
-    MultiWalletBuyResult,
-    WalletBackup,
-    USE_MULTI_WALLET,
-};
-
 use solana_sdk::{
     signature::Keypair,
     signer::Signer,
@@ -27,11 +16,6 @@ use solana_sdk::{
 use spl_token::instruction::close_account;
 use bs58;
 use std::str::FromStr;
-
-// Swap functions have been moved to swaps module
-
-
-
 
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
