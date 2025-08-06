@@ -7,7 +7,7 @@ edition = "2021"
 [workspace]
 resolver = "2"
 
-# Development profile - Fastest compilation for debugging
+# Development profile - Fastest compilation for debugging (ALWAYS USE THIS)
 [profile.dev]
 opt-level = 0         # No optimizations, fastest compile
 debug = 2             # Full debug info for better error messages
@@ -15,61 +15,14 @@ incremental = true    # Enable incremental compilation
 codegen-units = 256   # Maximum parallelism for fastest builds
 lto = false           # Disable link-time optimization
 panic = "unwind"      # Keep unwinding for better debugging
-split-debuginfo = "unpacked"  # Fast debug info on supported platforms
 
-# Fast debug profile - Slightly optimized dev builds
-[profile.fast-dev]
-inherits = "dev"
-opt-level = 1         # Light optimization for better runtime performance
-debug = 1             # Line numbers only for faster compile
-codegen-units = 128   # High parallelism
-
-# Testing profile - Fast builds with some optimization
-[profile.test]
-inherits = "dev"
-opt-level = 1         # Light optimization for reasonable test performance
-debug = 1             # Line numbers for test debugging
-incremental = true    # Incremental compilation
-codegen-units = 64    # Good parallelism
-lto = false           # No LTO for faster builds
-
-# Fast release profile for development/testing (RECOMMENDED FOR DEVELOPMENT)
-[profile.fast-release]
-inherits = "release"
-opt-level = 2         # Good optimization without excessive compile time
-lto = "thin"          # Fast link-time optimization
-codegen-units = 16    # Balance between build speed and optimization
-panic = "abort"       # Smaller binary size
-debug = true          # Keep debug info for debugging
-incremental = true    # Incremental compilation for faster rebuilds
-strip = "none"        # Keep symbols for debugging
-
-# Benchmark profile - High performance for benchmarking
-[profile.bench]
-inherits = "release"
-opt-level = 3         # Maximum optimization
-lto = "fat"           # Full link-time optimization
-codegen-units = 1     # Single unit for best optimization
-debug = false         # No debug info
-incremental = false   # Full optimization
-
-# Production release profile - Maximum optimization
+# Release profile - Normal optimized build (rarely needed)
 [profile.release]
-opt-level = 3         # Maximum optimization
-lto = "fat"           # Full link-time optimization for best performance
-codegen-units = 1     # Single unit for maximum optimization
-panic = "abort"       # Smaller binary size, faster execution
-strip = "symbols"     # Remove symbols for smaller binary
-debug = false         # No debug info for production
-incremental = false   # Full optimization, no incremental builds
-
-# Distribution profile - Smallest possible binary
-[profile.dist]
-inherits = "release"
-opt-level = "z"       # Optimize for size
-lto = "fat"           # Full LTO
-strip = "symbols"     # Strip all symbols
-panic = "abort"       # Reduce binary size
+opt-level = 2         # Moderate optimization
+lto = "thin"          # Light link-time optimization
+codegen-units = 16    # Balanced compilation
+debug = true          # Keep debug info
+panic = "abort"       # Smaller binary size
 
 
 [lib]
