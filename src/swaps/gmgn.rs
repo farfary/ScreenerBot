@@ -146,6 +146,25 @@ pub async fn get_gmgn_quote(
                 PARTNER
             )
         );
+        
+        log(
+            LogTag::Wallet,
+            "GMGN_QUOTE_DEBUG",
+            &format!(
+                "📊 GMGN Quote Debug:
+  • Input Mint: {}
+  • Output Mint: {}
+  • Amount: {} lamports
+  • Slippage: {}% ({} BPS)
+  • From Address: {}",
+                input_mint,
+                output_mint,
+                input_amount,
+                slippage,
+                (slippage * 100.0) as u16,
+                from_address
+            )
+        );
     }
 
     log(

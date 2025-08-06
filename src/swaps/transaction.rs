@@ -674,11 +674,28 @@ pub async fn sign_and_send_transaction(
         log(
             LogTag::Swap,
             "TRANSACTION_SIGN_START",
-            &format!("✍️ Signing transaction (length: {} chars)", swap_transaction_base64.len())
+            &format!("✍️ Signing transaction (length: {} chars)
+  Base64 Preview: {}...{}",
+                swap_transaction_base64.len(),
+                &swap_transaction_base64[..std::cmp::min(40, swap_transaction_base64.len())],
+                if swap_transaction_base64.len() > 80 { 
+                    &swap_transaction_base64[swap_transaction_base64.len()-40..] 
+                } else { 
+                    "" 
+                }
+            )
         );
     }
 
     let rpc_client = get_rpc_client();
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_RPC_CLIENT",
+            "🔗 Using global RPC client for transaction signing and sending"
+        );
+    }
     
     if is_debug_swap_enabled() {
         log(
@@ -694,7 +711,8 @@ pub async fn sign_and_send_transaction(
         log(
             LogTag::Swap,
             "TRANSACTION_SENT",
-            &format!("✅ Transaction sent successfully - Signature: {}", signature)
+            &format!("✅ Transaction sent successfully - Signature: {}
+  🎯 Transaction now pending confirmation on Solana blockchain", signature)
         );
     }
     
@@ -729,14 +747,50 @@ pub async fn verify_swap_transaction(
     }
 
     // Step 1: Wait for transaction confirmation with smart retry logic
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_1",
+            "🔎 Step 1: Waiting for transaction confirmation on blockchain..."
+        );
+    }
+    
     let transaction_details = wait_for_transaction_confirmation(
         transaction_signature,
         &configs
     ).await?;
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_1_COMPLETE",
+            &format!("✅ Step 1 Complete: Transaction confirmed
+  Fee: {} lamports | Has metadata: {}",
+                transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
+                transaction_details.meta.is_some()
+            )
+        );
+    }
+
     // Step 2: Verify transaction success on blockchain
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_2",
+            "🔎 Step 2: Verifying transaction success status..."
+        );
+    }
+    
     let transaction_success = verify_transaction_success(&transaction_details)?;
     if !transaction_success {
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Wallet,
+                "VERIFY_STEP_2_FAILED",
+                "❌ Step 2 Failed: Transaction failed on blockchain"
+            );
+        }
+        
         return Ok(TransactionVerificationResult {
             success: false,
             transaction_signature: transaction_signature.to_string(),
@@ -754,10 +808,50 @@ pub async fn verify_swap_transaction(
         });
     }
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_2_COMPLETE",
+            "✅ Step 2 Complete: Transaction succeeded on blockchain"
+        );
+    }
+
     // Step 3: Take post-transaction balance snapshot
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_3",
+            "🔎 Step 3: Taking post-transaction balance snapshot..."
+        );
+    }
+    
     let post_balance = take_balance_snapshot(&wallet_address, 
         if expected_direction == "buy" { output_mint } else { input_mint }
     ).await?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_3_COMPLETE",
+            &format!("✅ Step 3 Complete: Balance snapshot captured
+  Pre-SOL: {} | Post-SOL: {}
+  Pre-Token: {} | Post-Token: {}",
+                lamports_to_sol(pre_balance.sol_balance),
+                lamports_to_sol(post_balance.sol_balance),
+                pre_balance.token_balance,
+                post_balance.token_balance
+            )
+        );
+    }
+
+    // Step 4: Analyze balance changes and calculate amounts
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_4",
+            "🔎 Step 4: Analyzing balance changes and extracting amounts..."
+        );
+    }
 
     if is_debug_swap_enabled() {
         log(
@@ -817,6 +911,14 @@ pub async fn verify_swap_transaction(
     );
 
     // Step 7: Validate results consistency
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "VERIFY_STEP_7",
+            "🔎 Step 7: Validating transaction results for consistency..."
+        );
+    }
+    
     validate_transaction_results(
         expected_direction,
         pre_balance,
@@ -830,15 +932,39 @@ pub async fn verify_swap_transaction(
     if is_debug_swap_enabled() {
         log(
             LogTag::Wallet,
+            "VERIFY_STEP_7_COMPLETE",
+            "✅ Step 7 Complete: All transaction results validated successfully"
+        );
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
             "VERIFY_SUCCESS",
             &format!(
-                "✅ Transaction verification completed successfully\n  Input: {} | Output: {}\n  SOL spent: {} | SOL received: {}\n  ATA detected: {} | Rent reclaimed: {}\n  Effective price: {:.10} SOL/token",
+                "✅ Transaction verification completed successfully
+  📊 Final Results Summary:
+  • Input Amount: {} ({} type)
+  • Output Amount: {} ({} type)  
+  • SOL Spent: {} lamports ({:.6} SOL)
+  • SOL Received: {} lamports ({:.6} SOL)
+  • Transaction Fee: {} lamports ({:.6} SOL)
+  • ATA Detected: {} | Rent Reclaimed: {} lamports ({:.6} SOL)
+  • Effective Price: {:.10} SOL per token
+  🎯 Verification Process: ALL 7 STEPS COMPLETED",
                 blockchain_input_amount.unwrap_or(0),
+                if expected_direction == "buy" { "SOL" } else { "Tokens" },
                 blockchain_output_amount.unwrap_or(0),
+                if expected_direction == "buy" { "Tokens" } else { "SOL" },
                 sol_spent.unwrap_or(0),
+                lamports_to_sol(sol_spent.unwrap_or(0)),
                 sol_received.unwrap_or(0),
+                lamports_to_sol(sol_received.unwrap_or(0)),
+                transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
+                lamports_to_sol(transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0)),
                 ata_detected,
                 ata_rent_reclaimed,
+                lamports_to_sol(ata_rent_reclaimed),
                 effective_price.unwrap_or(0.0)
             )
         );
@@ -875,6 +1001,20 @@ async fn wait_for_transaction_confirmation(
     let mut current_delay = initial_delay;
     let mut attempt = 1;
     let mut consecutive_rate_limits = 0;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Wallet,
+            "CONFIRM_WAIT_START",
+            &format!("⏳ Starting confirmation wait for transaction: {}
+  ⏱️ Max wait time: {}s | Initial delay: {}ms | Max delay: {}s",
+                transaction_signature,
+                CONFIRMATION_TIMEOUT_SECS,
+                INITIAL_CONFIRMATION_DELAY_MS,
+                MAX_CONFIRMATION_DELAY_SECS
+            )
+        );
+    }
 
     log(
         LogTag::Wallet,
@@ -946,6 +1086,15 @@ async fn wait_for_transaction_confirmation(
                     consecutive_rate_limits += 1;
                     let rate_limit_delay = RATE_LIMIT_BASE_DELAY_SECS + consecutive_rate_limits * RATE_LIMIT_INCREMENT_SECS;
                     current_delay = tokio::time::Duration::from_secs(rate_limit_delay);
+                    
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Wallet,
+                            "RATE_LIMIT",
+                            &format!("⚠️ Rate limit hit (attempt {}), extending delay to {}s", 
+                                attempt, rate_limit_delay)
+                        );
+                    }
                 } else {
                     consecutive_rate_limits = 0;
                     current_delay = std::cmp::min(max_delay, 
@@ -960,9 +1109,11 @@ async fn wait_for_transaction_confirmation(
                         LogTag::Wallet,
                         "RETRY",
                         &format!(
-                            "🔄 Transaction not found yet (attempt {}), retrying in {:.1}s",
+                            "🔄 Transaction not found yet (attempt {}), retrying in {:.1}s
+  Error: {}",
                             attempt,
-                            current_delay.as_secs_f64()
+                            current_delay.as_secs_f64(),
+                            e
                         )
                     );
                 }

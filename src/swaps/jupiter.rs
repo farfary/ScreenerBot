@@ -158,6 +158,20 @@ pub async fn get_jupiter_quote(
             "JUPITER_REQUEST_SEND",
             "📤 Jupiter: Sending quote request..."
         );
+        
+        log(
+            LogTag::Swap,
+            "JUPITER_QUOTE_PARAMS",
+            &format!(
+                "📊 Jupiter Quote Debug:\n  • Input Mint: {}\n  • Output Mint: {}\n  • Amount: {} lamports\n  • Slippage: {}% ({} BPS)\n  • From Address: {}",
+                input_mint,
+                output_mint,
+                input_amount,
+                slippage,
+                slippage_bps,
+                from_address
+            )
+        );
     }
     
     let response = timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send())
@@ -284,9 +298,40 @@ pub async fn get_jupiter_swap_transaction(
     // Add priority fee if specified
     if let Some(fee) = priority_fee_lamports {
         request_body["prioritizationFeeLamports"] = serde_json::json!(fee);
+        
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_PRIORITY_FEE",
+                &format!("💰 Jupiter: Adding priority fee: {} lamports", fee)
+            );
+        }
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_BUILD_REQUEST",
+            &format!(
+                "📤 Jupiter Transaction Build Request:\n  • Quote Response: {} chars\n  • User: {}\n  • Dynamic Compute: {}\n  • Priority Fee: {:?} lamports",
+                serde_json::to_string(&request_body["quoteResponse"]).unwrap_or_default().len(),
+                &user_public_key[..8],
+                dynamic_compute_unit_limit,
+                priority_fee_lamports
+            )
+        );
     }
 
     let client = reqwest::Client::new();
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_BUILD_SENDING",
+            &format!("📡 Jupiter: Sending transaction build request to {}", JUPITER_SWAP_API)
+        );
+    }
+    
     let response = timeout(
         Duration::from_secs(API_TIMEOUT_SECS),
         client.post(JUPITER_SWAP_API)
@@ -294,19 +339,56 @@ pub async fn get_jupiter_swap_transaction(
             .send()
     )
     .await
-    .map_err(|_| SwapError::ApiError("Jupiter swap transaction timeout".to_string()))?
-    .map_err(|e| SwapError::NetworkError(e))?;
+    .map_err(|_| {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "JUPITER_BUILD_TIMEOUT", "⏰ Jupiter swap transaction build timeout");
+        }
+        SwapError::ApiError("Jupiter swap transaction timeout".to_string())
+    })?
+    .map_err(|e| {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "JUPITER_BUILD_NETWORK_ERROR", &format!("❌ Jupiter build network error: {}", e));
+        }
+        SwapError::NetworkError(e)
+    })?;
 
         let response_status = response.status();
+        
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "JUPITER_BUILD_RESPONSE_STATUS",
+                &format!("📡 Jupiter Build API Response - Status: {}", response_status)
+            );
+        }
+        
         if !response_status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
+            
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "JUPITER_BUILD_ERROR",
+                    &format!("❌ Jupiter Build API Error: {} - {}", response_status, error_text)
+                );
+            }
+            
             return Err(SwapError::ApiError(
                 format!("Jupiter swap API error {}: {}", response_status, error_text)
             ));
         }    let swap_response: JupiterSwapResponse = response.json().await
-        .map_err(|e| SwapError::InvalidResponse(
-            format!("Failed to parse Jupiter swap response: {}", e)
-        ))?;
+        .map_err(|e| {
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "JUPITER_BUILD_PARSE_ERROR",
+                    &format!("❌ Jupiter Build Response parsing failed: {}", e)
+                );
+            }
+            SwapError::InvalidResponse(
+                format!("Failed to parse Jupiter swap response: {}", e)
+            )
+        })?;
 
     if is_debug_swap_enabled() {
         log(
