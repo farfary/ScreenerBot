@@ -14,7 +14,7 @@ mod tests {
     };
     use crate::global::read_configs;
     use crate::rpc::{sol_to_lamports, lamports_to_sol};
-    use crate::wallet::get_token_balance;
+    use crate::utils::get_token_balance;
     use std::str::FromStr;
     use tokio;
 
@@ -302,7 +302,7 @@ mod tests {
             let wallet_address = get_wallet_address().expect("Failed to get wallet address");
             
             // Check initial balances
-            let initial_sol_balance = crate::wallet::get_sol_balance(&wallet_address).await
+            let initial_sol_balance = crate::utils::get_sol_balance(&wallet_address).await
                 .expect("Failed to get initial SOL balance");
             let initial_token_balance = get_token_balance(&wallet_address, &token.mint).await
                 .unwrap_or(0);
@@ -337,7 +337,7 @@ mod tests {
                     // Check final balances
                     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                     
-                    let final_sol_balance = crate::wallet::get_sol_balance(&wallet_address).await
+                    let final_sol_balance = crate::utils::get_sol_balance(&wallet_address).await
                         .expect("Failed to get final SOL balance");
                     let final_token_balance = get_token_balance(&wallet_address, &token.mint).await
                         .unwrap_or(0);
@@ -429,7 +429,7 @@ mod tests {
                     i + 1, sell_amount, token.symbol, portion * 100.0);
             
             // Check initial balances
-            let initial_sol_balance = crate::wallet::get_sol_balance(&wallet_address).await
+            let initial_sol_balance = crate::utils::get_sol_balance(&wallet_address).await
                 .expect("Failed to get initial SOL balance");
             
             println!("📊 Pre-sell Balances:");
@@ -462,7 +462,7 @@ mod tests {
                     // Check final balances
                     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                     
-                    let final_sol_balance = crate::wallet::get_sol_balance(&wallet_address).await
+                    let final_sol_balance = crate::utils::get_sol_balance(&wallet_address).await
                         .expect("Failed to get final SOL balance");
                     let final_token_balance = get_token_balance(&wallet_address, &token.mint).await
                         .unwrap_or(0);
@@ -923,7 +923,7 @@ mod tests {
         
         // Test 2: Buy token
         println!("\n💰 Step 2: Testing buy operation...");
-        let initial_balance = crate::wallet::get_sol_balance(&wallet_address).await
+        let initial_balance = crate::utils::get_sol_balance(&wallet_address).await
             .expect("Failed to get initial balance");
             
         match buy_token(&token, TEST_AMOUNT_1, None).await {

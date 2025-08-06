@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::global::DATA_DIR;
 use crate::rpc::get_rpc_client;
 use crate::logger::{log, LogTag};
-use crate::wallet::get_token_balance;
+use crate::utils::get_token_balance;
 
 // Wallet data structures
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -403,9 +403,9 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     let max_drawdown = calculate_max_drawdown(&pnl_values);
 
     // Get wallet balance
-    let wallet_balance = match crate::wallet::get_wallet_address() {
+    let wallet_balance = match crate::utils::get_wallet_address() {
         Ok(address) => {
-            match crate::wallet::get_sol_balance(&address).await {
+            match crate::utils::get_sol_balance(&address).await {
                 Ok(balance) => format!("{:.6} SOL", balance),
                 Err(_) => "Error fetching".to_string(),
             }

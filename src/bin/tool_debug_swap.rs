@@ -1,5 +1,5 @@
 use screenerbot::{
-    wallet::{ get_sol_balance, get_token_balance, get_wallet_address },
+    utils::{ get_sol_balance, get_token_balance, get_wallet_address },
     swaps::{ buy_token, sell_token },
     rpc::lamports_to_sol,
     tokens::{
@@ -490,8 +490,8 @@ async fn check_final_balances(
     token: &Token,
     initial_sol_balance: f64,
     initial_token_balance: u64,
-    buy_result: &screenerbot::wallet::SwapResult,
-    sell_result: &screenerbot::wallet::SwapResult
+    buy_result: &screenerbot::utils::SwapResult,
+    sell_result: &screenerbot::utils::SwapResult
 ) {
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "📊 FINAL BALANCE CHECK");
@@ -573,8 +573,8 @@ async fn check_final_balances(
 
 /// Display swap metrics using only swap results (no calculations in debug tool)
 async fn display_swap_metrics(
-    buy_result: &screenerbot::wallet::SwapResult,
-    sell_result: &screenerbot::wallet::SwapResult
+    buy_result: &screenerbot::utils::SwapResult,
+    sell_result: &screenerbot::utils::SwapResult
 ) {
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "📈 SWAP METRICS FROM RESULTS");

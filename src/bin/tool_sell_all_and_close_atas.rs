@@ -26,7 +26,7 @@
 use screenerbot::global::{ read_configs };
 use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
-use screenerbot::wallet::{ get_wallet_address, close_token_account };
+use screenerbot::utils::{ get_wallet_address, close_token_account };
 use screenerbot::swaps::sell_token;
 use screenerbot::rpc::SwapError;
 use reqwest;

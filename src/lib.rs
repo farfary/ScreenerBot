@@ -4,7 +4,6 @@ pub mod global;
 pub mod utils;
 pub mod trader;
 pub mod logger;
-pub mod wallet;
 pub mod wallets_manager;
 pub mod summary;
 pub mod positions;

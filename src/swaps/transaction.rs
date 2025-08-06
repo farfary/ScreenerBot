@@ -18,7 +18,7 @@ use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports, get_rpc_client};
 use crate::swaps::types::{SOL_MINT};
-use crate::wallet::{get_sol_balance, get_token_balance};
+use crate::utils::{get_sol_balance, get_token_balance};
 
 use std::collections::HashSet;
 use std::sync::{Arc as StdArc, Mutex as StdMutex};

@@ -42,7 +42,7 @@
 
 use screenerbot::{
     logger::{ log, LogTag, init_file_logging },
-    wallet::{ get_wallet_address, get_token_balance },
+    utils::{ get_wallet_address, get_token_balance },
     positions::{ get_open_positions, Position },
     utils::save_positions_to_file,
     global::{ read_configs, POSITIONS_FILE },

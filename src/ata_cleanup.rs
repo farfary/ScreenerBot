@@ -5,7 +5,7 @@
 /// This prevents blocking the main trading flow while ensuring optimal rent utilization.
 
 use crate::logger::{ log, LogTag };
-use crate::wallet::get_wallet_address;
+use crate::utils::get_wallet_address;
 use crate::global::ATA_FAILED_CACHE;
 
 use std::sync::{ Arc, Mutex, LazyLock };
@@ -119,7 +119,7 @@ async fn perform_ata_cleanup() -> Result<(), Box<dyn std::error::Error + Send + 
     };
 
     // Get all token accounts first
-    let all_accounts = match crate::wallet::get_all_token_accounts(&wallet_address).await {
+    let all_accounts = match crate::utils::get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
             log(LogTag::Wallet, "ERROR", &format!("Failed to get token accounts: {}", e));
@@ -156,7 +156,7 @@ async fn perform_ata_cleanup() -> Result<(), Box<dyn std::error::Error + Send + 
     let mut signatures = Vec::new();
 
     for account in empty_accounts {
-        match crate::wallet::close_single_ata(&wallet_address, &account.mint).await {
+        match crate::utils::close_single_ata(&wallet_address, &account.mint).await {
             Ok(signature) => {
                 closed_count += 1;
                 total_rent_reclaimed += 0.00203928; // Standard ATA rent
@@ -331,7 +331,7 @@ pub async fn get_ata_cleanup_stats() -> Result<String, Box<dyn std::error::Error
     let failed_count = get_failed_ata_count();
 
     // Get all token accounts to analyze current state
-    match crate::wallet::get_all_token_accounts(&wallet_address).await {
+    match crate::utils::get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => {
             let total_accounts = accounts.len();
             let empty_accounts = accounts

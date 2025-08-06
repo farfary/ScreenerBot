@@ -385,7 +385,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             }
 
             // CRITICAL FIX: Double-check wallet balance to ensure tokens were actually received
-            let wallet_address = match crate::wallet::get_wallet_address() {
+            let wallet_address = match crate::utils::get_wallet_address() {
                 Ok(addr) => addr,
                 Err(e) => {
                     log(
@@ -400,7 +400,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             // Wait a moment for balance to update, then verify
             tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
-            match crate::wallet::get_token_balance(&wallet_address, &token.mint).await {
+            match crate::utils::get_token_balance(&wallet_address, &token.mint).await {
                 Ok(actual_balance) => {
                     if actual_balance == 0 {
                         log(
@@ -588,7 +588,7 @@ pub async fn close_position(
         }
 
         // Check actual current wallet balance before attempting to sell
-        let wallet_address = match crate::wallet::get_wallet_address() {
+        let wallet_address = match crate::utils::get_wallet_address() {
             Ok(addr) => addr,
             Err(e) => {
                 log(
@@ -605,7 +605,7 @@ pub async fn close_position(
         };
 
         let actual_balance = match
-            crate::wallet::get_token_balance(&wallet_address, &position.mint).await
+            crate::utils::get_token_balance(&wallet_address, &position.mint).await
         {
             Ok(balance) => balance,
             Err(e) => {
@@ -714,7 +714,7 @@ pub async fn close_position(
                 // CRITICAL FIX: Verify wallet balance to ensure tokens were actually sold
                 tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
-                match crate::wallet::get_token_balance(&wallet_address, &position.mint).await {
+                match crate::utils::get_token_balance(&wallet_address, &position.mint).await {
                     Ok(remaining_balance) => {
                         if remaining_balance > 0 {
                             log(
@@ -796,7 +796,7 @@ pub async fn close_position(
                         )
                     );
 
-                    match crate::wallet::close_token_account(&position.mint, &wallet_address).await {
+                    match crate::utils::close_token_account(&position.mint, &wallet_address).await {
                         Ok(close_tx) => {
                             log(
                                 LogTag::Trader,

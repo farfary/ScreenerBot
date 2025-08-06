@@ -5,7 +5,7 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
 use crate::global::{is_debug_wallet_enabled, is_debug_swap_enabled};
-use crate::wallet::get_token_balance;
+use crate::utils::get_token_balance;
 use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 use super::types::{SwapData, SOL_MINT};
