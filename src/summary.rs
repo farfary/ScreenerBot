@@ -7,8 +7,7 @@ use crate::global::STARTUP_TIME;
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
-// TODO: Replace with new pool price system
-// use crate::pool_price_manager::refresh_open_position_prices;
+// New pool price system is now integrated via background services
 
 use chrono::{ Utc };
 use std::sync::Arc;

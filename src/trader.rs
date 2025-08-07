@@ -57,10 +57,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 8;
+pub const MAX_OPEN_POSITIONS: usize = 2;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.005;
+pub const TRADE_SIZE_SOL: f64 = 0.001;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000015;
@@ -69,7 +69,7 @@ pub const TRANSACTION_FEE_SOL: f64 = 0.000015;
 pub const SWAP_FEE_PERCENT: f64 = 0.0;
 
 /// Default slippage tolerance for swaps
-pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 10.0;
+pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
@@ -1765,12 +1765,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         if !open_position_mints.is_empty() {
             for mint in &open_position_mints {
                 let mint_clone = mint.clone();
-                // Temporarily disabled tokio::spawn due to Send/Sync issues with database
-                // TODO: Re-enable once database is made thread-safe
-                // tokio::spawn(async move {
-                //     // Use new pool price system for immediate price check
-                //     let _price = crate::tokens::get_token_price(&mint_clone).await;
-                // });
+                // Update prices for open positions using thread-safe price service
+                tokio::spawn(async move {
+                    // Use thread-safe price function for immediate price check
+                    let _price = crate::tokens::price::get_token_price_safe(&mint_clone).await;
+                });
             }
         }
 

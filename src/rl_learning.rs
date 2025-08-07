@@ -2311,13 +2311,44 @@ pub async fn collect_market_features(
         price_change_30min,
         pool_price,
         price_drop_detected,
-        confidence_score_placeholder(), // This would come from existing entry logic
+        calculate_data_confidence_score(
+            price_change_5min,
+            price_change_10min,
+            price_change_30min,
+            price_drop_detected,
+            price_history.len()
+        ),
     ))
 }
 
-/// Placeholder for confidence score - this should be integrated with existing entry logic
-fn confidence_score_placeholder() -> f64 {
-    0.5 // Default neutral confidence
+/// Calculate confidence score based on price data quality and patterns
+fn calculate_data_confidence_score(
+    price_change_5min: f64,
+    price_change_10min: f64,
+    price_change_30min: f64,
+    price_drop_detected: f64,
+    data_points: usize,
+) -> f64 {
+    let mut confidence = 0.5; // Start with neutral
+    
+    // Higher confidence with more data points
+    if data_points >= 100 {
+        confidence += 0.2;
+    } else if data_points >= 50 {
+        confidence += 0.1;
+    }
+    
+    // Higher confidence if price changes are consistent across timeframes
+    let change_consistency = 1.0 - ((price_change_5min - price_change_10min).abs() / 10.0).min(1.0);
+    confidence += change_consistency * 0.2;
+    
+    // Higher confidence if there's a clear price drop signal
+    if price_drop_detected > 5.0 { // More than 5% drop
+        confidence += 0.1;
+    }
+    
+    // Cap confidence between 0.1 and 0.9
+    confidence.max(0.1).min(0.9)
 }
 
 /// Record a completed trade for learning (called when position is closed)

@@ -84,7 +84,7 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
             
             // Periodic cleanup timer
             _ = cleanup_timer.tick() => {
-                if let Err(e) = perform_ata_cleanup().await {
+                if let Err(e) = perform_ata_cleanup().await.map(|_| ()) {
                     log(
                         LogTag::Wallet, 
                         "ERROR", 
@@ -102,7 +102,7 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
 }
 
 /// Performs the actual ATA cleanup operation with failed ATA caching
-async fn perform_ata_cleanup() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn perform_ata_cleanup() -> Result<(u32, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
     log(LogTag::Wallet, "ATA_SERVICE", "Starting periodic ATA cleanup check...");
 
     // Get wallet address from config
@@ -136,7 +136,7 @@ async fn perform_ata_cleanup() -> Result<(), Box<dyn std::error::Error + Send + 
 
     if empty_accounts.is_empty() {
         log(LogTag::Wallet, "ATA_SERVICE", "No empty ATAs found - wallet is already optimized");
-        return Ok(());
+        return Ok((0, Vec::new()));
     }
 
     log(
@@ -217,7 +217,7 @@ async fn perform_ata_cleanup() -> Result<(), Box<dyn std::error::Error + Send + 
     }
 
     log(LogTag::Wallet, "ATA_SERVICE", "Periodic ATA cleanup check completed");
-    Ok(())
+    Ok((closed_count, signatures))
 }
 
 /// Manually trigger an immediate ATA cleanup (can be called from other parts of the system)
@@ -227,15 +227,14 @@ pub async fn trigger_immediate_ata_cleanup() -> Result<
 > {
     log(LogTag::Wallet, "ATA_SERVICE", "Manual ATA cleanup triggered...");
 
-    // Perform manual cleanup using the same logic as periodic cleanup
-    perform_ata_cleanup().await?;
-
-    // Return current stats as approximation
+    // Perform manual cleanup and collect signatures
+    let (cleanup_count, actual_signatures) = perform_ata_cleanup().await?;
+    
     let stats = ATA_STATS.lock().unwrap();
-    let signatures = vec!["manual_cleanup".to_string()]; // Placeholder since we don't track individual sigs globally
-
-    log(LogTag::Wallet, "ATA_SERVICE", "Manual ATA cleanup completed");
-    Ok((stats.total_closed, signatures))
+    log(LogTag::Wallet, "ATA_SERVICE", 
+        &format!("Manual ATA cleanup completed: {} closed, {} signatures", 
+                cleanup_count, actual_signatures.len()));
+    Ok((cleanup_count, actual_signatures))
 }
 
 /// Get comprehensive ATA cleanup statistics
