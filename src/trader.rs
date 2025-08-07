@@ -65,12 +65,6 @@ pub const TRADE_SIZE_SOL: f64 = 0.002;
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000015;
 
-/// Default swap fee (set to 0 for GMGN routing)
-pub const SWAP_FEE_PERCENT: f64 = 0.0;
-
-/// Default slippage tolerance for swaps
-pub const SLIPPAGE_TOLERANCE_PERCENT: f64 = 5.0;
-
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
 // -----------------------------------------------------------------------------

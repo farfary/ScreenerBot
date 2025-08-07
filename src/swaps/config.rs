@@ -98,31 +98,3 @@ pub const RAYDIUM_QUOTE_API: &str = "https://api-v3.raydium.io/mint/price";
 
 /// Raydium swap API URL (deprecated - no longer available)
 pub const RAYDIUM_SWAP_API: &str = "https://api-v3.raydium.io/compute/swap-base-in";
-
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/// Get the default swap mode for GMGN router
-pub fn get_gmgn_default_swap_mode() -> &'static str {
-    GMGN_DEFAULT_SWAP_MODE
-}
-
-/// Get the default swap mode for Jupiter router
-pub fn get_jupiter_default_swap_mode() -> &'static str {
-    JUPITER_DEFAULT_SWAP_MODE
-}
-
-/// Get the appropriate default swap mode for a given router
-pub fn get_default_swap_mode_for_router(router: &str) -> &'static str {
-    match router.to_lowercase().as_str() {
-        "gmgn" => GMGN_DEFAULT_SWAP_MODE,
-        "jupiter" => JUPITER_DEFAULT_SWAP_MODE,
-        _ => "ExactIn", // Default fallback
-    }
-}
-
-/// Validate swap mode value
-pub fn is_valid_swap_mode(swap_mode: &str) -> bool {
-    matches!(swap_mode, "ExactIn" | "ExactOut")
-}
