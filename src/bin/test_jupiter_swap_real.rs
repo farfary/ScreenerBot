@@ -32,7 +32,7 @@ use clap::{Arg, Command};
 
 /// Test configuration - 0.002 SOL as requested
 const TEST_TRADE_SIZE_SOL: f64 = 0.002; // 0.002 SOL in native units
-const TEST_SLIPPAGE: f64 = 15.0; // 15% slippage tolerance for small trades
+const TEST_SLIPPAGE: f64 = 5.0; // 15% slippage tolerance for small trades
 const TEST_FEE: f64 = 0.25; // 0.25% fee
 
 /// Well-known token for testing (BONK - high liquidity, low price)
