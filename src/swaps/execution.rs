@@ -5,9 +5,10 @@ use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
-use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse, SOL_MINT, ANTI_MEV, PARTNER};
+use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse};
 use crate::swaps::interface::SwapResult;
 use crate::swaps::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
+use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {

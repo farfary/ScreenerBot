@@ -4,10 +4,11 @@
 use crate::global::is_debug_wallet_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports};
-use crate::swaps::types::{SwapData, SwapRequest, SOL_MINT};
+use crate::swaps::types::{SwapData, SwapRequest};
 use crate::swaps::interface::SwapResult;
 use crate::trader::SLIPPAGE_TOLERANCE_PERCENT;
 use crate::tokens::decimals::get_token_decimals_from_chain;
+use super::config::SOL_MINT;
 
 /// Calculate effective price per token for any swap operation
 /// Supports both buy and sell operations with proper decimal handling

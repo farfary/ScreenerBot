@@ -21,8 +21,8 @@
 use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled, DATA_DIR};
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports, get_rpc_client};
-use crate::swaps::types::{SOL_MINT};
 use crate::utils::{get_sol_balance, get_token_balance};
+use super::config::{SOL_MINT, TRANSACTION_CONFIRMATION_TIMEOUT_SECS};
 
 use std::collections::{HashSet, HashMap};
 use std::sync::{Arc as StdArc, Mutex as StdMutex};
@@ -37,7 +37,7 @@ use serde::{Serialize, Deserialize};
 use tokio::sync::{Notify, Mutex as AsyncMutex};
 
 /// Configuration constants for transaction verification
-const CONFIRMATION_TIMEOUT_SECS: u64 = 300;       // Extended time for blockchain confirmation (5 minutes)
+const CONFIRMATION_TIMEOUT_SECS: u64 = TRANSACTION_CONFIRMATION_TIMEOUT_SECS;       // Extended time for blockchain confirmation
 const INITIAL_CONFIRMATION_DELAY_MS: u64 = 1000;  // Initial delay before first check
 const MAX_CONFIRMATION_DELAY_SECS: u64 = 5;       // Maximum delay between confirmation checks
 const CONFIRMATION_BACKOFF_MULTIPLIER: f64 = 1.5; // Exponential backoff multiplier

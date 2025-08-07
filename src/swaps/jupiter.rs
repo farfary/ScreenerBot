@@ -6,17 +6,16 @@ use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
 use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, is_debug_wallet_enabled, read_configs};
-use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, SOL_MINT, JupiterQuoteResponse, JupiterSwapResponse};
+use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, JupiterQuoteResponse, JupiterSwapResponse};
+use super::config::{
+    JUPITER_QUOTE_API, JUPITER_SWAP_API, JUPITER_API_TIMEOUT_SECS, JUPITER_QUOTE_TIMEOUT_SECS,
+    JUPITER_RETRY_ATTEMPTS, JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
+    SOL_MINT
+};
 
 use serde::{Deserialize, Serialize};
 use reqwest;
 use tokio::time::{Duration, timeout};
-
-// Jupiter API Configuration
-const JUPITER_QUOTE_API: &str = "https://lite-api.jup.ag/swap/v1/quote";
-const JUPITER_SWAP_API: &str = "https://lite-api.jup.ag/swap/v1/swap";
-const API_TIMEOUT_SECS: u64 = 30;
-const QUOTE_TIMEOUT_SECS: u64 = 15;
 
 /// Jupiter swap result structure
 #[derive(Debug)]
@@ -145,7 +144,7 @@ pub async fn get_jupiter_quote(
                 url,
                 input_amount,
                 slippage_bps,
-                QUOTE_TIMEOUT_SECS
+                JUPITER_QUOTE_TIMEOUT_SECS
             )
         );
     }
@@ -174,7 +173,7 @@ pub async fn get_jupiter_quote(
         );
     }
     
-    let response = timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send())
+    let response = timeout(Duration::from_secs(JUPITER_QUOTE_TIMEOUT_SECS), client.get(&url).send())
         .await
         .map_err(|_| {
             if is_debug_swap_enabled() {
@@ -333,7 +332,7 @@ pub async fn get_jupiter_swap_transaction(
     }
     
     let response = timeout(
-        Duration::from_secs(API_TIMEOUT_SECS),
+        Duration::from_secs(JUPITER_API_TIMEOUT_SECS),
         client.post(JUPITER_SWAP_API)
             .json(&request_body)
             .send()
@@ -432,8 +431,8 @@ pub async fn execute_jupiter_swap(
     let jupiter_tx = get_jupiter_swap_transaction(
         &swap_data,
         &wallet_address,
-        true, // dynamic compute unit limit
-        Some(100_000), // default priority fee
+        JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT,
+        Some(JUPITER_DEFAULT_PRIORITY_FEE), // default priority fee
     ).await?;
 
     // Sign and send transaction using Jupiter-specific method

@@ -4,12 +4,8 @@
 use serde::{Deserialize, Serialize, Deserializer};
 use crate::trader::{SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT};
 
-/// Configuration constants for swap operations
-pub const ANTI_MEV: bool = false; // Enable anti-MEV by default
-pub const PARTNER: &str = "screenerbot"; // Partner identifier
-
-/// SOL token mint address (native Solana)
-pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
+/// Configuration constants for swap operations (re-exported from config)
+pub use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
 /// Custom deserializer for fields that can be either string or number
 pub fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>

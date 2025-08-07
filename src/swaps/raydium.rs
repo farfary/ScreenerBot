@@ -6,18 +6,16 @@ use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol};
 use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, is_debug_wallet_enabled, read_configs};
-use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, SOL_MINT};
+use crate::swaps::types::{SwapData, SwapQuote, RawTransaction};
+use super::config::{
+    RAYDIUM_QUOTE_API, RAYDIUM_SWAP_API, RAYDIUM_API_TIMEOUT_SECS, RAYDIUM_QUOTE_TIMEOUT_SECS,
+    RAYDIUM_RETRY_ATTEMPTS, SOL_MINT
+};
 use super::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
 
 use serde::{Deserialize, Serialize};
 use reqwest;
 use tokio::time::{Duration, timeout};
-
-// Raydium API Configuration - Updated to current endpoints
-const RAYDIUM_QUOTE_API: &str = "https://api-v3.raydium.io/mint/price";
-const RAYDIUM_SWAP_API: &str = "https://api-v3.raydium.io/compute/swap-base-in";
-const API_TIMEOUT_SECS: u64 = 30;
-const QUOTE_TIMEOUT_SECS: u64 = 15;
 
 /// Raydium quote response structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -239,7 +237,7 @@ pub async fn get_raydium_swap_transaction(
     let client = reqwest::Client::new();
     
     let response = timeout(
-        Duration::from_secs(API_TIMEOUT_SECS),
+        Duration::from_secs(RAYDIUM_API_TIMEOUT_SECS),
         client.post(RAYDIUM_SWAP_API)
             .json(&request_body)
             .send()

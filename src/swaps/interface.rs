@@ -8,7 +8,8 @@ use crate::global::{is_debug_wallet_enabled, is_debug_swap_enabled};
 use crate::utils::get_token_balance;
 use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard, TransactionMonitoringService};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
-use super::types::{SwapData, SOL_MINT};
+use super::types::{SwapData};
+use super::config::SOL_MINT;
 use crate::trader::{SLIPPAGE_TOLERANCE_PERCENT, SWAP_FEE_PERCENT};
 
 /// Result of a swap operation (compatible with existing wallet::SwapResult)

@@ -5,8 +5,13 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
 use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled, is_debug_wallet_enabled};
+use super::config::{
+    GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, GMGN_DEFAULT_SLIPPAGE, 
+    GMGN_DEFAULT_FEE, GMGN_API_TIMEOUT_SECS, GMGN_QUOTE_TIMEOUT_SECS, GMGN_RETRY_ATTEMPTS,
+    SOL_MINT
+};
 use super::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
-use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number, PARTNER, SOL_MINT};
+use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number};
 
 use serde::{Deserialize, Serialize};
 use reqwest;
@@ -115,7 +120,8 @@ pub async fn get_gmgn_quote(
     }
 
     let url = format!(
-        "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
+        "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
+        GMGN_QUOTE_API,
         input_mint,
         output_mint,
         input_amount,
@@ -123,7 +129,7 @@ pub async fn get_gmgn_quote(
         slippage,
         fee,
         is_anti_mev,
-        PARTNER
+        GMGN_PARTNER
     );
 
     if is_debug_swap_enabled() {
@@ -143,7 +149,7 @@ pub async fn get_gmgn_quote(
                 url,
                 input_amount,
                 (slippage * 100.0) as u16,
-                PARTNER
+                GMGN_PARTNER
             )
         );
         
@@ -181,8 +187,8 @@ pub async fn get_gmgn_quote(
     let client = reqwest::Client::new();
     let mut last_error = None;
 
-    // Retry up to 3 times with increasing delays
-    for attempt in 1..=3 {
+    // Retry up to configured attempts with increasing delays
+    for attempt in 1..=GMGN_RETRY_ATTEMPTS {
         if is_debug_swap_enabled() {
             log(
                 LogTag::Swap,
@@ -191,7 +197,10 @@ pub async fn get_gmgn_quote(
             );
         }
 
-        match client.get(&url).send().await {
+        match client.get(&url)
+            .timeout(tokio::time::Duration::from_secs(GMGN_QUOTE_TIMEOUT_SECS))
+            .send()
+            .await {
             Ok(response) => {
                 if is_debug_swap_enabled() {
                     log(
@@ -311,7 +320,7 @@ pub async fn get_gmgn_quote(
 
         // Wait before retry (except on last attempt)
         if attempt < 3 {
-            let delay = tokio::time::Duration::from_millis(1000 * attempt);
+            let delay = tokio::time::Duration::from_millis(1000 * attempt as u64);
             if is_debug_swap_enabled() {
                 log(
                     LogTag::Swap,
