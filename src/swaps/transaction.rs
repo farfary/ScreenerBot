@@ -18,7 +18,7 @@
 /// - Persistent transaction monitoring service
 /// - Position transaction verification tracking
 
-use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled, DATA_DIR};
+use crate::global::{read_configs, is_debug_swap_enabled, DATA_DIR};
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports, get_rpc_client};
 use crate::utils::{get_sol_balance, get_token_balance};
@@ -109,7 +109,7 @@ impl TransactionMonitoringService {
         
         if service_guard.is_none() {
             *service_guard = Some(TransactionMonitoringService::new());
-            log(LogTag::Wallet, "TRANSACTION_SERVICE", "✅ Transaction monitoring service initialized");
+            log(LogTag::Swap, "TRANSACTION_SERVICE", "✅ Transaction monitoring service initialized");
         }
         Ok(())
     }
@@ -128,7 +128,7 @@ impl TransactionMonitoringService {
             }
         }
 
-        log(LogTag::Wallet, "TRANSACTION_SERVICE", "🔄 Starting transaction monitoring background service");
+        log(LogTag::Swap, "TRANSACTION_SERVICE", "🔄 Starting transaction monitoring background service");
 
         // Background monitoring loop
         let mut interval = tokio::time::interval(
@@ -138,13 +138,13 @@ impl TransactionMonitoringService {
         loop {
             tokio::select! {
                 _ = shutdown.notified() => {
-                    log(LogTag::Wallet, "TRANSACTION_SERVICE", "🛑 Transaction monitoring service shutting down");
+                    log(LogTag::Swap, "TRANSACTION_SERVICE", "🛑 Transaction monitoring service shutting down");
                     Self::save_pending_transactions_to_disk();
                     break;
                 }
                 _ = interval.tick() => {
                     if let Err(e) = Self::monitor_pending_transactions().await {
-                        log(LogTag::Wallet, "TRANSACTION_SERVICE_ERROR", 
+                        log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                             &format!("Monitoring cycle failed: {}", e));
                     }
                 }
@@ -176,18 +176,18 @@ impl TransactionMonitoringService {
                             for tx in transactions {
                                 map.insert(tx.signature.clone(), tx);
                             }
-                            log(LogTag::Wallet, "TRANSACTION_SERVICE", 
+                            log(LogTag::Swap, "TRANSACTION_SERVICE", 
                                 &format!("📄 Loaded {} pending transactions from disk", map.len()));
                             return map;
                         }
                         Err(e) => {
-                            log(LogTag::Wallet, "TRANSACTION_SERVICE_ERROR", 
+                            log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                                 &format!("Failed to parse transaction state file: {}", e));
                         }
                     }
                 }
                 Err(e) => {
-                    log(LogTag::Wallet, "TRANSACTION_SERVICE_ERROR", 
+                    log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                         &format!("Failed to read transaction state file: {}", e));
                 }
             }
@@ -211,15 +211,15 @@ impl TransactionMonitoringService {
         match serde_json::to_string_pretty(&transactions_vec) {
             Ok(content) => {
                 if let Err(e) = std::fs::write(TRANSACTION_STATE_FILE, content) {
-                    log(LogTag::Wallet, "TRANSACTION_SERVICE_ERROR", 
+                    log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                         &format!("Failed to save transaction states: {}", e));
                 } else {
-                    log(LogTag::Wallet, "TRANSACTION_SERVICE", 
+                    log(LogTag::Swap, "TRANSACTION_SERVICE", 
                         &format!("💾 Saved {} pending transactions to disk", transactions_vec.len()));
                 }
             }
             Err(e) => {
-                log(LogTag::Wallet, "TRANSACTION_SERVICE_ERROR", 
+                log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                     &format!("Failed to serialize transaction states: {}", e));
             }
         }
@@ -241,12 +241,12 @@ impl TransactionMonitoringService {
             return Ok(());
         }
 
-        log(LogTag::Wallet, "TRANSACTION_SERVICE", 
+        log(LogTag::Swap, "TRANSACTION_SERVICE", 
             &format!("🔍 Monitoring {} pending transactions", pending_sigs.len()));
 
         for signature in pending_sigs {
             if let Err(e) = Self::check_transaction_progress(&signature).await {
-                log(LogTag::Wallet, "TRANSACTION_SERVICE_ERROR", 
+                log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                     &format!("Failed to check transaction {}: {}", &signature[..8], e));
             }
         }
@@ -282,7 +282,7 @@ impl TransactionMonitoringService {
                         });
                         should_update = true;
                         
-                        log(LogTag::Wallet, "TRANSACTION_STUCK", 
+                        log(LogTag::Swap, "TRANSACTION_STUCK", 
                             &format!("⚠️ Transaction {} stuck in state for {}s", 
                                 &signature[..8], time_in_state));
                     } else {
@@ -296,7 +296,7 @@ impl TransactionMonitoringService {
                                     });
                                     should_update = true;
                                     
-                                    log(LogTag::Wallet, "TRANSACTION_CONFIRMED", 
+                                    log(LogTag::Swap, "TRANSACTION_CONFIRMED", 
                                         &format!("✅ Transaction {} confirmed", &signature[..8]));
                                 }
                             }
@@ -308,7 +308,7 @@ impl TransactionMonitoringService {
                                     });
                                     should_update = true;
                                     
-                                    log(LogTag::Wallet, "TRANSACTION_VERIFIED", 
+                                    log(LogTag::Swap, "TRANSACTION_VERIFIED", 
                                         &format!("🎯 Transaction {} fully verified", &signature[..8]));
                                 }
                             }
@@ -416,7 +416,7 @@ impl TransactionMonitoringService {
 
             service.pending_transactions.insert(signature.to_string(), pending_tx);
             
-            log(LogTag::Wallet, "TRANSACTION_ADDED", 
+            log(LogTag::Swap, "TRANSACTION_ADDED", 
                 &format!("📝 Added transaction {} to monitoring queue", &signature[..8]));
         }
 
@@ -456,17 +456,17 @@ impl TransactionMonitoringService {
             if let Some(state) = Self::get_transaction_status(signature).await {
                 match &state {
                     TransactionState::Verified { .. } => {
-                        log(LogTag::Wallet, "TRANSACTION_WAIT_SUCCESS", 
+                        log(LogTag::Swap, "TRANSACTION_WAIT_SUCCESS", 
                             &format!("✅ Transaction {} completed successfully", &signature[..8]));
                         return Ok(state);
                     }
                     TransactionState::Failed { error, .. } => {
-                        log(LogTag::Wallet, "TRANSACTION_WAIT_FAILED", 
+                        log(LogTag::Swap, "TRANSACTION_WAIT_FAILED", 
                             &format!("❌ Transaction {} failed: {}", &signature[..8], error));
                         return Ok(state);
                     }
                     TransactionState::Stuck { last_state, .. } => {
-                        log(LogTag::Wallet, "TRANSACTION_WAIT_STUCK", 
+                        log(LogTag::Swap, "TRANSACTION_WAIT_STUCK", 
                             &format!("⚠️ Transaction {} stuck in {}", &signature[..8], last_state));
                         return Ok(state);
                     }
@@ -660,7 +660,7 @@ fn validate_transaction_results(
 ) -> Result<(), SwapError> {
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VALIDATION_START",
             &format!(
                 "🔍 Starting transaction validation for {} direction
@@ -687,7 +687,7 @@ fn validate_transaction_results(
             // For buy transactions: SOL should decrease (or stay same with ATA), tokens should increase
             if post_balance.sol_balance > pre_balance.sol_balance + 50_000_000 { // Allow 0.05 SOL tolerance for ATA operations
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "VALIDATION_WARNING",
                     &format!(
                         "⚠️ Buy transaction: SOL balance unexpectedly increased by {} lamports (>0.05 SOL tolerance)",
@@ -710,7 +710,7 @@ fn validate_transaction_results(
             // SOL should be spent in buy transactions
             if sol_spent.is_none() || sol_spent.unwrap() == 0 {
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "VALIDATION_WARNING",
                     "⚠️ Buy transaction: No SOL spent detected - possible data extraction issue"
                 );
@@ -733,7 +733,7 @@ fn validate_transaction_results(
                 // Check if SOL balance at least didn't decrease too much (accounting for fees)
                 if pre_balance.sol_balance > post_balance.sol_balance + 10_000_000 { // Allow 0.01 SOL for fees
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "VALIDATION_WARNING",
                         &format!(
                             "⚠️ Sell transaction: No SOL received and balance decreased by {} lamports",
@@ -780,7 +780,7 @@ fn validate_transaction_results(
     if let Some(spent) = sol_spent {
         if spent > 100_000_000_000 { // More than 100 SOL
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VALIDATION_WARNING",
                 &format!("⚠️ Large SOL amount spent: {} lamports ({:.3} SOL)", spent, lamports_to_sol(spent))
             );
@@ -790,7 +790,7 @@ fn validate_transaction_results(
     if let Some(received) = sol_received {
         if received > 100_000_000_000 { // More than 100 SOL
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VALIDATION_WARNING",
                 &format!("⚠️ Large SOL amount received: {} lamports ({:.3} SOL)", received, lamports_to_sol(received))
             );
@@ -806,7 +806,7 @@ fn validate_transaction_results(
     }
     if time_diff > 300 { // More than 5 minutes
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VALIDATION_WARNING",
             &format!("⚠️ Large time gap between balance snapshots: {} seconds", time_diff)
         );
@@ -849,7 +849,7 @@ fn validate_transaction_results(
                (token_received < actual_token_increase.saturating_sub(tolerance) || 
                 token_received > actual_token_increase + tolerance) {
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "VALIDATION_WARNING",
                     &format!(
                         "⚠️ Token amount mismatch: extracted={}, balance_change={} (tolerance={})",
@@ -865,14 +865,14 @@ fn validate_transaction_results(
         // Check for suspiciously round numbers that might indicate decimal truncation
         if input % 1_000_000_000 == 0 && input > 1_000_000_000 {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VALIDATION_WARNING",
                 &format!("⚠️ Input amount suspiciously round: {} (possible decimal precision issue)", input)
             );
         }
         if output % 1_000_000_000 == 0 && output > 1_000_000_000 {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VALIDATION_WARNING",
                 &format!("⚠️ Output amount suspiciously round: {} (possible decimal precision issue)", output)
             );
@@ -881,14 +881,14 @@ fn validate_transaction_results(
         // Check for extremely small amounts that might indicate decimal errors
         if input < 1000 && expected_direction == "buy" {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VALIDATION_WARNING",
                 &format!("⚠️ Very small input amount: {} (possible decimal error)", input)
             );
         }
         if output < 1000 && expected_direction == "sell" {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VALIDATION_WARNING",
                 &format!("⚠️ Very small output amount: {} (possible decimal error)", output)
             );
@@ -897,7 +897,7 @@ fn validate_transaction_results(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VALIDATION_SUCCESS",
             &format!(
                 "✅ All transaction validation checks passed
@@ -1074,7 +1074,7 @@ pub async fn verify_swap_transaction(
     
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_START",
             &format!(
                 "🔍 Starting transaction verification for {}\n  Direction: {}\n  Route: {} -> {}\n  Wallet: {}",
@@ -1090,7 +1090,7 @@ pub async fn verify_swap_transaction(
     // Step 1: Wait for transaction confirmation with smart retry logic
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_1",
             "🔎 Step 1: Waiting for transaction confirmation on blockchain..."
         );
@@ -1103,7 +1103,7 @@ pub async fn verify_swap_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_1_COMPLETE",
             &format!("✅ Step 1 Complete: Transaction confirmed
   Fee: {} lamports | Has metadata: {}",
@@ -1116,7 +1116,7 @@ pub async fn verify_swap_transaction(
     // Step 2: Verify transaction success on blockchain
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_2",
             "🔎 Step 2: Verifying transaction success status..."
         );
@@ -1126,7 +1126,7 @@ pub async fn verify_swap_transaction(
     if !transaction_success {
         if is_debug_swap_enabled() {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "VERIFY_STEP_2_FAILED",
                 "❌ Step 2 Failed: Transaction failed on blockchain"
             );
@@ -1151,7 +1151,7 @@ pub async fn verify_swap_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_2_COMPLETE",
             "✅ Step 2 Complete: Transaction succeeded on blockchain"
         );
@@ -1160,7 +1160,7 @@ pub async fn verify_swap_transaction(
     // Step 3: Take post-transaction balance snapshot
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_3",
             "🔎 Step 3: Taking post-transaction balance snapshot..."
         );
@@ -1172,7 +1172,7 @@ pub async fn verify_swap_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_3_COMPLETE",
             &format!("✅ Step 3 Complete: Balance snapshot captured
   Pre-SOL: {} | Post-SOL: {}
@@ -1188,7 +1188,7 @@ pub async fn verify_swap_transaction(
     // Step 4: Analyze balance changes and calculate amounts
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_4",
             "🔎 Step 4: Analyzing balance changes and extracting amounts..."
         );
@@ -1196,7 +1196,7 @@ pub async fn verify_swap_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "BALANCE_COMPARISON",
             &format!(
                 "📊 Balance Changes:\n  SOL: {} -> {} (diff: {})\n  Token: {} -> {} (diff: {})",
@@ -1254,7 +1254,7 @@ pub async fn verify_swap_transaction(
     // Step 7: Validate results consistency
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_7",
             "🔎 Step 7: Validating transaction results for consistency..."
         );
@@ -1272,7 +1272,7 @@ pub async fn verify_swap_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_STEP_7_COMPLETE",
             "✅ Step 7 Complete: All transaction results validated successfully"
         );
@@ -1280,7 +1280,7 @@ pub async fn verify_swap_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "VERIFY_SUCCESS",
             &format!(
                 "✅ Transaction verification completed successfully
@@ -1350,7 +1350,7 @@ async fn wait_for_transaction_confirmation(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "CONFIRM_WAIT_START",
             &format!("⏳ Starting confirmation wait for transaction: {}
   ⏱️ Max wait time: {}s | Initial delay: {}ms | Max delay: {}s",
@@ -1363,7 +1363,7 @@ async fn wait_for_transaction_confirmation(
     }
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "CONFIRM_WAIT",
         &format!("⏳ Waiting for transaction confirmation: {}", transaction_signature)
     );
@@ -1391,7 +1391,7 @@ async fn wait_for_transaction_confirmation(
                 if let Some(meta) = &tx_details.meta {
                     if is_debug_swap_enabled() {
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "CONFIRMED",
                             &format!(
                                 "✅ Transaction confirmed on attempt {} after {:.1}s",
@@ -1415,7 +1415,7 @@ async fn wait_for_transaction_confirmation(
                     
                     if is_debug_swap_enabled() {
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "PENDING",
                             &format!(
                                 "⏳ Transaction pending... (attempt {}, next check in {:.1}s)",
@@ -1435,7 +1435,7 @@ async fn wait_for_transaction_confirmation(
                     
                     if is_debug_swap_enabled() {
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "RATE_LIMIT",
                             &format!("⚠️ Rate limit hit (attempt {}), extending delay to {}s", 
                                 attempt, rate_limit_delay)
@@ -1452,7 +1452,7 @@ async fn wait_for_transaction_confirmation(
                 
                 if is_debug_swap_enabled() {
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "RETRY",
                         &format!(
                             "🔄 Transaction not found yet (attempt {}), retrying in {:.1}s
@@ -1481,7 +1481,7 @@ fn verify_transaction_success(
     
     if !success {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "TX_FAILED",
             &format!("❌ Transaction failed on-chain: {:?}", meta.err)
         );
@@ -1531,7 +1531,7 @@ fn extract_amounts_from_transaction(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "EXTRACT_AMOUNTS",
             &format!(
                 "📊 Amount extraction results:\n  Input: {} (from tokens: {:?}, from SOL: {:?})\n  Output: {} (from tokens: {:?}, from SOL: {:?})",
@@ -1720,7 +1720,7 @@ fn analyze_sol_changes(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "SOL_ANALYSIS",
             &format!(
                 "💰 SOL Analysis Results:\n  Raw change: {} lamports ({})\n  Fee: {} lamports\n  ATA detected: {} | Rent: {} lamports\n  Final: spent={:?}, received={:?}",
@@ -1758,7 +1758,7 @@ fn detect_ata_closure(
                 
                 if is_debug_swap_enabled() {
                     log(
-                        crate::logger::LogTag::Wallet,
+                        crate::logger::LogTag::Swap,
                         "ATA_LOG_DETECT",
                         &format!("🔍 ATA closure detected in logs: {}", log_message)
                     );
@@ -1808,7 +1808,7 @@ fn detect_ata_closure(
 
     if is_debug_swap_enabled() {
         log(
-            crate::logger::LogTag::Wallet,
+            crate::logger::LogTag::Swap,
             "ATA_DETECTION",
             &format!(
                 "🔍 ATA Detection Results:\n  Detected: {} | Confidence: {:.1}%\n  Estimated rent: {} lamports",
@@ -1868,7 +1868,7 @@ pub async fn verify_position_entry_transaction(
     pre_balance_snapshot: &BalanceSnapshot,
 ) -> Result<PositionEntryVerification, SwapError> {
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "POSITION_ENTRY_VERIFY",
         &format!("🔍 Verifying position entry transaction: {}", &transaction_signature[..8])
     );
@@ -1959,7 +1959,7 @@ pub async fn verify_position_entry_transaction(
     // Log verification results
     if verification_success {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "POSITION_ENTRY_SUCCESS",
             &format!(
                 "✅ Entry verified: {} tokens received, {:.9} SOL spent, price: {:.12} SOL/token",
@@ -1970,7 +1970,7 @@ pub async fn verify_position_entry_transaction(
         );
     } else {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "POSITION_ENTRY_WARNING",
             &format!(
                 "⚠️ Entry verification incomplete: tokens={}, sol_spent={}, price={:.12}",
@@ -2005,7 +2005,7 @@ pub async fn verify_position_exit_transaction(
     pre_balance_snapshot: &BalanceSnapshot,
 ) -> Result<PositionExitVerification, SwapError> {
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "POSITION_EXIT_VERIFY",
         &format!("🔍 Verifying position exit transaction: {}", &transaction_signature[..8])
     );
@@ -2097,7 +2097,7 @@ pub async fn verify_position_exit_transaction(
     // Log verification results
     if verification_success {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "POSITION_EXIT_SUCCESS",
             &format!(
                 "✅ Exit verified: {} tokens sold, {:.9} SOL received, price: {:.12} SOL/token",
@@ -2108,7 +2108,7 @@ pub async fn verify_position_exit_transaction(
         );
     } else {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "POSITION_EXIT_WARNING",
             &format!(
                 "⚠️ Exit verification incomplete: tokens={}, sol_received={}, price={:.12}",
@@ -2157,7 +2157,7 @@ fn analyze_position_entry_sol_changes(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "ENTRY_SOL_ANALYSIS",
             &format!(
                 "📊 Entry SOL Analysis:\n  SOL spent: {} lamports\n  ATA created: {}\n  ATA rent: {} lamports",
@@ -2205,7 +2205,7 @@ fn analyze_position_exit_sol_changes(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "EXIT_SOL_ANALYSIS",
             &format!(
                 "📊 Exit SOL Analysis:\n  SOL received: {} lamports\n  ATA closed: {}\n  ATA rent: {} lamports",
@@ -2240,7 +2240,7 @@ fn detect_ata_creation(
                     
                     if is_debug_swap_enabled() {
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "ATA_CREATE_DETECT",
                             &format!("🔍 ATA creation detected in logs: {}", log_message)
                         );
@@ -2291,7 +2291,7 @@ pub async fn register_position_transaction(
         service.pending_transactions.insert(transaction_signature.to_string(), pending_transaction);
         
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "POSITION_TX_REGISTERED",
             &format!("📝 Registered {} transaction for position tracking: {}", direction, &transaction_signature[..8])
         );

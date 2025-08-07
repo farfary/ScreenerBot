@@ -5,12 +5,12 @@
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
-use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, is_debug_wallet_enabled, read_configs};
+use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, JupiterQuoteResponse, JupiterSwapResponse};
 use super::config::{
-    JUPITER_QUOTE_API, JUPITER_SWAP_API, JUPITER_API_TIMEOUT_SECS, JUPITER_QUOTE_TIMEOUT_SECS,
-    JUPITER_RETRY_ATTEMPTS, JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
-    SOL_MINT
+    JUPITER_QUOTE_API, JUPITER_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
+    RETRY_ATTEMPTS, JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
+    JUPITER_DEFAULT_SWAP_MODE, SOL_MINT
 };
 
 use serde::{Deserialize, Serialize};
@@ -90,6 +90,7 @@ pub async fn get_jupiter_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64,
+    swap_mode: &str,
     fee: f64,
     is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
@@ -98,12 +99,20 @@ pub async fn get_jupiter_quote(
             LogTag::Swap,
             "JUPITER_QUOTE_START",
             &format!(
-                "🟡 Jupiter Quote Request:\n  Input: {} ({} units)\n  Output: {}\n  From: {}\n  Slippage: {}%\n  Fee: {}%\n  Anti-MEV: {}",
+                "🟡 Jupiter Quote Request:
+  Input: {} ({} units)
+  Output: {}
+  From: {}
+  Slippage: {}%
+  Swap Mode: {}
+  Fee: {}%
+  Anti-MEV: {}",
                 if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
                 input_amount,
                 if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] },
                 &from_address[..8],
                 slippage,
+                swap_mode,
                 fee,
                 is_anti_mev
             )
@@ -117,7 +126,7 @@ pub async fn get_jupiter_quote(
         ("outputMint".to_string(), output_mint.to_string()),
         ("amount".to_string(), input_amount.to_string()),
         ("slippageBps".to_string(), slippage_bps.to_string()),
-        ("swapMode".to_string(), "ExactIn".to_string()),
+        ("swapMode".to_string(), swap_mode.to_string()),
     ];
 
     let url = format!("{}?{}", JUPITER_QUOTE_API, 
@@ -135,16 +144,20 @@ pub async fn get_jupiter_quote(
         log(LogTag::Swap, "JUPITER_API", &format!("Jupiter Quote URL: {}", url));
     }
 
-    if is_debug_wallet_enabled() {
+    if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "JUPITER_QUOTE_DETAILS",
             &format!(
-                "📊 Jupiter Quote Parameters:\n  URL: {}\n  Input Amount: {} lamports\n  Slippage BPS: {}\n  Timeout: {}s",
+                "📊 Jupiter Quote Parameters:
+  URL: {}
+  Input Amount: {} lamports
+  Slippage BPS: {}
+  Timeout: {}s",
                 url,
                 input_amount,
                 slippage_bps,
-                JUPITER_QUOTE_TIMEOUT_SECS
+                QUOTE_TIMEOUT_SECS
             )
         );
     }
@@ -162,18 +175,25 @@ pub async fn get_jupiter_quote(
             LogTag::Swap,
             "JUPITER_QUOTE_PARAMS",
             &format!(
-                "📊 Jupiter Quote Debug:\n  • Input Mint: {}\n  • Output Mint: {}\n  • Amount: {} lamports\n  • Slippage: {}% ({} BPS)\n  • From Address: {}",
+                "📊 Jupiter Quote Debug:
+  • Input Mint: {}
+  • Output Mint: {}
+  • Amount: {} lamports
+  • Slippage: {}% ({} BPS)
+  • Swap Mode: {}
+  • From Address: {}",
                 input_mint,
                 output_mint,
                 input_amount,
                 slippage,
                 slippage_bps,
+                swap_mode,
                 from_address
             )
         );
     }
     
-    let response = timeout(Duration::from_secs(JUPITER_QUOTE_TIMEOUT_SECS), client.get(&url).send())
+    let response = timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send())
         .await
         .map_err(|_| {
             if is_debug_swap_enabled() {
@@ -332,7 +352,7 @@ pub async fn get_jupiter_swap_transaction(
     }
     
     let response = timeout(
-        Duration::from_secs(JUPITER_API_TIMEOUT_SECS),
+        Duration::from_secs(API_TIMEOUT_SECS),
         client.post(JUPITER_SWAP_API)
             .json(&request_body)
             .send()

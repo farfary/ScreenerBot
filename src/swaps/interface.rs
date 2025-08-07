@@ -4,7 +4,7 @@
 use crate::tokens::Token;
 use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
-use crate::global::{is_debug_wallet_enabled, is_debug_swap_enabled};
+use crate::global::{is_debug_swap_enabled};
 use crate::utils::get_token_balance;
 use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard, TransactionMonitoringService};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
@@ -37,7 +37,7 @@ pub async fn buy_token(
     if let Some(price) = expected_price {
         if price <= 0.0 || !price.is_finite() {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "ERROR",
                 &format!(
                     "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
@@ -59,7 +59,7 @@ pub async fn buy_token(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "BUY_START",
             &format!(
                 "🟢 Starting BUY operation for {} ({}) - Amount: {:.6} SOL",
@@ -80,6 +80,7 @@ pub async fn buy_token(
         sol_to_lamports(amount_sol),
         &wallet_address,
         SLIPPAGE_TOLERANCE_PERCENT,
+        "ExactIn", // swap_mode
         SWAP_FEE_PERCENT,
         false, // Anti-MEV
     ).await?;
@@ -98,7 +99,7 @@ pub async fn buy_token(
     }
 
     // Execute the swap
-    log(LogTag::Wallet, "SWAP", &format!("🚀 Executing swap with best quote via {:?}...", best_quote.router));
+    log(LogTag::Swap, "SWAP", &format!("🚀 Executing swap with best quote via {:?}...", best_quote.router));
 
     let unified_result = execute_best_swap(
         token,
@@ -134,10 +135,10 @@ pub async fn buy_token(
                 &token.mint,
                 true, // position related
             ).await {
-                log(LogTag::Wallet, "MONITOR_WARNING", 
+                log(LogTag::Swap, "MONITOR_WARNING", 
                     &format!("Failed to add buy transaction to monitoring: {}", e));
             } else {
-                log(LogTag::Wallet, "MONITOR_ADDED", 
+                log(LogTag::Swap, "MONITOR_ADDED", 
                     &format!("✅ Buy transaction {} added to monitoring", &signature[..8]));
             }
         }
@@ -154,7 +155,7 @@ pub async fn buy_token(
                 swap_result.effective_price = Some(effective_price);
 
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "PRICE",
                     &format!(
                         "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token",
@@ -163,11 +164,11 @@ pub async fn buy_token(
                     )
                 );
 
-                if is_debug_wallet_enabled() {
+                if is_debug_swap_enabled() {
                     if let Some(expected) = expected_price {
                         let price_diff = ((effective_price - expected) / expected) * 100.0;
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "PRICE",
                             &format!(
                                 "Price vs expected: {:.10} vs {:.10} SOL ({:+.2}%)",
@@ -181,7 +182,7 @@ pub async fn buy_token(
             }
             Err(e) => {
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "WARNING",
                     &format!("Failed to calculate effective price for buy: {}", e)
                 );
@@ -191,7 +192,7 @@ pub async fn buy_token(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "BUY_COMPLETE",
             &format!(
                 "🟢 BUY operation completed for {} - Success: {} | TX: {}",
@@ -225,7 +226,7 @@ pub async fn sell_token(
 
     for (attempt, &slippage) in slippages.iter().enumerate() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "SELL_ATTEMPT",
             &format!(
                 "🔴 Sell attempt {} for {} with {:.1}% slippage",
@@ -238,7 +239,7 @@ pub async fn sell_token(
         match sell_token_with_slippage(token, token_amount, expected_sol_output, slippage).await {
             Ok(result) => {
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "SELL_SUCCESS",
                     &format!(
                         "✅ Sell successful for {} on attempt {} with {:.1}% slippage",
@@ -251,7 +252,7 @@ pub async fn sell_token(
             }
             Err(e) => {
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "SELL_RETRY",
                     &format!(
                         "⚠️ Sell attempt {} failed for {} with {:.1}% slippage: {}",
@@ -269,7 +270,7 @@ pub async fn sell_token(
                 } else {
                     // Last attempt failed
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "SELL_FAILED",
                         &format!(
                             "❌ All sell attempts failed for {} after {} tries",
@@ -302,7 +303,7 @@ async fn sell_token_with_slippage(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "SELL_START",
             &format!(
                 "🔴 Starting SELL operation for {} ({}) - Expected amount: {} tokens, Slippage: {:.1}%",
@@ -322,7 +323,7 @@ async fn sell_token_with_slippage(
 
     if actual_wallet_balance == 0 {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "WARNING",
             &format!(
                 "⚠️ No {} tokens in wallet to sell (expected: {}, actual: 0)",
@@ -339,7 +340,7 @@ async fn sell_token_with_slippage(
     let actual_sell_amount = actual_wallet_balance;
     
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "SELL_AMOUNT",
         &format!(
             "💰 Selling {} {} tokens (position: {}, wallet: {})",
@@ -357,6 +358,7 @@ async fn sell_token_with_slippage(
         actual_sell_amount,
         &wallet_address,
         slippage,
+        "ExactIn", // swap_mode
         SWAP_FEE_PERCENT,
         false,
     ).await?;
@@ -396,10 +398,10 @@ async fn sell_token_with_slippage(
                 SOL_MINT,
                 true, // position related
             ).await {
-                log(LogTag::Wallet, "MONITOR_WARNING", 
+                log(LogTag::Swap, "MONITOR_WARNING", 
                     &format!("Failed to add sell transaction to monitoring: {}", e));
             } else {
-                log(LogTag::Wallet, "MONITOR_ADDED", 
+                log(LogTag::Swap, "MONITOR_ADDED", 
                     &format!("✅ Sell transaction {} added to monitoring", &signature[..8]));
             }
         }
@@ -418,7 +420,7 @@ async fn sell_token_with_slippage(
             swap_result.effective_price = Some(effective_price);
 
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "PRICE",
                 &format!(
                     "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token",
@@ -431,7 +433,7 @@ async fn sell_token_with_slippage(
 
     if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "SELL_COMPLETE",
             &format!(
                 "🔴 SELL operation completed for {} - Success: {} | TX: {}",

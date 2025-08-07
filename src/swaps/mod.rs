@@ -148,6 +148,7 @@ pub async fn get_best_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64,
+    swap_mode: &str,
     fee: f64,
     is_anti_mev: bool,
 ) -> Result<UnifiedQuote, SwapError> {
@@ -174,6 +175,7 @@ pub async fn get_best_quote(
                 input_amount,
                 from_address,
                 slippage,
+                "ExactIn", // Default to ExactIn mode
                 fee,
                 is_anti_mev,
             ).await {
@@ -225,6 +227,7 @@ pub async fn get_best_quote(
                 input_amount,
                 from_address,
                 slippage,
+                swap_mode,
                 fee,
                 is_anti_mev,
             ).await {

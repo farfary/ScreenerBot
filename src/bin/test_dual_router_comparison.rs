@@ -66,6 +66,7 @@ async fn test_dual_router_comparison(
         amount,
         &wallet_address,
         slippage,
+        "ExactIn", // swap_mode
         fee,
         anti_mev,
     ).await {

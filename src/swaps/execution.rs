@@ -1,7 +1,7 @@
 /// Swap execution and quote management functions
 /// Handles GMGN router integration, quote fetching, and swap execution
 
-use crate::global::{read_configs, is_debug_wallet_enabled, is_debug_swap_enabled};
+use crate::global::{read_configs, is_debug_swap_enabled};
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
@@ -38,6 +38,10 @@ fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
         return Err(SwapError::InvalidAmount("Fee cannot be negative".to_string()));
     }
 
+    if request.swap_mode != "ExactIn" && request.swap_mode != "ExactOut" {
+        return Err(SwapError::InvalidAmount("Swap mode must be either 'ExactIn' or 'ExactOut'".to_string()));
+    }
+
     Ok(())
 }
 
@@ -50,7 +54,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
             LogTag::Swap,
             "QUOTE_START",
             &format!(
-                "� Generic Quote Request:\n  Input: {} ({} units)\n  Output: {}\n  From: {}\n  Slippage: {}%\n  Fee: {}%\n  Anti-MEV: {}",
+                "🔄 Generic Quote Request:\n  Input: {} ({} units)\n  Output: {}\n  From: {}\n  Slippage: {}%\n  Swap Mode: {}\n  Fee: {}%\n  Anti-MEV: {}",
                 if request.input_mint == SOL_MINT {
                     "SOL"
                 } else {
@@ -64,6 +68,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 },
                 &request.from_address[..8],
                 request.slippage,
+                request.swap_mode,
                 request.fee,
                 request.is_anti_mev
             )
@@ -71,12 +76,13 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
     }
 
     let url = format!(
-        "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
+        "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
         request.input_mint,
         request.output_mint,
         request.input_amount,
         request.from_address,
         request.slippage,
+        request.swap_mode,
         request.fee,
         request.is_anti_mev,
         PARTNER
@@ -86,24 +92,25 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         log(LogTag::Swap, "QUOTE_URL", &format!("🌐 API URL: {}", url));
     }
 
-    if is_debug_wallet_enabled() {
+    if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "DEBUG",
             &format!(
-                "Swap request details: input_amount={}, slippage={}, fee={}, anti_mev={}, from_address={}",
+                "Swap request details: input_amount={}, slippage={}, swap_mode={}, fee={}, anti_mev={}, from_address={}",
                 request.input_amount,
                 request.slippage,
+                request.swap_mode,
                 request.fee,
                 request.is_anti_mev,
                 &request.from_address[..8]
             )
         );
-        log(LogTag::Wallet, "DEBUG", &format!("API URL: {}", url));
+        log(LogTag::Swap, "DEBUG", &format!("API URL: {}", url));
     }
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "QUOTE",
         &format!(
             "Requesting swap quote: {} units {} -> {}",
@@ -174,7 +181,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
                     if attempt < 3 && status_code >= 500 {
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "WARNING",
                             &format!("API error on attempt {}: {}, retrying...", attempt, error)
                         );
@@ -195,7 +202,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         let error = SwapError::NetworkError(e);
                         if attempt < 3 {
                             log(
-                                LogTag::Wallet,
+                                LogTag::Swap,
                                 "WARNING",
                                 &format!(
                                     "Network error on attempt {}: {}, retrying...",
@@ -215,9 +222,9 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 };
 
                 // Log the raw response for debugging
-                if is_debug_wallet_enabled() {
+                if is_debug_swap_enabled() {
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "DEBUG",
                         &format!(
                             "Raw API response: {}",
@@ -265,7 +272,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         );
                         if attempt < 3 {
                             log(
-                                LogTag::Wallet,
+                                LogTag::Swap,
                                 "WARNING",
                                 &format!(
                                     "Parse error on attempt {}: {}, retrying...",
@@ -320,7 +327,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         }
 
                         log(
-                            LogTag::Wallet,
+                            LogTag::Swap,
                             "QUOTE",
                             &format!(
                                 "Quote received: {} -> {} (Impact: {}%, Time: {:.3}s)",
@@ -336,7 +343,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         let error = SwapError::InvalidResponse("No data in response".to_string());
                         if attempt < 3 {
                             log(
-                                LogTag::Wallet,
+                                LogTag::Swap,
                                 "WARNING",
                                 &format!("No data on attempt {}, retrying...", attempt)
                             );
@@ -355,7 +362,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 let error = SwapError::NetworkError(e);
                 if attempt < 3 {
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "WARNING",
                         &format!("Network error on attempt {}: {}, retrying...", attempt, error)
                     );
@@ -393,7 +400,7 @@ pub async fn execute_swap_with_quote(
     };
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "SWAP",
         &format!(
             "Executing swap for {} ({}) - {} {} -> {} (using cached quote)",
@@ -425,7 +432,7 @@ pub async fn execute_swap_with_quote(
     ).await?;
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "PENDING",
         &format!("Transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
     );
@@ -462,7 +469,7 @@ pub async fn execute_swap_with_quote(
                     output_mint
                 ).await {
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "VALIDATION_WARNING",
                         &format!("⚠️ Transaction validation warning: {}", validation_error)
                     );
@@ -470,7 +477,7 @@ pub async fn execute_swap_with_quote(
                 }
 
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "CONFIRMED",
                     &format!(
                         "✅ Transaction CONFIRMED on-chain! TX: {} | Actual Input: {} | Actual Output: {}",
@@ -496,7 +503,7 @@ pub async fn execute_swap_with_quote(
             } else {
                 let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "FAILED",
                     &format!("❌ Transaction FAILED on-chain! TX: {} - Error: {}", transaction_signature, error_msg)
                 );
@@ -517,7 +524,7 @@ pub async fn execute_swap_with_quote(
         }
         Err(e) => {
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "ERROR",
                 &format!(
                     "❌ Transaction verification failed for TX: {} - Error: {}",
@@ -620,7 +627,7 @@ async fn validate_transaction_vs_quote(
     }
     
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "QUOTE_VALIDATION",
         &format!(
             "✅ Quote validation passed: Input dev: {:.2}%, Output dev: {:.2}%",

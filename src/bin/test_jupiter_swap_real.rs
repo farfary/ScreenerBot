@@ -188,6 +188,7 @@ async fn pre_flight_checks(token_mint: &str) -> Result<(), Box<dyn std::error::E
         sol_to_lamports(TEST_TRADE_SIZE_SOL),
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn", // swap_mode
         TEST_FEE,
         false,
     ).await;

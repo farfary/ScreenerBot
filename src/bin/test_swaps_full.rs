@@ -44,6 +44,7 @@ pub async fn test_gmgn_full_swap() -> Result<(), Box<dyn std::error::Error>> {
         TEST_SOL_AMOUNT,
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn",
         TEST_FEE,
         false,
     ).await;
@@ -70,6 +71,7 @@ pub async fn test_gmgn_full_swap() -> Result<(), Box<dyn std::error::Error>> {
                 input_amount: TEST_SOL_AMOUNT,
                 from_address: wallet_address.clone(),
                 slippage: TEST_SLIPPAGE,
+                swap_mode: "ExactIn".to_string(),
                 fee: TEST_FEE,
                 is_anti_mev: false,
                 expected_price: None,
@@ -123,6 +125,7 @@ pub async fn test_jupiter_full_swap() -> Result<(), Box<dyn std::error::Error>> 
         TEST_SOL_AMOUNT,
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn", // swap_mode
         TEST_FEE,
         false,
     ).await;
@@ -149,6 +152,7 @@ pub async fn test_jupiter_full_swap() -> Result<(), Box<dyn std::error::Error>> 
                 input_amount: TEST_SOL_AMOUNT,
                 from_address: wallet_address.clone(),
                 slippage: TEST_SLIPPAGE,
+                swap_mode: "ExactIn".to_string(),
                 fee: TEST_FEE,
                 is_anti_mev: false,
                 expected_price: None,
@@ -194,6 +198,7 @@ pub async fn test_router_comparison() -> Result<(), Box<dyn std::error::Error>> 
         TEST_SOL_AMOUNT,
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn",
         TEST_FEE,
         false,
     );
@@ -204,6 +209,7 @@ pub async fn test_router_comparison() -> Result<(), Box<dyn std::error::Error>> 
         TEST_SOL_AMOUNT,
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn", // swap_mode
         TEST_FEE,
         false,
     );
@@ -317,6 +323,7 @@ pub async fn test_router_resilience() -> Result<(), Box<dyn std::error::Error>> 
         TEST_SOL_AMOUNT,
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn",
         TEST_FEE,
         false,
     ).await;
@@ -343,6 +350,7 @@ pub async fn test_router_resilience() -> Result<(), Box<dyn std::error::Error>> 
         1000, // Very small amount
         &wallet_address,
         TEST_SLIPPAGE,
+        "ExactIn", // swap_mode
         TEST_FEE,
         false,
     ).await;

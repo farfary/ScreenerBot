@@ -5,11 +5,11 @@
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol};
-use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, is_debug_wallet_enabled, read_configs};
+use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction};
 use super::config::{
-    RAYDIUM_QUOTE_API, RAYDIUM_SWAP_API, RAYDIUM_API_TIMEOUT_SECS, RAYDIUM_QUOTE_TIMEOUT_SECS,
-    RAYDIUM_RETRY_ATTEMPTS, SOL_MINT
+    RAYDIUM_QUOTE_API, RAYDIUM_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
+    RETRY_ATTEMPTS, SOL_MINT
 };
 use super::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
 
@@ -237,7 +237,7 @@ pub async fn get_raydium_swap_transaction(
     let client = reqwest::Client::new();
     
     let response = timeout(
-        Duration::from_secs(RAYDIUM_API_TIMEOUT_SECS),
+        Duration::from_secs(API_TIMEOUT_SECS),
         client.post(RAYDIUM_SWAP_API)
             .json(&request_body)
             .send()
@@ -300,7 +300,7 @@ pub async fn execute_raydium_swap(
     swap_data: SwapData
 ) -> Result<RaydiumSwapResult, SwapError> {
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "RAYDIUM_SWAP_DEPRECATED",
         &format!(
             "🟣 Raydium direct API is deprecated for {} ({}) - Use Jupiter aggregator instead",
@@ -396,14 +396,14 @@ pub fn validate_raydium_quote_price(
 ) -> Result<(), SwapError> {
     let output_amount_str = &swap_data.quote.out_amount;
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "RAYDIUM_DEBUG",
         &format!("Raydium quote validation - Raw out_amount string: '{}'", output_amount_str)
     );
 
     let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "RAYDIUM_ERROR",
             &format!("Raydium quote validation - Failed to parse out_amount '{}': {}", output_amount_str, e)
         );
@@ -437,7 +437,7 @@ pub fn validate_raydium_quote_price(
     let price_difference = (((actual_price_per_token - expected_price) / expected_price) * 100.0).abs();
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "RAYDIUM_PRICE",
         &format!(
             "Raydium quote validation - Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",

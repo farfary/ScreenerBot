@@ -4,11 +4,11 @@
 use crate::tokens::Token;
 use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
 use crate::logger::{log, LogTag};
-use crate::global::{read_configs, is_debug_swap_enabled, is_debug_wallet_enabled};
+use crate::global::{read_configs, is_debug_swap_enabled};
 use super::config::{
-    GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, GMGN_DEFAULT_SLIPPAGE, 
-    GMGN_API_TIMEOUT_SECS, GMGN_QUOTE_TIMEOUT_SECS, GMGN_RETRY_ATTEMPTS,
-    SOL_MINT
+    GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, 
+    API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
+    GMGN_DEFAULT_SWAP_MODE, SOL_MINT
 };
 use super::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
 use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number};
@@ -93,6 +93,7 @@ pub async fn get_gmgn_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64,
+    swap_mode: &str,
     fee: f64,
     is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
@@ -106,6 +107,7 @@ pub async fn get_gmgn_quote(
   Output: {}
   From: {}
   Slippage: {}%
+  Swap Mode: {}
   Fee: {}%
   Anti-MEV: {}",
                 if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
@@ -113,6 +115,7 @@ pub async fn get_gmgn_quote(
                 if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] },
                 &from_address[..8],
                 slippage,
+                swap_mode,
                 fee,
                 is_anti_mev
             )
@@ -120,13 +123,14 @@ pub async fn get_gmgn_quote(
     }
 
     let url = format!(
-        "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&fee={}&is_anti_mev={}&partner={}",
+        "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
         GMGN_QUOTE_API,
         input_mint,
         output_mint,
         input_amount,
         from_address,
         slippage,
+        swap_mode,
         fee,
         is_anti_mev,
         GMGN_PARTNER
@@ -136,9 +140,9 @@ pub async fn get_gmgn_quote(
         log(LogTag::Swap, "GMGN_URL", &format!("🌐 GMGN API URL: {}", url));
     }
 
-    if is_debug_wallet_enabled() {
+    if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "GMGN_QUOTE_DETAILS",
             &format!(
                 "📊 GMGN Quote Parameters:
@@ -154,7 +158,7 @@ pub async fn get_gmgn_quote(
         );
         
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "GMGN_QUOTE_DEBUG",
             &format!(
                 "📊 GMGN Quote Debug:
@@ -174,7 +178,7 @@ pub async fn get_gmgn_quote(
     }
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "GMGN_QUOTE",
         &format!(
             "🔵 Requesting GMGN quote: {} units {} -> {}",
@@ -188,7 +192,7 @@ pub async fn get_gmgn_quote(
     let mut last_error = None;
 
     // Retry up to configured attempts with increasing delays
-    for attempt in 1..=GMGN_RETRY_ATTEMPTS {
+    for attempt in 1..=RETRY_ATTEMPTS {
         if is_debug_swap_enabled() {
             log(
                 LogTag::Swap,
@@ -198,7 +202,7 @@ pub async fn get_gmgn_quote(
         }
 
         match client.get(&url)
-            .timeout(tokio::time::Duration::from_secs(GMGN_QUOTE_TIMEOUT_SECS))
+            .timeout(tokio::time::Duration::from_secs(QUOTE_TIMEOUT_SECS))
             .send()
             .await {
             Ok(response) => {
@@ -244,7 +248,7 @@ pub async fn get_gmgn_quote(
                                     }
 
                                     log(
-                                        LogTag::Wallet,
+                                        LogTag::Swap,
                                         "GMGN_SUCCESS",
                                         &format!(
                                             "✅ GMGN quote received: {} -> {} (impact: {}%, time: {:.3}s)",
@@ -329,7 +333,7 @@ pub async fn get_gmgn_quote(
                 );
             }
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "RETRY",
                 &format!("GMGN attempt {} failed, retrying in {}ms...", attempt, delay.as_millis())
             );
@@ -367,7 +371,7 @@ pub async fn execute_gmgn_swap(
     };
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "GMGN_SWAP",
         &format!(
             "🔵 Executing GMGN swap for {} ({}) - {} {} -> {} (using cached quote)",
@@ -394,7 +398,7 @@ pub async fn execute_gmgn_swap(
     ).await?;
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "GMGN_PENDING",
         &format!("🔵 GMGN transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
     );
@@ -414,7 +418,7 @@ pub async fn execute_gmgn_swap(
 
             if verification_result.success && verification_result.confirmed {
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "GMGN_SUCCESS",
                     &format!(
                         "✅ GMGN swap confirmed! TX: {} (execution: {:.2}s)",
@@ -438,7 +442,7 @@ pub async fn execute_gmgn_swap(
             } else {
                 let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
                 log(
-                    LogTag::Wallet,
+                    LogTag::Swap,
                     "GMGN_FAILED",
                     &format!("❌ GMGN transaction failed: {} - Error: {}", transaction_signature, error_msg)
                 );
@@ -460,7 +464,7 @@ pub async fn execute_gmgn_swap(
         Err(e) => {
             let execution_time = start_time.elapsed().as_secs_f64();
             log(
-                LogTag::Wallet,
+                LogTag::Swap,
                 "GMGN_ERROR",
                 &format!("❌ GMGN transaction verification failed: {}", e)
             );
@@ -492,14 +496,14 @@ pub fn validate_gmgn_quote_price(
 ) -> Result<(), SwapError> {
     let output_amount_str = &swap_data.quote.out_amount;
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "GMGN_DEBUG",
         &format!("GMGN quote validation - Raw out_amount string: '{}'", output_amount_str)
     );
 
     let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "GMGN_ERROR",
             &format!("GMGN quote validation - Failed to parse out_amount '{}': {}", output_amount_str, e)
         );
@@ -533,7 +537,7 @@ pub fn validate_gmgn_quote_price(
     let price_difference = (((actual_price_per_token - expected_price) / expected_price) * 100.0).abs();
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "GMGN_PRICE",
         &format!(
             "GMGN quote validation - Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",

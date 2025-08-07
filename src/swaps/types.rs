@@ -5,7 +5,13 @@ use serde::{Deserialize, Serialize, Deserializer};
 use crate::trader::{SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT};
 
 /// Configuration constants for swap operations (re-exported from config)
-pub use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
+pub use super::config::{
+    SOL_MINT, 
+    GMGN_ANTI_MEV as ANTI_MEV, 
+    GMGN_PARTNER as PARTNER,
+    GMGN_DEFAULT_SWAP_MODE,
+    JUPITER_DEFAULT_SWAP_MODE
+};
 
 /// Custom deserializer for fields that can be either string or number
 pub fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -211,6 +217,7 @@ pub struct SwapRequest {
     pub input_amount: u64, // Amount in smallest unit (lamports for SOL, raw amount for tokens)
     pub from_address: String,
     pub slippage: f64,
+    pub swap_mode: String, // "ExactIn" or "ExactOut", default is "ExactIn"
     pub fee: f64,
     pub is_anti_mev: bool,
     pub expected_price: Option<f64>,
@@ -224,6 +231,7 @@ impl Default for SwapRequest {
             input_amount: 0,
             from_address: String::new(),
             slippage: SLIPPAGE_TOLERANCE_PERCENT,
+            swap_mode: GMGN_DEFAULT_SWAP_MODE.to_string(), // Use config default
             fee: SWAP_FEE_PERCENT,
             is_anti_mev: ANTI_MEV,
             expected_price: None,

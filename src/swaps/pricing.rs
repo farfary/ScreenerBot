@@ -1,7 +1,7 @@
 /// Price calculation and validation functions for swap operations
 /// Handles effective price calculations, quote validation, and price comparisons
 
-use crate::global::is_debug_wallet_enabled;
+use crate::global::is_debug_swap_enabled;
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports};
 use crate::swaps::types::{SwapData, SwapRequest};
@@ -75,9 +75,9 @@ pub async fn calculate_effective_price(
             if let Some(ata_rent) = ata_rent_reclaimed {
                 output_sol += lamports_to_sol(ata_rent);
                 
-                if is_debug_wallet_enabled() {
+                if is_debug_swap_enabled() {
                     log(
-                        LogTag::Wallet,
+                        LogTag::Swap,
                         "ATA_RENT",
                         &format!("Added ATA rent to price calculation: {:.6} SOL", lamports_to_sol(ata_rent))
                     );
@@ -93,9 +93,9 @@ pub async fn calculate_effective_price(
         _ => return Err(SwapError::InvalidAmount(format!("Invalid direction: {}", direction)))
     };
 
-    if is_debug_wallet_enabled() {
+    if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "PRICE_CALC",
             &format!(
                 "💰 EFFECTIVE PRICE CALCULATION ({}):\n  📥 Input: {} {} (raw: {})\n  📤 Output: {} {} (raw: {})\n  🔢 Decimals: in={}, out={}\n  🏦 ATA Rent: {} SOL\n  💎 Effective Price: {:.10} SOL per token",
@@ -209,7 +209,7 @@ pub fn calculate_effective_price_buy(swap_result: &SwapResult) -> Result<f64, Sw
     let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
         swap_data.quote.out_decimals as u32
     } else {
-        log(LogTag::Wallet, "ERROR", "Cannot calculate effective price without swap data decimals");
+        log(LogTag::Swap, "ERROR", "Cannot calculate effective price without swap data decimals");
         return Err(SwapError::InvalidResponse("Missing decimals in swap data".to_string()));
     };
 
@@ -219,9 +219,9 @@ pub fn calculate_effective_price_buy(swap_result: &SwapResult) -> Result<f64, Sw
     // Calculate effective price: SOL spent / tokens received
     let effective_price = input_sol / output_tokens;
 
-    if is_debug_wallet_enabled() {
+    if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "DEBUG",
             &format!(
                 "💰 EFFECTIVE PRICE CALCULATION (BUY):\n  📥 Input: {} SOL ({} lamports)\n  📤 Output: {:.6} tokens ({} raw)\n  🔢 Token Decimals: {}\n  💎 Effective Price: {:.10} SOL per token",
@@ -268,7 +268,7 @@ pub fn calculate_effective_price_sell(swap_result: &SwapResult) -> Result<f64, S
     let token_decimals = if let Some(swap_data) = &swap_result.swap_data {
         swap_data.quote.in_decimals as u32
     } else {
-        log(LogTag::Wallet, "ERROR", "Cannot calculate effective price without swap data decimals");
+        log(LogTag::Swap, "ERROR", "Cannot calculate effective price without swap data decimals");
         return Err(SwapError::InvalidResponse("Missing decimals in swap data".to_string()));
     };
 
@@ -278,9 +278,9 @@ pub fn calculate_effective_price_sell(swap_result: &SwapResult) -> Result<f64, S
     // Calculate effective price: SOL received / tokens sold
     let effective_price = output_sol / input_tokens;
 
-    if is_debug_wallet_enabled() {
+    if is_debug_swap_enabled() {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "DEBUG",
             &format!(
                 "💰 EFFECTIVE PRICE CALCULATION (SELL):\n  📥 Input: {:.6} tokens ({} raw)\n  📤 Output: {} SOL ({} lamports)\n  🔢 Token Decimals: {}\n  💎 Effective Price: {:.10} SOL per token",
@@ -305,14 +305,14 @@ pub fn validate_quote_price(
 ) -> Result<(), SwapError> {
     let output_amount_str = &swap_data.quote.out_amount;
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "DEBUG",
         &format!("Quote validation - Raw out_amount string: '{}'", output_amount_str)
     );
 
     let output_amount_raw = output_amount_str.parse::<f64>().unwrap_or_else(|e| {
         log(
-            LogTag::Wallet,
+            LogTag::Swap,
             "ERROR",
             &format!("Quote validation - Failed to parse out_amount '{}': {}", output_amount_str, e)
         );
@@ -320,7 +320,7 @@ pub fn validate_quote_price(
     });
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "DEBUG",
         &format!("Quote validation - Parsed output_amount_raw: {}", output_amount_raw)
     );
@@ -350,7 +350,7 @@ pub fn validate_quote_price(
     };
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "DEBUG",
         &format!(
             "Quote validation - Price calc debug: input_amount={}, output_amount_raw={}, output_decimals={}, actual_price={:.12}",
@@ -367,7 +367,7 @@ pub fn validate_quote_price(
     ).abs();
 
     log(
-        LogTag::Wallet,
+        LogTag::Swap,
         "PRICE",
         &format!(
             "Quote validation - Expected {:.12} SOL/token, Actual {:.12} SOL/token, Diff: {:.2}%",
@@ -404,6 +404,7 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
         sol_to_lamports(small_amount),
         &wallet_address,
         1.0, // 1% slippage for price checking
+        "ExactIn", // swap_mode
         0.0, // No fee for quote
         false, // No anti-MEV for price checking
     ).await?;
