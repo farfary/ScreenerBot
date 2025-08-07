@@ -1,7 +1,3 @@
-[build]
-# Use sparse registry for faster dependency resolution
-registry = "sparse"
-
 # Target-specific optimization for better performance
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "target-cpu=native"]
