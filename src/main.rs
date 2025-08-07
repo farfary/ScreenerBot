@@ -8,9 +8,6 @@ async fn main() {
     // Initialize file logging system first
     init_file_logging();
 
-    // Initialize swap router configuration
-    screenerbot::swaps::init_router_config();
-
     // Initialize centralized blacklist system with system/stable tokens
     screenerbot::tokens::initialize_system_stable_blacklist();
 

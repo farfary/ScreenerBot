@@ -9,12 +9,10 @@ pub mod types;
 pub mod transaction;
 pub mod pricing;
 pub mod execution;
-pub mod config;
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
 use crate::logger::{log, LogTag};
-use config::{is_gmgn_enabled, is_jupiter_enabled, is_raydium_enabled};
 
 // =============================================================================
 // TRANSACTION CONFIRMATION DELAY CONFIGURATION
@@ -81,12 +79,6 @@ pub use execution::{get_swap_quote, execute_swap_with_quote};
 pub use gmgn::{get_gmgn_quote, execute_gmgn_swap, gmgn_sign_and_send_transaction, GMGNSwapResult};
 pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send_transaction, JupiterSwapResult};
 pub use raydium::{get_raydium_quote, execute_raydium_swap, raydium_sign_and_send_transaction, RaydiumSwapResult};
-
-// Configuration
-pub use config::{
-    init_router_config, get_enabled_routers, get_config_summary, validate_router_availability,
-    has_available_routers, get_preferred_router_order
-};
 
 // =============================================================================
 // UNIFIED ROUTER INTERFACE
@@ -156,165 +148,147 @@ pub async fn get_best_quote(
         LogTag::Swap,
         "BEST_QUOTE",
         &format!(
-            "🔍 Finding best route: {} -> {} (amount: {}) | Enabled routers: {}",
+            "🔍 Finding best route: {} -> {} (amount: {})",
             if input_mint == types::SOL_MINT { "SOL" } else { &input_mint[..8] },
             if output_mint == types::SOL_MINT { "SOL" } else { &output_mint[..8] },
-            input_amount,
-            config::get_config_summary()
+            input_amount
         )
     );
 
     let mut quotes = Vec::new();
 
-    // Get GMGN quote (only if enabled)
-    if is_gmgn_enabled() {
-        log(LogTag::Swap, "QUOTE_GMGN", "🔵 Getting GMGN quote...");
-        match gmgn::get_gmgn_quote(
-            input_mint,
-            output_mint,
-            input_amount,
-            from_address,
-            slippage,
-            fee,
-            is_anti_mev,
-        ).await {
-            Ok(gmgn_data) => {
-                let unified_quote = UnifiedQuote {
-                    router: RouterType::GMGN,
-                    input_mint: input_mint.to_string(),
-                    output_mint: output_mint.to_string(),
-                    input_amount,
-                    output_amount: gmgn_data.quote.out_amount.parse().unwrap_or(0),
-                    price_impact_pct: gmgn_data.quote.price_impact_pct.parse().unwrap_or(0.0),
-                    fee_lamports: gmgn_data.raw_tx.prioritization_fee_lamports,
-                    slippage_bps: gmgn_data.quote.slippage_bps.parse().unwrap_or(0),
-                    route_plan: format!("GMGN Route: {}", serde_json::to_string(&gmgn_data.quote.route_plan).unwrap_or_default()),
-                    execution_data: QuoteExecutionData::GMGN(gmgn_data),
-                };
-                
-                log(
-                    LogTag::Swap,
-                    "QUOTE_GMGN_SUCCESS",
-                    &format!(
-                        "✅ GMGN quote: {} tokens, impact: {:.2}%, fee: {} lamports",
-                        unified_quote.output_amount,
-                        unified_quote.price_impact_pct,
-                        unified_quote.fee_lamports
-                    )
-                );
-                
-                quotes.push(unified_quote);
-            }
-            Err(e) => {
-                log(LogTag::Swap, "QUOTE_GMGN_ERROR", &format!("❌ GMGN quote failed: {}", e));
-            }
+    // Get GMGN quote
+    log(LogTag::Swap, "QUOTE_GMGN", "🔵 Getting GMGN quote...");
+    match gmgn::get_gmgn_quote(
+        input_mint,
+        output_mint,
+        input_amount,
+        from_address,
+        slippage,
+        fee,
+        is_anti_mev,
+    ).await {
+        Ok(gmgn_data) => {
+            let unified_quote = UnifiedQuote {
+                router: RouterType::GMGN,
+                input_mint: input_mint.to_string(),
+                output_mint: output_mint.to_string(),
+                input_amount,
+                output_amount: gmgn_data.quote.out_amount.parse().unwrap_or(0),
+                price_impact_pct: gmgn_data.quote.price_impact_pct.parse().unwrap_or(0.0),
+                fee_lamports: gmgn_data.raw_tx.prioritization_fee_lamports,
+                slippage_bps: gmgn_data.quote.slippage_bps.parse().unwrap_or(0),
+                route_plan: format!("GMGN Route: {}", serde_json::to_string(&gmgn_data.quote.route_plan).unwrap_or_default()),
+                execution_data: QuoteExecutionData::GMGN(gmgn_data),
+            };
+            
+            log(
+                LogTag::Swap,
+                "QUOTE_GMGN_SUCCESS",
+                &format!(
+                    "✅ GMGN quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    unified_quote.output_amount,
+                    unified_quote.price_impact_pct,
+                    unified_quote.fee_lamports
+                )
+            );
+            
+            quotes.push(unified_quote);
         }
-    } else {
-        log(LogTag::Swap, "QUOTE_GMGN_SKIP", "⏭️ GMGN router disabled in configuration");
+        Err(e) => {
+            log(LogTag::Swap, "QUOTE_GMGN_ERROR", &format!("❌ GMGN quote failed: {}", e));
+        }
     }
 
-    // Get Jupiter quote (only if enabled)
-    if is_jupiter_enabled() {
-        log(LogTag::Swap, "QUOTE_JUPITER", "🟡 Getting Jupiter quote...");
-        match jupiter::get_jupiter_quote(
-            input_mint,
-            output_mint,
-            input_amount,
-            from_address,
-            slippage,
-            fee,
-            is_anti_mev,
-        ).await {
-            Ok(jupiter_data) => {
-                let unified_quote = UnifiedQuote {
-                    router: RouterType::Jupiter,
-                    input_mint: input_mint.to_string(),
-                    output_mint: output_mint.to_string(),
-                    input_amount,
-                    output_amount: jupiter_data.quote.out_amount.parse().unwrap_or(0),
-                    price_impact_pct: jupiter_data.quote.price_impact_pct.parse().unwrap_or(0.0),
-                    fee_lamports: jupiter_data.raw_tx.prioritization_fee_lamports,
-                    slippage_bps: jupiter_data.quote.slippage_bps.parse().unwrap_or(0),
-                    route_plan: format!("Jupiter Route: {}", serde_json::to_string(&jupiter_data.quote.route_plan).unwrap_or_default()),
-                    execution_data: QuoteExecutionData::Jupiter(jupiter_data),
-                };
-                
-                log(
-                    LogTag::Swap,
-                    "QUOTE_JUPITER_SUCCESS",
-                    &format!(
-                        "✅ Jupiter quote: {} tokens, impact: {:.2}%, fee: {} lamports",
-                        unified_quote.output_amount,
-                        unified_quote.price_impact_pct,
-                        unified_quote.fee_lamports
-                    )
-                );
-                
-                quotes.push(unified_quote);
-            }
-            Err(e) => {
-                log(LogTag::Swap, "QUOTE_JUPITER_ERROR", &format!("❌ Jupiter quote failed: {}", e));
-            }
+    // Get Jupiter quote
+    log(LogTag::Swap, "QUOTE_JUPITER", "🟡 Getting Jupiter quote...");
+    match jupiter::get_jupiter_quote(
+        input_mint,
+        output_mint,
+        input_amount,
+        from_address,
+        slippage,
+        fee,
+        is_anti_mev,
+    ).await {
+        Ok(jupiter_data) => {
+            let unified_quote = UnifiedQuote {
+                router: RouterType::Jupiter,
+                input_mint: input_mint.to_string(),
+                output_mint: output_mint.to_string(),
+                input_amount,
+                output_amount: jupiter_data.quote.out_amount.parse().unwrap_or(0),
+                price_impact_pct: jupiter_data.quote.price_impact_pct.parse().unwrap_or(0.0),
+                fee_lamports: jupiter_data.raw_tx.prioritization_fee_lamports,
+                slippage_bps: jupiter_data.quote.slippage_bps.parse().unwrap_or(0),
+                route_plan: format!("Jupiter Route: {}", serde_json::to_string(&jupiter_data.quote.route_plan).unwrap_or_default()),
+                execution_data: QuoteExecutionData::Jupiter(jupiter_data),
+            };
+            
+            log(
+                LogTag::Swap,
+                "QUOTE_JUPITER_SUCCESS",
+                &format!(
+                    "✅ Jupiter quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    unified_quote.output_amount,
+                    unified_quote.price_impact_pct,
+                    unified_quote.fee_lamports
+                )
+            );
+            
+            quotes.push(unified_quote);
         }
-    } else {
-        log(LogTag::Swap, "QUOTE_JUPITER_SKIP", "⏭️ Jupiter router disabled in configuration");
+        Err(e) => {
+            log(LogTag::Swap, "QUOTE_JUPITER_ERROR", &format!("❌ Jupiter quote failed: {}", e));
+        }
     }
 
-    // Get Raydium quote (only if enabled)
-    if is_raydium_enabled() {
-        log(LogTag::Swap, "QUOTE_RAYDIUM", "🟣 Getting Raydium quote... (NOTE: Direct API is deprecated)");
-        match raydium::get_raydium_quote(
-            input_mint,
-            output_mint,
-            input_amount,
-            from_address,
-            slippage,
-            fee,
-            is_anti_mev,
-        ).await {
-            Ok(raydium_data) => {
-                let unified_quote = UnifiedQuote {
-                    router: RouterType::Raydium,
-                    input_mint: input_mint.to_string(),
-                    output_mint: output_mint.to_string(),
-                    input_amount,
-                    output_amount: raydium_data.quote.out_amount.parse().unwrap_or(0),
-                    price_impact_pct: raydium_data.quote.price_impact_pct.parse().unwrap_or(0.0),
-                    fee_lamports: raydium_data.raw_tx.prioritization_fee_lamports,
-                    slippage_bps: raydium_data.quote.slippage_bps.parse().unwrap_or(0),
-                    route_plan: format!("Raydium Route: {}", serde_json::to_string(&raydium_data.quote.route_plan).unwrap_or_default()),
-                    execution_data: QuoteExecutionData::Raydium(raydium_data),
-                };
-                
-                log(
-                    LogTag::Swap,
-                    "QUOTE_RAYDIUM_SUCCESS",
-                    &format!(
-                        "✅ Raydium quote: {} tokens, impact: {:.2}%, fee: {} lamports",
-                        unified_quote.output_amount,
-                        unified_quote.price_impact_pct,
-                        unified_quote.fee_lamports
-                    )
-                );
-                
-                quotes.push(unified_quote);
-            }
-            Err(e) => {
-                log(LogTag::Swap, "QUOTE_RAYDIUM_ERROR", &format!("❌ Raydium quote failed (deprecated API): {}", e));
-            }
+    // Get Raydium quote (NOTE: Direct Raydium API is deprecated)
+    log(LogTag::Swap, "QUOTE_RAYDIUM", "🟣 Getting Raydium quote... (NOTE: Direct API is deprecated)");
+    match raydium::get_raydium_quote(
+        input_mint,
+        output_mint,
+        input_amount,
+        from_address,
+        slippage,
+        fee,
+        is_anti_mev,
+    ).await {
+        Ok(raydium_data) => {
+            let unified_quote = UnifiedQuote {
+                router: RouterType::Raydium,
+                input_mint: input_mint.to_string(),
+                output_mint: output_mint.to_string(),
+                input_amount,
+                output_amount: raydium_data.quote.out_amount.parse().unwrap_or(0),
+                price_impact_pct: raydium_data.quote.price_impact_pct.parse().unwrap_or(0.0),
+                fee_lamports: raydium_data.raw_tx.prioritization_fee_lamports,
+                slippage_bps: raydium_data.quote.slippage_bps.parse().unwrap_or(0),
+                route_plan: format!("Raydium Route: {}", serde_json::to_string(&raydium_data.quote.route_plan).unwrap_or_default()),
+                execution_data: QuoteExecutionData::Raydium(raydium_data),
+            };
+            
+            log(
+                LogTag::Swap,
+                "QUOTE_RAYDIUM_SUCCESS",
+                &format!(
+                    "✅ Raydium quote: {} tokens, impact: {:.2}%, fee: {} lamports",
+                    unified_quote.output_amount,
+                    unified_quote.price_impact_pct,
+                    unified_quote.fee_lamports
+                )
+            );
+            
+            quotes.push(unified_quote);
         }
-    } else {
-        log(LogTag::Swap, "QUOTE_RAYDIUM_SKIP", "⏭️ Raydium router disabled in configuration (deprecated API)");
+        Err(e) => {
+            log(LogTag::Swap, "QUOTE_RAYDIUM_ERROR", &format!("❌ Raydium quote failed (deprecated API): {}", e));
+        }
     }
 
     // Check if we have any quotes
     if quotes.is_empty() {
-        let enabled_routers = config::get_enabled_routers();
-        let error_msg = if enabled_routers.is_empty() {
-            "No routers enabled for quote - all routers disabled in configuration"
-        } else {
-            &format!("No enabled routers available for quote - {} failed", enabled_routers.join(", "))
-        };
+        let error_msg = "No routers available for quote - GMGN, Jupiter, and Raydium all failed";
         log(LogTag::Swap, "QUOTE_ERROR", &format!("❌ {}", error_msg));
         return Err(SwapError::ApiError(error_msg.to_string()));
     }
@@ -331,8 +305,7 @@ pub async fn get_best_quote(
             LogTag::Swap,
             "QUOTE_COMPARISON",
             &format!(
-                "⚖️ Quote comparison among {} enabled routers - Winner: {:?}",
-                quotes.len(),
+                "⚖️ Quote comparison: GMGN vs Jupiter vs Raydium - Winner: {:?}",
                 best_quote.router
             )
         );
