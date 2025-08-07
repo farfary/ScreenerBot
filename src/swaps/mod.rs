@@ -67,7 +67,7 @@ pub use config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 pub use transaction::{
     check_and_reserve_transaction_slot, check_recent_transaction_attempt, 
     clear_recent_transaction_attempt, TransactionSlotGuard, get_wallet_address,
-    sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot
+    sign_and_send_transaction, verify_swap_transaction
 };
 
 // Effective price calculation (unified)

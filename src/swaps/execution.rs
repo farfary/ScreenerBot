@@ -7,7 +7,7 @@ use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
 use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse};
 use crate::swaps::interface::SwapResult;
-use crate::swaps::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
+use crate::swaps::transaction::{sign_and_send_transaction, verify_swap_transaction, get_wallet_address};
 use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
 /// Validates swap parameters before execution
@@ -420,11 +420,8 @@ pub async fn execute_swap_with_quote(
         )
     );
 
-    // Take pre-transaction snapshot for verification
+    // Get wallet address for logging
     let wallet_address = get_wallet_address()?;
-    let pre_balance = take_balance_snapshot(&wallet_address, 
-        if input_mint == SOL_MINT { output_mint } else { input_mint }
-    ).await?;
 
     // Sign and send the transaction using global RPC client
     let transaction_signature = sign_and_send_transaction(
@@ -437,15 +434,14 @@ pub async fn execute_swap_with_quote(
         &format!("Transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
     );
 
-    // CRITICAL FIX: Wait for transaction confirmation and verify actual results
+    // CRITICAL FIX: Wait for transaction confirmation and verify actual results using instruction analysis
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
     
     match verify_swap_transaction(
         &transaction_signature,
         input_mint,
         output_mint,
-        expected_direction,
-        &pre_balance
+        expected_direction
     ).await {
         Ok(verification_result) => {
             if verification_result.success && verification_result.confirmed {

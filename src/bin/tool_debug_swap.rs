@@ -590,6 +590,12 @@ async fn display_swap_metrics(
     log(LogTag::System, "INFO", &format!("  Execution time: {:.3}s", buy_result.execution_time));
     if let Some(price) = buy_result.effective_price {
         log(LogTag::System, "INFO", &format!("  Effective price: {:.10} SOL per token", price));
+    } else {
+        if buy_result.success {
+            log(LogTag::System, "WARNING", "  Effective price: Not calculated (unexpected for successful transaction)");
+        } else {
+            log(LogTag::System, "INFO", "  Effective price: Not available (transaction failed validation)");
+        }
     }
 
     // Display sell transaction results directly
@@ -602,6 +608,12 @@ async fn display_swap_metrics(
     log(LogTag::System, "INFO", &format!("  Execution time: {:.3}s", sell_result.execution_time));
     if let Some(price) = sell_result.effective_price {
         log(LogTag::System, "INFO", &format!("  Effective price: {:.10} SOL per token", price));
+    } else {
+        if sell_result.success {
+            log(LogTag::System, "WARNING", "  Effective price: Not calculated (unexpected for successful transaction)");
+        } else {
+            log(LogTag::System, "INFO", "  Effective price: Not available (transaction failed validation)");
+        }
     }
 
     // Summary using swap results

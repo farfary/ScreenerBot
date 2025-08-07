@@ -7,7 +7,7 @@ use crate::swaps::{ buy_token, sell_token };
 use crate::swaps::transaction::{
     TransactionMonitoringService, register_position_transaction, 
     verify_position_entry_transaction, verify_position_exit_transaction,
-    take_balance_snapshot, is_position_transaction_verified
+    is_position_transaction_verified
 };
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
@@ -397,19 +397,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         }
     };
     
-    // Take pre-transaction balance snapshot for verification
-    let pre_balance = match take_balance_snapshot(&wallet_address, &token.mint).await {
-        Ok(snapshot) => snapshot,
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("❌ Failed to take pre-transaction balance snapshot for {}: {}", token.symbol, e)
-            );
-            return;
-        }
-    };
-
+    // Execute the token purchase using instruction-based analysis
     match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
         Ok(swap_result) => {
             // CRITICAL FIX: Check if the transaction was actually successful on-chain
@@ -443,12 +431,11 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 );
             }
 
-            // Perform comprehensive transaction verification
+            // Perform comprehensive transaction verification using instruction analysis
             match verify_position_entry_transaction(
                 &transaction_signature,
                 &token.mint,
-                TRADE_SIZE_SOL,
-                &pre_balance,
+                TRADE_SIZE_SOL
             ).await {
                 Ok(verification) => {
                     if !verification.success {
@@ -721,20 +708,7 @@ pub async fn close_position(
             )
         );
 
-        // Take pre-transaction balance snapshot for verification
-        let pre_balance = match take_balance_snapshot(&wallet_address, &position.mint).await {
-            Ok(snapshot) => snapshot,
-            Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!("❌ Failed to take pre-transaction balance snapshot for {}: {}", position.symbol, e)
-                );
-                return false;
-            }
-        };
-
-        // Execute real sell transaction with critical operation protection
+        // Execute real sell transaction with critical operation protection using instruction-based analysis
         let _guard = crate::trader::CriticalOperationGuard::new(
             &format!("SELL {}", position.symbol)
         );
@@ -783,12 +757,11 @@ pub async fn close_position(
                     );
                 }
 
-                // Perform comprehensive transaction verification
+                // Perform comprehensive transaction verification using instruction analysis
                 match verify_position_exit_transaction(
                     &transaction_signature,
                     &position.mint,
-                    token_amount,
-                    &pre_balance,
+                    token_amount
                 ).await {
                     Ok(verification) => {
                         if !verification.success {

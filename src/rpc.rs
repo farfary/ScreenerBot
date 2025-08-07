@@ -28,6 +28,8 @@ use reqwest;
 use serde_json;
 use bincode;
 use bs58;
+use once_cell::sync::Lazy;
+use std::sync::{Arc as StdArc, Mutex as StdMutex};
 
 /// Structure to hold token account information
 #[derive(Debug)]
@@ -92,6 +94,106 @@ pub struct UiTokenAmount {
     pub ui_amount: Option<f64>,
     #[serde(rename = "uiAmountString")]
     pub ui_amount_string: Option<String>,
+}
+
+/// Cached ATA rent information
+#[derive(Debug, Clone)]
+pub struct AtaRentInfo {
+    pub rent_lamports: u64,
+    pub cached_at: Instant,
+}
+
+/// Global cache for ATA rent amounts (10-second cache)
+static ATA_RENT_CACHE: Lazy<StdArc<StdMutex<Option<AtaRentInfo>>>> = 
+    Lazy::new(|| StdArc::new(StdMutex::new(None)));
+
+/// Get current ATA rent amount from chain with 10-second cache
+pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
+    // Check cache first
+    {
+        let cache = ATA_RENT_CACHE.lock().unwrap();
+        if let Some(ref info) = *cache {
+            if info.cached_at.elapsed() < Duration::from_secs(10) {
+                return Ok(info.rent_lamports);
+            }
+        }
+    }
+
+    // Cache miss or expired, fetch from chain
+    let rpc_client = get_rpc_client();
+    
+    let rpc_payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getMinimumBalanceForRentExemption",
+        "params": [165 + 128] // ATA account size: 165 bytes + 128 bytes for token account data
+    });
+
+    let client = reqwest::Client::new();
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    // Try premium RPC first for better reliability
+    let response = client
+        .post(&configs.rpc_url_premium)
+        .header("Content-Type", "application/json")
+        .json(&rpc_payload)
+        .send()
+        .await?;
+
+    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+        if let Some(result) = rpc_response.get("result") {
+            if let Some(rent_lamports) = result.as_u64() {
+                // Update cache
+                {
+                    let mut cache = ATA_RENT_CACHE.lock().unwrap();
+                    *cache = Some(AtaRentInfo {
+                        rent_lamports,
+                        cached_at: Instant::now(),
+                    });
+                }
+                
+                log(LogTag::Rpc, "ATA_RENT", &format!("Retrieved ATA rent from chain: {} lamports ({:.9} SOL)", 
+                    rent_lamports, lamports_to_sol(rent_lamports)));
+                
+                return Ok(rent_lamports);
+            }
+        }
+    }
+
+    // Fallback to main RPC if premium fails
+    let response = client
+        .post(&configs.rpc_url)
+        .header("Content-Type", "application/json")
+        .json(&rpc_payload)
+        .send()
+        .await?;
+
+    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+        if let Some(result) = rpc_response.get("result") {
+            if let Some(rent_lamports) = result.as_u64() {
+                // Update cache
+                {
+                    let mut cache = ATA_RENT_CACHE.lock().unwrap();
+                    *cache = Some(AtaRentInfo {
+                        rent_lamports,
+                        cached_at: Instant::now(),
+                    });
+                }
+                
+                log(LogTag::Rpc, "ATA_RENT", &format!("Retrieved ATA rent from chain (fallback): {} lamports ({:.9} SOL)", 
+                    rent_lamports, lamports_to_sol(rent_lamports)));
+                
+                return Ok(rent_lamports);
+            }
+        }
+    }
+
+    // If all fails, return typical ATA rent as last resort
+    const FALLBACK_ATA_RENT: u64 = 2_039_280;
+    log(LogTag::Rpc, "ATA_RENT_FALLBACK", 
+        &format!("Using fallback ATA rent: {} lamports", FALLBACK_ATA_RENT));
+    
+    Ok(FALLBACK_ATA_RENT)
 }
 use tokio::sync::Notify;
 

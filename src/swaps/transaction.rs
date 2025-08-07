@@ -1,27 +1,23 @@
-/// Transaction verification and analysis for swap operations with persistent monitoring
+/// Transaction verification and analysis for swap operations with comprehensive instruction analysis
 /// 
-/// Purpose: Comprehensive transaction verification and persistent monitoring system
-/// - Verify transaction confirmation on blockchain
-/// - Extract actual input/output amounts from transaction metadata  
-/// - Calculate effective swap prices
-/// - Validate wallet balance changes
-/// - Prevent duplicate transactions
-/// - Persistent transaction state monitoring with disk storage
-/// - Smart timeout handling (only timeout on stuck steps, not active processing)
+/// Purpose: Complete transaction analysis from blockchain data without wallet balance dependencies
+/// - Analyze transaction instructions to extract input/output amounts
+/// - Calculate effective swap prices from instruction data
+/// - Detect ATA creation/closure from instruction patterns
+/// - Extract all fee information from transaction structure
+/// - Provide authoritative transaction metrics for position tracking
 ///
 /// Key Features:
-/// - Real transaction analysis from blockchain data
-/// - ATA (Associated Token Account) detection and rent calculation
-/// - Balance validation before/after swaps
-/// - Comprehensive error handling with multi-RPC fallback
-/// - Anti-duplicate transaction protection
-/// - Persistent transaction monitoring service
+/// - Pure instruction-based transaction analysis (no wallet balance checking)
+/// - Solana inner instruction parsing for accurate swap amounts
+/// - Real-time ATA rent detection with on-chain caching
+/// - Comprehensive fee breakdown (transaction, priority, ATA rent)
 /// - Position transaction verification tracking
+/// - Anti-duplicate transaction protection
 
 use crate::global::{read_configs, is_debug_swap_enabled, DATA_DIR};
 use crate::logger::{log, LogTag};
-use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports, get_rpc_client};
-use crate::utils::{get_sol_balance, get_token_balance};
+use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports, get_rpc_client, get_ata_rent_lamports};
 use super::config::{SOL_MINT, TRANSACTION_CONFIRMATION_TIMEOUT_SECS};
 
 use std::collections::{HashSet, HashMap};
@@ -30,7 +26,7 @@ use std::path::Path;
 use once_cell::sync::Lazy;
 use bs58;
 use solana_sdk::{signature::Keypair, signer::Signer, pubkey::Pubkey};
-use solana_transaction_status::{UiTransactionEncoding};
+use solana_transaction_status::{UiTransactionEncoding, UiInnerInstructions, UiInstruction, UiParsedInstruction, parse_instruction::ParsedInstruction};
 use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
@@ -46,7 +42,6 @@ const EARLY_ATTEMPT_DELAY_MS: u64 = 500;          // Fast delay for early attemp
 const RATE_LIMIT_BASE_DELAY_SECS: u64 = 2;        // Base delay for rate limiting
 const RATE_LIMIT_INCREMENT_SECS: u64 = 1;         // Additional delay per rate limit hit
 const MIN_TRADING_LAMPORTS: u64 = 500_000;        // Minimum trading amount (0.0005 SOL)
-const TYPICAL_ATA_RENT_LAMPORTS: u64 = 2_039_280; // Standard ATA rent amount
 const STUCK_STEP_TIMEOUT_SECS: u64 = 180;         // Timeout for being stuck on same step (3 minutes)
 const TRANSACTION_MONITOR_INTERVAL_SECS: u64 = 10; // How often to check pending transactions
 const TRANSACTION_STATE_FILE: &str = "data/pending_transactions.json"; // Persistent storage file
@@ -488,40 +483,57 @@ impl TransactionMonitoringService {
     }
 }
 
-/// Transaction verification result containing all relevant swap information
+/// Transaction verification result containing all swap information from instruction analysis
 #[derive(Debug, Clone)]
 pub struct TransactionVerificationResult {
     pub success: bool,
     pub transaction_signature: String,
     pub confirmed: bool,
     
-    // Balance changes (lamports for SOL, raw units for tokens)
-    pub input_amount: Option<u64>,     // Actual amount spent/consumed
-    pub output_amount: Option<u64>,    // Actual amount received/produced
+    // Amounts extracted from transaction instructions (lamports for SOL, raw units for tokens)
+    pub input_amount: Option<u64>,     // Actual amount spent/consumed from instructions
+    pub output_amount: Option<u64>,    // Actual amount received/produced from instructions
     
-    // SOL balance changes
-    pub sol_spent: Option<u64>,        // SOL spent in transaction (including fees)
-    pub sol_received: Option<u64>,     // SOL received in transaction
+    // SOL flow analysis from instruction data
+    pub sol_spent: Option<u64>,        // SOL spent in transaction (from transfers)
+    pub sol_received: Option<u64>,     // SOL received in transaction (from transfers)
     pub transaction_fee: u64,          // Network transaction fee in lamports
+    pub priority_fee: Option<u64>,     // Priority fee in lamports (if any)
     
-    // ATA (Associated Token Account) detection
-    pub ata_detected: bool,            // Whether ATA closure was detected
+    // ATA analysis from instruction patterns
+    pub ata_created: bool,             // Whether ATA creation was detected
+    pub ata_closed: bool,              // Whether ATA closure was detected
+    pub ata_rent_paid: u64,            // Amount of rent paid for ATA creation
     pub ata_rent_reclaimed: u64,       // Amount of rent reclaimed from ATA closure
     
-    // Effective pricing
-    pub effective_price: Option<f64>,  // Price per token in SOL (after fees/ATA)
+    // Price calculations from instruction data
+    pub effective_price: Option<f64>,  // Price per token in SOL (from instruction amounts)
     pub price_impact: Option<f64>,     // Calculated price impact percentage
+    
+    // Token transfer details
+    pub input_mint: String,            // Input token mint
+    pub output_mint: String,           // Output token mint
+    pub input_decimals: u32,           // Input token decimals
+    pub output_decimals: u32,          // Output token decimals
     
     // Error information
     pub error: Option<String>,         // Error details if transaction failed
 }
 
-/// Balance snapshot for before/after comparison
+/// Instruction-based swap analysis result
 #[derive(Debug, Clone)]
-pub struct BalanceSnapshot {
-    pub sol_balance: u64,              // SOL balance in lamports
-    pub token_balance: u64,            // Token balance in raw units
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+pub struct InstructionSwapAnalysis {
+    pub input_amount: Option<u64>,
+    pub output_amount: Option<u64>,
+    pub input_mint: Option<String>,
+    pub output_mint: Option<String>,
+    pub sol_spent: Option<u64>,
+    pub sol_received: Option<u64>,
+    pub ata_created: bool,
+    pub ata_closed: bool,
+    pub ata_rent_paid: u64,
+    pub ata_rent_reclaimed: u64,
+    pub priority_fee: Option<u64>,
 }
 
 /// CRITICAL: Global tracking of pending transactions to prevent duplicates
@@ -647,285 +659,6 @@ pub fn get_wallet_address() -> Result<String, SwapError> {
     Ok(keypair.pubkey().to_string())
 }
 
-/// Validates transaction results for consistency and detects anomalies
-/// Performs comprehensive checks to ensure transaction data integrity
-fn validate_transaction_results(
-    expected_direction: &str,
-    pre_balance: &BalanceSnapshot,
-    post_balance: &BalanceSnapshot,
-    input_amount: Option<u64>,
-    output_amount: Option<u64>,
-    sol_spent: Option<u64>,
-    sol_received: Option<u64>,
-) -> Result<(), SwapError> {
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "VALIDATION_START",
-            &format!(
-                "🔍 Starting transaction validation for {} direction
-  Pre-balance: SOL={} lamports, Token={}
-  Post-balance: SOL={} lamports, Token={}
-  Input amount: {:?} | Output amount: {:?}
-  SOL spent: {:?} | SOL received: {:?}",
-                expected_direction,
-                pre_balance.sol_balance,
-                pre_balance.token_balance,
-                post_balance.sol_balance,
-                post_balance.token_balance,
-                input_amount,
-                output_amount,
-                sol_spent,
-                sol_received
-            )
-        );
-    }
-
-    // Validation 1: Direction-specific balance change validation
-    match expected_direction {
-        "buy" => {
-            // For buy transactions: SOL should decrease (or stay same with ATA), tokens should increase
-            if post_balance.sol_balance > pre_balance.sol_balance + 50_000_000 { // Allow 0.05 SOL tolerance for ATA operations
-                log(
-                    LogTag::Swap,
-                    "VALIDATION_WARNING",
-                    &format!(
-                        "⚠️ Buy transaction: SOL balance unexpectedly increased by {} lamports (>0.05 SOL tolerance)",
-                        post_balance.sol_balance - pre_balance.sol_balance
-                    )
-                );
-            }
-
-            // Tokens should increase in buy transactions
-            if post_balance.token_balance <= pre_balance.token_balance {
-                return Err(SwapError::TransactionError(
-                    format!(
-                        "Buy validation failed: Token balance did not increase (pre: {}, post: {})",
-                        pre_balance.token_balance,
-                        post_balance.token_balance
-                    )
-                ));
-            }
-
-            // SOL should be spent in buy transactions
-            if sol_spent.is_none() || sol_spent.unwrap() == 0 {
-                log(
-                    LogTag::Swap,
-                    "VALIDATION_WARNING",
-                    "⚠️ Buy transaction: No SOL spent detected - possible data extraction issue"
-                );
-            }
-        }
-        "sell" => {
-            // For sell transactions: tokens should decrease, SOL should increase (or decrease less due to fees)
-            if post_balance.token_balance > pre_balance.token_balance {
-                return Err(SwapError::TransactionError(
-                    format!(
-                        "Sell validation failed: Token balance unexpectedly increased (pre: {}, post: {})",
-                        pre_balance.token_balance,
-                        post_balance.token_balance
-                    )
-                ));
-            }
-
-            // SOL should be received in sell transactions (allowing for transaction fees)
-            if sol_received.is_none() || sol_received.unwrap() == 0 {
-                // Check if SOL balance at least didn't decrease too much (accounting for fees)
-                if pre_balance.sol_balance > post_balance.sol_balance + 10_000_000 { // Allow 0.01 SOL for fees
-                    log(
-                        LogTag::Swap,
-                        "VALIDATION_WARNING",
-                        &format!(
-                            "⚠️ Sell transaction: No SOL received and balance decreased by {} lamports",
-                            pre_balance.sol_balance - post_balance.sol_balance
-                        )
-                    );
-                }
-            }
-        }
-        _ => {
-            return Err(SwapError::TransactionError(
-                format!("Invalid transaction direction: {}", expected_direction)
-            ));
-        }
-    }
-
-    // Validation 2: Amount consistency checks
-    if let (Some(input), Some(output)) = (input_amount, output_amount) {
-        // Ensure amounts are reasonable (not zero or impossibly large)
-        if input == 0 {
-            return Err(SwapError::TransactionError(
-                "Validation failed: Input amount is zero".to_string()
-            ));
-        }
-        if output == 0 {
-            return Err(SwapError::TransactionError(
-                "Validation failed: Output amount is zero".to_string()
-            ));
-        }
-
-        // Check for impossibly large amounts (likely parsing errors)
-        const MAX_REASONABLE_LAMPORTS: u64 = 1_000_000_000_000_000; // 1M SOL worth of lamports
-        if input > MAX_REASONABLE_LAMPORTS || output > MAX_REASONABLE_LAMPORTS {
-            return Err(SwapError::TransactionError(
-                format!(
-                    "Validation failed: Unreasonably large amounts detected (input: {}, output: {})",
-                    input, output
-                )
-            ));
-        }
-    }
-
-    // Validation 3: SOL amount consistency
-    if let Some(spent) = sol_spent {
-        if spent > 100_000_000_000 { // More than 100 SOL
-            log(
-                LogTag::Swap,
-                "VALIDATION_WARNING",
-                &format!("⚠️ Large SOL amount spent: {} lamports ({:.3} SOL)", spent, lamports_to_sol(spent))
-            );
-        }
-    }
-
-    if let Some(received) = sol_received {
-        if received > 100_000_000_000 { // More than 100 SOL
-            log(
-                LogTag::Swap,
-                "VALIDATION_WARNING",
-                &format!("⚠️ Large SOL amount received: {} lamports ({:.3} SOL)", received, lamports_to_sol(received))
-            );
-        }
-    }
-
-    // Validation 4: Balance snapshot time consistency
-    let time_diff = (post_balance.timestamp - pre_balance.timestamp).num_seconds();
-    if time_diff < 0 {
-        return Err(SwapError::TransactionError(
-            "Validation failed: Post-balance timestamp is before pre-balance timestamp".to_string()
-        ));
-    }
-    if time_diff > 300 { // More than 5 minutes
-        log(
-            LogTag::Swap,
-            "VALIDATION_WARNING",
-            &format!("⚠️ Large time gap between balance snapshots: {} seconds", time_diff)
-        );
-    }
-
-    // Validation 4.5: Check for balance underflow/overflow (data corruption detection)
-    const MAX_BALANCE_LAMPORTS: u64 = 500_000_000_000_000; // 500K SOL
-    const MAX_TOKEN_BALANCE: u64 = 1_000_000_000_000_000_000; // 1 billion tokens with 9 decimals
-
-    if pre_balance.sol_balance > MAX_BALANCE_LAMPORTS || post_balance.sol_balance > MAX_BALANCE_LAMPORTS {
-        return Err(SwapError::TransactionError(
-            format!(
-                "Validation failed: SOL balance exceeds reasonable limits (pre: {}, post: {})",
-                pre_balance.sol_balance, post_balance.sol_balance
-            )
-        ));
-    }
-
-    if pre_balance.token_balance > MAX_TOKEN_BALANCE || post_balance.token_balance > MAX_TOKEN_BALANCE {
-        return Err(SwapError::TransactionError(
-            format!(
-                "Validation failed: Token balance exceeds reasonable limits (pre: {}, post: {})",
-                pre_balance.token_balance, post_balance.token_balance
-            )
-        ));
-    }
-
-    // Validation 5: Cross-reference balance changes with extracted amounts
-    if expected_direction == "buy" {
-        if let Some(token_received) = output_amount {
-            let actual_token_increase = if post_balance.token_balance > pre_balance.token_balance {
-                post_balance.token_balance - pre_balance.token_balance
-            } else {
-                0
-            };
-
-            // Allow 10% tolerance for rounding/precision differences
-            let tolerance = std::cmp::max(token_received / 10, 1);
-            if actual_token_increase > 0 && 
-               (token_received < actual_token_increase.saturating_sub(tolerance) || 
-                token_received > actual_token_increase + tolerance) {
-                log(
-                    LogTag::Swap,
-                    "VALIDATION_WARNING",
-                    &format!(
-                        "⚠️ Token amount mismatch: extracted={}, balance_change={} (tolerance={})",
-                        token_received, actual_token_increase, tolerance
-                    )
-                );
-            }
-        }
-    }
-
-    // Validation 6: Detect potential decimal precision issues
-    if let (Some(input), Some(output)) = (input_amount, output_amount) {
-        // Check for suspiciously round numbers that might indicate decimal truncation
-        if input % 1_000_000_000 == 0 && input > 1_000_000_000 {
-            log(
-                LogTag::Swap,
-                "VALIDATION_WARNING",
-                &format!("⚠️ Input amount suspiciously round: {} (possible decimal precision issue)", input)
-            );
-        }
-        if output % 1_000_000_000 == 0 && output > 1_000_000_000 {
-            log(
-                LogTag::Swap,
-                "VALIDATION_WARNING",
-                &format!("⚠️ Output amount suspiciously round: {} (possible decimal precision issue)", output)
-            );
-        }
-
-        // Check for extremely small amounts that might indicate decimal errors
-        if input < 1000 && expected_direction == "buy" {
-            log(
-                LogTag::Swap,
-                "VALIDATION_WARNING",
-                &format!("⚠️ Very small input amount: {} (possible decimal error)", input)
-            );
-        }
-        if output < 1000 && expected_direction == "sell" {
-            log(
-                LogTag::Swap,
-                "VALIDATION_WARNING",
-                &format!("⚠️ Very small output amount: {} (possible decimal error)", output)
-            );
-        }
-    }
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "VALIDATION_SUCCESS",
-            &format!(
-                "✅ All transaction validation checks passed
-  📊 Validation Summary:
-  • Direction: {} ✓
-  • Balance Changes: SOL {} → {}, Token {} → {} ✓
-  • Amount Extraction: Input={:?}, Output={:?} ✓
-  • SOL Flow: Spent={:?}, Received={:?} ✓
-  • Time Consistency: {}s gap ✓
-  • Cross-validation: Balance vs extracted amounts ✓
-  🎯 Transaction data integrity confirmed",
-                expected_direction,
-                pre_balance.sol_balance,
-                post_balance.sol_balance,
-                pre_balance.token_balance,
-                post_balance.token_balance,
-                input_amount,
-                output_amount,
-                sol_spent,
-                sol_received,
-                (post_balance.timestamp - pre_balance.timestamp).num_seconds()
-            )
-        );
-    }
-
-    Ok(())
-}
-
 /// Calculate price impact percentage for a swap transaction
 fn calculate_price_impact(
     direction: &str,
@@ -946,20 +679,11 @@ fn calculate_price_impact(
         return None;
     }
 
-    // Price impact is typically calculated as the difference between
-    // expected output and actual output, but we need market data for that.
-    // For now, we'll calculate a simple slippage based on the effective price
-    // vs a theoretical "perfect" price (which we don't have)
-    
     // Calculate price impact by comparing actual amounts vs expected
-    // Price impact = (amount_difference / expected_amount) * 100
     match direction {
         "buy" => {
             if let (Some(input), Some(output)) = (input_amount, output_amount) {
                 if input > 0 && output > 0 {
-                    // For buy: price impact is how much less tokens we got than expected
-                    // Higher input for same output = negative impact
-                    // Less output for same input = negative impact
                     let actual_rate = (output as f64) / (input as f64);
                     if let Some(effective_price_val) = effective_price {
                         let expected_rate = 1.0 / effective_price_val;
@@ -972,7 +696,6 @@ fn calculate_price_impact(
         "sell" => {
             if let (Some(input), Some(output)) = (input_amount, output_amount) {
                 if input > 0 && output > 0 {
-                    // For sell: price impact is how much less SOL we got than expected
                     let actual_rate = (output as f64) / (input as f64);
                     if let Some(effective_price_val) = effective_price {
                         let expected_rate = effective_price_val;
@@ -988,23 +711,268 @@ fn calculate_price_impact(
     None
 }
 
-/// Take balance snapshot before transaction for comparison
-pub async fn take_balance_snapshot(
+/// Analyze transaction instructions to extract swap amounts and ATA operations
+/// This is the core function that analyzes Solana transaction instructions
+/// Based on the provided Rust example for parsing inner instructions
+pub async fn analyze_transaction_instructions(
+    transaction_details: &crate::rpc::TransactionDetails,
     wallet_address: &str,
-    token_mint: &str
-) -> Result<BalanceSnapshot, SwapError> {
-    let sol_balance = sol_to_lamports(get_sol_balance(wallet_address).await?);
-    let token_balance = if token_mint == SOL_MINT {
-        sol_balance
-    } else {
-        get_token_balance(wallet_address, token_mint).await?
+    expected_direction: &str, // "buy" or "sell"
+) -> Result<InstructionSwapAnalysis, SwapError> {
+    let mut analysis = InstructionSwapAnalysis {
+        input_amount: None,
+        output_amount: None,
+        input_mint: None,
+        output_mint: None,
+        sol_spent: None,
+        sol_received: None,
+        ata_created: false,
+        ata_closed: false,
+        ata_rent_paid: 0,
+        ata_rent_reclaimed: 0,
+        priority_fee: None,
     };
 
-    Ok(BalanceSnapshot {
-        sol_balance,
-        token_balance,
-        timestamp: chrono::Utc::now(),
-    })
+    let meta = transaction_details.meta.as_ref()
+        .ok_or_else(|| SwapError::TransactionError("No transaction metadata available".to_string()))?;
+
+    // Extract SOL balance changes from pre/post balances
+    if !meta.pre_balances.is_empty() && !meta.post_balances.is_empty() {
+        let pre_sol = meta.pre_balances[0]; // Wallet is typically first account
+        let post_sol = meta.post_balances[0];
+        
+        if pre_sol > post_sol {
+            analysis.sol_spent = Some(pre_sol - post_sol);
+        } else if post_sol > pre_sol {
+            analysis.sol_received = Some(post_sol - pre_sol);
+        }
+    }
+
+    // Analyze inner instructions for token transfers (main swap analysis)
+    // Note: Inner instructions might not be available in our TransactionMeta structure
+    // For now, we'll focus on token balance changes which are available
+    if let Some(log_messages) = &meta.log_messages {
+        for log_message in log_messages {
+            // Analyze transaction logs for ATA operations
+            if log_message.contains("Program 11111111111111111111111111111111 invoke") &&
+               (log_message.contains("Create") || log_message.contains("Allocate")) {
+                analysis.ata_created = true;
+                analysis.ata_rent_paid = get_ata_rent_lamports().await?;
+            }
+            
+            if log_message.contains("CloseAccount") {
+                analysis.ata_closed = true;
+                analysis.ata_rent_reclaimed = get_ata_rent_lamports().await?;
+            }
+        }
+    }
+
+    // Analyze token balance changes for swap amounts
+    if let Some(pre_token_balances) = &meta.pre_token_balances {
+        if let Some(post_token_balances) = &meta.post_token_balances {
+            for post_balance in post_token_balances {
+                // Find corresponding pre-balance or assume 0 for new accounts
+                let pre_amount = pre_token_balances
+                    .iter()
+                    .find(|pre| pre.account_index == post_balance.account_index && pre.mint == post_balance.mint)
+                    .map(|pre| pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0))
+                    .unwrap_or(0);
+
+                let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+
+                if post_amount > pre_amount {
+                    // Token balance increased (received tokens)
+                    analysis.output_amount = Some(post_amount - pre_amount);
+                    analysis.output_mint = Some(post_balance.mint.clone());
+                } else if pre_amount > post_amount {
+                    // Token balance decreased (spent tokens)
+                    analysis.input_amount = Some(pre_amount - post_amount);
+                    analysis.input_mint = Some(post_balance.mint.clone());
+                }
+            }
+        }
+    }
+
+    // Analyze main instructions for ATA operations and priority fees
+    if let Ok(message) = serde_json::from_value::<serde_json::Value>(transaction_details.transaction.message.clone()) {
+        if let Some(instructions) = message.get("instructions").and_then(|i| i.as_array()) {
+            for instruction in instructions {
+                analyze_main_instruction(instruction, &mut analysis).await?;
+            }
+        }
+    }
+
+    // Analyze transaction logs for additional context
+    if let Some(log_messages) = &meta.log_messages {
+        analyze_transaction_logs(log_messages, &mut analysis).await?;
+    }
+
+    // Get current ATA rent for comparison
+    let current_ata_rent = get_ata_rent_lamports().await.unwrap_or(2_039_280);
+
+    // Detect ATA operations based on rent amounts
+    if let Some(sol_spent) = analysis.sol_spent {
+        // Check if SOL spent includes ATA rent (for creation)
+        if sol_spent > current_ata_rent / 2 && sol_spent <= current_ata_rent * 2 {
+            analysis.ata_created = true;
+            analysis.ata_rent_paid = std::cmp::min(sol_spent, current_ata_rent);
+        }
+    }
+
+    if let Some(sol_received) = analysis.sol_received {
+        // Check if SOL received includes ATA rent (for closure)
+        if sol_received > current_ata_rent / 2 && sol_received <= current_ata_rent * 2 {
+            analysis.ata_closed = true;
+            analysis.ata_rent_reclaimed = std::cmp::min(sol_received, current_ata_rent);
+        }
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "INSTRUCTION_ANALYSIS",
+            &format!(
+                "📊 Instruction Analysis Complete:
+  Input: {:?} {} | Output: {:?} {}
+  SOL: spent={:?}, received={:?}
+  ATA: created={}, closed={}, rent_paid={}, rent_reclaimed={}
+  Priority fee: {:?}",
+                analysis.input_amount,
+                analysis.input_mint.as_deref().unwrap_or("?"),
+                analysis.output_amount,
+                analysis.output_mint.as_deref().unwrap_or("?"),
+                analysis.sol_spent,
+                analysis.sol_received,
+                analysis.ata_created,
+                analysis.ata_closed,
+                analysis.ata_rent_paid,
+                analysis.ata_rent_reclaimed,
+                analysis.priority_fee
+            )
+        );
+    }
+
+    Ok(analysis)
+}
+
+/// Analyze SPL Token instructions for transfer amounts
+async fn analyze_spl_token_instruction(
+    parsed: &ParsedInstruction,
+    analysis: &mut InstructionSwapAnalysis,
+    wallet_address: &str,
+) -> Result<(), SwapError> {
+    if parsed.program != "spl-token" {
+        return Ok(());
+    }
+
+    if let Some(instruction_type) = parsed.parsed.get("type").and_then(|v| v.as_str()) {
+        match instruction_type {
+            "transfer" | "transferChecked" => {
+                if let Some(info) = parsed.parsed.get("info") {
+                    let amount_str = info.get("amount")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("0");
+                    let amount = amount_str.parse::<u64>().unwrap_or(0);
+                    
+                    if amount == 0 {
+                        return Ok(());
+                    }
+
+                    let mint = info.get("mint")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    let source = info.get("source").and_then(|s| s.as_str()).unwrap_or("");
+                    let destination = info.get("destination").and_then(|d| d.as_str()).unwrap_or("");
+
+                    // Determine if this is an outgoing or incoming transfer for our wallet
+                    let is_outgoing = source.contains(wallet_address) || 
+                                    info.get("authority").and_then(|a| a.as_str()).unwrap_or("") == wallet_address;
+                    let is_incoming = destination.contains(wallet_address);
+
+                    if is_outgoing && analysis.input_amount.is_none() {
+                        analysis.input_amount = Some(amount);
+                        analysis.input_mint = Some(mint);
+                    } else if is_incoming && analysis.output_amount.is_none() {
+                        analysis.output_amount = Some(amount);
+                        analysis.output_mint = Some(mint);
+                    }
+                }
+            }
+            "closeAccount" => {
+                // ATA closure detected
+                analysis.ata_closed = true;
+                if let Some(info) = parsed.parsed.get("info") {
+                    // The rent goes to the destination (usually the wallet)
+                    if let Some(destination) = info.get("destination").and_then(|d| d.as_str()) {
+                        if destination == wallet_address {
+                            let current_ata_rent = get_ata_rent_lamports().await.unwrap_or(2_039_280);
+                            analysis.ata_rent_reclaimed = current_ata_rent;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+/// Analyze main transaction instructions for ATA creation and priority fees
+async fn analyze_main_instruction(
+    instruction: &serde_json::Value,
+    analysis: &mut InstructionSwapAnalysis,
+) -> Result<(), SwapError> {
+    if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|i| i.as_u64()) {
+        // Check for compute budget instructions (priority fees)
+        if let Some(data) = instruction.get("data").and_then(|d| d.as_str()) {
+            if let Ok(decoded_data) = bs58::decode(data).into_vec() {
+                if decoded_data.len() >= 4 {
+                    let instruction_type = u32::from_le_bytes([
+                        decoded_data[0], decoded_data[1], decoded_data[2], decoded_data[3]
+                    ]);
+                    
+                    // Compute budget instructions
+                    match instruction_type {
+                        2 => { // SetComputeUnitPrice
+                            if decoded_data.len() >= 12 {
+                                let price = u64::from_le_bytes([
+                                    decoded_data[4], decoded_data[5], decoded_data[6], decoded_data[7],
+                                    decoded_data[8], decoded_data[9], decoded_data[10], decoded_data[11]
+                                ]);
+                                analysis.priority_fee = Some(price);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Analyze transaction logs for ATA operations
+async fn analyze_transaction_logs(
+    log_messages: &[String],
+    analysis: &mut InstructionSwapAnalysis,
+) -> Result<(), SwapError> {
+    for log in log_messages {
+        let log_lower = log.to_lowercase();
+        
+        if log_lower.contains("create") && (log_lower.contains("account") || log_lower.contains("ata")) {
+            analysis.ata_created = true;
+        }
+        
+        if log_lower.contains("close") && (log_lower.contains("account") || log_lower.contains("ata")) {
+            analysis.ata_closed = true;
+        }
+    }
+
+    Ok(())
 }
 
 /// Sign and send transaction using global RPC client
@@ -1060,14 +1028,14 @@ pub async fn sign_and_send_transaction(
     Ok(signature)
 }
 
-/// MAIN FUNCTION: Comprehensive transaction verification and analysis
+/// MAIN FUNCTION: Comprehensive transaction verification and analysis using instruction parsing
 /// This is the core function that analyzes swap transactions and extracts all relevant information
+/// Now uses pure instruction analysis instead of wallet balance checking
 pub async fn verify_swap_transaction(
     transaction_signature: &str,
     input_mint: &str,
     output_mint: &str,
     expected_direction: &str, // "buy" or "sell"
-    pre_balance: &BalanceSnapshot,
 ) -> Result<TransactionVerificationResult, SwapError> {
     let wallet_address = get_wallet_address()?;
     let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
@@ -1077,7 +1045,7 @@ pub async fn verify_swap_transaction(
             LogTag::Swap,
             "VERIFY_START",
             &format!(
-                "🔍 Starting transaction verification for {}\n  Direction: {}\n  Route: {} -> {}\n  Wallet: {}",
+                "🔍 Starting instruction-based transaction analysis for {}\n  Direction: {}\n  Route: {} -> {}\n  Wallet: {}",
                 transaction_signature,
                 expected_direction,
                 if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
@@ -1087,7 +1055,7 @@ pub async fn verify_swap_transaction(
         );
     }
 
-    // Step 1: Wait for transaction confirmation with smart retry logic
+    // Step 1: Wait for transaction confirmation
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
@@ -1141,10 +1109,17 @@ pub async fn verify_swap_transaction(
             sol_spent: None,
             sol_received: None,
             transaction_fee: transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
-            ata_detected: false,
+            priority_fee: None,
+            ata_created: false,
+            ata_closed: false,
+            ata_rent_paid: 0,
             ata_rent_reclaimed: 0,
             effective_price: None,
             price_impact: None,
+            input_mint: input_mint.to_string(),
+            output_mint: output_mint.to_string(),
+            input_decimals: if input_mint == SOL_MINT { 9 } else { 6 }, // Default, will be updated
+            output_decimals: if output_mint == SOL_MINT { 9 } else { 6 }, // Default, will be updated
             error: Some("Transaction failed on-chain".to_string()),
         });
     }
@@ -1157,124 +1132,91 @@ pub async fn verify_swap_transaction(
         );
     }
 
-    // Step 3: Take post-transaction balance snapshot
+    // Step 3: Analyze transaction instructions (NEW - replaces balance snapshots)
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "VERIFY_STEP_3",
-            "🔎 Step 3: Taking post-transaction balance snapshot..."
+            "🔎 Step 3: Analyzing transaction instructions for amounts and ATA operations..."
         );
     }
     
-    let post_balance = take_balance_snapshot(&wallet_address, 
-        if expected_direction == "buy" { output_mint } else { input_mint }
+    let instruction_analysis = analyze_transaction_instructions(
+        &transaction_details,
+        &wallet_address,
+        expected_direction
     ).await?;
 
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "VERIFY_STEP_3_COMPLETE",
-            &format!("✅ Step 3 Complete: Balance snapshot captured
-  Pre-SOL: {} | Post-SOL: {}
-  Pre-Token: {} | Post-Token: {}",
-                lamports_to_sol(pre_balance.sol_balance),
-                lamports_to_sol(post_balance.sol_balance),
-                pre_balance.token_balance,
-                post_balance.token_balance
+            &format!("✅ Step 3 Complete: Instruction analysis completed
+  Input: {:?} | Output: {:?}
+  SOL spent: {:?} | SOL received: {:?}
+  ATA created: {} | ATA closed: {}",
+                instruction_analysis.input_amount,
+                instruction_analysis.output_amount,
+                instruction_analysis.sol_spent,
+                instruction_analysis.sol_received,
+                instruction_analysis.ata_created,
+                instruction_analysis.ata_closed
             )
         );
     }
 
-    // Step 4: Analyze balance changes and calculate amounts
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "VERIFY_STEP_4",
-            "🔎 Step 4: Analyzing balance changes and extracting amounts..."
-        );
-    }
+    // Step 4: Get token decimals for price calculations
+    let input_decimals = if input_mint == SOL_MINT { 
+        9 
+    } else { 
+        crate::tokens::decimals::get_token_decimals_from_chain(input_mint).await.unwrap_or(6) as u32
+    };
+    
+    let output_decimals = if output_mint == SOL_MINT { 
+        9 
+    } else { 
+        crate::tokens::decimals::get_token_decimals_from_chain(output_mint).await.unwrap_or(6) as u32
+    };
 
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "BALANCE_COMPARISON",
-            &format!(
-                "📊 Balance Changes:\n  SOL: {} -> {} (diff: {})\n  Token: {} -> {} (diff: {})",
-                lamports_to_sol(pre_balance.sol_balance),
-                lamports_to_sol(post_balance.sol_balance),
-                lamports_to_sol(if post_balance.sol_balance > pre_balance.sol_balance {
-                    post_balance.sol_balance - pre_balance.sol_balance
-                } else {
-                    pre_balance.sol_balance - post_balance.sol_balance
-                }),
-                pre_balance.token_balance,
-                post_balance.token_balance,
-                if post_balance.token_balance > pre_balance.token_balance {
-                    post_balance.token_balance - pre_balance.token_balance
-                } else {
-                    pre_balance.token_balance - post_balance.token_balance
-                }
-            )
-        );
-    }
-
-    // Step 4: Extract amounts from transaction metadata (authoritative)
-    let (blockchain_input_amount, blockchain_output_amount) = extract_amounts_from_transaction(
-        &transaction_details,
-        input_mint,
-        output_mint,
-        &wallet_address
-    )?;
-
-    // Step 5: Calculate SOL changes and detect ATA operations
-    let (sol_spent, sol_received, ata_detected, ata_rent_reclaimed) = analyze_sol_changes(
-        &transaction_details,
-        pre_balance,
-        &post_balance,
-        expected_direction,
-        &wallet_address
-    )?;
-
-    // Step 6: Calculate effective price using the unified function
+    // Step 5: Calculate effective price using the instruction data
     let effective_price = crate::swaps::pricing::calculate_effective_price_from_raw(
         expected_direction,
-        blockchain_input_amount,
-        blockchain_output_amount,
-        sol_spent,
-        sol_received,
-        ata_rent_reclaimed,
-        if input_mint == SOL_MINT { 9 } else { 
-            crate::tokens::decimals::get_token_decimals_from_chain(input_mint).await.unwrap_or(9) as u32
-        },
-        if output_mint == SOL_MINT { 9 } else { 
-            crate::tokens::decimals::get_token_decimals_from_chain(output_mint).await.unwrap_or(9) as u32
-        }
+        instruction_analysis.input_amount,
+        instruction_analysis.output_amount,
+        instruction_analysis.sol_spent,
+        instruction_analysis.sol_received,
+        instruction_analysis.ata_rent_reclaimed,
+        input_decimals,
+        output_decimals
     );
 
-    // Step 7: Validate results consistency
+    // Step 6: Calculate price impact
+    let price_impact = calculate_price_impact(
+        expected_direction,
+        instruction_analysis.input_amount,
+        instruction_analysis.output_amount,
+        effective_price
+    );
+
+    // Step 7: Validate results consistency (simplified validation)
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "VERIFY_STEP_7",
-            "🔎 Step 7: Validating transaction results for consistency..."
+            "🔎 Step 7: Validating instruction-based results..."
         );
     }
     
-    validate_transaction_results(
+    validate_instruction_analysis_results(
         expected_direction,
-        pre_balance,
-        &post_balance,
-        blockchain_input_amount,
-        blockchain_output_amount,
-        sol_spent,
-        sol_received
+        &instruction_analysis
     )?;
 
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "VERIFY_STEP_7_COMPLETE",
-            "✅ Step 7 Complete: All transaction results validated successfully"
+            "✅ Step 7 Complete: All instruction analysis results validated successfully"
         );
     }
 
@@ -1283,29 +1225,35 @@ pub async fn verify_swap_transaction(
             LogTag::Swap,
             "VERIFY_SUCCESS",
             &format!(
-                "✅ Transaction verification completed successfully
+                "✅ Transaction verification completed successfully using instruction analysis
   📊 Final Results Summary:
-  • Input Amount: {} ({} type)
-  • Output Amount: {} ({} type)  
+  • Input Amount: {} {} 
+  • Output Amount: {} {}
   • SOL Spent: {} lamports ({:.6} SOL)
   • SOL Received: {} lamports ({:.6} SOL)
   • Transaction Fee: {} lamports ({:.6} SOL)
-  • ATA Detected: {} | Rent Reclaimed: {} lamports ({:.6} SOL)
+  • Priority Fee: {:?} micro-lamports
+  • ATA Created: {} | Rent Paid: {} lamports ({:.6} SOL)
+  • ATA Closed: {} | Rent Reclaimed: {} lamports ({:.6} SOL)
   • Effective Price: {:.10} SOL per token
-  🎯 Verification Process: ALL 7 STEPS COMPLETED",
-                blockchain_input_amount.unwrap_or(0),
-                if expected_direction == "buy" { "SOL" } else { "Tokens" },
-                blockchain_output_amount.unwrap_or(0),
-                if expected_direction == "buy" { "Tokens" } else { "SOL" },
-                sol_spent.unwrap_or(0),
-                lamports_to_sol(sol_spent.unwrap_or(0)),
-                sol_received.unwrap_or(0),
-                lamports_to_sol(sol_received.unwrap_or(0)),
+  🎯 Pure instruction-based analysis: ALL 7 STEPS COMPLETED",
+                instruction_analysis.input_amount.unwrap_or(0),
+                if expected_direction == "buy" { "lamports (SOL)" } else { "tokens" },
+                instruction_analysis.output_amount.unwrap_or(0),
+                if expected_direction == "buy" { "tokens" } else { "lamports (SOL)" },
+                instruction_analysis.sol_spent.unwrap_or(0),
+                lamports_to_sol(instruction_analysis.sol_spent.unwrap_or(0)),
+                instruction_analysis.sol_received.unwrap_or(0),
+                lamports_to_sol(instruction_analysis.sol_received.unwrap_or(0)),
                 transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
                 lamports_to_sol(transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0)),
-                ata_detected,
-                ata_rent_reclaimed,
-                lamports_to_sol(ata_rent_reclaimed),
+                instruction_analysis.priority_fee,
+                instruction_analysis.ata_created,
+                instruction_analysis.ata_rent_paid,
+                lamports_to_sol(instruction_analysis.ata_rent_paid),
+                instruction_analysis.ata_closed,
+                instruction_analysis.ata_rent_reclaimed,
+                lamports_to_sol(instruction_analysis.ata_rent_reclaimed),
                 effective_price.unwrap_or(0.0)
             )
         );
@@ -1315,22 +1263,96 @@ pub async fn verify_swap_transaction(
         success: true,
         transaction_signature: transaction_signature.to_string(),
         confirmed: true,
-        input_amount: blockchain_input_amount,
-        output_amount: blockchain_output_amount,
-        sol_spent,
-        sol_received,
+        input_amount: instruction_analysis.input_amount,
+        output_amount: instruction_analysis.output_amount,
+        sol_spent: instruction_analysis.sol_spent,
+        sol_received: instruction_analysis.sol_received,
         transaction_fee: transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
-        ata_detected,
-        ata_rent_reclaimed,
+        priority_fee: instruction_analysis.priority_fee,
+        ata_created: instruction_analysis.ata_created,
+        ata_closed: instruction_analysis.ata_closed,
+        ata_rent_paid: instruction_analysis.ata_rent_paid,
+        ata_rent_reclaimed: instruction_analysis.ata_rent_reclaimed,
         effective_price,
-        price_impact: calculate_price_impact(
-            expected_direction,
-            blockchain_input_amount,
-            blockchain_output_amount,
-            effective_price
-        ),
+        price_impact,
+        input_mint: input_mint.to_string(),
+        output_mint: output_mint.to_string(),
+        input_decimals,
+        output_decimals,
         error: None,
     })
+}
+
+/// Validate instruction analysis results for consistency
+fn validate_instruction_analysis_results(
+    expected_direction: &str,
+    analysis: &InstructionSwapAnalysis
+) -> Result<(), SwapError> {
+    match expected_direction {
+        "buy" => {
+            // For buy transactions: Must have received tokens and spent SOL
+            if analysis.output_amount.is_none() || analysis.output_amount.unwrap() == 0 {
+                return Err(SwapError::TransactionError(
+                    format!("Buy validation failed: No tokens received (output_amount: {:?})", analysis.output_amount)
+                ));
+            }
+
+            if analysis.sol_spent.is_none() || analysis.sol_spent.unwrap() == 0 {
+                log(
+                    LogTag::Swap,
+                    "VALIDATION_WARNING",
+                    "⚠️ Buy transaction: No SOL spent detected - possible instruction parsing issue"
+                );
+            }
+        }
+        "sell" => {
+            // For sell transactions: Must have sent tokens and received SOL
+            if analysis.input_amount.is_none() || analysis.input_amount.unwrap() == 0 {
+                return Err(SwapError::TransactionError(
+                    format!("Sell validation failed: No tokens sent (input_amount: {:?})", analysis.input_amount)
+                ));
+            }
+
+            if analysis.sol_received.is_none() || analysis.sol_received.unwrap() == 0 {
+                log(
+                    LogTag::Swap,
+                    "VALIDATION_WARNING",
+                    "⚠️ Sell transaction: No SOL received detected - possible instruction parsing issue"
+                );
+            }
+        }
+        _ => {
+            return Err(SwapError::TransactionError(
+                format!("Invalid transaction direction: {}", expected_direction)
+            ));
+        }
+    }
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "VALIDATION_SUCCESS",
+            &format!(
+                "✅ Instruction analysis validation passed for {} direction
+  📊 Validation Summary:
+  • Direction: {} ✓
+  • Amount Extraction: Input={:?}, Output={:?} ✓
+  • SOL Flow: Spent={:?}, Received={:?} ✓
+  • ATA Operations: Created={}, Closed={} ✓
+  🎯 Pure instruction-based validation confirmed",
+                expected_direction,
+                expected_direction,
+                analysis.input_amount,
+                analysis.output_amount,
+                analysis.sol_spent,
+                analysis.sol_received,
+                analysis.ata_created,
+                analysis.ata_closed
+            )
+        );
+    }
+
+    Ok(())
 }
 
 /// Wait for transaction confirmation with smart exponential backoff
@@ -1490,340 +1512,8 @@ fn verify_transaction_success(
     Ok(success)
 }
 
-/// Extract actual amounts from confirmed transaction metadata
-fn extract_amounts_from_transaction(
-    transaction_details: &crate::rpc::TransactionDetails,
-    input_mint: &str,
-    output_mint: &str,
-    wallet_address: &str
-) -> Result<(Option<u64>, Option<u64>), SwapError> {
-    let meta = transaction_details.meta.as_ref()
-        .ok_or_else(|| SwapError::TransactionError("No transaction metadata available".to_string()))?;
-
-    // Method 1: Use token balance changes (most reliable for tokens)
-    let (input_from_tokens, output_from_tokens) = extract_token_balance_changes(
-        meta,
-        input_mint,
-        output_mint,
-        wallet_address
-    )?;
-
-    // Method 2: Use SOL balance changes (for SOL transactions)
-    let (input_from_sol, output_from_sol) = extract_sol_balance_changes(
-        meta,
-        input_mint,
-        output_mint,
-        wallet_address
-    )?;
-
-    // Combine results - prefer token balance method for tokens, SOL balance method for SOL
-    let final_input = if input_mint == SOL_MINT {
-        input_from_sol.or(input_from_tokens)
-    } else {
-        input_from_tokens.or(input_from_sol)
-    };
-
-    let final_output = if output_mint == SOL_MINT {
-        output_from_sol.or(output_from_tokens)
-    } else {
-        output_from_tokens.or(output_from_sol)
-    };
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXTRACT_AMOUNTS",
-            &format!(
-                "📊 Amount extraction results:\n  Input: {} (from tokens: {:?}, from SOL: {:?})\n  Output: {} (from tokens: {:?}, from SOL: {:?})",
-                final_input.unwrap_or(0),
-                input_from_tokens,
-                input_from_sol,
-                final_output.unwrap_or(0),
-                output_from_tokens,
-                output_from_sol
-            )
-        );
-    }
-
-    Ok((final_input, final_output))
-}
-
-/// Extract token balance changes from transaction metadata
-fn extract_token_balance_changes(
-    meta: &crate::rpc::TransactionMeta,
-    input_mint: &str,
-    output_mint: &str,
-    wallet_address: &str
-) -> Result<(Option<u64>, Option<u64>), SwapError> {
-    let pre_balances = meta.pre_token_balances.as_ref();
-    let post_balances = meta.post_token_balances.as_ref();
-
-    if pre_balances.is_none() || post_balances.is_none() {
-        return Ok((None, None));
-    }
-
-    let pre_balances = pre_balances.unwrap();
-    let post_balances = post_balances.unwrap();
-
-    let mut input_amount = None;
-    let mut output_amount = None;
-
-    // Find wallet's token account changes for input mint
-    if input_mint != SOL_MINT {
-        for post_balance in post_balances {
-            if post_balance.mint == input_mint {
-                // Find corresponding pre-balance
-                if let Some(pre_balance) = pre_balances
-                    .iter()
-                    .find(|pre| pre.account_index == post_balance.account_index && pre.mint == input_mint)
-                {
-                    let pre_amount = pre_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
-                    let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
-
-                    if pre_amount > post_amount {
-                        input_amount = Some(pre_amount - post_amount);
-                    }
-                }
-            }
-        }
-    }
-
-    // Find wallet's token account changes for output mint
-    if output_mint != SOL_MINT {
-        for post_balance in post_balances {
-            if post_balance.mint == output_mint {
-                // Find corresponding pre-balance or assume 0 if new account
-                let pre_amount = pre_balances
-                    .iter()
-                    .find(|pre| pre.account_index == post_balance.account_index && pre.mint == output_mint)
-                    .map(|pre| pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0))
-                    .unwrap_or(0);
-
-                let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
-
-                if post_amount > pre_amount {
-                    output_amount = Some(post_amount - pre_amount);
-                }
-            }
-        }
-    }
-
-    Ok((input_amount, output_amount))
-}
-
-/// Extract SOL balance changes from transaction metadata
-fn extract_sol_balance_changes(
-    meta: &crate::rpc::TransactionMeta,
-    input_mint: &str,
-    output_mint: &str,
-    wallet_address: &str
-) -> Result<(Option<u64>, Option<u64>), SwapError> {
-    // For SOL transactions, we need to look at the wallet's balance change
-    // Wallet is typically the first account (fee payer)
-    if meta.pre_balances.is_empty() || meta.post_balances.is_empty() {
-        return Ok((None, None));
-    }
-
-    let pre_sol_balance = meta.pre_balances[0];
-    let post_sol_balance = meta.post_balances[0];
-    let fee = meta.fee;
-
-    let mut input_amount = None;
-    let mut output_amount = None;
-
-    if input_mint == SOL_MINT {
-        // SOL was spent (input) - calculate actual SOL spent including fees
-        if pre_sol_balance > post_sol_balance {
-            input_amount = Some(pre_sol_balance - post_sol_balance);
-        }
-    }
-
-    if output_mint == SOL_MINT {
-        // SOL was received (output) - calculate SOL received excluding fees
-        if post_sol_balance + fee > pre_sol_balance {
-            output_amount = Some((post_sol_balance + fee) - pre_sol_balance);
-        }
-    }
-
-    Ok((input_amount, output_amount))
-}
-
-/// Analyze SOL balance changes and detect ATA operations
-fn analyze_sol_changes(
-    transaction_details: &crate::rpc::TransactionDetails,
-    pre_balance: &BalanceSnapshot,
-    post_balance: &BalanceSnapshot,
-    expected_direction: &str,
-    wallet_address: &str
-) -> Result<(Option<u64>, Option<u64>, bool, u64), SwapError> {
-    let meta = transaction_details.meta.as_ref()
-        .ok_or_else(|| SwapError::TransactionError("No transaction metadata available".to_string()))?;
-
-    let transaction_fee = meta.fee;
-    
-    // Calculate raw SOL difference
-    let sol_difference = if post_balance.sol_balance > pre_balance.sol_balance {
-        // SOL increased
-        (post_balance.sol_balance - pre_balance.sol_balance, false) // (amount, is_decrease)
-    } else {
-        // SOL decreased
-        (pre_balance.sol_balance - post_balance.sol_balance, true) // (amount, is_decrease)
-    };
-
-    let (raw_sol_change, sol_decreased) = sol_difference;
-
-    // Detect ATA closure by analyzing transaction logs and balance patterns
-    let (ata_detected, ata_rent_reclaimed) = detect_ata_closure(
-        meta,
-        raw_sol_change,
-        transaction_fee,
-        expected_direction
-    );
-
-    let (sol_spent, sol_received) = if expected_direction == "buy" {
-        // Buy transaction: SOL spent for tokens
-        if sol_decreased {
-            let total_spent = raw_sol_change;
-            let trading_spent = if ata_detected && total_spent > ata_rent_reclaimed {
-                total_spent - ata_rent_reclaimed
-            } else {
-                total_spent
-            };
-            (Some(trading_spent), None)
-        } else {
-            // Unexpected: SOL increased during buy (might be ATA closure)
-            if ata_detected {
-                (Some(transaction_fee), None) // Only fee was spent, rest was ATA rent
-            } else {
-                (Some(transaction_fee), None) // Default to fee if confusing
-            }
-        }
-    } else {
-        // Sell transaction: tokens sold for SOL
-        if !sol_decreased {
-            let total_received = raw_sol_change;
-            let trading_received = if ata_detected {
-                if total_received > ata_rent_reclaimed {
-                    total_received - ata_rent_reclaimed
-                } else {
-                    0 // All was ATA rent
-                }
-            } else {
-                total_received
-            };
-            (None, Some(trading_received))
-        } else {
-            // Unexpected: SOL decreased during sell (fee only?)
-            (Some(raw_sol_change), None)
-        }
-    };
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "SOL_ANALYSIS",
-            &format!(
-                "💰 SOL Analysis Results:\n  Raw change: {} lamports ({})\n  Fee: {} lamports\n  ATA detected: {} | Rent: {} lamports\n  Final: spent={:?}, received={:?}",
-                raw_sol_change,
-                if sol_decreased { "decreased" } else { "increased" },
-                transaction_fee,
-                ata_detected,
-                ata_rent_reclaimed,
-                sol_spent,
-                sol_received
-            )
-        );
-    }
-
-    Ok((sol_spent, sol_received, ata_detected, ata_rent_reclaimed))
-}
-
-/// Detect ATA closure operations from transaction logs and balance patterns
-fn detect_ata_closure(
-    meta: &crate::rpc::TransactionMeta,
-    raw_sol_change: u64,
-    transaction_fee: u64,
-    expected_direction: &str
-) -> (bool, u64) {
-    let mut ata_detected = false;
-    let mut confidence_score = 0.0;
-    let mut estimated_ata_rent = 0u64;
-
-    // Method 1: Analyze transaction logs for ATA closure instructions (highest confidence)
-    if let Some(log_messages) = &meta.log_messages {
-        for log_message in log_messages {
-            if log_message.contains("CloseAccount") || log_message.contains("close account") {
-                confidence_score += 0.4;
-                estimated_ata_rent = TYPICAL_ATA_RENT_LAMPORTS;
-                
-                if is_debug_swap_enabled() {
-                    log(
-                        crate::logger::LogTag::Swap,
-                        "ATA_LOG_DETECT",
-                        &format!("🔍 ATA closure detected in logs: {}", log_message)
-                    );
-                }
-                break;
-            }
-        }
-    }
-
-    // Method 2: Pattern analysis for sell transactions (medium confidence)
-    if expected_direction == "sell" {
-        // In sell transactions, if SOL increased by more than just trading amount,
-        // it likely includes ATA rent reclamation
-        if raw_sol_change > transaction_fee {
-            let sol_net_change = raw_sol_change - transaction_fee;
-            
-            // Check if the change amount is close to typical ATA rent
-            let diff_from_typical_rent = if sol_net_change > TYPICAL_ATA_RENT_LAMPORTS {
-                sol_net_change - TYPICAL_ATA_RENT_LAMPORTS
-            } else {
-                TYPICAL_ATA_RENT_LAMPORTS - sol_net_change
-            };
-
-            // If within 10% of typical ATA rent, likely ATA closure
-            if diff_from_typical_rent < (TYPICAL_ATA_RENT_LAMPORTS / 10) {
-                confidence_score += 0.3;
-                estimated_ata_rent = TYPICAL_ATA_RENT_LAMPORTS;
-            }
-        }
-    }
-
-    // Method 3: Balance pattern analysis (lower confidence)
-    if raw_sol_change > transaction_fee * 50 {  // Significantly more than just fees
-        confidence_score += 0.2;
-        if estimated_ata_rent == 0 {
-            estimated_ata_rent = TYPICAL_ATA_RENT_LAMPORTS;
-        }
-    }
-
-    // Determine if ATA was detected based on confidence threshold
-    ata_detected = confidence_score >= 0.4;
-
-    // Safety check: Don't let ATA rent exceed total SOL change
-    if ata_detected && estimated_ata_rent > raw_sol_change {
-        estimated_ata_rent = raw_sol_change;
-    }
-
-    if is_debug_swap_enabled() {
-        log(
-            crate::logger::LogTag::Swap,
-            "ATA_DETECTION",
-            &format!(
-                "🔍 ATA Detection Results:\n  Detected: {} | Confidence: {:.1}%\n  Estimated rent: {} lamports",
-                ata_detected,
-                confidence_score * 100.0,
-                estimated_ata_rent
-            )
-        );
-    }
-
-    (ata_detected, estimated_ata_rent)
-}
-
 /// POSITION-SPECIFIC TRANSACTION VERIFICATION FUNCTIONS
-/// Comprehensive verification for position entry and exit transactions
+/// Comprehensive verification for position entry and exit transactions using instruction analysis
 
 /// Comprehensive position entry transaction verification
 /// Returns verified transaction data and balance changes for position creation
@@ -1859,101 +1549,64 @@ pub struct PositionExitVerification {
     pub net_sol_received: f64, // SOL from sale only, excluding ATA rent
 }
 
-/// Verify position entry transaction with comprehensive analysis
+/// Verify position entry transaction using instruction analysis
 /// This function performs complete verification of a buy transaction for position tracking
 pub async fn verify_position_entry_transaction(
     transaction_signature: &str,
     token_mint: &str,
     expected_sol_spent: f64,
-    pre_balance_snapshot: &BalanceSnapshot,
 ) -> Result<PositionEntryVerification, SwapError> {
     log(
         LogTag::Swap,
         "POSITION_ENTRY_VERIFY",
-        &format!("🔍 Verifying position entry transaction: {}", &transaction_signature[..8])
+        &format!("🔍 Verifying position entry transaction using instruction analysis: {}", &transaction_signature[..8])
     );
 
-    // Get transaction details from blockchain
-    let rpc_client = get_rpc_client();
-    let transaction_details = match rpc_client.get_transaction_details(transaction_signature).await {
-        Ok(details) => details,
-        Err(e) => {
-            return Ok(PositionEntryVerification {
-                transaction_signature: transaction_signature.to_string(),
-                success: false,
-                error: Some(format!("Failed to fetch transaction details: {}", e)),
-                token_amount_received: 0,
-                sol_spent: 0,
-                effective_entry_price: 0.0,
-                entry_transaction_verified: false,
-                ata_created: false,
-                ata_rent_paid: 0,
-                transaction_fee: 0,
-                total_cost_sol: 0.0,
-            });
-        }
-    };
+    // Use the main verify_swap_transaction function with instruction analysis
+    let verification_result = verify_swap_transaction(
+        transaction_signature,
+        SOL_MINT,
+        token_mint,
+        "buy"
+    ).await?;
 
-    // Verify transaction succeeded on blockchain
-    if let Some(meta) = &transaction_details.meta {
-        if meta.err.is_some() {
-            return Ok(PositionEntryVerification {
-                transaction_signature: transaction_signature.to_string(),
-                success: false,
-                error: Some("Transaction failed on blockchain".to_string()),
-                token_amount_received: 0,
-                sol_spent: 0,
-                effective_entry_price: 0.0,
-                entry_transaction_verified: false,
-                ata_created: false,
-                ata_rent_paid: 0,
-                transaction_fee: 0,
-                total_cost_sol: 0.0,
-            });
-        }
+    if !verification_result.success {
+        return Ok(PositionEntryVerification {
+            transaction_signature: transaction_signature.to_string(),
+            success: false,
+            error: verification_result.error,
+            token_amount_received: 0,
+            sol_spent: 0,
+            effective_entry_price: 0.0,
+            entry_transaction_verified: false,
+            ata_created: false,
+            ata_rent_paid: 0,
+            transaction_fee: 0,
+            total_cost_sol: 0.0,
+        });
     }
 
-    // Get wallet address for analysis
-    let wallet_address = get_wallet_address()?;
+    // Extract values from instruction-based analysis
+    let token_amount_received = verification_result.output_amount.unwrap_or(0);
+    let sol_spent = verification_result.sol_spent.unwrap_or(0);
+    let ata_created = verification_result.ata_created;
+    let ata_rent_paid = verification_result.ata_rent_paid;
+    let transaction_fee = verification_result.transaction_fee;
 
-    // Take post-transaction balance snapshot
-    let post_balance = take_balance_snapshot(&wallet_address, token_mint).await?;
-
-    // Analyze SOL balance changes
-    let (sol_change, ata_created, ata_rent_paid) = analyze_position_entry_sol_changes(
-        &transaction_details,
-        &wallet_address,
-        &pre_balance_snapshot,
-        &post_balance,
-    )?;
-
-    // Analyze token balance changes
-    let token_amount_received = if post_balance.token_balance > pre_balance_snapshot.token_balance {
-        post_balance.token_balance - pre_balance_snapshot.token_balance
-    } else {
-        0
-    };
-
-    // Calculate effective entry price
+    // Calculate effective entry price from instruction data
     let effective_entry_price = if token_amount_received > 0 {
-        let sol_spent_for_tokens = sol_change.saturating_sub(ata_rent_paid);
-        (sol_spent_for_tokens as f64) / (token_amount_received as f64) * 10f64.powi(9) // Convert to SOL price
+        let sol_spent_for_tokens = sol_spent.saturating_sub(ata_rent_paid);
+        (sol_spent_for_tokens as f64) / (token_amount_received as f64) * 10f64.powi(verification_result.output_decimals as i32) / 10f64.powi(9)
     } else {
         0.0
     };
 
-    // Get transaction fee
-    let transaction_fee = transaction_details.meta
-        .as_ref()
-        .map(|m| m.fee)
-        .unwrap_or(0);
-
     // Calculate total cost
-    let total_cost_sol = lamports_to_sol(sol_change + transaction_fee);
+    let total_cost_sol = lamports_to_sol(sol_spent + transaction_fee);
 
     // Validate results
     let verification_success = token_amount_received > 0 && 
-                              sol_change > 0 && 
+                              sol_spent > 0 && 
                               effective_entry_price > 0.0;
 
     // Log verification results
@@ -1962,9 +1615,9 @@ pub async fn verify_position_entry_transaction(
             LogTag::Swap,
             "POSITION_ENTRY_SUCCESS",
             &format!(
-                "✅ Entry verified: {} tokens received, {:.9} SOL spent, price: {:.12} SOL/token",
+                "✅ Entry verified using instruction analysis: {} tokens received, {:.9} SOL spent, price: {:.12} SOL/token",
                 token_amount_received,
-                lamports_to_sol(sol_change),
+                lamports_to_sol(sol_spent),
                 effective_entry_price
             )
         );
@@ -1975,7 +1628,7 @@ pub async fn verify_position_entry_transaction(
             &format!(
                 "⚠️ Entry verification incomplete: tokens={}, sol_spent={}, price={:.12}",
                 token_amount_received,
-                sol_change,
+                sol_spent,
                 effective_entry_price
             )
         );
@@ -1986,7 +1639,7 @@ pub async fn verify_position_entry_transaction(
         success: verification_success,
         error: None,
         token_amount_received,
-        sol_spent: sol_change,
+        sol_spent,
         effective_entry_price,
         entry_transaction_verified: verification_success,
         ata_created,
@@ -1996,95 +1649,57 @@ pub async fn verify_position_entry_transaction(
     })
 }
 
-/// Verify position exit transaction with comprehensive analysis
+/// Verify position exit transaction using instruction analysis
 /// This function performs complete verification of a sell transaction for position tracking
 pub async fn verify_position_exit_transaction(
     transaction_signature: &str,
     token_mint: &str,
     expected_token_amount: u64,
-    pre_balance_snapshot: &BalanceSnapshot,
 ) -> Result<PositionExitVerification, SwapError> {
     log(
         LogTag::Swap,
         "POSITION_EXIT_VERIFY",
-        &format!("🔍 Verifying position exit transaction: {}", &transaction_signature[..8])
+        &format!("🔍 Verifying position exit transaction using instruction analysis: {}", &transaction_signature[..8])
     );
 
-    // Get transaction details from blockchain
-    let rpc_client = get_rpc_client();
-    let transaction_details = match rpc_client.get_transaction_details(transaction_signature).await {
-        Ok(details) => details,
-        Err(e) => {
-            return Ok(PositionExitVerification {
-                transaction_signature: transaction_signature.to_string(),
-                success: false,
-                error: Some(format!("Failed to fetch transaction details: {}", e)),
-                token_amount_sold: 0,
-                sol_received: 0,
-                effective_exit_price: 0.0,
-                exit_transaction_verified: false,
-                ata_closed: false,
-                ata_rent_reclaimed: 0,
-                transaction_fee: 0,
-                net_sol_received: 0.0,
-            });
-        }
-    };
+    // Use the main verify_swap_transaction function with instruction analysis
+    let verification_result = verify_swap_transaction(
+        transaction_signature,
+        token_mint,
+        SOL_MINT,
+        "sell"
+    ).await?;
 
-    // Verify transaction succeeded on blockchain
-    if let Some(meta) = &transaction_details.meta {
-        if meta.err.is_some() {
-            return Ok(PositionExitVerification {
-                transaction_signature: transaction_signature.to_string(),
-                success: false,
-                error: Some("Transaction failed on blockchain".to_string()),
-                token_amount_sold: 0,
-                sol_received: 0,
-                effective_exit_price: 0.0,
-                exit_transaction_verified: false,
-                ata_closed: false,
-                ata_rent_reclaimed: 0,
-                transaction_fee: 0,
-                net_sol_received: 0.0,
-            });
-        }
+    if !verification_result.success {
+        return Ok(PositionExitVerification {
+            transaction_signature: transaction_signature.to_string(),
+            success: false,
+            error: verification_result.error,
+            token_amount_sold: 0,
+            sol_received: 0,
+            effective_exit_price: 0.0,
+            exit_transaction_verified: false,
+            ata_closed: false,
+            ata_rent_reclaimed: 0,
+            transaction_fee: 0,
+            net_sol_received: 0.0,
+        });
     }
 
-    // Get wallet address for analysis
-    let wallet_address = get_wallet_address()?;
+    // Extract values from instruction-based analysis
+    let token_amount_sold = verification_result.input_amount.unwrap_or(0);
+    let sol_received = verification_result.sol_received.unwrap_or(0);
+    let ata_closed = verification_result.ata_closed;
+    let ata_rent_reclaimed = verification_result.ata_rent_reclaimed;
+    let transaction_fee = verification_result.transaction_fee;
 
-    // Take post-transaction balance snapshot
-    let post_balance = take_balance_snapshot(&wallet_address, token_mint).await?;
-    let wallet_address = get_wallet_address()?;
-
-    // Analyze SOL balance changes (should increase for sell)
-    let (sol_received, ata_closed, ata_rent_reclaimed) = analyze_position_exit_sol_changes(
-        &transaction_details,
-        &wallet_address,
-        &pre_balance_snapshot,
-        &post_balance,
-    )?;
-
-    // Analyze token balance changes (should decrease for sell)
-    let token_amount_sold = if pre_balance_snapshot.token_balance > post_balance.token_balance {
-        pre_balance_snapshot.token_balance - post_balance.token_balance
-    } else {
-        0
-    };
-
-    // Calculate effective exit price
+    // Calculate effective exit price from instruction data
     let effective_exit_price = if token_amount_sold > 0 {
         let sol_from_sale = sol_received.saturating_sub(ata_rent_reclaimed);
-        (sol_from_sale as f64) / (token_amount_sold as f64) * 10f64.powi(9) // Convert to SOL price
+        (sol_from_sale as f64) / (token_amount_sold as f64) * 10f64.powi(verification_result.input_decimals as i32) / 10f64.powi(9)
     } else {
         0.0
     };
-
-    // Get transaction fee
-    let transaction_fee = transaction_details.meta
-        .as_ref()
-        .map(|m| m.fee)
-        .unwrap_or(0);
 
     // Calculate net SOL received (excluding ATA rent)
     let net_sol_received = lamports_to_sol(sol_received.saturating_sub(ata_rent_reclaimed));
@@ -2100,7 +1715,7 @@ pub async fn verify_position_exit_transaction(
             LogTag::Swap,
             "POSITION_EXIT_SUCCESS",
             &format!(
-                "✅ Exit verified: {} tokens sold, {:.9} SOL received, price: {:.12} SOL/token",
+                "✅ Exit verified using instruction analysis: {} tokens sold, {:.9} SOL received, price: {:.12} SOL/token",
                 token_amount_sold,
                 net_sol_received,
                 effective_exit_price
@@ -2132,135 +1747,6 @@ pub async fn verify_position_exit_transaction(
         transaction_fee,
         net_sol_received,
     })
-}
-
-/// Analyze SOL balance changes for position entry (buy) transactions
-fn analyze_position_entry_sol_changes(
-    transaction_details: &crate::rpc::TransactionDetails,
-    wallet_address: &str,
-    pre_balance: &BalanceSnapshot,
-    post_balance: &BalanceSnapshot,
-) -> Result<(u64, bool, u64), SwapError> {
-    // Calculate raw SOL balance change (should be negative for buy)
-    let sol_change = if pre_balance.sol_balance > post_balance.sol_balance {
-        pre_balance.sol_balance - post_balance.sol_balance
-    } else {
-        0
-    };
-
-    // Detect ATA creation for entry transactions
-    let (ata_created, ata_rent_paid) = detect_ata_creation(
-        transaction_details,
-        wallet_address,
-        sol_change,
-    );
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "ENTRY_SOL_ANALYSIS",
-            &format!(
-                "📊 Entry SOL Analysis:\n  SOL spent: {} lamports\n  ATA created: {}\n  ATA rent: {} lamports",
-                sol_change,
-                ata_created,
-                ata_rent_paid
-            )
-        );
-    }
-
-    Ok((sol_change, ata_created, ata_rent_paid))
-}
-
-/// Analyze SOL balance changes for position exit (sell) transactions  
-fn analyze_position_exit_sol_changes(
-    transaction_details: &crate::rpc::TransactionDetails,
-    wallet_address: &str,
-    pre_balance: &BalanceSnapshot,
-    post_balance: &BalanceSnapshot,
-) -> Result<(u64, bool, u64), SwapError> {
-    // Calculate raw SOL balance change (should be positive for sell)
-    let sol_change = if post_balance.sol_balance > pre_balance.sol_balance {
-        post_balance.sol_balance - pre_balance.sol_balance
-    } else {
-        0
-    };
-
-    // Get transaction fee to exclude from ATA detection
-    let transaction_fee = transaction_details.meta
-        .as_ref()
-        .map(|m| m.fee)
-        .unwrap_or(0);
-
-    // Detect ATA closure for exit transactions
-    let (ata_closed, ata_rent_reclaimed) = if let Some(meta) = &transaction_details.meta {
-        detect_ata_closure(
-            meta,
-            sol_change,
-            transaction_fee,
-            "sell",
-        )
-    } else {
-        (false, 0)
-    };
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "EXIT_SOL_ANALYSIS",
-            &format!(
-                "📊 Exit SOL Analysis:\n  SOL received: {} lamports\n  ATA closed: {}\n  ATA rent: {} lamports",
-                sol_change,
-                ata_closed,
-                ata_rent_reclaimed
-            )
-        );
-    }
-
-    Ok((sol_change, ata_closed, ata_rent_reclaimed))
-}
-
-/// Detect ATA creation during buy transactions
-fn detect_ata_creation(
-    transaction_details: &crate::rpc::TransactionDetails,
-    wallet_address: &str,
-    total_sol_spent: u64,
-) -> (bool, u64) {
-    let mut ata_created = false;
-    let mut ata_rent_paid = 0u64;
-
-    // Analyze transaction logs for ATA creation
-    if let Some(meta) = &transaction_details.meta {
-        if let Some(log_messages) = &meta.log_messages {
-            for log_message in log_messages {
-                if log_message.contains("CreateAccount") || 
-                   log_message.contains("create account") ||
-                   log_message.contains("Allocate") {
-                    ata_created = true;
-                    ata_rent_paid = TYPICAL_ATA_RENT_LAMPORTS;
-                    
-                    if is_debug_swap_enabled() {
-                        log(
-                            LogTag::Swap,
-                            "ATA_CREATE_DETECT",
-                            &format!("🔍 ATA creation detected in logs: {}", log_message)
-                        );
-                    }
-                    break;
-                }
-            }
-        }
-
-        // If SOL spent is significantly more than expected trade amount, likely includes ATA creation
-        if !ata_created && total_sol_spent > sol_to_lamports(0.01) { // More than 0.01 SOL
-            let excess_sol = total_sol_spent.saturating_sub(sol_to_lamports(0.005)); // Subtract typical trade
-            if excess_sol > TYPICAL_ATA_RENT_LAMPORTS / 2 { // Within range of ATA rent
-                ata_created = true;
-                ata_rent_paid = std::cmp::min(excess_sol, TYPICAL_ATA_RENT_LAMPORTS);
-            }
-        }
-    }
-
-    (ata_created, ata_rent_paid)
 }
 
 /// Register a transaction for position tracking

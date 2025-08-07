@@ -10,7 +10,7 @@ use super::config::{
     API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
     GMGN_DEFAULT_SWAP_MODE, SOL_MINT
 };
-use super::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
+use super::transaction::{sign_and_send_transaction, verify_swap_transaction, get_wallet_address};
 use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number};
 
 use serde::{Deserialize, Serialize};
@@ -385,16 +385,13 @@ pub async fn execute_gmgn_swap(
 
     let start_time = std::time::Instant::now();
 
+    // Get wallet address for logging
+    let wallet_address = get_wallet_address()?;
+
     // Sign and send the transaction using GMGN-specific method
     let transaction_signature = gmgn_sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
         &configs
-    ).await?;
-
-    // Take pre-transaction snapshot
-    let wallet_address = get_wallet_address()?;
-    let pre_balance = take_balance_snapshot(&wallet_address, 
-        if input_mint == SOL_MINT { output_mint } else { input_mint }
     ).await?;
 
     log(
@@ -403,15 +400,14 @@ pub async fn execute_gmgn_swap(
         &format!("🔵 GMGN transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
     );
 
-    // Wait for transaction confirmation and verify actual results
+    // Wait for transaction confirmation and verify actual results using instruction analysis
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
     
     match verify_swap_transaction(
         &transaction_signature,
         input_mint,
         output_mint,
-        expected_direction,
-        &pre_balance
+        expected_direction
     ).await {
         Ok(verification_result) => {
             let execution_time = start_time.elapsed().as_secs_f64();

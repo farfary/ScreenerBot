@@ -447,6 +447,9 @@ pub async fn execute_jupiter_swap(
 
     let start_time = std::time::Instant::now();
 
+    // Get wallet address for logging
+    let wallet_address = crate::swaps::transaction::get_wallet_address()?;
+
     // Get swap transaction from Jupiter
     let jupiter_tx = get_jupiter_swap_transaction(
         &swap_data,
@@ -462,27 +465,20 @@ pub async fn execute_jupiter_swap(
         None,
     ).await?;
 
-    // Take pre-transaction snapshot
-    let wallet_address = crate::swaps::transaction::get_wallet_address()?;
-    let pre_balance = crate::swaps::transaction::take_balance_snapshot(&wallet_address, 
-        if input_mint == SOL_MINT { output_mint } else { input_mint }
-    ).await?;
-
     log(
         LogTag::Swap,
         "JUPITER_PENDING",
         &format!("🟡 Jupiter transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
     );
 
-    // Wait for transaction confirmation and verify actual results
+    // Wait for transaction confirmation and verify actual results using instruction analysis
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
     
     match crate::swaps::transaction::verify_swap_transaction(
         &transaction_signature,
         input_mint,
         output_mint,
-        expected_direction,
-        &pre_balance
+        expected_direction
     ).await {
         Ok(verification_result) => {
             let execution_time = start_time.elapsed().as_secs_f64();
