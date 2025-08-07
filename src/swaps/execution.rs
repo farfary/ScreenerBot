@@ -557,7 +557,7 @@ async fn validate_transaction_vs_quote(
     input_mint: &str,
     output_mint: &str
 ) -> Result<(), SwapError> {
-    use crate::trader::SLIPPAGE_TOLERANCE_PERCENT;
+    use super::config::INTERNAL_SLIPPAGE_PERCENT;
     
     // Get quote expectations
     let quoted_input = swap_data.quote.in_amount.parse::<u64>()
@@ -581,7 +581,7 @@ async fn validate_transaction_vs_quote(
     } else { 0.0 };
     
     // Validate within acceptable tolerance (use slippage tolerance as reference)
-    let tolerance = SLIPPAGE_TOLERANCE_PERCENT * 2.0; // Allow 2x slippage tolerance for amount deviations
+    let tolerance = INTERNAL_SLIPPAGE_PERCENT * 2.0; // Allow 2x slippage tolerance for amount deviations
     
     if input_deviation > tolerance {
         return Err(SwapError::TransactionError(
@@ -617,10 +617,10 @@ async fn validate_transaction_vs_quote(
         
         if quoted_price > 0.0 {
             let price_deviation = ((effective_price - quoted_price) / quoted_price * 100.0).abs();
-            if price_deviation > SLIPPAGE_TOLERANCE_PERCENT {
+            if price_deviation > INTERNAL_SLIPPAGE_PERCENT {
                 return Err(SwapError::TransactionError(
                     format!("Price deviation {:.2}% exceeds slippage tolerance {:.2}% (quoted: {:.10}, actual: {:.10})",
-                        price_deviation, SLIPPAGE_TOLERANCE_PERCENT, quoted_price, effective_price)
+                        price_deviation, INTERNAL_SLIPPAGE_PERCENT, quoted_price, effective_price)
                 ));
             }
         }

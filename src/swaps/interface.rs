@@ -9,8 +9,7 @@ use crate::utils::get_token_balance;
 use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard, TransactionMonitoringService};
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 use super::types::{SwapData};
-use super::config::SOL_MINT;
-use crate::trader::{SLIPPAGE_TOLERANCE_PERCENT, SWAP_FEE_PERCENT};
+use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
 
 /// Result of a swap operation (compatible with existing wallet::SwapResult)
 #[derive(Debug)]
@@ -79,8 +78,8 @@ pub async fn buy_token(
         &token.mint,
         sol_to_lamports(amount_sol),
         &wallet_address,
-        SLIPPAGE_TOLERANCE_PERCENT,
-        "ExactIn", // swap_mode
+        QUOTE_SLIPPAGE_PERCENT,
+        GMGN_DEFAULT_SWAP_MODE, // Use config value instead of hardcoded
         SWAP_FEE_PERCENT,
         false, // Anti-MEV
     ).await?;
@@ -221,8 +220,8 @@ pub async fn sell_token(
         }
     }
 
-    // Auto-retry with progressive slippage: 15% -> 25% -> 35% -> 50%
-    let slippages = [15.0, 25.0, 35.0, 50.0];
+    // Auto-retry with progressive slippage from config
+    let slippages = &SELL_RETRY_SLIPPAGES;
 
     for (attempt, &slippage) in slippages.iter().enumerate() {
         log(
@@ -358,7 +357,7 @@ async fn sell_token_with_slippage(
         actual_sell_amount,
         &wallet_address,
         slippage,
-        "ExactIn", // swap_mode
+        GMGN_DEFAULT_SWAP_MODE, // Use config value instead of hardcoded
         SWAP_FEE_PERCENT,
         false,
     ).await?;

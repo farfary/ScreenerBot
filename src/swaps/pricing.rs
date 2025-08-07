@@ -6,7 +6,7 @@ use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol, sol_to_lamports};
 use crate::swaps::types::{SwapData, SwapRequest};
 use crate::swaps::interface::SwapResult;
-use crate::trader::SLIPPAGE_TOLERANCE_PERCENT;
+use super::config::INTERNAL_SLIPPAGE_PERCENT;
 use crate::tokens::decimals::get_token_decimals_from_chain;
 use super::config::SOL_MINT;
 
@@ -377,13 +377,13 @@ pub fn validate_quote_price(
         )
     );
 
-    if price_difference > SLIPPAGE_TOLERANCE_PERCENT {
+    if price_difference > INTERNAL_SLIPPAGE_PERCENT {
         return Err(
             SwapError::SlippageExceeded(
                 format!(
                     "Price difference {:.2}% exceeds tolerance {:.2}%",
                     price_difference,
-                    SLIPPAGE_TOLERANCE_PERCENT
+                    INTERNAL_SLIPPAGE_PERCENT
                 )
             )
         );

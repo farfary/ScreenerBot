@@ -34,6 +34,23 @@ pub const RETRY_ATTEMPTS: u32 = 3;
 pub const TRANSACTION_CONFIRMATION_TIMEOUT_SECS: u64 = 300;
 
 // =============================================================================
+// SLIPPAGE CONFIGURATION
+// =============================================================================
+
+/// Default slippage tolerance for quotes (sent to router APIs)
+pub const QUOTE_SLIPPAGE_PERCENT: f64 = 5.0;
+
+/// Internal slippage tolerance for our calculations and validations
+pub const INTERNAL_SLIPPAGE_PERCENT: f64 = 5.0;
+
+/// Sell retry slippage progression (used when sell fails and needs retry)
+/// Progressive slippage: attempt 1 -> 15%, attempt 2 -> 25%, attempt 3 -> 35%, attempt 4 -> 50%
+pub const SELL_RETRY_SLIPPAGES: [f64; 4] = [15.0, 25.0, 35.0, 50.0];
+
+/// Swap fee percentage (currently 0% - no additional fees)
+pub const SWAP_FEE_PERCENT: f64 = 0.0;
+
+// =============================================================================
 // GMGN ROUTER CONFIGURATION
 // =============================================================================
 

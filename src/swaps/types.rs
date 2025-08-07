@@ -2,7 +2,6 @@
 /// This module contains shared data structures for swap operations
 
 use serde::{Deserialize, Serialize, Deserializer};
-use crate::trader::{SWAP_FEE_PERCENT, SLIPPAGE_TOLERANCE_PERCENT};
 
 /// Configuration constants for swap operations (re-exported from config)
 pub use super::config::{
@@ -10,7 +9,12 @@ pub use super::config::{
     GMGN_ANTI_MEV as ANTI_MEV, 
     GMGN_PARTNER as PARTNER,
     GMGN_DEFAULT_SWAP_MODE,
-    JUPITER_DEFAULT_SWAP_MODE
+    JUPITER_DEFAULT_SWAP_MODE,
+    SWAP_FEE_PERCENT,
+    QUOTE_SLIPPAGE_PERCENT,
+    INTERNAL_SLIPPAGE_PERCENT,
+    // Legacy alias for backward compatibility in types
+    QUOTE_SLIPPAGE_PERCENT as SLIPPAGE_TOLERANCE_PERCENT
 };
 
 /// Custom deserializer for fields that can be either string or number
