@@ -25,13 +25,18 @@ use screenerbot::tokens::{
     decimals::get_token_decimals_from_chain,
 };
 use screenerbot::utils::{get_sol_balance, get_token_balance};
-use screenerbot::wallet::{buy_token_jupiter, SwapRequest};
+use screenerbot::swaps::{execute_best_swap, types::SwapRequest};
 
 use std::{env, str::FromStr};
 use solana_sdk::{
     pubkey::Pubkey, 
-    signature::{Keypair, Signer},
+    signer::Signer,
+    instruction::{Instruction, AccountMeta},
+    transaction::Transaction,
+    compute_budget::ComputeBudgetInstruction,
+    signature::Keypair,
 };
+use spl_associated_token_account::instruction::create_associated_token_account;
 use spl_associated_token_account::get_associated_token_address;
 use bs58;
 
