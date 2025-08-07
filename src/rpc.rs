@@ -2258,14 +2258,26 @@ impl RpcClient {
                 } else if response.status().is_success() {
                     if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
                         if let Some(error) = rpc_response.get("error") {
-                            log(
-                                LogTag::Rpc,
-                                "ERROR",
-                                &format!("RPC error getting transaction: {:?}", error)
-                            );
-                            return Err(
-                                SwapError::TransactionError(format!("RPC error: {:?}", error))
-                            );
+                            let error_str = error.to_string();
+                            // Check if the JSON error response contains a 429 rate limit error
+                            if Self::is_rate_limit_error(&error_str) {
+                                should_fallback = true;
+                                self.record_429_error(Some(&self.rpc_url)); // Record 429 for adaptive backoff
+                                log(
+                                    LogTag::Rpc,
+                                    "WARNING",
+                                    "Main RPC returned 429 rate limit for transaction details, falling back to premium"
+                                );
+                            } else {
+                                log(
+                                    LogTag::Rpc,
+                                    "ERROR",
+                                    &format!("RPC error getting transaction: {:?}", error)
+                                );
+                                return Err(
+                                    SwapError::TransactionError(format!("RPC error: {:?}", error))
+                                );
+                            }
                         }
 
                         if let Some(result) = rpc_response.get("result") {

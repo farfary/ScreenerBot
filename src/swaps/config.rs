@@ -39,9 +39,6 @@ pub const GMGN_ANTI_MEV: bool = false;
 /// GMGN default slippage tolerance (percentage)
 pub const GMGN_DEFAULT_SLIPPAGE: f64 = 15.0;
 
-/// GMGN default fee (percentage)
-pub const GMGN_DEFAULT_FEE: f64 = 0.5;
-
 /// GMGN API timeout (seconds)
 pub const GMGN_API_TIMEOUT_SECS: u64 = 30;
 
@@ -64,8 +61,8 @@ pub const JUPITER_SWAP_API: &str = "https://lite-api.jup.ag/swap/v1/swap";
 /// Jupiter default slippage tolerance (percentage)
 pub const JUPITER_DEFAULT_SLIPPAGE: f64 = 15.0;
 
-/// Jupiter default fee (percentage)
-pub const JUPITER_DEFAULT_FEE: f64 = 0.5;
+/// Jupiter default fee (percentage) - Set to 0% to minimize fees
+pub const JUPITER_DEFAULT_FEE: f64 = 0.0;
 
 /// Jupiter API timeout (seconds)
 pub const JUPITER_API_TIMEOUT_SECS: u64 = 30;
@@ -79,8 +76,8 @@ pub const JUPITER_RETRY_ATTEMPTS: u32 = 3;
 /// Jupiter dynamic compute unit limit
 pub const JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT: bool = true;
 
-/// Jupiter default priority fee (lamports)
-pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 100_000;
+/// Jupiter default priority fee (lamports) - Reduced to minimize transaction costs
+pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 1_000;
 
 // =============================================================================
 // RAYDIUM ROUTER CONFIGURATION (DEPRECATED)
@@ -95,8 +92,8 @@ pub const RAYDIUM_SWAP_API: &str = "https://api-v3.raydium.io/compute/swap-base-
 /// Raydium default slippage tolerance (percentage)
 pub const RAYDIUM_DEFAULT_SLIPPAGE: f64 = 15.0;
 
-/// Raydium default fee (percentage)
-pub const RAYDIUM_DEFAULT_FEE: f64 = 0.5;
+/// Raydium default fee (percentage) - Set to 0% to minimize fees
+pub const RAYDIUM_DEFAULT_FEE: f64 = 0.0;
 
 /// Raydium API timeout (seconds)
 pub const RAYDIUM_API_TIMEOUT_SECS: u64 = 30;

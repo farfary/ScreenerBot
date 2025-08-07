@@ -7,7 +7,7 @@ use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled, is_debug_wallet_enabled};
 use super::config::{
     GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, GMGN_DEFAULT_SLIPPAGE, 
-    GMGN_DEFAULT_FEE, GMGN_API_TIMEOUT_SECS, GMGN_QUOTE_TIMEOUT_SECS, GMGN_RETRY_ATTEMPTS,
+    GMGN_API_TIMEOUT_SECS, GMGN_QUOTE_TIMEOUT_SECS, GMGN_RETRY_ATTEMPTS,
     SOL_MINT
 };
 use super::transaction::{sign_and_send_transaction, verify_swap_transaction, take_balance_snapshot, get_wallet_address};
