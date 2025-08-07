@@ -23,8 +23,8 @@ use futures::future;
 // TRANSACTION CONFIRMATION DELAY CONFIGURATION
 // =============================================================================
 
-/// Initial delay before first transaction confirmation check
-pub const INITIAL_CONFIRMATION_DELAY_MS: u64 = 500;
+/// Initial delay before first transaction confirmation check (5 seconds to allow transaction propagation)
+pub const INITIAL_CONFIRMATION_DELAY_MS: u64 = 5000;
 
 /// Maximum delay between confirmation checks (cap for exponential backoff)
 pub const MAX_CONFIRMATION_DELAY_SECS: u64 = 8;

@@ -442,13 +442,32 @@ pub async fn execute_swap_with_quote(
     ).await {
         Ok(verification_result) => {
             if verification_result.success && verification_result.confirmed {
-                // Use verified amounts from blockchain
+                // CRITICAL FIX: Use actual amounts if available, otherwise fail - don't mask extraction failures
                 let input_amount_str = verification_result.input_amount
                     .map(|n| n.to_string())
-                    .unwrap_or_else(|| swap_data.quote.in_amount.clone());
+                    .ok_or_else(|| SwapError::TransactionError(
+                        "Failed to extract actual input amount from transaction".to_string()
+                    ))?;
                 let output_amount_str = verification_result.output_amount
                     .map(|n| n.to_string())
-                    .unwrap_or_else(|| swap_data.quote.out_amount.clone());
+                    .ok_or_else(|| SwapError::TransactionError(
+                        "Failed to extract actual output amount from transaction".to_string()
+                    ))?;
+
+                // CRITICAL FIX: Validate actual amounts vs quote expectations
+                if let Err(validation_error) = validate_transaction_vs_quote(
+                    &swap_data,
+                    &verification_result,
+                    input_mint,
+                    output_mint
+                ).await {
+                    log(
+                        LogTag::Wallet,
+                        "VALIDATION_WARNING",
+                        &format!("⚠️ Transaction validation warning: {}", validation_error)
+                    );
+                    // Log warning but don't fail transaction - user should be aware of deviations
+                }
 
                 log(
                     LogTag::Wallet,
@@ -522,4 +541,92 @@ pub async fn execute_swap_with_quote(
             })
         }
     }
+}
+
+/// Validate actual transaction results against quote expectations
+async fn validate_transaction_vs_quote(
+    swap_data: &SwapData,
+    verification_result: &crate::swaps::transaction::TransactionVerificationResult,
+    input_mint: &str,
+    output_mint: &str
+) -> Result<(), SwapError> {
+    use crate::trader::SLIPPAGE_TOLERANCE_PERCENT;
+    
+    // Get quote expectations
+    let quoted_input = swap_data.quote.in_amount.parse::<u64>()
+        .map_err(|_| SwapError::ParseError("Invalid quoted input amount".to_string()))?;
+    let quoted_output = swap_data.quote.out_amount.parse::<u64>()
+        .map_err(|_| SwapError::ParseError("Invalid quoted output amount".to_string()))?;
+    
+    // Get actual amounts
+    let actual_input = verification_result.input_amount
+        .ok_or_else(|| SwapError::TransactionError("Missing actual input amount".to_string()))?;
+    let actual_output = verification_result.output_amount
+        .ok_or_else(|| SwapError::TransactionError("Missing actual output amount".to_string()))?;
+    
+    // Calculate deviations
+    let input_deviation = if quoted_input > 0 {
+        ((actual_input as f64 - quoted_input as f64) / quoted_input as f64 * 100.0).abs()
+    } else { 0.0 };
+    
+    let output_deviation = if quoted_output > 0 {
+        ((actual_output as f64 - quoted_output as f64) / quoted_output as f64 * 100.0).abs()
+    } else { 0.0 };
+    
+    // Validate within acceptable tolerance (use slippage tolerance as reference)
+    let tolerance = SLIPPAGE_TOLERANCE_PERCENT * 2.0; // Allow 2x slippage tolerance for amount deviations
+    
+    if input_deviation > tolerance {
+        return Err(SwapError::TransactionError(
+            format!("Input amount deviation {:.2}% exceeds tolerance {:.2}% (quoted: {}, actual: {})",
+                input_deviation, tolerance, quoted_input, actual_input)
+        ));
+    }
+    
+    if output_deviation > tolerance {
+        return Err(SwapError::TransactionError(
+            format!("Output amount deviation {:.2}% exceeds tolerance {:.2}% (quoted: {}, actual: {})",
+                output_deviation, tolerance, quoted_output, actual_output)
+        ));
+    }
+    
+    // Validate effective price if available
+    if let Some(effective_price) = verification_result.effective_price {
+        // Calculate expected price from quote
+        let is_buy = input_mint == SOL_MINT;
+        let quoted_price = if is_buy {
+            // Buy: SOL per token
+            let sol_amount = crate::rpc::lamports_to_sol(quoted_input);
+            let token_decimals = swap_data.quote.out_decimals as u32;
+            let token_amount = (quoted_output as f64) / (10_f64).powi(token_decimals as i32);
+            if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 }
+        } else {
+            // Sell: SOL per token
+            let sol_amount = crate::rpc::lamports_to_sol(quoted_output);
+            let token_decimals = swap_data.quote.in_decimals as u32;
+            let token_amount = (quoted_input as f64) / (10_f64).powi(token_decimals as i32);
+            if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 }
+        };
+        
+        if quoted_price > 0.0 {
+            let price_deviation = ((effective_price - quoted_price) / quoted_price * 100.0).abs();
+            if price_deviation > SLIPPAGE_TOLERANCE_PERCENT {
+                return Err(SwapError::TransactionError(
+                    format!("Price deviation {:.2}% exceeds slippage tolerance {:.2}% (quoted: {:.10}, actual: {:.10})",
+                        price_deviation, SLIPPAGE_TOLERANCE_PERCENT, quoted_price, effective_price)
+                ));
+            }
+        }
+    }
+    
+    log(
+        LogTag::Wallet,
+        "QUOTE_VALIDATION",
+        &format!(
+            "✅ Quote validation passed: Input dev: {:.2}%, Output dev: {:.2}%",
+            input_deviation, output_deviation
+        )
+    );
+    
+    Ok(())
 }
