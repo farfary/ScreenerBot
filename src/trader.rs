@@ -57,10 +57,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 3;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.004;
+pub const TRADE_SIZE_SOL: f64 = 0.001;
 
 /// Default transaction fee for buy/sell operations
 pub const TRANSACTION_FEE_SOL: f64 = 0.000015;
@@ -420,7 +420,7 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     }
 
     // Use centralized filtering system
-    if !should_buy_token(token).await {
+    if !should_buy_token(token) {
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
@@ -655,10 +655,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Use centralized filtering system to get eligible tokens
         use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
 
-        let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&tokens).await;
+        let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&tokens);
 
         // Log filtering statistics
-        let (total, passed, pass_rate) = get_filtering_stats(&tokens).await;
+        let (total, passed, pass_rate) = get_filtering_stats(&tokens);
         log(
             LogTag::Trader,
             "FILTER_STATS",
@@ -699,7 +699,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
         // Log filtering summary
-        log_filtering_summary(&tokens).await;
+        log_filtering_summary(&tokens);
 
         // Sync OHLCV watch list with trader tokens (run async to not block trading)
         if is_debug_trader_enabled() {
@@ -838,6 +838,49 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 )
                             );
 
+                            // CRITICAL: Check pool availability before trading
+                            // First we verify the price exists, then we check if pool trading is available
+                            debug_trader_log(
+                                "TASK_TIMING",
+                                &format!("Token {} checking pool availability", token.symbol)
+                            );
+                            let pool_check_start = std::time::Instant::now();
+                            
+                            let pool_service = get_pool_service();
+                            let has_pool_availability = pool_service.check_token_availability(&token.mint).await;
+                            
+                            debug_trader_log(
+                                "TASK_TIMING",
+                                &format!(
+                                    "Token {} pool availability check took {:.2}ms",
+                                    token.symbol,
+                                    pool_check_start.elapsed().as_millis()
+                                )
+                            );
+
+                            if !has_pool_availability {
+                                debug_trader_log(
+                                    "POOL_UNAVAILABLE",
+                                    &format!(
+                                        "Token {} ({}): NO POOL AVAILABLE for trading - price exists but skipping trading. Price = {:.10}",
+                                        token.symbol,
+                                        token.mint,
+                                        current_price
+                                    )
+                                );
+                                return None;
+                            }
+
+                            debug_trader_log(
+                                "POOL_AVAILABLE",
+                                &format!(
+                                    "Token {} ({}): Pool availability confirmed - ready for trading. Price = {:.10}",
+                                    token.symbol,
+                                    token.mint,
+                                    current_price
+                                )
+                            );
+
                             // Use centralized filtering system
                             debug_trader_log(
                                 "TASK_TIMING",
@@ -845,7 +888,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
                             let filter_start = std::time::Instant::now();
 
-                            if !should_buy_token(&token).await {
+                            if !should_buy_token(&token) {
                                 // Token was filtered out, skip processing
                                 return None;
                             }
@@ -1833,6 +1876,58 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     }
 
                     if should_exit {
+                        // CRITICAL: Check pool availability before selling
+                        // Verify the token has available pools for trading before attempting to sell
+                        if is_debug_trader_enabled() {
+                            debug_trader_log(
+                                "SELL_POOL_CHECK",
+                                &format!("Checking pool availability for sell: {} ({})", position.symbol, position.mint)
+                            );
+                        }
+                        
+                        let pool_service = get_pool_service();
+                        let has_pool_availability = pool_service.check_token_availability(&position.mint).await;
+                        
+                        if !has_pool_availability {
+                            if is_debug_trader_enabled() {
+                                debug_trader_log(
+                                    "SELL_POOL_UNAVAILABLE",
+                                    &format!(
+                                        "SKIPPING SELL for {} ({}): No pool available for trading - price exists but can't execute sell. Current price: {:.10}",
+                                        position.symbol,
+                                        position.mint,
+                                        current_price
+                                    )
+                                );
+                            }
+                            
+                            log(
+                                LogTag::Trader,
+                                "SELL_SKIP",
+                                &format!(
+                                    "Skipping sell for {} ({}) - No pool available (urgency: {:.2}, P&L: {:.2}%)",
+                                    position.symbol,
+                                    position.mint,
+                                    sell_urgency,
+                                    pnl_percent
+                                )
+                            );
+                            
+                            // Continue to next position without selling
+                            continue;
+                        }
+                        
+                        if is_debug_trader_enabled() {
+                            debug_trader_log(
+                                "SELL_POOL_CONFIRMED",
+                                &format!(
+                                    "Pool availability confirmed for sell: {} ({})",
+                                    position.symbol,
+                                    position.mint
+                                )
+                            );
+                        }
+
                         let minimal_token = Token {
                             mint: position.mint.clone(),
                             symbol: position.symbol.clone(),
