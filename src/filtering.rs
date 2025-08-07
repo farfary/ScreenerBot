@@ -8,6 +8,7 @@ use crate::tokens::{
     rugcheck::{ is_token_safe_for_trading, get_high_risk_issues },
     get_token_decimals_sync,
     is_token_excluded_from_trading,
+    pool::get_pool_service,
 };
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_filtering_enabled;
@@ -227,6 +228,9 @@ pub enum FilterReason {
     DecimalsNotAvailable {
         mint: String,
     },
+
+    // Pool availability failures (CRITICAL for trading)
+    PoolNotAvailable,
 }
 
 /// Result of token filtering
@@ -243,7 +247,7 @@ pub enum FilterResult {
 /// Centralized token filtering function
 /// Returns FilterResult::Approved if token passes all filters
 /// Returns FilterResult::Rejected(reason) if token fails any filter
-pub fn filter_token_for_trading(token: &Token) -> FilterResult {
+pub async fn filter_token_for_trading(token: &Token) -> FilterResult {
     // Entry debug log with token basic info
     if is_debug_filtering_enabled() {
         log(
@@ -315,20 +319,20 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         );
     }
 
-    // 2. Basic metadata validation
+    // 2. POOL AVAILABILITY VALIDATION (CRITICAL FOR TRADING)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_2",
-            &format!("📝 Step 2: Checking metadata for {}", token.symbol)
+            &format!("🏊 Step 2: Checking pool availability for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_basic_token_info(token) {
+    if let Some(reason) = validate_pool_availability(token).await {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_2",
-                &format!("❌ {}: FAILED Step 2 (Metadata) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 2 (Pool Availability) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -337,68 +341,68 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_2",
-            &format!("✅ {}: PASSED Step 2 (Metadata)", token.symbol)
+            &format!("✅ {}: PASSED Step 2 (Pool Availability)", token.symbol)
         );
     }
 
-    // 3. Age validation
+    // 3. Basic metadata validation
     if is_debug_filtering_enabled() {
-        log(LogTag::Filtering, "STEP_3", &format!("⏰ Step 3: Checking age for {}", token.symbol));
+        log(
+            LogTag::Filtering,
+            "STEP_3",
+            &format!("📝 Step 3: Checking metadata for {}", token.symbol)
+        );
     }
-    if let Some(reason) = validate_token_age(token) {
+    if let Some(reason) = validate_basic_token_info(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_3",
-                &format!("❌ {}: FAILED Step 3 (Age) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 3 (Metadata) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
     }
     if is_debug_filtering_enabled() {
-        log(LogTag::Filtering, "PASS_STEP_3", &format!("✅ {}: PASSED Step 3 (Age)", token.symbol));
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_3",
+            &format!("✅ {}: PASSED Step 3 (Metadata)", token.symbol)
+        );
     }
 
-    // 4. Liquidity validation
+    // 4. Age validation
+    if is_debug_filtering_enabled() {
+        log(LogTag::Filtering, "STEP_4", &format!("⏰ Step 4: Checking age for {}", token.symbol));
+    }
+    if let Some(reason) = validate_token_age(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT_STEP_4",
+                &format!("❌ {}: FAILED Step 4 (Age) - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+    if is_debug_filtering_enabled() {
+        log(LogTag::Filtering, "PASS_STEP_4", &format!("✅ {}: PASSED Step 4 (Age)", token.symbol));
+    }
+
+    // 5. Liquidity validation
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "STEP_4",
-            &format!("💧 Step 4: Checking liquidity for {}", token.symbol)
+            "STEP_5",
+            &format!("� Step 5: Checking liquidity for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_liquidity(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT_STEP_4",
-                &format!("❌ {}: FAILED Step 4 (Liquidity) - {:?}", token.symbol, reason)
-            );
-        }
-        return FilterResult::Rejected(reason);
-    }
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "PASS_STEP_4",
-            &format!("✅ {}: PASSED Step 4 (Liquidity)", token.symbol)
-        );
-    }
-
-    // 5. Holder Distribution Validation (CRITICAL FOR MICRO-CAPS)
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "STEP_5",
-            &format!("👥 Step 5: Checking holder distribution for {}", token.symbol)
-        );
-    }
-    if let Some(reason) = validate_holder_distribution(token) {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
                 "REJECT_STEP_5",
-                &format!("❌ {}: FAILED Step 5 (Holder Distribution) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 5 (Liquidity) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -407,24 +411,24 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_5",
-            &format!("✅ {}: PASSED Step 5 (Holder Distribution)", token.symbol)
+            &format!("✅ {}: PASSED Step 5 (Liquidity)", token.symbol)
         );
     }
 
-    // 6. Basic Price Validation (Simplified - ATH checking moved to trader)
+    // 6. Holder Distribution Validation (CRITICAL FOR MICRO-CAPS)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_6",
-            &format!("📈 Step 6: Checking basic price validity for {}", token.symbol)
+            &format!("👥 Step 6: Checking holder distribution for {}", token.symbol)
         );
     }
-    if let Some(reason) = validate_basic_price_data(token) {
+    if let Some(reason) = validate_holder_distribution(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
                 "REJECT_STEP_6",
-                &format!("❌ {}: FAILED Step 6 (Price Validation) - {:?}", token.symbol, reason)
+                &format!("❌ {}: FAILED Step 6 (Holder Distribution) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -433,24 +437,50 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
         log(
             LogTag::Filtering,
             "PASS_STEP_6",
-            &format!("✅ {}: PASSED Step 6 (Price Validation)", token.symbol)
+            &format!("✅ {}: PASSED Step 6 (Holder Distribution)", token.symbol)
         );
     }
 
-    // 7. Price validation
+    // 7. Basic Price Validation (Simplified - ATH checking moved to trader)
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "STEP_7",
-            &format!("💰 Step 7: Checking price data for {}", token.symbol)
+            &format!("📈 Step 7: Checking basic price validity for {}", token.symbol)
+        );
+    }
+    if let Some(reason) = validate_basic_price_data(token) {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "REJECT_STEP_7",
+                &format!("❌ {}: FAILED Step 7 (Price Validation) - {:?}", token.symbol, reason)
+            );
+        }
+        return FilterResult::Rejected(reason);
+    }
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "PASS_STEP_7",
+            &format!("✅ {}: PASSED Step 7 (Price Validation)", token.symbol)
+        );
+    }
+
+    // 8. Price validation
+    if is_debug_filtering_enabled() {
+        log(
+            LogTag::Filtering,
+            "STEP_8",
+            &format!("💰 Step 8: Checking price data for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_price_data(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT_STEP_7",
-                &format!("❌ {}: FAILED Step 7 (Price Data) - {:?}", token.symbol, reason)
+                "REJECT_STEP_8",
+                &format!("❌ {}: FAILED Step 8 (Price Data) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -458,25 +488,25 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "PASS_STEP_7",
-            &format!("✅ {}: PASSED Step 7 (Price Data)", token.symbol)
+            "PASS_STEP_8",
+            &format!("✅ {}: PASSED Step 8 (Price Data)", token.symbol)
         );
     }
 
-    // 8. Decimal availability validation
+    // 9. Decimal availability validation
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "STEP_8",
-            &format!("🔢 Step 8: Checking decimal availability for {}", token.symbol)
+            "STEP_9",
+            &format!("🔢 Step 9: Checking decimal availability for {}", token.symbol)
         );
     }
     if let Some(reason) = validate_decimal_availability(token) {
         if is_debug_filtering_enabled() {
             log(
                 LogTag::Filtering,
-                "REJECT_STEP_8",
-                &format!("❌ {}: FAILED Step 8 (Decimal Availability) - {:?}", token.symbol, reason)
+                "REJECT_STEP_9",
+                &format!("❌ {}: FAILED Step 9 (Decimal Availability) - {:?}", token.symbol, reason)
             );
         }
         return FilterResult::Rejected(reason);
@@ -484,8 +514,8 @@ pub fn filter_token_for_trading(token: &Token) -> FilterResult {
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
-            "PASS_STEP_7",
-            &format!("✅ {}: PASSED Step 7 (Decimal Availability)", token.symbol)
+            "PASS_STEP_9",
+            &format!("✅ {}: PASSED Step 9 (Decimal Availability)", token.symbol)
         );
     }
 
@@ -1510,26 +1540,28 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
 // =============================================================================
 
 /// Check if a specific token passes all filters (convenience function)
-pub fn is_token_eligible_for_trading(token: &Token) -> bool {
-    matches!(filter_token_for_trading(token), FilterResult::Approved)
+pub async fn is_token_eligible_for_trading(token: &Token) -> bool {
+    matches!(filter_token_for_trading(token).await, FilterResult::Approved)
 }
 
 /// Filter a list of tokens and return only eligible ones
-pub fn filter_eligible_tokens(tokens: &[Token]) -> Vec<Token> {
-    tokens
-        .iter()
-        .filter(|token| is_token_eligible_for_trading(token))
-        .cloned()
-        .collect()
+pub async fn filter_eligible_tokens(tokens: &[Token]) -> Vec<Token> {
+    let mut eligible = Vec::new();
+    for token in tokens {
+        if is_token_eligible_for_trading(token).await {
+            eligible.push(token.clone());
+        }
+    }
+    eligible
 }
 
 /// Filter a list of tokens and return both eligible and rejected with reasons
-pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
+pub async fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, FilterReason)>) {
     let mut eligible = Vec::new();
     let mut rejected = Vec::new();
 
     for token in tokens {
-        match filter_token_for_trading(token) {
+        match filter_token_for_trading(token).await {
             FilterResult::Approved => eligible.push(token.clone()),
             FilterResult::Rejected(reason) => rejected.push((token.clone(), reason)),
         }
@@ -1544,30 +1576,33 @@ pub fn filter_tokens_with_reasons(tokens: &[Token]) -> (Vec<Token>, Vec<(Token, 
 }
 
 /// Count how many tokens would pass filtering without processing them all
-pub fn count_eligible_tokens(tokens: &[Token]) -> usize {
-    tokens
-        .iter()
-        .filter(|token| is_token_eligible_for_trading(token))
-        .count()
+pub async fn count_eligible_tokens(tokens: &[Token]) -> usize {
+    let mut count = 0;
+    for token in tokens {
+        if is_token_eligible_for_trading(token).await {
+            count += 1;
+        }
+    }
+    count
 }
 
 /// Get filtering statistics for a list of tokens
-pub fn get_filtering_stats(tokens: &[Token]) -> (usize, usize, f64) {
+pub async fn get_filtering_stats(tokens: &[Token]) -> (usize, usize, f64) {
     let total = tokens.len();
-    let eligible = count_eligible_tokens(tokens);
+    let eligible = count_eligible_tokens(tokens).await;
     let pass_rate = if total > 0 { ((eligible as f64) / (total as f64)) * 100.0 } else { 0.0 };
 
     (total, eligible, pass_rate)
 }
 
 /// Log filtering summary statistics
-pub fn log_filtering_summary(tokens: &[Token]) {
+pub async fn log_filtering_summary(tokens: &[Token]) {
     // Only log summary if we have tokens and debug is enabled
     if tokens.is_empty() || !is_debug_filtering_enabled() {
         return;
     }
 
-    let (total, eligible, pass_rate) = get_filtering_stats(tokens);
+    let (total, eligible, pass_rate) = get_filtering_stats(tokens).await;
 
     log(
         LogTag::Filtering,
@@ -1664,6 +1699,7 @@ fn log_filtering_breakdown(rejected: &[(Token, FilterReason)]) {
             FilterReason::WhaleConcentrationRisk { .. } => "Whale Concentration Risk",
             FilterReason::LockAcquisitionFailed => "System Errors",
             FilterReason::DecimalsNotAvailable { .. } => "Decimal Issues",
+            FilterReason::PoolNotAvailable => "Pool Availability Issues",
         };
 
         *reason_counts.entry(reason_type.to_string()).or_insert(0) += 1;
@@ -1695,10 +1731,32 @@ pub fn log_filtering_error(token: &Token, reason: &FilterReason) {
     }
 }
 
+/// Validate that pool prices are available for this token
+/// This ensures we can calculate real-time blockchain prices, not just API prices
+async fn validate_pool_availability(token: &Token) -> Option<FilterReason> {
+    let pool_service = get_pool_service();
+    
+    // Check if pool prices are available for this token
+    let is_available = pool_service.check_token_availability(&token.mint).await;
+    
+    if !is_available {
+        if is_debug_filtering_enabled() {
+            log(
+                LogTag::Filtering,
+                "POOL_UNAVAILABLE",
+                &format!("Pool prices not available for {} ({})", token.symbol, token.mint)
+            );
+        }
+        return Some(FilterReason::PoolNotAvailable);
+    }
+    
+    None
+}
+
 /// Main public interface function that combines filtering with logging
 /// This should be used by the trader instead of filter_token_for_trading directly
-pub fn should_buy_token(token: &Token) -> bool {
-    match filter_token_for_trading(token) {
+pub async fn should_buy_token(token: &Token) -> bool {
+    match filter_token_for_trading(token).await {
         FilterResult::Approved => {
             if is_debug_filtering_enabled() {
                 log(

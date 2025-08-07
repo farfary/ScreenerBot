@@ -57,7 +57,7 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 2;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.001;
@@ -420,7 +420,7 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     }
 
     // Use centralized filtering system
-    if !should_buy_token(token) {
+    if !should_buy_token(token).await {
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
@@ -655,10 +655,10 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Use centralized filtering system to get eligible tokens
         use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
 
-        let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&tokens);
+        let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&tokens).await;
 
         // Log filtering statistics
-        let (total, passed, pass_rate) = get_filtering_stats(&tokens);
+        let (total, passed, pass_rate) = get_filtering_stats(&tokens).await;
         log(
             LogTag::Trader,
             "FILTER_STATS",
@@ -699,7 +699,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         let semaphore = Arc::new(Semaphore::new(5)); // Reduced to 5 concurrent checks to avoid overwhelming
 
         // Log filtering summary
-        log_filtering_summary(&tokens);
+        log_filtering_summary(&tokens).await;
 
         // Sync OHLCV watch list with trader tokens (run async to not block trading)
         if is_debug_trader_enabled() {
@@ -845,7 +845,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                             );
                             let filter_start = std::time::Instant::now();
 
-                            if !should_buy_token(&token) {
+                            if !should_buy_token(&token).await {
                                 // Token was filtered out, skip processing
                                 return None;
                             }

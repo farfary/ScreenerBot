@@ -310,7 +310,7 @@ impl FilteringStats {
 
 async fn analyze_token_filtering(token: &Token) -> (bool, Option<FilterReason>) {
     // Convert Token to the format expected by should_buy_token
-    let passed = should_buy_token(token);
+    let passed = should_buy_token(token).await;
 
     if !passed {
         // Try to determine the reason by checking individual conditions
