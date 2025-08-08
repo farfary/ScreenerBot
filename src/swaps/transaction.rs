@@ -305,6 +305,15 @@ impl TransactionMonitoringService {
                                     
                                     log(LogTag::Swap, "TRANSACTION_VERIFIED", 
                                         &format!("🎯 Transaction {} fully verified", &signature[..8]));
+                                    
+                                    // CRITICAL FIX: Update position if this is a position-related transaction
+                                    if tx.position_related {
+                                        if let Err(e) = Self::update_position_on_verification(signature, tx).await {
+                                            log(LogTag::Swap, "POSITION_UPDATE_ERROR", 
+                                                &format!("⚠️ Failed to update position for verified transaction {}: {}", 
+                                                    &signature[..8], e));
+                                        }
+                                    }
                                 }
                             }
                             TransactionState::Verified { .. } |
@@ -480,6 +489,68 @@ impl TransactionMonitoringService {
 
             interval.tick().await;
         }
+    }
+
+    /// Update position tracking when a transaction is verified by the monitoring service
+    /// This handles cases where immediate verification during swap failed but background verification succeeded
+    async fn update_position_on_verification(signature: &str, tx: &PendingTransaction) -> Result<(), SwapError> {
+        // Only handle sell transactions (buy transactions don't need position closure)
+        if tx.direction != "sell" {
+            return Ok(());
+        }
+
+        log(LogTag::Swap, "POSITION_UPDATE_VERIFIED", 
+            &format!("🔄 Updating position for verified sell transaction: {}", &signature[..8]));
+
+        // Import positions module to access position functions
+        use crate::positions::{SAVED_POSITIONS, calculate_position_pnl};
+
+        // First, verify the transaction outside of any lock
+        let verification = verify_position_exit_transaction(signature, &tx.mint, 0).await?;
+        
+        if !verification.success || verification.sol_received <= 0 {
+            return Err(SwapError::TransactionError(
+                format!("Transaction verification failed or no SOL received for {}", signature)
+            ));
+        }
+
+        // Now update the position with the verification results
+        let position_updated = {
+            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                if let Some(position) = positions.iter_mut().find(|p| p.mint == tx.mint && p.exit_price.is_none()) {
+                    // Update position with verified exit data
+                    position.exit_price = Some(verification.effective_exit_price);
+                    position.exit_time = Some(Utc::now());
+                    position.effective_exit_price = Some(verification.effective_exit_price);
+                    position.sol_received = Some(verification.net_sol_received);
+                    position.exit_transaction_signature = Some(signature.to_string());
+                    position.transaction_exit_verified = true;
+
+                    // Calculate P&L
+                    let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
+
+                    log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
+                        &format!("✅ Position updated from verified transaction: {} | P&L: {:.1}% ({:+.9} SOL) | SOL received: {:.9}", 
+                            position.symbol, net_pnl_percent, net_pnl_sol, verification.net_sol_received));
+                    
+                    true
+                } else {
+                    log(LogTag::Swap, "POSITION_UPDATE_WARNING", 
+                        &format!("⚠️ No open position found for mint {} in verified transaction {}", 
+                            tx.mint, &signature[..8]));
+                    false
+                }
+            } else {
+                return Err(SwapError::TransactionError("Failed to acquire positions lock".to_string()));
+            }
+        };
+
+        // Save positions to disk if we updated anything
+        if position_updated {
+            crate::utils::save_positions_to_file(&crate::positions::get_open_positions());
+        }
+
+        Ok(())
     }
 }
 
