@@ -281,6 +281,17 @@ async fn run_comprehensive_tests() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
+            // Add position analysis summary for this test
+            log(LogTag::System, "INFO", "");
+            log(LogTag::System, "INFO", &format!("📊 {} POSITION ANALYSIS SUMMARY:", token.symbol.to_uppercase()));
+            log(LogTag::System, "INFO", &format!("  Test Amount: {:.6} SOL", amount));
+            log(LogTag::System, "INFO", &format!("  Token: {} ({})", token.symbol, token.name));
+            log(LogTag::System, "INFO", &format!("  Mint: {}", token.mint));
+            if let Some(price) = token.price_dexscreener_sol {
+                log(LogTag::System, "INFO", &format!("  DexScreener Price: {:.12} SOL/token", price));
+            }
+            log(LogTag::System, "INFO", &"-".repeat(50));
+
             // Wait between tests
             tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
         }
@@ -556,6 +567,187 @@ async fn test_single_swap(
 
     // Final analysis
     let analysis_result = analyze_swap_cycle(&buy_result, &sell_result, token, test_amount, expected_price).await;
+
+    // STEP 3: Advanced Transaction & Position Analysis using Core Functions
+    log(LogTag::System, "INFO", "");
+    log(LogTag::System, "INFO", "🧪 STEP 3: Advanced Transaction & Position Analysis");
+    log(LogTag::System, "INFO", &"=".repeat(80));
+    
+    // Analyze buy transaction using transaction.rs verification
+    if let Some(buy_signature) = &buy_result.transaction_signature {
+        log(LogTag::System, "INFO", "🔍 ANALYZING BUY TRANSACTION WITH TRANSACTION.RS:");
+        
+        match screenerbot::swaps::transaction::verify_position_entry_transaction(
+            buy_signature,
+            &token.mint,
+            test_amount
+        ).await {
+            Ok(entry_verification) => {
+                log(LogTag::System, "SUCCESS", "✅ Position Entry Verification Results:");
+                log(LogTag::System, "INFO", &format!("  • Transaction: {}", entry_verification.transaction_signature));
+                log(LogTag::System, "INFO", &format!("  • Success: {}", entry_verification.success));
+                log(LogTag::System, "INFO", &format!("  • Entry Verified: {}", entry_verification.entry_transaction_verified));
+                log(LogTag::System, "INFO", &format!("  • Tokens Received: {} raw", entry_verification.token_amount_received));
+                log(LogTag::System, "INFO", &format!("  • SOL Spent: {} lamports ({:.9} SOL)", 
+                    entry_verification.sol_spent, 
+                    screenerbot::rpc::lamports_to_sol(entry_verification.sol_spent)));
+                log(LogTag::System, "INFO", &format!("  • Effective Entry Price: {:.12} SOL/token", entry_verification.effective_entry_price));
+                log(LogTag::System, "INFO", &format!("  • ATA Created: {}", entry_verification.ata_created));
+                log(LogTag::System, "INFO", &format!("  • ATA Rent Paid: {} lamports ({:.9} SOL)", 
+                    entry_verification.ata_rent_paid,
+                    screenerbot::rpc::lamports_to_sol(entry_verification.ata_rent_paid)));
+                log(LogTag::System, "INFO", &format!("  • Transaction Fee: {} lamports ({:.9} SOL)", 
+                    entry_verification.transaction_fee,
+                    screenerbot::rpc::lamports_to_sol(entry_verification.transaction_fee)));
+                log(LogTag::System, "INFO", &format!("  • Total Cost: {:.9} SOL", entry_verification.total_cost_sol));
+                
+                // Compare with swap result
+                if let Some(swap_effective_price) = buy_result.effective_price {
+                    let price_diff = ((entry_verification.effective_entry_price - swap_effective_price) / swap_effective_price * 100.0).abs();
+                    log(LogTag::System, "INFO", "");
+                    log(LogTag::System, "INFO", "🔍 PRICE COMPARISON:");
+                    log(LogTag::System, "INFO", &format!("  • Swap Result Price: {:.12} SOL/token", swap_effective_price));
+                    log(LogTag::System, "INFO", &format!("  • Position Entry Price: {:.12} SOL/token", entry_verification.effective_entry_price));
+                    log(LogTag::System, "INFO", &format!("  • Price Difference: {:.2}%", price_diff));
+                    
+                    if price_diff > 1.0 {
+                        log(LogTag::System, "WARNING", &format!("⚠️ Significant price difference detected: {:.2}%", price_diff));
+                    } else {
+                        log(LogTag::System, "SUCCESS", "✅ Price calculations match within tolerance");
+                    }
+                }
+                
+                if let Some(error) = entry_verification.error {
+                    log(LogTag::System, "WARNING", &format!("⚠️ Entry verification error: {}", error));
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("❌ Position entry verification failed: {}", e));
+            }
+        }
+    }
+    
+    // Analyze sell transaction using transaction.rs verification
+    if let Some(sell_signature) = &sell_result.transaction_signature {
+        log(LogTag::System, "INFO", "");
+        log(LogTag::System, "INFO", "🔍 ANALYZING SELL TRANSACTION WITH TRANSACTION.RS:");
+        
+        let tokens_sold = sell_result.input_amount.parse::<u64>().unwrap_or(0);
+        match screenerbot::swaps::transaction::verify_position_exit_transaction(
+            sell_signature,
+            &token.mint,
+            tokens_sold
+        ).await {
+            Ok(exit_verification) => {
+                log(LogTag::System, "SUCCESS", "✅ Position Exit Verification Results:");
+                log(LogTag::System, "INFO", &format!("  • Transaction: {}", exit_verification.transaction_signature));
+                log(LogTag::System, "INFO", &format!("  • Success: {}", exit_verification.success));
+                log(LogTag::System, "INFO", &format!("  • Exit Verified: {}", exit_verification.exit_transaction_verified));
+                log(LogTag::System, "INFO", &format!("  • Tokens Sold: {} raw", exit_verification.token_amount_sold));
+                log(LogTag::System, "INFO", &format!("  • SOL Received: {} lamports ({:.9} SOL)", 
+                    exit_verification.sol_received, 
+                    screenerbot::rpc::lamports_to_sol(exit_verification.sol_received)));
+                log(LogTag::System, "INFO", &format!("  • Effective Exit Price: {:.12} SOL/token", exit_verification.effective_exit_price));
+                log(LogTag::System, "INFO", &format!("  • ATA Closed: {}", exit_verification.ata_closed));
+                log(LogTag::System, "INFO", &format!("  • ATA Rent Reclaimed: {} lamports ({:.9} SOL)", 
+                    exit_verification.ata_rent_reclaimed,
+                    screenerbot::rpc::lamports_to_sol(exit_verification.ata_rent_reclaimed)));
+                log(LogTag::System, "INFO", &format!("  • Transaction Fee: {} lamports ({:.9} SOL)", 
+                    exit_verification.transaction_fee,
+                    screenerbot::rpc::lamports_to_sol(exit_verification.transaction_fee)));
+                log(LogTag::System, "INFO", &format!("  • Net SOL Received: {:.9} SOL", exit_verification.net_sol_received));
+                
+                // Compare with swap result
+                if let Some(swap_effective_price) = sell_result.effective_price {
+                    let price_diff = ((exit_verification.effective_exit_price - swap_effective_price) / swap_effective_price * 100.0).abs();
+                    log(LogTag::System, "INFO", "");
+                    log(LogTag::System, "INFO", "🔍 SELL PRICE COMPARISON:");
+                    log(LogTag::System, "INFO", &format!("  • Swap Result Price: {:.12} SOL/token", swap_effective_price));
+                    log(LogTag::System, "INFO", &format!("  • Position Exit Price: {:.12} SOL/token", exit_verification.effective_exit_price));
+                    log(LogTag::System, "INFO", &format!("  • Price Difference: {:.2}%", price_diff));
+                    
+                    if price_diff > 1.0 {
+                        log(LogTag::System, "WARNING", &format!("⚠️ Significant sell price difference detected: {:.2}%", price_diff));
+                    } else {
+                        log(LogTag::System, "SUCCESS", "✅ Sell price calculations match within tolerance");
+                    }
+                }
+                
+                if let Some(error) = exit_verification.error {
+                    log(LogTag::System, "WARNING", &format!("⚠️ Exit verification error: {}", error));
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("❌ Position exit verification failed: {}", e));
+            }
+        }
+    }
+    
+    // Test position tracking functions (simulated)
+    log(LogTag::System, "INFO", "");
+    log(LogTag::System, "INFO", "🔍 TESTING POSITION TRACKING FUNCTIONS:");
+    
+    if let (Some(buy_signature), Some(sell_signature)) = (&buy_result.transaction_signature, &sell_result.transaction_signature) {
+        // Test position entry calculation using positions.rs patterns
+        let tokens_received = buy_result.output_amount.parse::<u64>().unwrap_or(0);
+        let sol_spent_lamports = screenerbot::rpc::sol_to_lamports(test_amount);
+        
+        // Simulate position creation
+        log(LogTag::System, "INFO", "📊 SIMULATED POSITION CREATION:");
+        log(LogTag::System, "INFO", &format!("  • Token: {} ({})", token.symbol, token.mint));
+        log(LogTag::System, "INFO", &format!("  • Entry TX: {}", buy_signature));
+        log(LogTag::System, "INFO", &format!("  • Tokens Acquired: {} raw", tokens_received));
+        log(LogTag::System, "INFO", &format!("  • SOL Invested: {:.9} SOL", test_amount));
+        
+        // Calculate what the position entry price would be
+        if tokens_received > 0 {
+            let token_decimals = screenerbot::tokens::decimals::get_token_decimals_from_chain(&token.mint).await.unwrap_or(6);
+            let tokens_actual = (tokens_received as f64) / (10_f64).powi(token_decimals as i32);
+            let position_entry_price = test_amount / tokens_actual;
+            
+            log(LogTag::System, "INFO", &format!("  • Tokens (decimal): {:.6}", tokens_actual));
+            log(LogTag::System, "INFO", &format!("  • Position Entry Price: {:.12} SOL/token", position_entry_price));
+            
+            // Compare all price calculations
+            log(LogTag::System, "INFO", "");
+            log(LogTag::System, "INFO", "🎯 COMPREHENSIVE PRICE VALIDATION:");
+            
+            if let Some(swap_price) = buy_result.effective_price {
+                log(LogTag::System, "INFO", &format!("  • Swap Engine Price: {:.12} SOL/token", swap_price));
+                let swap_diff = ((position_entry_price - swap_price) / swap_price * 100.0).abs();
+                log(LogTag::System, "INFO", &format!("    └─ vs Position: {:.2}% difference", swap_diff));
+            }
+            
+            if let Some(expected) = expected_price {
+                log(LogTag::System, "INFO", &format!("  • Expected Market Price: {:.12} SOL/token", expected));
+                let market_diff = ((position_entry_price - expected) / expected * 100.0).abs();
+                log(LogTag::System, "INFO", &format!("    └─ vs Position: {:.2}% difference", market_diff));
+            }
+            
+            // Test P&L calculation
+            if let Some(current_price) = expected_price {
+                let current_value = tokens_actual * current_price;
+                let pnl_sol = current_value - test_amount;
+                let pnl_percent = (pnl_sol / test_amount) * 100.0;
+                
+                log(LogTag::System, "INFO", "");
+                log(LogTag::System, "INFO", "💰 SIMULATED P&L CALCULATION:");
+                log(LogTag::System, "INFO", &format!("  • Entry Value: {:.9} SOL", test_amount));
+                log(LogTag::System, "INFO", &format!("  • Current Price: {:.12} SOL/token", current_price));
+                log(LogTag::System, "INFO", &format!("  • Current Value: {:.9} SOL", current_value));
+                log(LogTag::System, "INFO", &format!("  • P&L: {:.9} SOL ({:+.2}%)", pnl_sol, pnl_percent));
+                
+                if pnl_sol.abs() > test_amount * 0.5 {
+                    log(LogTag::System, "WARNING", "⚠️ P&L calculation shows unrealistic loss/gain (>50%)");
+                } else {
+                    log(LogTag::System, "SUCCESS", "✅ P&L calculation appears reasonable");
+                }
+            }
+        }
+    }
+    
+    log(LogTag::System, "INFO", "");
+    log(LogTag::System, "SUCCESS", "🎉 Advanced transaction and position analysis completed!");
 
     Ok(analysis_result)
 }

@@ -2718,8 +2718,8 @@ pub async fn verify_position_entry_transaction(
 
     // Calculate effective entry price from instruction data
     let effective_entry_price = if token_amount_received > 0 {
-        let sol_spent_for_tokens = sol_spent.saturating_sub(ata_rent_paid);
-        let sol_spent_actual = lamports_to_sol(sol_spent_for_tokens);
+        // For BUY transactions, use full SOL spent since ATA rent is net-zero (paid and reclaimed in same tx)
+        let sol_spent_actual = lamports_to_sol(sol_spent);
         let tokens_received_actual = (token_amount_received as f64) / 10f64.powi(verification_result.output_decimals as i32);
         
         if tokens_received_actual > 0.0 {

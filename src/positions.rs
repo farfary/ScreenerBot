@@ -3,6 +3,7 @@ use crate::global::*;
 use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
+use crate::rpc::lamports_to_sol;
 use crate::swaps::{ buy_token, sell_token };
 use crate::swaps::transaction::{
     TransactionMonitoringService, register_position_transaction, 
@@ -141,14 +142,33 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         // Use actual SOL invested vs SOL received for closed positions
         let sol_invested = position.entry_size_sol;
 
-        // Account for trading fees (buy + sell fees)
-        // NOTE: sol_received should already be the net amount from token sale only
-        // ATA rent reclaim (~0.002 SOL) is separate from trading P&L
-        let total_fees = 2.0 * TRANSACTION_FEE_SOL;
+        // Use actual transaction fees instead of hardcoded values
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let total_fees = buy_fee + sell_fee;
+        
         let net_pnl_sol = sol_received - sol_invested - total_fees;
-        let net_pnl_percent = (net_pnl_sol / sol_invested) * 100.0;
+        let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
+        let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
 
-        return (net_pnl_sol, net_pnl_percent);
+        // Log detailed PnL calculation for debugging
+        log(
+            LogTag::Trader,
+            "PNL_DETAILED",
+            &format!(
+                "💰 DETAILED PNL CALCULATION for {}:\n  Entry size: {:.9} SOL\n  SOL received: {:.9} SOL\n  Buy fee: {:.9} SOL\n  Sell fee: {:.9} SOL\n  Total fees: {:.9} SOL\n  Net P&L: {:.9} SOL ({:.2}%)",
+                position.symbol,
+                sol_invested,
+                sol_received,
+                buy_fee,
+                sell_fee,
+                total_fees,
+                net_pnl_sol,
+                net_pnl_percent
+            )
+        );
+
+        return (net_pnl_percent, net_pnl_sol);
     }
 
     // Fallback for closed positions without sol_received (backward compatibility)
@@ -181,8 +201,10 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             let entry_cost = position.entry_size_sol;
             let exit_value = ui_token_amount * effective_exit;
 
-            // Account for buy + sell fees
-            let total_fees = 2.0 * TRANSACTION_FEE_SOL;
+            // Account for actual buy + sell fees
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let total_fees = buy_fee + sell_fee;
             let net_pnl_sol = exit_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
@@ -191,7 +213,9 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // Fallback for closed positions without token amount
         let price_change = (effective_exit - entry_price) / entry_price;
-        let total_fees = 2.0 * TRANSACTION_FEE_SOL;
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let total_fees = buy_fee + sell_fee;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
@@ -228,8 +252,10 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             let current_value = ui_token_amount * current;
             let entry_cost = position.entry_size_sol;
 
-            // Account for buy fee (already paid) + estimated sell fee
-            let total_fees = 2.0 * TRANSACTION_FEE_SOL;
+            // Account for actual buy fee (already paid) + estimated sell fee
+            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+            let total_fees = buy_fee + estimated_sell_fee;
             let net_pnl_sol = current_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
@@ -238,7 +264,9 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // Fallback for open positions without token amount
         let price_change = (current - entry_price) / entry_price;
-        let total_fees = 2.0 * TRANSACTION_FEE_SOL;
+        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
+        let total_fees = buy_fee + estimated_sell_fee;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
@@ -278,6 +306,9 @@ pub struct Position {
     // Transaction verification status
     pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
     pub transaction_exit_verified: bool, // Whether exit transaction is fully verified
+    // Actual transaction fees (in lamports)
+    pub entry_fee_lamports: Option<u64>, // Actual entry transaction fee
+    pub exit_fee_lamports: Option<u64>, // Actual exit transaction fee
 }
 
 /// Updates position with current price to track extremes
@@ -505,6 +536,8 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                         liquidity_tier: calculate_liquidity_tier(token),
                         transaction_entry_verified: verification.entry_transaction_verified,
                         transaction_exit_verified: false,
+                        entry_fee_lamports: Some(verification.transaction_fee),
+                        exit_fee_lamports: None,
                     };
 
                     log(
@@ -810,6 +843,7 @@ pub async fn close_position(
                         position.sol_received = Some(verification.net_sol_received);
                         position.exit_transaction_signature = Some(transaction_signature.clone());
                         position.transaction_exit_verified = verification.exit_transaction_verified;
+                        position.exit_fee_lamports = Some(verification.transaction_fee);
 
                         // Calculate actual P&L using unified function
                         let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
