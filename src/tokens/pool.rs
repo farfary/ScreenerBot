@@ -2458,7 +2458,7 @@ impl PoolPriceCalculator {
                             price_sol: *price,
                             token_reserve: 0,
                             sol_reserve: 0,
-                            token_decimals: 6, // Default assumption
+                            token_decimals: 9, // Default assumption, should be fetched properly
                             sol_decimals: 9,
                         })
                     );
@@ -3154,7 +3154,7 @@ impl PoolPriceCalculator {
         }
 
         // Use decimal values from cache (since we skipped the pool structure parsing)
-        let token_0_decimals = get_cached_decimals(&coin_mint.to_string()).unwrap_or(6);
+        let token_0_decimals = get_cached_decimals(&coin_mint.to_string()).unwrap_or(9);
         let token_1_decimals = get_cached_decimals(&pc_mint.to_string()).unwrap_or(9); // SOL is 9 decimals
 
         if self.debug_enabled {
@@ -3984,7 +3984,7 @@ impl PoolPriceCalculator {
         }
 
         // Get correct decimals for the target token
-        let target_token_decimals = get_cached_decimals(token_mint).unwrap_or(6);
+        let target_token_decimals = get_cached_decimals(token_mint).unwrap_or(9);
         let sol_decimals = 9;
 
         // For Orca Whirlpool, token_0 is SOL, token_1 is the target token
@@ -4189,7 +4189,7 @@ impl PoolPriceCalculator {
 
         // For PUMP.FUN, the pool structure uses placeholder token mint
         // We need to use the target token mint and get correct decimals
-        let target_token_decimals = get_cached_decimals(token_mint).unwrap_or(6);
+        let target_token_decimals = get_cached_decimals(token_mint).unwrap_or(9);
         let sol_decimals = 9;
 
         // For PUMP.FUN pools, token_0 is always the target token, token_1 is always SOL
@@ -4514,7 +4514,7 @@ impl PoolPriceCalculator {
         };
 
         // Use default decimals for now - will be corrected in price calculation with actual target token
-        let token_decimals = 6; // Default for most tokens
+        let token_decimals = 9; // Default fallback - should use get_cached_decimals properly
         let sol_decimals = 9; // SOL always has 9 decimals
 
         if self.debug_enabled {
@@ -4644,7 +4644,7 @@ impl PoolPriceCalculator {
         let sol_mint = SOL_MINT.to_string();
 
         // Use default decimals for now - will be corrected in price calculation with actual target token
-        let token_decimals = 6; // Default for most PUMP.FUN tokens
+        let token_decimals = 9; // Default fallback - should use get_cached_decimals properly
         let sol_decimals = 9; // SOL always has 9 decimals
 
         // For PUMP.FUN pools, get reserves from the vault accounts

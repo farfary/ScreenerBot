@@ -388,6 +388,64 @@ async fn test_single_swap(
     log(LogTag::System, "SUCCESS", "✅ Buy transaction successful!");
     log_swap_result(&buy_result, "BUY");
 
+    // 🔍 DEBUG: Analyze buy transaction in detail
+    if let Some(signature) = &buy_result.transaction_signature {
+        log(LogTag::System, "DEBUG", "🔍 ANALYZING BUY TRANSACTION...");
+        log(LogTag::System, "DEBUG", &format!("📝 Transaction signature: {}", signature));
+        
+        // Analyze the buy transaction using instruction-based analysis
+        match screenerbot::swaps::transaction::verify_swap_transaction(
+            signature,
+            screenerbot::swaps::config::SOL_MINT,
+            &token.mint,
+            "buy"
+        ).await {
+            Ok(verification) => {
+                log(LogTag::System, "DEBUG", "✅ Transaction verification completed");
+                log(LogTag::System, "DEBUG", &format!("📊 INSTRUCTION ANALYSIS RESULTS:"));
+                log(LogTag::System, "DEBUG", &format!("  • Success: {}", verification.success));
+                log(LogTag::System, "DEBUG", &format!("  • Input amount: {:?} lamports", verification.input_amount));
+                log(LogTag::System, "DEBUG", &format!("  • Output amount: {:?} raw tokens", verification.output_amount));
+                log(LogTag::System, "DEBUG", &format!("  • SOL spent: {:?} lamports", verification.sol_spent));
+                log(LogTag::System, "DEBUG", &format!("  • SOL received: {:?} lamports", verification.sol_received));
+                log(LogTag::System, "DEBUG", &format!("  • Input mint: {}", verification.input_mint));
+                log(LogTag::System, "DEBUG", &format!("  • Output mint: {}", verification.output_mint));
+                log(LogTag::System, "DEBUG", &format!("  • Input decimals: {}", verification.input_decimals));
+                log(LogTag::System, "DEBUG", &format!("  • Output decimals: {}", verification.output_decimals));
+                log(LogTag::System, "DEBUG", &format!("  • Transaction fee: {} lamports", verification.transaction_fee));
+                log(LogTag::System, "DEBUG", &format!("  • ATA created: {}", verification.ata_created));
+                log(LogTag::System, "DEBUG", &format!("  • ATA closed: {}", verification.ata_closed));
+                log(LogTag::System, "DEBUG", &format!("  • ATA rent paid: {} lamports", verification.ata_rent_paid));
+                log(LogTag::System, "DEBUG", &format!("  • ATA rent reclaimed: {} lamports", verification.ata_rent_reclaimed));
+                log(LogTag::System, "DEBUG", &format!("  • Effective price: {:?} SOL/token", verification.effective_price));
+                
+                // Compare with quote amounts
+                let quote_input = buy_result.input_amount.parse::<u64>().unwrap_or(0);
+                let quote_output = buy_result.output_amount.parse::<u64>().unwrap_or(0);
+                log(LogTag::System, "DEBUG", &format!("📊 QUOTE vs INSTRUCTION COMPARISON:"));
+                log(LogTag::System, "DEBUG", &format!("  • Quote input: {} vs Instruction input: {:?}", quote_input, verification.input_amount));
+                log(LogTag::System, "DEBUG", &format!("  • Quote output: {} vs Instruction output: {:?}", quote_output, verification.output_amount));
+                
+                if let (Some(instr_input), Some(instr_output)) = (verification.input_amount, verification.output_amount) {
+                    let input_diff = ((instr_input as f64 - quote_input as f64) / quote_input as f64 * 100.0).abs();
+                    let output_diff = ((instr_output as f64 - quote_output as f64) / quote_output as f64 * 100.0).abs();
+                    log(LogTag::System, "DEBUG", &format!("  • Input difference: {:.2}%", input_diff));
+                    log(LogTag::System, "DEBUG", &format!("  • Output difference: {:.2}%", output_diff));
+                    
+                    if input_diff > 5.0 || output_diff > 5.0 {
+                        log(LogTag::System, "WARNING", "⚠️ Significant difference between quote and instruction amounts detected!");
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("❌ Transaction verification failed: {}", e));
+            }
+        }
+        
+        log(LogTag::System, "DEBUG", "🔍 BUY TRANSACTION ANALYSIS COMPLETE");
+        log(LogTag::System, "DEBUG", &"=".repeat(60));
+    }
+
     // Wait for transaction to settle
     log(LogTag::System, "INFO", "⏳ Waiting 10 seconds for transaction to settle...");
     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
@@ -437,6 +495,60 @@ async fn test_single_swap(
 
     log(LogTag::System, "SUCCESS", "✅ Sell transaction successful!");
     log_swap_result(&sell_result, "SELL");
+
+    // 📊 DETAILED SELL TRANSACTION ANALYSIS
+    log(LogTag::System, "INFO", "🔍 Analyzing sell transaction details...");
+    
+    if let Some(ref swap_data) = sell_result.swap_data {
+        // Log quote information
+        log(LogTag::System, "INFO", &format!("📈 Sell Quote Analysis:"));
+        log(LogTag::System, "INFO", &format!("  - Input Token: {}", swap_data.quote.input_mint));
+        log(LogTag::System, "INFO", &format!("  - Output Token: {}", swap_data.quote.output_mint));
+        log(LogTag::System, "INFO", &format!("  - Input Amount (quote): {} (raw: {}, decimals: {})", 
+            swap_data.quote.in_amount.parse::<f64>().unwrap_or(0.0) / 10f64.powi(swap_data.quote.in_decimals as i32),
+            swap_data.quote.in_amount, swap_data.quote.in_decimals));
+        log(LogTag::System, "INFO", &format!("  - Output Amount (quote): {} (raw: {}, decimals: {})",
+            swap_data.quote.out_amount.parse::<f64>().unwrap_or(0.0) / 10f64.powi(swap_data.quote.out_decimals as i32), 
+            swap_data.quote.out_amount, swap_data.quote.out_decimals));
+        log(LogTag::System, "INFO", &format!("  - Price Impact: {}%", swap_data.quote.price_impact_pct));
+    } else {
+        log(LogTag::System, "WARNING", "⚠️  No swap_data available in sell result!");
+    }
+    
+    // Log transaction analysis from SwapResult
+    log(LogTag::System, "INFO", &format!("📊 Sell Transaction Analysis:"));
+    log(LogTag::System, "INFO", &format!("  - Signature: {:?}", sell_result.transaction_signature));
+    log(LogTag::System, "INFO", &format!("  - Input Amount (parsed): {}", sell_result.input_amount));
+    log(LogTag::System, "INFO", &format!("  - Output Amount (parsed): {}", sell_result.output_amount));
+    log(LogTag::System, "INFO", &format!("  - Price Impact: {}", sell_result.price_impact));
+    log(LogTag::System, "INFO", &format!("  - Effective Price: {:?}", sell_result.effective_price));
+    log(LogTag::System, "INFO", &format!("  - Fee (lamports): {}", sell_result.fee_lamports));
+    log(LogTag::System, "INFO", &format!("  - Execution Time: {:.2}s", sell_result.execution_time));
+    
+    // Compare quote vs parsed amounts if both are available
+    if let Some(ref swap_data) = sell_result.swap_data {
+        let quote_input_raw = swap_data.quote.in_amount.parse::<f64>().unwrap_or(0.0);
+        let quote_output_raw = swap_data.quote.out_amount.parse::<f64>().unwrap_or(0.0);
+        let parsed_input_raw = sell_result.input_amount.parse::<f64>().unwrap_or(0.0);
+        let parsed_output_raw = sell_result.output_amount.parse::<f64>().unwrap_or(0.0);
+        
+        log(LogTag::System, "INFO", &format!("🔍 Sell Amount Verification:"));
+        log(LogTag::System, "INFO", &format!("  - Quote Input (raw): {:.0}", quote_input_raw));
+        log(LogTag::System, "INFO", &format!("  - Parsed Input (raw): {:.0}", parsed_input_raw));
+        log(LogTag::System, "INFO", &format!("  - Input Difference: {:.0} ({:.2}%)", 
+            (parsed_input_raw - quote_input_raw).abs(),
+            if quote_input_raw > 0.0 { 
+                ((parsed_input_raw - quote_input_raw).abs() / quote_input_raw) * 100.0 
+            } else { 0.0 }));
+        
+        log(LogTag::System, "INFO", &format!("  - Quote Output (raw): {:.0}", quote_output_raw));
+        log(LogTag::System, "INFO", &format!("  - Parsed Output (raw): {:.0}", parsed_output_raw));
+        log(LogTag::System, "INFO", &format!("  - Output Difference: {:.0} ({:.2}%)", 
+            (parsed_output_raw - quote_output_raw).abs(),
+            if quote_output_raw > 0.0 { 
+                ((parsed_output_raw - quote_output_raw).abs() / quote_output_raw) * 100.0 
+            } else { 0.0 }));
+    }
 
     // Wait for transaction to settle
     log(LogTag::System, "INFO", "⏳ Waiting 5 seconds for transaction to settle...");

@@ -719,6 +719,8 @@ pub async fn analyze_transaction_instructions(
     transaction_details: &crate::rpc::TransactionDetails,
     wallet_address: &str,
     expected_direction: &str, // "buy" or "sell"
+    expected_input_mint: &str,   // NEW: Filter for specific input mint
+    expected_output_mint: &str,  // NEW: Filter for specific output mint
 ) -> Result<InstructionSwapAnalysis, SwapError> {
     let mut analysis = InstructionSwapAnalysis {
         input_amount: None,
@@ -769,27 +771,47 @@ pub async fn analyze_transaction_instructions(
         }
     }
 
-    // Analyze token balance changes for swap amounts
+    // Analyze token balance changes for swap amounts - FILTER BY EXPECTED MINTS
     if let Some(pre_token_balances) = &meta.pre_token_balances {
         if let Some(post_token_balances) = &meta.post_token_balances {
+            
+            // Process input mint balance changes (tokens spent)
+            for pre_balance in pre_token_balances {
+                if pre_balance.mint == expected_input_mint {
+                    let pre_amount = pre_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                    
+                    // Find corresponding post-balance or assume 0 if account was closed
+                    let post_amount = post_token_balances
+                        .iter()
+                        .find(|post| post.account_index == pre_balance.account_index && post.mint == pre_balance.mint)
+                        .map(|post| post.ui_token_amount.amount.parse::<u64>().unwrap_or(0))
+                        .unwrap_or(0);
+                    
+                    if pre_amount > post_amount {
+                        // Input tokens were spent
+                        analysis.input_amount = Some(pre_amount - post_amount);
+                        analysis.input_mint = Some(pre_balance.mint.clone());
+                    }
+                }
+            }
+            
+            // Process output mint balance changes (tokens received)
             for post_balance in post_token_balances {
-                // Find corresponding pre-balance or assume 0 for new accounts
-                let pre_amount = pre_token_balances
-                    .iter()
-                    .find(|pre| pre.account_index == post_balance.account_index && pre.mint == post_balance.mint)
-                    .map(|pre| pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0))
-                    .unwrap_or(0);
-
-                let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
-
-                if post_amount > pre_amount {
-                    // Token balance increased (received tokens)
-                    analysis.output_amount = Some(post_amount - pre_amount);
-                    analysis.output_mint = Some(post_balance.mint.clone());
-                } else if pre_amount > post_amount {
-                    // Token balance decreased (spent tokens)
-                    analysis.input_amount = Some(pre_amount - post_amount);
-                    analysis.input_mint = Some(post_balance.mint.clone());
+                if post_balance.mint == expected_output_mint {
+                    let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                    
+                    // Find corresponding pre-balance or assume 0 for new accounts
+                    let pre_amount = pre_token_balances
+                        .iter()
+                        .find(|pre| pre.account_index == post_balance.account_index && pre.mint == post_balance.mint)
+                        .map(|pre| pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0))
+                        .unwrap_or(0);
+                    
+                    if post_amount > pre_amount {
+                        // Output tokens were received
+                        analysis.output_amount = Some(post_amount - pre_amount);
+                        analysis.output_mint = Some(post_balance.mint.clone());
+                    }
                 }
             }
         }
@@ -1283,8 +1305,8 @@ pub async fn verify_swap_transaction(
             price_impact: None,
             input_mint: input_mint.to_string(),
             output_mint: output_mint.to_string(),
-            input_decimals: if input_mint == SOL_MINT { 9 } else { 6 }, // Default, will be updated
-            output_decimals: if output_mint == SOL_MINT { 9 } else { 6 }, // Default, will be updated
+            input_decimals: if input_mint == SOL_MINT { 9 } else { 9 }, // Default fallback to 9
+            output_decimals: if output_mint == SOL_MINT { 9 } else { 9 }, // Default fallback to 9
             error: Some("Transaction failed on-chain".to_string()),
         });
     }
@@ -1309,7 +1331,9 @@ pub async fn verify_swap_transaction(
     let instruction_analysis = analyze_transaction_instructions(
         &transaction_details,
         &wallet_address,
-        expected_direction
+        expected_direction,
+        input_mint,
+        output_mint
     ).await?;
 
     if is_debug_swap_enabled() {
@@ -1334,13 +1358,13 @@ pub async fn verify_swap_transaction(
     let input_decimals = if input_mint == SOL_MINT { 
         9 
     } else { 
-        crate::tokens::decimals::get_token_decimals_from_chain(input_mint).await.unwrap_or(6) as u32
+        crate::tokens::decimals::get_token_decimals_from_chain(input_mint).await.unwrap_or(9) as u32
     };
     
     let output_decimals = if output_mint == SOL_MINT { 
         9 
     } else { 
-        crate::tokens::decimals::get_token_decimals_from_chain(output_mint).await.unwrap_or(6) as u32
+        crate::tokens::decimals::get_token_decimals_from_chain(output_mint).await.unwrap_or(9) as u32
     };
 
     // Step 5: Calculate effective price using the instruction data
@@ -1761,7 +1785,14 @@ pub async fn verify_position_entry_transaction(
     // Calculate effective entry price from instruction data
     let effective_entry_price = if token_amount_received > 0 {
         let sol_spent_for_tokens = sol_spent.saturating_sub(ata_rent_paid);
-        (sol_spent_for_tokens as f64) / (token_amount_received as f64) * 10f64.powi(verification_result.output_decimals as i32) / 10f64.powi(9)
+        let sol_spent_actual = lamports_to_sol(sol_spent_for_tokens);
+        let tokens_received_actual = (token_amount_received as f64) / 10f64.powi(verification_result.output_decimals as i32);
+        
+        if tokens_received_actual > 0.0 {
+            sol_spent_actual / tokens_received_actual
+        } else {
+            0.0
+        }
     } else {
         0.0
     };
@@ -1861,7 +1892,14 @@ pub async fn verify_position_exit_transaction(
     // Calculate effective exit price from instruction data
     let effective_exit_price = if token_amount_sold > 0 {
         let sol_from_sale = sol_received.saturating_sub(ata_rent_reclaimed);
-        (sol_from_sale as f64) / (token_amount_sold as f64) * 10f64.powi(verification_result.input_decimals as i32) / 10f64.powi(9)
+        let sol_received_actual = lamports_to_sol(sol_from_sale);
+        let tokens_sold_actual = (token_amount_sold as f64) / 10f64.powi(verification_result.input_decimals as i32);
+        
+        if tokens_sold_actual > 0.0 {
+            sol_received_actual / tokens_sold_actual
+        } else {
+            0.0
+        }
     } else {
         0.0
     };
