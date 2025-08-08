@@ -595,3 +595,103 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
 
     Ok(price_per_token / 1_000_000_000.0) // Convert back to SOL
 }
+
+/// Calculate effective price using instruction analysis for maximum accuracy
+/// This function uses transaction verification to get actual amounts instead of relying on
+/// potentially incorrect amounts from Jupiter multi-hop swap responses
+pub async fn calculate_effective_price_with_verification(
+    swap_result: &SwapResult,
+    input_mint: &str,
+    output_mint: &str,
+    direction: &str, // "buy" or "sell"
+    ata_rent_reclaimed: Option<u64>, // ATA rent from closure (lamports)
+) -> Result<f64, SwapError> {
+    if !swap_result.success {
+        return Err(SwapError::InvalidAmount("Cannot calculate price from failed swap".to_string()));
+    }
+
+    let transaction_signature = swap_result.transaction_signature.as_ref()
+        .ok_or_else(|| SwapError::TransactionError("No transaction signature available for verification".to_string()))?;
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "PRICE_VERIFICATION",
+            &format!("🔍 Calculating effective price using instruction analysis for {} transaction: {}", direction, &transaction_signature[..8])
+        );
+    }
+
+    // Use instruction analysis to get verified amounts
+    match super::transaction::verify_swap_transaction(
+        transaction_signature,
+        input_mint,
+        output_mint,
+        direction
+    ).await {
+        Ok(verification_result) if verification_result.success => {
+            // Use verified amounts from instruction analysis
+            let input_amount_raw = verification_result.input_amount
+                .ok_or_else(|| SwapError::TransactionError("No input amount in verification result".to_string()))?;
+            let output_amount_raw = verification_result.output_amount
+                .ok_or_else(|| SwapError::TransactionError("No output amount in verification result".to_string()))?;
+
+            if input_amount_raw == 0 || output_amount_raw == 0 {
+                return Err(SwapError::InvalidAmount("Cannot calculate price with zero amounts from verification".to_string()));
+            }
+
+            // Use verified decimals from instruction analysis
+            let input_decimals = verification_result.input_decimals;
+            let output_decimals = verification_result.output_decimals;
+
+            // Convert to normalized amounts
+            let input_normalized = (input_amount_raw as f64) / (10_f64).powi(input_decimals as i32);
+            let output_normalized = (output_amount_raw as f64) / (10_f64).powi(output_decimals as i32);
+
+            // Account for ATA rent if provided (for sell operations)
+            let adjusted_output = if let Some(ata_rent) = ata_rent_reclaimed {
+                let ata_rent_sol = lamports_to_sol(ata_rent);
+                output_normalized + ata_rent_sol // Add back ATA rent to the received amount
+            } else {
+                output_normalized
+            };
+
+            // Calculate effective price based on direction
+            let effective_price = match direction {
+                "buy" => {
+                    // Buy: SOL spent per token received
+                    // input_normalized = SOL spent, output_normalized = tokens received
+                    input_normalized / output_normalized
+                }
+                "sell" => {
+                    // Sell: SOL received per token sold  
+                    // input_normalized = tokens sold, output_normalized = SOL received
+                    adjusted_output / input_normalized
+                }
+                _ => return Err(SwapError::InvalidAmount(format!("Invalid direction: {}", direction)))
+            };
+
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "PRICE_VERIFICATION",
+                    &format!("✅ Verified effective price calculation: {} {} → {} {} = {:.12} SOL/token", 
+                        input_normalized, 
+                        if input_mint == SOL_MINT { "SOL" } else { "tokens" },
+                        adjusted_output,
+                        if output_mint == SOL_MINT { "SOL" } else { "tokens" },
+                        effective_price
+                    )
+                );
+            }
+
+            Ok(effective_price)
+        }
+        Ok(verification_result) => {
+            let error_msg = verification_result.error.unwrap_or("Unknown verification error".to_string());
+            Err(SwapError::TransactionError(format!("Transaction verification failed: {}", error_msg)))
+        }
+        Err(e) => {
+            Err(SwapError::TransactionError(format!("Could not verify transaction: {}", e)))
+        }
+    }
+}

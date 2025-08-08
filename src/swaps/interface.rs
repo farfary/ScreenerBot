@@ -142,7 +142,7 @@ pub async fn buy_token(
             }
         }
 
-        match crate::swaps::pricing::calculate_effective_price(
+        match crate::swaps::pricing::calculate_effective_price_with_verification(
             &swap_result,
             SOL_MINT,
             &token.mint,
@@ -157,7 +157,7 @@ pub async fn buy_token(
                     LogTag::Swap,
                     "PRICE",
                     &format!(
-                        "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token",
+                        "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token (verified)",
                         effective_price,
                         token.symbol
                     )
@@ -405,28 +405,54 @@ async fn sell_token_with_slippage(
             }
         }
 
-        // Calculate effective price manually since we don't have SwapData in unified result
-        let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
-        let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
-        
-        if input_tokens_raw > 0 && output_lamports > 0 {
-            // Get token decimals from cache
-            let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
-            let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
-            let output_sol = lamports_to_sol(output_lamports);
-            let effective_price = output_sol / input_tokens;
-            
-            swap_result.effective_price = Some(effective_price);
-
-            log(
-                LogTag::Swap,
-                "PRICE",
-                &format!(
-                    "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token",
-                    effective_price,
-                    token.symbol
-                )
-            );
+        // Calculate effective price using instruction analysis for accuracy
+        // This replaces the manual calculation to avoid issues with multi-hop Jupiter swaps
+        match crate::swaps::pricing::calculate_effective_price_with_verification(
+            &swap_result,
+            &token.mint,
+            SOL_MINT,
+            "sell",
+            None, // ATA rent handling in verification
+        ).await {
+            Ok(effective_price) => {
+                swap_result.effective_price = Some(effective_price);
+                
+                log(
+                    LogTag::Swap,
+                    "PRICE",
+                    &format!(
+                        "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (verified)",
+                        effective_price,
+                        token.symbol
+                    )
+                );
+            }
+            Err(e) => {
+                log(LogTag::Swap, "WARNING", &format!("Could not calculate verified effective price: {}", e));
+                
+                // Fallback to original method with warning
+                let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
+                let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
+                
+                if input_tokens_raw > 0 && output_lamports > 0 {
+                    let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
+                    let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
+                    let output_sol = lamports_to_sol(output_lamports);
+                    let effective_price = output_sol / input_tokens;
+                    
+                    swap_result.effective_price = Some(effective_price);
+                    
+                    log(
+                        LogTag::Swap,
+                        "PRICE",
+                        &format!(
+                            "⚠️ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (fallback - may be inaccurate)",
+                            effective_price,
+                            token.symbol
+                        )
+                    );
+                }
+            }
         }
     }
 
