@@ -127,6 +127,7 @@ pub async fn calculate_effective_price(
 
 /// Alternative signature for direct calculation from raw transaction data
 /// Used by the transaction verification system
+/// FIXED: Now properly handles instruction vs quote data mismatches
 pub fn calculate_effective_price_from_raw(
     expected_direction: &str,
     input_amount: Option<u64>,
@@ -137,34 +138,125 @@ pub fn calculate_effective_price_from_raw(
     input_decimals: u32,
     output_decimals: u32,
 ) -> Option<f64> {
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "PRICE_DEBUG_RAW",
+            &format!(
+                "🔍 Raw Price Calculation Debug:
+  Direction: {}
+  Input amount: {:?} (decimals: {})
+  Output amount: {:?} (decimals: {})
+  SOL spent: {:?}
+  SOL received: {:?}
+  ATA rent reclaimed: {} lamports",
+                expected_direction,
+                input_amount,
+                input_decimals,
+                output_amount,
+                output_decimals,
+                sol_spent,
+                sol_received,
+                ata_rent_reclaimed
+            )
+        );
+    }
+
     match expected_direction {
         "buy" => {
-            // Buy: calculate SOL per token
-            if let (Some(sol_spent_val), Some(tokens_received)) = (sol_spent, output_amount) {
-                if tokens_received > 0 {
-                    let sol_for_tokens = lamports_to_sol(sol_spent_val);
-                    let actual_tokens = (tokens_received as f64) / (10_f64).powi(output_decimals as i32);
-                    if actual_tokens > 0.0 {
-                        return Some(sol_for_tokens / actual_tokens);
+            // Buy: calculate SOL per token using actual SOL spent and tokens received
+            // Use SOL spent if available, otherwise use input amount
+            let sol_amount = sol_spent.or(input_amount);
+            let token_amount = output_amount;
+            
+            if let (Some(sol_val), Some(tokens_val)) = (sol_amount, token_amount) {
+                if tokens_val > 0 && sol_val > 0 {
+                    let sol_spent_actual = lamports_to_sol(sol_val);
+                    let tokens_received_actual = (tokens_val as f64) / (10_f64).powi(output_decimals as i32);
+                    
+                    if tokens_received_actual > 0.0 {
+                        let price = sol_spent_actual / tokens_received_actual;
+                        
+                        if is_debug_swap_enabled() {
+                            log(
+                                LogTag::Swap,
+                                "PRICE_CALC_BUY",
+                                &format!(
+                                    "📊 BUY Price Calculation:
+  SOL spent: {} lamports = {:.9} SOL
+  Tokens received: {} raw = {:.6} tokens
+  Effective price: {:.10} SOL per token",
+                                    sol_val,
+                                    sol_spent_actual,
+                                    tokens_val,
+                                    tokens_received_actual,
+                                    price
+                                )
+                            );
+                        }
+                        
+                        return Some(price);
                     }
                 }
             }
         }
         "sell" => {
-            // Sell: calculate SOL per token, including ATA rent
-            if let (Some(tokens_sold), Some(sol_received_val)) = (input_amount, sol_received) {
-                if tokens_sold > 0 {
-                    let net_sol_received = lamports_to_sol(sol_received_val + ata_rent_reclaimed);
-                    let actual_tokens = (tokens_sold as f64) / (10_f64).powi(input_decimals as i32);
-                    if actual_tokens > 0.0 {
-                        return Some(net_sol_received / actual_tokens);
+            // Sell: calculate SOL per token, including ATA rent reclaimed
+            let token_amount = input_amount;
+            let sol_amount = sol_received;
+            
+            if let (Some(tokens_val), Some(sol_val)) = (token_amount, sol_amount) {
+                if tokens_val > 0 && sol_val > 0 {
+                    // Add ATA rent to total SOL received
+                    let total_sol_received = lamports_to_sol(sol_val + ata_rent_reclaimed);
+                    let tokens_sold_actual = (tokens_val as f64) / (10_f64).powi(input_decimals as i32);
+                    
+                    if tokens_sold_actual > 0.0 {
+                        let price = total_sol_received / tokens_sold_actual;
+                        
+                        if is_debug_swap_enabled() {
+                            log(
+                                LogTag::Swap,
+                                "PRICE_CALC_SELL",
+                                &format!(
+                                    "📊 SELL Price Calculation:
+  Tokens sold: {} raw = {:.6} tokens
+  SOL received: {} lamports = {:.9} SOL
+  ATA rent reclaimed: {} lamports = {:.9} SOL
+  Total SOL: {:.9} SOL
+  Effective price: {:.10} SOL per token",
+                                    tokens_val,
+                                    tokens_sold_actual,
+                                    sol_val,
+                                    lamports_to_sol(sol_val),
+                                    ata_rent_reclaimed,
+                                    lamports_to_sol(ata_rent_reclaimed),
+                                    total_sol_received,
+                                    price
+                                )
+                            );
+                        }
+                        
+                        return Some(price);
                     }
                 }
             }
         }
-        _ => {}
+        _ => {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "PRICE_ERROR", &format!("Invalid direction: {}", expected_direction));
+            }
+        }
     }
 
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "PRICE_CALC_FAILED",
+            &format!("❌ Price calculation failed for direction: {}", expected_direction)
+        );
+    }
+    
     None
 }
 
@@ -390,6 +482,95 @@ pub fn validate_quote_price(
     }
 
     Ok(())
+}
+
+/// Validates quote predictions against actual transaction results
+/// NEW: Detects when quotes don't match reality for debugging
+pub fn validate_quote_vs_actual(
+    quote_input: u64,
+    quote_output: u64,
+    actual_input: Option<u64>,
+    actual_output: Option<u64>,
+    direction: &str,
+    token_name: &str,
+) -> (bool, String) {
+    let mut issues = Vec::new();
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "QUOTE_VALIDATION",
+            &format!(
+                "🔍 Quote vs Actual Validation for {}:
+  Direction: {}
+  Quote - Input: {}, Output: {}
+  Actual - Input: {:?}, Output: {:?}",
+                token_name,
+                direction,
+                quote_input,
+                quote_output,
+                actual_input,
+                actual_output
+            )
+        );
+    }
+    
+    // Check input amount accuracy
+    if let Some(actual_in) = actual_input {
+        let input_diff_percent = if quote_input > 0 {
+            ((actual_in as f64 - quote_input as f64) / quote_input as f64 * 100.0).abs()
+        } else {
+            0.0
+        };
+        
+        if input_diff_percent > 5.0 { // 5% tolerance
+            issues.push(format!(
+                "Input mismatch: quoted {} vs actual {} ({:.1}% difference)",
+                quote_input, actual_in, input_diff_percent
+            ));
+        }
+    }
+    
+    // Check output amount accuracy  
+    if let Some(actual_out) = actual_output {
+        let output_diff_percent = if quote_output > 0 {
+            ((actual_out as f64 - quote_output as f64) / quote_output as f64 * 100.0).abs()
+        } else {
+            0.0
+        };
+        
+        if output_diff_percent > 10.0 { // 10% tolerance for output
+            issues.push(format!(
+                "Output mismatch: quoted {} vs actual {} ({:.1}% difference)",
+                quote_output, actual_out, output_diff_percent
+            ));
+        }
+        
+        // Critical check: massive deviation (>50% indicates fundamental error)
+        if output_diff_percent > 50.0 {
+            issues.push(format!(
+                "⚠️ CRITICAL: Output deviation {}% indicates quote/execution mismatch", 
+                output_diff_percent
+            ));
+        }
+    }
+    
+    let is_valid = issues.is_empty();
+    let summary = if is_valid {
+        "✅ Quote predictions match actual results".to_string()
+    } else {
+        format!("❌ Quote validation failed: {}", issues.join("; "))
+    };
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            if is_valid { "QUOTE_VALID" } else { "QUOTE_INVALID" },
+            &summary
+        );
+    }
+    
+    (is_valid, summary)
 }
 
 /// Gets current token price by requesting a small quote

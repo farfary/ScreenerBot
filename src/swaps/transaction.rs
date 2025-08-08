@@ -533,6 +533,7 @@ pub struct InstructionSwapAnalysis {
     pub ata_closed: bool,
     pub ata_rent_paid: u64,
     pub ata_rent_reclaimed: u64,
+    pub ata_rent_amount: Option<u64>, // For system instruction ATA creation
     pub priority_fee: Option<u64>,
 }
 
@@ -730,6 +731,7 @@ pub async fn analyze_transaction_instructions(
         ata_closed: false,
         ata_rent_paid: 0,
         ata_rent_reclaimed: 0,
+        ata_rent_amount: None,
         priority_fee: None,
     };
 
@@ -856,6 +858,7 @@ pub async fn analyze_transaction_instructions(
 }
 
 /// Analyze SPL Token instructions for transfer amounts
+/// ENHANCED: Better amount extraction and validation
 async fn analyze_spl_token_instruction(
     parsed: &ParsedInstruction,
     analysis: &mut InstructionSwapAnalysis,
@@ -885,30 +888,116 @@ async fn analyze_spl_token_instruction(
 
                     let source = info.get("source").and_then(|s| s.as_str()).unwrap_or("");
                     let destination = info.get("destination").and_then(|d| d.as_str()).unwrap_or("");
+                    let authority = info.get("authority").and_then(|a| a.as_str()).unwrap_or("");
 
-                    // Determine if this is an outgoing or incoming transfer for our wallet
-                    let is_outgoing = source.contains(wallet_address) || 
-                                    info.get("authority").and_then(|a| a.as_str()).unwrap_or("") == wallet_address;
+                    // Enhanced wallet detection logic
+                    let is_outgoing = source.contains(wallet_address) || authority == wallet_address;
                     let is_incoming = destination.contains(wallet_address);
+                    
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "TOKEN_TRANSFER_DEBUG",
+                            &format!(
+                                "🔍 Token Transfer Analysis:
+  Type: {}
+  Amount: {} (raw)
+  Mint: {}
+  Source: {} | Dest: {} | Authority: {}
+  Wallet: {}
+  Outgoing: {} | Incoming: {}",
+                                instruction_type,
+                                amount,
+                                &mint[..8],
+                                &source[..8],
+                                &destination[..8], 
+                                &authority[..8],
+                                &wallet_address[..8],
+                                is_outgoing,
+                                is_incoming
+                            )
+                        );
+                    }
 
-                    if is_outgoing && analysis.input_amount.is_none() {
-                        analysis.input_amount = Some(amount);
-                        analysis.input_mint = Some(mint);
-                    } else if is_incoming && analysis.output_amount.is_none() {
-                        analysis.output_amount = Some(amount);
-                        analysis.output_mint = Some(mint);
+                    // Improved assignment logic - prioritize larger amounts and SOL mint
+                    if is_outgoing {
+                        // For outgoing transfers, this is usually the input (what we're selling/spending)
+                        if analysis.input_amount.is_none() || 
+                           (mint == SOL_MINT && analysis.input_mint.as_ref() != Some(&SOL_MINT.to_string())) ||
+                           amount > analysis.input_amount.unwrap_or(0) {
+                            analysis.input_amount = Some(amount);
+                            analysis.input_mint = Some(mint.clone());
+                            
+                            // Track SOL movements separately
+                            if mint == SOL_MINT {
+                                analysis.sol_spent = Some(amount);
+                            }
+                        }
+                    }
+                    
+                    if is_incoming {
+                        // For incoming transfers, this is usually the output (what we're receiving)
+                        if analysis.output_amount.is_none() || 
+                           (mint == SOL_MINT && analysis.output_mint.as_ref() != Some(&SOL_MINT.to_string())) ||
+                           amount > analysis.output_amount.unwrap_or(0) {
+                            analysis.output_amount = Some(amount);
+                            analysis.output_mint = Some(mint.clone());
+                            
+                            // Track SOL movements separately
+                            if mint == SOL_MINT {
+                                analysis.sol_received = Some(amount);
+                            }
+                        }
                     }
                 }
             }
             "closeAccount" => {
-                // ATA closure detected
+                // Enhanced ATA closure tracking
                 analysis.ata_closed = true;
                 if let Some(info) = parsed.parsed.get("info") {
-                    // The rent goes to the destination (usually the wallet)
-                    if let Some(destination) = info.get("destination").and_then(|d| d.as_str()) {
-                        if destination == wallet_address {
-                            let current_ata_rent = get_ata_rent_lamports().await.unwrap_or(2_039_280);
-                            analysis.ata_rent_reclaimed = current_ata_rent;
+                    let account = info.get("account")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("");
+                    
+                    let destination = info.get("destination")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                        
+                    let owner = info.get("owner")
+                        .and_then(|o| o.as_str())
+                        .unwrap_or("");
+                    
+                    if is_debug_swap_enabled() {
+                        log(
+                            LogTag::Swap,
+                            "ATA_CLOSE_DEBUG",
+                            &format!(
+                                "🔒 ATA Closure Analysis:
+  Account: {}
+  Destination: {}
+  Owner: {}
+  Is Wallet Destination: {}
+  Is Wallet Owner: {}",
+                                &account[..std::cmp::min(account.len(), 8)],
+                                &destination[..std::cmp::min(destination.len(), 8)],
+                                &owner[..std::cmp::min(owner.len(), 8)],
+                                destination == wallet_address,
+                                owner == wallet_address
+                            )
+                        );
+                    }
+                    
+                    // Track ATA closures where wallet receives the rent
+                    if destination == wallet_address {
+                        let current_ata_rent = get_ata_rent_lamports().await.unwrap_or(2_039_280);
+                        analysis.ata_rent_reclaimed = current_ata_rent;
+                        
+                        if is_debug_swap_enabled() {
+                            log(
+                                LogTag::Swap,
+                                "ATA_RENT_RECLAIM",
+                                &format!("✅ Detected ATA rent reclamation: {} lamports", current_ata_rent)
+                            );
                         }
                     }
                 }
@@ -921,6 +1010,7 @@ async fn analyze_spl_token_instruction(
 }
 
 /// Analyze main transaction instructions for ATA creation and priority fees
+/// ENHANCED: Better system instruction analysis and ATA detection
 async fn analyze_main_instruction(
     instruction: &serde_json::Value,
     analysis: &mut InstructionSwapAnalysis,
@@ -934,15 +1024,50 @@ async fn analyze_main_instruction(
                         decoded_data[0], decoded_data[1], decoded_data[2], decoded_data[3]
                     ]);
                     
-                    // Compute budget instructions
+                    // System program instructions
                     match instruction_type {
-                        2 => { // SetComputeUnitPrice
+                        0 => { // CreateAccount
+                            // System program CreateAccount instruction
+                            if decoded_data.len() >= 52 {
+                                let lamports = u64::from_le_bytes([
+                                    decoded_data[4], decoded_data[5], decoded_data[6], decoded_data[7],
+                                    decoded_data[8], decoded_data[9], decoded_data[10], decoded_data[11]
+                                ]);
+                                let space = u64::from_le_bytes([
+                                    decoded_data[12], decoded_data[13], decoded_data[14], decoded_data[15],
+                                    decoded_data[16], decoded_data[17], decoded_data[18], decoded_data[19]
+                                ]);
+                                
+                                // Check if this looks like ATA creation (165 bytes, typical ATA rent)
+                                if space == 165 && lamports > 2_000_000 && lamports < 3_000_000 {
+                                    analysis.ata_created = true;
+                                    analysis.ata_rent_amount = Some(lamports);
+                                    
+                                    if is_debug_swap_enabled() {
+                                        log(
+                                            LogTag::Swap,
+                                            "ATA_CREATE_SYSTEM",
+                                            &format!("✅ Detected ATA creation via system: {} lamports, {} bytes", lamports, space)
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        2 => { // SetComputeUnitPrice (priority fees)
                             if decoded_data.len() >= 12 {
                                 let price = u64::from_le_bytes([
                                     decoded_data[4], decoded_data[5], decoded_data[6], decoded_data[7],
                                     decoded_data[8], decoded_data[9], decoded_data[10], decoded_data[11]
                                 ]);
                                 analysis.priority_fee = Some(price);
+                                
+                                if is_debug_swap_enabled() {
+                                    log(
+                                        LogTag::Swap,
+                                        "PRIORITY_FEE_DEBUG",
+                                        &format!("💰 Detected priority fee: {} micro-lamports per CU", price)
+                                    );
+                                }
                             }
                         }
                         _ => {}
@@ -956,19 +1081,59 @@ async fn analyze_main_instruction(
 }
 
 /// Analyze transaction logs for ATA operations
+/// ENHANCED: Better log parsing and debugging information
 async fn analyze_transaction_logs(
     log_messages: &[String],
     analysis: &mut InstructionSwapAnalysis,
 ) -> Result<(), SwapError> {
-    for log in log_messages {
-        let log_lower = log.to_lowercase();
+    for (i, log_message) in log_messages.iter().enumerate() {
+        let log_lower = log_message.to_lowercase();
         
-        if log_lower.contains("create") && (log_lower.contains("account") || log_lower.contains("ata")) {
-            analysis.ata_created = true;
+        if is_debug_swap_enabled() {
+            log(
+                LogTag::Swap,
+                "LOG_ANALYSIS_DEBUG",
+                &format!("📋 Log #{}: {}", i + 1, 
+                    if log_message.len() > 100 { 
+                        format!("{}...", &log_message[..100]) 
+                    } else { 
+                        log_message.clone() 
+                    }
+                )
+            );
         }
         
-        if log_lower.contains("close") && (log_lower.contains("account") || log_lower.contains("ata")) {
+        // Check for ATA creation patterns
+        if (log_lower.contains("create") && (log_lower.contains("account") || log_lower.contains("ata"))) ||
+           (log_lower.contains("program 11111111111111111111111111111111 invoke") && 
+            (log_lower.contains("create") || log_lower.contains("allocate"))) {
+            analysis.ata_created = true;
+            
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "ATA_CREATE_LOG",
+                    &format!("✅ Detected ATA creation in log: {}", 
+                        if log_message.len() > 60 { &log_message[..60] } else { log_message }
+                    )
+                );
+            }
+        }
+        
+        // Check for ATA closure patterns
+        if (log_lower.contains("close") && (log_lower.contains("account") || log_lower.contains("ata"))) ||
+           log_lower.contains("closeaccount") {
             analysis.ata_closed = true;
+            
+            if is_debug_swap_enabled() {
+                log(
+                    LogTag::Swap,
+                    "ATA_CLOSE_LOG",
+                    &format!("✅ Detected ATA closure in log: {}", 
+                        if log_message.len() > 60 { &log_message[..60] } else { log_message }
+                    )
+                );
+            }
         }
     }
 

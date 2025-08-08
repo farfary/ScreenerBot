@@ -76,8 +76,16 @@ fn print_help() {
 }
 
 /// Test configuration
-const TEST_SOL_AMOUNT: f64 = 0.001; // 0.001 SOL for testing
+const TEST_SOL_AMOUNTS: [f64; 3] = [0.001, 0.002, 0.003]; // Multiple test amounts
 const MAX_PRICE_SLIPPAGE: f64 = 10.0; // 10% maximum acceptable slippage
+
+/// Test tokens for comprehensive analysis
+const TEST_TOKENS: [&str; 4] = [
+    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", // Bonk
+    "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", // dogwifhat  
+    "6p6xGHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN", // Unknown token
+    "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H8Dfn",   // Unknown token
+];
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -97,6 +105,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Check for special test modes
+    if args.len() >= 2 && args[1] == "test-all" {
+        // Run comprehensive tests on all predefined tokens
+        return run_comprehensive_tests().await;
+    }
+
     let token_mint = &args[1];
 
     // Set up debug flags for global access
@@ -104,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "INFO", "🚀 Starting swap debug tool");
     log(LogTag::System, "INFO", &format!("Target token mint: {}", token_mint));
-    log(LogTag::System, "INFO", &format!("Test amount: {:.6} SOL", TEST_SOL_AMOUNT));
+    log(LogTag::System, "INFO", &format!("Test amounts: {:?} SOL", TEST_SOL_AMOUNTS));
 
     // Validate configuration
     let _configs = match read_configs() {
@@ -148,19 +162,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Check initial SOL balance
+    // Check initial SOL balance - need enough for largest test + fees
     log(LogTag::System, "INFO", "💰 Checking initial wallet balance...");
+    let max_test_amount = TEST_SOL_AMOUNTS.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+    let required_balance = max_test_amount + 0.005; // Extra for fees
+    
     let initial_sol_balance = match get_sol_balance(&wallet_address).await {
         Ok(balance) => {
             log(LogTag::System, "INFO", &format!("Initial SOL balance: {:.6} SOL", balance));
-            if balance < TEST_SOL_AMOUNT + 0.002 {
-                // Extra for fees
+            if balance < required_balance {
                 log(
                     LogTag::System,
                     "ERROR",
                     &format!(
                         "Insufficient SOL balance. Need at least {:.6} SOL, have {:.6} SOL",
-                        TEST_SOL_AMOUNT + 0.002,
+                        required_balance,
                         balance
                     )
                 );
@@ -255,30 +271,237 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "INFO", &format!("Using token: {} ({})", token.symbol, token.name));
 
-    // Check initial token balance
-    let initial_token_balance = match get_token_balance(&wallet_address, token_mint).await {
-        Ok(balance) => {
-            log(
-                LogTag::System,
-                "INFO",
-                &format!("Initial {} balance: {} tokens", token.symbol, balance)
-            );
-            balance
-        }
+    // Run single token test with first amount
+    run_single_token_test(&token, TEST_SOL_AMOUNTS[0], &wallet_address, initial_sol_balance).await
+}
+
+/// Run comprehensive tests on all predefined tokens
+async fn run_comprehensive_tests() -> Result<(), Box<dyn std::error::Error>> {
+    log(LogTag::System, "INFO", "🧪 Running comprehensive swap tests on all predefined tokens");
+    
+    // Initialize everything
+    let _configs = match read_configs() {
+        Ok(configs) => configs,
         Err(e) => {
-            log(LogTag::System, "INFO", &format!("No initial {} balance ({})", token.symbol, e));
-            0
+            log(LogTag::System, "ERROR", &format!("Failed to read configs: {}", e));
+            std::process::exit(1);
         }
     };
+
+    if let Err(e) = init_rpc_client() {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize RPC client: {}", e));
+        std::process::exit(1);
+    }
+
+    if let Err(e) = init_dexscreener_api().await {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize DexScreener API: {}", e));
+        std::process::exit(1);
+    }
+
+    let wallet_address = get_wallet_address()?;
+    let initial_sol_balance = get_sol_balance(&wallet_address).await?;
+    
+    log(LogTag::System, "INFO", &format!("Wallet: {}...", &wallet_address[..8]));
+    log(LogTag::System, "INFO", &format!("Initial balance: {:.6} SOL", initial_sol_balance));
+
+    // Test each token with different amounts
+    for token_mint in TEST_TOKENS.iter() {
+        log(LogTag::System, "INFO", "");
+        log(LogTag::System, "INFO", &format!("🎯 Testing token: {}", token_mint));
+        log(LogTag::System, "INFO", "=".repeat(80));
+
+        // Get token info
+        let token = match get_token_from_mint_global_api(token_mint).await {
+            Ok(Some(token)) => token,
+            Ok(None) => {
+                log(LogTag::System, "WARNING", &format!("Token {} not found, skipping", token_mint));
+                continue;
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("Failed to get token {}: {}", token_mint, e));
+                continue;
+            }
+        };
+
+        // Test with multiple amounts
+        for &amount in TEST_SOL_AMOUNTS.iter() {
+            log(LogTag::System, "INFO", "");
+            log(LogTag::System, "INFO", &format!("💰 Testing {} with {:.6} SOL", token.symbol, amount));
+            log(LogTag::System, "INFO", "-".repeat(50));
+
+            match test_single_swap(&token, amount, &wallet_address).await {
+                Ok(_) => {
+                    log(LogTag::System, "SUCCESS", &format!("✅ {} test with {:.6} SOL completed", token.symbol, amount));
+                }
+                Err(e) => {
+                    log(LogTag::System, "ERROR", &format!("❌ {} test with {:.6} SOL failed: {}", token.symbol, amount, e));
+                }
+            }
+
+            // Wait between tests
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        }
+    }
+
+    log(LogTag::System, "SUCCESS", "🎉 Comprehensive tests completed!");
+    Ok(())
+}
+
+/// Run test for a single token with specified amount
+async fn run_single_token_test(
+    token: &screenerbot::tokens::types::Token,
+    test_amount: f64,
+    wallet_address: &str,
+    initial_sol_balance: f64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    log(LogTag::System, "INFO", &format!("🎯 Testing {} with {:.6} SOL", token.symbol, test_amount));
+    
+    // Check balance is sufficient
+    if initial_sol_balance < test_amount + 0.005 {
+        log(LogTag::System, "ERROR", &format!("Insufficient balance for test amount {:.6} SOL", test_amount));
+        return Err("Insufficient balance".into());
+    }
+
+    test_single_swap(token, test_amount, wallet_address).await
+}
+
+/// Test a single swap cycle with specified token and amount
+async fn test_single_swap(
+    token: &screenerbot::tokens::types::Token,
+    test_amount: f64,
+    wallet_address: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+
+/// Test a single swap cycle with specified token and amount
+async fn test_single_swap(
+    token: &screenerbot::tokens::types::Token,
+    test_amount: f64,
+    wallet_address: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Get token decimals
+    let token_decimals = match get_token_decimals_from_chain(&token.mint).await {
+        Ok(decimals) => {
+            log(LogTag::System, "INFO", &format!("Token decimals: {}", decimals));
+            decimals
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to get token decimals: {}", e));
+            return Err(e.into());
+        }
+    };
+
+    // Get current price from multiple sources for comparison
+    let api_price = get_token_price_safe(&token.mint).await;
+    let dexscreener_price = token.price_dexscreener_sol;
+    
+    log(LogTag::System, "INFO", "📊 Price Comparison:");
+    if let Some(price) = api_price {
+        log(LogTag::System, "INFO", &format!("  API Price: {:.10} SOL", price));
+    } else {
+        log(LogTag::System, "WARNING", "  API Price: Not available");
+    }
+    
+    if let Some(price) = dexscreener_price {
+        log(LogTag::System, "INFO", &format!("  DexScreener Price: {:.10} SOL", price));
+    } else {
+        log(LogTag::System, "WARNING", "  DexScreener Price: Not available");
+    }
+
+    // Use the best available price for validation
+    let expected_price = api_price.or(dexscreener_price);
+
+    // Check initial balances
+    let initial_sol_balance = get_sol_balance(wallet_address).await.unwrap_or(0.0);
+    let initial_token_balance = get_token_balance(wallet_address, &token.mint).await.unwrap_or(0);
+
+    log(LogTag::System, "INFO", &format!("📊 Initial balances:"));
+    log(LogTag::System, "INFO", &format!("  SOL: {:.6}", initial_sol_balance));
+    log(LogTag::System, "INFO", &format!("  {}: {} tokens", token.symbol, initial_token_balance));
 
     // STEP 1: Buy tokens with SOL
     log(LogTag::System, "INFO", "");
     log(LogTag::System, "INFO", "🎯 STEP 1: Buying tokens with SOL");
-    log(LogTag::System, "INFO", "==================================================");
+    log(LogTag::System, "INFO", "=".repeat(50));
 
-    let expected_price = if current_price > 0.0 { Some(current_price) } else { None };
+    let buy_result = match buy_token(&token, test_amount, expected_price).await {
+        Ok(result) => {
+            log(LogTag::System, "SUCCESS", "✅ Buy transaction successful!");
+            log_swap_result(&result, "BUY");
+            result
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("❌ Buy transaction failed: {}", e));
+            return Err(e.into());
+        }
+    };
 
-    let buy_result = match buy_token(&token, TEST_SOL_AMOUNT, expected_price).await {
+    // Wait for transaction to settle
+    log(LogTag::System, "INFO", "⏳ Waiting 10 seconds for transaction to settle...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+    // Check balances after buy
+    let sol_balance_after_buy = get_sol_balance(wallet_address).await.unwrap_or(0.0);
+    let token_balance_after_buy = get_token_balance(wallet_address, &token.mint).await.unwrap_or(0);
+
+    log(LogTag::System, "INFO", &format!("📊 Balances after buy:"));
+    log(LogTag::System, "INFO", &format!("  SOL: {:.6} (change: {:.6})", sol_balance_after_buy, sol_balance_after_buy - initial_sol_balance));
+    log(LogTag::System, "INFO", &format!("  {}: {} tokens (change: {})", token.symbol, token_balance_after_buy, token_balance_after_buy - initial_token_balance));
+
+    // Calculate tokens received
+    let tokens_received = token_balance_after_buy - initial_token_balance;
+    let tokens_received_swap = buy_result.output_amount.parse::<u64>().unwrap_or(0);
+
+    let tokens_to_sell = if tokens_received > 0 {
+        tokens_received
+    } else if tokens_received_swap > 0 {
+        log(LogTag::System, "WARNING", "⚠️ Using swap result data for tokens received");
+        tokens_received_swap
+    } else {
+        log(LogTag::System, "ERROR", "❌ No tokens received from buy transaction!");
+        return Err("No tokens received".into());
+    };
+
+    log(LogTag::System, "SUCCESS", &format!("✅ Successfully bought {} tokens", tokens_to_sell));
+
+    // STEP 2: Sell tokens back to SOL
+    log(LogTag::System, "INFO", "");
+    log(LogTag::System, "INFO", "🎯 STEP 2: Selling tokens back to SOL");
+    log(LogTag::System, "INFO", "=".repeat(50));
+
+    // Calculate expected SOL output for validation
+    let expected_sol_output = if let Some(price) = expected_price {
+        let actual_tokens = (tokens_to_sell as f64) / (10_f64).powi(token_decimals as i32);
+        let estimated_sol = price * actual_tokens;
+        log(LogTag::System, "INFO", &format!("Expected SOL output: {:.6} SOL", estimated_sol));
+        Some(estimated_sol)
+    } else {
+        None
+    };
+
+    let sell_result = match sell_token(&token, tokens_to_sell, expected_sol_output).await {
+        Ok(result) => {
+            log(LogTag::System, "SUCCESS", "✅ Sell transaction successful!");
+            log_swap_result(&result, "SELL");
+            result
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("❌ Sell transaction failed: {}", e));
+            return Err(e.into());
+        }
+    };
+
+    // Wait for transaction to settle
+    log(LogTag::System, "INFO", "⏳ Waiting 5 seconds for transaction to settle...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+    // Final analysis
+    analyze_swap_cycle(&buy_result, &sell_result, token, test_amount, expected_price).await;
+
+    Ok(())
+}
+
+/// Log detailed swap result information
+fn log_swap_result(result: &screenerbot::utils::SwapResult, operation: &str) {
         Ok(result) => {
             log(LogTag::System, "SUCCESS", &format!("✅ Buy transaction successful!"));
             log(

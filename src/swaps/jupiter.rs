@@ -3,6 +3,7 @@
 /// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
 
 use crate::tokens::Token;
+use crate::tokens::decimals::get_token_decimals_from_chain;
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
 use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
@@ -282,7 +283,7 @@ pub async fn get_jupiter_quote(
     }
 
     // Convert Jupiter quote to unified SwapData format
-    convert_jupiter_quote_to_swap_data(quote_response)
+    convert_jupiter_quote_to_swap_data(quote_response).await
 }
 
 /// Builds a swap transaction from Jupiter API
@@ -555,16 +556,45 @@ pub async fn execute_jupiter_swap(
 }
 
 /// Converts Jupiter quote response to unified SwapData format
-fn convert_jupiter_quote_to_swap_data(jupiter_quote: JupiterQuoteResponse) -> Result<SwapData, SwapError> {
+async fn convert_jupiter_quote_to_swap_data(jupiter_quote: JupiterQuoteResponse) -> Result<SwapData, SwapError> {
     // Create SwapQuote from Jupiter response
+    // CRITICAL FIX: Get actual token decimals instead of hardcoding to 9
+    let input_decimals = if jupiter_quote.input_mint == SOL_MINT { 
+        9 
+    } else { 
+        get_token_decimals_from_chain(&jupiter_quote.input_mint).await.unwrap_or(9) 
+    };
+    
+    let output_decimals = if jupiter_quote.output_mint == SOL_MINT { 
+        9 
+    } else { 
+        get_token_decimals_from_chain(&jupiter_quote.output_mint).await.unwrap_or(9) 
+    };
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "JUPITER_DECIMALS_DEBUG",
+            &format!(
+                "🔢 Jupiter Decimals Resolution:
+  Input mint: {} -> {} decimals
+  Output mint: {} -> {} decimals",
+                &jupiter_quote.input_mint[..8],
+                input_decimals,
+                &jupiter_quote.output_mint[..8],
+                output_decimals
+            )
+        );
+    }
+
     let swap_quote = SwapQuote {
         input_mint: jupiter_quote.input_mint,
         in_amount: jupiter_quote.in_amount,
         output_mint: jupiter_quote.output_mint,
         out_amount: jupiter_quote.out_amount,
         other_amount_threshold: jupiter_quote.other_amount_threshold,
-        in_decimals: 9, // Default for Jupiter
-        out_decimals: 9, // Default for Jupiter
+        in_decimals: input_decimals as u8,
+        out_decimals: output_decimals as u8,
         swap_mode: jupiter_quote.swap_mode,
         slippage_bps: jupiter_quote.slippage_bps.to_string(),
         platform_fee: jupiter_quote.platform_fee.map(|pf| serde_json::to_string(&pf).unwrap_or_default()),
