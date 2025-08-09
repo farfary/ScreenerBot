@@ -104,6 +104,13 @@ async fn main() {
     }
     log(LogTag::System, "INFO", "Wallet tracker initialized successfully");
 
+    // Initialize wallet transaction manager for efficient transaction caching
+    if let Err(e) = screenerbot::wallet_transactions::initialize_wallet_transaction_manager().await {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize wallet transaction manager: {}", e));
+        std::process::exit(1);
+    }
+    log(LogTag::System, "INFO", "Wallet transaction manager initialized successfully");
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();

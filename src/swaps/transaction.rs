@@ -917,9 +917,13 @@ impl TransactionMonitoringService {
                                         position.token_amount = Some(entry_verification.token_amount_received);
                                         position.effective_entry_price = Some(entry_verification.effective_entry_price);
                                         
+                                        // FIXED: Update entry_size_sol with actual SOL spent (excluding ATA rent)
+                                        // Use sol_spent which contains only tokens + fees, not ATA rent
+                                        position.entry_size_sol = lamports_to_sol(entry_verification.sol_spent);
+                                        
                                         log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
-                                            &format!("✅ Position entry updated with verification data: {} | TX: {} | Tokens: {} | Price: {:.12} SOL", 
-                                                position.symbol, &signature[..8], entry_verification.token_amount_received, entry_verification.effective_entry_price));
+                                            &format!("✅ Position entry updated with verification data: {} | TX: {} | Tokens: {} | Price: {:.12} SOL | Entry size: {:.9} SOL", 
+                                                position.symbol, &signature[..8], entry_verification.token_amount_received, entry_verification.effective_entry_price, position.entry_size_sol));
                                     } else {
                                         log(LogTag::Swap, "POSITION_UPDATE_ERROR", 
                                             &format!("❌ Failed to extract token amount for {}: verification failed", position.symbol));
@@ -3300,10 +3304,18 @@ pub async fn verify_position_entry_transaction(
 
     // Extract values from instruction-based analysis
     let token_amount_received = verification_result.output_amount.unwrap_or(0);
-    let sol_spent = verification_result.sol_spent.unwrap_or(0);
+    let total_sol_spent = verification_result.sol_spent.unwrap_or(0);
     let ata_created = verification_result.ata_created;
     let ata_rent_paid = verification_result.ata_rent_paid;
     let transaction_fee = verification_result.transaction_fee;
+
+    // Calculate actual swap cost (excluding ATA rent)
+    // FIXED: When ATA is created, subtract ATA rent from total SOL spent to get actual swap cost
+    let sol_spent_swap_only = if ata_created && ata_rent_paid > 0 {
+        total_sol_spent.saturating_sub(ata_rent_paid)
+    } else {
+        total_sol_spent
+    };
 
     // Calculate effective entry price from instruction data (SWAP-ONLY semantics)
     // Definition: use quoted SOL input (exclude fees and ATA rent) divided by tokens received.
@@ -3316,8 +3328,8 @@ pub async fn verify_position_entry_transaction(
                 // Preferred path: use the originally intended SOL input
                 expected_sol_spent / tokens_received_actual
             } else {
-                // Fallback: derive from net SOL spent (may include rent/fees)
-                let sol_spent_actual = lamports_to_sol(sol_spent);
+                // Fallback: derive from net SOL spent (SWAP-ONLY, excluding ATA rent)
+                let sol_spent_actual = lamports_to_sol(sol_spent_swap_only);
                 sol_spent_actual / tokens_received_actual
             }
         } else {
@@ -3327,12 +3339,12 @@ pub async fn verify_position_entry_transaction(
         0.0
     };
 
-    // Calculate total cost
-    let total_cost_sol = lamports_to_sol(sol_spent + transaction_fee);
+    // Calculate total cost (includes ATA rent for reference)
+    let total_cost_sol = lamports_to_sol(total_sol_spent + transaction_fee);
 
     // Validate results
     let verification_success = token_amount_received > 0 && 
-                              sol_spent > 0 && 
+                              sol_spent_swap_only > 0 && 
                               effective_entry_price > 0.0;
 
     // Log verification results
@@ -3341,12 +3353,25 @@ pub async fn verify_position_entry_transaction(
             LogTag::Swap,
             "POSITION_ENTRY_SUCCESS",
             &format!(
-                "✅ Entry verified using instruction analysis: {} tokens received, {:.9} SOL spent, price: {:.12} SOL/token",
+                "✅ Entry verified using instruction analysis: {} tokens received, {:.9} SOL spent (swap-only), price: {:.12} SOL/token",
                 token_amount_received,
-                lamports_to_sol(sol_spent),
+                lamports_to_sol(sol_spent_swap_only),
                 effective_entry_price
             )
         );
+        
+        // Additional logging for ATA rent tracking
+        if ata_created && ata_rent_paid > 0 {
+            log(
+                LogTag::Swap,
+                "POSITION_ENTRY_SUCCESS",
+                &format!(
+                    "ATA rent details: {:.9} SOL rent paid, total transaction: {:.9} SOL",
+                    lamports_to_sol(ata_rent_paid),
+                    lamports_to_sol(total_sol_spent)
+                )
+            );
+        }
     } else {
         log(
             LogTag::Swap,
@@ -3354,7 +3379,7 @@ pub async fn verify_position_entry_transaction(
             &format!(
                 "⚠️ Entry verification incomplete: tokens={}, sol_spent={}, price={:.12}",
                 token_amount_received,
-                sol_spent,
+                sol_spent_swap_only,
                 effective_entry_price
             )
         );
@@ -3365,7 +3390,7 @@ pub async fn verify_position_entry_transaction(
         success: verification_success,
         error: None,
         token_amount_received,
-        sol_spent,
+        sol_spent: sol_spent_swap_only, // FIXED: Use swap-only amount (excluding ATA rent)
         effective_entry_price,
         entry_transaction_verified: verification_success,
         ata_created,
@@ -3453,12 +3478,15 @@ pub async fn verify_position_exit_transaction(
     // Calculate net SOL received (SWAP-ONLY, excluding ATA rent and fees)
     // Definition: exact SOL received from the token sale route, independent of ATA rent reclaim.
     // Rationale: P&L uses this swap-only SOL and accounts for fees separately.
-    let tokens_sold_ui = if verification_result.input_decimals > 0 {
-        (token_amount_sold as f64) / 10f64.powi(verification_result.input_decimals as i32)
+    // FIXED: Use actual SOL from transaction, subtract ATA rent if reclaimed
+    let actual_swap_sol = if ata_closed && ata_rent_reclaimed > 0 {
+        // ATA was closed and rent reclaimed - subtract rent from total SOL received
+        sol_received.saturating_sub(ata_rent_reclaimed)
     } else {
-        token_amount_sold as f64
+        // No ATA rent reclaim - use total SOL received
+        sol_received
     };
-    let net_sol_received = tokens_sold_ui * effective_exit_price;
+    let net_sol_received = lamports_to_sol(actual_swap_sol);
 
     // Validate results
     let verification_success = token_amount_sold > 0 && 

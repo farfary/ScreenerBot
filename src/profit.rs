@@ -36,7 +36,7 @@ const SAFE_MAX_TIME: f64 = 90.0; // Safe tokens - 1.5 hours
 const MEDIUM_MAX_TIME: f64 = 60.0; // Medium risk tokens - 1 hour
 const RISKY_MAX_TIME: f64 = 45.0; // Risky tokens - 45 minutes
 const DANGEROUS_MAX_TIME: f64 = 30.0; // Dangerous tokens - 30 minutes
-const MIN_HOLD_TIME: f64 = 1.0; // Minimum hold time for all positions
+const MIN_HOLD_TIME: f64 = 0.5; // Minimum hold time for all positions
 
 // 🎯 OPTIMIZED PROFIT TARGETS - CORRECTED RISK-BASED STRATEGY
 // LOWER RISK = HIGHER TARGETS + LONGER TIME (more patience for safer tokens)

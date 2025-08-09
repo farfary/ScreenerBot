@@ -195,3 +195,6 @@ fast = []
 # Full feature set
 full = ["web", "telegram", "logging", "firebase", "jupiter", "ui", "time-zones", "http-client", "crypto-extra"]
 
+[[bin]]
+name = "tool_analyze_wallet_swaps"
+path = "src/bin/tool_analyze_wallet_swaps.rs"
