@@ -958,7 +958,31 @@ fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
 
 impl ClosedPositionDisplay {
     fn from_position(position: &Position) -> Self {
-        // For closed positions, prioritize effective exit price over regular exit price
+        // Check if position is fully verified (both entry and exit must be verified for closed positions)
+        let is_verified = position.transaction_entry_verified && position.transaction_exit_verified;
+        
+        if !is_verified {
+            // For unverified positions, hide sensitive data
+            let duration = if let Some(exit_time) = position.exit_time {
+                format_duration_compact(position.entry_time, exit_time)
+            } else {
+                format_duration_compact(position.entry_time, Utc::now())
+            };
+
+            return Self {
+                symbol: position.symbol.clone(),
+                mint: position.mint.clone(),
+                entry_price: "UNVERIFIED".to_string(),
+                exit_price: "UNVERIFIED".to_string(),
+                size_sol: format!("{:.6}", position.entry_size_sol),
+                pnl_sol: "UNVERIFIED".to_string(),
+                pnl_percent: "UNVERIFIED".to_string(),
+                duration,
+                status: "🔍 UNVERIFIED".to_string(),
+            };
+        }
+
+        // For verified positions, show full details
         let exit_price = position.effective_exit_price.unwrap_or(
             position.exit_price.unwrap_or(0.0)
         );
@@ -1005,6 +1029,33 @@ impl ClosedPositionDisplay {
 
 impl OpenPositionDisplay {
     fn from_position(position: &Position, current_price: Option<f64>) -> Self {
+        // Check if position entry is verified (for open positions, only entry needs to be verified)
+        let is_verified = position.transaction_entry_verified;
+        
+        let duration = format_duration_compact(position.entry_time, Utc::now());
+
+        if !is_verified {
+            // For unverified positions, hide sensitive data
+            let current_price_str = if current_price.is_some() {
+                "UNVERIFIED".to_string()
+            } else {
+                "N/A".to_string()
+            };
+
+            return Self {
+                symbol: position.symbol.clone(),
+                mint: position.mint.clone(),
+                entry_price: "UNVERIFIED".to_string(),
+                current_price: current_price_str,
+                size_sol: format!("{:.6}", position.entry_size_sol),
+                pnl_sol: "UNVERIFIED".to_string(),
+                pnl_percent: "UNVERIFIED".to_string(),
+                duration,
+                status: "🔍 UNVERIFIED".to_string(),
+            };
+        }
+
+        // For verified positions, show full details
         let current_price_str = if let Some(price) = current_price {
             format!("{:.11}", price)
         } else {
@@ -1027,8 +1078,6 @@ impl OpenPositionDisplay {
         } else {
             ("N/A".to_string(), "N/A".to_string())
         };
-
-        let duration = format_duration_compact(position.entry_time, Utc::now());
 
         let status = if let Some(price) = current_price {
             let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));

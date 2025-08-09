@@ -168,7 +168,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             )
         );
 
-        return (net_pnl_percent, net_pnl_sol);
+        return (net_pnl_sol, net_pnl_percent);
     }
 
     // Fallback for closed positions without sol_received (backward compatibility)
