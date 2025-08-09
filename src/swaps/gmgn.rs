@@ -5,9 +5,8 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
 use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled};
-use crate::utils::{get_random_partner_id, create_randomized_http_client};
 use super::config::{
-    GMGN_QUOTE_API, GMGN_ANTI_MEV, 
+    GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, 
     API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
     GMGN_DEFAULT_SWAP_MODE, SOL_MINT
 };
@@ -123,9 +122,6 @@ pub async fn get_gmgn_quote(
         );
     }
 
-    // Generate random partner ID for each request
-    let partner_id = get_random_partner_id();
-
     let url = format!(
         "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
         GMGN_QUOTE_API,
@@ -137,7 +133,7 @@ pub async fn get_gmgn_quote(
         swap_mode,
         fee,
         is_anti_mev,
-        partner_id
+        GMGN_PARTNER
     );
 
     if is_debug_swap_enabled() {
@@ -157,7 +153,7 @@ pub async fn get_gmgn_quote(
                 url,
                 input_amount,
                 (slippage * 100.0) as u16,
-                partner_id
+                GMGN_PARTNER
             )
         );
         
@@ -192,9 +188,7 @@ pub async fn get_gmgn_quote(
         )
     );
 
-    // Create randomized HTTP client
-    let client = create_randomized_http_client()
-        .map_err(|e| SwapError::ConfigError(format!("Failed to create HTTP client: {}", e)))?;
+    let client = reqwest::Client::new();
     let mut last_error = None;
 
     // Retry up to configured attempts with increasing delays

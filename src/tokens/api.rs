@@ -3,7 +3,6 @@
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_api_enabled;
 use crate::swaps::config::SOL_MINT;
-use crate::utils::{ get_random_user_agent, create_randomized_http_client };
 
 // =============================================================================
 // DEXSCREENER API CONFIGURATION CONSTANTS
@@ -54,15 +53,13 @@ pub struct DexScreenerApi {
 impl DexScreenerApi {
     /// Create new DexScreener API client
     pub fn new() -> Self {
-        let user_agent = get_random_user_agent();
-        
-        if is_debug_api_enabled() {
-            log(LogTag::Api, "USER_AGENT", &format!("Using random user agent: {}", user_agent));
-        }
-        
         Self {
-            client: create_randomized_http_client()
-                .expect("Failed to create randomized HTTP client"),
+            client: reqwest::Client
+                ::builder()
+                .timeout(Duration::from_secs(30))
+                .user_agent("ScreenerBot/1.0")
+                .build()
+                .expect("Failed to create HTTP client"),
             rate_limiter: Arc::new(Semaphore::new(DEXSCREENER_RATE_LIMIT_PER_MINUTE)),
             stats: ApiStats::new(),
             last_request_time: None,
