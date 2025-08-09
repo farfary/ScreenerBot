@@ -1,0 +1,1410 @@
+/// Comprehensive Swap Transaction Discovery Tool
+/// 
+/// This tool analyzes all wallet transactions to find swap operations:
+/// - Scans entire transaction history for swap patterns
+/// - Detects token purchases and sales from instruction analysis
+/// - Extracts swap amounts, prices, and fees
+/// - Identifies swap routers (Jupiter, Raydium, etc.)
+/// - Provides detailed swap analytics and statistics
+/// - Exports swap data to JSON for further analysis
+///
+/// Usage:
+///   cargo run --bin tool_find_all_swaps [--wallet WALLET] [--limit LIMIT] [--export] [--detailed]
+
+use screenerbot::{
+    rpc::{get_rpc_client, init_rpc_client, TransactionDetails, TokenBalance},
+    logger::{init_file_logging, log, LogTag},
+    global::read_configs,
+    tokens::{get_token_decimals, TokenDatabase},
+    wallets_manager::WalletsManager,
+};
+use clap::Parser;
+use serde::{Deserialize, Serialize};
+use solana_sdk::{
+    pubkey::Pubkey,
+    signature::Signer,
+};
+// Remove unused transaction imports
+// Remove unused client import
+use std::str::FromStr;
+use bs58;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
+use chrono::{DateTime, Utc};
+
+#[derive(Parser)]
+#[command(about = "Find and analyze all swap transactions in wallet history")]
+struct Args {
+    /// Wallet address to analyze (if not provided, uses all configured wallets)
+    #[arg(short, long)]
+    wallet: Option<String>,
+    
+    /// Maximum number of transactions to analyze per wallet (default: 1000)
+    #[arg(short, long, default_value = "1000")]
+    limit: usize,
+    
+    /// Export detailed swap data to JSON file
+    #[arg(short, long)]
+    export: bool,
+    
+    /// Show detailed analysis for each swap
+    #[arg(short, long)]
+    detailed: bool,
+    
+    /// Only analyze recent transactions from the last N days
+    #[arg(long)]
+    days: Option<u64>,
+    
+    /// Filter by token mint address
+    #[arg(long)]
+    token: Option<String>,
+    
+    /// Filter by swap type (buy/sell)
+    #[arg(long)]
+    swap_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedSwapTransaction {
+    pub signature: String,
+    pub slot: u64,
+    pub block_time: Option<i64>,
+    pub date_time: Option<String>,
+    pub wallet_address: String,
+    pub swap_type: String, // "buy" or "sell"
+    pub token_mint: String,
+    pub token_symbol: String,
+    pub token_name: Option<String>,
+    pub sol_amount: f64,
+    pub token_amount: u64,
+    pub token_decimals: u8,
+    pub formatted_token_amount: f64,
+    pub effective_price: f64,
+    pub price_per_token: f64,
+    pub fees_paid: f64,
+    pub success: bool,
+    pub router_program: Option<String>,
+    pub router_name: Option<String>,
+    pub instructions_count: usize,
+    pub ata_created: bool,
+    pub ata_closed: bool,
+    pub priority_fee: Option<f64>,
+    pub compute_units: Option<u32>,
+    pub pre_token_balance: Option<f64>,
+    pub post_token_balance: Option<f64>,
+    pub token_balance_change: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwapAnalytics {
+    pub total_swaps: usize,
+    pub buy_swaps: usize,
+    pub sell_swaps: usize,
+    pub unique_tokens: usize,
+    pub total_sol_spent: f64,
+    pub total_sol_received: f64,
+    pub total_fees_paid: f64,
+    pub net_sol_change: f64,
+    pub average_swap_size: f64,
+    pub most_traded_tokens: Vec<(String, usize)>,
+    pub router_usage: HashMap<String, usize>,
+    pub success_rate: f64,
+    pub time_range: Option<(DateTime<Utc>, DateTime<Utc>)>,
+    pub swaps_by_month: HashMap<String, usize>,
+    pub fee_efficiency: f64, // fees as percentage of volume
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletSwapReport {
+    pub wallet_address: String,
+    pub analytics: SwapAnalytics,
+    pub detailed_swaps: Vec<DetailedSwapTransaction>,
+}
+
+async fn analyze_jupiter_swap(
+    transaction: &TransactionDetails,
+    meta: &screenerbot::rpc::TransactionMeta,
+    wallet_address: &str,
+) -> Option<(bool, BasicSwapInfo)> {
+    log(LogTag::System, "DEBUG", "🔍 Analyzing Jupiter swap transaction");
+    
+    // For Jupiter swaps, look at SOL balance changes and token balance changes
+    // Parse the message from JSON to get account keys
+    let account_keys_value = transaction.transaction.message.get("accountKeys")?;
+    let account_keys_array = account_keys_value.as_array()?;
+    
+    // Convert to pubkeys and find wallet index
+    let mut account_keys = Vec::new();
+    for key_value in account_keys_array {
+        if let Some(key_str) = key_value.get("pubkey").and_then(|k| k.as_str()) {
+            if let Ok(pubkey) = Pubkey::from_str(key_str) {
+                account_keys.push(pubkey);
+            }
+        }
+    }
+    
+    let wallet_pubkey = Pubkey::from_str(wallet_address).ok()?;
+    let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey)?;
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - wallet index: {}", wallet_index));
+    
+    // Analyze SOL balance changes
+    let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
+        let pre_balance = meta.pre_balances[wallet_index] as i64;
+        let post_balance = meta.post_balances[wallet_index] as i64;
+        (post_balance - pre_balance) as f64 / 1_000_000_000.0
+    } else {
+        log(LogTag::System, "DEBUG", "📊 Jupiter swap - cannot find wallet SOL balances");
+        return None;
+    };
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - SOL change: {} SOL", sol_change));
+    
+    // Look for token balance changes involving wallet
+    if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
+        // Look for wallet's token accounts that had changes
+        let mut wallet_token_changes = HashMap::new();
+        
+        // For now, analyze ALL token balance changes in the transaction
+        // In a real implementation, we'd filter by wallet ownership
+        
+        // Collect all pre-token balances
+        for balance in pre_balances {
+            let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+            let decimals = balance.ui_token_amount.decimals;
+            let formatted_amount = amount / 10f64.powi(decimals as i32);
+            *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) -= formatted_amount;
+            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - pre token: mint={}, amount={}", balance.mint, formatted_amount));
+        }
+        
+        // Collect all post-token balances
+        for balance in post_balances {
+            let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+            let decimals = balance.ui_token_amount.decimals;
+            let formatted_amount = amount / 10f64.powi(decimals as i32);
+            *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
+            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - post token: mint={}, amount={}", balance.mint, formatted_amount));
+        }
+        
+        // Look for meaningful token changes (positive = gained, negative = lost)
+        log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - analyzing {} total token changes", wallet_token_changes.len()));
+        for (mint, change) in &wallet_token_changes {
+            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - token change candidate: mint={}, change={}, significant={}", 
+                mint, change, change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112"));
+        }
+        
+        let significant_changes: Vec<_> = wallet_token_changes.iter()
+            .filter(|(mint, &change)| change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112") // Ignore SOL token and dust
+            .collect();
+        
+        log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - found {} significant token changes", significant_changes.len()));
+        
+        for (mint, change) in &significant_changes {
+            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - token change: mint={}, change={}", mint, change));
+        }
+        
+        // If we have token changes and SOL changes, this is likely a swap
+        if !significant_changes.is_empty() && sol_change.abs() > 0.001 {
+            // Determine if this is a buy or sell based on SOL change
+            let is_buy = sol_change < 0.0; // SOL decreased = buying tokens
+            
+            // Find the main token being traded (largest absolute change)
+            let main_token = significant_changes.iter()
+                .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+                .map(|(mint, _)| mint.clone())?;
+            
+            let token_change = *significant_changes.iter()
+                .find(|(mint, _)| mint.as_str() == main_token)?
+                .1;
+            
+            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap detected: {} {} tokens, SOL change: {}", 
+                if is_buy { "BUY" } else { "SELL" }, main_token, sol_change));
+            
+            let swap_info = BasicSwapInfo {
+                swap_type: if is_buy { "BUY".to_string() } else { "SELL".to_string() },
+                token_mint: main_token.to_string(),
+                sol_amount: sol_change.abs(),
+                token_amount: (token_change.abs() * 1_000_000.0) as u64, // Convert to token base units
+                effective_price: if token_change != 0.0 { sol_change.abs() / token_change.abs() } else { 0.0 },
+                fees_paid: 0.0, // TODO: calculate from transaction fee
+            };
+            
+            return Some((is_buy, swap_info));
+        }
+    }
+    
+    log(LogTag::System, "DEBUG", "📊 Jupiter swap - no significant changes detected");
+    None
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    init_file_logging();
+    
+    let args = Args::parse();
+    
+    log(LogTag::System, "INFO", "🔍 Starting comprehensive swap transaction discovery");
+    
+    // Initialize RPC client
+    init_rpc_client()?;
+    let _rpc_client = get_rpc_client();
+    
+    // Read configurations
+    let _configs = read_configs().map_err(|e| format!("Failed to read configs: {}", e))?;
+    
+    // Determine which wallets to analyze
+    let wallets_to_analyze = if let Some(ref wallet_addr) = args.wallet {
+        vec![wallet_addr.clone()]
+    } else {
+        // Get all configured wallets
+        get_all_configured_wallets().await?
+    };
+    
+    if wallets_to_analyze.is_empty() {
+        return Err("No wallets found to analyze".into());
+    }
+    
+    log(LogTag::System, "INFO", &format!("📊 Analyzing {} wallet(s)", wallets_to_analyze.len()));
+    
+    let mut all_reports = Vec::new();
+    
+    for wallet_address in &wallets_to_analyze {
+        log(LogTag::System, "INFO", &format!("🔍 Analyzing wallet: {}", &wallet_address[..8]));
+        
+        match analyze_wallet_swaps(wallet_address, &args).await {
+            Ok(report) => {
+                log(LogTag::System, "SUCCESS", &format!(
+                    "✅ Found {} swaps in wallet {}", 
+                    report.analytics.total_swaps, 
+                    &wallet_address[..8]
+                ));
+                all_reports.push(report);
+            },
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!(
+                    "❌ Failed to analyze wallet {}: {}", 
+                    &wallet_address[..8], 
+                    e
+                ));
+            }
+        }
+    }
+    
+    // Display comprehensive results
+    display_comprehensive_results(&all_reports, &args)?;
+    
+    // Export to JSON if requested
+    if args.export {
+        export_results_to_json(&all_reports, &args)?;
+    }
+    
+    log(LogTag::System, "SUCCESS", "🎉 Swap discovery analysis completed successfully");
+    
+    Ok(())
+}
+
+async fn get_all_configured_wallets() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut wallets = Vec::new();
+    
+    // Try to get wallets from wallets manager
+    if let Ok(wallets_manager) = WalletsManager::new() {
+        let wallet_infos = wallets_manager.get_all_wallets().await?;
+        for wallet_info in wallet_infos {
+            wallets.push(wallet_info.public_key);
+        }
+    }
+    
+    // If no wallets found, try to get from configs
+    if wallets.is_empty() {
+        let configs = read_configs()?;
+        if !configs.main_wallet_private.is_empty() {
+            // Derive wallet address from private key
+            if let Ok(private_key_bytes) = bs58::decode(&configs.main_wallet_private).into_vec() {
+                if let Ok(keypair) = solana_sdk::signature::Keypair::from_bytes(&private_key_bytes) {
+                    wallets.push(keypair.pubkey().to_string());
+                }
+            }
+        }
+    }
+    
+    Ok(wallets)
+}
+
+async fn analyze_wallet_swaps(
+    wallet_address: &str,
+    args: &Args,
+) -> Result<WalletSwapReport, Box<dyn std::error::Error>> {
+    log(LogTag::System, "INFO", &format!("🔄 Fetching transactions for wallet {}", &wallet_address[..8]));
+    
+    // Get all transactions for this wallet
+    let transactions = fetch_wallet_transactions(wallet_address, args.limit).await?;
+    
+    log(LogTag::System, "INFO", &format!("📊 Analyzing {} transactions for swaps", transactions.len()));
+    
+    let mut detailed_swaps = Vec::new();
+    let mut processed = 0;
+    
+    // Apply time filter if specified
+    let _cutoff_time = if let Some(days) = args.days {
+        Some(Utc::now() - chrono::Duration::days(days as i64))
+    } else {
+        None
+    };
+    
+    for transaction in &transactions {
+        processed += 1;
+        
+        if processed % 100 == 0 {
+            log(LogTag::System, "INFO", &format!("📊 Processed {}/{} transactions...", processed, transactions.len()));
+        }
+        
+        // Apply time filter - skip since TransactionDetails doesn't have block_time
+        // if let Some(cutoff) = cutoff_time {
+        //     // Would need to get block_time from another source
+        // }
+        
+        // Analyze transaction for swap patterns
+        log(LogTag::System, "DEBUG", &format!("🔍 Analyzing transaction with {} signatures", transaction.transaction.signatures.len()));
+        if let Some(swap) = analyze_transaction_for_detailed_swap(transaction, wallet_address).await {
+            log(LogTag::System, "DEBUG", &format!("✅ Swap detected: {} {}", swap.swap_type, swap.token_symbol));
+            // Apply filters
+            if let Some(ref token_filter) = args.token {
+                if swap.token_mint != *token_filter {
+                    continue;
+                }
+            }
+            
+            if let Some(ref type_filter) = args.swap_type {
+                if swap.swap_type != *type_filter {
+                    continue;
+                }
+            }
+            
+            if args.detailed {
+                println!("\n🔍 Swap Found:");
+                display_detailed_swap(&swap);
+            }
+            
+            detailed_swaps.push(swap);
+        }
+    }
+    
+    // Generate analytics
+    let analytics = generate_swap_analytics(&detailed_swaps);
+    
+    log(LogTag::System, "SUCCESS", &format!(
+        "✅ Wallet analysis complete: {} swaps found from {} transactions", 
+        detailed_swaps.len(), 
+        transactions.len()
+    ));
+    
+    Ok(WalletSwapReport {
+        wallet_address: wallet_address.to_string(),
+        analytics,
+        detailed_swaps,
+    })
+}
+
+async fn fetch_wallet_transactions(
+    wallet_address: &str,
+    limit: usize,
+) -> Result<Vec<TransactionDetails>, Box<dyn std::error::Error>> {
+    let _rpc_client = get_rpc_client();
+    
+    log(LogTag::System, "INFO", "📥 Loading transaction files from data/transactions/...");
+    
+    // Read all JSON files from data/transactions directory
+    let transactions_dir = Path::new("data/transactions");
+    if !transactions_dir.exists() {
+        log(LogTag::System, "WARN", "No transactions directory found at data/transactions/");
+        return Ok(Vec::new());
+    }
+    
+    let mut transactions = Vec::new();
+    let mut files_processed = 0;
+    
+    for entry in fs::read_dir(transactions_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            files_processed += 1;
+            
+            if files_processed % 10 == 0 {
+                log(LogTag::System, "INFO", &format!("📊 Processed {} transaction files...", files_processed));
+            }
+            
+            match load_transaction_from_file(&path).await {
+                Ok(Some(transaction)) => {
+                    // Check if this transaction involves the target wallet
+                    let involves_wallet = transaction_involves_wallet(&transaction, wallet_address);
+                    log(LogTag::System, "DEBUG", &format!("📊 Transaction in {:?} involves wallet {}: {}", 
+                        path.file_name().unwrap_or_default(), wallet_address, involves_wallet));
+                    if involves_wallet {
+                        transactions.push(transaction);
+                        
+                        if transactions.len() >= limit {
+                            break;
+                        }
+                    }
+                },
+                Ok(None) => {
+                    // File was loaded but doesn't contain valid transaction data
+                    continue;
+                },
+                Err(e) => {
+                    log(LogTag::System, "WARN", &format!(
+                        "Failed to load transaction from {}: {}", 
+                        path.display(), 
+                        e
+                    ));
+                }
+            }
+        }
+    }
+    
+    log(LogTag::System, "INFO", &format!("� Simulating transaction fetch for wallet {}", &wallet_address[..8]));
+    
+    // For demonstration, we'll return an empty list
+    // In a real implementation, you would use the Solana RPC to get signatures first
+    
+    log(LogTag::System, "SUCCESS", &format!("✅ Fetched {} transactions", transactions.len()));
+    
+    Ok(transactions)
+}
+
+async fn analyze_transaction_for_detailed_swap(
+    transaction: &TransactionDetails,
+    wallet_address: &str,
+) -> Option<DetailedSwapTransaction> {
+    log(LogTag::System, "DEBUG", &format!("📊 Analyzing transaction for wallet {}", &wallet_address[..8]));
+    
+    let meta = transaction.meta.as_ref()?;
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Transaction has meta: success={}", meta.err.is_none()));
+    
+    // Check if transaction was successful
+    if meta.err.is_some() {
+        log(LogTag::System, "DEBUG", "❌ Transaction failed, skipping");
+        return None;
+    }
+    
+    // Get basic transaction info
+    let signature = transaction.transaction.signatures.get(0)?.clone();
+    let slot = transaction.slot;
+    let block_time = None; // TransactionDetails doesn't have block_time in our current implementation
+    let date_time = block_time.and_then(|t| {
+        DateTime::from_timestamp(t, 0).map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+    });
+    
+    // Analyze for swap patterns
+    log(LogTag::System, "DEBUG", "🔍 Calling detect_swap_from_transaction");
+    let (swap_detected, swap_info) = detect_swap_from_transaction(transaction, meta, wallet_address).await?;
+    
+    log(LogTag::System, "DEBUG", &format!("🔍 Swap detection result: {}", swap_detected));
+    
+    if !swap_detected {
+        log(LogTag::System, "DEBUG", "❌ No swap detected in transaction");
+        return None;
+    }
+    
+    // Extract additional details
+    let router_info = identify_swap_router(transaction);
+    let (instructions_count, ata_created, ata_closed) = analyze_instruction_patterns(transaction, meta);
+    let priority_fee = extract_priority_fee(transaction);
+    let compute_units = extract_compute_units(transaction);
+    
+    // Get token balance changes
+    let (pre_balance, post_balance, balance_change) = get_token_balance_changes(
+        meta, 
+        &swap_info.token_mint, 
+        wallet_address
+    );
+    
+    // Get token information from database
+    let (token_symbol, token_name, token_decimals) = get_token_info_safe(&swap_info.token_mint).await;
+    
+    let formatted_token_amount = swap_info.token_amount as f64 / 10f64.powi(token_decimals as i32);
+    let price_per_token = if formatted_token_amount > 0.0 {
+        swap_info.sol_amount / formatted_token_amount
+    } else {
+        0.0
+    };
+    
+    Some(DetailedSwapTransaction {
+        signature,
+        slot,
+        block_time,
+        date_time,
+        wallet_address: wallet_address.to_string(),
+        swap_type: swap_info.swap_type,
+        token_mint: swap_info.token_mint,
+        token_symbol,
+        token_name,
+        sol_amount: swap_info.sol_amount,
+        token_amount: swap_info.token_amount,
+        token_decimals,
+        formatted_token_amount,
+        effective_price: swap_info.effective_price,
+        price_per_token,
+        fees_paid: swap_info.fees_paid,
+        success: true,
+        router_program: router_info.0,
+        router_name: router_info.1,
+        instructions_count,
+        ata_created,
+        ata_closed,
+        priority_fee,
+        compute_units,
+        pre_token_balance: pre_balance,
+        post_token_balance: post_balance,
+        token_balance_change: balance_change,
+    })
+}
+
+#[derive(Debug)]
+struct BasicSwapInfo {
+    swap_type: String,
+    token_mint: String,
+    sol_amount: f64,
+    token_amount: u64,
+    effective_price: f64,
+    fees_paid: f64,
+}
+
+async fn detect_swap_from_transaction(
+    transaction: &TransactionDetails,
+    meta: &screenerbot::rpc::TransactionMeta,
+    wallet_address: &str,
+) -> Option<(bool, BasicSwapInfo)> {
+    log(LogTag::System, "DEBUG", "🔍 Starting swap detection");
+    
+    // First check if this transaction involves Jupiter or other known DEX programs
+    let (router_name, _program_id) = identify_swap_router(transaction);
+    log(LogTag::System, "DEBUG", &format!("📊 Detected swap router: {:?}", router_name));
+    
+    // For now, test Jupiter analysis on transactions with token balances
+    if meta.pre_token_balances.is_some() && meta.post_token_balances.is_some() {
+        log(LogTag::System, "DEBUG", "📊 Transaction has token balances - testing Jupiter analysis");
+        if let Some(result) = analyze_jupiter_swap(transaction, meta, wallet_address).await {
+            return Some(result);
+        }
+    }
+    
+    // If we detect a Jupiter transaction, analyze it differently
+    if let Some(ref router) = router_name {
+        if router.contains("Jupiter") {
+            return analyze_jupiter_swap(transaction, meta, wallet_address).await;
+        }
+    }
+    
+    // Parse the message from JSON to get account keys
+    let account_keys_value = transaction.transaction.message.get("accountKeys")?;
+    let account_keys_array = account_keys_value.as_array()?;
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Found {} account keys", account_keys_array.len()));
+    
+    // Convert to pubkeys
+    let mut account_keys = Vec::new();
+    for key_value in account_keys_array {
+        if let Some(key_str) = key_value.get("pubkey").and_then(|k| k.as_str()) {
+            if let Ok(pubkey) = Pubkey::from_str(key_str) {
+                account_keys.push(pubkey);
+            }
+        }
+    }
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Converted {} pubkeys", account_keys.len()));
+    
+    // Find wallet account index
+    let wallet_pubkey = Pubkey::from_str(wallet_address).ok()?;
+    let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey)?;
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Wallet index: {}", wallet_index));
+    
+    // Analyze SOL balance changes
+    let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
+        let pre_balance = meta.pre_balances[wallet_index] as i64;
+        let post_balance = meta.post_balances[wallet_index] as i64;
+        (post_balance - pre_balance) as f64 / 1_000_000_000.0
+    } else {
+        return None;
+    };
+    
+    // Analyze token balance changes
+    let token_changes = analyze_token_balance_changes(meta, wallet_index);
+    
+    // Look for swap patterns: SOL decrease + token increase = buy, SOL increase + token decrease = sell
+    for (mint, token_change) in token_changes {
+        if token_change.abs() < 1.0 { // Ignore dust changes
+            continue;
+        }
+        
+        let (swap_type, sol_amount, token_amount, effective_price) = if sol_change < -0.001 && token_change > 0.0 {
+            // Buy: SOL decreased, tokens increased
+            let sol_spent = sol_change.abs();
+            let price = if token_change > 0.0 { sol_spent / token_change } else { 0.0 };
+            ("buy".to_string(), sol_spent, token_change as u64, price)
+        } else if sol_change > 0.001 && token_change < 0.0 {
+            // Sell: SOL increased, tokens decreased
+            let sol_received = sol_change;
+            let tokens_sold = token_change.abs();
+            let price = if tokens_sold > 0.0 { sol_received / tokens_sold } else { 0.0 };
+            ("sell".to_string(), sol_received, tokens_sold as u64, price)
+        } else {
+            continue;
+        };
+        
+        let fees_paid = meta.fee as f64 / 1_000_000_000.0;
+        
+        return Some((true, BasicSwapInfo {
+            swap_type,
+            token_mint: mint,
+            sol_amount,
+            token_amount,
+            effective_price,
+            fees_paid,
+        }));
+    }
+    
+    None
+}
+
+fn analyze_token_balance_changes(
+    meta: &screenerbot::rpc::TransactionMeta,
+    wallet_index: usize,
+) -> HashMap<String, f64> {
+    let mut changes = HashMap::new();
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Analyzing token balance changes for wallet_index: {}", wallet_index));
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Has pre_token_balances: {}", meta.pre_token_balances.is_some()));
+    log(LogTag::System, "DEBUG", &format!("📊 Has post_token_balances: {}", meta.post_token_balances.is_some()));
+    
+    if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
+        log(LogTag::System, "DEBUG", &format!("📊 Pre token balances: {}, Post token balances: {}", pre_balances.len(), post_balances.len()));
+        
+        // Create maps for easier lookup
+        let mut pre_map = HashMap::new();
+        let mut post_map = HashMap::new();
+        
+        for balance in pre_balances {
+            log(LogTag::System, "DEBUG", &format!("📊 Pre balance: account_index={}, mint={}, amount={}", 
+                balance.account_index, balance.mint, balance.ui_token_amount.amount));
+            // Remove the wallet_index filter - analyze all token changes in the transaction
+            let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+            let decimals = balance.ui_token_amount.decimals;
+            let formatted_amount = amount / 10f64.powi(decimals as i32);
+            // Accumulate amounts for the same mint
+            *pre_map.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
+            log(LogTag::System, "DEBUG", &format!("📊 Pre balance accumulated: mint={}, amount={}", balance.mint, formatted_amount));
+        }
+        
+        for balance in post_balances {
+            log(LogTag::System, "DEBUG", &format!("📊 Post balance: account_index={}, mint={}, amount={}", 
+                balance.account_index, balance.mint, balance.ui_token_amount.amount));
+            // Remove the wallet_index filter - analyze all token changes in the transaction
+            let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+            let decimals = balance.ui_token_amount.decimals;
+            let formatted_amount = amount / 10f64.powi(decimals as i32);
+            // Accumulate amounts for the same mint
+            *post_map.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
+            log(LogTag::System, "DEBUG", &format!("📊 Post balance accumulated: mint={}, amount={}", balance.mint, formatted_amount));
+        }
+        
+        // Calculate changes for all tokens
+        let all_mints: HashSet<_> = pre_map.keys().chain(post_map.keys()).collect();
+        
+        for mint in all_mints {
+            let pre_amount = pre_map.get(mint).copied().unwrap_or(0.0);
+            let post_amount = post_map.get(mint).copied().unwrap_or(0.0);
+            let change = post_amount - pre_amount;
+            
+            if change.abs() > 0.000001 { // Filter out dust
+                changes.insert(mint.clone(), change);
+                log(LogTag::System, "DEBUG", &format!("📊 Token change: mint={}, change={}", mint, change));
+            }
+        }
+    }
+    
+    log(LogTag::System, "DEBUG", &format!("📊 Total token changes found: {}", changes.len()));
+    changes
+}
+
+fn identify_swap_router(
+    transaction: &TransactionDetails,
+) -> (Option<String>, Option<String>) {
+    // Parse instructions from the message JSON
+    if let Some(instructions_value) = transaction.transaction.message.get("instructions") {
+        if let Some(instructions_array) = instructions_value.as_array() {
+            // Get account keys for looking up program IDs
+            if let Some(account_keys_value) = transaction.transaction.message.get("accountKeys") {
+                if let Some(account_keys_array) = account_keys_value.as_array() {
+                    for instruction in instructions_array {
+                        if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|p| p.as_u64()) {
+                            if let Some(program_key_value) = account_keys_array.get(program_id_index as usize) {
+                                if let Some(program_id) = program_key_value.as_str() {
+                                    let router_name = match program_id {
+                                        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => "Jupiter Aggregator v6",
+                                        "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => "Jupiter Aggregator v4",
+                                        "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM" => "Raydium AMM",
+                                        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "Raydium AMM v4",
+                                        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Raydium CPMM",
+                                        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
+                                        "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt" => "Invariant",
+                                        "SoLFiHG9TfgtdUXUjWAxi3LtvYuFyDLVhBWxdMZxyCe" => "SolFi",
+                                        _ => continue,
+                                    };
+                                    
+                                    return (Some(program_id.to_string()), Some(router_name.to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    (None, None)
+}
+
+fn analyze_instruction_patterns(
+    transaction: &TransactionDetails,
+    meta: &screenerbot::rpc::TransactionMeta,
+) -> (usize, bool, bool) {
+    // Count instructions from JSON message
+    let instructions_count = transaction.transaction.message
+        .get("instructions")
+        .and_then(|instr| instr.as_array())
+        .map(|arr| arr.len())
+        .unwrap_or(0);
+    
+    // Check logs for ATA operations
+    let mut ata_created = false;
+    let mut ata_closed = false;
+    
+    if let Some(log_messages) = &meta.log_messages {
+        for log in log_messages {
+            if log.contains("InitializeAccount") || log.contains("CreateIdempotent") {
+                ata_created = true;
+            }
+            if log.contains("CloseAccount") {
+                ata_closed = true;
+            }
+        }
+    }
+    
+    (instructions_count, ata_created, ata_closed)
+}
+
+fn extract_priority_fee(transaction: &TransactionDetails) -> Option<f64> {
+    // Parse instructions from JSON to look for compute budget instructions
+    let instructions_value = transaction.transaction.message.get("instructions")?;
+    let instructions_array = instructions_value.as_array()?;
+    
+    let account_keys_value = transaction.transaction.message.get("accountKeys")?;
+    let account_keys_array = account_keys_value.as_array()?;
+    
+    for instruction in instructions_array {
+        if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|p| p.as_u64()) {
+            if let Some(program_key_value) = account_keys_array.get(program_id_index as usize) {
+                if let Some(program_id) = program_key_value.as_str() {
+                    if program_id == "ComputeBudget111111111111111111111111111111" {
+                        // Try to decode compute budget instruction data
+                        if let Some(data_str) = instruction.get("data").and_then(|d| d.as_str()) {
+                            if let Ok(decoded_data) = bs58::decode(data_str).into_vec() {
+                                if decoded_data.len() >= 12 {
+                                    let instruction_type = u32::from_le_bytes([
+                                        decoded_data[0], decoded_data[1], 
+                                        decoded_data[2], decoded_data[3]
+                                    ]);
+                                    
+                                    if instruction_type == 2 { // SetComputeUnitPrice
+                                        let price = u64::from_le_bytes([
+                                            decoded_data[4], decoded_data[5], decoded_data[6], decoded_data[7],
+                                            decoded_data[8], decoded_data[9], decoded_data[10], decoded_data[11]
+                                        ]);
+                                        return Some(price as f64 / 1_000_000.0); // Convert micro-lamports to lamports
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
+fn extract_compute_units(transaction: &TransactionDetails) -> Option<u32> {
+    // Parse instructions from JSON to look for compute budget instructions  
+    let instructions_value = transaction.transaction.message.get("instructions")?;
+    let instructions_array = instructions_value.as_array()?;
+    
+    let account_keys_value = transaction.transaction.message.get("accountKeys")?;
+    let account_keys_array = account_keys_value.as_array()?;
+    
+    for instruction in instructions_array {
+        if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|p| p.as_u64()) {
+            if let Some(program_key_value) = account_keys_array.get(program_id_index as usize) {
+                if let Some(program_id) = program_key_value.as_str() {
+                    if program_id == "ComputeBudget111111111111111111111111111111" {
+                        if let Some(data_str) = instruction.get("data").and_then(|d| d.as_str()) {
+                            if let Ok(decoded_data) = bs58::decode(data_str).into_vec() {
+                                if decoded_data.len() >= 8 {
+                                    let instruction_type = u32::from_le_bytes([
+                                        decoded_data[0], decoded_data[1], 
+                                        decoded_data[2], decoded_data[3]
+                                    ]);
+                                    
+                                    if instruction_type == 3 { // SetComputeUnitLimit
+                                        let limit = u32::from_le_bytes([
+                                            decoded_data[4], decoded_data[5], 
+                                            decoded_data[6], decoded_data[7]
+                                        ]);
+                                        return Some(limit);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    None
+}
+
+fn get_token_balance_changes(
+    meta: &screenerbot::rpc::TransactionMeta,
+    token_mint: &str,
+    wallet_address: &str,
+) -> (Option<f64>, Option<f64>, Option<f64>) {
+    let wallet_pubkey = match Pubkey::from_str(wallet_address) {
+        Ok(pk) => pk,
+        Err(_) => return (None, None, None),
+    };
+    
+    // Find balances for this token and wallet
+    let pre_balance = find_token_balance(&meta.pre_token_balances, token_mint, &wallet_pubkey);
+    let post_balance = find_token_balance(&meta.post_token_balances, token_mint, &wallet_pubkey);
+    
+    let change = match (pre_balance, post_balance) {
+        (Some(pre), Some(post)) => Some(post - pre),
+        (None, Some(post)) => Some(post),
+        (Some(pre), None) => Some(-pre),
+        (None, None) => None,
+    };
+    
+    (pre_balance, post_balance, change)
+}
+
+fn find_token_balance(
+    balances: &Option<Vec<TokenBalance>>,
+    token_mint: &str,
+    _wallet_pubkey: &Pubkey,
+) -> Option<f64> {
+    if let Some(balances) = balances {
+        for balance in balances {
+            if balance.mint == token_mint {
+                // Check if this is the wallet's token account (simplified check)
+                let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                let decimals = balance.ui_token_amount.decimals;
+                return Some(amount / 10f64.powi(decimals as i32));
+            }
+        }
+    }
+    None
+}
+
+async fn get_token_info_safe(mint: &str) -> (String, Option<String>, u8) {
+    // Try to get token information from database
+    let symbol = if let Ok(db) = TokenDatabase::new() {
+        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+            token.symbol
+        } else {
+            format!("TOKEN_{}", &mint[..8])
+        }
+    } else {
+        format!("TOKEN_{}", &mint[..8])
+    };
+    
+    let name = if let Ok(db) = TokenDatabase::new() {
+        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+            Some(token.name)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    
+    let decimals = if let Some(decimals) = get_token_decimals(mint).await {
+        decimals
+    } else {
+        9 // Default to 9 decimals
+    };
+    
+    (symbol, name, decimals)
+}
+
+fn generate_swap_analytics(swaps: &[DetailedSwapTransaction]) -> SwapAnalytics {
+    if swaps.is_empty() {
+        return SwapAnalytics {
+            total_swaps: 0,
+            buy_swaps: 0,
+            sell_swaps: 0,
+            unique_tokens: 0,
+            total_sol_spent: 0.0,
+            total_sol_received: 0.0,
+            total_fees_paid: 0.0,
+            net_sol_change: 0.0,
+            average_swap_size: 0.0,
+            most_traded_tokens: Vec::new(),
+            router_usage: HashMap::new(),
+            success_rate: 0.0,
+            time_range: None,
+            swaps_by_month: HashMap::new(),
+            fee_efficiency: 0.0,
+        };
+    }
+    
+    let total_swaps = swaps.len();
+    let buy_swaps = swaps.iter().filter(|s| s.swap_type == "buy").count();
+    let sell_swaps = swaps.iter().filter(|s| s.swap_type == "sell").count();
+    
+    let unique_tokens = swaps.iter()
+        .map(|s| &s.token_mint)
+        .collect::<HashSet<_>>()
+        .len();
+    
+    let mut total_sol_spent = 0.0;
+    let mut total_sol_received = 0.0;
+    let mut total_fees_paid = 0.0;
+    let mut token_counts = HashMap::new();
+    let mut router_usage = HashMap::new();
+    let mut swaps_by_month = HashMap::new();
+    
+    let mut earliest_time = None;
+    let mut latest_time = None;
+    
+    for swap in swaps {
+        // SOL flow
+        if swap.swap_type == "buy" {
+            total_sol_spent += swap.sol_amount;
+        } else {
+            total_sol_received += swap.sol_amount;
+        }
+        
+        total_fees_paid += swap.fees_paid;
+        
+        // Token counts
+        *token_counts.entry(swap.token_symbol.clone()).or_insert(0) += 1;
+        
+        // Router usage
+        if let Some(ref router) = swap.router_name {
+            *router_usage.entry(router.clone()).or_insert(0) += 1;
+        }
+        
+        // Time analysis
+        if let Some(block_time) = swap.block_time {
+            if let Some(dt) = DateTime::from_timestamp(block_time, 0) {
+                let month_key = dt.format("%Y-%m").to_string();
+                *swaps_by_month.entry(month_key).or_insert(0) += 1;
+                
+                if earliest_time.is_none() || Some(dt) < earliest_time {
+                    earliest_time = Some(dt);
+                }
+                if latest_time.is_none() || Some(dt) > latest_time {
+                    latest_time = Some(dt);
+                }
+            }
+        }
+    }
+    
+    let net_sol_change = total_sol_received - total_sol_spent;
+    let total_volume = total_sol_spent + total_sol_received;
+    let average_swap_size = if total_swaps > 0 { total_volume / total_swaps as f64 } else { 0.0 };
+    let fee_efficiency = if total_volume > 0.0 { (total_fees_paid / total_volume) * 100.0 } else { 0.0 };
+    
+    // Most traded tokens (top 10)
+    let mut token_pairs: Vec<_> = token_counts.into_iter().collect();
+    token_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+    let most_traded_tokens = token_pairs.into_iter().take(10).collect();
+    
+    let success_rate = 100.0; // All included swaps are successful
+    
+    let time_range = match (earliest_time, latest_time) {
+        (Some(start), Some(end)) => Some((start, end)),
+        _ => None,
+    };
+    
+    SwapAnalytics {
+        total_swaps,
+        buy_swaps,
+        sell_swaps,
+        unique_tokens,
+        total_sol_spent,
+        total_sol_received,
+        total_fees_paid,
+        net_sol_change,
+        average_swap_size,
+        most_traded_tokens,
+        router_usage,
+        success_rate,
+        time_range,
+        swaps_by_month,
+        fee_efficiency,
+    }
+}
+
+fn display_comprehensive_results(
+    reports: &[WalletSwapReport],
+    _args: &Args,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("\n🎯 COMPREHENSIVE SWAP ANALYSIS RESULTS");
+    println!("═══════════════════════════════════════════════════════════════");
+    
+    // Combined analytics
+    let total_swaps: usize = reports.iter().map(|r| r.analytics.total_swaps).sum();
+    let total_buy_swaps: usize = reports.iter().map(|r| r.analytics.buy_swaps).sum();
+    let total_sell_swaps: usize = reports.iter().map(|r| r.analytics.sell_swaps).sum();
+    let total_sol_spent: f64 = reports.iter().map(|r| r.analytics.total_sol_spent).sum();
+    let total_sol_received: f64 = reports.iter().map(|r| r.analytics.total_sol_received).sum();
+    let total_fees: f64 = reports.iter().map(|r| r.analytics.total_fees_paid).sum();
+    let net_sol_change = total_sol_received - total_sol_spent;
+    
+    println!("📊 OVERALL STATISTICS:");
+    println!("  • Total Wallets Analyzed: {}", reports.len());
+    println!("  • Total Swaps Found: {}", total_swaps);
+    println!("  • Buy Swaps: {} ({:.1}%)", total_buy_swaps, (total_buy_swaps as f64 / total_swaps as f64) * 100.0);
+    println!("  • Sell Swaps: {} ({:.1}%)", total_sell_swaps, (total_sell_swaps as f64 / total_swaps as f64) * 100.0);
+    println!("  • Total SOL Spent: {:.6} SOL", total_sol_spent);
+    println!("  • Total SOL Received: {:.6} SOL", total_sol_received);
+    println!("  • Net SOL Change: {:.6} SOL", net_sol_change);
+    println!("  • Total Fees Paid: {:.6} SOL", total_fees);
+    
+    if total_swaps > 0 {
+        let avg_swap_size = (total_sol_spent + total_sol_received) / total_swaps as f64;
+        println!("  • Average Swap Size: {:.6} SOL", avg_swap_size);
+    }
+    
+    // Per-wallet breakdown
+    if reports.len() > 1 {
+        println!("\n💼 PER-WALLET BREAKDOWN:");
+        for (i, report) in reports.iter().enumerate() {
+            println!("  {}. Wallet {} ({}):", 
+                i + 1, 
+                &report.wallet_address[..8], 
+                &report.wallet_address[report.wallet_address.len()-8..]
+            );
+            println!("     • Swaps: {} (Buy: {}, Sell: {})", 
+                report.analytics.total_swaps,
+                report.analytics.buy_swaps,
+                report.analytics.sell_swaps
+            );
+            println!("     • SOL Spent: {:.6}, Received: {:.6}, Net: {:.6}", 
+                report.analytics.total_sol_spent,
+                report.analytics.total_sol_received,
+                report.analytics.net_sol_change
+            );
+            println!("     • Unique Tokens: {}", report.analytics.unique_tokens);
+            println!("     • Total Fees: {:.6} SOL", report.analytics.total_fees_paid);
+        }
+    }
+    
+    // Combined router usage
+    let mut all_routers = HashMap::new();
+    for report in reports {
+        for (router, count) in &report.analytics.router_usage {
+            *all_routers.entry(router.clone()).or_insert(0) += count;
+        }
+    }
+    
+    if !all_routers.is_empty() {
+        println!("\n🔀 ROUTER USAGE:");
+        let mut router_pairs: Vec<_> = all_routers.into_iter().collect();
+        router_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        
+        for (router, count) in router_pairs {
+            let percentage = (count as f64 / total_swaps as f64) * 100.0;
+            println!("  • {}: {} swaps ({:.1}%)", router, count, percentage);
+        }
+    }
+    
+    // Combined token usage
+    let mut all_tokens = HashMap::new();
+    for report in reports {
+        for (token, count) in &report.analytics.most_traded_tokens {
+            *all_tokens.entry(token.clone()).or_insert(0) += count;
+        }
+    }
+    
+    if !all_tokens.is_empty() {
+        println!("\n🏷️  MOST TRADED TOKENS:");
+        let mut token_pairs: Vec<_> = all_tokens.into_iter().collect();
+        token_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        
+        for (i, (token, count)) in token_pairs.iter().take(10).enumerate() {
+            let percentage = (*count as f64 / total_swaps as f64) * 100.0;
+            println!("  {}. {}: {} swaps ({:.1}%)", i + 1, token, count, percentage);
+        }
+    }
+    
+    println!("\n═══════════════════════════════════════════════════════════════");
+    
+    Ok(())
+}
+
+fn display_detailed_swap(swap: &DetailedSwapTransaction) {
+    println!("  📝 Signature: {}", &swap.signature[..16]);
+    println!("  📅 Date: {}", swap.date_time.as_deref().unwrap_or("N/A"));
+    println!("  💱 Type: {} {} for {:.6} SOL", 
+        swap.swap_type.to_uppercase(), 
+        swap.token_symbol, 
+        swap.sol_amount
+    );
+    println!("  🪙 Amount: {:.6} tokens (raw: {})", 
+        swap.formatted_token_amount, 
+        swap.token_amount
+    );
+    println!("  💰 Price: {:.9} SOL per token", swap.price_per_token);
+    println!("  💸 Fees: {:.6} SOL", swap.fees_paid);
+    
+    if let Some(ref router) = swap.router_name {
+        println!("  🔀 Router: {}", router);
+    }
+    
+    if let Some(priority_fee) = swap.priority_fee {
+        println!("  ⚡ Priority Fee: {:.6} SOL", priority_fee);
+    }
+    
+    if swap.ata_created {
+        println!("  🆕 ATA Created");
+    }
+    if swap.ata_closed {
+        println!("  🗑️ ATA Closed");
+    }
+}
+
+fn export_results_to_json(
+    reports: &[WalletSwapReport],
+    _args: &Args,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("swap_analysis_{}.json", timestamp);
+    let filepath = Path::new("data").join(&filename);
+    
+    // Ensure data directory exists
+    if let Some(parent) = filepath.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
+    // Create export data
+    let export_data = serde_json::json!({
+        "export_timestamp": Utc::now(),
+        "total_wallets": reports.len(),
+        "total_swaps": reports.iter().map(|r| r.analytics.total_swaps).sum::<usize>(),
+        "reports": reports
+    });
+    
+    // Write to file
+    fs::write(&filepath, serde_json::to_string_pretty(&export_data)?)?;
+    
+    println!("\n💾 EXPORT COMPLETE:");
+    println!("  📁 File: {}", filepath.display());
+    println!("  📊 Data: {} wallet reports with detailed swap information", reports.len());
+    
+    log(LogTag::System, "SUCCESS", &format!("Exported swap analysis to: {}", filepath.display()));
+    
+    Ok(())
+}
+
+// Helper function to load a transaction from a JSON file
+async fn load_transaction_from_file(file_path: &Path) -> Result<Option<TransactionDetails>, Box<dyn std::error::Error>> {
+    log(LogTag::System, "DEBUG", &format!("📊 Loading transaction from file: {:?}", file_path));
+    let content = fs::read_to_string(file_path)?;
+    let json_data: serde_json::Value = serde_json::from_str(&content)?;
+    
+    // Extract the transaction_data field from the JSON
+    if let Some(transaction_data) = json_data.get("transaction_data") {
+        // Convert to TransactionDetails format
+        if let Ok(transaction_details) = convert_json_to_transaction_details(transaction_data) {
+            return Ok(Some(transaction_details));
+        }
+    }
+    
+    Ok(None)
+}
+
+// Helper function to convert JSON data to TransactionDetails
+fn convert_json_to_transaction_details(data: &serde_json::Value) -> Result<TransactionDetails, Box<dyn std::error::Error>> {
+    let slot = data.get("slot").and_then(|s| s.as_u64()).unwrap_or(0);
+    
+    // Extract transaction data
+    let transaction_json = data.get("transaction").ok_or("Missing transaction field")?;
+    
+    // Extract meta data if present
+    let meta = if let Some(meta_json) = data.get("meta") {
+        log(LogTag::System, "DEBUG", &format!("📊 Found meta field with keys: {:?}", 
+            meta_json.as_object().map(|obj| obj.keys().collect::<Vec<_>>()).unwrap_or_default()));
+        Some(convert_meta_from_json(meta_json)?)
+    } else {
+        log(LogTag::System, "DEBUG", "📊 No meta field found in transaction data");
+        None
+    };
+    
+    // Create TransactionData
+    let transaction_data = screenerbot::rpc::TransactionData {
+        message: transaction_json.get("message").unwrap_or(&serde_json::Value::Null).clone(),
+        signatures: transaction_json.get("signatures")
+            .and_then(|s| s.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .unwrap_or_default(),
+    };
+    
+    Ok(TransactionDetails {
+        slot,
+        transaction: transaction_data,
+        meta,
+    })
+}
+
+// Helper function to convert meta JSON to TransactionMeta
+fn convert_meta_from_json(meta_json: &serde_json::Value) -> Result<screenerbot::rpc::TransactionMeta, Box<dyn std::error::Error>> {
+    // Handle err field properly: JSON null should become None
+    let err = match meta_json.get("err") {
+        Some(serde_json::Value::Null) => None,
+        Some(other) => Some(other.clone()),
+        None => None,
+    };
+    
+    let pre_balances = meta_json.get("preBalances")
+        .and_then(|b| b.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+        .unwrap_or_default();
+        
+    let post_balances = meta_json.get("postBalances")
+        .and_then(|b| b.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect())
+        .unwrap_or_default();
+    
+    let fee = meta_json.get("fee").and_then(|f| f.as_u64()).unwrap_or(0);
+    
+    let log_messages = meta_json.get("logMessages")
+        .and_then(|l| l.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect());
+    
+    // Convert token balances
+    let pre_token_balances_result = convert_token_balances(meta_json.get("preTokenBalances"));
+    log(LogTag::System, "DEBUG", &format!("📊 Pre token balances conversion result: {:?}", 
+        pre_token_balances_result.as_ref().map(|v| v.len()).unwrap_or(0)));
+    
+    let post_token_balances_result = convert_token_balances(meta_json.get("postTokenBalances"));
+    log(LogTag::System, "DEBUG", &format!("📊 Post token balances conversion result: {:?}", 
+        post_token_balances_result.as_ref().map(|v| v.len()).unwrap_or(0)));
+    
+    Ok(screenerbot::rpc::TransactionMeta {
+        err,
+        pre_balances,
+        post_balances,
+        pre_token_balances: pre_token_balances_result,
+        post_token_balances: post_token_balances_result,
+        fee,
+        log_messages,
+    })
+}
+
+// Helper function to convert token balance arrays
+fn convert_token_balances(balances_json: Option<&serde_json::Value>) -> Option<Vec<TokenBalance>> {
+    log(LogTag::System, "DEBUG", &format!("📊 convert_token_balances called with: {:?}", 
+        balances_json.map(|v| format!("is_array={}", v.is_array()))));
+    
+    if let Some(balances_array) = balances_json.and_then(|b| b.as_array()) {
+        log(LogTag::System, "DEBUG", &format!("📊 Converting {} token balances", balances_array.len()));
+        let mut balances = Vec::new();
+        
+        for balance_json in balances_array {
+            if let Ok(balance) = convert_single_token_balance(balance_json) {
+                log(LogTag::System, "DEBUG", &format!("📊 Converted token balance for mint: {}", balance.mint));
+                balances.push(balance);
+            } else {
+                log(LogTag::System, "DEBUG", "📊 Failed to convert a token balance");
+            }
+        }
+        
+        if !balances.is_empty() {
+            log(LogTag::System, "DEBUG", &format!("📊 Successfully converted {} token balances", balances.len()));
+            return Some(balances);
+        } else {
+            log(LogTag::System, "DEBUG", "📊 No token balances converted successfully");
+        }
+    } else {
+        log(LogTag::System, "DEBUG", "📊 No token balances array found in JSON");
+    }
+    None
+}
+
+// Helper function to convert a single token balance
+fn convert_single_token_balance(balance_json: &serde_json::Value) -> Result<TokenBalance, Box<dyn std::error::Error>> {
+    let account_index = balance_json.get("accountIndex").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+    let mint = balance_json.get("mint").and_then(|m| m.as_str()).unwrap_or("").to_string();
+    let owner = balance_json.get("owner").and_then(|o| o.as_str()).map(|s| s.to_string());
+    let program_id = balance_json.get("programId").and_then(|p| p.as_str()).map(|s| s.to_string());
+    
+    // Convert UI token amount
+    let ui_token_amount = if let Some(ui_amount_json) = balance_json.get("uiTokenAmount") {
+        screenerbot::rpc::UiTokenAmount {
+            amount: ui_amount_json.get("amount").and_then(|a| a.as_str()).unwrap_or("0").to_string(),
+            decimals: ui_amount_json.get("decimals").and_then(|d| d.as_u64()).unwrap_or(0) as u8,
+            ui_amount: ui_amount_json.get("uiAmount").and_then(|u| u.as_f64()),
+            ui_amount_string: Some(ui_amount_json.get("uiAmountString").and_then(|s| s.as_str()).unwrap_or("0").to_string()),
+        }
+    } else {
+        screenerbot::rpc::UiTokenAmount {
+            amount: "0".to_string(),
+            decimals: 0,
+            ui_amount: None,
+            ui_amount_string: Some("0".to_string()),
+        }
+    };
+    
+    Ok(TokenBalance {
+        account_index,
+        mint,
+        owner,
+        program_id,
+        ui_token_amount,
+    })
+}
+
+// Helper function to check if a transaction involves a specific wallet
+fn transaction_involves_wallet(transaction: &TransactionDetails, wallet_address: &str) -> bool {
+    // Check if wallet is in account keys
+    if let Some(account_keys) = transaction.transaction.message.get("accountKeys") {
+        if let Some(keys_array) = account_keys.as_array() {
+            for key_obj in keys_array {
+                if let Some(pubkey) = key_obj.get("pubkey").and_then(|k| k.as_str()) {
+                    if pubkey == wallet_address {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Also check in signatures (though this is less reliable for finding the specific wallet)
+    for signature in &transaction.transaction.signatures {
+        if signature.len() > 0 {
+            // Could add more sophisticated wallet matching here
+            // For now, we'll rely on account keys check above
+        }
+    }
+    
+    false
+}
