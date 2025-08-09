@@ -6,9 +6,11 @@ use crate::utils::*;
 use crate::rpc::lamports_to_sol;
 use crate::swaps::{ buy_token, sell_token };
 use crate::swaps::transaction::{
-    TransactionMonitoringService, register_position_transaction, 
-    verify_position_entry_transaction, verify_position_exit_transaction,
-    is_position_transaction_verified
+    TransactionMonitoringService,
+    register_position_transaction,
+    verify_position_entry_transaction,
+    verify_position_exit_transaction,
+    is_position_transaction_verified,
 };
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
@@ -96,24 +98,22 @@ fn is_frozen_account_error(error_msg: &str) -> bool {
 /// Calculate liquidity tier based on USD liquidity amount
 /// Returns tier classification for position tracking and analysis
 pub fn calculate_liquidity_tier(token: &crate::tokens::types::Token) -> Option<String> {
-    let liquidity_usd = token.liquidity
-        .as_ref()
-        .and_then(|l| l.usd)?;
-    
+    let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd)?;
+
     if liquidity_usd < 0.0 {
         return Some("INVALID".to_string());
     }
-    
+
     // Liquidity tier classification based on USD value
     let tier = match liquidity_usd {
-        x if x < 1_000.0 => "MICRO",      // < $1K
-        x if x < 10_000.0 => "SMALL",     // $1K - $10K  
-        x if x < 50_000.0 => "MEDIUM",    // $10K - $50K
-        x if x < 250_000.0 => "LARGE",    // $50K - $250K
+        x if x < 1_000.0 => "MICRO", // < $1K
+        x if x < 10_000.0 => "SMALL", // $1K - $10K
+        x if x < 50_000.0 => "MEDIUM", // $10K - $50K
+        x if x < 250_000.0 => "LARGE", // $50K - $250K
         x if x < 1_000_000.0 => "XLARGE", // $250K - $1M
-        _ => "MEGA",                      // > $1M
+        _ => "MEGA", // > $1M
     };
-    
+
     Some(tier.to_string())
 }
 
@@ -146,27 +146,29 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
         let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
         let total_fees = buy_fee + sell_fee;
-        
+
         let net_pnl_sol = sol_received - sol_invested - total_fees;
         let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
         let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
 
-        // Log detailed PnL calculation for debugging
-        log(
-            LogTag::Trader,
-            "PNL_DETAILED",
-            &format!(
-                "💰 DETAILED PNL CALCULATION for {}:\n  Entry size: {:.9} SOL\n  SOL received: {:.9} SOL\n  Buy fee: {:.9} SOL\n  Sell fee: {:.9} SOL\n  Total fees: {:.9} SOL\n  Net P&L: {:.9} SOL ({:.2}%)",
-                position.symbol,
-                sol_invested,
-                sol_received,
-                buy_fee,
-                sell_fee,
-                total_fees,
-                net_pnl_sol,
-                net_pnl_percent
-            )
-        );
+        if is_debug_profit_enabled() {
+            // Log detailed PnL calculation for debugging
+            log(
+                LogTag::Trader,
+                "PNL_DETAILED",
+                &format!(
+                    "💰 DETAILED PNL CALCULATION for {}:\n  Entry size: {:.9} SOL\n  SOL received: {:.9} SOL\n  Buy fee: {:.9} SOL\n  Sell fee: {:.9} SOL\n  Total fees: {:.9} SOL\n  Net P&L: {:.9} SOL ({:.2}%)",
+                    position.symbol,
+                    sol_invested,
+                    sol_received,
+                    buy_fee,
+                    sell_fee,
+                    total_fees,
+                    net_pnl_sol,
+                    net_pnl_percent
+                )
+            );
+        }
 
         return (net_pnl_sol, net_pnl_percent);
     }
@@ -414,7 +416,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
 
     // Execute real buy transaction with critical operation protection
     let _guard = crate::trader::CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
-    
+
     // Get wallet address for balance tracking
     let wallet_address = match crate::utils::get_wallet_address() {
         Ok(addr) => addr,
@@ -427,7 +429,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             return;
         }
     };
-    
+
     // Execute the token purchase using instruction-based analysis
     match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
         Ok(swap_result) => {
@@ -445,8 +447,10 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 return;
             }
 
-            let transaction_signature = swap_result.transaction_signature.clone().unwrap_or_default();
-            
+            let transaction_signature = swap_result.transaction_signature
+                .clone()
+                .unwrap_or_default();
+
             // IMMEDIATE: Create unverified position right after successful swap (with signature)
             // This ensures position is created immediately when swap succeeds
             let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
@@ -500,18 +504,23 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 log(
                     LogTag::Trader,
                     "SAVED",
-                    &format!("💾 Unverified position saved to disk: {} - background verification will update", token.symbol)
+                    &format!(
+                        "💾 Unverified position saved to disk: {} - background verification will update",
+                        token.symbol
+                    )
                 );
             }
 
             // Register transaction for monitoring (transaction service will verify and update position)
-            if let Err(e) = register_position_transaction(
-                &transaction_signature,
-                &token.mint,
-                "buy",
-                crate::swaps::config::SOL_MINT,
-                &token.mint,
-            ).await {
+            if
+                let Err(e) = register_position_transaction(
+                    &transaction_signature,
+                    &token.mint,
+                    "buy",
+                    crate::swaps::config::SOL_MINT,
+                    &token.mint
+                ).await
+            {
                 log(
                     LogTag::Trader,
                     "WARNING",
@@ -521,7 +530,10 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 log(
                     LogTag::Trader,
                     "MONITOR",
-                    &format!("📡 Transaction {} registered for background verification and position update", &transaction_signature[..8])
+                    &format!(
+                        "📡 Transaction {} registered for background verification and position update",
+                        &transaction_signature[..8]
+                    )
                 );
             }
 
@@ -726,7 +738,10 @@ pub async fn close_position(
                             log(
                                 LogTag::Trader,
                                 "FROZEN_ACCOUNT",
-                                &format!("🧊 Frozen account detected for {}, adding to cooldown", position.symbol)
+                                &format!(
+                                    "🧊 Frozen account detected for {}, adding to cooldown",
+                                    position.symbol
+                                )
                             );
                             add_mint_to_frozen_cooldown(&position.mint);
                         }
@@ -734,16 +749,20 @@ pub async fn close_position(
                     return false; // Failed to close
                 }
 
-                let transaction_signature = swap_result.transaction_signature.clone().unwrap_or_default();
-                
+                let transaction_signature = swap_result.transaction_signature
+                    .clone()
+                    .unwrap_or_default();
+
                 // Register transaction for monitoring
-                if let Err(e) = register_position_transaction(
-                    &transaction_signature,
-                    &position.mint,
-                    "sell",
-                    &position.mint,
-                    crate::swaps::config::SOL_MINT,
-                ).await {
+                if
+                    let Err(e) = register_position_transaction(
+                        &transaction_signature,
+                        &position.mint,
+                        "sell",
+                        &position.mint,
+                        crate::swaps::config::SOL_MINT
+                    ).await
+                {
                     log(
                         LogTag::Trader,
                         "WARNING",
@@ -752,11 +771,13 @@ pub async fn close_position(
                 }
 
                 // Perform comprehensive transaction verification using instruction analysis
-                match verify_position_exit_transaction(
-                    &transaction_signature,
-                    &position.mint,
-                    token_amount
-                ).await {
+                match
+                    verify_position_exit_transaction(
+                        &transaction_signature,
+                        &position.mint,
+                        token_amount
+                    ).await
+                {
                     Ok(verification) => {
                         if !verification.success {
                             log(
@@ -812,10 +833,18 @@ pub async fn close_position(
 
                         log(
                             LogTag::Trader,
-                            if is_profitable { "PROFIT" } else { "LOSS" },
+                            if is_profitable {
+                                "PROFIT"
+                            } else {
+                                "LOSS"
+                            },
                             &format!(
                                 "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {} (verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
-                                if is_profitable { "💰" } else { "📉" },
+                                if is_profitable {
+                                    "💰"
+                                } else {
+                                    "📉"
+                                },
                                 position.symbol,
                                 transaction_signature,
                                 verification.token_amount_sold,
@@ -840,7 +869,11 @@ pub async fn close_position(
                         log(
                             LogTag::Trader,
                             "ERROR",
-                            &format!("❌ Exit transaction verification failed for {}: {}", position.symbol, e)
+                            &format!(
+                                "❌ Exit transaction verification failed for {}: {}",
+                                position.symbol,
+                                e
+                            )
                         );
                         return false;
                     }
@@ -859,7 +892,10 @@ pub async fn close_position(
                     log(
                         LogTag::Trader,
                         "FROZEN_ACCOUNT",
-                        &format!("🧊 Frozen account detected for {}, adding to cooldown", position.symbol)
+                        &format!(
+                            "🧊 Frozen account detected for {}, adding to cooldown",
+                            position.symbol
+                        )
                     );
                     add_mint_to_frozen_cooldown(&position.mint);
                 }
