@@ -7,6 +7,7 @@ use crate::global::STARTUP_TIME;
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
+use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
@@ -181,6 +182,38 @@ pub struct RpcOverviewDisplay {
     calls_per_second: String,
     #[tabled(rename = "⏰ Since Startup")]
     uptime: String,
+}
+
+/// Display structure for wallet tracker statistics
+#[derive(Tabled)]
+pub struct WalletTrackerDisplay {
+    #[tabled(rename = "💰 Current Value")]
+    current_value: String,
+    #[tabled(rename = "📈 Change from Start")]
+    value_change: String,
+    #[tabled(rename = "📊 Change %")]
+    change_percent: String,
+    #[tabled(rename = "📅 Days Tracked")]
+    days_tracked: String,
+    #[tabled(rename = "🏆 Best Value")]
+    best_value: String,
+    #[tabled(rename = "📉 Worst Value")]
+    worst_value: String,
+}
+
+/// Display structure for wallet holdings breakdown
+#[derive(Tabled)]
+pub struct WalletHoldingsDisplay {
+    #[tabled(rename = "💎 SOL Balance")]
+    sol_balance: String,
+    #[tabled(rename = "🪙 Token Value")]
+    token_value: String,
+    #[tabled(rename = "🏠 ATA Rent")]
+    ata_rent: String,
+    #[tabled(rename = "📦 Token Count")]
+    token_count: String,
+    #[tabled(rename = "🔗 Total Value")]
+    total_value: String,
 }
 
 /// Background task to display positions table every 10 seconds
@@ -401,16 +434,8 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     // Calculate maximum drawdown
     let max_drawdown = calculate_max_drawdown(&pnl_values);
 
-    // Get wallet balance
-    let wallet_balance = match crate::utils::get_wallet_address() {
-        Ok(address) => {
-            match crate::utils::get_sol_balance(&address).await {
-                Ok(balance) => format!("{:.6} SOL", balance),
-                Err(_) => "Error fetching".to_string(),
-            }
-        }
-        Err(_) => "Error getting address".to_string(),
-    };
+    // Get wallet balance from wallet tracker
+    let wallet_balance = get_wallet_summary().await;
 
     // Calculate bot uptime
     let uptime = format_duration_compact(*STARTUP_TIME, Utc::now());
@@ -506,6 +531,25 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     let mut pool_table = Table::new(vec![pool_service_stats]);
     pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     println!("{}", pool_table);
+
+    // Display wallet tracker statistics if available
+    if let Some(wallet_analysis) = get_wallet_analysis().await {
+        let wallet_tracker_stats = WalletTrackerDisplay {
+            current_value: format!("{:.6} SOL", wallet_analysis.current_value),
+            value_change: format!("{:+.6} SOL", wallet_analysis.value_change),
+            change_percent: format!("{:+.2}%", wallet_analysis.value_change_percent),
+            days_tracked: format!("{} days", wallet_analysis.period_days),
+            best_value: format!("{:.6} SOL", wallet_analysis.best_day_value),
+            worst_value: format!("{:.6} SOL", wallet_analysis.worst_day_value),
+        };
+
+        println!("\n💼 Wallet Tracker Statistics");
+        let mut wallet_table = Table::new(vec![wallet_tracker_stats]);
+        wallet_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        println!("{}", wallet_table);
+    } else {
+        println!("\n💼 Wallet Tracker: No historical data available");
+    }
 
     // Display RPC statistics if available
     if let Some(rpc_stats) = get_global_rpc_stats() {

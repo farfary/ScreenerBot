@@ -97,6 +97,13 @@ async fn main() {
         "Pool price service with disk caching initialized and monitoring started"
     );
 
+    // Initialize wallet tracker for balance and value monitoring
+    if let Err(e) = screenerbot::wallet_tracker::init_wallet_tracker().await {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize wallet tracker: {}", e));
+        std::process::exit(1);
+    }
+    log(LogTag::System, "INFO", "Wallet tracker initialized successfully");
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
@@ -216,6 +223,23 @@ async fn main() {
         log(LogTag::Trader, "INFO", "Positions display task started");
         screenerbot::summary::monitor_positions_display(shutdown_display).await;
         log(LogTag::Trader, "INFO", "Positions display task ended");
+    });
+
+    // Start wallet tracker background service
+    let shutdown_wallet = shutdown.clone();
+    let wallet_tracker_handle = tokio::spawn(async move {
+        log(LogTag::Wallet, "INFO", "Wallet tracker service task started");
+        match screenerbot::wallet_tracker::start_wallet_tracking(shutdown_wallet).await {
+            Ok(handle) => {
+                if let Err(e) = handle.await {
+                    log(LogTag::Wallet, "ERROR", &format!("Wallet tracker task error: {:?}", e));
+                }
+            }
+            Err(e) => {
+                log(LogTag::Wallet, "ERROR", &format!("Failed to start wallet tracker: {}", e));
+            }
+        }
+        log(LogTag::Wallet, "INFO", "Wallet tracker service task ended");
     });
 
     log(
@@ -362,6 +386,14 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("Positions display task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            if let Err(e) = wallet_tracker_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Wallet tracker task failed to shutdown cleanly: {}", e)
                 );
             }
 

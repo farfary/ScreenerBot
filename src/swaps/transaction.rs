@@ -567,7 +567,8 @@ pub struct TransactionVerificationResult {
     
     // SOL flow analysis from instruction data
     pub sol_spent: Option<u64>,        // SOL spent in transaction (from transfers)
-    pub sol_received: Option<u64>,     // SOL received in transaction (from transfers)
+    pub sol_received: Option<u64>,     // SOL received in transaction (from transfers, includes ATA rent)
+    pub sol_from_swap: Option<u64>,    // SOL received from swap only (excludes ATA rent)
     pub transaction_fee: u64,          // Network transaction fee in lamports
     pub priority_fee: Option<u64>,     // Priority fee in lamports (if any)
     
@@ -600,6 +601,7 @@ pub struct InstructionSwapAnalysis {
     pub output_mint: Option<String>,
     pub sol_spent: Option<u64>,
     pub sol_received: Option<u64>,
+    pub sol_from_swap: Option<u64>,    // SOL received from swap only (excludes ATA rent)
     pub ata_created: bool,
     pub ata_closed: bool,
     pub ata_rent_paid: u64,
@@ -800,6 +802,7 @@ pub async fn analyze_transaction_instructions(
         output_mint: None,
         sol_spent: None,
         sol_received: None,
+        sol_from_swap: None,
         ata_created: false,
         ata_closed: false,
         ata_rent_paid: 0,
@@ -847,7 +850,9 @@ pub async fn analyze_transaction_instructions(
   • Pre-transaction SOL: {} lamports ({:.9} SOL)
   • Post-transaction SOL: {} lamports ({:.9} SOL)
   • Net Change: {:+} lamports ({:+.9} SOL)
-  • Total Accounts: {} -> {}",
+  • Total Accounts: {} -> {}
+  • Expected Direction: {}
+  • Route: {} -> {}",
                     pre_sol,
                     lamports_to_sol(pre_sol),
                     post_sol,
@@ -855,11 +860,15 @@ pub async fn analyze_transaction_instructions(
                     post_sol as i64 - pre_sol as i64,
                     lamports_to_sol(post_sol) - lamports_to_sol(pre_sol),
                     meta.pre_balances.len(),
-                    meta.post_balances.len()
+                    meta.post_balances.len(),
+                    expected_direction,
+                    if expected_input_mint == SOL_MINT { "SOL" } else { &expected_input_mint[..8] },
+                    if expected_output_mint == SOL_MINT { "SOL" } else { &expected_output_mint[..8] }
                 )
             );
         }
         
+        // Enhanced SOL flow detection for multi-hop swaps
         if pre_sol > post_sol {
             analysis.sol_spent = Some(pre_sol - post_sol);
             
@@ -873,18 +882,72 @@ pub async fn analyze_transaction_instructions(
                     )
                 );
             }
+            
+            // For buy transactions (SOL -> Token), this SOL spent might be the input amount
+            if expected_direction == "buy" && expected_input_mint == SOL_MINT {
+                // Don't set input_amount here yet - let the logic below handle it with fees
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "BUY_SOL_INPUT_CANDIDATE",
+                        &format!("💡 Buy transaction: SOL spent {} lamports could be input (will verify after fee analysis)", 
+                            pre_sol - post_sol
+                        )
+                    );
+                }
+            }
         } else if post_sol > pre_sol {
-            analysis.sol_received = Some(post_sol - pre_sol);
+            let total_sol_received = post_sol - pre_sol;
+            analysis.sol_received = Some(total_sol_received);
+            
+            // Calculate SOL from swap only (excluding ATA rent reclaimed)
+            // This is critical for accurate effective price calculation
+            let sol_from_swap_only = if analysis.ata_rent_reclaimed > 0 {
+                // Subtract ATA rent reclaimed to get pure swap proceeds
+                total_sol_received.saturating_sub(analysis.ata_rent_reclaimed)
+            } else {
+                total_sol_received
+            };
+            analysis.sol_from_swap = Some(sol_from_swap_only);
             
             if is_debug_swap_enabled() {
                 log(
                     LogTag::Swap,
                     "SOL_RECEIVED_DETECTED",
-                    &format!("📥 SOL Received: {} lamports ({:.9} SOL)", 
-                        post_sol - pre_sol,
-                        lamports_to_sol(post_sol - pre_sol)
+                    &format!("📥 SOL Received Analysis:
+  Total SOL received: {} lamports ({:.9} SOL)
+  ATA rent reclaimed: {} lamports ({:.9} SOL)
+  SOL from swap only: {} lamports ({:.9} SOL)", 
+                        total_sol_received,
+                        lamports_to_sol(total_sol_received),
+                        analysis.ata_rent_reclaimed,
+                        lamports_to_sol(analysis.ata_rent_reclaimed),
+                        sol_from_swap_only,
+                        lamports_to_sol(sol_from_swap_only)
                     )
                 );
+            }
+            
+            // For sell transactions (Token -> SOL), this SOL received is the output amount
+            // This handles multi-hop swaps like BONK -> USDC -> USDT -> SOL
+            if expected_direction == "sell" && expected_output_mint == SOL_MINT {
+                // This is the actual SOL received from selling, regardless of intermediate hops
+                analysis.output_amount = Some(post_sol - pre_sol);
+                analysis.output_mint = Some(SOL_MINT.to_string());
+                
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "MULTI_HOP_SELL_OUTPUT",
+                        &format!("✅ Multi-hop sell output detected:
+  🪙 Final output: SOL
+  📥 Amount received: {} lamports ({:.9} SOL)
+  🔄 Handles complex routes like BONK->USDC->USDT->SOL",
+                            post_sol - pre_sol,
+                            lamports_to_sol(post_sol - pre_sol)
+                        )
+                    );
+                }
             }
         }
     }
@@ -1008,6 +1071,7 @@ pub async fn analyze_transaction_instructions(
             }
             
             // Process input mint balance changes (tokens spent)
+            // For multi-hop swaps, focus on the initial token that was spent
             for (i, pre_balance) in pre_token_balances.iter().enumerate() {
                 if pre_balance.mint == expected_input_mint {
                     let pre_amount = pre_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
@@ -1019,7 +1083,8 @@ pub async fn analyze_transaction_instructions(
                             &format!("🔍 Analyzing INPUT mint changes for {}:
   📤 Pre-amount: {} (raw)
   📊 Decimals: {}
-  🗂️ Account index: {}",
+  🗂️ Account index: {}
+  🔄 Multi-hop aware: Tracking initial token spent",
                                 &pre_balance.mint[..8],
                                 pre_amount,
                                 pre_balance.ui_token_amount.decimals,
@@ -1050,7 +1115,7 @@ pub async fn analyze_transaction_instructions(
                                 log(
                                     LogTag::Swap,
                                     "INPUT_MINT_CLOSED",
-                                    "🔒 No post-balance found - account likely closed"
+                                    "🔒 No post-balance found - account likely closed (common in sells)"
                                 );
                             }
                             0
@@ -1066,11 +1131,12 @@ pub async fn analyze_transaction_instructions(
                             log(
                                 LogTag::Swap,
                                 "INPUT_TOKENS_SPENT",
-                                &format!("✅ INPUT tokens spent detected:
+                                &format!("✅ INPUT tokens spent detected (multi-hop compatible):
   🪙 Mint: {}
   📤 Amount spent: {} (raw)
   📊 Equivalent: {:.9} tokens
-  💰 Pre: {} -> Post: {} = Spent: {}",
+  💰 Pre: {} -> Post: {} = Spent: {}
+  🔄 Works for: BONK->USDC->USDT->SOL routes",
                                     &pre_balance.mint[..8],
                                     spent_amount,
                                     (spent_amount as f64) / 10f64.powi(pre_balance.ui_token_amount.decimals as i32),
@@ -1085,79 +1151,93 @@ pub async fn analyze_transaction_instructions(
             }
             
             // Process output mint balance changes (tokens received)
-            for (i, post_balance) in post_token_balances.iter().enumerate() {
-                if post_balance.mint == expected_output_mint {
-                    let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
-                    
-                    if is_debug_swap_enabled() {
-                        log(
-                            LogTag::Swap,
-                            "OUTPUT_MINT_ANALYSIS",
-                            &format!("🔍 Analyzing OUTPUT mint changes for {}:
-  📥 Post-amount: {} (raw)
-  📊 Decimals: {}
-  🗂️ Account index: {}",
-                                &post_balance.mint[..8],
-                                post_amount,
-                                post_balance.ui_token_amount.decimals,
-                                post_balance.account_index
-                            )
-                        );
-                    }
-                    
-                    // Find corresponding pre-balance or assume 0 for new accounts
-                    let pre_amount = pre_token_balances
-                        .iter()
-                        .find(|pre| pre.account_index == post_balance.account_index && pre.mint == post_balance.mint)
-                        .map(|pre| {
-                            let amount = pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
-                            
-                            if is_debug_swap_enabled() {
-                                log(
-                                    LogTag::Swap,
-                                    "OUTPUT_MINT_PRE",
-                                    &format!("📤 Found corresponding pre-balance: {} (raw)", amount)
-                                );
-                            }
-                            
-                            amount
-                        })
-                        .unwrap_or_else(|| {
-                            if is_debug_swap_enabled() {
-                                log(
-                                    LogTag::Swap,
-                                    "OUTPUT_MINT_NEW",
-                                    "🆕 No pre-balance found - new account created"
-                                );
-                            }
-                            0
-                        });
-                    
-                    if post_amount > pre_amount {
-                        // Output tokens were received
-                        let received_amount = post_amount - pre_amount;
-                        analysis.output_amount = Some(received_amount);
-                        analysis.output_mint = Some(post_balance.mint.clone());
+            // For multi-hop swaps, focus on the final token that was received
+            // Skip this if we already detected SOL output above (for sell transactions)
+            if !(expected_direction == "sell" && expected_output_mint == SOL_MINT && analysis.output_amount.is_some()) {
+                for (i, post_balance) in post_token_balances.iter().enumerate() {
+                    if post_balance.mint == expected_output_mint {
+                        let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
                         
                         if is_debug_swap_enabled() {
                             log(
                                 LogTag::Swap,
-                                "OUTPUT_TOKENS_RECEIVED",
-                                &format!("✅ OUTPUT tokens received detected:
-  🪙 Mint: {}
-  📥 Amount received: {} (raw)
-  📊 Equivalent: {:.9} tokens
-  💰 Pre: {} -> Post: {} = Received: {}",
+                                "OUTPUT_MINT_ANALYSIS",
+                                &format!("🔍 Analyzing OUTPUT mint changes for {}:
+  📥 Post-amount: {} (raw)
+  📊 Decimals: {}
+  🗂️ Account index: {}
+  🔄 Multi-hop aware: Tracking final token received",
                                     &post_balance.mint[..8],
-                                    received_amount,
-                                    (received_amount as f64) / 10f64.powi(post_balance.ui_token_amount.decimals as i32),
-                                    pre_amount,
                                     post_amount,
-                                    received_amount
+                                    post_balance.ui_token_amount.decimals,
+                                    post_balance.account_index
                                 )
                             );
                         }
+                        
+                        // Find corresponding pre-balance or assume 0 for new accounts
+                        let pre_amount = pre_token_balances
+                            .iter()
+                            .find(|pre| pre.account_index == post_balance.account_index && pre.mint == post_balance.mint)
+                            .map(|pre| {
+                                let amount = pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
+                                
+                                if is_debug_swap_enabled() {
+                                    log(
+                                        LogTag::Swap,
+                                        "OUTPUT_MINT_PRE",
+                                        &format!("📤 Found corresponding pre-balance: {} (raw)", amount)
+                                    );
+                                }
+                                
+                                amount
+                            })
+                            .unwrap_or_else(|| {
+                                if is_debug_swap_enabled() {
+                                    log(
+                                        LogTag::Swap,
+                                        "OUTPUT_MINT_NEW",
+                                        "🆕 No pre-balance found - new account created (common in buys)"
+                                    );
+                                }
+                                0
+                            });
+                        
+                        if post_amount > pre_amount {
+                            // Output tokens were received
+                            let received_amount = post_amount - pre_amount;
+                            analysis.output_amount = Some(received_amount);
+                            analysis.output_mint = Some(post_balance.mint.clone());
+                            
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "OUTPUT_TOKENS_RECEIVED",
+                                    &format!("✅ OUTPUT tokens received detected (multi-hop compatible):
+  🪙 Mint: {}
+  📥 Amount received: {} (raw)
+  📊 Equivalent: {:.9} tokens
+  💰 Pre: {} -> Post: {} = Received: {}
+  🔄 Works for: SOL->USDC->USDT->TOKEN routes",
+                                        &post_balance.mint[..8],
+                                        received_amount,
+                                        (received_amount as f64) / 10f64.powi(post_balance.ui_token_amount.decimals as i32),
+                                        pre_amount,
+                                        post_amount,
+                                        received_amount
+                                    )
+                                );
+                            }
+                        }
                     }
+                }
+            } else {
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "SKIP_TOKEN_OUTPUT_ANALYSIS",
+                        "⏭️ Skipping token output analysis - SOL output already detected from balance changes"
+                    );
                 }
             }
         }
@@ -1272,6 +1352,49 @@ pub async fn analyze_transaction_instructions(
         }
     }
 
+    // Post-processing: Handle SOL input for buy transactions with multi-hop routes
+    // This needs to happen after ATA rent analysis to properly calculate the trading amount
+    if expected_direction == "buy" && expected_input_mint == SOL_MINT && analysis.input_amount.is_none() {
+        if let Some(sol_spent) = analysis.sol_spent {
+            // Calculate the actual SOL input amount by subtracting fees and ATA rent
+            let mut adjusted_sol_input = sol_spent;
+            
+            // Subtract transaction fees (estimate if not detected)
+            let estimated_tx_fee = 5000u64; // Typical transaction fee
+            adjusted_sol_input = adjusted_sol_input.saturating_sub(estimated_tx_fee);
+            
+            // Subtract ATA rent if an ATA was created
+            if analysis.ata_created {
+                adjusted_sol_input = adjusted_sol_input.saturating_sub(analysis.ata_rent_paid);
+            }
+            
+            // The remaining SOL should be the actual input amount for the swap
+            if adjusted_sol_input > 0 {
+                analysis.input_amount = Some(adjusted_sol_input);
+                analysis.input_mint = Some(SOL_MINT.to_string());
+                
+                if is_debug_swap_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "MULTI_HOP_BUY_INPUT",
+                        &format!("✅ Multi-hop buy input calculated:
+  💰 Total SOL spent: {} lamports
+  ⚡ Est. transaction fee: {} lamports
+  🏠 ATA rent paid: {} lamports
+  🔄 Calculated input: {} lamports ({:.9} SOL)
+  📝 Handles routes like SOL->USDC->USDT->TOKEN",
+                            sol_spent,
+                            estimated_tx_fee,
+                            analysis.ata_rent_paid,
+                            adjusted_sol_input,
+                            lamports_to_sol(adjusted_sol_input)
+                        )
+                    );
+                }
+            }
+        }
+    }
+
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
@@ -1283,6 +1406,7 @@ pub async fn analyze_transaction_instructions(
   • Signature: {}
   • Direction: {} | Route: {} -> {}
   • Wallet: {}
+  • Multi-hop Support: ✅ (Handles BONK->USDC->USDT->SOL routes)
   
   💰 AMOUNT ANALYSIS:
   • Input Amount: {:?} {} ({:.9} tokens)
@@ -1308,6 +1432,7 @@ pub async fn analyze_transaction_instructions(
   • Output Detection: {}
   • SOL Flow Detection: {}
   • ATA Operations Detection: {}
+  • Multi-hop Routing: ✅
   
   📋 METADATA SUMMARY:
   • Pre-token Balances: {}
@@ -1315,7 +1440,8 @@ pub async fn analyze_transaction_instructions(
   • Log Messages: {}
   • Instructions Analyzed: ✅
   
-  🎯 INSTRUCTION-BASED ANALYSIS METHODOLOGY COMPLETE",
+  🎯 MULTI-HOP INSTRUCTION-BASED ANALYSIS COMPLETE
+  🔄 Supports complex routes: Token->USDC->USDT->SOL",
                 &transaction_details.transaction.signatures.get(0).unwrap_or(&"unknown".to_string())[..std::cmp::min(16, transaction_details.transaction.signatures.get(0).unwrap_or(&"unknown".to_string()).len())],
                 expected_direction,
                 if expected_input_mint == SOL_MINT { "SOL" } else { &expected_input_mint[..8] },
@@ -1323,10 +1449,10 @@ pub async fn analyze_transaction_instructions(
                 &wallet_address[..8],
                 analysis.input_amount,
                 analysis.input_mint.as_deref().unwrap_or("?"),
-                analysis.input_amount.unwrap_or(0) as f64 / 10f64.powi(9), // Assuming 9 decimals for display
+                analysis.input_amount.unwrap_or(0) as f64, // Raw amount for debug
                 analysis.output_amount,
                 analysis.output_mint.as_deref().unwrap_or("?"),
-                analysis.output_amount.unwrap_or(0) as f64 / 10f64.powi(9), // Assuming 9 decimals for display
+                analysis.output_amount.unwrap_or(0) as f64, // Raw amount for debug
                 analysis.input_mint.as_deref().unwrap_or("NONE"),
                 analysis.output_mint.as_deref().unwrap_or("NONE"),
                 analysis.sol_spent,
@@ -2144,6 +2270,7 @@ pub async fn verify_swap_transaction(
             output_amount: None,
             sol_spent: None,
             sol_received: None,
+            sol_from_swap: None,
             transaction_fee: transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
             priority_fee: None,
             ata_created: false,
@@ -2154,8 +2281,12 @@ pub async fn verify_swap_transaction(
             price_impact: None,
             input_mint: input_mint.to_string(),
             output_mint: output_mint.to_string(),
-            input_decimals: if input_mint == SOL_MINT { 9 } else { 9 }, // Default fallback to 9
-            output_decimals: if output_mint == SOL_MINT { 9 } else { 9 }, // Default fallback to 9
+            input_decimals: if input_mint == SOL_MINT { 9 } else { 
+                crate::tokens::get_token_decimals(input_mint).await.unwrap_or(9) as u32
+            },
+            output_decimals: if output_mint == SOL_MINT { 9 } else { 
+                crate::tokens::get_token_decimals(output_mint).await.unwrap_or(9) as u32
+            },
             error: Some("Transaction failed on-chain".to_string()),
         });
     }
@@ -2207,22 +2338,29 @@ pub async fn verify_swap_transaction(
     let input_decimals = if input_mint == SOL_MINT { 
         9 
     } else { 
-        crate::tokens::decimals::get_token_decimals_from_chain(input_mint).await.unwrap_or(9) as u32
+        crate::tokens::get_token_decimals(input_mint).await.unwrap_or(9) as u32
     };
     
     let output_decimals = if output_mint == SOL_MINT { 
         9 
     } else { 
-        crate::tokens::decimals::get_token_decimals_from_chain(output_mint).await.unwrap_or(9) as u32
+        crate::tokens::get_token_decimals(output_mint).await.unwrap_or(9) as u32
     };
 
     // Step 5: Calculate effective price using the instruction data
+    // For sell transactions, use sol_from_swap (excludes ATA rent) for accurate pricing
+    let sol_for_pricing = if expected_direction == "sell" {
+        instruction_analysis.sol_from_swap
+    } else {
+        instruction_analysis.sol_received
+    };
+    
     let effective_price = crate::swaps::pricing::calculate_effective_price_from_raw(
         expected_direction,
         instruction_analysis.input_amount,
         instruction_analysis.output_amount,
         instruction_analysis.sol_spent,
-        instruction_analysis.sol_received,
+        sol_for_pricing,
         instruction_analysis.ata_rent_reclaimed,
         input_decimals,
         output_decimals
@@ -2390,6 +2528,7 @@ pub async fn verify_swap_transaction(
         output_amount: instruction_analysis.output_amount,
         sol_spent: instruction_analysis.sol_spent,
         sol_received: instruction_analysis.sol_received,
+        sol_from_swap: instruction_analysis.sol_from_swap,
         transaction_fee: transaction_details.meta.as_ref().map(|m| m.fee).unwrap_or(0),
         priority_fee: instruction_analysis.priority_fee,
         ata_created: instruction_analysis.ata_created,
@@ -2431,9 +2570,12 @@ fn validate_instruction_analysis_results(
         "sell" => {
             // For sell transactions: Must have sent tokens and received SOL
             if analysis.input_amount.is_none() || analysis.input_amount.unwrap() == 0 {
-                return Err(SwapError::TransactionError(
-                    format!("Sell validation failed: No tokens sent (input_amount: {:?})", analysis.input_amount)
-                ));
+                log(
+                    LogTag::Swap,
+                    "VALIDATION_WARNING", 
+                    &format!("⚠️ Sell transaction: No tokens sent detected in instruction analysis (input_amount: {:?}) - will use quote data for pricing", analysis.input_amount)
+                );
+                // Don't fail validation - allow quote data fallback for pricing
             }
 
             if analysis.sol_received.is_none() || analysis.sol_received.unwrap() == 0 {
@@ -2716,14 +2858,21 @@ pub async fn verify_position_entry_transaction(
     let ata_rent_paid = verification_result.ata_rent_paid;
     let transaction_fee = verification_result.transaction_fee;
 
-    // Calculate effective entry price from instruction data
+    // Calculate effective entry price from instruction data (SWAP-ONLY semantics)
+    // Definition: use quoted SOL input (exclude fees and ATA rent) divided by tokens received.
+    // Fallback to instruction-derived amounts only if expected_sol_spent is not positive.
     let effective_entry_price = if token_amount_received > 0 {
-        // For BUY transactions, use full SOL spent since ATA rent is net-zero (paid and reclaimed in same tx)
-        let sol_spent_actual = lamports_to_sol(sol_spent);
         let tokens_received_actual = (token_amount_received as f64) / 10f64.powi(verification_result.output_decimals as i32);
-        
+
         if tokens_received_actual > 0.0 {
-            sol_spent_actual / tokens_received_actual
+            if expected_sol_spent > 0.0 {
+                // Preferred path: use the originally intended SOL input
+                expected_sol_spent / tokens_received_actual
+            } else {
+                // Fallback: derive from net SOL spent (may include rent/fees)
+                let sol_spent_actual = lamports_to_sol(sol_spent);
+                sol_spent_actual / tokens_received_actual
+            }
         } else {
             0.0
         }
@@ -2823,23 +2972,46 @@ pub async fn verify_position_exit_transaction(
     let ata_rent_reclaimed = verification_result.ata_rent_reclaimed;
     let transaction_fee = verification_result.transaction_fee;
 
-    // Calculate effective exit price from instruction data
-    let effective_exit_price = if token_amount_sold > 0 {
-        let sol_from_sale = sol_received.saturating_sub(ata_rent_reclaimed);
-        let sol_received_actual = lamports_to_sol(sol_from_sale);
-        let tokens_sold_actual = (token_amount_sold as f64) / 10f64.powi(verification_result.input_decimals as i32);
-        
-        if tokens_sold_actual > 0.0 {
-            sol_received_actual / tokens_sold_actual
+    // Calculate effective exit price using the centralized pricing function with fallback
+    let effective_exit_price = if let Some(price) = crate::swaps::pricing::calculate_effective_price_from_raw_with_quote(
+        "sell",
+        verification_result.input_amount,
+        verification_result.output_amount,
+        verification_result.sol_spent,
+        verification_result.sol_received,
+        verification_result.ata_rent_reclaimed,
+        verification_result.input_decimals,
+        verification_result.output_decimals,
+        Some(expected_token_amount), // Use expected token amount as quote fallback
+        None, // No quote output amount for position tracking
+    ) {
+        price
+    } else {
+        // Legacy fallback calculation if centralized function fails
+        if token_amount_sold > 0 {
+            let sol_from_sale = sol_received.saturating_sub(ata_rent_reclaimed);
+            let sol_received_actual = lamports_to_sol(sol_from_sale);
+            let tokens_sold_actual = (token_amount_sold as f64) / 10f64.powi(verification_result.input_decimals as i32);
+            
+            if tokens_sold_actual > 0.0 {
+                sol_received_actual / tokens_sold_actual
+            } else {
+                0.0
+            }
         } else {
             0.0
         }
-    } else {
-        0.0
     };
 
-    // Calculate net SOL received (excluding ATA rent)
-    let net_sol_received = lamports_to_sol(sol_received.saturating_sub(ata_rent_reclaimed));
+    // Calculate net SOL received (SWAP-ONLY, excluding ATA rent and fees)
+    // Definition: exact SOL received from the token sale route, independent of ATA rent reclaim.
+    // Rationale: P&L uses this swap-only SOL and accounts for fees separately.
+    let tokens_sold_ui = if verification_result.input_decimals > 0 {
+        (token_amount_sold as f64) / 10f64.powi(verification_result.input_decimals as i32)
+    } else {
+        token_amount_sold as f64
+    };
+    let net_sol_received = tokens_sold_ui * effective_exit_price;
 
     // Validate results
     let verification_success = token_amount_sold > 0 && 
@@ -2852,7 +3024,7 @@ pub async fn verify_position_exit_transaction(
             LogTag::Swap,
             "POSITION_EXIT_SUCCESS",
             &format!(
-                "✅ Exit verified using instruction analysis: {} tokens sold, {:.9} SOL received, price: {:.12} SOL/token",
+                "✅ Exit verified using instruction analysis: {} tokens sold, {:.9} SOL received (swap-only), price: {:.12} SOL/token",
                 token_amount_sold,
                 net_sol_received,
                 effective_exit_price

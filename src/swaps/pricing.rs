@@ -66,28 +66,15 @@ pub async fn calculate_effective_price(
             input_sol / output_tokens
         }
         "sell" => {
-            // Sell: Token -> SOL  
-            // Calculate SOL per token, accounting for ATA rent
+            // Sell: Token -> SOL
+            // Calculate SOL per token using ONLY SOL received from the swap (exclude ATA rent)
             let input_tokens = (input_amount_raw as f64) / (10_f64).powi(input_decimals as i32);
-            let mut output_sol = lamports_to_sol(output_amount_raw);
-            
-            // Add ATA rent to the SOL received if applicable
-            if let Some(ata_rent) = ata_rent_reclaimed {
-                output_sol += lamports_to_sol(ata_rent);
-                
-                if is_debug_swap_enabled() {
-                    log(
-                        LogTag::Swap,
-                        "ATA_RENT",
-                        &format!("Added ATA rent to price calculation: {:.6} SOL", lamports_to_sol(ata_rent))
-                    );
-                }
-            }
-            
+            let output_sol = lamports_to_sol(output_amount_raw);
+
             if input_tokens <= 0.0 {
                 return Err(SwapError::InvalidAmount("Invalid token input amount".to_string()));
             }
-            
+
             output_sol / input_tokens
         }
         _ => return Err(SwapError::InvalidAmount(format!("Invalid direction: {}", direction)))
@@ -138,6 +125,33 @@ pub fn calculate_effective_price_from_raw(
     input_decimals: u32,
     output_decimals: u32,
 ) -> Option<f64> {
+    calculate_effective_price_from_raw_with_quote(
+        expected_direction,
+        input_amount,
+        output_amount,
+        sol_spent,
+        sol_received,
+        ata_rent_reclaimed,
+        input_decimals,
+        output_decimals,
+        None, // quote_input_amount
+        None, // quote_output_amount
+    )
+}
+
+/// Enhanced version with quote fallback amounts for instruction parsing failures
+pub fn calculate_effective_price_from_raw_with_quote(
+    expected_direction: &str,
+    input_amount: Option<u64>,
+    output_amount: Option<u64>,
+    sol_spent: Option<u64>,
+    sol_received: Option<u64>,
+    ata_rent_reclaimed: u64,
+    input_decimals: u32,
+    output_decimals: u32,
+    quote_input_amount: Option<u64>,
+    quote_output_amount: Option<u64>,
+) -> Option<f64> {
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
@@ -149,7 +163,9 @@ pub fn calculate_effective_price_from_raw(
   Output amount: {:?} (decimals: {})
   SOL spent: {:?}
   SOL received: {:?}
-  ATA rent reclaimed: {} lamports",
+  ATA rent reclaimed: {} lamports
+  Quote input: {:?}
+  Quote output: {:?}",
                 expected_direction,
                 input_amount,
                 input_decimals,
@@ -157,17 +173,20 @@ pub fn calculate_effective_price_from_raw(
                 output_decimals,
                 sol_spent,
                 sol_received,
-                ata_rent_reclaimed
+                ata_rent_reclaimed,
+                quote_input_amount,
+                quote_output_amount
             )
         );
     }
 
     match expected_direction {
         "buy" => {
-            // Buy: calculate SOL per token using actual SOL spent and tokens received
-            // Use SOL spent if available, otherwise use input amount
-            let sol_amount = sol_spent.or(input_amount);
-            let token_amount = output_amount;
+            // Buy: calculate SOL per token using the quoted input amount and tokens received
+            // Use input_amount (quoted amount) rather than sol_spent (which includes fees/rent)
+            // Fallback to quote amounts if instruction analysis failed
+            let sol_amount = input_amount.or(quote_input_amount);
+            let token_amount = output_amount.or(quote_output_amount);
             
             if let (Some(sol_val), Some(tokens_val)) = (sol_amount, token_amount) {
                 if tokens_val > 0 && sol_val > 0 {
@@ -182,8 +201,8 @@ pub fn calculate_effective_price_from_raw(
                                 LogTag::Swap,
                                 "PRICE_CALC_BUY",
                                 &format!(
-                                    "📊 BUY Price Calculation:
-  SOL spent: {} lamports = {:.9} SOL
+                                    "📊 BUY Price Calculation (input_amount method):
+  SOL input (quoted): {} lamports = {:.9} SOL
   Tokens received: {} raw = {:.6} tokens
   Effective price: {:.10} SOL per token",
                                     sol_val,
@@ -199,16 +218,64 @@ pub fn calculate_effective_price_from_raw(
                     }
                 }
             }
+            
+            // Fallback: If input_amount is None, use sol_spent but adjust for fees/rent
+            if let (Some(tokens_val), Some(sol_spent_val)) = (token_amount, sol_spent) {
+                if tokens_val > 0 && sol_spent_val > 0 {
+                    // Estimate the actual trade amount by subtracting typical fees and ATA rent
+                    // This is less accurate but provides a reasonable estimate
+                    let estimated_fees = 5000u64; // Typical transaction fee
+                    let estimated_ata_rent = 2_039_280u64; // Typical ATA rent
+                    let adjusted_sol_spent = sol_spent_val.saturating_sub(estimated_fees).saturating_sub(estimated_ata_rent);
+                    
+                    if adjusted_sol_spent > 0 {
+                        let sol_spent_actual = lamports_to_sol(adjusted_sol_spent);
+                        let tokens_received_actual = (tokens_val as f64) / (10_f64).powi(output_decimals as i32);
+                        
+                        if tokens_received_actual > 0.0 {
+                            let price = sol_spent_actual / tokens_received_actual;
+                            
+                            if is_debug_swap_enabled() {
+                                log(
+                                    LogTag::Swap,
+                                    "PRICE_CALC_BUY_FALLBACK",
+                                    &format!(
+                                        "📊 BUY Price Calculation (sol_spent fallback method):
+  SOL spent (total): {} lamports = {:.9} SOL
+  Estimated fees: {} lamports
+  Estimated ATA rent: {} lamports
+  Adjusted SOL for trade: {} lamports = {:.9} SOL
+  Tokens received: {} raw = {:.6} tokens
+  Effective price: {:.10} SOL per token",
+                                        sol_spent_val,
+                                        lamports_to_sol(sol_spent_val),
+                                        estimated_fees,
+                                        estimated_ata_rent,
+                                        adjusted_sol_spent,
+                                        sol_spent_actual,
+                                        tokens_val,
+                                        tokens_received_actual,
+                                        price
+                                    )
+                                );
+                            }
+                            
+                            return Some(price);
+                        }
+                    }
+                }
+            }
         }
-        "sell" => {
-            // Sell: calculate SOL per token, including ATA rent reclaimed
-            let token_amount = input_amount;
-            let sol_amount = sol_received;
+    "sell" => {
+        // Sell: calculate SOL per token using only SOL received (exclude ATA rent)
+        // Fallback to quote amounts if instruction analysis failed
+            let token_amount = input_amount.or(quote_input_amount);
+            let sol_amount = sol_received.or(quote_output_amount);
             
             if let (Some(tokens_val), Some(sol_val)) = (token_amount, sol_amount) {
                 if tokens_val > 0 && sol_val > 0 {
-                    // Add ATA rent to total SOL received
-                    let total_sol_received = lamports_to_sol(sol_val + ata_rent_reclaimed);
+            // Use only SOL received from the swap
+            let total_sol_received = lamports_to_sol(sol_val);
                     let tokens_sold_actual = (tokens_val as f64) / (10_f64).powi(input_decimals as i32);
                     
                     if tokens_sold_actual > 0.0 {
@@ -222,15 +289,12 @@ pub fn calculate_effective_price_from_raw(
                                     "📊 SELL Price Calculation:
   Tokens sold: {} raw = {:.6} tokens
   SOL received: {} lamports = {:.9} SOL
-  ATA rent reclaimed: {} lamports = {:.9} SOL
-  Total SOL: {:.9} SOL
+  Total SOL: {:.9} SOL (swap only)
   Effective price: {:.10} SOL per token",
                                     tokens_val,
                                     tokens_sold_actual,
                                     sol_val,
                                     lamports_to_sol(sol_val),
-                                    ata_rent_reclaimed,
-                                    lamports_to_sol(ata_rent_reclaimed),
                                     total_sol_received,
                                     price
                                 )
@@ -596,9 +660,6 @@ pub async fn get_token_price_sol(token_mint: &str) -> Result<f64, SwapError> {
     Ok(price_per_token / 1_000_000_000.0) // Convert back to SOL
 }
 
-/// Calculate effective price using instruction analysis for maximum accuracy
-/// This function uses transaction verification to get actual amounts instead of relying on
-/// potentially incorrect amounts from Jupiter multi-hop swap responses
 pub async fn calculate_effective_price_with_verification(
     swap_result: &SwapResult,
     input_mint: &str,
@@ -610,88 +671,132 @@ pub async fn calculate_effective_price_with_verification(
         return Err(SwapError::InvalidAmount("Cannot calculate price from failed swap".to_string()));
     }
 
-    let transaction_signature = swap_result.transaction_signature.as_ref()
+    let tx_sig = swap_result.transaction_signature.as_ref()
         .ok_or_else(|| SwapError::TransactionError("No transaction signature available for verification".to_string()))?;
 
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "PRICE_VERIFICATION",
-            &format!("🔍 Calculating effective price using instruction analysis for {} transaction: {}", direction, &transaction_signature[..8])
+            &format!("🔍 Calculating effective price using instruction analysis for {} tx: {}", direction, &tx_sig[..8])
         );
     }
 
-    // Use instruction analysis to get verified amounts
-    match super::transaction::verify_swap_transaction(
-        transaction_signature,
+    // Verify on-chain
+    let verification_result = super::transaction::verify_swap_transaction(
+        tx_sig,
         input_mint,
         output_mint,
         direction
-    ).await {
-        Ok(verification_result) if verification_result.success => {
-            // Use verified amounts from instruction analysis
-            let input_amount_raw = verification_result.input_amount
-                .ok_or_else(|| SwapError::TransactionError("No input amount in verification result".to_string()))?;
-            let output_amount_raw = verification_result.output_amount
-                .ok_or_else(|| SwapError::TransactionError("No output amount in verification result".to_string()))?;
+    ).await?;
 
-            if input_amount_raw == 0 || output_amount_raw == 0 {
-                return Err(SwapError::InvalidAmount("Cannot calculate price with zero amounts from verification".to_string()));
-            }
-
-            // Use verified decimals from instruction analysis
-            let input_decimals = verification_result.input_decimals;
-            let output_decimals = verification_result.output_decimals;
-
-            // Convert to normalized amounts
-            let input_normalized = (input_amount_raw as f64) / (10_f64).powi(input_decimals as i32);
-            let output_normalized = (output_amount_raw as f64) / (10_f64).powi(output_decimals as i32);
-
-            // Account for ATA rent if provided (for sell operations)
-            let adjusted_output = if let Some(ata_rent) = ata_rent_reclaimed {
-                let ata_rent_sol = lamports_to_sol(ata_rent);
-                output_normalized + ata_rent_sol // Add back ATA rent to the received amount
-            } else {
-                output_normalized
-            };
-
-            // Calculate effective price based on direction
-            let effective_price = match direction {
-                "buy" => {
-                    // Buy: SOL spent per token received
-                    // input_normalized = SOL spent, output_normalized = tokens received
-                    input_normalized / output_normalized
-                }
-                "sell" => {
-                    // Sell: SOL received per token sold  
-                    // input_normalized = tokens sold, output_normalized = SOL received
-                    adjusted_output / input_normalized
-                }
-                _ => return Err(SwapError::InvalidAmount(format!("Invalid direction: {}", direction)))
-            };
-
-            if is_debug_swap_enabled() {
-                log(
-                    LogTag::Swap,
-                    "PRICE_VERIFICATION",
-                    &format!("✅ Verified effective price calculation: {} {} → {} {} = {:.12} SOL/token", 
-                        input_normalized, 
-                        if input_mint == SOL_MINT { "SOL" } else { "tokens" },
-                        adjusted_output,
-                        if output_mint == SOL_MINT { "SOL" } else { "tokens" },
-                        effective_price
-                    )
-                );
-            }
-
-            Ok(effective_price)
-        }
-        Ok(verification_result) => {
-            let error_msg = verification_result.error.unwrap_or("Unknown verification error".to_string());
-            Err(SwapError::TransactionError(format!("Transaction verification failed: {}", error_msg)))
-        }
-        Err(e) => {
-            Err(SwapError::TransactionError(format!("Could not verify transaction: {}", e)))
-        }
+    if !verification_result.success {
+        let err_msg = verification_result.error.unwrap_or_else(|| "verification failed".to_string());
+        return Err(SwapError::TransactionError(format!("Transaction verification failed: {}", err_msg)));
     }
+
+    let input_raw_opt = verification_result.input_amount.map(|v| v as u128);
+    let input_decimals = verification_result.input_decimals;
+    let sol_spent_opt = verification_result.sol_spent;
+    let output_raw_opt = verification_result.output_amount.map(|v| v as u128);
+    let output_decimals = verification_result.output_decimals;
+    let sol_received_opt = verification_result.sol_received;
+    let transaction_fee = verification_result.transaction_fee;
+    let ata_rent_paid = verification_result.ata_rent_paid;
+    let ata_rent_reclaimed = verification_result.ata_rent_reclaimed;
+
+    // Validate presence depending on direction
+    match direction {
+        "buy" => {
+            let have_sol_spent = sol_spent_opt.is_some() || (input_raw_opt.is_some() && input_mint == SOL_MINT);
+            let have_tokens_out = output_raw_opt.is_some() || (output_mint == SOL_MINT && sol_received_opt.is_some());
+            if !have_sol_spent || !have_tokens_out {
+                return Err(SwapError::TransactionError("Missing required amounts in verification result for buy".to_string()));
+            }
+        }
+        "sell" => {
+            let have_tokens_in = input_raw_opt.is_some() || (input_mint == SOL_MINT && sol_spent_opt.is_some());
+            let have_sol_received = sol_received_opt.is_some() || (output_raw_opt.is_some() && output_mint == SOL_MINT);
+            if !have_tokens_in || !have_sol_received {
+                return Err(SwapError::TransactionError("Missing required amounts in verification result for sell".to_string()));
+            }
+        }
+        _ => return Err(SwapError::InvalidAmount(format!("Invalid direction: {}", direction))),
+    }
+
+    let lamports_to_sol = |lam: u64| -> f64 { lam as f64 / 1_000_000_000.0 };
+
+    // Normalize using instruction values; for BUY prefer quoted SOL input (exclude fees), for SELL use token amount
+    let input_normalized: f64 = match direction {
+        "buy" => {
+            if input_mint == SOL_MINT {
+                if let Some(raw) = input_raw_opt { // quoted SOL input in lamports
+                    lamports_to_sol(raw as u64)
+                } else if let Some(spent) = sol_spent_opt { // fallback if needed
+                    lamports_to_sol(spent)
+                } else {
+                    return Err(SwapError::TransactionError("Unable to determine SOL input for buy".to_string()));
+                }
+            } else if let Some(raw) = input_raw_opt {
+                (raw as f64) / (10f64).powi(input_decimals as i32)
+            } else {
+                return Err(SwapError::TransactionError("Unable to determine input normalized amount".to_string()));
+            }
+        }
+        "sell" => {
+            if let Some(raw) = input_raw_opt {
+                (raw as f64) / (10f64).powi(input_decimals as i32)
+            } else {
+                return Err(SwapError::TransactionError("Unable to determine tokens sold".to_string()));
+            }
+        }
+        _ => unreachable!(),
+    };
+
+    let output_normalized: f64 = match direction {
+        "buy" => {
+            if let Some(raw) = output_raw_opt {
+                (raw as f64) / (10f64).powi(output_decimals as i32)
+            } else {
+                return Err(SwapError::TransactionError("Unable to determine tokens received".to_string()));
+            }
+        }
+        "sell" => {
+            if let Some(recv) = sol_received_opt {
+                lamports_to_sol(recv)
+            } else {
+                return Err(SwapError::TransactionError("Unable to determine SOL received".to_string()));
+            }
+        }
+        _ => unreachable!(),
+    };
+
+    // Compute effective price
+    let effective_price = match direction {
+        "buy" => {
+            if output_normalized == 0.0 {
+                return Err(SwapError::InvalidAmount("Zero tokens received".to_string()));
+            }
+            input_normalized / output_normalized
+        }
+        "sell" => {
+            if input_normalized == 0.0 {
+                return Err(SwapError::InvalidAmount("Zero tokens sold".to_string()));
+            }
+            output_normalized / input_normalized
+        }
+        _ => unreachable!(),
+    };
+
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "PRICE_VERIFICATION",
+            &format!("✅ Verified price: dir={} input={} output={} price={:.12} SOL/token",
+                direction, input_normalized, output_normalized, effective_price)
+        );
+    }
+
+    Ok(effective_price)
 }
+

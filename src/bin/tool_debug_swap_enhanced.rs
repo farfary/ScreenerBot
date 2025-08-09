@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use screenerbot::{
     utils::{ get_sol_balance, get_token_balance, get_wallet_address },
     swaps::{ buy_token, sell_token },
@@ -7,7 +9,7 @@ use screenerbot::{
         price::{get_token_price_safe, initialize_price_service},
         decimals::get_token_decimals_from_chain,
         api::{ init_dexscreener_api, get_token_from_mint_global_api },
-        pool::init_pool_service,
+        pool::{ init_pool_service, get_pool_service },
     },
     swaps::{
         gmgn::get_gmgn_quote,
@@ -21,6 +23,28 @@ use screenerbot::{
 
 use std::env;
 use tokio;
+
+/// Simple formatters to avoid printing `Some(..)`/`None` in logs
+fn fmt_opt_u64(v: Option<u64>) -> String {
+    match v {
+        Some(n) => n.to_string(),
+        None => "N/A".to_string(),
+    }
+}
+
+fn fmt_opt_f64(v: Option<f64>, precision: usize) -> String {
+    match v {
+        Some(x) => format!("{x:.prec$}", x = x, prec = precision),
+        None => "N/A".to_string(),
+    }
+}
+
+fn fmt_opt_signature(sig: &Option<String>) -> String {
+    match sig {
+        Some(s) => s.clone(),
+        None => "N/A".to_string(),
+    }
+}
 
 /// Print comprehensive help menu for the Enhanced Debug Swap Tool
 fn print_help() {
@@ -38,6 +62,7 @@ fn print_help() {
     println!("");
     println!("OPTIONS:");
     println!("    --help, -h             Show this help message");
+    println!("    --dry-run              API testing only - no actual swaps executed");
     println!("    --debug-swap           Enable detailed swap operation logging");
     println!("    --debug-wallet         Enable detailed wallet balance tracking");
     println!("");
@@ -47,6 +72,9 @@ fn print_help() {
     println!("");
     println!("    # Test specific token (Bonk)");
     println!("    cargo run --bin tool_debug_swap_enhanced -- DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263");
+    println!("");
+    println!("    # API testing only (no actual swaps)");
+    println!("    cargo run --bin tool_debug_swap_enhanced -- DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 --dry-run");
     println!("");
     println!("    # Full debug mode with detailed logging");
     println!("    cargo run --bin tool_debug_swap_enhanced -- test-all --debug-swap --debug-wallet");
@@ -125,11 +153,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Check for test-mode argument
     let mut test_mode_comprehensive = false;
+    let mut dry_run_mode = false;
     let mut token_mint_arg = None;
     
     for arg in &args[1..] {
         if arg.starts_with("--test-mode=comprehensive") {
             test_mode_comprehensive = true;
+        } else if arg == "--dry-run" {
+            dry_run_mode = true;
         } else if !arg.starts_with("--") {
             token_mint_arg = Some(arg);
         }
@@ -144,6 +175,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "INFO", "🚀 Starting enhanced swap debug tool");
     log(LogTag::System, "INFO", &format!("Target token mint: {}", token_mint));
+    
+    if dry_run_mode {
+        log(LogTag::System, "INFO", "🔍 DRY RUN MODE: API testing only - no actual swaps will be executed");
+    }
 
     // Initialize systems
     initialize_systems().await?;
@@ -158,7 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token = get_token_info(token_mint).await?;
 
     // Run single token test with first amount
-    run_single_token_test(&token, TEST_SOL_AMOUNTS[0], &wallet_address, initial_sol_balance).await
+    run_single_token_test(&token, TEST_SOL_AMOUNTS[0], &wallet_address, initial_sol_balance, dry_run_mode).await
 }
 
 /// Initialize all required systems
@@ -270,7 +305,7 @@ async fn run_comprehensive_tests() -> Result<(), Box<dyn std::error::Error>> {
             log(LogTag::System, "INFO", &format!("💰 Testing {} with {:.6} SOL", token.symbol, amount));
             log(LogTag::System, "INFO", &"-".repeat(50));
 
-            match test_single_swap(&token, amount, &wallet_address).await {
+            match test_single_swap(&token, amount, &wallet_address, false).await {
                 Ok(result) => {
                     log(LogTag::System, "SUCCESS", &format!("✅ {} test with {:.6} SOL completed", token.symbol, amount));
                     test_results.push((token.symbol.clone(), amount, true, result));
@@ -331,6 +366,7 @@ async fn run_single_token_test(
     test_amount: f64,
     wallet_address: &str,
     initial_sol_balance: f64,
+    dry_run_mode: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::System, "INFO", &format!("🎯 Testing {} with {:.6} SOL", token.symbol, test_amount));
     
@@ -341,7 +377,7 @@ async fn run_single_token_test(
         return Err(error_msg.into());
     }
 
-    let result = test_single_swap(token, test_amount, wallet_address).await?;
+    let result = test_single_swap(token, test_amount, wallet_address, dry_run_mode).await?;
     log(LogTag::System, "SUCCESS", &format!("✅ Single token test completed: {}", result));
     Ok(())
 }
@@ -351,6 +387,7 @@ async fn test_single_swap(
     token: &Token,
     test_amount: f64,
     wallet_address: &str,
+    dry_run_mode: bool,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Get token decimals
     let token_decimals = get_token_decimals_from_chain(&token.mint).await.map_err(|e| {
@@ -391,6 +428,12 @@ async fn test_single_swap(
     log(LogTag::System, "INFO", "🎯 STEP 1: Buying tokens with SOL");
     log(LogTag::System, "INFO", &"=".repeat(50));
 
+    if dry_run_mode {
+        log(LogTag::System, "INFO", "🔍 DRY RUN: Skipping actual buy transaction");
+        log(LogTag::System, "INFO", "📊 API and quote analysis completed successfully");
+        return Ok("DRY RUN COMPLETED - API and price analysis finished".to_string());
+    }
+
     let buy_result = buy_token(&token, test_amount, expected_price).await.map_err(|e| {
         log(LogTag::System, "ERROR", &format!("❌ Buy transaction failed: {}", e));
         e
@@ -415,10 +458,10 @@ async fn test_single_swap(
                 log(LogTag::System, "DEBUG", "✅ Transaction verification completed");
                 log(LogTag::System, "DEBUG", &format!("📊 INSTRUCTION ANALYSIS RESULTS:"));
                 log(LogTag::System, "DEBUG", &format!("  • Success: {}", verification.success));
-                log(LogTag::System, "DEBUG", &format!("  • Input amount: {:?} lamports", verification.input_amount));
-                log(LogTag::System, "DEBUG", &format!("  • Output amount: {:?} raw tokens", verification.output_amount));
-                log(LogTag::System, "DEBUG", &format!("  • SOL spent: {:?} lamports", verification.sol_spent));
-                log(LogTag::System, "DEBUG", &format!("  • SOL received: {:?} lamports", verification.sol_received));
+                log(LogTag::System, "DEBUG", &format!("  • Input amount: {} lamports", fmt_opt_u64(verification.input_amount)));
+                log(LogTag::System, "DEBUG", &format!("  • Output amount: {} raw tokens", fmt_opt_u64(verification.output_amount)));
+                log(LogTag::System, "DEBUG", &format!("  • SOL spent: {} lamports", fmt_opt_u64(verification.sol_spent)));
+                log(LogTag::System, "DEBUG", &format!("  • SOL received: {} lamports", fmt_opt_u64(verification.sol_received)));
                 log(LogTag::System, "DEBUG", &format!("  • Input mint: {}", verification.input_mint));
                 log(LogTag::System, "DEBUG", &format!("  • Output mint: {}", verification.output_mint));
                 log(LogTag::System, "DEBUG", &format!("  • Input decimals: {}", verification.input_decimals));
@@ -428,14 +471,14 @@ async fn test_single_swap(
                 log(LogTag::System, "DEBUG", &format!("  • ATA closed: {}", verification.ata_closed));
                 log(LogTag::System, "DEBUG", &format!("  • ATA rent paid: {} lamports", verification.ata_rent_paid));
                 log(LogTag::System, "DEBUG", &format!("  • ATA rent reclaimed: {} lamports", verification.ata_rent_reclaimed));
-                log(LogTag::System, "DEBUG", &format!("  • Effective price: {:?} SOL/token", verification.effective_price));
+                log(LogTag::System, "DEBUG", &format!("  • Effective price: {} SOL/token", fmt_opt_f64(verification.effective_price, 12)));
                 
                 // Compare with quote amounts
                 let quote_input = buy_result.input_amount.parse::<u64>().unwrap_or(0);
                 let quote_output = buy_result.output_amount.parse::<u64>().unwrap_or(0);
                 log(LogTag::System, "DEBUG", &format!("📊 QUOTE vs INSTRUCTION COMPARISON:"));
-                log(LogTag::System, "DEBUG", &format!("  • Quote input: {} vs Instruction input: {:?}", quote_input, verification.input_amount));
-                log(LogTag::System, "DEBUG", &format!("  • Quote output: {} vs Instruction output: {:?}", quote_output, verification.output_amount));
+                log(LogTag::System, "DEBUG", &format!("  • Quote input: {} vs Instruction input: {}", quote_input, fmt_opt_u64(verification.input_amount)));
+                log(LogTag::System, "DEBUG", &format!("  • Quote output: {} vs Instruction output: {}", quote_output, fmt_opt_u64(verification.output_amount)));
                 
                 if let (Some(instr_input), Some(instr_output)) = (verification.input_amount, verification.output_amount) {
                     let input_diff = ((instr_input as f64 - quote_input as f64) / quote_input as f64 * 100.0).abs();
@@ -528,11 +571,11 @@ async fn test_single_swap(
     
     // Log transaction analysis from SwapResult
     log(LogTag::System, "INFO", &format!("📊 Sell Transaction Analysis:"));
-    log(LogTag::System, "INFO", &format!("  - Signature: {:?}", sell_result.transaction_signature));
+    log(LogTag::System, "INFO", &format!("  - Signature: {}", fmt_opt_signature(&sell_result.transaction_signature)));
     log(LogTag::System, "INFO", &format!("  - Input Amount (parsed): {}", sell_result.input_amount));
     log(LogTag::System, "INFO", &format!("  - Output Amount (parsed): {}", sell_result.output_amount));
     log(LogTag::System, "INFO", &format!("  - Price Impact: {}", sell_result.price_impact));
-    log(LogTag::System, "INFO", &format!("  - Effective Price: {:?}", sell_result.effective_price));
+    log(LogTag::System, "INFO", &format!("  - Effective Price: {}", fmt_opt_f64(sell_result.effective_price, 12)));
     log(LogTag::System, "INFO", &format!("  - Fee (lamports): {}", sell_result.fee_lamports));
     log(LogTag::System, "INFO", &format!("  - Execution Time: {:.2}s", sell_result.execution_time));
     
@@ -658,7 +701,51 @@ async fn test_single_swap(
                 log(LogTag::System, "INFO", &format!("  • Net SOL Received: {:.9} SOL", exit_verification.net_sol_received));
                 
                 // Compare with swap result
+                // Debug: Show sell result effective price details
+                log(LogTag::System, "DEBUG", "🔍 SELL RESULT EFFECTIVE PRICE DEBUG:");
+                log(LogTag::System, "DEBUG", &format!("  • sell_result.effective_price: {}", fmt_opt_f64(sell_result.effective_price, 12)));
+                log(LogTag::System, "DEBUG", &format!("  • sell_result.success: {}", sell_result.success));
+                if let Some(error) = &sell_result.error {
+                    log(LogTag::System, "DEBUG", &format!("  • sell_result.error: {}", error));
+                }
+                
                 if let Some(swap_effective_price) = sell_result.effective_price {
+                    // Extra diagnostics when swap_effective_price is zero or near-zero
+                    if swap_effective_price <= 0.0 {
+                        log(LogTag::System, "WARNING", "⚠️ Swap effective price is 0.0 — investigating root cause");
+                        // Log sell_result breakdown
+                        log(LogTag::System, "DEBUG", &format!(
+                            "  • SELL RESULT BREAKDOWN: input_amount(raw)={}, output_amount(raw)={}, fee_lamports={}, success={}, err={:?}",
+                            sell_result.input_amount,
+                            sell_result.output_amount,
+                            sell_result.fee_lamports,
+                            sell_result.success,
+                            sell_result.error
+                        ));
+                        // Attempt a recompute using exit verification values as a sanity check
+                        let token_decimals = screenerbot::tokens::decimals::get_token_decimals_from_chain(&token.mint)
+                            .await
+                            .unwrap_or(9);
+                        let tokens_sold_dec = (exit_verification.token_amount_sold as f64)
+                            / (10_f64).powi(token_decimals as i32);
+                        let total_sol_received = screenerbot::rpc::lamports_to_sol(
+                            exit_verification.sol_received,
+                        );
+                        let recomputed_exit_price = if tokens_sold_dec > 0.0 {
+                            total_sol_received / tokens_sold_dec
+                        } else {
+                            0.0
+                        };
+                        log(LogTag::System, "DEBUG", &format!(
+                            "  • EXIT VERIFY BREAKDOWN: token_decimals={}, tokens_sold_dec={:.9}, sol_received(SOL)={:.9}, ata_rent_reclaimed(SOL)={:.9}, recomputed_exit_price={:.12}",
+                            token_decimals,
+                            tokens_sold_dec,
+                            screenerbot::rpc::lamports_to_sol(exit_verification.sol_received),
+                            screenerbot::rpc::lamports_to_sol(exit_verification.ata_rent_reclaimed),
+                            recomputed_exit_price
+                        ));
+                        log(LogTag::System, "DEBUG", "  • Likely causes: missing SOL received detection in instruction analysis, or quote fallback not applied for sell");
+                    }
                     let price_diff = ((exit_verification.effective_exit_price - swap_effective_price) / swap_effective_price * 100.0).abs();
                     log(LogTag::System, "INFO", "");
                     log(LogTag::System, "INFO", "🔍 SELL PRICE COMPARISON:");
@@ -671,6 +758,43 @@ async fn test_single_swap(
                     } else {
                         log(LogTag::System, "SUCCESS", "✅ Sell price calculations match within tolerance");
                     }
+                } else {
+                    // This is the case we're hitting - effective price is None
+                    log(LogTag::System, "INFO", "");
+                    log(LogTag::System, "INFO", "🔍 SELL PRICE COMPARISON:");
+                    log(LogTag::System, "WARNING", "  ❌ Swap Result Price: None (effective price calculation failed)");
+                    log(LogTag::System, "INFO", &format!("  • Position Exit Price: {:.12} SOL/token", exit_verification.effective_exit_price));
+                    log(LogTag::System, "INFO", "  • Price Difference: inf% (cannot compare with None)");
+                    log(LogTag::System, "WARNING", "⚠️ Significant sell price difference detected: inf%");
+                    
+                    // Add debug info about why effective price is None
+                    log(LogTag::System, "DEBUG", "🔍 DEBUGGING WHY EFFECTIVE PRICE IS NONE:");
+                    log(LogTag::System, "DEBUG", &format!("  • Sell transaction signature: {:?}", sell_result.transaction_signature));
+                    log(LogTag::System, "DEBUG", &format!("  • Sell input amount: {}", sell_result.input_amount));
+                    log(LogTag::System, "DEBUG", &format!("  • Sell output amount: {}", sell_result.output_amount));
+                    // Re-run a recompute using exit verification context to provide guidance
+                    let token_decimals = screenerbot::tokens::decimals::get_token_decimals_from_chain(&token.mint)
+                        .await
+                        .unwrap_or(9);
+                    let tokens_sold_dec = (exit_verification.token_amount_sold as f64)
+                        / (10_f64).powi(token_decimals as i32);
+                    let total_sol_received = screenerbot::rpc::lamports_to_sol(
+                            exit_verification.sol_received,
+                    );
+                    let recomputed_exit_price = if tokens_sold_dec > 0.0 {
+                        total_sol_received / tokens_sold_dec
+                    } else {
+                        0.0
+                    };
+                    log(LogTag::System, "DEBUG", &format!(
+                        "  • RECOMPUTE (from exit verification): token_decimals={}, tokens_sold_dec={:.9}, total_sol_received(SWAP_ONLY)={:.9} SOL, recomputed_exit_price={:.12}",
+                        token_decimals,
+                        tokens_sold_dec,
+                        total_sol_received,
+                        recomputed_exit_price
+                    ));
+                    log(LogTag::System, "DEBUG", "  • This suggests the transaction verification effective price calculation failed");
+                    log(LogTag::System, "DEBUG", "  • Possible reasons: instruction analysis didn't find SOL received, or calculation returned None");
                 }
                 
                 if let Some(error) = exit_verification.error {
@@ -756,6 +880,7 @@ async fn test_single_swap(
 #[derive(Debug)]
 struct PriceComparison {
     api_price: Option<f64>,
+    pool_price: Option<f64>,
     dexscreener_price: Option<f64>,
     gmgn_price: Option<f64>,
     jupiter_price: Option<f64>,
@@ -779,10 +904,35 @@ async fn get_comprehensive_price_comparison(
         log(LogTag::System, "WARNING", "  🔴 API Price: Not available");
     }
     
-    // 2. Get DexScreener price from token object
+    // 2. Get Pool price directly from pool service
+    let pool_price = {
+        let pool_service = get_pool_service();
+        if pool_service.check_token_availability(token_mint).await {
+            match pool_service.get_pool_price(token_mint, api_price).await {
+                Some(result) => {
+                    if let Some(price) = result.price_sol {
+                        log(LogTag::System, "INFO", &format!("  🏊 Pool Price: {:.10} SOL (from {} via {})", price, result.pool_address, result.dex_id));
+                        Some(price)
+                    } else {
+                        log(LogTag::System, "WARNING", "  🔴 Pool Price: Calculation failed");
+                        None
+                    }
+                }
+                None => {
+                    log(LogTag::System, "WARNING", "  🔴 Pool Price: No pool data available");
+                    None
+                }
+            }
+        } else {
+            log(LogTag::System, "WARNING", "  🔴 Pool Price: Token not available in pool service");
+            None
+        }
+    };
+    
+    // 3. Get DexScreener price from token object
     let dexscreener_price = None; // Will be set from token object in caller
     
-    // 3. Get GMGN quote price
+    // 4. Get GMGN quote price
     let gmgn_price = get_gmgn_quote_price(token_mint, wallet_address, test_amount).await;
     if let Some(price) = gmgn_price {
         log(LogTag::System, "INFO", &format!("  🟡 GMGN Quote Price: {:.10} SOL", price));
@@ -790,7 +940,7 @@ async fn get_comprehensive_price_comparison(
         log(LogTag::System, "WARNING", "  🔴 GMGN Quote Price: Not available");
     }
     
-    // 4. Get Jupiter quote price
+    // 5. Get Jupiter quote price
     let jupiter_price = get_jupiter_quote_price(token_mint, wallet_address, test_amount).await;
     if let Some(price) = jupiter_price {
         log(LogTag::System, "INFO", &format!("  🟠 Jupiter Quote Price: {:.10} SOL", price));
@@ -801,6 +951,7 @@ async fn get_comprehensive_price_comparison(
     // Collect all available prices
     let mut prices = Vec::new();
     if let Some(price) = api_price { prices.push(("API", price)); }
+    if let Some(price) = pool_price { prices.push(("Pool", price)); }
     if let Some(price) = gmgn_price { prices.push(("GMGN", price)); }
     if let Some(price) = jupiter_price { prices.push(("Jupiter", price)); }
     
@@ -824,10 +975,19 @@ async fn get_comprehensive_price_comparison(
         }
     }
     
-    // Choose best price (use API price as primary, fallback to others)
-    let best_price = api_price
-        .or(jupiter_price)
-        .or(gmgn_price);
+    // Choose best price (prefer quotes over API/Pool for accuracy, use median if available)
+    // API prices may use incorrect decimals or stale data, while quotes are real-time and decimal-aware
+    let best_price = if let (Some(gmgn), Some(jupiter)) = (gmgn_price, jupiter_price) {
+        // If both quotes available, use the median of the two (more stable than single source)
+        let avg = (gmgn + jupiter) / 2.0;
+        Some(avg)
+    } else {
+        // Fallback priority: quotes > pool > API (quotes most accurate, pool real-time, API may be stale)
+        jupiter_price
+            .or(gmgn_price)
+            .or(pool_price)
+            .or(api_price)
+    };
     
     if let Some(price) = best_price {
         log(LogTag::System, "INFO", &format!("  🎯 Selected Price: {:.10} SOL", price));
@@ -837,6 +997,7 @@ async fn get_comprehensive_price_comparison(
     
     PriceComparison {
         api_price,
+        pool_price,
         dexscreener_price,
         gmgn_price,
         jupiter_price,

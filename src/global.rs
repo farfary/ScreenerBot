@@ -182,6 +182,16 @@ pub fn is_debug_wallet_enabled() -> bool {
     }
 }
 
+/// Check if debug wallet tracker mode is enabled via command line args
+pub fn is_debug_wallet_tracker_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-wallet-tracker".to_string()) || 
+        args.contains(&"--debug-wallet".to_string())
+    } else {
+        false
+    }
+}
+
 /// Check if debug swap mode is enabled via command line args
 pub fn is_debug_swap_enabled() -> bool {
     if let Ok(args) = CMD_ARGS.lock() { args.contains(&"--debug-swap".to_string()) } else { false }

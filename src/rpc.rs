@@ -3,6 +3,25 @@
 /// This module provides a centralized RPC client that can be used throughout the application
 /// for consistent RPC configuration and connection management.
 
+/// FORCE PREMIUM RPC ONLY - When set to true, ALL RPC calls will use only premium RPC URL
+/// This bypasses all fallback logic and main RPC usage for maximum reliability
+/// 
+/// USAGE:
+/// - Set to `true` to force all RPC operations to use only the premium RPC endpoint
+/// - Set to `false` for normal operation (main RPC with premium fallback)
+/// 
+/// When enabled, the following methods use ONLY premium RPC:
+/// - get_ata_rent_lamports()
+/// - get_sol_balance()
+/// - get_token_balance()
+/// - get_latest_blockhash()
+/// - send_transaction()
+/// - sign_and_send_transaction()
+/// 
+/// WARNING: If premium RPC fails when this is enabled, operations will fail
+/// instead of falling back to other endpoints.
+const FORCE_PREMIUM_RPC_ONLY: bool = false;
+
 use crate::logger::{ log, LogTag };
 use crate::global::{ read_configs, is_debug_wallet_enabled, RPC_STATS };
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
@@ -107,6 +126,11 @@ pub struct AtaRentInfo {
 static ATA_RENT_CACHE: Lazy<StdArc<StdMutex<Option<AtaRentInfo>>>> = 
     Lazy::new(|| StdArc::new(StdMutex::new(None)));
 
+/// Check if premium RPC only mode is active
+fn is_premium_rpc_only() -> bool {
+    FORCE_PREMIUM_RPC_ONLY
+}
+
 /// Get current ATA rent amount from chain with 10-second cache
 pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
     // Check cache first
@@ -126,13 +150,52 @@ pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getMinimumBalanceForRentExemption",
-        "params": [165 + 128] // ATA account size: 165 bytes + 128 bytes for token account data
+        "params": [165] // ATA account size: 165 bytes for standard token account
     });
 
     let client = reqwest::Client::new();
     let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
-    // Try premium RPC first for better reliability
+    // If premium RPC only mode is active, use only premium RPC
+    if is_premium_rpc_only() {
+        log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for ATA rent");
+        
+        let response = client
+            .post(&configs.rpc_url_premium)
+            .header("Content-Type", "application/json")
+            .json(&rpc_payload)
+            .send()
+            .await?;
+
+        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+            if let Some(result) = rpc_response.get("result") {
+                if let Some(rent_lamports) = result.as_u64() {
+                    // Update cache
+                    {
+                        let mut cache = ATA_RENT_CACHE.lock().unwrap();
+                        *cache = Some(AtaRentInfo {
+                            rent_lamports,
+                            cached_at: Instant::now(),
+                        });
+                    }
+                    
+                    log(LogTag::Rpc, "ATA_RENT", &format!("Retrieved ATA rent from premium RPC: {} lamports ({:.9} SOL)", 
+                        rent_lamports, lamports_to_sol(rent_lamports)));
+                    
+                    return Ok(rent_lamports);
+                }
+            }
+        }
+
+        // If premium RPC fails and we're in premium-only mode, fallback to typical rent
+        const FALLBACK_ATA_RENT: u64 = 2_039_280;
+        log(LogTag::Rpc, "ATA_RENT_FALLBACK", 
+            &format!("Premium RPC failed in premium-only mode, using fallback: {} lamports", FALLBACK_ATA_RENT));
+        
+        return Ok(FALLBACK_ATA_RENT);
+    }
+
+    // Normal mode: Try premium RPC first for better reliability
     let response = client
         .post(&configs.rpc_url_premium)
         .header("Content-Type", "application/json")
@@ -195,6 +258,7 @@ pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
     
     Ok(FALLBACK_ATA_RENT)
 }
+
 use tokio::sync::Notify;
 
 /// Error types for RPC and wallet operations
@@ -1123,10 +1187,55 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
-
-        // Use main RPC URL first
         let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for SOL balance");
+            
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(value) = result.get("value") {
+                                if let Some(balance_lamports) = value.as_u64() {
+                                    let balance_sol = lamports_to_sol(balance_lamports);
+                                    if is_debug_wallet_enabled() {
+                                        log(
+                                            LogTag::Rpc,
+                                            "DEBUG",
+                                            &format!(
+                                                "SOL balance retrieved: {} lamports ({:.6} SOL) from premium RPC only",
+                                                balance_lamports,
+                                                balance_sol
+                                            )
+                                        );
+                                    }
+                                    self.record_call_for_url(&configs.rpc_url_premium, "get_balance");
+                                    self.record_success(Some(&configs.rpc_url_premium));
+                                    return Ok(balance_sol);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(SwapError::NetworkError(e));
+                }
+            }
+
+            return Err(
+                SwapError::TransactionError("Premium RPC failed in premium-only mode".to_string())
+            );
+        }
+
+        // Normal mode: Use main RPC first
         let mut should_fallback = false;
 
         match
@@ -1269,10 +1378,84 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
-
-        // Use main RPC URL first
         let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for token balance");
+            
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(value) = result.get("value") {
+                                if let Some(accounts) = value.as_array() {
+                                    if let Some(account) = accounts.first() {
+                                        if let Some(account_data) = account.get("account") {
+                                            if let Some(data) = account_data.get("data") {
+                                                if let Some(parsed) = data.get("parsed") {
+                                                    if let Some(info) = parsed.get("info") {
+                                                        if
+                                                            let Some(token_amount) =
+                                                                info.get("tokenAmount")
+                                                        {
+                                                            if
+                                                                let Some(amount_str) =
+                                                                    token_amount.get("amount")
+                                                            {
+                                                                if
+                                                                    let Some(amount_str) =
+                                                                        amount_str.as_str()
+                                                                {
+                                                                    if
+                                                                        let Ok(amount) =
+                                                                            amount_str.parse::<u64>()
+                                                                    {
+                                                                        self.record_call_for_url(
+                                                                            &configs.rpc_url_premium,
+                                                                            "get_token_accounts_by_owner"
+                                                                        );
+                                                                        return Ok(amount);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // No token account found
+                                self.record_call_for_url(
+                                    &configs.rpc_url_premium,
+                                    "get_token_accounts_by_owner"
+                                );
+                                return Ok(0);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Rpc,
+                        "ERROR",
+                        &format!("Premium RPC failed in premium-only mode for token balance: {}", e)
+                    );
+                    return Ok(0);
+                }
+            }
+            
+            return Ok(0);
+        }
+
+        // Normal mode: Use main RPC first
         let mut should_fallback = false;
 
         match
@@ -1452,10 +1635,47 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
-
-        // Use main RPC URL first
         let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - using only premium RPC for blockhash");
+            
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                        if let Some(result) = rpc_response.get("result") {
+                            if let Some(value) = result.get("value") {
+                                if
+                                    let Some(blockhash_str) = value
+                                        .get("blockhash")
+                                        .and_then(|b| b.as_str())
+                                {
+                                    if let Ok(blockhash) = Hash::from_str(blockhash_str) {
+                                        return Ok(blockhash);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(SwapError::NetworkError(e));
+                }
+            }
+
+            return Err(
+                SwapError::TransactionError("Premium RPC failed in premium-only mode for blockhash".to_string())
+            );
+        }
+
+        // Normal mode: Use main RPC first
         let mut should_fallback = false;
 
         match
@@ -1588,10 +1808,56 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
-
-        // Use premium RPC URL first
         let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - sending transaction to premium RPC only");
+            
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(signature) = result.as_str() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "SUCCESS",
+                                        &format!("Transaction sent successfully via premium RPC only: {}", signature)
+                                    );
+                                    return Ok(signature.to_string());
+                                }
+                            }
+
+                            if let Some(error) = rpc_response.get("error") {
+                                let error_msg = error
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("Unknown RPC error");
+                                return Err(
+                                    SwapError::TransactionError(format!("Premium RPC error: {}", error_msg))
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(SwapError::NetworkError(e));
+                }
+            }
+
+            return Err(
+                SwapError::TransactionError("Premium RPC failed in premium-only mode".to_string())
+            );
+        }
+
+        // Normal mode: Use premium RPC URL first
         let premium_rpc = &configs.rpc_url_premium;
 
         log(LogTag::Rpc, "INFO", "Sending transaction to premium RPC...");
@@ -1785,7 +2051,53 @@ impl RpcClient {
 
         let client = reqwest::Client::new();
 
-        // Use premium RPC URL first
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - sending signed transaction to premium RPC only");
+            
+            match
+                client
+                    .post(&configs.rpc_url_premium)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if let Some(result) = rpc_response.get("result") {
+                                if let Some(tx_sig) = result.as_str() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "SUCCESS",
+                                        &format!("Signed transaction sent successfully via premium RPC only: {}", tx_sig)
+                                    );
+                                    self.record_call_for_url(&configs.rpc_url_premium, "send_transaction");
+                                    return Ok(tx_sig.to_string());
+                                }
+                            }
+
+                            if let Some(error) = rpc_response.get("error") {
+                                let error_msg = error
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or("Unknown RPC error");
+                                return Err(
+                                    SwapError::TransactionError(format!("Premium RPC error: {}", error_msg))
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(SwapError::NetworkError(e));
+                }
+            }
+
+            return Err(SwapError::TransactionError("Premium RPC failed in premium-only mode".to_string()));
+        }
+
+        // Normal mode: Use premium RPC URL first
         let premium_rpc = &configs.rpc_url_premium;
 
         log(LogTag::Rpc, "SEND", "Sending signed transaction to premium RPC");

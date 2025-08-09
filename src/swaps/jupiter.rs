@@ -488,6 +488,32 @@ pub async fn execute_jupiter_swap(
                 let input_str = verification_result.input_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.in_amount.clone());
                 let output_str = verification_result.output_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.out_amount.clone());
 
+                // Calculate effective price with quote fallback if instruction analysis failed
+        let effective_price = verification_result.effective_price.or_else(|| {
+                    if let (Ok(quote_input), Ok(quote_output)) = (swap_data.quote.in_amount.parse::<u64>(), swap_data.quote.out_amount.parse::<u64>()) {
+                        use crate::swaps::pricing::calculate_effective_price_from_raw_with_quote;
+                        
+                        // Get decimals for accurate calculation (SOL is always 9 decimals)
+            let input_decimals = if input_mint == crate::swaps::config::SOL_MINT { 9 } else { swap_data.quote.in_decimals as u32 };
+            let output_decimals = if output_mint == crate::swaps::config::SOL_MINT { 9 } else { swap_data.quote.out_decimals as u32 };
+                        
+                        calculate_effective_price_from_raw_with_quote(
+                            expected_direction,
+                            verification_result.input_amount,
+                            verification_result.output_amount,
+                            verification_result.sol_spent,
+                            verification_result.sol_received,
+                            verification_result.ata_rent_reclaimed,
+                            input_decimals,
+                            output_decimals,
+                            Some(quote_input),
+                            Some(quote_output),
+                        )
+                    } else {
+                        None
+                    }
+                });
+
                 log(
                     LogTag::Swap,
                     "JUPITER_SUCCESS",
@@ -505,7 +531,7 @@ pub async fn execute_jupiter_swap(
                     price_impact: swap_data.quote.price_impact_pct.clone(),
                     fee_lamports: verification_result.transaction_fee,
                     execution_time,
-                    effective_price: verification_result.effective_price,
+                    effective_price,
                     swap_data: Some(swap_data),
                     error: None,
                 })

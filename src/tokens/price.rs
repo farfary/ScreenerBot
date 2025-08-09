@@ -821,7 +821,7 @@ pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
 
     let service_guard = PRICE_SERVICE.lock().await;
     if let Some(ref service) = *service_guard {
-        let result = service.get_token_price(mint).await;
+        let result = service.get_token_price_blocking(mint).await;
 
         if is_debug_price_service_enabled() {
             log(

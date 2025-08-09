@@ -118,13 +118,12 @@ pub async fn buy_token(
         fee_lamports: unified_result.fee_lamports,
         execution_time: unified_result.execution_time,
         effective_price: unified_result.effective_price,
-        swap_data: None, // Will be set below if needed
+        swap_data: unified_result.swap_data, // preserve swap_data for decimals/fallbacks
         error: unified_result.error,
     };
 
-    // Calculate and set the effective price in the swap result
+    // Add transaction to monitoring service if successful
     if swap_result.success {
-        // Add transaction to monitoring service
         if let Some(ref signature) = swap_result.transaction_signature {
             if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
                 signature,
@@ -142,48 +141,30 @@ pub async fn buy_token(
             }
         }
 
-        match crate::swaps::pricing::calculate_effective_price_with_verification(
-            &swap_result,
-            SOL_MINT,
-            &token.mint,
-            "buy",
-            None, // No ATA rent for buy operations
-        ).await {
-            Ok(effective_price) => {
-                // Update the swap result with the calculated effective price
-                swap_result.effective_price = Some(effective_price);
+        log(
+            LogTag::Swap,
+            "PRICE",
+            &format!(
+                "✅ BUY COMPLETED - {} tokens purchased",
+                token.symbol
+            )
+        );
 
+        // Update wallet tracker after successful buy
+        crate::wallet_tracker::update_wallet_after_swap().await;
+
+        if is_debug_swap_enabled() {
+            if let (Some(effective_price), Some(expected)) = (swap_result.effective_price, expected_price) {
+                let price_diff = ((effective_price - expected) / expected) * 100.0;
                 log(
                     LogTag::Swap,
                     "PRICE",
                     &format!(
-                        "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token (verified)",
+                        "Price vs expected: {:.10} vs {:.10} SOL ({:+.2}%)",
                         effective_price,
-                        token.symbol
+                        expected,
+                        price_diff
                     )
-                );
-
-                if is_debug_swap_enabled() {
-                    if let Some(expected) = expected_price {
-                        let price_diff = ((effective_price - expected) / expected) * 100.0;
-                        log(
-                            LogTag::Swap,
-                            "PRICE",
-                            &format!(
-                                "Price vs expected: {:.10} vs {:.10} SOL ({:+.2}%)",
-                                effective_price,
-                                expected,
-                                price_diff
-                            )
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                log(
-                    LogTag::Swap,
-                    "WARNING",
-                    &format!("Failed to calculate effective price for buy: {}", e)
                 );
             }
         }
@@ -381,13 +362,12 @@ async fn sell_token_with_slippage(
         fee_lamports: unified_result.fee_lamports,
         execution_time: unified_result.execution_time,
         effective_price: unified_result.effective_price,
-        swap_data: None, // Will be populated later if needed
+        swap_data: unified_result.swap_data, // carry decimals/quote for fallbacks
         error: unified_result.error,
     };
 
-    // Calculate and set the effective price in the swap result
+    // Add transaction to monitoring service if successful
     if swap_result.success {
-        // Add transaction to monitoring service
         if let Some(ref signature) = swap_result.transaction_signature {
             if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
                 signature,
@@ -405,55 +385,17 @@ async fn sell_token_with_slippage(
             }
         }
 
-        // Calculate effective price using instruction analysis for accuracy
-        // This replaces the manual calculation to avoid issues with multi-hop Jupiter swaps
-        match crate::swaps::pricing::calculate_effective_price_with_verification(
-            &swap_result,
-            &token.mint,
-            SOL_MINT,
-            "sell",
-            None, // ATA rent handling in verification
-        ).await {
-            Ok(effective_price) => {
-                swap_result.effective_price = Some(effective_price);
-                
-                log(
-                    LogTag::Swap,
-                    "PRICE",
-                    &format!(
-                        "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (verified)",
-                        effective_price,
-                        token.symbol
-                    )
-                );
-            }
-            Err(e) => {
-                log(LogTag::Swap, "WARNING", &format!("Could not calculate verified effective price: {}", e));
-                
-                // Fallback to original method with warning
-                let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
-                let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
-                
-                if input_tokens_raw > 0 && output_lamports > 0 {
-                    let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
-                    let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
-                    let output_sol = lamports_to_sol(output_lamports);
-                    let effective_price = output_sol / input_tokens;
-                    
-                    swap_result.effective_price = Some(effective_price);
-                    
-                    log(
-                        LogTag::Swap,
-                        "PRICE",
-                        &format!(
-                            "⚠️ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (fallback - may be inaccurate)",
-                            effective_price,
-                            token.symbol
-                        )
-                    );
-                }
-            }
-        }
+        log(
+            LogTag::Swap,
+            "PRICE",
+            &format!(
+                "✅ SELL COMPLETED - {} tokens sold",
+                token.symbol
+            )
+        );
+
+        // Update wallet tracker after successful sell
+        crate::wallet_tracker::update_wallet_after_swap().await;
     }
 
     if is_debug_swap_enabled() {

@@ -71,7 +71,7 @@ pub use transaction::{
 };
 
 // Effective price calculation (unified)
-pub use pricing::{calculate_effective_price, calculate_effective_price_from_raw};
+pub use pricing::{calculate_effective_price, calculate_effective_price_from_raw, calculate_effective_price_from_raw_with_quote};
 
 // Legacy pricing functions (deprecated - use calculate_effective_price instead)
 pub use pricing::{
@@ -134,6 +134,7 @@ pub struct UnifiedSwapResult {
     pub fee_lamports: u64,
     pub execution_time: f64,
     pub effective_price: Option<f64>,
+    pub swap_data: Option<types::SwapData>,
     pub error: Option<String>,
 }
 
@@ -421,6 +422,7 @@ pub async fn execute_best_swap(
                     fee_lamports: result.fee_lamports,
                     execution_time: result.execution_time,
                     effective_price: result.effective_price,
+                    swap_data: result.swap_data,
                     error: result.error,
                 }),
                 Err(e) => Err(e),
@@ -438,6 +440,7 @@ pub async fn execute_best_swap(
                     fee_lamports: result.fee_lamports,
                     execution_time: result.execution_time,
                     effective_price: result.effective_price,
+                    swap_data: result.swap_data,
                     error: result.error,
                 }),
                 Err(e) => Err(e),
@@ -455,6 +458,7 @@ pub async fn execute_best_swap(
                     fee_lamports: result.fee_lamports,
                     execution_time: result.execution_time,
                     effective_price: result.effective_price,
+                    swap_data: result.swap_data,
                     error: result.error,
                 }),
                 Err(e) => Err(e),
