@@ -6,6 +6,7 @@ use serde_json;
 use crate::positions::*;
 use crate::logger::{ log, LogTag };
 use crate::global::POSITIONS_FILE;
+use rand::{ Rng, seq::SliceRandom };
 
 // Wallet-related imports
 use crate::global::read_configs;
@@ -572,4 +573,270 @@ fn build_token_2022_close_instruction(
         accounts,
         data: instruction_data,
     })
+}
+
+// =============================================================================
+// UNIVERSAL BROWSER RANDOMIZATION SYSTEM
+// =============================================================================
+
+/// Generate a random, complex user agent string that mimics real browsers
+/// Uses combinations of browsers, OS versions, and additional components
+pub fn get_random_user_agent() -> String {
+    let mut rng = rand::thread_rng();
+    
+    // Browser components with versions
+    let chrome_versions = [
+        "121.0.0.0", "122.0.0.0", "123.0.0.0", "124.0.0.0", "125.0.0.0",
+        "120.0.0.0", "119.0.0.0", "118.0.0.0", "117.0.0.0", "116.0.0.0"
+    ];
+    
+    let firefox_versions = [
+        "122.0", "123.0", "124.0", "125.0", "126.0",
+        "121.0", "120.0", "119.0", "118.0", "117.0"
+    ];
+    
+    let safari_versions = [
+        "17.2.1", "17.3.1", "17.4.1", "16.6", "16.5.2",
+        "17.1.2", "16.4.1", "16.3.3", "15.6.1", "15.5"
+    ];
+    
+    let edge_versions = [
+        "121.0.0.0", "122.0.0.0", "123.0.0.0", "124.0.0.0",
+        "120.0.0.0", "119.0.0.0", "118.0.0.0", "117.0.0.0"
+    ];
+    
+    // Operating system variations
+    let windows_versions = [
+        "Windows NT 10.0; Win64; x64",
+        "Windows NT 11.0; Win64; x64", 
+        "Windows NT 10.0; WOW64",
+        "Windows NT 6.1; Win64; x64",
+        "Windows NT 6.3; Win64; x64"
+    ];
+    
+    let mac_versions = [
+        "Macintosh; Intel Mac OS X 10_15_7",
+        "Macintosh; Intel Mac OS X 11_7_10", 
+        "Macintosh; Intel Mac OS X 12_6_8",
+        "Macintosh; Intel Mac OS X 13_5_2",
+        "Macintosh; Intel Mac OS X 14_1_2",
+        "Macintosh; Apple M1 Mac OS X 12_6",
+        "Macintosh; Apple M2 Mac OS X 13_4"
+    ];
+    
+    let linux_versions = [
+        "X11; Linux x86_64",
+        "X11; Ubuntu; Linux x86_64",
+        "X11; Linux i686",
+        "X11; Fedora; Linux x86_64",
+        "X11; CentOS; Linux x86_64"
+    ];
+    
+    // Browser choice weights (Chrome most common, then Edge, Firefox, Safari)
+    let browser_choice = rng.gen_range(0..100);
+    
+    match browser_choice {
+        // Chrome variants (50% probability)
+        0..=49 => {
+            let version = chrome_versions.choose(&mut rng).unwrap();
+            let webkit = format!("537.{}", rng.gen_range(30..40));
+            let os_choice = rng.gen_range(0..3);
+            
+            let os = match os_choice {
+                0 => windows_versions.choose(&mut rng).unwrap(),
+                1 => mac_versions.choose(&mut rng).unwrap(),
+                _ => linux_versions.choose(&mut rng).unwrap(),
+            };
+            
+            format!("Mozilla/5.0 ({}) AppleWebKit/{} (KHTML, like Gecko) Chrome/{} Safari/{}", 
+                   os, webkit, version, webkit)
+        },
+        
+        // Edge variants (20% probability)
+        50..=69 => {
+            let version = edge_versions.choose(&mut rng).unwrap();
+            let webkit = format!("537.{}", rng.gen_range(30..40));
+            let os = windows_versions.choose(&mut rng).unwrap();
+            
+            format!("Mozilla/5.0 ({}) AppleWebKit/{} (KHTML, like Gecko) Chrome/{} Safari/{} Edg/{}", 
+                   os, webkit, version, webkit, version)
+        },
+        
+        // Firefox variants (20% probability)
+        70..=89 => {
+            let version = firefox_versions.choose(&mut rng).unwrap();
+            let gecko_version = format!("{}.0", rng.gen_range(20100000..20240000));
+            let os_choice = rng.gen_range(0..3);
+            
+            let os = match os_choice {
+                0 => windows_versions.choose(&mut rng).unwrap().replace("Win64; x64", "rv:122.0"),
+                1 => mac_versions.choose(&mut rng).unwrap().replace("Intel", "rv:122.0; Intel"),
+                _ => linux_versions.choose(&mut rng).unwrap().replace("Linux x86_64", "Linux x86_64; rv:122.0"),
+            };
+            
+            format!("Mozilla/5.0 ({}) Gecko/{} Firefox/{}", os, gecko_version, version)
+        },
+        
+        // Safari variants (10% probability)
+        _ => {
+            let version = safari_versions.choose(&mut rng).unwrap();
+            let webkit = format!("605.1.{}", rng.gen_range(10..20));
+            let os = mac_versions.choose(&mut rng).unwrap();
+            
+            format!("Mozilla/5.0 ({}) AppleWebKit/{} (KHTML, like Gecko) Version/{} Safari/{}", 
+                   os, webkit, version, webkit)
+        }
+    }
+}
+
+/// Generate a random, undetectable partner/application identifier
+/// Creates realistic-looking application names that don't stand out
+pub fn get_random_partner_id() -> String {
+    let mut rng = rand::thread_rng();
+    
+    // Business/financial application prefixes
+    let prefixes = [
+        "trade", "crypto", "defi", "swap", "finance", "market", "invest", "capital",
+        "yield", "liquidity", "portfolio", "asset", "vault", "bridge", "protocol",
+        "analytics", "tracker", "monitor", "scanner", "aggregator", "optimizer"
+    ];
+    
+    // Suffixes that sound professional
+    let suffixes = [
+        "pro", "hub", "lab", "tech", "net", "app", "tool", "bot", "ai", "platform",
+        "suite", "engine", "core", "link", "bridge", "flow", "sync", "pulse",
+        "scout", "lens", "radar", "scope", "dash", "view", "edge", "wave"
+    ];
+    
+    // Company/organization style endings
+    let company_endings = [
+        "labs", "tech", "solutions", "systems", "ventures", "capital", "group",
+        "partners", "analytics", "research", "finance", "trading", "protocols"
+    ];
+    
+    let style_choice = rng.gen_range(0..100);
+    
+    match style_choice {
+        // Simple compound names (40% probability)
+        0..=39 => {
+            let prefix = prefixes.choose(&mut rng).unwrap();
+            let suffix = suffixes.choose(&mut rng).unwrap();
+            format!("{}{}", prefix, suffix)
+        },
+        
+        // Compound with separator (30% probability) 
+        40..=69 => {
+            let prefix = prefixes.choose(&mut rng).unwrap();
+            let suffix = suffixes.choose(&mut rng).unwrap();
+            let separators = ["-", "_", ""];
+            let sep = separators.choose(&mut rng).unwrap();
+            format!("{}{}{}", prefix, sep, suffix)
+        },
+        
+        // Company style names (20% probability)
+        70..=89 => {
+            let base = prefixes.choose(&mut rng).unwrap();
+            let ending = company_endings.choose(&mut rng).unwrap();
+            format!("{}{}", base, ending)
+        },
+        
+        // Numbered/versioned names (10% probability)
+        _ => {
+            let prefix = prefixes.choose(&mut rng).unwrap();
+            let suffix = suffixes.choose(&mut rng).unwrap();
+            let number = rng.gen_range(1..99);
+            let patterns = [
+                format!("{}{}{}", prefix, suffix, number),
+                format!("{}{}v{}", prefix, suffix, number),
+                format!("{}{}-{}", prefix, suffix, number),
+            ];
+            patterns.choose(&mut rng).unwrap().clone()
+        }
+    }
+}
+
+/// Generate a complex, randomized HTTP client configuration
+/// Returns a configured reqwest::Client with random user agent and headers
+pub fn create_randomized_http_client() -> Result<reqwest::Client, String> {
+    let user_agent = get_random_user_agent();
+    let mut rng = rand::thread_rng();
+    
+    // Additional random headers to make requests less detectable
+    let accept_languages = [
+        "en-US,en;q=0.9",
+        "en-US,en;q=0.9,es;q=0.8",
+        "en-GB,en;q=0.9,en-US;q=0.8",
+        "en-US,en;q=0.8,es;q=0.6,fr;q=0.4",
+        "en,en-US;q=0.9,en-GB;q=0.8"
+    ];
+    
+    let accept_encodings = [
+        "gzip, deflate, br",
+        "gzip, deflate",
+        "gzip, deflate, br, zstd"
+    ];
+    
+    let connection_types = ["keep-alive", "close"];
+    
+    let sec_fetch_sites = ["same-origin", "cross-site", "same-site"];
+    let sec_fetch_modes = ["cors", "navigate", "no-cors"];
+    
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent(&user_agent)
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            
+            // Accept header variations
+            headers.insert(
+                reqwest::header::ACCEPT,
+                "application/json, text/plain, */*".parse().unwrap()
+            );
+            
+            // Random accept-language
+            headers.insert(
+                reqwest::header::ACCEPT_LANGUAGE,
+                accept_languages.choose(&mut rng).unwrap().parse().unwrap()
+            );
+            
+            // Random accept-encoding
+            headers.insert(
+                reqwest::header::ACCEPT_ENCODING,
+                accept_encodings.choose(&mut rng).unwrap().parse().unwrap()
+            );
+            
+            // Connection type
+            headers.insert(
+                reqwest::header::CONNECTION,
+                connection_types.choose(&mut rng).unwrap().parse().unwrap()
+            );
+            
+            // Modern browser security headers (randomized)
+            if rng.gen_bool(0.8) {
+                headers.insert(
+                    reqwest::header::HeaderName::from_static("sec-fetch-site"),
+                    sec_fetch_sites.choose(&mut rng).unwrap().parse().unwrap()
+                );
+            }
+            
+            if rng.gen_bool(0.8) {
+                headers.insert(
+                    reqwest::header::HeaderName::from_static("sec-fetch-mode"),
+                    sec_fetch_modes.choose(&mut rng).unwrap().parse().unwrap()
+                );
+            }
+            
+            if rng.gen_bool(0.7) {
+                headers.insert(
+                    reqwest::header::HeaderName::from_static("sec-fetch-dest"),
+                    "empty".parse().unwrap()
+                );
+            }
+            
+            headers
+        })
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    
+    Ok(client)
 }

@@ -95,7 +95,16 @@ pub struct TransactionMonitoringService {
 impl TransactionMonitoringService {
     /// Create new transaction monitoring service
     pub fn new() -> Self {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", "🔧 Creating new transaction monitoring service");
+        }
+        
         let loaded_transactions = Self::load_pending_transactions_from_disk();
+        
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", 
+                &format!("📊 Loaded {} transactions from disk", loaded_transactions.len()));
+        }
         
         // Separate transactions by state: pending vs completed
         let mut pending_map = HashMap::new();
@@ -105,11 +114,25 @@ impl TransactionMonitoringService {
             match &tx.state {
                 TransactionState::Completed { .. } => {
                     completed_transactions.push(tx);
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", 
+                            &format!("📝 Loaded completed transaction: {}", &signature[..8]));
+                    }
                 }
                 _ => {
-                    pending_map.insert(signature, tx);
+                    pending_map.insert(signature.clone(), tx);
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", 
+                            &format!("📝 Loaded pending transaction: {}", &signature[..8]));
+                    }
                 }
             }
+        }
+        
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", 
+                &format!("📊 Service initialized - Pending: {} | Completed: {}", 
+                    pending_map.len(), completed_transactions.len()));
         }
         
         let all_transactions = completed_transactions;
@@ -124,6 +147,10 @@ impl TransactionMonitoringService {
 
     /// Initialize global transaction monitoring service
     pub async fn init_global_service() -> Result<(), SwapError> {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", "🔧 Initializing global transaction service");
+        }
+        
         let mut service_guard = TRANSACTION_SERVICE.lock().await;
         
         if service_guard.is_none() {
@@ -162,9 +189,15 @@ impl TransactionMonitoringService {
                     break;
                 }
                 _ = interval.tick() => {
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", "🔍 Starting monitoring cycle");
+                    }
                     if let Err(e) = Self::monitor_pending_transactions().await {
                         log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                             &format!("Monitoring cycle failed: {}", e));
+                    }
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_SERVICE_DEBUG", "✅ Monitoring cycle completed");
                     }
                 }
             }
@@ -186,13 +219,34 @@ impl TransactionMonitoringService {
     fn load_pending_transactions_from_disk() -> HashMap<String, Transaction> {
         let file_path = TRANSACTION_STATE_FILE;
         
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_LOAD_DEBUG", 
+                &format!("🔍 Loading transactions from: {}", file_path));
+        }
+        
         if Path::new(file_path).exists() {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_LOAD_DEBUG", "📂 Transaction file exists, reading content");
+            }
             match std::fs::read_to_string(file_path) {
                 Ok(content) => {
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_LOAD_DEBUG", 
+                            &format!("📄 File content loaded, size: {} bytes", content.len()));
+                    }
                     match serde_json::from_str::<Vec<Transaction>>(&content) {
                         Ok(transactions) => {
+                            if is_debug_swap_enabled() {
+                                log(LogTag::Swap, "TRANSACTION_LOAD_DEBUG", 
+                                    &format!("✅ Successfully parsed {} transactions", transactions.len()));
+                            }
                             let mut map = HashMap::new();
                             for tx in transactions {
+                                if is_debug_swap_enabled() {
+                                    log(LogTag::Swap, "TRANSACTION_LOAD_DEBUG", 
+                                        &format!("📝 Loading tx: {} | State: {:?} | Mint: {}", 
+                                            &tx.signature[..8], tx.state, &tx.mint[..8]));
+                                }
                                 map.insert(tx.signature.clone(), tx);
                             }
                             log(LogTag::Swap, "TRANSACTION_LOAD", 
@@ -220,14 +274,28 @@ impl TransactionMonitoringService {
 
     /// Save all transactions (pending + completed) to disk
     async fn save_all_transactions_to_disk() {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_SAVE_DEBUG", "🔍 Starting transaction save process");
+        }
+        
         let (pending_transactions, completed_transactions): (Vec<Transaction>, Vec<Transaction>) = {
             let service_guard = TRANSACTION_SERVICE.lock().await;
 
             if let Some(service) = service_guard.as_ref() {
                 let pending: Vec<Transaction> = service.pending_transactions.values().cloned().collect();
                 let completed: Vec<Transaction> = service.all_transactions.clone();
+                
+                if is_debug_swap_enabled() {
+                    log(LogTag::Swap, "TRANSACTION_SAVE_DEBUG", 
+                        &format!("📊 Collecting transactions - Pending: {} | Completed: {}", 
+                            pending.len(), completed.len()));
+                }
+                
                 (pending, completed)
             } else {
+                if is_debug_swap_enabled() {
+                    log(LogTag::Swap, "TRANSACTION_SAVE_DEBUG", "❌ Transaction service not available");
+                }
                 return;
             }
         };
@@ -236,8 +304,18 @@ impl TransactionMonitoringService {
         let mut all_transactions = pending_transactions;
         all_transactions.extend(completed_transactions);
 
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_SAVE_DEBUG", 
+                &format!("📝 Serializing {} total transactions", all_transactions.len()));
+        }
+
         match serde_json::to_string_pretty(&all_transactions) {
             Ok(content) => {
+                if is_debug_swap_enabled() {
+                    log(LogTag::Swap, "TRANSACTION_SAVE_DEBUG", 
+                        &format!("✅ Serialization successful, writing {} bytes to {}", 
+                            content.len(), TRANSACTION_STATE_FILE));
+                }
                 if let Err(e) = std::fs::write(TRANSACTION_STATE_FILE, content) {
                     log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                         &format!("Failed to save all transactions: {}", e));
@@ -264,24 +342,46 @@ impl TransactionMonitoringService {
             let service_guard = TRANSACTION_SERVICE.lock().await;
             
             if let Some(service) = service_guard.as_ref() {
-                service.pending_transactions.keys().cloned().collect()
+                let sigs: Vec<String> = service.pending_transactions.keys().cloned().collect();
+                if is_debug_swap_enabled() && !sigs.is_empty() {
+                    log(LogTag::Swap, "TRANSACTION_MONITOR_DEBUG", 
+                        &format!("📊 Retrieved {} pending transactions for monitoring", sigs.len()));
+                }
+                sigs
             } else {
+                if is_debug_swap_enabled() {
+                    log(LogTag::Swap, "TRANSACTION_MONITOR_DEBUG", "❌ Transaction service not available");
+                }
                 return Ok(());
             }
         };
 
         if pending_sigs.is_empty() {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_MONITOR_DEBUG", "📭 No pending transactions to monitor");
+            }
             return Ok(());
         }
 
         log(LogTag::Swap, "TRANSACTION_SERVICE", 
             &format!("🔍 Monitoring {} pending transactions", pending_sigs.len()));
 
-        for signature in pending_sigs {
-            if let Err(e) = Self::check_transaction_progress(&signature).await {
+        if is_debug_swap_enabled() {
+            for sig in &pending_sigs {
+                log(LogTag::Swap, "TRANSACTION_MONITOR_DEBUG", 
+                    &format!("🔍 Checking transaction: {}", &sig[..8]));
+            }
+        }
+
+        for signature in &pending_sigs {
+            if let Err(e) = Self::check_transaction_progress(signature).await {
                 log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
                     &format!("Failed to check transaction {}: {}", &signature[..8], e));
             }
+        }
+
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_MONITOR_DEBUG", "🧹 Starting cleanup of old transactions");
         }
 
         // Clean up completed/failed transactions older than 1 hour
@@ -295,6 +395,11 @@ impl TransactionMonitoringService {
 
     /// Check progress of a specific transaction
     async fn check_transaction_progress(signature: &str) -> Result<(), SwapError> {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                &format!("🔍 Checking progress for transaction: {}", &signature[..8]));
+        }
+        
         let mut should_update = false;
         let mut new_state: Option<TransactionState> = None;
         let now = Utc::now();
@@ -305,8 +410,20 @@ impl TransactionMonitoringService {
             
             if let Some(service) = service_guard.as_ref() {
                 if let Some(tx) = service.pending_transactions.get(signature) {
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                            &format!("📊 Current state: {:?} | Direction: {} | Mint: {}", 
+                                tx.state, tx.direction, &tx.mint[..8]));
+                    }
+                    
                     // Check if stuck on same state for too long
                     let time_in_state = (now - tx.last_updated).num_seconds();
+                    
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                            &format!("⏱️ Time in current state: {}s (timeout: {}s)", 
+                                time_in_state, STUCK_STEP_TIMEOUT_SECS));
+                    }
                     
                     if time_in_state > STUCK_STEP_TIMEOUT_SECS as i64 {
                         new_state = Some(TransactionState::Stuck {
@@ -322,6 +439,10 @@ impl TransactionMonitoringService {
                         // Try to advance the state
                         match &tx.state {
                             TransactionState::Submitted { .. } => {
+                                if is_debug_swap_enabled() {
+                                    log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                                        "🔍 Checking if transaction is confirmed on blockchain");
+                                }
                                 // Check if confirmed
                                 if Self::is_transaction_confirmed(signature).await? {
                                     new_state = Some(TransactionState::Confirmed {
@@ -331,9 +452,16 @@ impl TransactionMonitoringService {
                                     
                                     log(LogTag::Swap, "TRANSACTION_CONFIRMED", 
                                         &format!("✅ Transaction {} confirmed", &signature[..8]));
+                                } else if is_debug_swap_enabled() {
+                                    log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                                        "⏳ Transaction not yet confirmed");
                                 }
                             }
                             TransactionState::Confirmed { .. } => {
+                                if is_debug_swap_enabled() {
+                                    log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                                        "🔍 Checking if transaction effects are visible");
+                                }
                                 // Check if balance changes are visible (verified)
                                 if Self::verify_transaction_effects(signature, tx).await? {
                                     new_state = Some(TransactionState::Verified {
@@ -447,11 +575,21 @@ impl TransactionMonitoringService {
 
     /// Clean up old completed/failed transactions
     async fn cleanup_old_transactions() {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_CLEANUP_DEBUG", "🧹 Starting cleanup of old transactions");
+        }
+        
         let mut service_guard = TRANSACTION_SERVICE.lock().await;
 
         if let Some(service) = service_guard.as_mut() {
             let cutoff_time = Utc::now() - chrono::Duration::hours(1);
             let mut to_remove = Vec::new();
+            
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_CLEANUP_DEBUG", 
+                    &format!("📊 Scanning {} transactions for cleanup (cutoff: 1 hour ago)", 
+                        service.pending_transactions.len()));
+            }
 
             for (signature, tx) in &service.pending_transactions {
                 match &tx.state {
@@ -459,15 +597,34 @@ impl TransactionMonitoringService {
                     TransactionState::Failed { failed_at: verified_at, .. } => {
                         if *verified_at < cutoff_time {
                             to_remove.push(signature.clone());
+                            if is_debug_swap_enabled() {
+                                log(LogTag::Swap, "TRANSACTION_CLEANUP_DEBUG", 
+                                    &format!("🗑️ Marking for removal: {} | State: {:?} | Age: {}h", 
+                                        &signature[..8], tx.state, 
+                                        (Utc::now() - *verified_at).num_hours()));
+                            }
                         }
                     }
                     _ => {} // Keep pending transactions
                 }
             }
 
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_CLEANUP_DEBUG", 
+                    &format!("🗑️ Removing {} old transactions", to_remove.len()));
+            }
+
             for signature in to_remove {
                 service.pending_transactions.remove(&signature);
             }
+            
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_CLEANUP_DEBUG", 
+                    &format!("✅ Cleanup complete. Remaining transactions: {}", 
+                        service.pending_transactions.len()));
+            }
+        } else if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_CLEANUP_DEBUG", "❌ Transaction service not available");
         }
     }
 
@@ -482,9 +639,21 @@ impl TransactionMonitoringService {
         amount_sol: f64,
         wallet_address: &str,
     ) -> Result<(), SwapError> {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_ADD_DEBUG", 
+                &format!("📝 Adding transaction to monitor: {} | Direction: {} | Mint: {} | Amount: {:.6} SOL | Position: {}", 
+                    &signature[..8], direction, &mint[..8], amount_sol, position_related));
+        }
+        
         let mut service_guard = TRANSACTION_SERVICE.lock().await;
 
         if let Some(service) = service_guard.as_mut() {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_ADD_DEBUG", 
+                    &format!("📊 Current monitoring queue size: {} transactions", 
+                        service.pending_transactions.len()));
+            }
+            
             let pending_tx = Transaction {
                 signature: signature.to_string(),
                 mint: mint.to_string(),
@@ -503,8 +672,22 @@ impl TransactionMonitoringService {
 
             service.pending_transactions.insert(signature.to_string(), pending_tx);
             
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_ADD_DEBUG", 
+                    &format!("✅ Transaction added successfully. New queue size: {} transactions", 
+                        service.pending_transactions.len()));
+            }
+            
             log(LogTag::Swap, "TRANSACTION_ADDED", 
                 &format!("📝 Added transaction {} to monitoring queue", &signature[..8]));
+        } else {
+            if is_debug_swap_enabled() {
+                log(LogTag::Swap, "TRANSACTION_ADD_DEBUG", "❌ Transaction service not available");
+            }
+        }
+
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_ADD_DEBUG", "💾 Saving updated transaction list to disk");
         }
 
         // Save transactions to disk immediately to ensure comprehensive tracking
@@ -630,8 +813,11 @@ impl TransactionMonitoringService {
 
                 // Save positions to disk if we updated anything
                 if position_updated {
-                    use crate::positions::get_open_positions;
-                    crate::utils::save_positions_to_file(&get_open_positions());
+                    if let Ok(positions) = SAVED_POSITIONS.lock() {
+                        crate::utils::save_positions_to_file(&positions);
+                        log(LogTag::Swap, "POSITION_SAVED", 
+                            &format!("💾 Updated position saved to disk after buy verification"));
+                    }
                 }
             }
             "sell" => {
@@ -677,8 +863,11 @@ impl TransactionMonitoringService {
 
                 // Save positions to disk if we updated anything
                 if position_updated {
-                    use crate::positions::get_open_positions;
-                    crate::utils::save_positions_to_file(&get_open_positions());
+                    if let Ok(positions) = SAVED_POSITIONS.lock() {
+                        crate::utils::save_positions_to_file(&positions);
+                        log(LogTag::Swap, "POSITION_SAVED", 
+                            &format!("💾 Updated position saved to disk after sell verification"));
+                    }
                 }
             }
             _ => {

@@ -57,7 +57,8 @@ pub const SWAP_FEE_PERCENT: f64 = 0.0;
 /// GMGN API base URL for quotes
 pub const GMGN_QUOTE_API: &str = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route";
 
-/// GMGN partner identifier
+/// GMGN partner identifier - NOTE: This is now dynamically generated using get_random_partner_id()
+/// The static value below is kept for reference but should not be used directly
 pub const GMGN_PARTNER: &str = "screenerbot";
 
 /// GMGN default anti-MEV setting

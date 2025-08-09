@@ -65,6 +65,10 @@ path = "src/bin/test_dual_router_comparison.rs"
 name = "test_jupiter_swap_real"
 path = "src/bin/test_jupiter_swap_real.rs"
 
+[[bin]]
+name = "test_random_user_agents"
+path = "src/bin/test_random_user_agents.rs"
+
 
 [dependencies]
 # Core async runtime with minimal features for faster builds

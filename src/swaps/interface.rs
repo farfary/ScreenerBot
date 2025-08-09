@@ -125,6 +125,7 @@ pub async fn buy_token(
     // Add transaction to monitoring service if successful
     if swap_result.success {
         if let Some(ref signature) = swap_result.transaction_signature {
+            // CRITICAL: Add to transaction monitoring IMMEDIATELY after successful swap
             if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
                 signature,
                 &token.mint,
@@ -135,11 +136,11 @@ pub async fn buy_token(
                 amount_sol,
                 &get_wallet_address().unwrap_or_else(|_| "unknown".to_string()),
             ).await {
-                log(LogTag::Wallet, "MONITOR_WARNING", 
-                    &format!("Failed to add buy transaction to monitoring: {}", e));
+                log(LogTag::Swap, "MONITOR_ERROR", 
+                    &format!("❌ Failed to add buy transaction to monitoring: {}", e));
             } else {
-                log(LogTag::Wallet, "MONITOR_ADDED", 
-                    &format!("✅ Buy transaction {} added to monitoring", &signature[..8]));
+                log(LogTag::Swap, "MONITOR_ADDED", 
+                    &format!("✅ Buy transaction {} added to monitoring service", &signature[..8]));
             }
         }
 
@@ -393,6 +394,7 @@ async fn sell_token_with_slippage(
     // Add transaction to monitoring service if successful
     if swap_result.success {
         if let Some(ref signature) = swap_result.transaction_signature {
+            // CRITICAL: Add to transaction monitoring IMMEDIATELY after successful swap
             if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
                 signature,
                 &token.mint,
@@ -403,11 +405,11 @@ async fn sell_token_with_slippage(
                 swap_result.output_amount.parse::<f64>().unwrap_or(0.0),
                 &get_wallet_address().unwrap_or_else(|_| "unknown".to_string()),
             ).await {
-                log(LogTag::Swap, "MONITOR_WARNING", 
-                    &format!("Failed to add sell transaction to monitoring: {}", e));
+                log(LogTag::Swap, "MONITOR_ERROR", 
+                    &format!("❌ Failed to add sell transaction to monitoring: {}", e));
             } else {
                 log(LogTag::Swap, "MONITOR_ADDED", 
-                    &format!("✅ Sell transaction {} added to monitoring", &signature[..8]));
+                    &format!("✅ Sell transaction {} added to monitoring service", &signature[..8]));
             }
         }
 
