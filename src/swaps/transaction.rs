@@ -34,7 +34,7 @@ use tokio::sync::{Notify, Mutex as AsyncMutex};
 
 /// Configuration constants for transaction verification
 const CONFIRMATION_TIMEOUT_SECS: u64 = TRANSACTION_CONFIRMATION_TIMEOUT_SECS;       // Extended time for blockchain confirmation
-const INITIAL_CONFIRMATION_DELAY_MS: u64 = 5000;  // Initial delay before first check (5 seconds to allow transaction propagation)
+const INITIAL_CONFIRMATION_DELAY_MS: u64 = 3000;  // Initial delay before first check (5 seconds to allow transaction propagation)
 const MAX_CONFIRMATION_DELAY_SECS: u64 = 5;       // Maximum delay between confirmation checks
 const CONFIRMATION_BACKOFF_MULTIPLIER: f64 = 1.5; // Exponential backoff multiplier
 const EARLY_ATTEMPTS_COUNT: u32 = 3;               // Number of fast early attempts

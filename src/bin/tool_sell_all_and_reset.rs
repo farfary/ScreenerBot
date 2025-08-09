@@ -81,6 +81,7 @@ fn print_help() {
     println!("    • data/rl_learning_records.json (RL learning data)");
     println!("    • data/positions.json (trading positions)");
     println!("    • data/pending_transactions.json (pending transactions)");
+    println!("    • data/transactions.json (transaction history)");
     println!("    • data/ata_failed_cache.json (failed ATA cache)");
     println!("    • data/wallet_history.json (wallet tracker history)");
     println!("    • logs/screenerbot_*.log (all bot log files)");
@@ -128,6 +129,7 @@ const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/rl_learning_records.json", 
     "data/positions.json",
     "data/pending_transactions.json",
+    "data/transactions.json",
     "data/ata_failed_cache.json",
     "data/wallet_history.json",
 ];
