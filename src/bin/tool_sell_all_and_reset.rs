@@ -74,6 +74,7 @@ fn print_help() {
     println!("    4. Close all Associated Token Accounts (empty and non-empty)");
     println!("    5. Reclaim rent SOL from closed ATAs (~0.00203928 SOL each)");
     println!("    6. Delete specific bot data files to reset the system");
+    println!("    7. Clean up all bot log files from logs/ directory");
     println!("");
     println!("DATA FILES THAT WILL BE DELETED:");
     println!("    • data/rpc_stats.json (RPC statistics)");
@@ -81,6 +82,8 @@ fn print_help() {
     println!("    • data/positions.json (trading positions)");
     println!("    • data/pending_transactions.json (pending transactions)");
     println!("    • data/ata_failed_cache.json (failed ATA cache)");
+    println!("    • data/wallet_history.json (wallet tracker history)");
+    println!("    • logs/screenerbot_*.log (all bot log files)");
     println!("");
     println!("FILES THAT WILL BE PRESERVED:");
     println!("    • data/configs.json (wallet keys and RPC endpoints)");
@@ -126,6 +129,7 @@ const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/positions.json",
     "data/pending_transactions.json",
     "data/ata_failed_cache.json",
+    "data/wallet_history.json",
 ];
 
 /// Token account information from Solana RPC
@@ -576,6 +580,73 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             files_removed,
             files_not_found,
             files_failed
+        )
+    );
+
+    // Log file cleanup
+    log(
+        LogTag::System,
+        "LOG_CLEANUP_START",
+        &format!("Starting log file cleanup{}", if dry_run { " (DRY RUN)" } else { "" })
+    );
+
+    let mut log_files_removed = 0;
+    let mut log_files_failed = 0;
+
+    if let Ok(entries) = fs::read_dir("logs") {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if let Some(filename) = path.file_name() {
+                    if let Some(name_str) = filename.to_str() {
+                        if name_str.starts_with("screenerbot_") && name_str.ends_with(".log") {
+                            if dry_run {
+                                log(
+                                    LogTag::System,
+                                    "DRY_LOG_REMOVE",
+                                    &format!("Would remove log file: {}", path.display())
+                                );
+                                log_files_removed += 1;
+                            } else {
+                                match fs::remove_file(&path) {
+                                    Ok(()) => {
+                                        log(
+                                            LogTag::System,
+                                            "LOG_REMOVED",
+                                            &format!("Successfully removed log file: {}", path.display())
+                                        );
+                                        log_files_removed += 1;
+                                    }
+                                    Err(e) => {
+                                        log(
+                                            LogTag::System,
+                                            "LOG_REMOVE_FAILED",
+                                            &format!("Failed to remove log file {}: {}", path.display(), e)
+                                        );
+                                        log_files_failed += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        log(
+            LogTag::System,
+            "LOG_DIR_NOT_FOUND",
+            "Logs directory not found or not accessible"
+        );
+    }
+
+    log(
+        LogTag::System,
+        "LOG_CLEANUP_SUMMARY",
+        &format!(
+            "Log cleanup completed: {} removed, {} failed",
+            log_files_removed,
+            log_files_failed
         )
     );
 
