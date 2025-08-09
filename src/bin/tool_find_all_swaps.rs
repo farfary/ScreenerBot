@@ -32,6 +32,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use chrono::{DateTime, Utc};
+use std::sync::{Arc, Mutex};
+
+// Global storage for raw transaction JSON data
+lazy_static::lazy_static! {
+    static ref TRANSACTION_JSON_CACHE: Arc<Mutex<HashMap<String, serde_json::Value>>> = 
+        Arc::new(Mutex::new(HashMap::new()));
+}
 
 #[derive(Parser)]
 #[command(about = "Find and analyze all swap transactions in wallet history")]
@@ -122,10 +129,75 @@ pub struct WalletSwapReport {
     pub detailed_swaps: Vec<DetailedSwapTransaction>,
 }
 
+/// Extract actual swap amounts from inner instructions, excluding ATA creation costs and fees
+fn extract_actual_swap_amounts_from_json(transaction_json: &serde_json::Value, target_token_mint: &str) -> Option<(f64, f64)> {
+    // Access the meta field to get inner instructions
+    let meta = transaction_json.get("meta")?;
+    let inner_instructions = meta.get("innerInstructions")?;
+    
+    if let Some(inner_array) = inner_instructions.as_array() {
+        let mut sol_amount = 0.0;
+        let mut token_amount = 0.0;
+        
+        // Look through all inner instruction groups
+        for instruction_group in inner_array {
+            if let Some(instructions) = instruction_group.get("instructions").and_then(|i| i.as_array()) {
+                for instruction in instructions {
+                    // Look for transferChecked instructions (actual token transfers)
+                    if let Some(program) = instruction.get("program").and_then(|p| p.as_str()) {
+                        if program == "spl-token" {
+                            if let Some(parsed) = instruction.get("parsed") {
+                                if let Some(type_str) = parsed.get("type").and_then(|t| t.as_str()) {
+                                    if type_str == "transferChecked" {
+                                        if let Some(info) = parsed.get("info") {
+                                            if let Some(mint) = info.get("mint").and_then(|m| m.as_str()) {
+                                                if let Some(token_amount_obj) = info.get("tokenAmount") {
+                                                    if let Some(ui_amount) = token_amount_obj.get("uiAmount").and_then(|a| a.as_f64()) {
+                                                        
+                                                        // Check if this is SOL (wrapped SOL mint)
+                                                        if mint == "So11111111111111111111111111111111111111112" {
+                                                            // This is the SOL amount being spent for the swap
+                                                            log(LogTag::System, "DEBUG", &format!("📊 Found SOL transfer in swap: {} SOL", ui_amount));
+                                                            sol_amount = ui_amount;
+                                                        } 
+                                                        // Check if this is our target token
+                                                        else if mint == target_token_mint {
+                                                            // This is the token amount being received/sent
+                                                            log(LogTag::System, "DEBUG", &format!("📊 Found token transfer in swap: {} tokens (mint: {})", ui_amount, mint));
+                                                            token_amount = ui_amount;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Return the extracted amounts if we found both
+        if sol_amount > 0.0 && token_amount > 0.0 {
+            log(LogTag::System, "DEBUG", &format!("📊 Extracted actual swap amounts: {} SOL ↔ {} tokens", sol_amount, token_amount));
+            Some((sol_amount, token_amount))
+        } else {
+            log(LogTag::System, "DEBUG", "📊 Could not extract both SOL and token amounts from inner instructions");
+            None
+        }
+    } else {
+        log(LogTag::System, "DEBUG", "📊 No inner instructions found in transaction");
+        None
+    }
+}
+
 async fn analyze_jupiter_swap(
     transaction: &TransactionDetails,
     meta: &screenerbot::rpc::TransactionMeta,
     wallet_address: &str,
+    transaction_json: Option<&serde_json::Value>,
 ) -> Option<(bool, BasicSwapInfo)> {
     log(LogTag::System, "DEBUG", "🔍 Analyzing Jupiter swap transaction");
     
@@ -231,16 +303,39 @@ async fn analyze_jupiter_swap(
             log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap detected: {} {} tokens, SOL change: {}", 
                 if is_buy { "BUY" } else { "SELL" }, main_token, sol_change));
             
+            // Try to extract actual swap amounts from inner instructions
+            let (actual_sol_amount, actual_token_amount, actual_price) = 
+                if let Some(json_data) = transaction_json {
+                    if let Some((inner_sol, inner_token)) = extract_actual_swap_amounts_from_json(json_data, &main_token) {
+                        let price = if inner_token > 0.0 { inner_sol / inner_token } else { 0.0 };
+                        log(LogTag::System, "DEBUG", &format!("📊 Using actual swap amounts: {} SOL ↔ {} tokens, price: {} SOL/token", 
+                            inner_sol, inner_token, price));
+                        (inner_sol, inner_token, price)
+                    } else {
+                        // Fallback to balance change method
+                        let fallback_price = if token_change != 0.0 { sol_change.abs() / token_change.abs() } else { 0.0 };
+                        log(LogTag::System, "DEBUG", &format!("📊 Using fallback balance change method: {} SOL ↔ {} tokens, price: {} SOL/token", 
+                            sol_change.abs(), token_change.abs(), fallback_price));
+                        (sol_change.abs(), token_change.abs(), fallback_price)
+                    }
+                } else {
+                    // Fallback to balance change method when no JSON data available
+                    let fallback_price = if token_change != 0.0 { sol_change.abs() / token_change.abs() } else { 0.0 };
+                    log(LogTag::System, "DEBUG", &format!("📊 Using fallback balance change method (no JSON): {} SOL ↔ {} tokens, price: {} SOL/token", 
+                        sol_change.abs(), token_change.abs(), fallback_price));
+                    (sol_change.abs(), token_change.abs(), fallback_price)
+                };
+            
             let swap_info = BasicSwapInfo {
                 swap_type: if is_buy { "BUY".to_string() } else { "SELL".to_string() },
                 token_mint: main_token.to_string(),
-                sol_amount: sol_change.abs(),
-                token_amount: (token_change.abs() * 1_000_000.0) as u64, // Convert to token base units
-                effective_price: if token_change != 0.0 { sol_change.abs() / token_change.abs() } else { 0.0 },
-                fees_paid: 0.0, // TODO: calculate from transaction fee
+                sol_amount: actual_sol_amount,
+                token_amount: (actual_token_amount * 1_000_000.0) as u64, // Convert to token base units
+                effective_price: actual_price,
+                fees_paid: meta.fee as f64 / 1_000_000_000.0, // Convert lamports to SOL
             };
             
-            return Some((is_buy, swap_info));
+            return Some((true, swap_info)); // Always return true since we detected a swap (whether buy or sell)
         }
     }
     
@@ -433,6 +528,7 @@ async fn fetch_wallet_transactions(
     
     let mut transactions = Vec::new();
     let mut files_processed = 0;
+    let mut processed_signatures = std::collections::HashSet::new();
     
     for entry in fs::read_dir(transactions_dir)? {
         let entry = entry?;
@@ -447,11 +543,22 @@ async fn fetch_wallet_transactions(
             
             match load_transaction_from_file(&path).await {
                 Ok(Some(transaction)) => {
+                    // Check for duplicate signatures first
+                    let signature = transaction.transaction.signatures.get(0)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("no_signature_{}", files_processed));
+                    
+                    if processed_signatures.contains(&signature) {
+                        log(LogTag::System, "DEBUG", &format!("📊 Skipping duplicate transaction: {}", signature));
+                        continue;
+                    }
+                    
                     // Check if this transaction involves the target wallet
                     let involves_wallet = transaction_involves_wallet(&transaction, wallet_address);
                     log(LogTag::System, "DEBUG", &format!("📊 Transaction in {:?} involves wallet {}: {}", 
                         path.file_name().unwrap_or_default(), wallet_address, involves_wallet));
                     if involves_wallet {
+                        processed_signatures.insert(signature.clone());
                         transactions.push(transaction);
                         
                         if transactions.len() >= limit {
@@ -597,7 +704,14 @@ async fn detect_swap_from_transaction(
     // For now, test Jupiter analysis on transactions with token balances
     if meta.pre_token_balances.is_some() && meta.post_token_balances.is_some() {
         log(LogTag::System, "DEBUG", "📊 Transaction has token balances - testing Jupiter analysis");
-        if let Some(result) = analyze_jupiter_swap(transaction, meta, wallet_address).await {
+        if let Some(result) = {
+            let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
+                TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
+            } else {
+                None
+            };
+            analyze_jupiter_swap(transaction, meta, wallet_address, json_data.as_ref()).await
+        } {
             return Some(result);
         }
     }
@@ -605,7 +719,14 @@ async fn detect_swap_from_transaction(
     // If we detect a Jupiter transaction, analyze it differently
     if let Some(ref router) = router_name {
         if router.contains("Jupiter") {
-            return analyze_jupiter_swap(transaction, meta, wallet_address).await;
+            return {
+                let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
+                    TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
+                } else {
+                    None
+                };
+                analyze_jupiter_swap(transaction, meta, wallet_address, json_data.as_ref()).await
+            };
         }
     }
     
@@ -655,13 +776,13 @@ async fn detect_swap_from_transaction(
             // Buy: SOL decreased, tokens increased
             let sol_spent = sol_change.abs();
             let price = if token_change > 0.0 { sol_spent / token_change } else { 0.0 };
-            ("buy".to_string(), sol_spent, token_change as u64, price)
+            ("BUY".to_string(), sol_spent, token_change as u64, price)
         } else if sol_change > 0.001 && token_change < 0.0 {
             // Sell: SOL increased, tokens decreased
             let sol_received = sol_change;
             let tokens_sold = token_change.abs();
             let price = if tokens_sold > 0.0 { sol_received / tokens_sold } else { 0.0 };
-            ("sell".to_string(), sol_received, tokens_sold as u64, price)
+            ("SELL".to_string(), sol_received, tokens_sold as u64, price)
         } else {
             continue;
         };
@@ -985,8 +1106,8 @@ fn generate_swap_analytics(swaps: &[DetailedSwapTransaction]) -> SwapAnalytics {
     }
     
     let total_swaps = swaps.len();
-    let buy_swaps = swaps.iter().filter(|s| s.swap_type == "buy").count();
-    let sell_swaps = swaps.iter().filter(|s| s.swap_type == "sell").count();
+    let buy_swaps = swaps.iter().filter(|s| s.swap_type == "BUY").count();
+    let sell_swaps = swaps.iter().filter(|s| s.swap_type == "SELL").count();
     
     let unique_tokens = swaps.iter()
         .map(|s| &s.token_mint)
@@ -1005,7 +1126,7 @@ fn generate_swap_analytics(swaps: &[DetailedSwapTransaction]) -> SwapAnalytics {
     
     for swap in swaps {
         // SOL flow
-        if swap.swap_type == "buy" {
+        if swap.swap_type == "BUY" {
             total_sol_spent += swap.sol_amount;
         } else {
             total_sol_received += swap.sol_amount;
@@ -1245,6 +1366,13 @@ async fn load_transaction_from_file(file_path: &Path) -> Result<Option<Transacti
     if let Some(transaction_data) = json_data.get("transaction_data") {
         // Convert to TransactionDetails format
         if let Ok(transaction_details) = convert_json_to_transaction_details(transaction_data) {
+            // Store the raw JSON data in the cache using the signature as key
+            if let Some(signature) = transaction_details.transaction.signatures.get(0) {
+                if let Ok(mut cache) = TRANSACTION_JSON_CACHE.lock() {
+                    cache.insert(signature.clone(), transaction_data.clone());
+                    log(LogTag::System, "DEBUG", &format!("📊 Cached raw JSON for transaction: {}", signature));
+                }
+            }
             return Ok(Some(transaction_details));
         }
     }
