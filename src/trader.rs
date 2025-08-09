@@ -1790,7 +1790,11 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             if let Ok(positions) = SAVED_POSITIONS.lock() {
                 positions
                     .iter()
-                    .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+                    .filter(|p| {
+                        p.position_type == "buy" 
+                        && p.exit_price.is_none() 
+                        && p.transaction_entry_verified // Only process verified positions
+                    })
                     .map(|p| p.mint.clone())
                     .collect()
             } else {
@@ -1815,17 +1819,44 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
         // First, collect open positions data (without holding mutex across await)
         let open_positions_data: Vec<(usize, Position)> = {
             if let Ok(positions) = SAVED_POSITIONS.lock() {
-                positions
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, position)| {
-                        if position.position_type == "buy" && position.exit_price.is_none() {
-                            Some((index, position.clone()))
+                let mut verified_positions = Vec::new();
+                let mut unverified_count = 0;
+                
+                for (index, position) in positions.iter().enumerate() {
+                    if position.position_type == "buy" && position.exit_price.is_none() {
+                        if position.transaction_entry_verified {
+                            // Only process verified positions
+                            verified_positions.push((index, position.clone()));
                         } else {
-                            None
+                            // Skip unverified positions and count them
+                            unverified_count += 1;
+                            if is_debug_trader_enabled() {
+                                debug_trader_log(
+                                    "SKIP_UNVERIFIED",
+                                    &format!(
+                                        "⏳ Skipping unverified position: {} ({})", 
+                                        position.symbol, 
+                                        position.mint
+                                    )
+                                );
+                            }
                         }
-                    })
-                    .collect()
+                    }
+                }
+                
+                if unverified_count > 0 {
+                    log(
+                        LogTag::Trader,
+                        "INFO",
+                        &format!(
+                            "Skipping {} unverified open positions, processing {} verified positions",
+                            unverified_count,
+                            verified_positions.len()
+                        )
+                    );
+                }
+                
+                verified_positions
             } else {
                 Vec::new()
             }
