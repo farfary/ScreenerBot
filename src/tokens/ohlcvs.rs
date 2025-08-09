@@ -5,7 +5,9 @@
 ///
 /// ## Features:
 /// - **Multi-timeframe Support**: minute(1,5,15), hour(1,4,12), day(1) aggregations
-/// - **Smart Caching**: File-based cache organized by mint/timeframe in .cache_ohlcvs/
+/// - **Smart Caching**: File-based cache organized per mint in CACHE_OHLCVS_DIR/
+///   - Structure: CACHE_OHLCVS_DIR/<mint>/<timeframe>.json (e.g., 1m.json, 5m.json, 15m.json, 1h.json, 4h.json, 12h.json, 1d.json)
+///   - Backward compatible: still reads old layouts if present
 /// - **Background Monitoring**: Continuous data collection for watched tokens
 /// - **Pool Integration**: Uses best pools from pool service for data fetching
 /// - **Data Validation**: Handles missing intervals and validates data integrity
@@ -186,16 +188,12 @@ impl CachedOhlcvData {
         }
     }
 
-    /// Get cache file path
+    /// Get cache file path (new layout)
+    /// New layout stores files as: CACHE_OHLCVS_DIR/<mint>/<timeframe>.json
     pub fn get_cache_path(&self) -> PathBuf {
-        // Safe mint prefix extraction (first 8 chars or entire mint if shorter)
-        let mint_prefix = if self.mint.len() >= 8 { &self.mint[..8] } else { &self.mint };
-
-        let cache_dir = Path::new(CACHE_DIR)
-            .join(mint_prefix) // First 8 chars of mint for organization
-            .join(self.timeframe.get_cache_dir());
-
-        cache_dir.join(format!("{}.json", self.mint))
+        Path::new(CACHE_DIR)
+            .join(&self.mint)
+            .join(format!("{}.json", self.timeframe.get_cache_dir()))
     }
 }
 
@@ -302,21 +300,7 @@ impl OhlcvService {
             fs::create_dir_all(cache_dir)?;
             log(LogTag::Ohlcv, "INIT", &format!("Created OHLCV cache directory: {}", CACHE_DIR));
         }
-
-        // Create subdirectories for each timeframe
-        for timeframe in Timeframe::all() {
-            let timeframe_dir = cache_dir.join(timeframe.get_cache_dir());
-            if !timeframe_dir.exists() {
-                fs::create_dir_all(&timeframe_dir)?;
-                if is_debug_ohlcv_enabled() {
-                    log(
-                        LogTag::Ohlcv,
-                        "INIT_DIR",
-                        &format!("📁 Created timeframe directory: {}", timeframe_dir.display())
-                    );
-                }
-            }
-        }
+    // Note: we no longer create root-level timeframe directories. Files are stored under per-mint folders.
 
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
@@ -1010,39 +994,66 @@ impl OhlcvService {
         mint: &str,
         timeframe: &Timeframe
     ) -> Result<CachedOhlcvData, String> {
-        // Safe mint prefix extraction (first 8 chars or entire mint if shorter)
-        let mint_prefix = if mint.len() >= 8 { &mint[..8] } else { mint };
+        // Try new layout first: CACHE/<mint>/<timeframe>.json
+        let new_path = Path::new(CACHE_DIR)
+            .join(mint)
+            .join(format!("{}.json", timeframe.get_cache_dir()));
 
-        let cache_path = Path::new(CACHE_DIR)
+        // Backward-compat paths (old layouts):
+        // - v1 (prefix-first): CACHE/<mint_prefix>/<timeframe>/<mint>.json
+        // - v0 (timeframe-first): CACHE/<timeframe>/<mint>.json or CACHE/<timeframe>/<mint_prefix>/<mint>.json
+        let mint_prefix = if mint.len() >= 8 { &mint[..8] } else { mint };
+        let old_v1_path = Path::new(CACHE_DIR)
             .join(mint_prefix)
             .join(timeframe.get_cache_dir())
             .join(format!("{}.json", mint));
+        let old_v0_path_a = Path::new(CACHE_DIR)
+            .join(timeframe.get_cache_dir())
+            .join(format!("{}.json", mint));
+        let old_v0_path_b = Path::new(CACHE_DIR)
+            .join(timeframe.get_cache_dir())
+            .join(mint_prefix)
+            .join(format!("{}.json", mint));
 
-        if is_debug_ohlcv_enabled() {
-            log(
-                LogTag::Ohlcv,
-                "FILE_CACHE_LOAD",
-                &format!("📁 Attempting to load file cache: {}", cache_path.display())
-            );
-        }
-
-        if !cache_path.exists() {
+        let chosen_path = if new_path.exists() {
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "FILE_CACHE_LOAD", &format!("📁 Load (new): {}", new_path.display()));
+            }
+            new_path
+        } else if old_v1_path.exists() {
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "FILE_CACHE_LOAD", &format!("📁 Load (old v1): {}", old_v1_path.display()));
+            }
+            old_v1_path
+        } else if old_v0_path_a.exists() {
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "FILE_CACHE_LOAD", &format!("📁 Load (old v0-a): {}", old_v0_path_a.display()));
+            }
+            old_v0_path_a
+        } else if old_v0_path_b.exists() {
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "FILE_CACHE_LOAD", &format!("📁 Load (old v0-b): {}", old_v0_path_b.display()));
+            }
+            old_v0_path_b
+        } else {
             if is_debug_ohlcv_enabled() {
                 log(
                     LogTag::Ohlcv,
                     "FILE_CACHE_MISSING",
-                    &format!("❌ Cache file not found: {}", cache_path.display())
+                    &format!(
+                        "❌ Cache file not found for {} {} (checked new and old layouts)",
+                        mint,
+                        timeframe
+                    )
                 );
             }
             return Err("Cache file not found".to_string());
-        }
+        };
 
-        let content = fs
-            ::read_to_string(&cache_path)
+        let content = fs::read_to_string(&chosen_path)
             .map_err(|e| format!("Failed to read cache file: {}", e))?;
 
-        let cached_data: CachedOhlcvData = serde_json
-            ::from_str(&content)
+        let cached_data: CachedOhlcvData = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse cache file: {}", e))?;
 
         if is_debug_ohlcv_enabled() {
