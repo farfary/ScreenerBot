@@ -166,25 +166,35 @@ async fn analyze_jupiter_swap(
         // Look for wallet's token accounts that had changes
         let mut wallet_token_changes = HashMap::new();
         
-        // For now, analyze ALL token balance changes in the transaction
-        // In a real implementation, we'd filter by wallet ownership
+        // Get wallet pubkey string for owner comparison
+        let wallet_pubkey_str = wallet_address;
         
-        // Collect all pre-token balances
+        // Collect pre-token balances for wallet-owned accounts only
         for balance in pre_balances {
-            let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
-            let decimals = balance.ui_token_amount.decimals;
-            let formatted_amount = amount / 10f64.powi(decimals as i32);
-            *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) -= formatted_amount;
-            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - pre token: mint={}, amount={}", balance.mint, formatted_amount));
+            // Only include token accounts owned by the wallet
+            if let Some(ref owner) = balance.owner {
+                if owner == wallet_pubkey_str {
+                    let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                    let decimals = balance.ui_token_amount.decimals;
+                    let formatted_amount = amount / 10f64.powi(decimals as i32);
+                    *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) -= formatted_amount;
+                    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - pre token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                }
+            }
         }
         
-        // Collect all post-token balances
+        // Collect post-token balances for wallet-owned accounts only
         for balance in post_balances {
-            let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
-            let decimals = balance.ui_token_amount.decimals;
-            let formatted_amount = amount / 10f64.powi(decimals as i32);
-            *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
-            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - post token: mint={}, amount={}", balance.mint, formatted_amount));
+            // Only include token accounts owned by the wallet
+            if let Some(ref owner) = balance.owner {
+                if owner == wallet_pubkey_str {
+                    let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                    let decimals = balance.ui_token_amount.decimals;
+                    let formatted_amount = amount / 10f64.powi(decimals as i32);
+                    *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
+                    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - post token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                }
+            }
         }
         
         // Look for meaningful token changes (positive = gained, negative = lost)
