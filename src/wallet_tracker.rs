@@ -530,16 +530,77 @@ pub async fn init_wallet_tracker() -> Result<(), String> {
 }
 
 /// Start wallet tracking service
+/// Start wallet tracking loop without holding the global lock continuously
+async fn start_wallet_tracking_loop(shutdown: Arc<tokio::sync::Notify>) {
+    log(LogTag::Wallet, "START", "Wallet tracker started");
+
+    // Take initial snapshot
+    {
+        let mut tracker_guard = GLOBAL_WALLET_TRACKER.lock().await;
+        if let Some(ref mut tracker) = *tracker_guard {
+            if let Err(e) = tracker.take_snapshot().await {
+                log(LogTag::Wallet, "ERROR", &format!("Initial snapshot failed: {}", e));
+            }
+            tracker.tracking_active = true;
+        } else {
+            log(LogTag::Wallet, "ERROR", "Wallet tracker not initialized");
+            return;
+        }
+    } // Lock released here
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                log(LogTag::Wallet, "SHUTDOWN", "Wallet tracker stopping");
+                break;
+            }
+            
+            _ = sleep(TokioDuration::from_secs(WALLET_TRACKING_INTERVAL_SECONDS)) => {
+                // Acquire lock only for the duration of the snapshot
+                let mut should_cleanup = false;
+                {
+                    let mut tracker_guard = GLOBAL_WALLET_TRACKER.lock().await;
+                    if let Some(ref mut tracker) = *tracker_guard {
+                        if let Err(e) = tracker.take_snapshot().await {
+                            log(LogTag::Wallet, "ERROR", &format!("Snapshot failed: {}", e));
+                        }
+
+                        // Check if cleanup is needed
+                        if (Utc::now() - tracker.last_cleanup).num_hours() >= CLEANUP_INTERVAL_HOURS {
+                            should_cleanup = true;
+                        }
+                    }
+                } // Lock released here
+
+                // Perform cleanup if needed (acquire lock briefly again)
+                if should_cleanup {
+                    let mut tracker_guard = GLOBAL_WALLET_TRACKER.lock().await;
+                    if let Some(ref mut tracker) = *tracker_guard {
+                        tracker.cleanup_old_data().await;
+                        tracker.last_cleanup = Utc::now();
+                    }
+                } // Lock released here
+            }
+        }
+    }
+
+    // Mark as stopped
+    {
+        let mut tracker_guard = GLOBAL_WALLET_TRACKER.lock().await;
+        if let Some(ref mut tracker) = *tracker_guard {
+            tracker.tracking_active = false;
+        }
+    }
+    log(LogTag::Wallet, "STOP", "Wallet tracker stopped");
+}
+
 pub async fn start_wallet_tracking(shutdown: Arc<tokio::sync::Notify>) -> Result<tokio::task::JoinHandle<()>, String> {
     log(LogTag::Wallet, "START", "Starting wallet tracking service");
 
     let handle = tokio::spawn(async move {
-        let mut tracker_guard = GLOBAL_WALLET_TRACKER.lock().await;
-        if let Some(ref mut tracker) = *tracker_guard {
-            tracker.start_tracking(shutdown).await;
-        } else {
-            log(LogTag::Wallet, "ERROR", "Wallet tracker not initialized");
-        }
+        // Instead of holding the lock for the entire tracking duration,
+        // we'll periodically acquire and release it for each operation
+        start_wallet_tracking_loop(shutdown).await;
     });
 
     Ok(handle)

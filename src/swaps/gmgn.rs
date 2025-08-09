@@ -397,87 +397,65 @@ pub async fn execute_gmgn_swap(
     log(
         LogTag::Swap,
         "GMGN_PENDING",
-        &format!("🔵 GMGN transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
+        &format!("🔵 GMGN transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
 
-    // Wait for transaction confirmation and verify actual results using instruction analysis
+    // Add transaction to monitoring service instead of blocking verification
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    
-    match verify_swap_transaction(
+    let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
+    let amount_sol = if input_mint == SOL_MINT {
+        // Buy: input is SOL
+        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+    } else {
+        // Sell: output is SOL  
+        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+    };
+
+    match crate::swaps::transaction::TransactionMonitoringService::add_transaction_to_monitor(
         &transaction_signature,
+        target_mint,
+        expected_direction,
         input_mint,
         output_mint,
-        expected_direction
+        false, // position_related
+        amount_sol,
+        &crate::utils::get_wallet_address().map_err(|e| SwapError::ConfigError(e.to_string()))?
     ).await {
-        Ok(verification_result) => {
+        Ok(()) => {
+            log(
+                LogTag::Swap,
+                "GMGN_TRANSACTION_ADDED",
+                &format!("📝 Added transaction {} to monitoring queue", &transaction_signature[..8])
+            );
+            
+            // Return success result with quote data - monitoring service will handle verification
             let execution_time = start_time.elapsed().as_secs_f64();
-
-            if verification_result.success && verification_result.confirmed {
-                log(
-                    LogTag::Swap,
-                    "GMGN_SUCCESS",
-                    &format!(
-                        "✅ GMGN swap confirmed! TX: {} (execution: {:.2}s)",
-                        transaction_signature,
-                        execution_time
-                    )
-                );
-
-                Ok(GMGNSwapResult {
-                    success: true,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: verification_result.input_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.in_amount.clone()),
-                    output_amount: verification_result.output_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.out_amount.clone()),
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time,
-                    effective_price: verification_result.effective_price,
-                    swap_data: Some(swap_data),
-                    error: None,
-                })
-            } else {
-                let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
-                log(
-                    LogTag::Swap,
-                    "GMGN_FAILED",
-                    &format!("❌ GMGN transaction failed: {} - Error: {}", transaction_signature, error_msg)
-                );
-
-                Ok(GMGNSwapResult {
-                    success: false,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: swap_data.quote.in_amount.clone(),
-                    output_amount: "0".to_string(),
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time,
-                    effective_price: None,
-                    swap_data: Some(swap_data),
-                    error: Some(error_msg),
-                })
-            }
+            
+            Ok(GMGNSwapResult {
+                success: true,
+                transaction_signature: Some(transaction_signature),
+                input_amount: swap_data.quote.in_amount.clone(),
+                output_amount: swap_data.quote.out_amount.clone(),
+                price_impact: swap_data.quote.price_impact_pct.clone(),
+                fee_lamports: 0, // Will be calculated by monitoring service
+                execution_time,
+                effective_price: None, // Will be calculated by monitoring service
+                swap_data: Some(swap_data),
+                error: None,
+            })
         }
         Err(e) => {
             let execution_time = start_time.elapsed().as_secs_f64();
             log(
                 LogTag::Swap,
-                "GMGN_ERROR",
-                &format!("❌ GMGN transaction verification failed: {}", e)
+                "GMGN_TRANSACTION_ADD_ERROR",
+                &format!("❌ Failed to add transaction to monitoring service: {}", e)
             );
-
-            // Return as failed transaction
-            Ok(GMGNSwapResult {
-                success: false,
-                transaction_signature: Some(transaction_signature),
-                input_amount: swap_data.quote.in_amount.clone(),
-                output_amount: "0".to_string(),
-                price_impact: swap_data.quote.price_impact_pct.clone(),
-                fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-                execution_time,
-                effective_price: None,
-                swap_data: Some(swap_data),
-                error: Some(format!("Transaction verification failed: {}", e)),
-            })
+            
+            // Return error - no fallback verification, transaction service handles all monitoring
+            Err(SwapError::TransactionError(
+                format!("Failed to add transaction to monitoring service: {}", e)
+            ))
         }
     }
 }

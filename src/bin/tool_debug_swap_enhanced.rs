@@ -15,6 +15,7 @@ use screenerbot::{
         gmgn::get_gmgn_quote,
         jupiter::get_jupiter_quote,
         config::{SOL_MINT},
+        transaction::TransactionMonitoringService,
     },
     global::{ set_cmd_args },
     logger::{ log, LogTag, init_file_logging },
@@ -213,6 +214,19 @@ async fn initialize_systems() -> Result<(), Box<dyn std::error::Error>> {
     
     // Initialize pool service
     let _ = init_pool_service();
+    
+    // Initialize transaction monitoring service
+    TransactionMonitoringService::init_global_service().await
+        .map_err(|e| format!("Failed to initialize transaction monitoring service: {}", e))?;
+    
+    // Start the background monitoring service as a separate task
+    let shutdown_notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    let shutdown_clone = shutdown_notify.clone();
+    tokio::spawn(async move {
+        if let Err(e) = TransactionMonitoringService::start_monitoring_service(shutdown_clone).await {
+            log(LogTag::System, "ERROR", &format!("Transaction monitoring service failed: {}", e));
+        }
+    });
     
     println!("✅ Systems initialized successfully");
     Ok(())
@@ -442,61 +456,41 @@ async fn test_single_swap(
     log(LogTag::System, "SUCCESS", "✅ Buy transaction successful!");
     log_swap_result(&buy_result, "BUY");
 
-    // 🔍 DEBUG: Analyze buy transaction in detail
+    // 🔍 DEBUG: Analyze buy transaction using transaction service BLOCKING verification
     if let Some(signature) = &buy_result.transaction_signature {
-        log(LogTag::System, "DEBUG", "🔍 ANALYZING BUY TRANSACTION...");
+        log(LogTag::System, "DEBUG", "🔍 ANALYZING BUY TRANSACTION WITH BLOCKING VERIFICATION...");
         log(LogTag::System, "DEBUG", &format!("📝 Transaction signature: {}", signature));
         
-        // Analyze the buy transaction using instruction-based analysis
-        match screenerbot::swaps::transaction::verify_swap_transaction(
+        // Use blocking verification for immediate results (no background service dependency)
+        match TransactionMonitoringService::verify_transaction_blocking(
             signature,
-            screenerbot::swaps::config::SOL_MINT,
             &token.mint,
-            "buy"
+            "buy",
+            SOL_MINT,
+            &token.mint,
+            std::time::Duration::from_secs(120) // 2 minute timeout
         ).await {
-            Ok(verification) => {
-                log(LogTag::System, "DEBUG", "✅ Transaction verification completed");
-                log(LogTag::System, "DEBUG", &format!("📊 INSTRUCTION ANALYSIS RESULTS:"));
-                log(LogTag::System, "DEBUG", &format!("  • Success: {}", verification.success));
-                log(LogTag::System, "DEBUG", &format!("  • Input amount: {} lamports", fmt_opt_u64(verification.input_amount)));
-                log(LogTag::System, "DEBUG", &format!("  • Output amount: {} raw tokens", fmt_opt_u64(verification.output_amount)));
-                log(LogTag::System, "DEBUG", &format!("  • SOL spent: {} lamports", fmt_opt_u64(verification.sol_spent)));
-                log(LogTag::System, "DEBUG", &format!("  • SOL received: {} lamports", fmt_opt_u64(verification.sol_received)));
-                log(LogTag::System, "DEBUG", &format!("  • Input mint: {}", verification.input_mint));
-                log(LogTag::System, "DEBUG", &format!("  • Output mint: {}", verification.output_mint));
-                log(LogTag::System, "DEBUG", &format!("  • Input decimals: {}", verification.input_decimals));
-                log(LogTag::System, "DEBUG", &format!("  • Output decimals: {}", verification.output_decimals));
-                log(LogTag::System, "DEBUG", &format!("  • Transaction fee: {} lamports", verification.transaction_fee));
-                log(LogTag::System, "DEBUG", &format!("  • ATA created: {}", verification.ata_created));
-                log(LogTag::System, "DEBUG", &format!("  • ATA closed: {}", verification.ata_closed));
-                log(LogTag::System, "DEBUG", &format!("  • ATA rent paid: {} lamports", verification.ata_rent_paid));
-                log(LogTag::System, "DEBUG", &format!("  • ATA rent reclaimed: {} lamports", verification.ata_rent_reclaimed));
-                log(LogTag::System, "DEBUG", &format!("  • Effective price: {} SOL/token", fmt_opt_f64(verification.effective_price, 12)));
+            Ok(final_state) => {
+                log(LogTag::System, "DEBUG", &format!("✅ BLOCKING verification completed with state: {:?}", final_state));
                 
-                // Compare with quote amounts
-                let quote_input = buy_result.input_amount.parse::<u64>().unwrap_or(0);
-                let quote_output = buy_result.output_amount.parse::<u64>().unwrap_or(0);
-                log(LogTag::System, "DEBUG", &format!("📊 QUOTE vs INSTRUCTION COMPARISON:"));
-                log(LogTag::System, "DEBUG", &format!("  • Quote input: {} vs Instruction input: {}", quote_input, fmt_opt_u64(verification.input_amount)));
-                log(LogTag::System, "DEBUG", &format!("  • Quote output: {} vs Instruction output: {}", quote_output, fmt_opt_u64(verification.output_amount)));
-                
-                if let (Some(instr_input), Some(instr_output)) = (verification.input_amount, verification.output_amount) {
-                    let input_diff = ((instr_input as f64 - quote_input as f64) / quote_input as f64 * 100.0).abs();
-                    let output_diff = ((instr_output as f64 - quote_output as f64) / quote_output as f64 * 100.0).abs();
-                    log(LogTag::System, "DEBUG", &format!("  • Input difference: {:.2}%", input_diff));
-                    log(LogTag::System, "DEBUG", &format!("  • Output difference: {:.2}%", output_diff));
-                    
-                    if input_diff > 5.0 || output_diff > 5.0 {
-                        log(LogTag::System, "WARNING", "⚠️ Significant difference between quote and instruction amounts detected!");
+                match final_state {
+                    screenerbot::swaps::transaction::TransactionState::Verified { .. } => {
+                        log(LogTag::System, "SUCCESS", "✅ Buy transaction fully verified!");
+                    }
+                    screenerbot::swaps::transaction::TransactionState::Failed { error, .. } => {
+                        log(LogTag::System, "ERROR", &format!("❌ Buy transaction verification failed: {}", error));
+                    }
+                    _ => {
+                        log(LogTag::System, "WARNING", &format!("⚠️ Buy transaction in unexpected state: {:?}", final_state));
                     }
                 }
             }
             Err(e) => {
-                log(LogTag::System, "ERROR", &format!("❌ Transaction verification failed: {}", e));
+                log(LogTag::System, "ERROR", &format!("❌ BLOCKING verification failed: {}", e));
             }
         }
         
-        log(LogTag::System, "DEBUG", "🔍 BUY TRANSACTION ANALYSIS COMPLETE");
+        log(LogTag::System, "DEBUG", "🔍 BUY TRANSACTION BLOCKING ANALYSIS COMPLETE");
         log(LogTag::System, "DEBUG", &"=".repeat(60));
     }
 

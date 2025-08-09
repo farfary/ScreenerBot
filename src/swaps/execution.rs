@@ -389,6 +389,7 @@ pub async fn execute_swap_with_quote(
     input_amount: u64,
     swap_data: SwapData
 ) -> Result<SwapResult, SwapError> {
+    let start_time = std::time::Instant::now();
     let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     // Determine if this is SOL to token or token to SOL
@@ -431,117 +432,64 @@ pub async fn execute_swap_with_quote(
     log(
         LogTag::Swap,
         "PENDING",
-        &format!("Transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
+        &format!("Transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
 
-    // CRITICAL FIX: Wait for transaction confirmation and verify actual results using instruction analysis
+    // Add transaction to monitoring service instead of blocking verification
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    
-    match verify_swap_transaction(
+    let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
+    let amount_sol = if input_mint == SOL_MINT {
+        // Buy: input is SOL
+        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+    } else {
+        // Sell: output is SOL  
+        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+    };
+
+    match crate::swaps::transaction::TransactionMonitoringService::add_transaction_to_monitor(
         &transaction_signature,
+        target_mint,
+        expected_direction,
         input_mint,
         output_mint,
-        expected_direction
+        false, // position_related
+        amount_sol,
+        &crate::utils::get_wallet_address().map_err(|e| SwapError::ConfigError(e.to_string()))?
     ).await {
-        Ok(verification_result) => {
-            if verification_result.success && verification_result.confirmed {
-                // CRITICAL FIX: Use actual amounts if available, otherwise fail - don't mask extraction failures
-                let input_amount_str = verification_result.input_amount
-                    .map(|n| n.to_string())
-                    .ok_or_else(|| SwapError::TransactionError(
-                        "Failed to extract actual input amount from transaction".to_string()
-                    ))?;
-                let output_amount_str = verification_result.output_amount
-                    .map(|n| n.to_string())
-                    .ok_or_else(|| SwapError::TransactionError(
-                        "Failed to extract actual output amount from transaction".to_string()
-                    ))?;
-
-                // CRITICAL FIX: Validate actual amounts vs quote expectations
-                if let Err(validation_error) = validate_transaction_vs_quote(
-                    &swap_data,
-                    &verification_result,
-                    input_mint,
-                    output_mint
-                ).await {
-                    log(
-                        LogTag::Swap,
-                        "VALIDATION_WARNING",
-                        &format!("⚠️ Transaction validation warning: {}", validation_error)
-                    );
-                    // Log warning but don't fail transaction - user should be aware of deviations
-                }
-
-                log(
-                    LogTag::Swap,
-                    "CONFIRMED",
-                    &format!(
-                        "✅ Transaction CONFIRMED on-chain! TX: {} | Actual Input: {} | Actual Output: {}",
-                        transaction_signature,
-                        input_amount_str,
-                        output_amount_str
-                    )
-                );
-
-                Ok(SwapResult {
-                    success: true,
-                    transaction_signature: Some(transaction_signature),
-                    // Use ACTUAL amounts from blockchain verification
-                    input_amount: input_amount_str,
-                    output_amount: output_amount_str,
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time: swap_data.quote.time_taken,
-                    effective_price: verification_result.effective_price, // From blockchain verification
-                    swap_data: Some(swap_data), // Include the complete swap data
-                    error: None,
-                })
-            } else {
-                let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
-                log(
-                    LogTag::Swap,
-                    "FAILED",
-                    &format!("❌ Transaction FAILED on-chain! TX: {} - Error: {}", transaction_signature, error_msg)
-                );
-
-                Ok(SwapResult {
-                    success: false,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: swap_data.quote.in_amount.clone(),
-                    output_amount: "0".to_string(), // Zero output for failed transaction
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time: swap_data.quote.time_taken,
-                    effective_price: None,
-                    swap_data: Some(swap_data),
-                    error: Some("Transaction failed on-chain".to_string()),
-                })
-            }
+        Ok(()) => {
+            log(
+                LogTag::Swap,
+                "TRANSACTION_ADDED",
+                &format!("📝 Added transaction {} to monitoring queue", &transaction_signature[..8])
+            );
+            
+            // Return success result with quote data - monitoring service will handle verification
+            let execution_time = start_time.elapsed().as_secs_f64();
+            
+            Ok(SwapResult {
+                success: true,
+                transaction_signature: Some(transaction_signature),
+                input_amount: swap_data.quote.in_amount.clone(),
+                output_amount: swap_data.quote.out_amount.clone(),
+                price_impact: swap_data.quote.price_impact_pct.clone(),
+                fee_lamports: 0, // Will be calculated by monitoring service
+                execution_time,
+                effective_price: None, // Will be calculated by monitoring service
+                swap_data: Some(swap_data),
+                error: None,
+            })
         }
         Err(e) => {
             log(
                 LogTag::Swap,
-                "ERROR",
-                &format!(
-                    "❌ Transaction verification failed for TX: {} - Error: {}",
-                    transaction_signature,
-                    e
-                )
+                "TRANSACTION_ADD_ERROR",
+                &format!("❌ Failed to add transaction to monitoring service: {}", e)
             );
-
-            // Return as failed transaction
-            Ok(SwapResult {
-                success: false,
-                transaction_signature: Some(transaction_signature),
-                input_amount: swap_data.quote.in_amount.clone(),
-                output_amount: "0".to_string(),
-                price_impact: swap_data.quote.price_impact_pct.clone(),
-                fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-                execution_time: swap_data.quote.time_taken,
-                effective_price: None,
-                swap_data: Some(swap_data),
-                error: Some(format!("Transaction verification failed: {}", e)),
-            })
+            
+            // Return error - no fallback verification, transaction service handles all monitoring
+            Err(SwapError::TransactionError(
+                format!("Failed to add transaction to monitoring service: {}", e)
+            ))
         }
     }
 }

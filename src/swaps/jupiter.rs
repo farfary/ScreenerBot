@@ -469,114 +469,65 @@ pub async fn execute_jupiter_swap(
     log(
         LogTag::Swap,
         "JUPITER_PENDING",
-        &format!("🟡 Jupiter transaction submitted! TX: {} - Now verifying confirmation...", transaction_signature)
+        &format!("🟡 Jupiter transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
 
-    // Wait for transaction confirmation and verify actual results using instruction analysis
+    // Add transaction to monitoring service instead of blocking verification
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    
-    match crate::swaps::transaction::verify_swap_transaction(
+    let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
+    let amount_sol = if input_mint == SOL_MINT {
+        // Buy: input is SOL
+        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+    } else {
+        // Sell: output is SOL  
+        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+    };
+
+    match crate::swaps::transaction::TransactionMonitoringService::add_transaction_to_monitor(
         &transaction_signature,
+        target_mint,
+        expected_direction,
         input_mint,
         output_mint,
-        expected_direction
+        false, // position_related
+        amount_sol,
+        &crate::utils::get_wallet_address().map_err(|e| SwapError::ConfigError(e.to_string()))?
     ).await {
-        Ok(verification_result) => {
+        Ok(()) => {
+            log(
+                LogTag::Swap,
+                "JUPITER_TRANSACTION_ADDED",
+                &format!("📝 Added transaction {} to monitoring queue", &transaction_signature[..8])
+            );
+            
+            // Return success result with quote data - monitoring service will handle verification
             let execution_time = start_time.elapsed().as_secs_f64();
-
-            if verification_result.success && verification_result.confirmed {
-                let input_str = verification_result.input_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.in_amount.clone());
-                let output_str = verification_result.output_amount.map(|n| n.to_string()).unwrap_or_else(|| swap_data.quote.out_amount.clone());
-
-                // Calculate effective price with quote fallback if instruction analysis failed
-        let effective_price = verification_result.effective_price.or_else(|| {
-                    if let (Ok(quote_input), Ok(quote_output)) = (swap_data.quote.in_amount.parse::<u64>(), swap_data.quote.out_amount.parse::<u64>()) {
-                        use crate::swaps::pricing::calculate_effective_price_from_raw_with_quote;
-                        
-                        // Get decimals for accurate calculation (SOL is always 9 decimals)
-            let input_decimals = if input_mint == crate::swaps::config::SOL_MINT { 9 } else { swap_data.quote.in_decimals as u32 };
-            let output_decimals = if output_mint == crate::swaps::config::SOL_MINT { 9 } else { swap_data.quote.out_decimals as u32 };
-                        
-                        calculate_effective_price_from_raw_with_quote(
-                            expected_direction,
-                            verification_result.input_amount,
-                            verification_result.output_amount,
-                            verification_result.sol_spent,
-                            verification_result.sol_received,
-                            verification_result.ata_rent_reclaimed,
-                            input_decimals,
-                            output_decimals,
-                            Some(quote_input),
-                            Some(quote_output),
-                        )
-                    } else {
-                        None
-                    }
-                });
-
-                log(
-                    LogTag::Swap,
-                    "JUPITER_SUCCESS",
-                    &format!(
-                        "✅ Jupiter swap completed! {} -> {} in {:.2}s",
-                        input_str, output_str, execution_time
-                    )
-                );
-
-                Ok(JupiterSwapResult {
-                    success: true,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: input_str,
-                    output_amount: output_str,
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time,
-                    effective_price,
-                    swap_data: Some(swap_data),
-                    error: None,
-                })
-            } else {
-                let error_msg = verification_result.error.unwrap_or_else(|| "Transaction failed on blockchain".to_string());
-                log(
-                    LogTag::Swap,
-                    "JUPITER_FAILED",
-                    &format!("❌ Jupiter transaction failed on-chain: {} - Error: {}", transaction_signature, error_msg)
-                );
-
-                Ok(JupiterSwapResult {
-                    success: false,
-                    transaction_signature: Some(transaction_signature),
-                    input_amount: String::new(),
-                    output_amount: String::new(),
-                    price_impact: swap_data.quote.price_impact_pct.clone(),
-                    fee_lamports: verification_result.transaction_fee,
-                    execution_time,
-                    effective_price: None,
-                    swap_data: Some(swap_data),
-                    error: Some(error_msg),
-                })
-            }
+            
+            Ok(JupiterSwapResult {
+                success: true,
+                transaction_signature: Some(transaction_signature),
+                input_amount: swap_data.quote.in_amount.clone(),
+                output_amount: swap_data.quote.out_amount.clone(),
+                price_impact: swap_data.quote.price_impact_pct.clone(),
+                fee_lamports: 0, // Will be calculated by monitoring service
+                execution_time,
+                effective_price: None, // Will be calculated by monitoring service
+                swap_data: Some(swap_data),
+                error: None,
+            })
         }
         Err(e) => {
             let execution_time = start_time.elapsed().as_secs_f64();
             log(
                 LogTag::Swap,
-                "JUPITER_ERROR",
-                &format!("❌ Jupiter transaction verification failed: {}", e)
+                "JUPITER_TRANSACTION_ADD_ERROR", 
+                &format!("❌ Failed to add transaction to monitoring service: {}", e)
             );
-
-            Ok(JupiterSwapResult {
-                success: false,
-                transaction_signature: Some(transaction_signature),
-                input_amount: String::new(),
-                output_amount: String::new(),
-                price_impact: swap_data.quote.price_impact_pct.clone(),
-                fee_lamports: 0,
-                execution_time,
-                effective_price: None,
-                swap_data: Some(swap_data),
-                error: Some(e.to_string()),
-            })
+            
+            // Return error - no fallback verification, transaction service handles all monitoring
+            Err(SwapError::TransactionError(
+                format!("Failed to add transaction to monitoring service: {}", e)
+            ))
         }
     }
 }

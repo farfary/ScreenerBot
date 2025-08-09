@@ -13,7 +13,7 @@ use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
 use chrono::{ Utc };
 use std::sync::Arc;
 use tokio::sync::Notify;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
 
 /// Display structure for closed positions with specific "Exit" column
@@ -222,13 +222,42 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
         log(LogTag::Summary, "DEBUG", "Starting positions display monitor");
     }
 
+    let mut tick: u64 = 0;
     loop {
+        tick += 1;
+        let tick_start = Instant::now();
         if is_debug_summary_enabled() {
-            log(LogTag::Summary, "DEBUG", "Displaying positions table");
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!("Summary tick #{} start - generating positions table", tick)
+            );
         }
 
         // Display the positions table
         display_positions_table().await;
+
+        if is_debug_summary_enabled() {
+            let elapsed = tick_start.elapsed();
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "Summary tick #{} display complete in {} ms",
+                    tick,
+                    elapsed.as_millis()
+                )
+            );
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "Summary tick #{} sleeping for {}s (or until shutdown)",
+                    tick,
+                    SUMMARY_DISPLAY_INTERVAL_SECS
+                )
+            );
+        }
 
         // Wait 10 seconds or until shutdown
         if
@@ -247,6 +276,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
 }
 
 pub async fn display_positions_table() {
+    let fn_start = Instant::now();
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions table display generation");
     }
@@ -255,8 +285,19 @@ pub async fn display_positions_table() {
     // for open positions, so we don't need to refresh them here
 
     // Use existing safe functions instead of locking SAVED_POSITIONS directly
+    let collect_start = Instant::now();
     let open_positions = get_open_positions();
     let closed_positions = get_closed_positions();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Collected positions in {} ms",
+                collect_start.elapsed().as_millis()
+            )
+        );
+    }
 
     let open_count = open_positions.len();
     let closed_count = closed_positions.len();
@@ -291,7 +332,18 @@ pub async fn display_positions_table() {
 
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();
+    let summary_start = Instant::now();
     display_bot_summary(&closed_refs).await;
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Bot summary generated in {} ms",
+                summary_start.elapsed().as_millis()
+            )
+        );
+    }
 
     // Display closed positions first (last 10, sorted by close time)
     if !closed_positions.is_empty() {
@@ -306,6 +358,7 @@ pub async fn display_positions_table() {
         let mut sorted_closed = closed_positions.clone();
         sorted_closed.sort_by_key(|p| p.exit_time.unwrap_or(Utc::now()));
 
+        let closed_build_start = Instant::now();
         let recent_closed: Vec<_> = sorted_closed
             .iter()
             .rev() // Most recent first
@@ -313,6 +366,17 @@ pub async fn display_positions_table() {
             .rev() // Reverse back so oldest of the 10 is first
             .map(|position| ClosedPositionDisplay::from_position(position))
             .collect();
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "Built recent closed positions (n={}) in {} ms",
+                    recent_closed.len(),
+                    closed_build_start.elapsed().as_millis()
+                )
+            );
+        }
 
         if !recent_closed.is_empty() {
             if is_debug_summary_enabled() {
@@ -362,6 +426,7 @@ pub async fn display_positions_table() {
             }
 
             // Fetch all prices in one batch call (much faster!)
+            let price_fetch_start = Instant::now();
             let price_map = crate::tokens::get_current_token_prices_batch(&mints).await;
 
             if is_debug_summary_enabled() {
@@ -370,18 +435,31 @@ pub async fn display_positions_table() {
                     LogTag::Summary,
                     "DEBUG",
                     &format!(
-                        "Price fetching complete - Found prices for {}/{} tokens",
+                        "Price fetching complete - Found prices for {}/{} tokens in {} ms",
                         prices_found,
-                        mints.len()
+                        mints.len(),
+                        price_fetch_start.elapsed().as_millis()
                     )
                 );
             }
 
             // Build displays with fetched prices
             let mut displays = Vec::new();
+            let build_start = Instant::now();
             for position in &sorted_open {
                 let current_price = price_map.get(&position.mint).copied().flatten();
                 displays.push(OpenPositionDisplay::from_position(position, current_price));
+            }
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "Built open positions display (n={}) in {} ms",
+                        displays.len(),
+                        build_start.elapsed().as_millis()
+                    )
+                );
             }
             displays
         };
@@ -400,7 +478,14 @@ pub async fn display_positions_table() {
     }
 
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Positions table display generation complete");
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Positions table display generation complete in {} ms",
+                fn_start.elapsed().as_millis()
+            )
+        );
     }
 }
 
@@ -413,6 +498,7 @@ pub async fn display_current_bot_summary() {
 
 /// Displays comprehensive bot summary with detailed statistics and performance metrics
 pub async fn display_bot_summary(closed_positions: &[&Position]) {
+    let fn_start = Instant::now();
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -433,6 +519,7 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     }
 
     // Calculate comprehensive trading statistics
+    let stats_start = Instant::now();
     let total_trades = closed_positions.len();
     let profitable_trades = closed_positions
         .iter()
@@ -502,9 +589,27 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 
     // Calculate maximum drawdown
     let max_drawdown = calculate_max_drawdown(&pnl_values);
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!("Computed P&L stats in {} ms", stats_start.elapsed().as_millis())
+        );
+    }
 
     // Get wallet balance from wallet tracker
+    let wallet_start = Instant::now();
     let wallet_balance = get_wallet_summary().await;
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Fetched wallet summary in {} ms",
+                wallet_start.elapsed().as_millis()
+            )
+        );
+    }
 
     if is_debug_summary_enabled() {
         log(
@@ -563,9 +668,20 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 
     // Get pool service statistics
     let pool_service = get_pool_service();
+    let pool_stats_start = Instant::now();
     let (pool_cache_count, price_cache_count, _availability_cache_count) =
         pool_service.get_cache_stats().await;
     let enhanced_stats = pool_service.get_enhanced_stats().await;
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Fetched pool service stats in {} ms",
+                pool_stats_start.elapsed().as_millis()
+            )
+        );
+    }
 
     let pool_service_stats = PoolServiceDisplay {
         pool_cache: format!("{} pools", pool_cache_count),
@@ -620,7 +736,18 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     println!("{}", pool_table);
 
     // Display wallet tracker statistics if available
+    let wallet_analysis_start = Instant::now();
     if let Some(wallet_analysis) = get_wallet_analysis().await {
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "Fetched wallet analysis in {} ms",
+                    wallet_analysis_start.elapsed().as_millis()
+                )
+            );
+        }
         let wallet_tracker_stats = WalletTrackerDisplay {
             current_value: format!("{:.6} SOL", wallet_analysis.current_value),
             value_change: format!("{:+.6} SOL", wallet_analysis.value_change),
@@ -640,7 +767,21 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 
     // Display RPC statistics if available
     if let Some(rpc_stats) = get_global_rpc_stats() {
+        if is_debug_summary_enabled() {
+            log(LogTag::Summary, "DEBUG", "Displaying RPC statistics tables");
+        }
+        let rpc_start = Instant::now();
         display_rpc_statistics(&rpc_stats);
+        if is_debug_summary_enabled() {
+            log(
+                LogTag::Summary,
+                "DEBUG",
+                &format!(
+                    "RPC statistics tables rendered in {} ms",
+                    rpc_start.elapsed().as_millis()
+                )
+            );
+        }
     }
 
     // Display frozen account cooldowns if any exist
@@ -656,7 +797,14 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
     println!("");
 
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Bot summary display generation complete");
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Bot summary display generation complete in {} ms",
+                fn_start.elapsed().as_millis()
+            )
+        );
     }
 }
 

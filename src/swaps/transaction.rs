@@ -399,135 +399,100 @@ impl TransactionMonitoringService {
             log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
                 &format!("🔍 Checking progress for transaction: {}", &signature[..8]));
         }
-        
-        let mut should_update = false;
-        let mut new_state: Option<TransactionState> = None;
+
         let now = Utc::now();
 
-        // Get current state
-        {
+        // Snapshot the transaction without holding the lock across awaits
+        let tx_snapshot = {
             let service_guard = TRANSACTION_SERVICE.lock().await;
-            
             if let Some(service) = service_guard.as_ref() {
-                if let Some(tx) = service.pending_transactions.get(signature) {
+                service.pending_transactions.get(signature).cloned()
+            } else { None }
+        };
+
+        let Some(tx_snapshot) = tx_snapshot else { return Ok(()); };
+
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                &format!("📊 Current state: {:?} | Direction: {} | Mint: {}", 
+                    tx_snapshot.state, tx_snapshot.direction, &tx_snapshot.mint[..8]));
+        }
+
+        // Determine next state without holding the lock
+        let mut new_state: Option<TransactionState> = None;
+        let mut needs_position_update = false;
+
+        let time_in_state = (now - tx_snapshot.last_updated).num_seconds();
+        if time_in_state > STUCK_STEP_TIMEOUT_SECS as i64 {
+            new_state = Some(TransactionState::Stuck { 
+                stuck_since: tx_snapshot.last_updated, 
+                last_state: format!("{:?}", tx_snapshot.state), 
+            });
+            log(LogTag::Swap, "TRANSACTION_STUCK", 
+                &format!("⚠️ Transaction {} stuck in state for {}s", &signature[..8], time_in_state));
+        } else {
+            match &tx_snapshot.state {
+                TransactionState::Submitted { .. } => {
                     if is_debug_swap_enabled() {
                         log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
-                            &format!("📊 Current state: {:?} | Direction: {} | Mint: {}", 
-                                tx.state, tx.direction, &tx.mint[..8]));
+                            "🔍 Checking if transaction is confirmed on blockchain");
                     }
-                    
-                    // Check if stuck on same state for too long
-                    let time_in_state = (now - tx.last_updated).num_seconds();
-                    
-                    if is_debug_swap_enabled() {
-                        log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
-                            &format!("⏱️ Time in current state: {}s (timeout: {}s)", 
-                                time_in_state, STUCK_STEP_TIMEOUT_SECS));
-                    }
-                    
-                    if time_in_state > STUCK_STEP_TIMEOUT_SECS as i64 {
-                        new_state = Some(TransactionState::Stuck {
-                            stuck_since: tx.last_updated,
-                            last_state: format!("{:?}", tx.state),
-                        });
-                        should_update = true;
-                        
-                        log(LogTag::Swap, "TRANSACTION_STUCK", 
-                            &format!("⚠️ Transaction {} stuck in state for {}s", 
-                                &signature[..8], time_in_state));
-                    } else {
-                        // Try to advance the state
-                        match &tx.state {
-                            TransactionState::Submitted { .. } => {
-                                if is_debug_swap_enabled() {
-                                    log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
-                                        "🔍 Checking if transaction is confirmed on blockchain");
-                                }
-                                // Check if confirmed
-                                if Self::is_transaction_confirmed(signature).await? {
-                                    new_state = Some(TransactionState::Confirmed {
-                                        confirmed_at: now,
-                                    });
-                                    should_update = true;
-                                    
-                                    log(LogTag::Swap, "TRANSACTION_CONFIRMED", 
-                                        &format!("✅ Transaction {} confirmed", &signature[..8]));
-                                } else if is_debug_swap_enabled() {
-                                    log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
-                                        "⏳ Transaction not yet confirmed");
-                                }
-                            }
-                            TransactionState::Confirmed { .. } => {
-                                if is_debug_swap_enabled() {
-                                    log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
-                                        "🔍 Checking if transaction effects are visible");
-                                }
-                                // Check if balance changes are visible (verified)
-                                if Self::verify_transaction_effects(signature, tx).await? {
-                                    new_state = Some(TransactionState::Verified {
-                                        verified_at: now,
-                                    });
-                                    should_update = true;
-                                    
-                                    log(LogTag::Swap, "TRANSACTION_VERIFIED", 
-                                        &format!("🎯 Transaction {} fully verified", &signature[..8]));
-                                    
-                                    // CRITICAL FIX: Update position if this is a position-related transaction
-                                    if tx.position_related {
-                                        if let Err(e) = Self::update_position_on_verification(signature, tx).await {
-                                            log(LogTag::Swap, "POSITION_UPDATE_ERROR", 
-                                                &format!("⚠️ Failed to update position for verified transaction {}: {}", 
-                                                    &signature[..8], e));
-                                        }
-                                    }
-                                }
-                            }
-                            TransactionState::Verified { .. } |
-                            TransactionState::Failed { .. } |
-                            TransactionState::Stuck { .. } |
-                            TransactionState::Completed { .. } => {
-                                // Final states - no further processing needed
-                            }
-                        }
+                    if Self::is_transaction_confirmed(signature).await? {
+                        new_state = Some(TransactionState::Confirmed { confirmed_at: now });
+                        log(LogTag::Swap, "TRANSACTION_CONFIRMED", 
+                            &format!("✅ Transaction {} confirmed", &signature[..8]));
+                    } else if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", "⏳ Transaction not yet confirmed");
                     }
                 }
+                TransactionState::Confirmed { .. } => {
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_PROGRESS_DEBUG", 
+                            "🔍 Checking if transaction effects are visible");
+                    }
+                    if Self::verify_transaction_effects(signature, &tx_snapshot).await? {
+                        new_state = Some(TransactionState::Verified { verified_at: now });
+                        needs_position_update = tx_snapshot.position_related;
+                        log(LogTag::Swap, "TRANSACTION_VERIFIED", 
+                            &format!("🎯 Transaction {} fully verified", &signature[..8]));
+                    }
+                }
+                _ => {}
             }
         }
 
-        // Update state if needed
-        if should_update && new_state.is_some() {
+        // Apply the new state if computed
+        if let Some(state) = new_state.clone() {
             let mut service_guard = TRANSACTION_SERVICE.lock().await;
-            
             if let Some(service) = service_guard.as_mut() {
-                if let Some(tx) = service.pending_transactions.get_mut(signature) {
-                    let state = new_state.unwrap();
-                    tx.state = state.clone();
-                    tx.last_updated = now;
-                    
-                    // If transaction is verified, move it to completed state and update history
+                if let Some(tx_mut) = service.pending_transactions.get_mut(signature) {
+                    tx_mut.state = state.clone();
+                    tx_mut.last_updated = now;
+
                     if matches!(state, TransactionState::Verified { .. }) {
-                        // Update state to completed
-                        tx.state = TransactionState::Completed {
-                            completed_at: now,
-                        };
-                        
+                        // Move to completed and archive
+                        tx_mut.state = TransactionState::Completed { completed_at: now };
                         log(LogTag::Swap, "TRANSACTION_COMPLETED", 
                             &format!("✅ Transaction {} moved to completed state", &signature[..8]));
-                        
-                        // Add to complete transaction history
-                        service.all_transactions.push(tx.clone());
-                        
-                        // Remove from pending transactions since it's now complete
+                        let archived = tx_mut.clone();
+                        service.all_transactions.push(archived);
                         service.pending_transactions.remove(signature);
-                        
                         log(LogTag::Swap, "TRANSACTION_ARCHIVED", 
                             &format!("📚 Transaction {} moved from pending to history", &signature[..8]));
-                        
-                        // Save all transactions to disk immediately
-                        drop(service_guard); // Release the lock before async operation
-                        Self::save_all_transactions_to_disk().await;
                     }
                 }
+            }
+            drop(service_guard);
+
+            // Perform follow-up actions outside the lock
+            if needs_position_update && matches!(state, TransactionState::Verified { .. }) {
+                if let Err(e) = Self::update_position_on_verification(signature, &tx_snapshot).await {
+                    log(LogTag::Swap, "POSITION_UPDATE_ERROR", 
+                        &format!("⚠️ Failed to update position for verified transaction {}: {}", &signature[..8], e));
+                }
+                Self::save_all_transactions_to_disk().await;
+            } else {
+                Self::save_pending_transactions_to_disk().await;
             }
         }
 
@@ -537,17 +502,9 @@ impl TransactionMonitoringService {
     /// Check if transaction is confirmed on blockchain
     async fn is_transaction_confirmed(signature: &str) -> Result<bool, SwapError> {
         let rpc_client = get_rpc_client();
-        
-        // Try to get transaction details
         match rpc_client.get_transaction_details(signature).await {
-            Ok(details) => {
-                // Transaction exists and is confirmed if we get details
-                Ok(true)
-            }
-            Err(_) => {
-                // Transaction not found or failed - consider not confirmed
-                Ok(false)
-            }
+            Ok(details) => Ok(details.meta.is_some()),
+            Err(_) => Ok(false),
         }
     }
 
@@ -690,8 +647,11 @@ impl TransactionMonitoringService {
             log(LogTag::Swap, "TRANSACTION_ADD_DEBUG", "💾 Saving updated transaction list to disk");
         }
 
-        // Save transactions to disk immediately to ensure comprehensive tracking
-        Self::save_all_transactions_to_disk().await;
+    // IMPORTANT: Release the service lock before awaiting to prevent deadlocks
+    drop(service_guard);
+
+    // Save transactions to disk immediately to ensure comprehensive tracking
+    Self::save_all_transactions_to_disk().await;
 
         Ok(())
     }
@@ -760,6 +720,151 @@ impl TransactionMonitoringService {
         }
     }
 
+    /// BLOCKING: Check and verify a single transaction immediately (synchronous)
+    /// This function performs immediate verification of a specific transaction without relying on background service
+    /// Useful for debug tools and immediate verification needs
+    pub async fn check_single_transaction_blocking(
+        signature: &str,
+        expected_direction: &str,
+        input_mint: &str,
+        output_mint: &str,
+    ) -> Result<TransactionState, SwapError> {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_CHECK_BLOCKING", 
+                &format!("🔍 BLOCKING: Checking single transaction {} | Direction: {} | Route: {} -> {}", 
+                    &signature[..12], expected_direction, 
+                    if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
+                    if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] }));
+        }
+
+        // Step 1: Check if transaction is confirmed on blockchain
+        let is_confirmed = match Self::is_transaction_confirmed(signature).await {
+            Ok(confirmed) => confirmed,
+            Err(e) => {
+                log(LogTag::Swap, "TRANSACTION_CHECK_ERROR", 
+                    &format!("❌ Failed to check transaction confirmation: {}", e));
+                return Ok(TransactionState::Failed { 
+                    failed_at: chrono::Utc::now(), 
+                    error: format!("Confirmation check failed: {}", e) 
+                });
+            }
+        };
+
+        if !is_confirmed {
+            log(LogTag::Swap, "TRANSACTION_CHECK_PENDING", 
+                &format!("⏳ Transaction {} not yet confirmed", &signature[..8]));
+            return Ok(TransactionState::Submitted { submitted_at: chrono::Utc::now() });
+        }
+
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_CHECK_CONFIRMED", 
+                &format!("✅ Transaction {} confirmed, proceeding with verification", &signature[..8]));
+        }
+
+        // Step 2: Verify transaction effects using instruction analysis
+        let verification_success = match verify_swap_transaction(
+            signature,
+            input_mint,
+            output_mint,
+            expected_direction
+        ).await {
+            Ok(verification_result) => {
+                if is_debug_swap_enabled() {
+                    log(LogTag::Swap, "TRANSACTION_VERIFY_SUCCESS", 
+                        &format!("✅ Transaction {} verification completed successfully", &signature[..8]));
+                }
+                verification_result.success
+            }
+            Err(e) => {
+                log(LogTag::Swap, "TRANSACTION_VERIFY_ERROR", 
+                    &format!("❌ Transaction {} verification failed: {}", &signature[..8], e));
+                return Ok(TransactionState::Failed { 
+                    failed_at: chrono::Utc::now(), 
+                    error: format!("Verification failed: {}", e) 
+                });
+            }
+        };
+
+        // Step 3: Return final state based on verification
+        if verification_success {
+            log(LogTag::Swap, "TRANSACTION_CHECK_VERIFIED", 
+                &format!("✅ Transaction {} fully verified and successful", &signature[..8]));
+            Ok(TransactionState::Verified { verified_at: chrono::Utc::now() })
+        } else {
+            log(LogTag::Swap, "TRANSACTION_CHECK_FAILED", 
+                &format!("❌ Transaction {} verification failed", &signature[..8]));
+            Ok(TransactionState::Failed { 
+                failed_at: chrono::Utc::now(), 
+                error: "Transaction verification failed".to_string() 
+            })
+        }
+    }
+
+    /// BLOCKING: Wait for a single transaction to complete with immediate checking (no background service dependency)
+    /// This combines adding to monitor + blocking verification for immediate use cases
+    pub async fn verify_transaction_blocking(
+        signature: &str,
+        mint: &str,
+        direction: &str,
+        input_mint: &str,
+        output_mint: &str,
+        max_wait_time: std::time::Duration,
+    ) -> Result<TransactionState, SwapError> {
+        if is_debug_swap_enabled() {
+            log(LogTag::Swap, "TRANSACTION_VERIFY_BLOCKING", 
+                &format!("🚀 BLOCKING VERIFICATION: Starting for transaction {} | Direction: {} | Timeout: {:?}", 
+                    &signature[..12], direction, max_wait_time));
+        }
+
+        let start_time = std::time::Instant::now();
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
+
+        loop {
+            // Check transaction status using blocking verification
+            match Self::check_single_transaction_blocking(signature, direction, input_mint, output_mint).await {
+                Ok(TransactionState::Verified { .. }) => {
+                    log(LogTag::Swap, "TRANSACTION_VERIFY_BLOCKING_SUCCESS", 
+                        &format!("✅ BLOCKING: Transaction {} verified successfully in {:.1}s", 
+                            &signature[..8], start_time.elapsed().as_secs_f64()));
+                    return Ok(TransactionState::Verified { verified_at: chrono::Utc::now() });
+                }
+                Ok(TransactionState::Failed { error, .. }) => {
+                    log(LogTag::Swap, "TRANSACTION_VERIFY_BLOCKING_FAILED", 
+                        &format!("❌ BLOCKING: Transaction {} failed: {}", &signature[..8], error));
+                    return Ok(TransactionState::Failed { 
+                        failed_at: chrono::Utc::now(), 
+                        error 
+                    });
+                }
+                Ok(state) => {
+                    // Still in progress
+                    if is_debug_swap_enabled() {
+                        log(LogTag::Swap, "TRANSACTION_VERIFY_BLOCKING_PROGRESS", 
+                            &format!("⏳ BLOCKING: Transaction {} still in progress: {:?}", &signature[..8], state));
+                    }
+                }
+                Err(e) => {
+                    log(LogTag::Swap, "TRANSACTION_VERIFY_BLOCKING_ERROR", 
+                        &format!("❌ BLOCKING: Error checking transaction {}: {}", &signature[..8], e));
+                    return Err(e);
+                }
+            }
+
+            // Check timeout
+            if start_time.elapsed() >= max_wait_time {
+                log(LogTag::Swap, "TRANSACTION_VERIFY_BLOCKING_TIMEOUT", 
+                    &format!("⏰ BLOCKING: Transaction {} verification timed out after {:?}", 
+                        &signature[..8], max_wait_time));
+                return Err(SwapError::TransactionError(
+                    format!("Blocking transaction verification timeout after {:?}", max_wait_time)
+                ));
+            }
+
+            // Wait before next check
+            interval.tick().await;
+        }
+    }
+
     /// Update position tracking when a transaction is verified by the monitoring service
     /// Update position on transaction verification
     /// This handles cases where immediate verification during swap failed but background verification succeeded
@@ -772,32 +877,19 @@ impl TransactionMonitoringService {
 
         match tx.direction.as_str() {
             "buy" => {
-                // Handle BUY transaction verification - check if position exists and update it
-                let verification = verify_position_entry_transaction(signature, &tx.mint, 0.0).await?;
-                
-                if !verification.success || verification.token_amount_received == 0 {
-                    return Err(SwapError::TransactionError(
-                        format!("Buy transaction verification failed or no tokens received for {}", signature)
-                    ));
-                }
-
+                // Handle BUY transaction verification - since the monitoring service already verified the transaction,
+                // we just need to mark the position as verified without re-verifying
                 let position_updated = {
                     if let Ok(mut positions) = SAVED_POSITIONS.lock() {
                         if let Some(position) = positions.iter_mut().find(|p| 
                             p.entry_transaction_signature.as_ref() == Some(&signature.to_string()) && !p.transaction_entry_verified
                         ) {
-                            // Update position with verified entry data
+                            // Mark position as verified - the monitoring service has already done the verification
                             position.transaction_entry_verified = true;
-                            position.token_amount = Some(verification.token_amount_received);
-                            position.effective_entry_price = Some(verification.effective_entry_price);
-                            position.entry_fee_lamports = Some(verification.transaction_fee);
-                            position.total_size_sol = verification.total_cost_sol;
-                            position.price_highest = verification.effective_entry_price;
-                            position.price_lowest = verification.effective_entry_price;
 
                             log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
-                                &format!("✅ Position entry updated from verified transaction: {} | Tokens: {} | Effective price: {:.12}", 
-                                    position.symbol, verification.token_amount_received, verification.effective_entry_price));
+                                &format!("✅ Position entry marked as verified from monitoring service: {} | Transaction: {}", 
+                                    position.symbol, &signature[..8]));
                             
                             true
                         } else {
@@ -821,33 +913,19 @@ impl TransactionMonitoringService {
                 }
             }
             "sell" => {
-                // Handle SELL transaction verification - close position
-                let verification = verify_position_exit_transaction(signature, &tx.mint, 0).await?;
-                
-                if !verification.success || verification.sol_received <= 0 {
-                    return Err(SwapError::TransactionError(
-                        format!("Sell transaction verification failed or no SOL received for {}", signature)
-                    ));
-                }
-
+                // Handle SELL transaction verification - since the monitoring service already verified the transaction,
+                // we just need to mark the position as closed without re-verifying
                 let position_updated = {
                     if let Ok(mut positions) = SAVED_POSITIONS.lock() {
                         if let Some(position) = positions.iter_mut().find(|p| p.mint == tx.mint && p.exit_price.is_none()) {
-                            // Update position with verified exit data
-                            position.exit_price = Some(verification.effective_exit_price);
+                            // Mark position as exit verified - the monitoring service has already done the verification
                             position.exit_time = Some(Utc::now());
-                            position.effective_exit_price = Some(verification.effective_exit_price);
-                            position.sol_received = Some(verification.net_sol_received);
                             position.exit_transaction_signature = Some(signature.to_string());
                             position.transaction_exit_verified = true;
-                            position.exit_fee_lamports = Some(verification.transaction_fee);
-
-                            // Calculate P&L
-                            let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
 
                             log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
-                                &format!("✅ Position exit updated from verified transaction: {} | P&L: {:.1}% ({:+.9} SOL) | SOL received: {:.9}", 
-                                    position.symbol, net_pnl_percent, net_pnl_sol, verification.net_sol_received));
+                                &format!("✅ Position exit marked as verified from monitoring service: {} | Transaction: {}", 
+                                    position.symbol, &signature[..8]));
                             
                             true
                         } else {
