@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("⏰ Last sync: {}", last_sync);
                 
                 // Analyze recent swaps
-                let analysis = manager.analyze_recent_swaps(limit);
+                let analysis = manager.analyze_recent_swaps(limit).await;
                 
                 // Display results
                 WalletTransactionManager::display_analysis(&analysis);

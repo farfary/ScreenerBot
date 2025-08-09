@@ -8,6 +8,7 @@ use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
+use crate::wallet_transactions::get_global_wallet_transaction_stats;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
@@ -204,16 +205,31 @@ pub struct WalletTrackerDisplay {
 /// Display structure for wallet holdings breakdown
 #[derive(Tabled)]
 pub struct WalletHoldingsDisplay {
-    #[tabled(rename = "💎 SOL Balance")]
-    sol_balance: String,
-    #[tabled(rename = "🪙 Token Value")]
-    token_value: String,
-    #[tabled(rename = "🏠 ATA Rent")]
-    ata_rent: String,
-    #[tabled(rename = "📦 Token Count")]
-    token_count: String,
-    #[tabled(rename = "🔗 Total Value")]
-    total_value: String,
+    #[tabled(rename = "🏷️ Symbol")]
+    symbol: String,
+    #[tabled(rename = "💰 Balance")]
+    balance: String,
+    #[tabled(rename = "💵 Value (SOL)")]
+    value_sol: String,
+    #[tabled(rename = "📊 Percentage")]
+    percentage: String,
+}
+
+/// Display structure for wallet transaction statistics
+#[derive(Tabled)]
+pub struct WalletTransactionDisplay {
+    #[tabled(rename = "💾 Cached Transactions")]
+    cached_transactions: String,
+    #[tabled(rename = "📈 Total Fetched")]
+    total_fetched: String,
+    #[tabled(rename = "⏰ Last Sync")]
+    last_sync: String,
+    #[tabled(rename = "� Periodic Sync")]
+    periodic_sync_status: String,
+    #[tabled(rename = "📅 Oldest Signature")]
+    oldest_signature: String,
+    #[tabled(rename = "🆕 Newest Signature")]
+    newest_signature: String,
 }
 
 /// Background task to display positions table every 10 seconds
@@ -784,6 +800,23 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         }
     }
 
+    // Display wallet transaction statistics
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "Displaying wallet transaction statistics");
+    }
+    let tx_start = Instant::now();
+    display_wallet_transaction_statistics();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Wallet transaction statistics rendered in {} ms",
+                tx_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Display frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
     if !active_cooldowns.is_empty() {
@@ -936,21 +969,87 @@ fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
     }
 }
 
+/// Display wallet transaction statistics
+fn display_wallet_transaction_statistics() {
+    if let Some((cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)) = get_global_wallet_transaction_stats() {
+        println!("\n📝 WALLET TRANSACTION STATISTICS");
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        
+        let periodic_status = if is_periodic_running {
+            "🟢 Running (5s interval)".to_string()
+        } else {
+            "🔴 Stopped".to_string()
+        };
+        
+        let oldest_display = oldest_sig
+            .map(|sig| format!("{}...{}", &sig[..8], &sig[sig.len()-8..]))
+            .unwrap_or_else(|| "None".to_string());
+        
+        let newest_display = newest_sig
+            .map(|sig| format!("{}...{}", &sig[..8], &sig[sig.len()-8..]))
+            .unwrap_or_else(|| "None".to_string());
+        
+        let transaction_display = vec![WalletTransactionDisplay {
+            cached_transactions: cached_count.to_string(),
+            total_fetched: total_fetched.to_string(),
+            last_sync,
+            periodic_sync_status: periodic_status,
+            oldest_signature: oldest_display,
+            newest_signature: newest_display,
+        }];
+        
+        let transaction_table = Table::new(transaction_display)
+            .with(Style::modern())
+            .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
+            .to_string();
+        
+        println!("{}", transaction_table);
+        
+        // Display sync efficiency metrics
+        let sync_efficiency = if total_fetched > 0 {
+            (cached_count as f64 / total_fetched as f64) * 100.0
+        } else {
+            0.0
+        };
+        
+        println!("\n📊 Transaction Cache Efficiency:");
+        println!("   💾 Cache Hit Rate: {:.1}% ({} cached out of {} fetched)", 
+                 sync_efficiency, cached_count, total_fetched);
+        
+        if is_periodic_running {
+            println!("   🔄 Auto-sync: Active (checking every 5 seconds for new transactions)");
+        } else {
+            println!("   ⚠️  Auto-sync: Inactive (manual sync only)");
+        }
+        
+        log(LogTag::Summary, "STATISTICS", &format!("Wallet transactions: {} cached, {} total, sync: {}", 
+            cached_count, total_fetched, if is_periodic_running { "active" } else { "inactive" }));
+    } else {
+        println!("\n📝 WALLET TRANSACTION STATISTICS");
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        println!("⚠️  Wallet transaction manager not initialized");
+        
+        log(LogTag::Summary, "WARNING", "Wallet transaction manager not available for statistics");
+    }
+}
+
 /// Calculate maximum drawdown percentage
 fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
     if pnl_values.is_empty() {
         return 0.0;
     }
 
-    let mut running_total = 0.0_f64;
-    let mut peak = 0.0_f64;
-    let mut max_drawdown = 0.0_f64;
+    let mut peak = pnl_values[0];
+    let mut max_drawdown = 0.0;
 
-    for &pnl in pnl_values {
-        running_total += pnl;
-        peak = peak.max(running_total);
-        let drawdown = ((peak - running_total) / peak.max(0.001)) * 100.0; // Avoid division by zero
-        max_drawdown = max_drawdown.max(drawdown);
+    for &value in pnl_values.iter().skip(1) {
+        if value > peak {
+            peak = value;
+        }
+        let drawdown = (peak - value) / peak.abs().max(1.0) * 100.0;
+        if drawdown > max_drawdown {
+            max_drawdown = drawdown;
+        }
     }
 
     max_drawdown

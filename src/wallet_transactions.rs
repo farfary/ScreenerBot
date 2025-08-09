@@ -5,6 +5,7 @@ use crate::{
     rpc::RpcClient,
     logger::{log, LogTag},
     global::is_debug_transactions_enabled,
+    tokens::{get_token_decimals, TokenDatabase},
 };
 use solana_sdk::{
     signature::{Signature, Signer},
@@ -18,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -27,23 +29,6 @@ use tokio::sync::Notify;
 
 lazy_static! {
     static ref WALLET_TRANSACTION_MANAGER: Arc<RwLock<Option<WalletTransactionManager>>> = Arc::new(RwLock::new(None));
-    /// Global shutdown signal for background tasks
-    static ref TRANSACTION_SYNC_SHUTDOWN: Arc<Notify> = Arc::new(Notify::new());
-}
-
-/// Configuration for automatic transaction syncing
-#[derive(Debug, Clone)]
-pub struct TransactionSyncConfig {
-    /// How often to check for new transactions (in seconds)
-    pub sync_interval_seconds: u64,
-    /// Maximum number of new signatures to fetch per sync
-    pub max_signatures_per_sync: usize,
-    /// How often to perform a deeper sync (fetch more history)
-    pub deep_sync_interval_minutes: u64,
-    /// Enable automatic background syncing
-    pub auto_sync_enabled: bool,
-    /// Smart sync: reduce frequency when no new transactions found
-    pub smart_sync_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,18 +85,7 @@ pub struct FetchRange {
     pub transaction_count: usize,
 }
 
-impl Default for TransactionSyncConfig {
-    fn default() -> Self {
-        Self {
-            sync_interval_seconds: 30,        // Check every 30 seconds
-            max_signatures_per_sync: 25,      // Conservative batch size
-            deep_sync_interval_minutes: 60,   // Deep sync every hour
-            auto_sync_enabled: true,
-            smart_sync_enabled: true,
-        }
-    }
-}
-    impl Default for WalletSyncState {
+impl Default for WalletSyncState {
     fn default() -> Self {
         Self {
             wallet_address: String::new(),
@@ -125,30 +99,13 @@ impl Default for TransactionSyncConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SmartSyncState {
-    /// Number of consecutive syncs with no new transactions
-    pub consecutive_empty_syncs: u32,
-    /// Current dynamic sync interval (adjusted based on activity)
-    pub current_sync_interval: Duration,
-    /// Last time we found new transactions
-    pub last_activity_time: DateTime<Utc>,
-    /// Total sync operations performed
-    pub total_syncs: u64,
-    /// Total new transactions found across all syncs
-    pub total_new_transactions_found: u64,
-}
-
 pub struct WalletTransactionManager {
     wallet_address: String,
     cache_dir: PathBuf,
     sync_state_file: PathBuf,
     sync_state: WalletSyncState,
     transaction_cache: HashMap<String, CachedTransactionData>,
-    /// Configuration for automatic syncing
-    sync_config: TransactionSyncConfig,
-    /// Smart sync state for adaptive intervals
-    smart_sync_state: SmartSyncState,
+    is_periodic_sync_running: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Initialize the global wallet transaction manager
@@ -182,80 +139,19 @@ pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::
     }
     
     log(LogTag::Transactions, "SUCCESS", "Global wallet transaction manager initialized and ready");
-    
-    // Start automatic background sync if enabled
-    if let Ok(global_manager_lock) = WALLET_TRANSACTION_MANAGER.read() {
-        if let Some(ref manager) = *global_manager_lock {
-            if manager.sync_config.auto_sync_enabled {
-                start_background_transaction_sync().await;
-            }
-        }
+    Ok(())
+}
+
+/// Start the periodic sync background task for the global wallet transaction manager
+pub async fn start_wallet_transaction_sync_task(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
+    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+    if let Some(ref manager) = *manager_lock {
+        let sync_handle = manager.start_periodic_sync(shutdown).await;
+        drop(manager_lock);
+        Ok(sync_handle)
+    } else {
+        Err("Wallet transaction manager not initialized".into())
     }
-    
-    Ok(())
-}
-
-/// Start background transaction sync service
-pub async fn start_background_transaction_sync() {
-    log(LogTag::Transactions, "INFO", "Starting automatic transaction sync service");
-    
-    let shutdown_signal = TRANSACTION_SYNC_SHUTDOWN.clone();
-    
-    tokio::spawn(async move {
-        let mut sync_interval = tokio::time::interval(Duration::from_secs(30)); // Start with 30 seconds
-        let mut deep_sync_interval = tokio::time::interval(Duration::from_secs(60 * 60)); // Deep sync every hour
-        
-        loop {
-            tokio::select! {
-                _ = shutdown_signal.notified() => {
-                    log(LogTag::Transactions, "INFO", "Background transaction sync service shutting down");
-                    break;
-                }
-                _ = sync_interval.tick() => {
-                    if let Err(e) = perform_smart_sync().await {
-                        log(LogTag::Transactions, "ERROR", &format!("Smart sync failed: {}", e));
-                    }
-                }
-                _ = deep_sync_interval.tick() => {
-                    if let Err(e) = perform_deep_sync().await {
-                        log(LogTag::Transactions, "ERROR", &format!("Deep sync failed: {}", e));
-                    }
-                }
-            }
-        }
-    });
-}
-
-/// Stop background transaction sync service
-pub async fn stop_background_transaction_sync() {
-    log(LogTag::Transactions, "INFO", "Stopping background transaction sync service");
-    TRANSACTION_SYNC_SHUTDOWN.notify_waiters();
-}
-
-/// Perform smart sync with adaptive intervals
-async fn perform_smart_sync() -> Result<(), String> {
-    // Simple approach: just log for now and implement properly later
-    if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "DEBUG", "Smart sync check (placeholder implementation)");
-    }
-    
-    // TODO: Implement proper async-safe smart sync
-    // This requires refactoring the fetch methods to not require mutable references
-    // across await boundaries while holding locks
-    
-    Ok(())
-}
-
-/// Perform deep sync for comprehensive transaction coverage
-async fn perform_deep_sync() -> Result<(), String> {
-    // Simple approach: just log for now and implement properly later
-    log(LogTag::Transactions, "INFO", "Deep sync check (placeholder implementation)");
-    
-    // TODO: Implement proper async-safe deep sync
-    // This requires refactoring the fetch methods to not require mutable references
-    // across await boundaries while holding locks
-    
-    Ok(())
 }
 
 /// Get access to the global wallet transaction manager
@@ -263,11 +159,21 @@ pub fn get_wallet_transaction_manager() -> Result<Arc<RwLock<Option<WalletTransa
     Ok(WALLET_TRANSACTION_MANAGER.clone())
 }
 
+/// Get global wallet transaction statistics for summary display
+pub fn get_global_wallet_transaction_stats() -> Option<(usize, usize, String, bool, Option<String>, Option<String>)> {
+    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+    if let Some(ref manager) = *manager_lock {
+        Some(manager.get_detailed_sync_stats())
+    } else {
+        None
+    }
+}
+
 /// Convenient function to analyze recent swaps using the global manager
 pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, Box<dyn std::error::Error>> {
     let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
     if let Some(ref manager) = *manager_lock {
-        Ok(manager.analyze_recent_swaps(limit))
+        Ok(manager.analyze_recent_swaps(limit).await)
     } else {
         // Create a standalone manager if global one isn't available
         log(LogTag::Transactions, "INFO", "Creating standalone wallet transaction manager");
@@ -294,25 +200,156 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
         
         log(LogTag::Transactions, "SUCCESS", "Standalone wallet transaction manager ready");
         
-        Ok(manager.analyze_recent_swaps(limit))
+        Ok(manager.analyze_recent_swaps(limit).await)
     }
 }
 
-/// Get smart sync statistics from the global manager
-pub fn get_global_sync_stats() -> Option<(u64, u64, Duration, u32)> {
-    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
-    manager_lock.as_ref().map(|manager| manager.get_smart_sync_stats())
+/// Perform periodic sync check (helper function to avoid Send trait issues)
+async fn perform_periodic_sync_check() {
+    // Get RPC client first
+    let rpc_client = crate::rpc::get_rpc_client();
+    
+    // Read lock first to check if manager exists and get wallet address
+    let wallet_address = {
+        let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+        if let Some(ref manager) = *manager_lock {
+            manager.wallet_address.clone()
+        } else {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "Manager not available for periodic sync");
+            }
+            return;
+        }
+    };
+    
+    // Get latest signatures to see what's new (outside of any locks)
+    let latest_signatures = match fetch_wallet_signatures_standalone(&wallet_address, &rpc_client, 20).await {
+        Ok(sigs) => sigs,
+        Err(e) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "ERROR", &format!("Failed to fetch signatures: {}", e));
+            }
+            return;
+        }
+    };
+    
+    if latest_signatures.is_empty() {
+        return;
+    }
+    
+    // Check which signatures are new (briefly lock to read cached signatures)
+    let mut new_signatures = Vec::new();
+    {
+        let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+        if let Some(ref manager) = *manager_lock {
+            for sig_info in &latest_signatures {
+                if !manager.sync_state.cached_signatures.contains(&sig_info.signature) {
+                    new_signatures.push(sig_info.signature.clone());
+                }
+            }
+        } else {
+            return; // Manager disappeared during sync
+        }
+    }
+    
+    if !new_signatures.is_empty() {
+        log(LogTag::Transactions, "INFO", &format!("Found {} new transactions in periodic sync", new_signatures.len()));
+        
+        // Fetch new transaction details (outside of any locks)
+        if let Ok(new_transactions) = fetch_transaction_details_standalone(&new_signatures, &rpc_client).await {
+            // Update manager with new data (brief write lock)
+            let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+            if let Some(ref mut manager) = *manager_lock {
+                // Update cached signatures
+                for sig in &new_signatures {
+                    manager.sync_state.cached_signatures.insert(sig.clone());
+                }
+                
+                // Update cached transactions  
+                for (sig, tx) in new_transactions {
+                    manager.transaction_cache.insert(sig.clone(), CachedTransactionData {
+                        signature: sig,
+                        transaction_data: tx,
+                        cached_at: Utc::now(),
+                    });
+                }
+                
+                // Save sync state (outside the lock to avoid blocking)
+                let sync_state_clone = manager.sync_state.clone();
+                let sync_state_file = manager.sync_state_file.clone();
+                drop(manager_lock);
+                
+                // Save to disk outside of lock
+                if let Err(e) = save_sync_state_to_file(&sync_state_clone, &sync_state_file) {
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "ERROR", &format!("Failed to save sync state: {}", e));
+                    }
+                }
+            }
+        }
+    } else if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "No new transactions found in periodic sync");
+    }
 }
 
-/// Configure sync settings for the global manager
-pub async fn configure_global_sync(config: TransactionSyncConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
-    if let Some(ref mut manager) = manager_lock.as_mut() {
-        manager.configure_sync(config);
-        Ok(())
-    } else {
-        Err("Global transaction manager not initialized".into())
+/// Helper function to fetch wallet signatures without holding manager lock
+async fn fetch_wallet_signatures_standalone(
+    wallet_address: &str, 
+    rpc_client: &RpcClient, 
+    limit: usize
+) -> Result<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>, Box<dyn std::error::Error>> {
+    let wallet_pubkey = Pubkey::from_str(wallet_address)?;
+    
+    let config = GetConfirmedSignaturesForAddress2Config {
+        before: None,
+        until: None,
+        limit: Some(limit),
+        commitment: Some(CommitmentConfig::confirmed()),
+    };
+    
+    let signatures = rpc_client.client()
+        .get_signatures_for_address_with_config(&wallet_pubkey, config)?;
+    Ok(signatures)
+}
+
+/// Helper function to fetch transaction details without holding manager lock
+async fn fetch_transaction_details_standalone(
+    signatures: &[String],
+    rpc_client: &RpcClient
+) -> Result<Vec<(String, EncodedConfirmedTransactionWithStatusMeta)>, Box<dyn std::error::Error>> {
+    let mut transactions = Vec::new();
+    
+    for signature_str in signatures {
+        if let Ok(signature) = Signature::from_str(signature_str) {
+            match rpc_client.client().get_transaction(&signature, UiTransactionEncoding::Json) {
+                Ok(tx) => {
+                    transactions.push((signature_str.clone(), tx));
+                }
+                Err(e) => {
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", signature_str, e));
+                    }
+                }
+            }
+        }
     }
+    
+    Ok(transactions)
+}
+
+/// Helper function to save sync state to file without holding manager lock
+fn save_sync_state_to_file(
+    sync_state: &WalletSyncState,
+    sync_state_file: &Path
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(parent) = sync_state_file.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
+    let json_data = serde_json::to_string_pretty(sync_state)?;
+    fs::write(sync_state_file, json_data)?;
+    
+    Ok(())
 }
 
 impl WalletTransactionManager {
@@ -372,14 +409,7 @@ impl WalletTransactionManager {
             sync_state_file,
             sync_state,
             transaction_cache: HashMap::new(),
-            sync_config: TransactionSyncConfig::default(),
-            smart_sync_state: SmartSyncState {
-                consecutive_empty_syncs: 0,
-                current_sync_interval: Duration::from_secs(TransactionSyncConfig::default().sync_interval_seconds),
-                last_activity_time: Utc::now(),
-                total_syncs: 0,
-                total_new_transactions_found: 0,
-            },
+            is_periodic_sync_running: Arc::new(AtomicBool::new(false)),
         };
         
         // Load existing transaction cache into memory
@@ -451,62 +481,50 @@ impl WalletTransactionManager {
         Ok(())
     }
     
-    /// Check if we should perform a sync based on smart sync state
-    fn should_perform_sync(&self) -> bool {
-        if !self.sync_config.smart_sync_enabled {
-            return true; // Always sync if smart sync is disabled
-        }
+    /// Start periodic sync background task that runs every 5 seconds
+    pub async fn start_periodic_sync(&self, shutdown: Arc<Notify>) -> tokio::task::JoinHandle<()> {
+        let wallet_address = self.wallet_address.clone();
+        let sync_running = self.is_periodic_sync_running.clone();
         
-        let now = chrono::Utc::now();
-        let time_since_last_sync = now.signed_duration_since(self.sync_state.last_sync_time);
-        
-        time_since_last_sync.num_seconds() >= self.smart_sync_state.current_sync_interval.as_secs() as i64
+        tokio::spawn(async move {
+            // Mark sync as running
+            sync_running.store(true, Ordering::SeqCst);
+            
+            log(LogTag::Transactions, "INFO", &format!("Starting periodic transaction sync every 5 seconds for wallet: {}", &wallet_address[..8]));
+            
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            
+            loop {
+                tokio::select! {
+                    _ = shutdown.notified() => {
+                        log(LogTag::Transactions, "INFO", "Periodic transaction sync shutting down");
+                        break;
+                    }
+                    _ = interval.tick() => {
+                        // Perform lightweight sync check for new transactions
+                        perform_periodic_sync_check().await;
+                    }
+                }
+            }
+            
+            // Mark sync as stopped
+            sync_running.store(false, Ordering::SeqCst);
+            log(LogTag::Transactions, "INFO", "Periodic transaction sync task ended");
+        })
     }
     
-    /// Update smart sync state based on sync results
-    fn update_smart_sync_state(&mut self, new_transactions_found: usize) {
-        self.smart_sync_state.total_syncs += 1;
-        
-        if new_transactions_found > 0 {
-            // Found new transactions - reset to base interval
-            self.smart_sync_state.consecutive_empty_syncs = 0;
-            self.smart_sync_state.last_activity_time = chrono::Utc::now();
-            self.smart_sync_state.total_new_transactions_found += new_transactions_found as u64;
-            self.smart_sync_state.current_sync_interval = Duration::from_secs(self.sync_config.sync_interval_seconds);
-            
-            if is_debug_transactions_enabled() {
-                log(LogTag::Transactions, "DEBUG", &format!("Smart sync: Found activity, reset to {} seconds", 
-                    self.sync_config.sync_interval_seconds));
-            }
-        } else {
-            // No new transactions - increase interval gradually
-            self.smart_sync_state.consecutive_empty_syncs += 1;
-            
-            // Exponential backoff: start at base, max out at 10 minutes
-            let backoff_multiplier = (self.smart_sync_state.consecutive_empty_syncs as f64).min(10.0);
-            let new_interval_secs = (self.sync_config.sync_interval_seconds as f64 * backoff_multiplier).min(600.0) as u64;
-            self.smart_sync_state.current_sync_interval = Duration::from_secs(new_interval_secs);
-            
-            if is_debug_transactions_enabled() {
-                log(LogTag::Transactions, "DEBUG", &format!("Smart sync: No activity ({} empty), interval now {} seconds", 
-                    self.smart_sync_state.consecutive_empty_syncs, new_interval_secs));
-            }
-        }
-    }
-    
-    /// Perform a lightweight transaction fetch for smart sync
-    async fn fetch_recent_transactions_smart(&mut self, rpc_client: &RpcClient) -> Result<usize, Box<dyn std::error::Error>> {
-        // Use smaller batch size for frequent checks
-        let smart_batch_size = (self.sync_config.max_signatures_per_sync / 2).max(10);
-        
+    /// Sync only new transactions (lightweight operation for periodic sync)
+    pub async fn sync_new_transactions_only(&mut self, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
         if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "DEBUG", &format!("Smart sync: Checking {} recent signatures", smart_batch_size));
+            log(LogTag::Transactions, "DEBUG", "Checking for new transactions (periodic sync)");
         }
         
-        let latest_signatures = self.fetch_wallet_signatures(rpc_client, smart_batch_size, None).await?;
+        // Get latest signatures to see what's new (smaller batch for frequent checks)
+        let latest_signatures = self.fetch_wallet_signatures(rpc_client, 20, None).await?;
         
         if latest_signatures.is_empty() {
-            return Ok(0);
+            return Ok(());
         }
         
         let mut new_signatures = Vec::new();
@@ -517,46 +535,21 @@ impl WalletTransactionManager {
         }
         
         if !new_signatures.is_empty() {
-            if is_debug_transactions_enabled() {
-                log(LogTag::Transactions, "DEBUG", &format!("Smart sync: Found {} new transactions to cache", new_signatures.len()));
-            }
-            
+            log(LogTag::Transactions, "INFO", &format!("Found {} new transactions in periodic sync", new_signatures.len()));
             self.fetch_and_cache_transactions(rpc_client, &new_signatures).await?;
             self.save_sync_state()?;
+        } else if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "No new transactions found in periodic sync");
         }
         
-        Ok(new_signatures.len())
-    }
-    
-    /// Get smart sync statistics
-    pub fn get_smart_sync_stats(&self) -> (u64, u64, Duration, u32) {
-        (
-            self.smart_sync_state.total_syncs,
-            self.smart_sync_state.total_new_transactions_found,
-            self.smart_sync_state.current_sync_interval,
-            self.smart_sync_state.consecutive_empty_syncs,
-        )
-    }
-    
-    /// Configure sync settings
-    pub fn configure_sync(&mut self, config: TransactionSyncConfig) {
-        self.sync_config = config;
-        // Reset smart sync state when configuration changes
-        self.smart_sync_state.consecutive_empty_syncs = 0;
-        self.smart_sync_state.current_sync_interval = Duration::from_secs(self.sync_config.sync_interval_seconds);
-        
-        log(LogTag::Transactions, "CONFIG", &format!("Transaction sync configured: {}s interval, max {} sigs/sync", 
-            self.sync_config.sync_interval_seconds, self.sync_config.max_signatures_per_sync));
+        Ok(())
     }
     
     async fn fetch_missing_transactions(&mut self, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
         log(LogTag::Transactions, "INFO", "Checking for missing transactions to fetch");
         
-        // Use configured batch size for initial sync
-        let batch_size = self.sync_config.max_signatures_per_sync;
-        
         // First, get latest signatures to see what's new
-        let latest_signatures = self.fetch_wallet_signatures(rpc_client, batch_size, None).await?;
+        let latest_signatures = self.fetch_wallet_signatures(rpc_client, 50, None).await?;
         
         if latest_signatures.is_empty() {
             log(LogTag::System, "INFO", "No transactions found for wallet");
@@ -630,7 +623,7 @@ impl WalletTransactionManager {
     }
     
     async fn fetch_and_cache_transactions(&mut self, rpc_client: &RpcClient, signatures: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-        log(LogTag::Api, "INFO", &format!("Fetching and caching {} transactions concurrently", signatures.len()));
+        log(LogTag::Transactions, "INFO", &format!("Fetching and caching {} transactions concurrently", signatures.len()));
         
         // Configuration for concurrent processing
         const MAX_CONCURRENT_REQUESTS: usize = 8; // Limit concurrent requests to avoid overwhelming RPC
@@ -643,11 +636,11 @@ impl WalletTransactionManager {
             .collect();
         
         if new_signatures.is_empty() {
-            log(LogTag::Api, "SKIP", "All transactions already cached");
+            log(LogTag::Transactions, "SKIP", "All transactions already cached");
             return Ok(());
         }
         
-        log(LogTag::Api, "CONCURRENT", &format!("Processing {} new transactions with {} concurrent workers", 
+        log(LogTag::Transactions, "CONCURRENT", &format!("Processing {} new transactions with {} concurrent workers", 
             new_signatures.len(), MAX_CONCURRENT_REQUESTS));
         
         // Process signatures in chunks to manage concurrency
@@ -655,7 +648,7 @@ impl WalletTransactionManager {
         let mut total_errors = 0;
         
         for (batch_idx, chunk) in new_signatures.chunks(MAX_CONCURRENT_REQUESTS).enumerate() {
-            log(LogTag::Api, "BATCH", &format!("Processing batch {} with {} transactions", 
+            log(LogTag::Transactions, "BATCH", &format!("Processing batch {} with {} transactions", 
                 batch_idx + 1, chunk.len()));
             
             // Process each transaction in this batch sequentially for now to avoid lifetime issues
@@ -685,17 +678,17 @@ impl WalletTransactionManager {
                             total_success += 1;
                         },
                         Err(e) => {
-                            log(LogTag::Api, "ERROR", &format!("Transaction fetch failed for {}: {}", signature, e));
+                            log(LogTag::Transactions, "ERROR", &format!("Transaction fetch failed for {}: {}", signature, e));
                             total_errors += 1;
                         }
                     }
                 } else {
-                    log(LogTag::Api, "ERROR", &format!("Invalid signature format: {}", signature));
+                    log(LogTag::Transactions, "ERROR", &format!("Invalid signature format: {}", signature));
                     total_errors += 1;
                 }
             }
             
-            log(LogTag::Api, "BATCH_RESULT", &format!("Batch {} completed: {} in batch", 
+            log(LogTag::Transactions, "BATCH_RESULT", &format!("Batch {} completed: {} in batch", 
                 batch_idx + 1, chunk.len()));
             
             // Small delay between batches to be respectful to RPC
@@ -705,7 +698,7 @@ impl WalletTransactionManager {
         }
         
         self.sync_state.last_sync_time = Utc::now();
-        log(LogTag::Api, "SUCCESS", &format!("Batch fetch completed: {} success, {} errors, {} total cached", 
+        log(LogTag::Transactions, "SUCCESS", &format!("Batch fetch completed: {} success, {} errors, {} total cached", 
             total_success, total_errors, self.sync_state.total_transactions_fetched));
         
         Ok(())
@@ -839,7 +832,7 @@ impl WalletTransactionManager {
         self.transaction_cache.get(signature)
     }
     
-    pub fn analyze_recent_swaps(&self, limit: usize) -> SwapAnalysis {
+    pub async fn analyze_recent_swaps(&self, limit: usize) -> SwapAnalysis {
         log(LogTag::Transactions, "INFO", &format!("Analyzing {} recent swaps from cache", limit));
         
         let mut swap_transactions = Vec::new();
@@ -858,8 +851,8 @@ impl WalletTransactionManager {
                         &signature[..8], cached_tx.transaction_data.slot));
                 }
                 
-                if let Some(swap) = self.analyze_transaction_for_swap(cached_tx) {
-                    log(LogTag::Swap, "FOUND", &format!("Swap detected: {} {} {} SOL for {} tokens", 
+                if let Some(swap) = self.analyze_transaction_for_swap(cached_tx).await {
+                    log(LogTag::Transactions, "FOUND", &format!("Swap detected: {} {} {} SOL for {} tokens", 
                         swap.swap_type, swap.token_symbol, swap.sol_amount, swap.token_amount));
                     swap_transactions.push(swap);
                     
@@ -876,7 +869,7 @@ impl WalletTransactionManager {
         self.generate_swap_analysis(swap_transactions)
     }
     
-    fn analyze_transaction_for_swap(&self, cached_tx: &CachedTransactionData) -> Option<SwapTransaction> {
+    async fn analyze_transaction_for_swap(&self, cached_tx: &CachedTransactionData) -> Option<SwapTransaction> {
         let tx = &cached_tx.transaction_data;
         let signature = &cached_tx.signature;
         
@@ -955,11 +948,24 @@ impl WalletTransactionManager {
                 if token_change.abs() > 1000 && sol_change.abs() > 0.001 {
                     let swap_type = if token_change > 0 { "buy" } else { "sell" };
                     
-                    // Get token symbol
-                    let token_symbol = get_token_symbol(mint_str).unwrap_or_else(|| format!("{}...{}", &mint_str[..4], &mint_str[mint_str.len()-4..]));
+                    // Get token symbol from database
+                    let token_symbol = get_token_symbol_safe(mint_str).await;
                     
-                    // Calculate effective price
-                    let token_amount_ui = token_change.abs() as f64 / 10f64.powi(decimals as i32);
+                    // Validate decimals from transaction against our token database
+                    let validated_decimals = if let Some(db_decimals) = get_token_decimals_safe_local(mint_str).await {
+                        if db_decimals != decimals {
+                            log(LogTag::Transactions, "WARNING", &format!("Decimal mismatch for {}: transaction={}, database={}, using database value", 
+                                &mint_str[..8], decimals, db_decimals));
+                            db_decimals
+                        } else {
+                            decimals
+                        }
+                    } else {
+                        decimals // Fallback to transaction data if database lookup fails
+                    };
+                    
+                    // Calculate effective price using validated decimals
+                    let token_amount_ui = token_change.abs() as f64 / 10f64.powi(validated_decimals as i32);
                     let effective_price = if token_amount_ui > 0.0 {
                         sol_change.abs() / token_amount_ui
                     } else {
@@ -978,7 +984,7 @@ impl WalletTransactionManager {
                         token_symbol,
                         sol_amount: sol_change.abs(),
                         token_amount: token_change.abs() as u64,
-                        token_decimals: decimals,
+                        token_decimals: validated_decimals,
                         effective_price,
                         fees_paid,
                         success: true,
@@ -1025,6 +1031,18 @@ impl WalletTransactionManager {
         let total_fetched = self.sync_state.total_transactions_fetched;
         let last_sync = self.sync_state.last_sync_time.format("%Y-%m-%d %H:%M:%S UTC").to_string();
         (cached_count, total_fetched, last_sync)
+    }
+    
+    /// Get detailed sync statistics including periodic sync status
+    pub fn get_detailed_sync_stats(&self) -> (usize, usize, String, bool, Option<String>, Option<String>) {
+        let cached_count = self.sync_state.cached_signatures.len();
+        let total_fetched = self.sync_state.total_transactions_fetched;
+        let last_sync = self.sync_state.last_sync_time.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+        let is_periodic_running = self.is_periodic_sync_running.load(Ordering::SeqCst);
+        let oldest_sig = self.sync_state.oldest_signature.clone();
+        let newest_sig = self.sync_state.newest_signature.clone();
+        
+        (cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)
     }
     
     pub fn display_analysis(analysis: &SwapAnalysis) {
@@ -1074,7 +1092,7 @@ impl WalletTransactionManager {
                          swap.fees_paid,
                          status);
                 
-                log(LogTag::Swap, "DETAIL", &format!("Swap {}: {} {} tokens for {:.6} SOL at {:.9} SOL/token", 
+                log(LogTag::Transactions, "DETAIL", &format!("Swap {}: {} {} tokens for {:.6} SOL at {:.9} SOL/token", 
                     i + 1, swap.swap_type, swap.token_symbol, swap.sol_amount, swap.effective_price));
             }
         }
@@ -1084,8 +1102,58 @@ impl WalletTransactionManager {
     }
 }
 
-fn get_token_symbol(mint: &str) -> Option<String> {
-    // Try to get symbol from our token database
-    // For now, return a shortened mint address
-    Some(format!("{}...{}", &mint[..6], &mint[mint.len()-4..]))
+/// Get token symbol from database, with fallback to shortened mint
+async fn get_token_symbol_safe(mint: &str) -> String {
+    // Try to get symbol from token database
+    if let Ok(db) = TokenDatabase::new() {
+        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+            if !token.symbol.is_empty() && token.symbol != "unknown" {
+                return token.symbol;
+            }
+        }
+    }
+    
+    // Fallback to shortened mint address
+    if mint.len() >= 8 {
+        format!("{}...{}", &mint[..6], &mint[mint.len()-4..])
+    } else {
+        mint.to_string()
+    }
+}
+
+/// Get token info (symbol and name) from database
+async fn get_token_info_safe(mint: &str) -> (String, String) {
+    // Try to get info from token database
+    if let Ok(db) = TokenDatabase::new() {
+        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
+            let symbol = if !token.symbol.is_empty() && token.symbol != "unknown" {
+                token.symbol
+            } else {
+                format!("{}...{}", &mint[..6], &mint[mint.len()-4..])
+            };
+            
+            let name = if !token.name.is_empty() && token.name != "unknown" {
+                token.name
+            } else {
+                symbol.clone()
+            };
+            
+            return (symbol, name);
+        }
+    }
+    
+    // Fallback to shortened mint address for both
+    let fallback = if mint.len() >= 8 {
+        format!("{}...{}", &mint[..6], &mint[mint.len()-4..])
+    } else {
+        mint.to_string()
+    };
+    
+    (fallback.clone(), fallback)
+}
+
+/// Get token decimals with proper error handling and cache
+async fn get_token_decimals_safe_local(mint: &str) -> Option<u8> {
+    // Use the centralized decimals function from tokens module
+    get_token_decimals(mint).await
 }

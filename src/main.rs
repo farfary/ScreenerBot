@@ -12,6 +12,9 @@ async fn main() {
     screenerbot::tokens::initialize_system_stable_blacklist();
 
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
+    
+    // Create shared shutdown notification for all background tasks
+    let shutdown = Arc::new(Notify::new());
 
     // Set up emergency shutdown handler (second Ctrl+C will force kill)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -111,7 +114,17 @@ async fn main() {
     }
     log(LogTag::System, "INFO", "Wallet transaction manager initialized successfully");
 
-    let shutdown = Arc::new(Notify::new());
+    // Start wallet transaction periodic sync background service
+    let shutdown_wallet_transactions = shutdown.clone();
+    let wallet_transactions_handle = match screenerbot::wallet_transactions::start_wallet_transaction_sync_task(shutdown_wallet_transactions).await {
+        Ok(handle) => handle,
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to start wallet transaction sync task: {}", e));
+            std::process::exit(1);
+        }
+    };
+    log(LogTag::System, "INFO", "Wallet transaction periodic sync task started successfully");
+
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
 
@@ -401,6 +414,15 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("Wallet tracker task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for wallet transactions sync task
+            if let Err(e) = wallet_transactions_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Wallet transactions sync task failed to shutdown cleanly: {}", e)
                 );
             }
 
