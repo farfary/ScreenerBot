@@ -4,6 +4,7 @@
 use crate::{
     rpc::RpcClient,
     logger::{log, LogTag},
+    global::is_debug_transactions_enabled,
 };
 use solana_sdk::{
     signature::{Signature, Signer},
@@ -105,7 +106,7 @@ pub struct WalletTransactionManager {
 
 /// Initialize the global wallet transaction manager
 pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::error::Error>> {
-    log(LogTag::System, "INFO", "Initializing global wallet transaction manager");
+    log(LogTag::Transactions, "INFO", "Initializing global wallet transaction manager");
     
     // Get the main bot wallet address from global configs
     let configs = crate::global::read_configs()
@@ -116,7 +117,7 @@ pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::
     
     let wallet_address = main_wallet_keypair.pubkey().to_string();
     
-    log(LogTag::System, "INFO", &format!("Initializing transaction manager for wallet: {}", wallet_address));
+    log(LogTag::Transactions, "INFO", &format!("Initializing transaction manager for wallet: {}", wallet_address));
     
     // Create and initialize the manager
     let mut manager = WalletTransactionManager::new(wallet_address)?;
@@ -133,7 +134,7 @@ pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::
         *global_manager = Some(manager);
     }
     
-    log(LogTag::System, "SUCCESS", "Global wallet transaction manager initialized and ready");
+    log(LogTag::Transactions, "SUCCESS", "Global wallet transaction manager initialized and ready");
     Ok(())
 }
 
@@ -149,7 +150,7 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
         Ok(manager.analyze_recent_swaps(limit))
     } else {
         // Create a standalone manager if global one isn't available
-        log(LogTag::System, "INFO", "Creating standalone wallet transaction manager");
+        log(LogTag::Transactions, "INFO", "Creating standalone wallet transaction manager");
         
         // Get the main bot wallet address from global configs
         let configs = crate::global::read_configs()
@@ -160,7 +161,7 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
         
         let wallet_address = main_wallet_keypair.pubkey().to_string();
         
-        log(LogTag::System, "INFO", &format!("Creating standalone manager for wallet: {}", wallet_address));
+        log(LogTag::Transactions, "INFO", &format!("Creating standalone manager for wallet: {}", wallet_address));
         
         // Create and initialize the manager
         let mut manager = WalletTransactionManager::new(wallet_address)?;
@@ -171,7 +172,7 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
         // Initialize and sync
         manager.initialize_and_sync(rpc_client).await?;
         
-        log(LogTag::System, "SUCCESS", "Standalone wallet transaction manager ready");
+        log(LogTag::Transactions, "SUCCESS", "Standalone wallet transaction manager ready");
         
         Ok(manager.analyze_recent_swaps(limit))
     }
@@ -202,7 +203,7 @@ impl WalletTransactionManager {
                     match serde_json::from_str::<WalletSyncState>(&content) {
                         Ok(mut state) => {
                             state.wallet_address = wallet_address.clone(); // Ensure consistency
-                            log(LogTag::System, "LOADED", &format!("Loaded sync state: {} transactions, {} cached", 
+                            log(LogTag::Transactions, "LOADED", &format!("Loaded sync state: {} transactions, {} cached", 
                                 state.total_transactions_fetched, state.cached_signatures.len()));
                             state
                         },
@@ -222,7 +223,7 @@ impl WalletTransactionManager {
                 }
             }
         } else {
-            log(LogTag::System, "INFO", "Creating new sync state");
+            log(LogTag::Transactions, "INFO", "Creating new sync state");
             let mut state = WalletSyncState::default();
             state.wallet_address = wallet_address.clone();
             state
@@ -243,7 +244,7 @@ impl WalletTransactionManager {
     }
     
     fn load_cached_transactions(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        log(LogTag::System, "INFO", "Loading cached transactions into memory");
+        log(LogTag::Transactions, "INFO", "Loading cached transactions into memory");
         let mut loaded = 0;
         
         for signature in &self.sync_state.cached_signatures.clone() {
@@ -253,6 +254,9 @@ impl WalletTransactionManager {
                     Ok(content) => {
                         match serde_json::from_str::<CachedTransactionData>(&content) {
                             Ok(cached_tx) => {
+                                if is_debug_transactions_enabled() {
+                                    log(LogTag::Transactions, "DEBUG", &format!("Loaded cached transaction: {}...", &signature[..8]));
+                                }
                                 self.transaction_cache.insert(signature.clone(), cached_tx);
                                 loaded += 1;
                             },
@@ -275,20 +279,20 @@ impl WalletTransactionManager {
             }
         }
         
-        log(LogTag::System, "SUCCESS", &format!("Loaded {} cached transactions into memory", loaded));
+        log(LogTag::Transactions, "SUCCESS", &format!("Loaded {} cached transactions into memory", loaded));
         Ok(())
     }
     
     fn save_sync_state(&self) -> Result<(), Box<dyn std::error::Error>> {
         let content = serde_json::to_string_pretty(&self.sync_state)?;
         fs::write(&self.sync_state_file, content)?;
-        log(LogTag::System, "SAVED", &format!("Sync state saved: {} transactions tracked", 
+        log(LogTag::Transactions, "SAVED", &format!("Sync state saved: {} transactions tracked", 
             self.sync_state.total_transactions_fetched));
         Ok(())
     }
     
     pub async fn initialize_and_sync(&mut self, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
-        log(LogTag::System, "INFO", &format!("Initializing wallet transaction manager for {}", self.wallet_address));
+        log(LogTag::Transactions, "INFO", &format!("Initializing wallet transaction manager for {}", self.wallet_address));
         
         // Fetch missing transactions
         self.fetch_missing_transactions(rpc_client).await?;
@@ -296,14 +300,14 @@ impl WalletTransactionManager {
         // Save updated sync state
         self.save_sync_state()?;
         
-        log(LogTag::System, "SUCCESS", &format!("Wallet transaction manager initialized: {} total transactions", 
+        log(LogTag::Transactions, "SUCCESS", &format!("Wallet transaction manager initialized: {} total transactions", 
             self.sync_state.total_transactions_fetched));
         
         Ok(())
     }
     
     async fn fetch_missing_transactions(&mut self, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
-        log(LogTag::System, "INFO", "Checking for missing transactions to fetch");
+        log(LogTag::Transactions, "INFO", "Checking for missing transactions to fetch");
         
         // First, get latest signatures to see what's new
         let latest_signatures = self.fetch_wallet_signatures(rpc_client, 50, None).await?;
@@ -321,7 +325,7 @@ impl WalletTransactionManager {
         }
         
         if !new_signatures.is_empty() {
-            log(LogTag::System, "INFO", &format!("Found {} new transactions to fetch", new_signatures.len()));
+            log(LogTag::Transactions, "INFO", &format!("Found {} new transactions to fetch", new_signatures.len()));
             self.fetch_and_cache_transactions(rpc_client, &new_signatures).await?;
         } else {
             log(LogTag::System, "INFO", "All recent transactions are already cached");
@@ -428,7 +432,7 @@ impl WalletTransactionManager {
                             if let Err(e) = self.save_sync_state() {
                                 log(LogTag::System, "ERROR", &format!("Failed to save sync state after caching {}: {}", signature, e));
                             } else {
-                                log(LogTag::System, "SAVED", &format!("Sync state saved after caching transaction {} (total: {})", 
+                                log(LogTag::Transactions, "SAVED", &format!("Sync state saved after caching transaction {} (total: {})", 
                                     signature, self.sync_state.total_transactions_fetched));
                             }
                             
@@ -500,7 +504,7 @@ impl WalletTransactionManager {
         // Store in memory
         self.transaction_cache.insert(sig_str.clone(), cached_tx);
         
-        log(LogTag::System, "CACHED", &format!("Transaction {} cached successfully", sig_str));
+        log(LogTag::Transactions, "CACHED", &format!("Transaction {} cached successfully", sig_str));
         Ok(())
     }
     
@@ -554,7 +558,7 @@ impl WalletTransactionManager {
         fs::write(&cache_file, content)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         
-        log(LogTag::System, "CACHED", &format!("Transaction {} cached successfully (concurrent)", signature_str));
+        log(LogTag::Transactions, "CACHED", &format!("Transaction {} cached successfully (concurrent)", signature_str));
         Ok(cached_tx)
     }
     
@@ -590,7 +594,7 @@ impl WalletTransactionManager {
     }
     
     pub fn analyze_recent_swaps(&self, limit: usize) -> SwapAnalysis {
-        log(LogTag::System, "INFO", &format!("Analyzing {} recent swaps from cache", limit));
+        log(LogTag::Transactions, "INFO", &format!("Analyzing {} recent swaps from cache", limit));
         
         let mut swap_transactions = Vec::new();
         let mut processed = 0;
@@ -602,6 +606,11 @@ impl WalletTransactionManager {
         for signature in signatures.iter().rev().take(1000) { // Check up to 1000 recent transactions
             if let Some(cached_tx) = self.transaction_cache.get(*signature) {
                 processed += 1;
+                
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("Processing transaction {} (slot: {:?})", 
+                        &signature[..8], cached_tx.transaction_data.slot));
+                }
                 
                 if let Some(swap) = self.analyze_transaction_for_swap(cached_tx) {
                     log(LogTag::Swap, "FOUND", &format!("Swap detected: {} {} {} SOL for {} tokens", 
@@ -615,7 +624,7 @@ impl WalletTransactionManager {
             }
         }
         
-        log(LogTag::System, "SUCCESS", &format!("Analysis complete. Found {} swaps from {} transactions", 
+        log(LogTag::Transactions, "SUCCESS", &format!("Analysis complete. Found {} swaps from {} transactions", 
             swap_transactions.len(), processed));
         
         self.generate_swap_analysis(swap_transactions)

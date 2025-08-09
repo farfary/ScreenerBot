@@ -59,6 +59,7 @@ const ENABLE_SWAP_LOGS: bool = true;
 const ENABLE_ENTRY_LOGS: bool = true;
 const ENABLE_RL_LEARN_LOGS: bool = true;
 const ENABLE_SUMMARY_LOGS: bool = true;
+const ENABLE_TRANSACTIONS_LOGS: bool = true;
 const ENABLE_OTHER_LOGS: bool = true;
 
 /// Log Type Configuration - Set to false to disable specific log types
@@ -287,6 +288,7 @@ pub enum LogTag {
     Entry,
     RlLearn,
     Summary,
+    Transactions,
     Test,
     Other(String),
 }
@@ -313,6 +315,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Entry => format!("{:<8}", "ENTRY").bright_yellow().bold(), // 🚪 Entry yellow
             LogTag::RlLearn => format!("{:<8}", "RL_LEARN").bright_cyan().bold(), // 🤖 AI cyan
             LogTag::Summary => format!("{:<8}", "SUMMARY").bright_white().bold(), // 📊 Summary white
+            LogTag::Transactions => format!("{:<8}", "TX").bright_blue().bold(), // 📝 Transactions blue
             LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(), // 🧪 Test blue
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
@@ -343,6 +346,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Entry => ENABLE_ENTRY_LOGS,
         LogTag::RlLearn => ENABLE_RL_LEARN_LOGS,
         LogTag::Summary => ENABLE_SUMMARY_LOGS,
+        LogTag::Transactions => ENABLE_TRANSACTIONS_LOGS,
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
         LogTag::Test => true, // Always enable test logs
     };
@@ -462,6 +466,10 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Summary =>
             format!("{:<width$}", "SUMMARY", width = TAG_WIDTH)
                 .bright_white()
+                .bold(),
+        LogTag::Transactions =>
+            format!("{:<width$}", "TX", width = TAG_WIDTH)
+                .bright_blue()
                 .bold(),
         LogTag::Test =>
             format!("{:<width$}", "TEST", width = TAG_WIDTH)
@@ -598,6 +606,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::Entry => "ENTRY",
         LogTag::RlLearn => "RL_LEARN",
         LogTag::Summary => "SUMMARY",
+        LogTag::Transactions => "TX",
         LogTag::Test => "TEST",
         LogTag::Other(ref s) => s,
     };

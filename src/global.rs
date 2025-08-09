@@ -215,6 +215,15 @@ pub fn is_debug_summary_enabled() -> bool {
     }
 }
 
+/// Check if debug transactions mode is enabled via command line args
+pub fn is_debug_transactions_enabled() -> bool {
+    if let Ok(args) = CMD_ARGS.lock() {
+        args.contains(&"--debug-transactions".to_string())
+    } else {
+        false
+    }
+}
+
 /// Represents the runtime configuration loaded from configs.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configs {
