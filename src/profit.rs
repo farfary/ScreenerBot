@@ -607,6 +607,7 @@ fn calculate_momentum_score(volume_trend: f64, buy_pressure: f64, price_momentum
 /// - Risk-adjusted profit targets
 /// - Time pressure scaling
 /// - ATH proximity warnings
+/// - Minimum profit threshold in SOL (from trader.rs PROFIT_EXTRA_NEEDED_SOL)
 ///
 /// Returns: (urgency_score: 0.0-1.0, detailed_reason: String)
 pub async fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
@@ -627,12 +628,44 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     }
 
     // Calculate current P&L
-    let (_pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(current_price));
+    let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(current_price));
 
     // Calculate position duration
     let now = Utc::now();
     let duration = now - position.entry_time;
     let minutes_held = (duration.num_seconds() as f64) / 60.0;
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 💰 MINIMUM PROFIT THRESHOLD CHECK (NEW FEATURE)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    
+    // Import the minimum profit threshold from trader.rs
+    use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
+    
+    // For profitable positions, ensure minimum SOL profit before selling
+    if pnl_percent > 0.0 && pnl_sol < PROFIT_EXTRA_NEEDED_SOL {
+        if is_debug_profit_enabled() {
+            log(
+                LogTag::Profit,
+                "MIN_PROFIT_CHECK",
+                &format!(
+                    "Profit below minimum threshold: {:.8} SOL < {:.8} SOL required ({}% profit) - holding position",
+                    pnl_sol,
+                    PROFIT_EXTRA_NEEDED_SOL,
+                    pnl_percent
+                )
+            );
+        }
+        return (
+            0.0, 
+            format!(
+                "Profit too small: {:.8} SOL < {:.8} SOL minimum ({:.2}% profit)",
+                pnl_sol,
+                PROFIT_EXTRA_NEEDED_SOL,
+                pnl_percent
+            )
+        );
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🤖 RL-ENHANCED EXIT ANALYSIS FOR 30+ MINUTE POSITIONS

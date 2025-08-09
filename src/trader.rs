@@ -62,8 +62,8 @@ pub const MAX_OPEN_POSITIONS: usize = 1;
 /// Trade size in SOL for each position
 pub const TRADE_SIZE_SOL: f64 = 0.004;
 
-/// Default transaction fee for buy/sell operations
-pub const TRANSACTION_FEE_SOL: f64 = 0.000015;
+
+pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00001;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding

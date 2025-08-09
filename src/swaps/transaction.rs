@@ -877,29 +877,72 @@ impl TransactionMonitoringService {
 
         match tx.direction.as_str() {
             "buy" => {
-                // Handle BUY transaction verification - since the monitoring service already verified the transaction,
-                // we just need to mark the position as verified without re-verifying
+                // Handle BUY transaction verification - extract token amount and update position data
+                // First, find the position and get the necessary data without holding the lock across await
+                let (position_found, mint_for_verification, entry_size_sol) = {
+                    if let Ok(positions) = SAVED_POSITIONS.lock() {
+                        if let Some(position) = positions.iter().find(|p| 
+                            p.entry_transaction_signature.as_ref() == Some(&signature.to_string()) && !p.transaction_entry_verified
+                        ) {
+                            (true, position.mint.clone(), position.entry_size_sol)
+                        } else {
+                            (false, String::new(), 0.0)
+                        }
+                    } else {
+                        return Err(SwapError::TransactionError("Failed to acquire positions lock".to_string()));
+                    }
+                };
+
+                if !position_found {
+                    log(LogTag::Swap, "POSITION_UPDATE_INFO", 
+                        &format!("ℹ️ No pending position found for verified buy transaction {} (mint: {})", 
+                            &signature[..8], tx.mint));
+                    return Ok(());
+                }
+
+                // Now perform the verification without holding any locks
+                let verification_result = verify_position_entry_transaction(signature, &mint_for_verification, entry_size_sol).await;
+
+                // Update the position with the verification results
                 let position_updated = {
                     if let Ok(mut positions) = SAVED_POSITIONS.lock() {
                         if let Some(position) = positions.iter_mut().find(|p| 
                             p.entry_transaction_signature.as_ref() == Some(&signature.to_string()) && !p.transaction_entry_verified
                         ) {
-                            // Mark position as verified - the monitoring service has already done the verification
-                            position.transaction_entry_verified = true;
-
-                            log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
-                                &format!("✅ Position entry marked as verified from monitoring service: {} | Transaction: {}", 
-                                    position.symbol, &signature[..8]));
+                            match verification_result {
+                                Ok(entry_verification) => {
+                                    if entry_verification.success {
+                                        // Update position with verified transaction data
+                                        position.transaction_entry_verified = true;
+                                        position.token_amount = Some(entry_verification.token_amount_received);
+                                        position.effective_entry_price = Some(entry_verification.effective_entry_price);
+                                        
+                                        log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
+                                            &format!("✅ Position entry updated with verification data: {} | TX: {} | Tokens: {} | Price: {:.12} SOL", 
+                                                position.symbol, &signature[..8], entry_verification.token_amount_received, entry_verification.effective_entry_price));
+                                    } else {
+                                        log(LogTag::Swap, "POSITION_UPDATE_ERROR", 
+                                            &format!("❌ Failed to extract token amount for {}: verification failed", position.symbol));
+                                        // Still mark as verified to avoid retry loops, but without token amount
+                                        position.transaction_entry_verified = true;
+                                    }
+                                }
+                                Err(e) => {
+                                    log(LogTag::Swap, "POSITION_UPDATE_ERROR", 
+                                        &format!("❌ Error extracting token amount for {}: {}", position.symbol, e));
+                                    // Still mark as verified to avoid retry loops, but without token amount
+                                    position.transaction_entry_verified = true;
+                                }
+                            }
                             
                             true
                         } else {
-                            log(LogTag::Swap, "POSITION_UPDATE_INFO", 
-                                &format!("ℹ️ No pending position found for verified buy transaction {} (mint: {})", 
-                                    &signature[..8], tx.mint));
+                            log(LogTag::Swap, "POSITION_UPDATE_WARNING", 
+                                &format!("⚠️ Position disappeared during verification for transaction {}", &signature[..8]));
                             false
                         }
                     } else {
-                        return Err(SwapError::TransactionError("Failed to acquire positions lock".to_string()));
+                        return Err(SwapError::TransactionError("Failed to acquire positions lock for update".to_string()));
                     }
                 };
 

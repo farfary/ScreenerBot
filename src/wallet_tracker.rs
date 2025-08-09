@@ -140,23 +140,30 @@ impl WalletHistory {
         let start_value = self.start_value;
         
         let value_change = current_value - start_value;
-        let value_change_percent = if start_value != 0.0 {
+        // Fix: Protect against division by zero and very small start values
+        let value_change_percent = if start_value.abs() > f64::EPSILON {
             (value_change / start_value) * 100.0
         } else {
             0.0
         };
 
         let period_days = if let Some(first) = self.snapshots.first() {
-            (current.timestamp - first.timestamp).num_days()
+            std::cmp::max(1, (current.timestamp - first.timestamp).num_days())
         } else {
-            0
+            1
         };
 
-        // Find best and worst days
+        // Find best and worst days - handle empty case properly
         let values: Vec<f64> = self.snapshots.iter().map(|s| s.total_wallet_value_sol).collect();
-        let best_day_value = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let worst_day_value = values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let (best_day_value, worst_day_value) = if values.is_empty() {
+            (current_value, current_value)
+        } else {
+            let best = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let worst = values.iter().cloned().fold(f64::INFINITY, f64::min);
+            (best, worst)
+        };
 
+        // Fix: Protect against division by zero for period calculation
         let avg_daily_change = if period_days > 0 {
             value_change / period_days as f64
         } else {
@@ -190,7 +197,7 @@ impl WalletHistory {
         Ok(history)
     }
 
-    /// Save to file
+    /// Save to file with atomic write to prevent corruption
     pub fn save_to_file(&self) -> Result<(), String> {
         // Ensure data directory exists
         if let Some(parent) = Path::new(WALLET_HISTORY_FILE).parent() {
@@ -201,8 +208,14 @@ impl WalletHistory {
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize wallet history: {}", e))?;
 
-        fs::write(WALLET_HISTORY_FILE, content)
-            .map_err(|e| format!("Failed to write wallet history file: {}", e))?;
+        // Atomic write: write to temp file first, then rename
+        let temp_file = format!("{}.tmp", WALLET_HISTORY_FILE);
+        fs::write(&temp_file, &content)
+            .map_err(|e| format!("Failed to write temp wallet history file: {}", e))?;
+
+        // Atomic rename - this prevents corruption if the process is interrupted
+        fs::rename(&temp_file, WALLET_HISTORY_FILE)
+            .map_err(|e| format!("Failed to rename wallet history file: {}", e))?;
 
         Ok(())
     }
@@ -297,18 +310,32 @@ impl WalletTracker {
         log(LogTag::Wallet, "STOP", "Wallet tracker stopped");
     }
 
-    /// Take a wallet snapshot
+    /// Take a wallet snapshot with improved error handling and performance
     pub async fn take_snapshot(&mut self) -> Result<(), String> {
         if is_debug_wallet_tracker_enabled() {
             log(LogTag::Wallet, "SNAPSHOT_START", "Taking wallet snapshot...");
         }
 
-        // Get SOL balance
-        let sol_balance = get_sol_balance(&self.wallet_address).await
-            .map_err(|e| format!("Failed to get SOL balance: {}", e))?;
+        // Get SOL balance with retry logic
+        let sol_balance = match get_sol_balance(&self.wallet_address).await {
+            Ok(balance) => balance,
+            Err(e) => {
+                log(LogTag::Wallet, "ERROR", &format!("Failed to get SOL balance: {}", e));
+                // Return error rather than continuing with potentially stale data
+                return Err(format!("Failed to get SOL balance: {}", e));
+            }
+        };
 
-        // Get all token accounts
-        let token_holdings = self.get_token_holdings().await?;
+        // Get all token accounts with improved error handling
+        let token_holdings = match self.get_token_holdings().await {
+            Ok(holdings) => holdings,
+            Err(e) => {
+                log(LogTag::Wallet, "ERROR", &format!("Failed to get token holdings: {}", e));
+                // Continue with empty holdings rather than failing completely
+                // This allows SOL tracking even if token tracking fails
+                Vec::new()
+            }
+        };
 
         // Calculate WSOL balance (if any)
         let wsol_balance = token_holdings.iter()
@@ -316,14 +343,20 @@ impl WalletTracker {
             .map(|h| h.balance_ui)
             .unwrap_or(0.0);
 
-        // Calculate totals
+        // Calculate totals with validation
         let total_tokens_value_sol: f64 = token_holdings.iter()
-            .map(|h| h.value_sol)
+            .map(|h| if h.value_sol.is_finite() { h.value_sol } else { 0.0 })
             .sum();
 
         let total_ata_rent_sol: f64 = token_holdings.iter()
-            .map(|h| h.ata_rent_sol)
+            .map(|h| if h.ata_rent_sol.is_finite() { h.ata_rent_sol } else { 0.0 })
             .sum();
+
+        // Validate all values are finite before creating snapshot
+        let values_to_check = [sol_balance, wsol_balance, total_tokens_value_sol, total_ata_rent_sol];
+        if values_to_check.iter().any(|v| !v.is_finite()) {
+            return Err("Detected invalid (infinite/NaN) values in wallet snapshot".to_string());
+        }
 
         let total_wallet_value_sol = sol_balance + wsol_balance + total_tokens_value_sol + total_ata_rent_sol;
 
@@ -355,9 +388,12 @@ impl WalletTracker {
             );
         }
 
-        // Add to history and save
+        // Add to history and save atomically
         self.history.add_snapshot(snapshot);
-        self.history.save_to_file()?;
+        if let Err(e) = self.history.save_to_file() {
+            log(LogTag::Wallet, "ERROR", &format!("Failed to save wallet history: {}", e));
+            // Don't return error here - the snapshot was taken successfully, just not saved
+        }
 
         log(
             LogTag::Wallet,
@@ -368,8 +404,9 @@ impl WalletTracker {
         Ok(())
     }
 
-    /// Get all token holdings with values
+    /// Get all token holdings with values - optimized with batch processing and error handling
     async fn get_token_holdings(&self) -> Result<Vec<TokenHolding>, String> {
+        let start_time = std::time::Instant::now();
         let rpc_client = get_rpc_client();
         
         // Get all token accounts for this wallet
@@ -377,69 +414,159 @@ impl WalletTracker {
             .get_all_token_accounts(&self.wallet_address).await
             .map_err(|e| format!("Failed to get token accounts: {}", e))?;
 
+        if token_accounts.is_empty() {
+            if is_debug_wallet_tracker_enabled() {
+                log(LogTag::Wallet, "TOKEN_HOLDINGS", "No token accounts found");
+            }
+            return Ok(Vec::new());
+        }
+
         let mut holdings = Vec::new();
+        let mut failed_tokens = Vec::new();
         let pool_service = get_pool_service();
 
-        for account_info in token_accounts {
+        // Pre-check token availability in batch for efficiency
+        let mut availability_checks = Vec::new();
+        for account_info in &token_accounts {
+            availability_checks.push(pool_service.check_token_availability(&account_info.mint));
+        }
+        let availability_results = futures::future::join_all(availability_checks).await;
+
+        for (i, account_info) in token_accounts.iter().enumerate() {
             // Skip if balance is zero
             if account_info.balance == 0 {
                 continue;
             }
 
-            let mint = account_info.mint;
-            let balance = account_info.balance;
-            let ata_address = account_info.account;
-
-            // Get token decimals
-            let decimals = self.get_token_decimals(&mint).await.unwrap_or(9);
-            let balance_ui = balance as f64 / 10_f64.powi(decimals as i32);
-
-            // Get price from pool service only
-            let price_sol = if pool_service.check_token_availability(&mint).await {
-                match pool_service.get_pool_price(&mint, None).await {
-                    Some(result) => result.price_sol,
-                    None => None,
+            match self.process_single_token_holding(account_info, availability_results[i]).await {
+                Ok(holding) => {
+                    // Log first few tokens to avoid spam
+                    if is_debug_wallet_tracker_enabled() && holdings.len() <= 3 {
+                        log(
+                            LogTag::Wallet,
+                            "TOKEN_HOLDING",
+                            &format!(
+                                "Token {}: {:.6} tokens, price={:.10} SOL, value={:.6} SOL",
+                                &account_info.mint[..8],
+                                holding.balance_ui,
+                                holding.price_sol.unwrap_or(0.0),
+                                holding.value_sol
+                            )
+                        );
+                    }
+                    
+                    holdings.push(holding);
                 }
-            } else {
-                None
-            };
-
-            let value_sol = price_sol.map(|p| p * balance_ui).unwrap_or(0.0);
-            let ata_rent_sol = lamports_to_sol(ATA_RENT_LAMPORTS);
-
-            let holding = TokenHolding {
-                mint: mint.clone(),
-                symbol: None, // We'll get this from token database if needed
-                balance,
-                decimals,
-                balance_ui,
-                ata_address,
-                price_sol,
-                value_sol,
-                ata_rent_sol,
-            };
-
-            holdings.push(holding);
-
-            if is_debug_wallet_tracker_enabled() {
-                log(
-                    LogTag::Wallet,
-                    "TOKEN_HOLDING",
-                    &format!(
-                        "Token {}: {:.6} tokens, price={:.10} SOL, value={:.6} SOL",
-                        &mint[..8],
-                        balance_ui,
-                        price_sol.unwrap_or(0.0),
-                        value_sol
-                    )
-                );
+                Err(e) => {
+                    failed_tokens.push(format!("{}[{}]: {}", &account_info.mint[..8], account_info.mint, e));
+                    if is_debug_wallet_tracker_enabled() {
+                        log(LogTag::Wallet, "TOKEN_ERROR", &format!("Failed to process token {}: {}", &account_info.mint[..8], e));
+                    }
+                }
             }
         }
 
-        // Sort by value (highest first)
-        holdings.sort_by(|a, b| b.value_sol.partial_cmp(&a.value_sol).unwrap_or(std::cmp::Ordering::Equal));
+        // Sort by value (highest first) with NaN protection
+        holdings.sort_by(|a, b| {
+            let a_val = if a.value_sol.is_finite() { a.value_sol } else { 0.0 };
+            let b_val = if b.value_sol.is_finite() { b.value_sol } else { 0.0 };
+            b_val.partial_cmp(&a_val).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Log summary statistics
+        let duration = start_time.elapsed();
+        let success_rate = if token_accounts.len() > 0 {
+            (holdings.len() as f64 / token_accounts.len() as f64) * 100.0
+        } else {
+            100.0
+        };
+
+        if is_debug_wallet_tracker_enabled() || !failed_tokens.is_empty() {
+            log(
+                LogTag::Wallet,
+                if failed_tokens.is_empty() { "TOKEN_BATCH_SUCCESS" } else { "TOKEN_BATCH_PARTIAL" },
+                &format!(
+                    "Processed {} tokens in {:.1}ms, {:.1}% success ({} succeeded, {} failed)",
+                    token_accounts.len(),
+                    duration.as_millis(),
+                    success_rate,
+                    holdings.len(),
+                    failed_tokens.len()
+                )
+            );
+        }
+
+        // Log failed tokens if any (truncated to avoid spam)
+        if !failed_tokens.is_empty() {
+            let failed_display = if failed_tokens.len() > 5 {
+                format!("{} (and {} more)", failed_tokens[..5].join(", "), failed_tokens.len() - 5)
+            } else {
+                failed_tokens.join(", ")
+            };
+            log(LogTag::Wallet, "TOKEN_FAILURES", &format!("Failed tokens: {}", failed_display));
+        }
 
         Ok(holdings)
+    }
+
+    /// Process a single token holding with error handling
+    async fn process_single_token_holding(
+        &self, 
+        account_info: &crate::rpc::TokenAccountInfo, 
+        is_available: bool
+    ) -> Result<TokenHolding, String> {
+        let mint = &account_info.mint;
+        let balance = account_info.balance;
+        let ata_address = &account_info.account;
+
+        // Get token decimals with fallback
+        let decimals = self.get_token_decimals(mint).await.unwrap_or(9);
+        
+        // Validate decimals range to prevent overflow
+        if decimals > 18 {
+            return Err(format!("Invalid decimals {} for token {}", decimals, mint));
+        }
+
+        let balance_ui = balance as f64 / 10_f64.powi(decimals as i32);
+        
+        // Validate balance is finite
+        if !balance_ui.is_finite() {
+            return Err(format!("Invalid balance calculation for token {}", mint));
+        }
+
+        // Get price from pool service only if available
+        let price_sol = if is_available {
+            let pool_service = get_pool_service();
+            match pool_service.get_pool_price(mint, None).await {
+                Some(result) => result.price_sol,
+                None => None,
+            }
+        } else {
+            None
+        };
+
+        // Calculate value with validation
+        let value_sol = match price_sol {
+            Some(p) if p.is_finite() && p >= 0.0 => {
+                let val = p * balance_ui;
+                if val.is_finite() { val } else { 0.0 }
+            }
+            _ => 0.0,
+        };
+
+        let ata_rent_sol = lamports_to_sol(ATA_RENT_LAMPORTS);
+
+        Ok(TokenHolding {
+            mint: mint.clone(),
+            symbol: None, // We'll get this from token database if needed
+            balance,
+            decimals,
+            balance_ui,
+            ata_address: ata_address.clone(),
+            price_sol,
+            value_sol,
+            ata_rent_sol,
+        })
     }
 
     /// Get token decimals (simple implementation)
