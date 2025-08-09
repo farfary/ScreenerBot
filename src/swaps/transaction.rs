@@ -44,7 +44,7 @@ const RATE_LIMIT_INCREMENT_SECS: u64 = 1;         // Additional delay per rate l
 const MIN_TRADING_LAMPORTS: u64 = 500_000;        // Minimum trading amount (0.0005 SOL)
 const STUCK_STEP_TIMEOUT_SECS: u64 = 180;         // Timeout for being stuck on same step (3 minutes)
 const TRANSACTION_MONITOR_INTERVAL_SECS: u64 = 10; // How often to check pending transactions
-const TRANSACTION_STATE_FILE: &str = "data/pending_transactions.json"; // Persistent storage file
+const TRANSACTION_STATE_FILE: &str = "data/transactions.json"; // All transactions storage file
 
 /// Transaction monitoring states - tracks progress through swap process
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -55,15 +55,17 @@ pub enum TransactionState {
     Confirmed { confirmed_at: DateTime<Utc> },
     /// Transaction fully verified with balance changes detected
     Verified { verified_at: DateTime<Utc> },
+    /// Transaction completed and moved to history
+    Completed { completed_at: DateTime<Utc> },
     /// Transaction failed at some stage
     Failed { failed_at: DateTime<Utc>, error: String },
     /// Transaction stuck on same state for too long
     Stuck { stuck_since: DateTime<Utc>, last_state: String },
 }
 
-/// Pending transaction information for persistent monitoring
+/// Transaction information for comprehensive tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingTransaction {
+pub struct Transaction {
     pub signature: String,
     pub mint: String,
     pub direction: String, // "buy" or "sell"
@@ -73,16 +75,19 @@ pub struct PendingTransaction {
     pub input_mint: String,
     pub output_mint: String,
     pub position_related: bool, // Whether this affects a position entry/exit
+    pub amount_sol: Option<f64>, // Amount in SOL for tracking
+    pub wallet_address: String, // Wallet that made the transaction
 }
 
 /// Global transaction monitoring service instance
 static TRANSACTION_SERVICE: Lazy<StdArc<AsyncMutex<Option<TransactionMonitoringService>>>> = 
     Lazy::new(|| StdArc::new(AsyncMutex::new(None)));
 
-/// Persistent transaction monitoring service
+/// Comprehensive transaction monitoring service
 #[derive(Debug)]
 pub struct TransactionMonitoringService {
-    pending_transactions: HashMap<String, PendingTransaction>,
+    pending_transactions: HashMap<String, Transaction>, // Active monitoring
+    all_transactions: Vec<Transaction>, // Complete history
     shutdown_notify: Option<StdArc<Notify>>,
     running: bool,
 }
@@ -90,9 +95,28 @@ pub struct TransactionMonitoringService {
 impl TransactionMonitoringService {
     /// Create new transaction monitoring service
     pub fn new() -> Self {
-        let pending = Self::load_pending_transactions_from_disk();
+        let loaded_transactions = Self::load_pending_transactions_from_disk();
+        
+        // Separate transactions by state: pending vs completed
+        let mut pending_map = HashMap::new();
+        let mut completed_transactions = Vec::new();
+        
+        for (signature, tx) in loaded_transactions {
+            match &tx.state {
+                TransactionState::Completed { .. } => {
+                    completed_transactions.push(tx);
+                }
+                _ => {
+                    pending_map.insert(signature, tx);
+                }
+            }
+        }
+        
+        let all_transactions = completed_transactions;
+        let pending = pending_map;
         Self {
             pending_transactions: pending,
+            all_transactions,
             shutdown_notify: None,
             running: false,
         }
@@ -158,66 +182,80 @@ impl TransactionMonitoringService {
         Ok(())
     }
 
-    /// Load pending transactions from disk
-    fn load_pending_transactions_from_disk() -> HashMap<String, PendingTransaction> {
+    /// Load transactions from disk
+    fn load_pending_transactions_from_disk() -> HashMap<String, Transaction> {
         let file_path = TRANSACTION_STATE_FILE;
         
         if Path::new(file_path).exists() {
             match std::fs::read_to_string(file_path) {
                 Ok(content) => {
-                    match serde_json::from_str::<Vec<PendingTransaction>>(&content) {
+                    match serde_json::from_str::<Vec<Transaction>>(&content) {
                         Ok(transactions) => {
                             let mut map = HashMap::new();
                             for tx in transactions {
                                 map.insert(tx.signature.clone(), tx);
                             }
-                            log(LogTag::Swap, "TRANSACTION_SERVICE", 
-                                &format!("📄 Loaded {} pending transactions from disk", map.len()));
+                            log(LogTag::Swap, "TRANSACTION_LOAD", 
+                                &format!("� Loaded {} transactions from disk", map.len()));
                             return map;
                         }
                         Err(e) => {
-                            log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
-                                &format!("Failed to parse transaction state file: {}", e));
+                            log(LogTag::Swap, "TRANSACTION_LOAD_ERROR", 
+                                &format!("Failed to parse transaction file: {}", e));
                         }
                     }
                 }
                 Err(e) => {
-                    log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
-                        &format!("Failed to read transaction state file: {}", e));
+                    log(LogTag::Swap, "TRANSACTION_LOAD_ERROR", 
+                        &format!("Failed to read transaction file: {}", e));
                 }
             }
+        } else {
+            log(LogTag::Swap, "TRANSACTION_LOAD", 
+                "📂 No existing transaction file found - starting fresh");
         }
         
         HashMap::new()
     }
 
-    /// Save pending transactions to disk
-    async fn save_pending_transactions_to_disk() {
-        let transactions_vec: Vec<PendingTransaction> = {
+    /// Save all transactions (pending + completed) to disk
+    async fn save_all_transactions_to_disk() {
+        let (pending_transactions, completed_transactions): (Vec<Transaction>, Vec<Transaction>) = {
             let service_guard = TRANSACTION_SERVICE.lock().await;
 
             if let Some(service) = service_guard.as_ref() {
-                service.pending_transactions.values().cloned().collect()
+                let pending: Vec<Transaction> = service.pending_transactions.values().cloned().collect();
+                let completed: Vec<Transaction> = service.all_transactions.clone();
+                (pending, completed)
             } else {
                 return;
             }
         };
 
-        match serde_json::to_string_pretty(&transactions_vec) {
+        // Combine all transactions into one comprehensive list
+        let mut all_transactions = pending_transactions;
+        all_transactions.extend(completed_transactions);
+
+        match serde_json::to_string_pretty(&all_transactions) {
             Ok(content) => {
                 if let Err(e) = std::fs::write(TRANSACTION_STATE_FILE, content) {
                     log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
-                        &format!("Failed to save transaction states: {}", e));
+                        &format!("Failed to save all transactions: {}", e));
                 } else {
                     log(LogTag::Swap, "TRANSACTION_SERVICE", 
-                        &format!("💾 Saved {} pending transactions to disk", transactions_vec.len()));
+                        &format!("💾 Saved {} total transactions to disk (pending + completed)", all_transactions.len()));
                 }
             }
             Err(e) => {
                 log(LogTag::Swap, "TRANSACTION_SERVICE_ERROR", 
-                    &format!("Failed to serialize transaction states: {}", e));
+                    &format!("Failed to serialize all transactions: {}", e));
             }
         }
+    }
+
+    /// Save all transactions to disk - redirects to comprehensive save function
+    async fn save_pending_transactions_to_disk() {
+        Self::save_all_transactions_to_disk().await;
     }
 
     /// Monitor all pending transactions
@@ -318,7 +356,8 @@ impl TransactionMonitoringService {
                             }
                             TransactionState::Verified { .. } |
                             TransactionState::Failed { .. } |
-                            TransactionState::Stuck { .. } => {
+                            TransactionState::Stuck { .. } |
+                            TransactionState::Completed { .. } => {
                                 // Final states - no further processing needed
                             }
                         }
@@ -333,8 +372,33 @@ impl TransactionMonitoringService {
             
             if let Some(service) = service_guard.as_mut() {
                 if let Some(tx) = service.pending_transactions.get_mut(signature) {
-                    tx.state = new_state.unwrap();
+                    let state = new_state.unwrap();
+                    tx.state = state.clone();
                     tx.last_updated = now;
+                    
+                    // If transaction is verified, move it to completed state and update history
+                    if matches!(state, TransactionState::Verified { .. }) {
+                        // Update state to completed
+                        tx.state = TransactionState::Completed {
+                            completed_at: now,
+                        };
+                        
+                        log(LogTag::Swap, "TRANSACTION_COMPLETED", 
+                            &format!("✅ Transaction {} moved to completed state", &signature[..8]));
+                        
+                        // Add to complete transaction history
+                        service.all_transactions.push(tx.clone());
+                        
+                        // Remove from pending transactions since it's now complete
+                        service.pending_transactions.remove(signature);
+                        
+                        log(LogTag::Swap, "TRANSACTION_ARCHIVED", 
+                            &format!("📚 Transaction {} moved from pending to history", &signature[..8]));
+                        
+                        // Save all transactions to disk immediately
+                        drop(service_guard); // Release the lock before async operation
+                        Self::save_all_transactions_to_disk().await;
+                    }
                 }
             }
         }
@@ -359,11 +423,26 @@ impl TransactionMonitoringService {
         }
     }
 
-    /// Verify transaction effects (balance changes)
-    async fn verify_transaction_effects(signature: &str, tx: &PendingTransaction) -> Result<bool, SwapError> {
-        // For now, if it's confirmed, consider it verified
-        // This can be enhanced with actual balance checking
-        Ok(true)
+    /// Verify transaction effects using instruction-based analysis
+    async fn verify_transaction_effects(signature: &str, tx: &Transaction) -> Result<bool, SwapError> {
+        // Use the existing verification functions based on transaction direction
+        match tx.direction.as_str() {
+            "buy" => {
+                // For buy transactions, verify the position entry
+                match verify_position_entry_transaction(signature, &tx.mint, 0.0).await {
+                    Ok(verification) => Ok(verification.success),
+                    Err(_) => Ok(false), // Verification failed
+                }
+            }
+            "sell" => {
+                // For sell transactions, verify the position exit
+                match verify_position_exit_transaction(signature, &tx.mint, 0).await {
+                    Ok(verification) => Ok(verification.success),
+                    Err(_) => Ok(false), // Verification failed
+                }
+            }
+            _ => Ok(true), // Unknown direction, assume verified if confirmed
+        }
     }
 
     /// Clean up old completed/failed transactions
@@ -400,11 +479,13 @@ impl TransactionMonitoringService {
         input_mint: &str,
         output_mint: &str,
         position_related: bool,
+        amount_sol: f64,
+        wallet_address: &str,
     ) -> Result<(), SwapError> {
         let mut service_guard = TRANSACTION_SERVICE.lock().await;
 
         if let Some(service) = service_guard.as_mut() {
-            let pending_tx = PendingTransaction {
+            let pending_tx = Transaction {
                 signature: signature.to_string(),
                 mint: mint.to_string(),
                 direction: direction.to_string(),
@@ -416,6 +497,8 @@ impl TransactionMonitoringService {
                 input_mint: input_mint.to_string(),
                 output_mint: output_mint.to_string(),
                 position_related,
+                amount_sol: Some(amount_sol),
+                wallet_address: wallet_address.to_string(),
             };
 
             service.pending_transactions.insert(signature.to_string(), pending_tx);
@@ -423,6 +506,9 @@ impl TransactionMonitoringService {
             log(LogTag::Swap, "TRANSACTION_ADDED", 
                 &format!("📝 Added transaction {} to monitoring queue", &signature[..8]));
         }
+
+        // Save transactions to disk immediately to ensure comprehensive tracking
+        Self::save_all_transactions_to_disk().await;
 
         Ok(())
     }
@@ -492,62 +578,113 @@ impl TransactionMonitoringService {
     }
 
     /// Update position tracking when a transaction is verified by the monitoring service
+    /// Update position on transaction verification
     /// This handles cases where immediate verification during swap failed but background verification succeeded
-    async fn update_position_on_verification(signature: &str, tx: &PendingTransaction) -> Result<(), SwapError> {
-        // Only handle sell transactions (buy transactions don't need position closure)
-        if tx.direction != "sell" {
-            return Ok(());
-        }
-
+    async fn update_position_on_verification(signature: &str, tx: &Transaction) -> Result<(), SwapError> {
         log(LogTag::Swap, "POSITION_UPDATE_VERIFIED", 
-            &format!("🔄 Updating position for verified sell transaction: {}", &signature[..8]));
+            &format!("🔄 Updating position for verified {} transaction: {}", tx.direction, &signature[..8]));
 
         // Import positions module to access position functions
         use crate::positions::{SAVED_POSITIONS, calculate_position_pnl};
 
-        // First, verify the transaction outside of any lock
-        let verification = verify_position_exit_transaction(signature, &tx.mint, 0).await?;
-        
-        if !verification.success || verification.sol_received <= 0 {
-            return Err(SwapError::TransactionError(
-                format!("Transaction verification failed or no SOL received for {}", signature)
-            ));
-        }
-
-        // Now update the position with the verification results
-        let position_updated = {
-            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                if let Some(position) = positions.iter_mut().find(|p| p.mint == tx.mint && p.exit_price.is_none()) {
-                    // Update position with verified exit data
-                    position.exit_price = Some(verification.effective_exit_price);
-                    position.exit_time = Some(Utc::now());
-                    position.effective_exit_price = Some(verification.effective_exit_price);
-                    position.sol_received = Some(verification.net_sol_received);
-                    position.exit_transaction_signature = Some(signature.to_string());
-                    position.transaction_exit_verified = true;
-
-                    // Calculate P&L
-                    let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
-
-                    log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
-                        &format!("✅ Position updated from verified transaction: {} | P&L: {:.1}% ({:+.9} SOL) | SOL received: {:.9}", 
-                            position.symbol, net_pnl_percent, net_pnl_sol, verification.net_sol_received));
-                    
-                    true
-                } else {
-                    log(LogTag::Swap, "POSITION_UPDATE_WARNING", 
-                        &format!("⚠️ No open position found for mint {} in verified transaction {}", 
-                            tx.mint, &signature[..8]));
-                    false
+        match tx.direction.as_str() {
+            "buy" => {
+                // Handle BUY transaction verification - check if position exists and update it
+                let verification = verify_position_entry_transaction(signature, &tx.mint, 0.0).await?;
+                
+                if !verification.success || verification.token_amount_received == 0 {
+                    return Err(SwapError::TransactionError(
+                        format!("Buy transaction verification failed or no tokens received for {}", signature)
+                    ));
                 }
-            } else {
-                return Err(SwapError::TransactionError("Failed to acquire positions lock".to_string()));
-            }
-        };
 
-        // Save positions to disk if we updated anything
-        if position_updated {
-            crate::utils::save_positions_to_file(&crate::positions::get_open_positions());
+                let position_updated = {
+                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                        if let Some(position) = positions.iter_mut().find(|p| 
+                            p.entry_transaction_signature.as_ref() == Some(&signature.to_string()) && !p.transaction_entry_verified
+                        ) {
+                            // Update position with verified entry data
+                            position.transaction_entry_verified = true;
+                            position.token_amount = Some(verification.token_amount_received);
+                            position.effective_entry_price = Some(verification.effective_entry_price);
+                            position.entry_fee_lamports = Some(verification.transaction_fee);
+                            position.total_size_sol = verification.total_cost_sol;
+                            position.price_highest = verification.effective_entry_price;
+                            position.price_lowest = verification.effective_entry_price;
+
+                            log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
+                                &format!("✅ Position entry updated from verified transaction: {} | Tokens: {} | Effective price: {:.12}", 
+                                    position.symbol, verification.token_amount_received, verification.effective_entry_price));
+                            
+                            true
+                        } else {
+                            log(LogTag::Swap, "POSITION_UPDATE_INFO", 
+                                &format!("ℹ️ No pending position found for verified buy transaction {} (mint: {})", 
+                                    &signature[..8], tx.mint));
+                            false
+                        }
+                    } else {
+                        return Err(SwapError::TransactionError("Failed to acquire positions lock".to_string()));
+                    }
+                };
+
+                // Save positions to disk if we updated anything
+                if position_updated {
+                    use crate::positions::get_open_positions;
+                    crate::utils::save_positions_to_file(&get_open_positions());
+                }
+            }
+            "sell" => {
+                // Handle SELL transaction verification - close position
+                let verification = verify_position_exit_transaction(signature, &tx.mint, 0).await?;
+                
+                if !verification.success || verification.sol_received <= 0 {
+                    return Err(SwapError::TransactionError(
+                        format!("Sell transaction verification failed or no SOL received for {}", signature)
+                    ));
+                }
+
+                let position_updated = {
+                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                        if let Some(position) = positions.iter_mut().find(|p| p.mint == tx.mint && p.exit_price.is_none()) {
+                            // Update position with verified exit data
+                            position.exit_price = Some(verification.effective_exit_price);
+                            position.exit_time = Some(Utc::now());
+                            position.effective_exit_price = Some(verification.effective_exit_price);
+                            position.sol_received = Some(verification.net_sol_received);
+                            position.exit_transaction_signature = Some(signature.to_string());
+                            position.transaction_exit_verified = true;
+                            position.exit_fee_lamports = Some(verification.transaction_fee);
+
+                            // Calculate P&L
+                            let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
+
+                            log(LogTag::Swap, "POSITION_UPDATED_VERIFIED", 
+                                &format!("✅ Position exit updated from verified transaction: {} | P&L: {:.1}% ({:+.9} SOL) | SOL received: {:.9}", 
+                                    position.symbol, net_pnl_percent, net_pnl_sol, verification.net_sol_received));
+                            
+                            true
+                        } else {
+                            log(LogTag::Swap, "POSITION_UPDATE_WARNING", 
+                                &format!("⚠️ No open position found for mint {} in verified sell transaction {}", 
+                                    tx.mint, &signature[..8]));
+                            false
+                        }
+                    } else {
+                        return Err(SwapError::TransactionError("Failed to acquire positions lock".to_string()));
+                    }
+                };
+
+                // Save positions to disk if we updated anything
+                if position_updated {
+                    use crate::positions::get_open_positions;
+                    crate::utils::save_positions_to_file(&get_open_positions());
+                }
+            }
+            _ => {
+                log(LogTag::Swap, "POSITION_UPDATE_WARNING", 
+                    &format!("⚠️ Unknown transaction direction '{}' for position update", tx.direction));
+            }
         }
 
         Ok(())
@@ -3071,7 +3208,7 @@ pub async fn register_position_transaction(
     let mut service_guard = service_arc.lock().await;
     
     if let Some(service) = service_guard.as_mut() {
-        let pending_transaction = PendingTransaction {
+        let pending_transaction = Transaction {
             signature: transaction_signature.to_string(),
             mint: mint.to_string(),
             direction: direction.to_string(),
@@ -3081,6 +3218,8 @@ pub async fn register_position_transaction(
             input_mint: input_mint.to_string(),
             output_mint: output_mint.to_string(),
             position_related: true,
+            amount_sol: Some(0.0), // Default value - amount not provided to this function
+            wallet_address: get_wallet_address().unwrap_or_else(|_| "unknown".to_string()), // Use current wallet
         };
 
         service.pending_transactions.insert(transaction_signature.to_string(), pending_transaction);

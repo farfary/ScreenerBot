@@ -132,6 +132,8 @@ pub async fn buy_token(
                 SOL_MINT,
                 &token.mint,
                 true, // position related
+                amount_sol,
+                &get_wallet_address().unwrap_or_else(|_| "unknown".to_string()),
             ).await {
                 log(LogTag::Wallet, "MONITOR_WARNING", 
                     &format!("Failed to add buy transaction to monitoring: {}", e));
@@ -398,6 +400,8 @@ async fn sell_token_with_slippage(
                 &token.mint,
                 SOL_MINT,
                 true, // position related
+                swap_result.output_amount.parse::<f64>().unwrap_or(0.0),
+                &get_wallet_address().unwrap_or_else(|_| "unknown".to_string()),
             ).await {
                 log(LogTag::Swap, "MONITOR_WARNING", 
                     &format!("Failed to add sell transaction to monitoring: {}", e));

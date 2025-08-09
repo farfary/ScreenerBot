@@ -462,131 +462,131 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 );
             }
 
-            // Perform comprehensive transaction verification using instruction analysis
+            // Get simple profit targets for this token
+            let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
+
+            // Try immediate verification first, but create position either way
+            let mut position_verified = false;
+            let mut token_amount = None;
+            let mut effective_entry_price = None;
+            let mut total_cost_sol = TRADE_SIZE_SOL;
+            let mut entry_fee_lamports = None;
+
+            // Attempt immediate transaction verification
             match verify_position_entry_transaction(
                 &transaction_signature,
                 &token.mint,
                 TRADE_SIZE_SOL
             ).await {
                 Ok(verification) => {
-                    if !verification.success {
+                    if verification.success && verification.token_amount_received > 0 {
+                        position_verified = true;
+                        token_amount = Some(verification.token_amount_received);
+                        effective_entry_price = Some(verification.effective_entry_price);
+                        total_cost_sol = verification.total_cost_sol;
+                        entry_fee_lamports = Some(verification.transaction_fee);
+
                         log(
                             LogTag::Trader,
-                            "ERROR",
+                            "VERIFIED",
                             &format!(
-                                "❌ Entry transaction verification failed for {}: {}",
+                                "✅ Entry immediately verified: {} received {} tokens, spent {:.9} SOL, effective price: {:.12}",
                                 token.symbol,
-                                verification.error.unwrap_or_default()
+                                verification.token_amount_received,
+                                verification.total_cost_sol,
+                                verification.effective_entry_price
                             )
                         );
-                        return;
-                    }
-
-                    // CRITICAL FIX: Validate that we actually received tokens from verified transaction
-                    if verification.token_amount_received == 0 {
+                    } else {
                         log(
                             LogTag::Trader,
-                            "ERROR",
+                            "PENDING",
                             &format!(
-                                "❌ Transaction verified but no tokens received for {}. TX: {}",
-                                token.symbol,
-                                transaction_signature
+                                "⏳ Entry verification incomplete for {}, creating pending position for background verification",
+                                token.symbol
                             )
                         );
-                        return;
-                    }
-
-                    log(
-                        LogTag::Trader,
-                        "VERIFIED",
-                        &format!(
-                            "✅ Entry verified: {} received {} tokens, spent {:.9} SOL, effective price: {:.12}",
-                            token.symbol,
-                            verification.token_amount_received,
-                            verification.total_cost_sol,
-                            verification.effective_entry_price
-                        )
-                    );
-
-                    // Get simple profit targets for this token
-                    let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
-
-                    // Create new verified position using verification data
-                    let new_position = Position {
-                        mint: token.mint.clone(),
-                        symbol: token.symbol.clone(),
-                        name: token.name.clone(),
-                        entry_price: price,
-                        entry_time: Utc::now(),
-                        exit_price: None,
-                        exit_time: None,
-                        position_type: "buy".to_string(),
-                        entry_size_sol: TRADE_SIZE_SOL,
-                        total_size_sol: verification.total_cost_sol,
-                        price_highest: verification.effective_entry_price,
-                        price_lowest: verification.effective_entry_price,
-                        entry_transaction_signature: Some(transaction_signature.clone()),
-                        exit_transaction_signature: None,
-                        token_amount: Some(verification.token_amount_received),
-                        effective_entry_price: Some(verification.effective_entry_price),
-                        effective_exit_price: None,
-                        sol_received: None,
-                        profit_target_min: Some(profit_min),
-                        profit_target_max: Some(profit_max),
-                        liquidity_tier: calculate_liquidity_tier(token),
-                        transaction_entry_verified: verification.entry_transaction_verified,
-                        transaction_exit_verified: false,
-                        entry_fee_lamports: Some(verification.transaction_fee),
-                        exit_fee_lamports: None,
-                    };
-
-                    log(
-                        LogTag::Trader,
-                        "SUCCESS",
-                        &format!(
-                            "✅ POSITION CREATED: {} | TX: {} | Tokens: {} (verified) | Signal Price: {:.12} SOL | Effective Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}%",
-                            token.symbol,
-                            transaction_signature,
-                            verification.token_amount_received,
-                            price,
-                            verification.effective_entry_price,
-                            profit_min,
-                            profit_max
-                        )
-                    );
-
-                    // Add verified position to saved positions
-                    if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                        positions.push(new_position);
-                        save_positions_to_file(&positions);
-
-                        log(
-                            LogTag::Trader,
-                            "SAVED",
-                            &format!("💾 Position saved to disk: {} (verified entry)", token.symbol)
-                        );
-                    }
-
-                    // Record position for RL learning if enabled
-                    let learner = get_trading_learner();
-                    if learner.is_model_ready() {
-                        if let Some(rugcheck_score) = get_rugcheck_score_for_token(&token.mint).await {
-                            // Note: We'll record the complete trade when position is closed
-                            log(
-                                LogTag::Trader,
-                                "RL_READY",
-                                &format!("🤖 Position {} ready for RL learning when closed", token.symbol)
-                            );
-                        }
                     }
                 }
                 Err(e) => {
                     log(
                         LogTag::Trader,
-                        "ERROR",
-                        &format!("❌ Entry transaction verification failed for {}: {}", token.symbol, e)
+                        "PENDING",
+                        &format!(
+                            "⏳ Entry verification failed immediately for {}, creating pending position for background verification: {}",
+                            token.symbol, e
+                        )
                     );
-                    return;
+                }
+            }
+
+            // Create position regardless of immediate verification status
+            // Background transaction service will update it when verification completes
+            let new_position = Position {
+                mint: token.mint.clone(),
+                symbol: token.symbol.clone(),
+                name: token.name.clone(),
+                entry_price: price,
+                entry_time: Utc::now(),
+                exit_price: None,
+                exit_time: None,
+                position_type: "buy".to_string(),
+                entry_size_sol: TRADE_SIZE_SOL,
+                total_size_sol: total_cost_sol,
+                price_highest: effective_entry_price.unwrap_or(price),
+                price_lowest: effective_entry_price.unwrap_or(price),
+                entry_transaction_signature: Some(transaction_signature.clone()),
+                exit_transaction_signature: None,
+                token_amount,
+                effective_entry_price,
+                effective_exit_price: None,
+                sol_received: None,
+                profit_target_min: Some(profit_min),
+                profit_target_max: Some(profit_max),
+                liquidity_tier: calculate_liquidity_tier(token),
+                transaction_entry_verified: position_verified,
+                transaction_exit_verified: false,
+                entry_fee_lamports,
+                exit_fee_lamports: None,
+            };
+
+            let verification_status = if position_verified { "verified" } else { "pending verification" };
+            log(
+                LogTag::Trader,
+                "SUCCESS",
+                &format!(
+                    "✅ POSITION CREATED: {} | TX: {} | Status: {} | Signal Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}%",
+                    token.symbol,
+                    transaction_signature,
+                    verification_status,
+                    price,
+                    profit_min,
+                    profit_max
+                )
+            );
+
+            // Add position to saved positions
+            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                positions.push(new_position);
+                save_positions_to_file(&positions);
+
+                log(
+                    LogTag::Trader,
+                    "SAVED",
+                    &format!("💾 Position saved to disk: {} ({})", token.symbol, verification_status)
+                );
+            }
+
+            // Record position for RL learning if enabled
+            let learner = get_trading_learner();
+            if learner.is_model_ready() {
+                if let Some(rugcheck_score) = get_rugcheck_score_for_token(&token.mint).await {
+                    // Note: We'll record the complete trade when position is closed
+                    log(
+                        LogTag::Trader,
+                        "RL_READY",
+                        &format!("🤖 Position {} ready for RL learning when closed", token.symbol)
+                    );
                 }
             }
         }
