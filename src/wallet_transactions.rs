@@ -6,6 +6,7 @@ use crate::{
     logger::{log, LogTag},
     global::is_debug_transactions_enabled,
     tokens::{get_token_decimals, TokenDatabase},
+    tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol},
 };
 use solana_sdk::{
     signature::{Signature, Signer},
@@ -898,7 +899,7 @@ impl WalletTransactionManager {
         
         let pre_balance = meta.pre_balances.get(wallet_index).copied().unwrap_or(0);
         let post_balance = meta.post_balances.get(wallet_index).copied().unwrap_or(0);
-        let sol_change = (post_balance as i64 - pre_balance as i64) as f64 / 1_000_000_000.0;
+        let sol_change = lamports_to_sol((post_balance as i64 - pre_balance as i64) as u64);
         
         // Analyze token account changes
         let pre_token_balances = &meta.pre_token_balances;
@@ -973,7 +974,7 @@ impl WalletTransactionManager {
                     };
                     
                     // Calculate fees
-                    let fees_paid = meta.fee as f64 / 1_000_000_000.0;
+                    let fees_paid = lamports_to_sol(meta.fee);
                     
                     return Some(SwapTransaction {
                         signature: signature.clone(),

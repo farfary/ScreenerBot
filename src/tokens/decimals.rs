@@ -16,6 +16,16 @@ use serde::{ Serialize, Deserialize };
 
 const CACHE_FILE_NAME: &str = DECIMAL_CACHE_FILE;
 
+// =============================================================================
+// DECIMAL CONSTANTS
+// =============================================================================
+
+/// SOL token decimals constant - ALWAYS use this instead of hardcoding 9
+pub const SOL_DECIMALS: u8 = 9;
+
+/// SOL token lamports per SOL constant - ALWAYS use this instead of hardcoding 1_000_000_000
+pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
+
 #[derive(Serialize, Deserialize)]
 struct DecimalCacheData {
     decimals: HashMap<String, u8>,
@@ -780,4 +790,28 @@ pub fn cleanup_retryable_failed_cache() {
             }
         }
     }
+}
+
+// =============================================================================
+// LAMPORTS CONVERSION UTILITIES
+// =============================================================================
+
+/// Convert lamports to SOL using the proper SOL decimals constant
+pub fn lamports_to_sol(lamports: u64) -> f64 {
+    lamports as f64 / LAMPORTS_PER_SOL as f64
+}
+
+/// Convert SOL to lamports using the proper SOL decimals constant
+pub fn sol_to_lamports(sol: f64) -> u64 {
+    (sol * LAMPORTS_PER_SOL as f64) as u64
+}
+
+/// Convert token amount to UI amount using provided decimals
+pub fn raw_to_ui_amount(raw_amount: u64, decimals: u8) -> f64 {
+    raw_amount as f64 / 10f64.powi(decimals as i32)
+}
+
+/// Convert UI amount to raw token amount using provided decimals
+pub fn ui_to_raw_amount(ui_amount: f64, decimals: u8) -> u64 {
+    (ui_amount * 10f64.powi(decimals as i32)) as u64
 }

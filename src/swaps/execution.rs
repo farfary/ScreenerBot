@@ -10,6 +10,7 @@ use crate::swaps::interface::SwapResult;
 /// Use utils for wallet address instead of transaction module
 use crate::utils::get_wallet_address;
 use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
+use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, get_token_decimals_from_chain};
 
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
@@ -441,10 +442,10 @@ pub async fn execute_swap_with_quote(
     let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
     let amount_sol = if input_mint == SOL_MINT {
         // Buy: input is SOL
-        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
     } else {
         // Sell: output is SOL  
-        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
     };
 
     // Return success result - verification handled by signature-only analysis
@@ -545,6 +546,19 @@ pub async fn verify_swap_transaction(
     
     let wallet_address = get_wallet_address()?;
     
+    // Get proper decimals for input and output mints
+    let input_decimals = if input_mint == SOL_MINT {
+        SOL_DECIMALS
+    } else {
+        get_token_decimals_from_chain(input_mint).await.unwrap_or(SOL_DECIMALS)
+    };
+    
+    let output_decimals = if output_mint == SOL_MINT {
+        SOL_DECIMALS
+    } else {
+        get_token_decimals_from_chain(output_mint).await.unwrap_or(SOL_DECIMALS)
+    };
+    
     match analyze_post_swap_transaction(
         transaction_signature,
         &wallet_address,
@@ -562,7 +576,7 @@ pub async fn verify_swap_transaction(
                 sol_spent: None,
                 sol_received: None,
                 sol_from_swap: None,
-                transaction_fee: (analysis.fees_paid * 1_000_000_000.0) as u64, // Convert SOL to lamports
+                transaction_fee: (analysis.fees_paid * LAMPORTS_PER_SOL as f64) as u64, // Convert SOL to lamports
                 priority_fee: None,
                 ata_created: analysis.ata_created,
                 ata_closed: analysis.ata_closed,
@@ -572,8 +586,8 @@ pub async fn verify_swap_transaction(
                 price_impact: None,
                 input_mint: input_mint.to_string(),
                 output_mint: output_mint.to_string(),
-                input_decimals: 9, // Default to 9 decimals
-                output_decimals: 9, // Default to 9 decimals
+                input_decimals: input_decimals as u32,
+                output_decimals: output_decimals as u32,
                 creation_status: "Success".to_string(),
                 error_details: None,
             })

@@ -7,8 +7,8 @@ use screenerbot::{
     swaps::{
         get_best_quote, execute_best_swap,
         types::SOL_MINT,
-        transaction::get_wallet_address,
     },
+    utils::get_wallet_address,
 };
 
 /// Test the new dual-router quote comparison

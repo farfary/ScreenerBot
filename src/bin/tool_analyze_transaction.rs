@@ -1,5 +1,5 @@
 use clap::Parser;
-use screenerbot::rpc::{init_rpc_client, get_rpc_client};
+use screenerbot::rpc::{init_rpc_client, get_rpc_client, lamports_to_sol};
 use screenerbot::logger::{log, LogTag};
 
 #[derive(Parser)]
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 
-                println!("⚡ Fee: {:.9} SOL", meta.fee as f64 / 1_000_000_000.0);
+                println!("⚡ Fee: {:.9} SOL", lamports_to_sol(meta.fee));
                 
                 // Show balance changes
                 if !meta.pre_balances.is_empty() && !meta.post_balances.is_empty() {
@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for (i, (pre, post)) in meta.pre_balances.iter().zip(meta.post_balances.iter()).enumerate() {
                         let change = *post as i64 - *pre as i64;
                         if change != 0 {
-                            let change_sol = change as f64 / 1_000_000_000.0;
+                            let change_sol = lamports_to_sol(change.abs() as u64) * if change > 0 { 1.0 } else { -1.0 };
                             println!("  Account {}: {:.9} SOL", i, change_sol);
                         }
                     }

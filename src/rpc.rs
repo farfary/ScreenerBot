@@ -24,6 +24,7 @@ const FORCE_PREMIUM_RPC_ONLY: bool = false;
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ read_configs, is_debug_wallet_enabled, RPC_STATS };
+use crate::tokens::decimals::{LAMPORTS_PER_SOL};
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{
     account::Account,
@@ -309,12 +310,12 @@ impl From<serde_json::Error> for SwapError {
 
 /// Converts lamports to SOL amount
 pub fn lamports_to_sol(lamports: u64) -> f64 {
-    (lamports as f64) / 1_000_000_000.0
+    (lamports as f64) / LAMPORTS_PER_SOL as f64
 }
 
 /// Converts SOL amount to lamports (1 SOL = 1,000,000,000 lamports)
 pub fn sol_to_lamports(sol_amount: f64) -> u64 {
-    (sol_amount * 1_000_000_000.0) as u64
+    (sol_amount * LAMPORTS_PER_SOL as f64) as u64
 }
 
 /// Statistics tracking for RPC usage

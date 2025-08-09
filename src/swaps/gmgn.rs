@@ -5,6 +5,7 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
 use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled};
+use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL};
 use super::config::{
     GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, 
     API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
@@ -407,10 +408,10 @@ pub async fn execute_gmgn_swap(
     let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
     let amount_sol = if input_mint == SOL_MINT {
         // Buy: input is SOL
-        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
     } else {
         // Sell: output is SOL  
-        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
     };
 
     // Return success result - verification handled by signature-only analysis

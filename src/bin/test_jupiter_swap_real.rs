@@ -19,9 +19,9 @@
 use screenerbot::swaps::{
     jupiter::get_jupiter_quote,
     interface::{buy_token, sell_token},
-    transaction::get_wallet_address,
     types::SOL_MINT,
 };
+use screenerbot::utils::get_wallet_address;
 use screenerbot::logger::{log, LogTag, init_file_logging};
 use screenerbot::rpc::{lamports_to_sol, sol_to_lamports, get_rpc_client, init_rpc_client};
 use screenerbot::utils::{get_sol_balance, get_token_balance};

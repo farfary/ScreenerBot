@@ -3,7 +3,7 @@
 /// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
 
 use crate::tokens::Token;
-use crate::tokens::decimals::get_token_decimals_from_chain;
+use crate::tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS, LAMPORTS_PER_SOL};
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
 use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
@@ -477,10 +477,10 @@ pub async fn execute_jupiter_swap(
     let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
     let amount_sol = if input_mint == SOL_MINT {
         // Buy: input is SOL
-        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
     } else {
         // Sell: output is SOL  
-        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
+        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
     };
 
     // Simplified approach - no complex transaction monitoring
@@ -512,15 +512,15 @@ async fn convert_jupiter_quote_to_swap_data(jupiter_quote: JupiterQuoteResponse)
     // Create SwapQuote from Jupiter response
     // CRITICAL FIX: Get actual token decimals instead of hardcoding to 9
     let input_decimals = if jupiter_quote.input_mint == SOL_MINT { 
-        9 
+        SOL_DECIMALS 
     } else { 
-        get_token_decimals_from_chain(&jupiter_quote.input_mint).await.unwrap_or(9) 
+        get_token_decimals_from_chain(&jupiter_quote.input_mint).await.unwrap_or(SOL_DECIMALS) 
     };
     
     let output_decimals = if jupiter_quote.output_mint == SOL_MINT { 
-        9 
+        SOL_DECIMALS 
     } else { 
-        get_token_decimals_from_chain(&jupiter_quote.output_mint).await.unwrap_or(9) 
+        get_token_decimals_from_chain(&jupiter_quote.output_mint).await.unwrap_or(SOL_DECIMALS) 
     };
 
     if is_debug_swap_enabled() {

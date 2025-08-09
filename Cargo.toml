@@ -54,10 +54,6 @@ name = "tool_wallet_manager"
 path = "src/bin/tool_wallet_manager.rs"
 
 [[bin]]
-name = "test_swaps_full"
-path = "src/bin/test_swaps_full.rs"
-
-[[bin]]
 name = "test_dual_router_comparison"
 path = "src/bin/test_dual_router_comparison.rs"
 

@@ -16,6 +16,7 @@ use crate::{
     logger::{init_file_logging, log, LogTag},
     global::read_configs,
     tokens::{get_token_decimals, TokenDatabase},
+    tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol},
     wallets_manager::WalletsManager,
 };
 use clap::Parser;
@@ -225,7 +226,7 @@ async fn analyze_jupiter_swap(
     let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
         let pre_balance = meta.pre_balances[wallet_index] as i64;
         let post_balance = meta.post_balances[wallet_index] as i64;
-        (post_balance - pre_balance) as f64 / 1_000_000_000.0
+        lamports_to_sol((post_balance - pre_balance).abs() as u64) * if post_balance > pre_balance { 1.0 } else { -1.0 }
     } else {
         log(LogTag::System, "DEBUG", "📊 Jupiter swap - cannot find wallet SOL balances");
         return None;
@@ -332,7 +333,7 @@ async fn analyze_jupiter_swap(
                 sol_amount: actual_sol_amount,
                 token_amount: (actual_token_amount * 1_000_000.0) as u64, // Convert to token base units
                 effective_price: actual_price,
-                fees_paid: meta.fee as f64 / 1_000_000_000.0, // Convert lamports to SOL
+                fees_paid: lamports_to_sol(meta.fee), // Convert lamports to SOL
             };
             
             return Some((true, swap_info)); // Always return true since we detected a swap (whether buy or sell)
@@ -694,7 +695,7 @@ async fn detect_swap_from_transaction(
     let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
         let pre_balance = meta.pre_balances[wallet_index] as i64;
         let post_balance = meta.post_balances[wallet_index] as i64;
-        (post_balance - pre_balance) as f64 / 1_000_000_000.0
+        lamports_to_sol((post_balance - pre_balance).abs() as u64) * if post_balance > pre_balance { 1.0 } else { -1.0 }
     } else {
         return None;
     };
@@ -723,7 +724,7 @@ async fn detect_swap_from_transaction(
             continue;
         };
         
-        let fees_paid = meta.fee as f64 / 1_000_000_000.0;
+        let fees_paid = lamports_to_sol(meta.fee);
         
         return Some((true, BasicSwapInfo {
             swap_type,
