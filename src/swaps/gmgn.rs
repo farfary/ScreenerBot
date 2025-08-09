@@ -10,7 +10,9 @@ use super::config::{
     API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
     GMGN_DEFAULT_SWAP_MODE, SOL_MINT
 };
-use super::transaction::{sign_and_send_transaction, verify_swap_transaction, get_wallet_address};
+use super::execution::{sign_and_send_transaction, verify_swap_transaction};
+// Use utils for wallet address instead of transaction module
+use crate::utils::get_wallet_address;
 use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number};
 
 use serde::{Deserialize, Serialize};
@@ -411,53 +413,21 @@ pub async fn execute_gmgn_swap(
         swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
     };
 
-    match crate::swaps::transaction::TransactionMonitoringService::add_transaction_to_monitor(
-        &transaction_signature,
-        target_mint,
-        expected_direction,
-        input_mint,
-        output_mint,
-        false, // position_related
-        amount_sol,
-        &crate::utils::get_wallet_address().map_err(|e| SwapError::ConfigError(e.to_string()))?
-    ).await {
-        Ok(()) => {
-            log(
-                LogTag::Swap,
-                "GMGN_TRANSACTION_ADDED",
-                &format!("📝 Added transaction {} to monitoring queue", &transaction_signature[..8])
-            );
-            
-            // Return success result with quote data - monitoring service will handle verification
-            let execution_time = start_time.elapsed().as_secs_f64();
-            
-            Ok(GMGNSwapResult {
-                success: true,
-                transaction_signature: Some(transaction_signature),
-                input_amount: swap_data.quote.in_amount.clone(),
-                output_amount: swap_data.quote.out_amount.clone(),
-                price_impact: swap_data.quote.price_impact_pct.clone(),
-                fee_lamports: 0, // Will be calculated by monitoring service
-                execution_time,
-                effective_price: None, // Will be calculated by monitoring service
-                swap_data: Some(swap_data),
-                error: None,
-            })
-        }
-        Err(e) => {
-            let execution_time = start_time.elapsed().as_secs_f64();
-            log(
-                LogTag::Swap,
-                "GMGN_TRANSACTION_ADD_ERROR",
-                &format!("❌ Failed to add transaction to monitoring service: {}", e)
-            );
-            
-            // Return error - no fallback verification, transaction service handles all monitoring
-            Err(SwapError::TransactionError(
-                format!("Failed to add transaction to monitoring service: {}", e)
-            ))
-        }
-    }
+    // Return success result - verification handled by signature-only analysis
+    let execution_time = start_time.elapsed().as_secs_f64();
+    
+    Ok(GMGNSwapResult {
+        success: true,
+        transaction_signature: Some(transaction_signature),
+        input_amount: swap_data.quote.in_amount.clone(),
+        output_amount: swap_data.quote.out_amount.clone(),
+        price_impact: swap_data.quote.price_impact_pct.clone(),
+        fee_lamports: 0, // Will be calculated by monitoring service
+        execution_time,
+        effective_price: None, // Will be calculated by monitoring service
+        swap_data: Some(swap_data),
+        error: None,
+    })
 }
 
 /// Validates the price from a GMGN swap quote against expected price

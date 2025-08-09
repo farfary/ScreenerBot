@@ -12,7 +12,8 @@ use crate::global::read_configs;
 use crate::rpc::SwapError;
 // Re-export for backward compatibility
 pub use crate::swaps::interface::SwapResult;
-pub use crate::swaps::get_wallet_address;
+// Remove dependency on swaps module for get_wallet_address
+// pub use crate::swaps::get_wallet_address;
 
 use solana_sdk::{
     signature::Keypair,
@@ -24,6 +25,26 @@ use solana_sdk::{
 use spl_token::instruction::close_account;
 use bs58;
 use std::str::FromStr;
+
+/// Get the wallet address from the main wallet private key in configs
+/// This replaces the swaps::get_wallet_address dependency
+pub fn get_wallet_address() -> Result<String, SwapError> {
+    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+
+    // Decode the private key from base58
+    let private_key_bytes = bs58
+        ::decode(&configs.main_wallet_private)
+        .into_vec()
+        .map_err(|e| SwapError::ConfigError(format!("Invalid private key format: {}", e)))?;
+
+    // Create keypair from private key
+    let keypair = Keypair::try_from(&private_key_bytes[..]).map_err(|e|
+        SwapError::ConfigError(format!("Failed to create keypair: {}", e))
+    )?;
+
+    Ok(keypair.pubkey().to_string())
+}
+
 
 /// Format a duration (from Option<DateTime<Utc>>) as a human-readable age string (y d h m s)
 pub fn format_age_string(created_at: Option<DateTime<Utc>>) -> String {

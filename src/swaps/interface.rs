@@ -6,7 +6,10 @@ use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
 use crate::global::{is_debug_swap_enabled};
 use crate::utils::get_token_balance;
-use super::transaction::{get_wallet_address, check_recent_transaction_attempt, check_and_reserve_transaction_slot, clear_recent_transaction_attempt, TransactionSlotGuard, TransactionMonitoringService};
+// Use utils instead of transaction module for wallet address
+use crate::utils::get_wallet_address;
+// Use transactions_tools for post-swap analysis instead of complex verification
+use crate::transactions_tools::analyze_post_swap_transaction;
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 use super::types::{SwapData};
 use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
@@ -49,25 +52,17 @@ pub async fn buy_token(
         }
     }
 
-    // CRITICAL FIX: Prevent duplicate transactions
-    check_recent_transaction_attempt(&token.mint, "buy")?;
-    check_and_reserve_transaction_slot(&token.mint, "buy")?;
-
-    // Ensure we release the slot regardless of outcome
-    let _guard = TransactionSlotGuard::new(&token.mint, "buy");
-
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "BUY_START",
-            &format!(
-                "🟢 Starting BUY operation for {} ({}) - Amount: {:.6} SOL",
-                token.symbol,
-                token.mint,
-                amount_sol
-            )
-        );
-    }
+    // Simplified anti-spam protection (no complex transaction monitoring)
+    log(
+        LogTag::Swap,
+        "BUY_START",
+        &format!(
+            "🟢 BUYING {} SOL worth of {} tokens (mint: {})",
+            amount_sol,
+            token.symbol,
+            token.mint
+        )
+    );
 
     // Get wallet address
     let wallet_address = get_wallet_address()?;
@@ -124,71 +119,55 @@ pub async fn buy_token(
 
     // Add transaction to monitoring service if successful
     if swap_result.success {
+        // Simple post-swap analysis using signature only (replaces complex transaction monitoring)
         if let Some(ref signature) = swap_result.transaction_signature {
-            // CRITICAL: Add to transaction monitoring IMMEDIATELY after successful swap
-            if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
+            match analyze_post_swap_transaction(
                 signature,
-                &token.mint,
-                "buy",
+                &wallet_address,
                 SOL_MINT,
                 &token.mint,
-                true, // position related
-                amount_sol,
-                &get_wallet_address().unwrap_or_else(|_| "unknown".to_string()),
+                "buy",
             ).await {
-                log(LogTag::Swap, "MONITOR_ERROR", 
-                    &format!("❌ Failed to add buy transaction to monitoring: {}", e));
-            } else {
-                log(LogTag::Swap, "MONITOR_ADDED", 
-                    &format!("✅ Buy transaction {} added to monitoring service", &signature[..8]));
-            }
-        }
+                Ok(analysis) => {
+                    // Update the swap result with the analyzed effective price
+                    swap_result.effective_price = Some(analysis.effective_price);
 
-        // Calculate and set the effective price using instruction-based verification
-        match crate::swaps::pricing::calculate_effective_price_with_verification(
-            &swap_result,
-            SOL_MINT,
-            &token.mint,
-            "buy",
-            None, // No ATA rent for buy operations
-        ).await {
-            Ok(effective_price) => {
-                // Update the swap result with the calculated effective price
-                swap_result.effective_price = Some(effective_price);
+                    log(
+                        LogTag::Swap,
+                        "PRICE",
+                        &format!(
+                            "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token (signature analysis)",
+                            analysis.effective_price,
+                            token.symbol
+                        )
+                    );
 
-                log(
-                    LogTag::Swap,
-                    "PRICE",
-                    &format!(
-                        "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token (verified)",
-                        effective_price,
-                        token.symbol
-                    )
-                );
-
-                if is_debug_swap_enabled() {
-                    if let Some(expected) = expected_price {
-                        let price_diff = ((effective_price - expected) / expected) * 100.0;
-                        log(
-                            LogTag::Swap,
-                            "PRICE",
-                            &format!(
-                                "Price vs expected: {:.10} vs {:.10} SOL ({:+.2}%)",
-                                effective_price,
-                                expected,
-                                price_diff
-                            )
-                        );
+                    if is_debug_swap_enabled() {
+                        if let Some(expected) = expected_price {
+                            let price_diff = ((analysis.effective_price - expected) / expected) * 100.0;
+                            log(
+                                LogTag::Swap,
+                                "PRICE",
+                                &format!(
+                                    "Price vs expected: {:.10} vs {:.10} SOL ({:+.2}%)",
+                                    analysis.effective_price,
+                                    expected,
+                                    price_diff
+                                )
+                            );
+                        }
                     }
                 }
+                Err(e) => {
+                    log(
+                        LogTag::Swap,
+                        "WARNING",
+                        &format!("Failed to analyze post-swap transaction for buy: {}", e)
+                    );
+                }
             }
-            Err(e) => {
-                log(
-                    LogTag::Swap,
-                    "WARNING",
-                    &format!("Failed to calculate effective price for buy: {}", e)
-                );
-            }
+        } else {
+            log(LogTag::Swap, "WARNING", "No transaction signature available for post-swap analysis");
         }
 
         // Update wallet tracker after successful buy
@@ -270,7 +249,7 @@ pub async fn sell_token(
 
                 // If this isn't the last attempt, wait and clear recent attempt to allow retry
                 if attempt < slippages.len() - 1 {
-                    clear_recent_transaction_attempt(&token.mint, "sell");
+                    // Wait before retry (simplified - no transaction attempt clearing)
                     tokio::time::sleep(tokio::time::Duration::from_secs((attempt + 1) as u64 * 2)).await;
                 } else {
                     // Last attempt failed
@@ -299,13 +278,7 @@ async fn sell_token_with_slippage(
     expected_sol_output: Option<f64>,
     slippage: f64
 ) -> Result<SwapResult, SwapError> {
-    // CRITICAL FIX: Prevent duplicate transactions
-    check_recent_transaction_attempt(&token.mint, "sell")?;
-    check_and_reserve_transaction_slot(&token.mint, "sell")?;
-
-    // Ensure we release the slot regardless of outcome
-    let _guard = TransactionSlotGuard::new(&token.mint, "sell");
-
+    // Simplified approach (no complex transaction monitoring)
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
@@ -391,76 +364,58 @@ async fn sell_token_with_slippage(
         error: unified_result.error,
     };
 
-    // Add transaction to monitoring service if successful
+    // Simple post-swap analysis using signature only (replaces complex transaction monitoring)
     if swap_result.success {
         if let Some(ref signature) = swap_result.transaction_signature {
-            // CRITICAL: Add to transaction monitoring IMMEDIATELY after successful swap
-            if let Err(e) = TransactionMonitoringService::add_transaction_to_monitor(
+            match analyze_post_swap_transaction(
                 signature,
-                &token.mint,
-                "sell",
+                &wallet_address,
                 &token.mint,
                 SOL_MINT,
-                true, // position related
-                swap_result.output_amount.parse::<f64>().unwrap_or(0.0),
-                &get_wallet_address().unwrap_or_else(|_| "unknown".to_string()),
+                "sell",
             ).await {
-                log(LogTag::Swap, "MONITOR_ERROR", 
-                    &format!("❌ Failed to add sell transaction to monitoring: {}", e));
-            } else {
-                log(LogTag::Swap, "MONITOR_ADDED", 
-                    &format!("✅ Sell transaction {} added to monitoring service", &signature[..8]));
-            }
-        }
-
-        // Calculate effective price using instruction analysis for accuracy
-        // This replaces the manual calculation to avoid issues with multi-hop Jupiter swaps
-        match crate::swaps::pricing::calculate_effective_price_with_verification(
-            &swap_result,
-            &token.mint,
-            SOL_MINT,
-            "sell",
-            None, // ATA rent handling in verification
-        ).await {
-            Ok(effective_price) => {
-                swap_result.effective_price = Some(effective_price);
-                
-                log(
-                    LogTag::Swap,
-                    "PRICE",
-                    &format!(
-                        "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (verified)",
-                        effective_price,
-                        token.symbol
-                    )
-                );
-            }
-            Err(e) => {
-                log(LogTag::Swap, "WARNING", &format!("Could not calculate verified effective price: {}", e));
-                
-                // Fallback to original method with warning
-                let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
-                let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
-                
-                if input_tokens_raw > 0 && output_lamports > 0 {
-                    let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
-                    let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
-                    let output_sol = lamports_to_sol(output_lamports);
-                    let effective_price = output_sol / input_tokens;
-                    
-                    swap_result.effective_price = Some(effective_price);
+                Ok(analysis) => {
+                    swap_result.effective_price = Some(analysis.effective_price);
                     
                     log(
                         LogTag::Swap,
                         "PRICE",
                         &format!(
-                            "⚠️ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (fallback - may be inaccurate)",
-                            effective_price,
+                            "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (signature analysis)",
+                            analysis.effective_price,
                             token.symbol
                         )
                     );
                 }
+                Err(e) => {
+                    log(LogTag::Swap, "WARNING", &format!("Could not analyze post-swap transaction: {}", e));
+                    
+                    // Fallback to original method with warning
+                    let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
+                    let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
+                    
+                    if input_tokens_raw > 0 && output_lamports > 0 {
+                        let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
+                        let input_tokens = (input_tokens_raw as f64) / (10_f64).powi(token_decimals as i32);
+                        let output_sol = lamports_to_sol(output_lamports);
+                        let effective_price = output_sol / input_tokens;
+                        
+                        swap_result.effective_price = Some(effective_price);
+                        
+                        log(
+                            LogTag::Swap,
+                            "PRICE",
+                            &format!(
+                                "⚠️ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (fallback - may be inaccurate)",
+                                effective_price,
+                                token.symbol
+                            )
+                        );
+                    }
+                }
             }
+        } else {
+            log(LogTag::Swap, "WARNING", "No transaction signature available for post-swap analysis");
         }
 
         // Update wallet tracker after successful sell

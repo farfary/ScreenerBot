@@ -18,3 +18,4 @@ pub mod rl_learning;
 pub mod swaps;
 pub mod wallet_tracker;
 pub mod wallet_transactions;
+pub mod transactions_tools;

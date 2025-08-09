@@ -11,7 +11,9 @@ use super::config::{
     RAYDIUM_QUOTE_API, RAYDIUM_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
     RETRY_ATTEMPTS, SOL_MINT
 };
-use super::transaction::{sign_and_send_transaction, verify_swap_transaction, get_wallet_address};
+use super::execution::{sign_and_send_transaction, verify_swap_transaction};
+// Use utils for wallet address instead of transaction module  
+use crate::utils::get_wallet_address;
 
 use serde::{Deserialize, Serialize};
 use reqwest;

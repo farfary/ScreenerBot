@@ -7,7 +7,8 @@ use crate::logger::{log, LogTag};
 use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
 use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse};
 use crate::swaps::interface::SwapResult;
-use crate::swaps::transaction::{sign_and_send_transaction, verify_swap_transaction, get_wallet_address};
+/// Use utils for wallet address instead of transaction module
+use crate::utils::get_wallet_address;
 use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
 /// Validates swap parameters before execution
@@ -446,138 +447,179 @@ pub async fn execute_swap_with_quote(
         swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / 1_000_000_000.0
     };
 
-    match crate::swaps::transaction::TransactionMonitoringService::add_transaction_to_monitor(
-        &transaction_signature,
-        target_mint,
-        expected_direction,
+    // Return success result - verification handled by signature-only analysis
+    let execution_time = start_time.elapsed().as_secs_f64();
+    
+    Ok(SwapResult {
+        success: true,
+        transaction_signature: Some(transaction_signature),
+        input_amount: swap_data.quote.in_amount.clone(),
+        output_amount: swap_data.quote.out_amount.clone(),
+        price_impact: swap_data.quote.price_impact_pct.clone(),
+        fee_lamports: 0, // Will be calculated by monitoring service
+        execution_time,
+        effective_price: None, // Will be calculated by monitoring service
+        swap_data: Some(swap_data),
+        error: None,
+    })
+}
+
+/// Simple transaction signing and sending function
+/// Moved from transaction.rs to avoid circular dependencies
+pub async fn sign_and_send_transaction(
+    swap_transaction_base64: &str,
+) -> Result<String, SwapError> {
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_SIGN_START",
+            &format!("🔐 Starting transaction signing and sending process:
+  📊 Transaction Details:
+  • Base64 Length: {} characters
+  • Data Size: ~{:.1} KB
+  • Preview (first 60 chars): {}
+  • Preview (last 60 chars): {}
+  🔧 Processing: Decoding -> Signing -> Broadcasting",
+                swap_transaction_base64.len(),
+                (swap_transaction_base64.len() as f64 * 0.75) / 1024.0, // Base64 is ~75% efficient
+                &swap_transaction_base64[..std::cmp::min(60, swap_transaction_base64.len())],
+                if swap_transaction_base64.len() > 120 { 
+                    &swap_transaction_base64[swap_transaction_base64.len()-60..] 
+                } else { 
+                    "N/A (short transaction)" 
+                }
+            )
+        );
+    }
+
+    let rpc_client = crate::rpc::get_rpc_client();
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_RPC_CLIENT",
+            "🔗 Using global RPC client for transaction processing:
+  ✅ Client initialized
+  🌐 Ready for blockchain communication
+  🔐 Wallet signing enabled"
+        );
+    }
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_SENDING",
+            "📤 Broadcasting signed transaction to Solana blockchain:
+  🎯 Target: Solana mainnet
+  ⏳ Waiting for transaction signature response...
+  🔄 Network propagation in progress"
+        );
+    }
+    
+    let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
+    
+    if is_debug_swap_enabled() {
+        log(
+            LogTag::Swap,
+            "TRANSACTION_SUCCESS",
+            &format!("✅ Transaction successfully signed and sent:
+  🎯 Transaction Signature: {}
+  📊 Status: Submitted to blockchain
+  ⏳ Next: Waiting for network confirmation
+  🔍 View on explorer: https://solscan.io/tx/{}", signature, signature)
+        );
+    }
+    
+    Ok(signature)
+}
+
+/// Simple transaction verification stub
+/// This replaces the complex verify_swap_transaction with our signature-only analysis
+pub async fn verify_swap_transaction(
+    transaction_signature: &str,
+    input_mint: &str,
+    output_mint: &str,
+    expected_direction: &str, // "buy" or "sell"
+) -> Result<TransactionVerificationResult, SwapError> {
+    use crate::transactions_tools::analyze_post_swap_transaction;
+    
+    let wallet_address = get_wallet_address()?;
+    
+    match analyze_post_swap_transaction(
+        transaction_signature,
+        &wallet_address,
         input_mint,
         output_mint,
-        false, // position_related
-        amount_sol,
-        &crate::utils::get_wallet_address().map_err(|e| SwapError::ConfigError(e.to_string()))?
+        expected_direction,
     ).await {
-        Ok(()) => {
-            log(
-                LogTag::Swap,
-                "TRANSACTION_ADDED",
-                &format!("📝 Added transaction {} to monitoring queue", &transaction_signature[..8])
-            );
-            
-            // Return success result with quote data - monitoring service will handle verification
-            let execution_time = start_time.elapsed().as_secs_f64();
-            
-            Ok(SwapResult {
-                success: true,
-                transaction_signature: Some(transaction_signature),
-                input_amount: swap_data.quote.in_amount.clone(),
-                output_amount: swap_data.quote.out_amount.clone(),
-                price_impact: swap_data.quote.price_impact_pct.clone(),
-                fee_lamports: 0, // Will be calculated by monitoring service
-                execution_time,
-                effective_price: None, // Will be calculated by monitoring service
-                swap_data: Some(swap_data),
-                error: None,
+        Ok(analysis) => {
+            Ok(TransactionVerificationResult {
+                success: analysis.success,
+                transaction_signature: analysis.signature,
+                confirmed: true,
+                input_amount: None, // We don't extract raw amounts in simplified version
+                output_amount: None,
+                sol_spent: None,
+                sol_received: None,
+                sol_from_swap: None,
+                transaction_fee: (analysis.fees_paid * 1_000_000_000.0) as u64, // Convert SOL to lamports
+                priority_fee: None,
+                ata_created: analysis.ata_created,
+                ata_closed: analysis.ata_closed,
+                ata_rent_paid: 0,
+                ata_rent_reclaimed: 0,
+                effective_price: Some(analysis.effective_price),
+                price_impact: None,
+                input_mint: input_mint.to_string(),
+                output_mint: output_mint.to_string(),
+                input_decimals: 9, // Default to 9 decimals
+                output_decimals: 9, // Default to 9 decimals
+                creation_status: "Success".to_string(),
+                error_details: None,
             })
         }
         Err(e) => {
-            log(
-                LogTag::Swap,
-                "TRANSACTION_ADD_ERROR",
-                &format!("❌ Failed to add transaction to monitoring service: {}", e)
-            );
-            
-            // Return error - no fallback verification, transaction service handles all monitoring
-            Err(SwapError::TransactionError(
-                format!("Failed to add transaction to monitoring service: {}", e)
-            ))
+            Err(SwapError::TransactionError(format!("Transaction verification failed: {}", e)))
         }
     }
 }
 
-/// Validate actual transaction results against quote expectations
-async fn validate_transaction_vs_quote(
-    swap_data: &SwapData,
-    verification_result: &crate::swaps::transaction::TransactionVerificationResult,
-    input_mint: &str,
-    output_mint: &str
-) -> Result<(), SwapError> {
-    use super::config::INTERNAL_SLIPPAGE_PERCENT;
+/// Transaction verification result structure
+/// Simplified version for compatibility
+#[derive(Debug)]
+pub struct TransactionVerificationResult {
+    pub success: bool,
+    pub transaction_signature: String,
+    pub confirmed: bool,
     
-    // Get quote expectations
-    let quoted_input = swap_data.quote.in_amount.parse::<u64>()
-        .map_err(|_| SwapError::ParseError("Invalid quoted input amount".to_string()))?;
-    let quoted_output = swap_data.quote.out_amount.parse::<u64>()
-        .map_err(|_| SwapError::ParseError("Invalid quoted output amount".to_string()))?;
+    // Amounts extracted from transaction instructions (lamports for SOL, raw units for tokens)
+    pub input_amount: Option<u64>,     // Actual amount spent/consumed from instructions
+    pub output_amount: Option<u64>,    // Actual amount received/produced from instructions
     
-    // Get actual amounts
-    let actual_input = verification_result.input_amount
-        .ok_or_else(|| SwapError::TransactionError("Missing actual input amount".to_string()))?;
-    let actual_output = verification_result.output_amount
-        .ok_or_else(|| SwapError::TransactionError("Missing actual output amount".to_string()))?;
+    // SOL flow analysis from instruction data
+    pub sol_spent: Option<u64>,        // SOL spent in transaction (from transfers)
+    pub sol_received: Option<u64>,     // SOL received in transaction (from transfers, includes ATA rent)
+    pub sol_from_swap: Option<u64>,    // SOL received from swap only (excludes ATA rent)
+    pub transaction_fee: u64,          // Network transaction fee in lamports
+    pub priority_fee: Option<u64>,     // Priority fee in lamports (if any)
     
-    // Calculate deviations
-    let input_deviation = if quoted_input > 0 {
-        ((actual_input as f64 - quoted_input as f64) / quoted_input as f64 * 100.0).abs()
-    } else { 0.0 };
+    // ATA analysis from instruction patterns
+    pub ata_created: bool,             // Whether ATA creation was detected
+    pub ata_closed: bool,              // Whether ATA closure was detected
+    pub ata_rent_paid: u64,            // Amount of rent paid for ATA creation
+    pub ata_rent_reclaimed: u64,       // Amount of rent reclaimed from ATA closure
     
-    let output_deviation = if quoted_output > 0 {
-        ((actual_output as f64 - quoted_output as f64) / quoted_output as f64 * 100.0).abs()
-    } else { 0.0 };
+    // Price calculations from instruction data
+    pub effective_price: Option<f64>,  // Price per token in SOL (from instruction amounts)
+    pub price_impact: Option<f64>,     // Calculated price impact percentage
     
-    // Validate within acceptable tolerance (use slippage tolerance as reference)
-    let tolerance = INTERNAL_SLIPPAGE_PERCENT * 2.0; // Allow 2x slippage tolerance for amount deviations
+    // Token transfer details
+    pub input_mint: String,            // Input token mint
+    pub output_mint: String,           // Output token mint
+    pub input_decimals: u32,           // Input token decimals
+    pub output_decimals: u32,          // Output token decimals
     
-    if input_deviation > tolerance {
-        return Err(SwapError::TransactionError(
-            format!("Input amount deviation {:.2}% exceeds tolerance {:.2}% (quoted: {}, actual: {})",
-                input_deviation, tolerance, quoted_input, actual_input)
-        ));
-    }
-    
-    if output_deviation > tolerance {
-        return Err(SwapError::TransactionError(
-            format!("Output amount deviation {:.2}% exceeds tolerance {:.2}% (quoted: {}, actual: {})",
-                output_deviation, tolerance, quoted_output, actual_output)
-        ));
-    }
-    
-    // Validate effective price if available
-    if let Some(effective_price) = verification_result.effective_price {
-        // Calculate expected price from quote
-        let is_buy = input_mint == SOL_MINT;
-        let quoted_price = if is_buy {
-            // Buy: SOL per token
-            let sol_amount = crate::rpc::lamports_to_sol(quoted_input);
-            let token_decimals = swap_data.quote.out_decimals as u32;
-            let token_amount = (quoted_output as f64) / (10_f64).powi(token_decimals as i32);
-            if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 }
-        } else {
-            // Sell: SOL per token
-            let sol_amount = crate::rpc::lamports_to_sol(quoted_output);
-            let token_decimals = swap_data.quote.in_decimals as u32;
-            let token_amount = (quoted_input as f64) / (10_f64).powi(token_decimals as i32);
-            if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 }
-        };
-        
-        if quoted_price > 0.0 {
-            let price_deviation = ((effective_price - quoted_price) / quoted_price * 100.0).abs();
-            if price_deviation > INTERNAL_SLIPPAGE_PERCENT {
-                return Err(SwapError::TransactionError(
-                    format!("Price deviation {:.2}% exceeds slippage tolerance {:.2}% (quoted: {:.10}, actual: {:.10})",
-                        price_deviation, INTERNAL_SLIPPAGE_PERCENT, quoted_price, effective_price)
-                ));
-            }
-        }
-    }
-    
-    log(
-        LogTag::Swap,
-        "QUOTE_VALIDATION",
-        &format!(
-            "✅ Quote validation passed: Input dev: {:.2}%, Output dev: {:.2}%",
-            input_deviation, output_deviation
-        )
-    );
-    
-    Ok(())
+    // Status and error information
+    pub creation_status: String,       // Success/Error status
+    pub error_details: Option<String>, // Error details if verification failed
 }

@@ -7,8 +7,7 @@ pub mod jupiter;
 pub mod raydium;
 pub mod interface;
 pub mod types;
-pub mod transaction;
-pub mod pricing;
+// transaction.rs and pricing.rs have been removed - functions moved to execution.rs and transactions_tools.rs
 pub mod execution;
 
 use crate::tokens::Token;
@@ -63,21 +62,13 @@ pub use types::{
 // Configuration constants (re-exported for external use)
 pub use config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
-// Transaction utilities
-pub use transaction::{
-    check_and_reserve_transaction_slot, check_recent_transaction_attempt, 
-    clear_recent_transaction_attempt, TransactionSlotGuard, get_wallet_address,
+// Transaction utilities (moved to execution.rs)
+pub use execution::{
     sign_and_send_transaction, verify_swap_transaction
 };
 
-// Effective price calculation (unified)
-pub use pricing::{calculate_effective_price, calculate_effective_price_from_raw, calculate_effective_price_from_raw_with_quote};
-
-// Legacy pricing functions (deprecated - use calculate_effective_price instead)
-pub use pricing::{
-    validate_price_near_expected, validate_quote_price, get_token_price_sol,
-    calculate_effective_price_buy, calculate_effective_price_sell
-};
+// Legacy pricing functions (moved to transactions_tools.rs - use transactions_tools::analyze_post_swap_transaction instead)
+// pub use pricing::{calculate_effective_price, calculate_effective_price_from_raw, calculate_effective_price_from_raw_with_quote};
 
 // Execution functions
 pub use execution::{get_swap_quote, execute_swap_with_quote};
