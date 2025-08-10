@@ -37,6 +37,10 @@ pub struct Args {
     /// Enable verbose output
     #[arg(short, long)]
     pub verbose: bool,
+    
+    /// Verify exit transaction instead of entry transaction
+    #[arg(short, long)]
+    pub exit: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,10 +50,13 @@ pub struct VerificationUpdate {
     pub signature: String,
     pub was_verified: bool,
     pub now_verified: bool,
+    pub verification_type: String, // "entry" or "exit"
     pub effective_entry_price: Option<f64>,
+    pub effective_exit_price: Option<f64>,
     pub token_amount: Option<u64>,
     pub sol_amount: Option<f64>,
     pub entry_fee: Option<f64>,
+    pub exit_fee: Option<f64>,
     pub error: Option<String>,
 }
 
@@ -103,41 +110,77 @@ async fn update_all_positions(args: &Args) -> Result<(), Box<dyn std::error::Err
     let mut failed_count = 0;
     
     for position in &all_positions {
-        let is_verified = position.transaction_entry_verified && 
-                         position.effective_entry_price.is_some() &&
-                         position.token_amount.is_some();
+        let mut needs_entry_verification = false;
+        let mut needs_exit_verification = false;
         
-        if !is_verified {
-            if let Some(signature) = &position.entry_transaction_signature {
-                println!("\n{} Verifying: {} ({})", 
-                    "🔍".bright_yellow(), 
-                    position.symbol.bright_white(), 
-                    position.mint.bright_blue()
-                );
-                
-                match update_position_verification(&position.mint, signature, args).await {
-                    Ok(update) => {
-                        if update.now_verified {
-                            updated_count += 1;
-                            println!("✅ Verified and updated: {}", position.symbol.bright_green());
-                        } else {
-                            failed_count += 1;
-                            println!("❌ Verification failed: {}", position.symbol.bright_red());
-                        }
-                        updates.push(update);
-                    }
-                    Err(e) => {
-                        failed_count += 1;
-                        println!("❌ Error verifying {}: {}", position.symbol.bright_red(), e);
-                    }
-                }
-            } else {
-                println!("⚠️  No signature for position: {}", position.symbol.bright_yellow());
+        // Check entry verification status
+        if !position.transaction_entry_verified || 
+           position.effective_entry_price.is_none() ||
+           position.token_amount.is_none() {
+            needs_entry_verification = true;
+        }
+        
+        // Check exit verification status for closed positions
+        if position.exit_transaction_signature.is_some() {
+            if !position.transaction_exit_verified || position.effective_exit_price.is_none() {
+                needs_exit_verification = true;
             }
-        } else {
+        }
+        
+        if needs_entry_verification && position.entry_transaction_signature.is_some() {
+            println!("\n{} Verifying ENTRY: {} ({})", 
+                "🔍".bright_yellow(), 
+                position.symbol.bright_white(), 
+                position.mint.bright_blue()
+            );
+            
+            match update_position_verification(&position.mint, &position.entry_transaction_signature.as_ref().unwrap(), args, false).await {
+                Ok(update) => {
+                    if update.now_verified {
+                        updated_count += 1;
+                        println!("✅ Entry verified and updated: {}", position.symbol.bright_green());
+                    } else {
+                        failed_count += 1;
+                        println!("❌ Entry verification failed: {}", position.symbol.bright_red());
+                    }
+                    updates.push(update);
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    println!("❌ Error verifying entry for {}: {}", position.symbol.bright_red(), e);
+                }
+            }
+        }
+        
+        if needs_exit_verification && position.exit_transaction_signature.is_some() {
+            println!("\n{} Verifying EXIT: {} ({})", 
+                "🔍".bright_yellow(), 
+                position.symbol.bright_white(), 
+                position.mint.bright_blue()
+            );
+            
+            match update_position_verification(&position.mint, &position.exit_transaction_signature.as_ref().unwrap(), args, true).await {
+                Ok(update) => {
+                    if update.now_verified {
+                        updated_count += 1;
+                        println!("✅ Exit verified and updated: {}", position.symbol.bright_green());
+                    } else {
+                        failed_count += 1;
+                        println!("❌ Exit verification failed: {}", position.symbol.bright_red());
+                    }
+                    updates.push(update);
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    println!("❌ Error verifying exit for {}: {}", position.symbol.bright_red(), e);
+                }
+            }
+        }
+        
+        if !needs_entry_verification && !needs_exit_verification {
             already_verified_count += 1;
             if args.verbose {
-                println!("✅ Already verified: {}", position.symbol.bright_green());
+                println!("✅ Already fully verified: {}", position.symbol.bright_green());
             }
         }
     }
@@ -159,7 +202,11 @@ async fn update_all_positions(args: &Args) -> Result<(), Box<dyn std::error::Err
 }
 
 async fn update_position_by_mint(mint: &str, args: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n{} {}", "🔍 UPDATING POSITION FOR MINT:".bright_cyan().bold(), mint.bright_blue());
+    let verification_type = if args.exit { "EXIT" } else { "ENTRY" };
+    println!("\n{} {}", 
+        format!("🔍 UPDATING {} VERIFICATION FOR MINT:", verification_type).bright_cyan().bold(), 
+        mint.bright_blue()
+    );
     
     // Find position with this mint
     let positions = {
@@ -173,17 +220,23 @@ async fn update_position_by_mint(mint: &str, args: &Args) -> Result<(), Box<dyn 
     let position = positions.iter().find(|p| p.mint == mint);
     
     if let Some(position) = position {
-        if let Some(signature) = &position.entry_transaction_signature {
-            let update = update_position_verification(mint, signature, args).await?;
+        let signature = if args.exit {
+            &position.exit_transaction_signature
+        } else {
+            &position.entry_transaction_signature
+        };
+        
+        if let Some(signature) = signature {
+            let update = update_position_verification(mint, signature, args, args.exit).await?;
             display_update(&update);
             
             if update.now_verified {
-                println!("✅ Position successfully verified and updated!");
+                println!("✅ Position {} verification successful!", verification_type.to_lowercase());
             } else {
-                println!("❌ Position verification failed");
+                println!("❌ Position {} verification failed", verification_type.to_lowercase());
             }
         } else {
-            println!("❌ Position has no entry transaction signature");
+            println!("❌ Position has no {} transaction signature", verification_type.to_lowercase());
         }
     } else {
         println!("❌ Position not found for mint: {}", mint);
@@ -193,7 +246,11 @@ async fn update_position_by_mint(mint: &str, args: &Args) -> Result<(), Box<dyn 
 }
 
 async fn update_position_by_signature(signature: &str, args: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n{} {}", "🔍 UPDATING POSITION FOR SIGNATURE:".bright_cyan().bold(), signature.bright_blue());
+    let verification_type = if args.exit { "EXIT" } else { "ENTRY" };
+    println!("\n{} {}", 
+        format!("🔍 UPDATING {} VERIFICATION FOR SIGNATURE:", verification_type).bright_cyan().bold(), 
+        signature.bright_blue()
+    );
     
     // Find position with this signature
     let positions = {
@@ -204,28 +261,35 @@ async fn update_position_by_signature(signature: &str, args: &Args) -> Result<()
         all_positions
     };
     
-    let position = positions.iter().find(|p| 
-        p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-    );
+    let position = if args.exit {
+        positions.iter().find(|p| 
+            p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+        )
+    } else {
+        positions.iter().find(|p| 
+            p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+        )
+    };
     
     if let Some(position) = position {
-        let update = update_position_verification(&position.mint, signature, args).await?;
+        let update = update_position_verification(&position.mint, signature, args, args.exit).await?;
         display_update(&update);
         
         if update.now_verified {
-            println!("✅ Position successfully verified and updated!");
+            println!("✅ Position {} verification successful!", verification_type.to_lowercase());
         } else {
-            println!("❌ Position verification failed");
+            println!("❌ Position {} verification failed", verification_type.to_lowercase());
         }
     } else {
-        println!("❌ Position not found for signature: {}", signature);
+        println!("❌ Position not found for {} signature: {}", verification_type.to_lowercase(), signature);
     }
     
     Ok(())
 }
 
-async fn update_position_verification(mint: &str, signature: &str, args: &Args) -> Result<VerificationUpdate, Box<dyn std::error::Error>> {
+async fn update_position_verification(mint: &str, signature: &str, args: &Args, is_exit: bool) -> Result<VerificationUpdate, Box<dyn std::error::Error>> {
     let wallet_address = get_wallet_address().unwrap_or_default();
+    let verification_type = if is_exit { "exit" } else { "entry" };
     
     // Get current position state
     let (was_verified, symbol) = {
@@ -239,9 +303,13 @@ async fn update_position_verification(mint: &str, signature: &str, args: &Args) 
         
         let position = positions.iter().find(|p| p.mint == mint);
         if let Some(pos) = position {
-            let verified = pos.transaction_entry_verified && 
-                          pos.effective_entry_price.is_some() &&
-                          pos.token_amount.is_some();
+            let verified = if is_exit {
+                pos.transaction_exit_verified && pos.effective_exit_price.is_some()
+            } else {
+                pos.transaction_entry_verified && 
+                pos.effective_entry_price.is_some() &&
+                pos.token_amount.is_some()
+            };
             (verified, pos.symbol.clone())
         } else {
             return Err("Position not found".into());
@@ -249,7 +317,7 @@ async fn update_position_verification(mint: &str, signature: &str, args: &Args) 
     };
     
     if args.verbose {
-        println!("  📊 Analyzing transaction: {}", &signature[..16]);
+        println!("  📊 Analyzing {} transaction: {}", verification_type, &signature[..16]);
     }
     
     // Try to verify the transaction
@@ -267,14 +335,24 @@ async fn update_position_verification(mint: &str, signature: &str, args: &Args) 
             let updated = {
                 if let Ok(mut positions) = SAVED_POSITIONS.lock() {
                     if let Some(position) = positions.iter_mut().find(|p| p.mint == mint) {
-                        position.transaction_entry_verified = true;
-                        position.effective_entry_price = Some(analysis.effective_price);
-                        position.token_amount = Some(analysis.token_amount as u64);
-                        position.total_size_sol = analysis.sol_amount; // Update actual SOL spent
-                        position.entry_fee_lamports = Some((analysis.fees_paid * 1_000_000_000.0) as u64); // Convert SOL to lamports
+                        if is_exit {
+                            // Update exit verification fields
+                            position.transaction_exit_verified = true;
+                            position.effective_exit_price = Some(analysis.effective_price);
+                            position.exit_fee_lamports = Some((analysis.fees_paid * 1_000_000_000.0) as u64);
+                            // For exits, we might want to update sol_received as well
+                            position.sol_received = Some(analysis.sol_amount);
+                        } else {
+                            // Update entry verification fields
+                            position.transaction_entry_verified = true;
+                            position.effective_entry_price = Some(analysis.effective_price);
+                            position.token_amount = Some(analysis.token_amount as u64);
+                            position.total_size_sol = analysis.sol_amount; // Update actual SOL spent
+                            position.entry_fee_lamports = Some((analysis.fees_paid * 1_000_000_000.0) as u64);
+                        }
                         
                         if args.verbose {
-                            println!("  💾 Updated position in memory");
+                            println!("  💾 Updated {} verification in memory", verification_type);
                         }
                         
                         // Save to file
@@ -300,10 +378,13 @@ async fn update_position_verification(mint: &str, signature: &str, args: &Args) 
                     signature: signature.to_string(),
                     was_verified,
                     now_verified: true,
-                    effective_entry_price: Some(analysis.effective_price),
-                    token_amount: Some(analysis.token_amount as u64),
+                    verification_type: verification_type.to_string(),
+                    effective_entry_price: if is_exit { None } else { Some(analysis.effective_price) },
+                    effective_exit_price: if is_exit { Some(analysis.effective_price) } else { None },
+                    token_amount: if is_exit { None } else { Some(analysis.token_amount as u64) },
                     sol_amount: Some(analysis.sol_amount),
-                    entry_fee: Some(analysis.fees_paid),
+                    entry_fee: if is_exit { None } else { Some(analysis.fees_paid) },
+                    exit_fee: if is_exit { Some(analysis.fees_paid) } else { None },
                     error: None,
                 })
             } else {
@@ -317,10 +398,13 @@ async fn update_position_verification(mint: &str, signature: &str, args: &Args) 
                 signature: signature.to_string(),
                 was_verified,
                 now_verified: false,
+                verification_type: verification_type.to_string(),
                 effective_entry_price: None,
+                effective_exit_price: None,
                 token_amount: None,
                 sol_amount: None,
                 entry_fee: None,
+                exit_fee: None,
                 error: Some(e),
             })
         }
@@ -328,14 +412,18 @@ async fn update_position_verification(mint: &str, signature: &str, args: &Args) 
 }
 
 fn display_update(update: &VerificationUpdate) {
-    println!("\n{} {}", "📋 UPDATE RESULT:".bright_blue(), update.symbol.bright_white());
+    println!("\n{} {} ({})", "📋 UPDATE RESULT:".bright_blue(), update.symbol.bright_white(), update.verification_type.to_uppercase().bright_cyan());
     println!("  🏷️  Mint: {}", update.mint.bright_blue());
     println!("  📡 Signature: {}", &update.signature[..16].bright_yellow());
     println!("  📊 Was verified: {}", if update.was_verified { "✅".to_string() } else { "❌".to_string() });
     println!("  📊 Now verified: {}", if update.now_verified { "✅".to_string() } else { "❌".to_string() });
     
     if let Some(price) = update.effective_entry_price {
-        println!("  💰 Effective price: {:.12} SOL", price);
+        println!("  💰 Effective entry price: {:.12} SOL", price);
+    }
+    
+    if let Some(price) = update.effective_exit_price {
+        println!("  💰 Effective exit price: {:.12} SOL", price);
     }
     
     if let Some(amount) = update.token_amount {
@@ -343,11 +431,19 @@ fn display_update(update: &VerificationUpdate) {
     }
     
     if let Some(sol) = update.sol_amount {
-        println!("  💎 SOL spent: {:.9}", sol);
+        if update.verification_type == "exit" {
+            println!("  💎 SOL received: {:.9}", sol);
+        } else {
+            println!("  💎 SOL spent: {:.9}", sol);
+        }
     }
     
     if let Some(fee) = update.entry_fee {
         println!("  💸 Entry fee: {:.9} SOL", fee);
+    }
+    
+    if let Some(fee) = update.exit_fee {
+        println!("  💸 Exit fee: {:.9} SOL", fee);
     }
     
     if let Some(error) = &update.error {

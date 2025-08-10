@@ -414,11 +414,15 @@ async fn analyze_jupiter_swap(
                     (sol_change.abs(), token_change.abs(), fallback_price)
                 };
             
+            // Get the correct token decimals instead of assuming 6 decimals
+            let token_decimals = get_token_decimals_from_chain(&main_token).await.unwrap_or(6);
+            let token_base_units = (actual_token_amount * 10f64.powi(token_decimals as i32)) as u64;
+            
             let swap_info = BasicSwapInfo {
                 swap_type: if is_buy { "BUY".to_string() } else { "SELL".to_string() },
                 token_mint: main_token.to_string(),
                 sol_amount: actual_sol_amount,
-                token_amount: (actual_token_amount * 1_000_000.0) as u64, // Convert to token base units
+                token_amount: token_base_units, // Convert to correct token base units using actual decimals
                 effective_price: actual_price,
                 fees_paid: lamports_to_sol(meta.fee), // Convert lamports to SOL
             };
@@ -573,11 +577,15 @@ async fn analyze_pumpfun_swap(
                     actual_sol_amount, actual_token_amount, actual_price));
             }
             
+            // Get the correct token decimals instead of assuming 6 decimals
+            let token_decimals = get_token_decimals_from_chain(&main_token).await.unwrap_or(6);
+            let token_base_units = (actual_token_amount * 10f64.powi(token_decimals as i32)) as u64;
+            
             let swap_info = BasicSwapInfo {
                 swap_type: if is_buy { "BUY".to_string() } else { "SELL".to_string() },
                 token_mint: main_token.to_string(),
                 sol_amount: actual_sol_amount,
-                token_amount: (actual_token_amount * 1_000_000.0) as u64, // Convert to token base units
+                token_amount: token_base_units, // Convert to correct token base units using actual decimals
                 effective_price: actual_price,
                 fees_paid: lamports_to_sol(meta.fee), // Convert lamports to SOL
             };
