@@ -33,6 +33,12 @@ pub const RETRY_ATTEMPTS: u32 = 3;
 /// Transaction confirmation timeout (seconds)
 pub const TRANSACTION_CONFIRMATION_TIMEOUT_SECS: u64 = 300;
 
+/// Transaction confirmation maximum attempts
+pub const TRANSACTION_CONFIRMATION_MAX_ATTEMPTS: u32 = 10;
+
+/// Transaction confirmation retry delay (milliseconds)
+pub const TRANSACTION_CONFIRMATION_RETRY_DELAY_MS: u64 = 2000;
+
 // =============================================================================
 // SLIPPAGE CONFIGURATION
 // =============================================================================

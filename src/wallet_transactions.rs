@@ -314,11 +314,17 @@ async fn perform_periodic_sync_check() {
         
         // Fetch new transaction details (outside of any locks)
         if let Ok(new_transactions) = fetch_transaction_details_standalone(&new_signatures, &rpc_client).await {
+            if !new_transactions.is_empty() {
+                log(LogTag::Transactions, "INFO", &format!("Successfully fetched {} of {} new transactions", new_transactions.len(), new_signatures.len()));
+            } else {
+                log(LogTag::Transactions, "INFO", "New transactions detected but none could be fetched yet (likely very recent), will retry in next sync");
+            }
+            
             // Update manager with new data (brief write lock)
             let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
             if let Some(ref mut manager) = *manager_lock {
-                // Update cached signatures
-                for sig in &new_signatures {
+                // Only add signatures for transactions we successfully fetched
+                for (sig, _) in &new_transactions {
                     manager.sync_state.cached_signatures.insert(sig.clone());
                 }
                 
@@ -378,13 +384,30 @@ async fn fetch_transaction_details_standalone(
     
     for signature_str in signatures {
         if let Ok(signature) = Signature::from_str(signature_str) {
-            match rpc_client.client().get_transaction(&signature, UiTransactionEncoding::Json) {
+            match rpc_client.client().get_transaction_with_config(
+                &signature,
+                solana_client::rpc_config::RpcTransactionConfig {
+                    encoding: Some(UiTransactionEncoding::JsonParsed),
+                    commitment: Some(CommitmentConfig::confirmed()),
+                    max_supported_transaction_version: Some(0),
+                }
+            ) {
                 Ok(tx) => {
                     transactions.push((signature_str.clone(), tx));
                 }
                 Err(e) => {
-                    if is_debug_transactions_enabled() {
-                        log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", signature_str, e));
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
+                        // This is likely a very recent transaction that hasn't fully propagated yet
+                        // We'll skip it for now and it will be picked up in the next sync cycle
+                        if is_debug_transactions_enabled() {
+                            log(LogTag::Transactions, "SKIP", &format!("Transaction {} not yet available (recent transaction), will retry later", signature_str));
+                        }
+                    } else {
+                        // Log other errors for debugging
+                        if is_debug_transactions_enabled() {
+                            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", signature_str, error_msg));
+                        }
                     }
                 }
             }
@@ -777,7 +800,7 @@ impl WalletTransactionManager {
         
         log(LogTag::Rpc, "FETCH", &format!("Fetching transaction {} from RPC", sig_str));
         
-        // Fetch from RPC
+        // Fetch from RPC with proper error handling for recent transactions
         let tx_result = rpc_client.client().get_transaction_with_config(
             signature,
             solana_client::rpc_config::RpcTransactionConfig {
@@ -785,7 +808,17 @@ impl WalletTransactionManager {
                 commitment: Some(CommitmentConfig::confirmed()),
                 max_supported_transaction_version: Some(0),
             },
-        )?;
+        ).map_err(|e| {
+            let error_msg = e.to_string();
+            if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
+                // This is likely a very recent transaction that hasn't fully propagated yet
+                log(LogTag::Transactions, "SKIP", &format!("Transaction {} not yet available (recent transaction), will retry later", sig_str));
+                // Return a custom error that can be handled differently
+                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "Transaction not yet available")) as Box<dyn std::error::Error>
+            } else {
+                Box::new(e) as Box<dyn std::error::Error>
+            }
+        })?;
         
         // Create cached data
         let cached_tx = CachedTransactionData {
@@ -938,12 +971,28 @@ impl WalletTransactionManager {
                     let error_string = format!("{}", e);
                     drop(e); // Explicitly drop the error to avoid Send issues
                     
+                    // Check if this is a "transaction not yet available" error
+                    let is_temp_unavailable = error_string.contains("Transaction not yet available") || 
+                                            error_string.contains("Transaction not found") || 
+                                            error_string.contains("null, expected struct");
+                    
                     if attempts >= MAX_ATTEMPTS {
-                        let error_msg = format!("Failed to fetch transaction {} after {} attempts: {}", signature, attempts, error_string);
-                        log(LogTag::Transactions, "ERROR", &error_msg);
-                        return Err(error_msg.into());
+                        if is_temp_unavailable {
+                            let warning_msg = format!("Transaction {} is not yet available after {} attempts (very recent transaction), verification may be delayed", signature, attempts);
+                            log(LogTag::Transactions, "WARNING", &warning_msg);
+                            return Err(warning_msg.into());
+                        } else {
+                            let error_msg = format!("Failed to fetch transaction {} after {} attempts: {}", signature, attempts, error_string);
+                            log(LogTag::Transactions, "ERROR", &error_msg);
+                            return Err(error_msg.into());
+                        }
                     } else {
-                        let retry_msg = format!("Fetch attempt {} failed for {}: {}. Retrying in {}ms...", attempts, signature, error_string, RETRY_DELAY_MS);
+                        let retry_msg = if is_temp_unavailable {
+                            format!("Transaction {} not yet available (attempt {}), retrying in {}ms...", signature, attempts, RETRY_DELAY_MS)
+                        } else {
+                            format!("Fetch attempt {} failed for {}: {}. Retrying in {}ms...", attempts, signature, error_string, RETRY_DELAY_MS)
+                        };
+                        
                         if is_debug_transactions_enabled() {
                             log(LogTag::Transactions, "DEBUG", &retry_msg);
                         }
@@ -957,17 +1006,26 @@ impl WalletTransactionManager {
     /// Verify and analyze a swap transaction for position data
     /// Returns verified transaction data including effective price, token amounts, and fees
     pub async fn verify_swap_transaction(&mut self, signature: &str, expected_direction: &str, rpc_client: &RpcClient) -> Result<VerifiedSwapData, String> {
-        // Ensure transaction is cached with retry logic
-        self.get_or_fetch_transaction(signature, rpc_client).await?;
+        // Try to ensure transaction is cached with retry logic
+        match self.get_or_fetch_transaction(signature, rpc_client).await {
+            Ok(_) => {
+                log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} cached successfully", signature));
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("not yet available") || error_msg.contains("very recent transaction") {
+                    // For very recent transactions, we can still try to analyze from the blockchain
+                    log(LogTag::Transactions, "WARNING", &format!("Transaction {} not yet cached, attempting direct blockchain analysis", signature));
+                } else {
+                    return Err(format!("Failed to cache transaction {}: {}", signature, error_msg));
+                }
+            }
+        }
         
         log(LogTag::Transactions, "VERIFY", &format!("Verifying swap transaction {} for {} operation", signature, expected_direction));
         
-        // Get the cached transaction data
-        let cached_tx = self.transaction_cache.get(signature)
-            .ok_or("Transaction not found in cache after fetching")?;
-            
         // Use the comprehensive swap analysis from transactions_tools
-        // First try to analyze using the signature-only method
+        // First try to analyze using the signature-only method (works even if not cached)
         match crate::transactions_tools::analyze_post_swap_transaction_simple(signature, &self.wallet_address).await {
             Ok(analysis) => {
                 log(LogTag::Transactions, "SUCCESS", &format!(
@@ -996,13 +1054,19 @@ impl WalletTransactionManager {
                 })
             }
             Err(e) => {
-                log(LogTag::Transactions, "WARNING", &format!(
-                    "Simple analysis failed for {}, falling back to legacy analysis: {}", 
-                    signature, e
-                ));
-                
-                // Fallback to the original analysis method
-                self.analyze_transaction_for_verified_swap(&cached_tx.transaction_data, expected_direction).await
+                // If simple analysis fails, try to get cached transaction data and use legacy analysis
+                if let Some(cached_tx) = self.transaction_cache.get(signature) {
+                    log(LogTag::Transactions, "WARNING", &format!(
+                        "Simple analysis failed for {}, falling back to legacy analysis: {}", 
+                        signature, e
+                    ));
+                    
+                    // Fallback to the original analysis method
+                    self.analyze_transaction_for_verified_swap(&cached_tx.transaction_data, expected_direction).await
+                } else {
+                    // Transaction not cached and simple analysis failed
+                    Err(format!("Transaction verification failed: simple analysis error ({}), and transaction not cached", e))
+                }
             }
         }
     }

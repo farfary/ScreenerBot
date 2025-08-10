@@ -11,7 +11,8 @@ use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, JupiterQuoteRespo
 use super::config::{
     JUPITER_QUOTE_API, JUPITER_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
     RETRY_ATTEMPTS, JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
-    JUPITER_DEFAULT_SWAP_MODE, SOL_MINT
+    JUPITER_DEFAULT_SWAP_MODE, SOL_MINT, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
+    TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
 
 use serde::{Deserialize, Serialize};
@@ -75,10 +76,45 @@ pub async fn jupiter_sign_and_send_transaction(
         );
     }
     
+    // Wait for transaction confirmation before proceeding
+    log(
+        LogTag::Swap,
+        "JUPITER_CONFIRMING",
+        &format!("⏳ Jupiter: Waiting for transaction confirmation: {}", &signature[..8])
+    );
+    
+    match rpc_client.wait_for_transaction_confirmation(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
+        Ok(true) => {
+            log(
+                LogTag::Swap,
+                "JUPITER_CONFIRMED",
+                &format!("✅ Jupiter: Transaction confirmed on-chain: {}", &signature[..8])
+            );
+        }
+        Ok(false) => {
+            log(
+                LogTag::Swap,
+                "JUPITER_TIMEOUT",
+                &format!("⏰ Jupiter: Transaction confirmation timeout: {}", &signature[..8])
+            );
+            return Err(SwapError::TransactionError(
+                format!("Transaction confirmation timeout: {}", signature)
+            ));
+        }
+        Err(e) => {
+            log(
+                LogTag::Swap,
+                "JUPITER_CONFIRMATION_ERROR",
+                &format!("❌ Jupiter: Transaction confirmation error: {} - {}", &signature[..8], e)
+            );
+            return Err(e);
+        }
+    }
+    
     log(
         LogTag::Swap,
         "JUPITER_SIGN_SUCCESS",
-        &format!("✅ Jupiter: Transaction signed and sent successfully: {}", signature)
+        &format!("✅ Jupiter: Transaction signed, sent and confirmed: {}", signature)
     );
     
     Ok(signature)

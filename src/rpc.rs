@@ -2937,6 +2937,79 @@ impl RpcClient {
 
         Err(SwapError::InvalidResponse("No associated token account found".to_string()))
     }
+
+    /// Wait for transaction confirmation with polling
+    /// Returns true if transaction is confirmed, false if timeout or failed
+    pub async fn wait_for_transaction_confirmation(
+        &self,
+        signature: &str,
+        max_attempts: u32,
+        retry_delay_ms: u64,
+    ) -> Result<bool, SwapError> {
+        log(
+            LogTag::Rpc,
+            "CONFIRMATION_START",
+            &format!(
+                "🔍 Waiting for transaction confirmation: {} (max {} attempts, {}ms delay)",
+                &signature[..8], max_attempts, retry_delay_ms
+            )
+        );
+
+        for attempt in 1..=max_attempts {
+            // Check if transaction exists and is confirmed
+            match self.get_transaction_details(signature).await {
+                Ok(_transaction_details) => {
+                    log(
+                        LogTag::Rpc,
+                        "CONFIRMATION_SUCCESS",
+                        &format!(
+                            "✅ Transaction confirmed after {} attempts: {}",
+                            attempt, &signature[..8]
+                        )
+                    );
+                    return Ok(true);
+                }
+                Err(SwapError::TransactionError(ref err)) if err.contains("not found or not confirmed yet") => {
+                    if attempt < max_attempts {
+                        log(
+                            LogTag::Rpc,
+                            "CONFIRMATION_WAITING",
+                            &format!(
+                                "⏳ Transaction not confirmed yet (attempt {}/{}): {}",
+                                attempt, max_attempts, &signature[..8]
+                            )
+                        );
+                        
+                        // Wait before next attempt
+                        tokio::time::sleep(Duration::from_millis(retry_delay_ms)).await;
+                    } else {
+                        log(
+                            LogTag::Rpc,
+                            "CONFIRMATION_TIMEOUT",
+                            &format!(
+                                "⏰ Transaction confirmation timeout after {} attempts: {}",
+                                max_attempts, &signature[..8]
+                            )
+                        );
+                        return Ok(false); // Timeout, but not an error
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Rpc,
+                        "CONFIRMATION_ERROR",
+                        &format!(
+                            "❌ Error checking transaction confirmation: {} - {}",
+                            &signature[..8], e
+                        )
+                    );
+                    return Err(e); // Actual error
+                }
+            }
+        }
+
+        Ok(false) // Timeout
+    }
 }
 
 /// Global RPC client instance

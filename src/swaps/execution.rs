@@ -9,7 +9,7 @@ use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse};
 use crate::swaps::interface::SwapResult;
 /// Use utils for wallet address instead of transaction module
 use crate::utils::get_wallet_address;
-use super::config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
+use super::config::{SOL_MINT, GMGN_PARTNER, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS};
 use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, get_token_decimals_from_chain};
 
 /// Validates swap parameters before execution
@@ -87,7 +87,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         request.swap_mode,
         request.fee,
         request.is_anti_mev,
-        PARTNER
+        GMGN_PARTNER
     );
 
     if is_debug_swap_enabled() {
@@ -529,6 +529,41 @@ pub async fn sign_and_send_transaction(
   ⏳ Next: Waiting for network confirmation
   🔍 View on explorer: https://solscan.io/tx/{}", signature, signature)
         );
+    }
+    
+    // Wait for transaction confirmation before proceeding
+    log(
+        LogTag::Swap,
+        "TRANSACTION_CONFIRMING",
+        &format!("⏳ Waiting for transaction confirmation: {}", &signature[..8])
+    );
+    
+    match rpc_client.wait_for_transaction_confirmation(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
+        Ok(true) => {
+            log(
+                LogTag::Swap,
+                "TRANSACTION_CONFIRMED",
+                &format!("✅ Transaction confirmed on-chain: {}", &signature[..8])
+            );
+        }
+        Ok(false) => {
+            log(
+                LogTag::Swap,
+                "TRANSACTION_TIMEOUT",
+                &format!("⏰ Transaction confirmation timeout: {}", &signature[..8])
+            );
+            return Err(SwapError::TransactionError(
+                format!("Transaction confirmation timeout: {}", signature)
+            ));
+        }
+        Err(e) => {
+            log(
+                LogTag::Swap,
+                "TRANSACTION_CONFIRMATION_ERROR",
+                &format!("❌ Transaction confirmation error: {} - {}", &signature[..8], e)
+            );
+            return Err(e);
+        }
     }
     
     Ok(signature)

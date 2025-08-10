@@ -8,8 +8,9 @@ use crate::rpc::{SwapError, lamports_to_sol};
 use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction};
 use super::config::{
-    RAYDIUM_QUOTE_API, RAYDIUM_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
-    RETRY_ATTEMPTS, SOL_MINT
+    SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, QUOTE_TIMEOUT_SECS, 
+    API_TIMEOUT_SECS, RETRY_ATTEMPTS, RAYDIUM_SWAP_API,
+    TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
 use super::execution::{sign_and_send_transaction, verify_swap_transaction};
 // Use utils for wallet address instead of transaction module  
@@ -137,10 +138,45 @@ pub async fn raydium_sign_and_send_transaction(
         );
     }
     
+    // Wait for transaction confirmation before proceeding
+    log(
+        LogTag::Swap,
+        "RAYDIUM_CONFIRMING",
+        &format!("⏳ Raydium: Waiting for transaction confirmation: {}", &signature[..8])
+    );
+    
+    match rpc_client.wait_for_transaction_confirmation(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
+        Ok(true) => {
+            log(
+                LogTag::Swap,
+                "RAYDIUM_CONFIRMED",
+                &format!("✅ Raydium: Transaction confirmed on-chain: {}", &signature[..8])
+            );
+        }
+        Ok(false) => {
+            log(
+                LogTag::Swap,
+                "RAYDIUM_TIMEOUT",
+                &format!("⏰ Raydium: Transaction confirmation timeout: {}", &signature[..8])
+            );
+            return Err(SwapError::TransactionError(
+                format!("Transaction confirmation timeout: {}", signature)
+            ));
+        }
+        Err(e) => {
+            log(
+                LogTag::Swap,
+                "RAYDIUM_CONFIRMATION_ERROR",
+                &format!("❌ Raydium: Transaction confirmation error: {} - {}", &signature[..8], e)
+            );
+            return Err(e);
+        }
+    }
+    
     log(
         LogTag::Swap,
         "RAYDIUM_SIGN_SUCCESS",
-        &format!("✅ Raydium: Transaction signed and sent successfully: {}", signature)
+        &format!("✅ Raydium: Transaction signed, sent and confirmed: {}", signature)
     );
     
     Ok(signature)

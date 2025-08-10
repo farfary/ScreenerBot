@@ -81,10 +81,8 @@ fn print_help() {
     println!("    • data/rpc_stats.json (RPC statistics)");
     println!("    • data/rl_learning_records.json (RL learning data)");
     println!("    • data/positions.json (trading positions)");
-    println!("    • data/pending_transactions.json (pending transactions)");
-    println!("    • data/transactions.json (transaction history)");
     println!("    • data/ata_failed_cache.json (failed ATA cache)");
-    println!("    • data/wallet_history.json (wallet tracker history)");
+    println!("    • data/wallet_transactions_stats.json (wallet sync data)");
     println!("    • logs/screenerbot_*.log (all bot log files)");
     println!("");
     println!("FILES THAT WILL BE PRESERVED:");
@@ -92,7 +90,7 @@ fn print_help() {
     println!("    • data/tokens.db (token database)");
     println!("    • data/decimal_cache.json (token decimals cache)");
     println!("    • data/token_blacklist.json (blacklisted tokens)");
-    println!("    • data/entry_analysis.json (entry analysis data)");
+    println!("    • data/transactions/ (individual transaction files)");
     println!("    • data/cache_prices/ (price history cache)");
     println!("    • data/cache_ohlcvs/ (OHLCV data cache)");
     println!("");
@@ -129,10 +127,8 @@ const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/rpc_stats.json",
     "data/rl_learning_records.json", 
     "data/positions.json",
-    "data/pending_transactions.json",
-    "data/transactions.json",
     "data/ata_failed_cache.json",
-    "data/wallet_history.json",
+    "data/wallet_transactions_stats.json",
 ];
 
 /// Token account information from Solana RPC

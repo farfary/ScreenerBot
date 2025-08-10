@@ -7,9 +7,10 @@ use crate::logger::{log, LogTag};
 use crate::global::{read_configs, is_debug_swap_enabled};
 use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL};
 use super::config::{
-    GMGN_QUOTE_API, GMGN_PARTNER, GMGN_ANTI_MEV, 
-    API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
-    GMGN_DEFAULT_SWAP_MODE, SOL_MINT
+    GMGN_QUOTE_API, SOL_MINT, GMGN_ANTI_MEV, GMGN_PARTNER,
+    QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, QUOTE_TIMEOUT_SECS, 
+    API_TIMEOUT_SECS, RETRY_ATTEMPTS, GMGN_DEFAULT_SWAP_MODE,
+    TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
 use super::execution::{sign_and_send_transaction, verify_swap_transaction};
 // Use utils for wallet address instead of transaction module
@@ -80,10 +81,45 @@ pub async fn gmgn_sign_and_send_transaction(
         );
     }
     
+    // Wait for transaction confirmation before proceeding
+    log(
+        LogTag::Swap,
+        "GMGN_CONFIRMING",
+        &format!("⏳ GMGN: Waiting for transaction confirmation: {}", &signature[..8])
+    );
+    
+    match rpc_client.wait_for_transaction_confirmation(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
+        Ok(true) => {
+            log(
+                LogTag::Swap,
+                "GMGN_CONFIRMED",
+                &format!("✅ GMGN: Transaction confirmed on-chain: {}", &signature[..8])
+            );
+        }
+        Ok(false) => {
+            log(
+                LogTag::Swap,
+                "GMGN_TIMEOUT",
+                &format!("⏰ GMGN: Transaction confirmation timeout: {}", &signature[..8])
+            );
+            return Err(SwapError::TransactionError(
+                format!("Transaction confirmation timeout: {}", signature)
+            ));
+        }
+        Err(e) => {
+            log(
+                LogTag::Swap,
+                "GMGN_CONFIRMATION_ERROR",
+                &format!("❌ GMGN: Transaction confirmation error: {} - {}", &signature[..8], e)
+            );
+            return Err(e);
+        }
+    }
+    
     log(
         LogTag::Swap,
         "GMGN_SIGN_SUCCESS",
-        &format!("✅ GMGN: Transaction signed and sent successfully: {}", signature)
+        &format!("✅ GMGN: Transaction signed, sent and confirmed: {}", signature)
     );
     
     Ok(signature)
