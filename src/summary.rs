@@ -35,6 +35,8 @@ pub struct ClosedPositionDisplay {
     pnl_sol: String,
     #[tabled(rename = "📊 P&L (%)")]
     pnl_percent: String,
+    #[tabled(rename = "💳 Fees (SOL)")]
+    fees_sol: String,
     #[tabled(rename = "⏱️ Duration")]
     duration: String,
     #[tabled(rename = "🎯 Status")]
@@ -58,6 +60,8 @@ pub struct OpenPositionDisplay {
     pnl_sol: String,
     #[tabled(rename = "📊 P&L (%)")]
     pnl_percent: String,
+    #[tabled(rename = "💳 Fees (SOL)")]
+    fees_sol: String,
     #[tabled(rename = "⏱️ Duration")]
     duration: String,
     #[tabled(rename = "🎯 Status")]
@@ -1160,6 +1164,9 @@ impl ClosedPositionDisplay {
         // Check if position is fully verified (both entry and exit must be verified for closed positions)
         let is_verified = position.transaction_entry_verified && position.transaction_exit_verified;
         
+        // Calculate total fees for the position
+        let total_fees = calculate_position_total_fees(position);
+        
         if !is_verified {
             // For unverified positions, hide sensitive data
             let duration = if let Some(exit_time) = position.exit_time {
@@ -1176,6 +1183,7 @@ impl ClosedPositionDisplay {
                 size_sol: format!("{:.6}", position.entry_size_sol),
                 pnl_sol: "UNVERIFIED".to_string(),
                 pnl_percent: "UNVERIFIED".to_string(),
+                fees_sol: format!("{:.6}", total_fees),
                 duration,
                 status: "🔍 UNVERIFIED".to_string(),
             };
@@ -1220,6 +1228,7 @@ impl ClosedPositionDisplay {
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
+            fees_sol: format!("{:.6}", total_fees),
             duration,
             status,
         }
@@ -1230,6 +1239,9 @@ impl OpenPositionDisplay {
     fn from_position(position: &Position, current_price: Option<f64>) -> Self {
         // Check if position entry is verified (for open positions, only entry needs to be verified)
         let is_verified = position.transaction_entry_verified;
+        
+        // Calculate total fees for the position (for open positions, only entry fees + manual adjustment)
+        let total_fees = calculate_position_total_fees(position);
         
         let duration = format_duration_compact(position.entry_time, Utc::now());
 
@@ -1249,6 +1261,7 @@ impl OpenPositionDisplay {
                 size_sol: format!("{:.6}", position.entry_size_sol),
                 pnl_sol: "UNVERIFIED".to_string(),
                 pnl_percent: "UNVERIFIED".to_string(),
+                fees_sol: format!("{:.6}", total_fees),
                 duration,
                 status: "🔍 UNVERIFIED".to_string(),
             };
@@ -1297,6 +1310,7 @@ impl OpenPositionDisplay {
             size_sol: format!("{:.6}", position.entry_size_sol),
             pnl_sol: pnl_sol_str,
             pnl_percent: pnl_percent_str,
+            fees_sol: format!("{:.6}", total_fees),
             duration,
             status,
         }

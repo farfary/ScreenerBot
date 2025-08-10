@@ -57,6 +57,14 @@ path = "src/bin/tool_price_history_cache.rs"
 name = "tool_wallet_manager"
 path = "src/bin/tool_wallet_manager.rs"
 
+[[bin]]
+name = "tool_fix_exit_fees"
+path = "src/bin/tool_fix_exit_fees.rs"
+
+[[bin]]
+name = "tool_verify_fees"
+path = "src/bin/tool_verify_fees.rs"
+
 
 [dependencies]
 # Core async runtime with minimal features for faster builds

@@ -111,6 +111,26 @@ pub fn calculate_liquidity_tier(token: &crate::tokens::types::Token) -> Option<S
     Some(tier.to_string())
 }
 
+/// Calculate total fees for a position including entry fees, exit fees, and manual adjustments
+pub fn calculate_position_total_fees(position: &Position) -> f64 {
+    let entry_fees_sol = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+    let exit_fees_sol = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+    // Include manual fee component from trader configuration
+    let manual_fee_sol = PROFIT_EXTRA_NEEDED_SOL;
+    
+    entry_fees_sol + exit_fees_sol + manual_fee_sol
+}
+
+/// Calculate detailed breakdown of position fees for analysis
+pub fn calculate_position_fees_breakdown(position: &Position) -> (f64, f64, f64, f64) {
+    let entry_fee_sol = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+    let exit_fee_sol = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+    let manual_fee_sol = PROFIT_EXTRA_NEEDED_SOL;
+    let total_fees = entry_fee_sol + exit_fee_sol + manual_fee_sol;
+    
+    (entry_fee_sol, exit_fee_sol, manual_fee_sol, total_fees)
+}
+
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
 /// For closed positions with sol_received, uses actual SOL invested vs SOL received
@@ -783,6 +803,40 @@ pub async fn close_position(
                             )
                         );
 
+                        // Extract actual exit transaction fee
+                        let exit_fee_lamports = match crate::transactions_tools::analyze_post_swap_transaction(
+                            &transaction_signature,
+                            &crate::utils::get_wallet_address().unwrap_or_default(),
+                            &position.mint,
+                            "So11111111111111111111111111111111111111112", // SOL mint
+                            "sell"
+                        ).await {
+                            Ok(analysis) => {
+                                log(
+                                    LogTag::Trader,
+                                    "FEE_EXTRACTED",
+                                    &format!(
+                                        "✅ Exit fee extracted for {}: {} lamports ({:.9} SOL)",
+                                        position.symbol,
+                                        analysis.transaction_fee.unwrap_or(0),
+                                        analysis.fees_paid
+                                    )
+                                );
+                                analysis.transaction_fee
+                            }
+                            Err(e) => {
+                                log(
+                                    LogTag::Trader,
+                                    "WARNING",
+                                    &format!(
+                                        "⚠️ Failed to extract exit fee for {}: {}. Using 0.",
+                                        position.symbol, e
+                                    )
+                                );
+                                Some(0)
+                            }
+                        };
+
                         // Update position with verified exit data
                         position.exit_price = Some(exit_price);
                         position.exit_time = Some(exit_time);
@@ -790,7 +844,7 @@ pub async fn close_position(
                         position.sol_received = Some(sol_received);
                         position.exit_transaction_signature = Some(transaction_signature.clone());
                         position.transaction_exit_verified = true;
-                        position.exit_fee_lamports = Some(0); // Fee calculated elsewhere
+                        position.exit_fee_lamports = exit_fee_lamports;
 
                         // Calculate actual P&L using unified function
                         let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
