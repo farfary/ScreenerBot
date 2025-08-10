@@ -897,6 +897,20 @@ impl RpcClient {
         }
     }
 
+    /// Create a client specifically for main RPC (for lightweight operations like checking signatures)
+    pub fn create_main_client(&self) -> Arc<SolanaRpcClient> {
+        log(
+            LogTag::Rpc,
+            "MAIN",
+            &format!("Using main RPC for lightweight operations: {}", self.rpc_url)
+        );
+        let client = SolanaRpcClient::new_with_commitment(
+            self.rpc_url.clone(),
+            CommitmentConfig::confirmed()
+        );
+        Arc::new(client)
+    }
+
     /// Check if error should trigger fallback (rate limits, timeouts) vs real errors (account not found)
     fn should_fallback_on_error(error: &str) -> bool {
         let error_lower = error.to_lowercase();
@@ -3009,6 +3023,154 @@ impl RpcClient {
         }
 
         Ok(false) // Timeout
+    }
+
+    /// Get wallet signatures using main RPC (lightweight operation)
+    /// This is optimized for checking how many new transactions exist without heavy data transfer
+    pub async fn get_wallet_signatures_main_rpc(
+        &self,
+        wallet_pubkey: &Pubkey,
+        limit: usize,
+        before: Option<&str>
+    ) -> Result<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>, SwapError> {
+        // Use main RPC for this lightweight operation
+        let main_client = self.create_main_client();
+        
+        // Apply rate limiting for main RPC
+        self.wait_for_rate_limit().await;
+        self.record_call_for_url(&self.rpc_url, "get_signatures_for_address");
+        
+        let config = solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
+            before: before.and_then(|s| solana_sdk::signature::Signature::from_str(s).ok()),
+            until: None,
+            limit: Some(limit),
+            commitment: Some(CommitmentConfig::confirmed()),
+        };
+        
+        log(LogTag::Rpc, "MAIN", &format!("Fetching {} signatures using main RPC", limit));
+        
+        let signatures = main_client
+            .get_signatures_for_address_with_config(wallet_pubkey, config)
+            .map_err(|e| SwapError::ApiError(format!("Failed to get signatures from main RPC: {}", e)))?;
+        
+        log(LogTag::Rpc, "SUCCESS", &format!("Retrieved {} signatures from main RPC", signatures.len()));
+        Ok(signatures)
+    }
+
+    /// Get transaction details using premium RPC (data-intensive operation)
+    /// This is optimized for fetching full transaction data with minimal rate limiting
+    pub async fn get_transaction_details_premium_rpc(
+        &self,
+        transaction_signature: &str
+    ) -> Result<solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta, SwapError> {
+        // Use premium RPC for this data-intensive operation
+        let premium_client = if let Some(client) = self.create_premium_client() {
+            client
+        } else {
+            // Fallback to main client if no premium available
+            log(LogTag::Rpc, "WARNING", "No premium RPC available, using main RPC for transaction details");
+            self.client.clone()
+        };
+        
+        // No rate limiting for premium RPC, but record the call
+        if self.premium_url.is_some() {
+            self.record_call_for_url(self.premium_url.as_ref().unwrap(), "get_transaction");
+        } else {
+            self.wait_for_rate_limit().await;
+            self.record_call("get_transaction");
+        }
+        
+        let signature = solana_sdk::signature::Signature::from_str(transaction_signature)
+            .map_err(|e| SwapError::ParseError(format!("Invalid signature: {}", e)))?;
+        
+        log(LogTag::Rpc, "PREMIUM", &format!("Fetching transaction details for {} using premium RPC", &transaction_signature[..8]));
+        
+        let transaction = premium_client
+            .get_transaction_with_config(
+                &signature,
+                solana_client::rpc_config::RpcTransactionConfig {
+                    encoding: Some(solana_transaction_status::UiTransactionEncoding::JsonParsed),
+                    commitment: Some(CommitmentConfig::confirmed()),
+                    max_supported_transaction_version: Some(0),
+                }
+            )
+            .map_err(|e| {
+                let error_msg = e.to_string();
+                if error_msg.contains("Transaction not found") {
+                    SwapError::ApiError(format!("Transaction {} not found", transaction_signature))
+                } else {
+                    SwapError::ApiError(format!("Failed to get transaction from premium RPC: {}", e))
+                }
+            })?;
+        
+        log(LogTag::Rpc, "SUCCESS", &format!("Retrieved transaction details for {} from premium RPC", &transaction_signature[..8]));
+        Ok(transaction)
+    }
+
+    /// Batch get transaction details using premium RPC (optimized for multiple transactions)
+    /// This uses premium RPC to minimize rate limiting when fetching multiple transactions
+    pub async fn batch_get_transaction_details_premium_rpc(
+        &self,
+        signatures: &[String]
+    ) -> Result<Vec<(String, solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta)>, SwapError> {
+        if signatures.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // Use premium RPC for batch operations
+        let premium_client = if let Some(client) = self.create_premium_client() {
+            client
+        } else {
+            log(LogTag::Rpc, "WARNING", "No premium RPC available, using main RPC for batch transaction details");
+            self.client.clone()
+        };
+        
+        log(LogTag::Rpc, "PREMIUM", &format!("Batch fetching {} transaction details using premium RPC", signatures.len()));
+        
+        let mut results = Vec::new();
+        let mut successful_fetches = 0;
+        
+        for signature_str in signatures {
+            // Record call for each transaction
+            if self.premium_url.is_some() {
+                self.record_call_for_url(self.premium_url.as_ref().unwrap(), "get_transaction");
+            } else {
+                self.wait_for_rate_limit().await;
+                self.record_call("get_transaction");
+            }
+            
+            if let Ok(signature) = solana_sdk::signature::Signature::from_str(signature_str) {
+                match premium_client.get_transaction_with_config(
+                    &signature,
+                    solana_client::rpc_config::RpcTransactionConfig {
+                        encoding: Some(solana_transaction_status::UiTransactionEncoding::JsonParsed),
+                        commitment: Some(CommitmentConfig::confirmed()),
+                        max_supported_transaction_version: Some(0),
+                    }
+                ) {
+                    Ok(tx) => {
+                        results.push((signature_str.clone(), tx));
+                        successful_fetches += 1;
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
+                            log(LogTag::Rpc, "SKIP", &format!("Transaction {} not yet available", &signature_str[..8]));
+                        } else {
+                            log(LogTag::Rpc, "ERROR", &format!("Failed to fetch transaction {}: {}", &signature_str[..8], e));
+                        }
+                    }
+                }
+            }
+            
+            // Small delay between requests to avoid overwhelming even premium RPC
+            if signatures.len() > 5 {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+        
+        log(LogTag::Rpc, "SUCCESS", &format!("Successfully fetched {}/{} transactions from premium RPC", successful_fetches, signatures.len()));
+        Ok(results)
     }
 }
 

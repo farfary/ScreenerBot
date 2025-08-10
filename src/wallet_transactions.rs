@@ -363,15 +363,13 @@ async fn fetch_wallet_signatures_standalone(
 ) -> Result<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>, Box<dyn std::error::Error>> {
     let wallet_pubkey = Pubkey::from_str(wallet_address)?;
     
-    let config = GetConfirmedSignaturesForAddress2Config {
-        before: None,
-        until: None,
-        limit: Some(limit),
-        commitment: Some(CommitmentConfig::confirmed()),
-    };
+    log(LogTag::Transactions, "MAIN_RPC", &format!("Using main RPC to check for {} new signatures", limit));
     
-    let signatures = rpc_client.client()
-        .get_signatures_for_address_with_config(&wallet_pubkey, config)?;
+    // Use main RPC for lightweight signature checking
+    let signatures = rpc_client.get_wallet_signatures_main_rpc(&wallet_pubkey, limit, None).await
+        .map_err(|e| format!("Failed to get signatures from main RPC: {}", e))?;
+    
+    log(LogTag::Transactions, "SUCCESS", &format!("Retrieved {} signatures from main RPC", signatures.len()));
     Ok(signatures)
 }
 
@@ -380,40 +378,17 @@ async fn fetch_transaction_details_standalone(
     signatures: &[String],
     rpc_client: &RpcClient
 ) -> Result<Vec<(String, EncodedConfirmedTransactionWithStatusMeta)>, Box<dyn std::error::Error>> {
-    let mut transactions = Vec::new();
-    
-    for signature_str in signatures {
-        if let Ok(signature) = Signature::from_str(signature_str) {
-            match rpc_client.client().get_transaction_with_config(
-                &signature,
-                solana_client::rpc_config::RpcTransactionConfig {
-                    encoding: Some(UiTransactionEncoding::JsonParsed),
-                    commitment: Some(CommitmentConfig::confirmed()),
-                    max_supported_transaction_version: Some(0),
-                }
-            ) {
-                Ok(tx) => {
-                    transactions.push((signature_str.clone(), tx));
-                }
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
-                        // This is likely a very recent transaction that hasn't fully propagated yet
-                        // We'll skip it for now and it will be picked up in the next sync cycle
-                        if is_debug_transactions_enabled() {
-                            log(LogTag::Transactions, "SKIP", &format!("Transaction {} not yet available (recent transaction), will retry later", signature_str));
-                        }
-                    } else {
-                        // Log other errors for debugging
-                        if is_debug_transactions_enabled() {
-                            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", signature_str, error_msg));
-                        }
-                    }
-                }
-            }
-        }
+    if signatures.is_empty() {
+        return Ok(Vec::new());
     }
     
+    log(LogTag::Transactions, "PREMIUM_RPC", &format!("Using premium RPC to fetch {} transaction details", signatures.len()));
+    
+    // Use premium RPC for data-intensive transaction fetching
+    let transactions = rpc_client.batch_get_transaction_details_premium_rpc(signatures).await
+        .map_err(|e| format!("Failed to fetch transaction details from premium RPC: {}", e))?;
+    
+    log(LogTag::Transactions, "SUCCESS", &format!("Successfully fetched {}/{} transactions from premium RPC", transactions.len(), signatures.len()));
     Ok(transactions)
 }
 
@@ -798,27 +773,20 @@ impl WalletTransactionManager {
             return Ok(());
         }
         
-        log(LogTag::Rpc, "FETCH", &format!("Fetching transaction {} from RPC", sig_str));
+        log(LogTag::Transactions, "PREMIUM_RPC", &format!("Fetching transaction {} using premium RPC", &sig_str[..8]));
         
-        // Fetch from RPC with proper error handling for recent transactions
-        let tx_result = rpc_client.client().get_transaction_with_config(
-            signature,
-            solana_client::rpc_config::RpcTransactionConfig {
-                encoding: Some(UiTransactionEncoding::JsonParsed),
-                commitment: Some(CommitmentConfig::confirmed()),
-                max_supported_transaction_version: Some(0),
-            },
-        ).map_err(|e| {
-            let error_msg = e.to_string();
-            if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
-                // This is likely a very recent transaction that hasn't fully propagated yet
-                log(LogTag::Transactions, "SKIP", &format!("Transaction {} not yet available (recent transaction), will retry later", sig_str));
-                // Return a custom error that can be handled differently
-                Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "Transaction not yet available")) as Box<dyn std::error::Error>
-            } else {
-                Box::new(e) as Box<dyn std::error::Error>
-            }
-        })?;
+        // Use premium RPC for individual transaction fetching
+        let tx_result = rpc_client.get_transaction_details_premium_rpc(&sig_str).await
+            .map_err(|e| {
+                let error_msg = e.to_string();
+                if error_msg.contains("Transaction not found") {
+                    log(LogTag::Transactions, "SKIP", &format!("Transaction {} not yet available, will retry later", &sig_str[..8]));
+                    format!("Transaction not found: {}", error_msg)
+                } else {
+                    log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", &sig_str[..8], error_msg));
+                    error_msg
+                }
+            })?;
         
         // Create cached data
         let cached_tx = CachedTransactionData {
@@ -835,7 +803,7 @@ impl WalletTransactionManager {
         // Store in memory
         self.transaction_cache.insert(sig_str.clone(), cached_tx);
         
-        log(LogTag::Transactions, "CACHED", &format!("Transaction {} cached successfully", sig_str));
+        log(LogTag::Transactions, "CACHED", &format!("Transaction {} cached successfully", &sig_str[..8]));
         Ok(())
     }
     
@@ -864,17 +832,11 @@ impl WalletTransactionManager {
             }
         }
         
-        log(LogTag::Rpc, "FETCH", &format!("Fetching transaction {} from RPC (concurrent)", signature_str));
+        log(LogTag::Transactions, "PREMIUM_RPC", &format!("Fetching transaction {} using premium RPC (concurrent)", &signature_str[..8]));
         
-        // Fetch from RPC
-        let tx_result = rpc_client.client().get_transaction_with_config(
-            signature,
-            solana_client::rpc_config::RpcTransactionConfig {
-                encoding: Some(UiTransactionEncoding::JsonParsed),
-                commitment: Some(CommitmentConfig::confirmed()),
-                max_supported_transaction_version: Some(0),
-            },
-        ).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        // Use premium RPC for concurrent transaction fetching
+        let tx_result = rpc_client.get_transaction_details_premium_rpc(signature_str).await
+            .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error + Send + Sync>)?;
         
         // Create cached data
         let cached_tx = CachedTransactionData {
@@ -902,20 +864,11 @@ impl WalletTransactionManager {
         
         let pubkey = Pubkey::from_str(&self.wallet_address)?;
         
-        let mut config = GetConfirmedSignaturesForAddress2Config {
-            limit: Some(limit),
-            commitment: Some(CommitmentConfig::confirmed()),
-            ..Default::default()
-        };
+        log(LogTag::Transactions, "MAIN_RPC", &format!("Fetching {} signatures using main RPC", limit));
         
-        if let Some(before_sig) = before {
-            if let Ok(sig) = Signature::from_str(before_sig) {
-                config.before = Some(sig);
-            }
-        }
-        
-        let signatures = rpc_client.client()
-            .get_signatures_for_address_with_config(&pubkey, config)?;
+        // Use main RPC for lightweight signature fetching
+        let signatures = rpc_client.get_wallet_signatures_main_rpc(&pubkey, limit, before).await
+            .map_err(|e| format!("Failed to get signatures from main RPC: {}", e))?;
         
         Ok(signatures)
     }
