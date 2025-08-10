@@ -12,7 +12,7 @@ use clap::Parser;
 use screenerbot::{
     logger::{init_file_logging, log, LogTag},
     positions::{get_open_positions, get_closed_positions, SAVED_POSITIONS},
-    wallet_transactions::{initialize_wallet_transaction_manager},
+    transactions_manager::{initialize_wallet_transaction_manager},
     transactions_tools::{analyze_post_swap_transaction_simple},
     utils::{get_wallet_address, save_positions_to_file},
 };

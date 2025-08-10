@@ -101,7 +101,7 @@ impl TransactionDetector {
         }
 
         // First try to load cached JSON data via wallet transaction manager for enhanced analysis
-        let cached_json = crate::wallet_transactions::get_cached_transaction_json_global(signature).await;
+        let cached_json = crate::transactions_manager::get_cached_transaction_json_global(signature).await;
         if cached_json.is_some() && is_debug_transactions_enabled() {
             log(LogTag::Transactions, "CACHE", &format!("📁 Using cached JSON data for enhanced analysis: {}", &signature[..8]));
         }
@@ -553,7 +553,7 @@ impl TransactionDetector {
     /// Fetch transaction details using wallet transaction manager (with caching)
     async fn fetch_transaction(&self, signature: &str) -> Result<TransactionDetails, String> {
         // Use wallet transaction manager for cached access with automatic RPC fallback
-        use crate::wallet_transactions::get_wallet_transaction_manager;
+        use crate::transactions_manager::get_wallet_transaction_manager;
         
         let manager_lock = get_wallet_transaction_manager()
             .map_err(|e| format!("Failed to get wallet transaction manager: {}", e))?;
@@ -574,7 +574,7 @@ impl TransactionDetector {
             }
             
             // Try to load from disk cache via wallet transaction manager
-            if let Some(json_data) = crate::wallet_transactions::get_cached_transaction_json_global(signature).await {
+            if let Some(json_data) = crate::transactions_manager::get_cached_transaction_json_global(signature).await {
                 if let Some(transaction_data) = json_data.get("transaction_data") {
                     // Parse the transaction data into our TransactionDetails format
                     match serde_json::from_value::<TransactionDetails>(transaction_data.clone()) {
@@ -594,7 +594,7 @@ impl TransactionDetector {
             log(LogTag::Transactions, "CACHE_MISS", &format!("📁 Transaction not cached, using wallet transaction manager: {}", &signature[..8]));
         }
         
-        use crate::wallet_transactions::get_transaction_details_global;
+        use crate::transactions_manager::get_transaction_details_global;
         get_transaction_details_global(signature).await
             .map_err(|e| format!("Failed to fetch transaction via wallet transaction manager: {}", e))
     }

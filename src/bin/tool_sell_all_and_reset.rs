@@ -30,7 +30,7 @@ use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::utils::{ get_wallet_address, close_token_account };
 use screenerbot::swaps::sell_token;
-use screenerbot::wallet_transactions::{initialize_wallet_transaction_manager, verify_swap_transaction_global};
+use screenerbot::transactions_manager::{initialize_wallet_transaction_manager, verify_swap_transaction_global};
 use screenerbot::rpc::SwapError;
 use reqwest;
 use serde_json;

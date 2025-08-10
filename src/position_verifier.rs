@@ -6,7 +6,7 @@
 use crate::{
     logger::{log, LogTag},
     positions::{SAVED_POSITIONS, Position},
-    wallet_transactions::verify_swap_transaction_global,
+    transactions_manager::verify_swap_transaction_global,
     transactions_tools::analyze_post_swap_transaction_simple,
     utils::{get_wallet_address, save_positions_to_file},
     global::is_debug_transactions_enabled,

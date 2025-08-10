@@ -14,9 +14,9 @@ use clap::Parser;
 use screenerbot::{
     logger::{init_file_logging, log, LogTag},
     positions::{get_open_positions, get_closed_positions},
-    rpc::get_rpc_client,
-    wallet_transactions::{initialize_wallet_transaction_manager, verify_swap_transaction_global},
+    transactions_manager::{initialize_wallet_transaction_manager, verify_swap_transaction_global},
     transactions_tools::{analyze_post_swap_transaction_simple},
+    rpc::get_rpc_client,
     utils::get_wallet_address,
 };
 use serde::{Deserialize, Serialize};
@@ -200,7 +200,7 @@ async fn debug_transaction_signature_internal(signature: &str, _args: &Args) -> 
     
     // Test 3: Check if transaction exists using wallet transaction manager
     println!("💾 Checking transaction via wallet transaction manager...");
-    use screenerbot::wallet_transactions::get_transaction_details_global;
+    use screenerbot::transactions_manager::get_transaction_details_global;
     
     match get_transaction_details_global(signature).await {
         Ok(_) => {
@@ -307,7 +307,7 @@ fn display_debug_result(result: &DebugResult, verbose: bool) {
     // Next steps
     println!("\n{}", "🔧 SUGGESTED FIXES".bright_cyan().bold());
     if !result.global_verification_success {
-        println!("  1. Check wallet_transactions.rs verify_swap_transaction_global implementation");
+        println!("  1. Check transactions_manager.rs verify_swap_transaction_global implementation");
         println!("  2. Verify RPC transaction fetching in get_transaction_details");
         println!("  3. Debug swap detection in analyze_transaction_for_verified_swap");
     }

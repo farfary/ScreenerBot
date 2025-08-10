@@ -8,7 +8,8 @@ use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
-use crate::wallet_transactions::get_global_wallet_transaction_stats;
+use crate::global::{read_configs, Configs};
+use crate::transactions_manager::get_global_wallet_transaction_stats;
 use crate::position_verifier::get_position_verification_stats;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 // New pool price system is now integrated via background services

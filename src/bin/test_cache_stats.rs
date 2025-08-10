@@ -1,8 +1,8 @@
 /// Test script to display wallet transaction cache statistics
 
 use screenerbot::{
-    logger::init_file_logging,
-    wallet_transactions::initialize_wallet_transaction_manager,
+    logger::{init_file_logging},
+    transactions_manager::initialize_wallet_transaction_manager,
     summary::display_wallet_transaction_statistics,
 };
 

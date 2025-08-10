@@ -817,7 +817,7 @@ async fn analyze_transaction_for_detailed_swap(
     }
     
     // Extract additional details
-    let router_info = (Some("Unknown".to_string()), Some("Unknown".to_string())); // Removed identify_swap_router - use transaction_detector.rs instead
+    let router_info = (Some("Unknown".to_string()), Some("Unknown".to_string())); // Removed identify_swap_router - use transactions_detector.rs instead
     let (instructions_count, ata_created, ata_closed) = analyze_instruction_patterns(transaction, meta);
     let priority_fee = extract_priority_fee(transaction);
     let compute_units = extract_compute_units(transaction);
@@ -889,10 +889,10 @@ async fn detect_swap_from_transaction(
         log(LogTag::Transactions, "DEBUG", "🔍 Starting swap detection");
     }
     
-    // Router detection is now handled by transaction_detector.rs - this is legacy code
+    // Router detection is now handled by transactions_detector.rs - this is legacy code
     let router_name = Some("Unknown".to_string());
     if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "DEBUG", "📊 Router detection moved to transaction_detector.rs");
+        log(LogTag::Transactions, "DEBUG", "📊 Router detection moved to transactions_detector.rs");
     }
     
     // For now, test Jupiter analysis on transactions with token balances
@@ -1788,7 +1788,7 @@ pub async fn analyze_post_swap_transaction_simple(
     }
     
     // Use wallet transaction manager for cached transaction access
-    use crate::wallet_transactions::get_transaction_details_global;
+    use crate::transactions_manager::get_transaction_details_global;
     let transaction = get_transaction_details_global(signature).await
         .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
     
@@ -1855,7 +1855,7 @@ pub async fn analyze_post_swap_transaction(
     ));
     
     // Use wallet transaction manager for cached transaction access
-    use crate::wallet_transactions::get_transaction_details_global;
+    use crate::transactions_manager::get_transaction_details_global;
     let transaction = get_transaction_details_global(signature).await
         .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
     

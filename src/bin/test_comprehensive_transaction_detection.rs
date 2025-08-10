@@ -16,9 +16,9 @@
 use clap::Parser;
 use screenerbot::{
     logger::{init_file_logging, log, LogTag},
-    transaction_detector::{analyze_transaction_comprehensive, TransactionType, TransactionDirection},
+    transactions_detector::{analyze_transaction_comprehensive, TransactionType, TransactionDirection},
     utils::get_wallet_address,
-    wallet_transactions::initialize_wallet_transaction_manager,
+    transactions_manager::initialize_wallet_transaction_manager,
 };
 use std::fs;
 use colored::Colorize;
@@ -186,7 +186,7 @@ async fn test_recent_transactions(wallet_address: &str, count: usize, filter_typ
     Ok(())
 }
 
-fn print_transaction_analysis(analysis: &screenerbot::transaction_detector::TransactionAnalysis, signature: &str) {
+fn print_transaction_analysis(analysis: &screenerbot::transactions_detector::TransactionAnalysis, signature: &str) {
     println!("📋 {}", "TRANSACTION ANALYSIS".bright_green().bold());
     println!("🔗 Signature: {}", signature.bright_cyan());
     
@@ -252,7 +252,7 @@ fn print_transaction_analysis(analysis: &screenerbot::transaction_detector::Tran
     println!();
 }
 
-fn print_analysis_insights(analysis: &screenerbot::transaction_detector::TransactionAnalysis) {
+fn print_analysis_insights(analysis: &screenerbot::transactions_detector::TransactionAnalysis) {
     println!("💡 {}", "INSIGHTS".bright_yellow().bold());
     
     match analysis.transaction_type {
@@ -332,7 +332,7 @@ fn get_cached_transaction_files() -> Result<Vec<String>, Box<dyn std::error::Err
     Ok(signatures)
 }
 
-fn should_display_transaction(analysis: &screenerbot::transaction_detector::TransactionAnalysis, filter: &str) -> bool {
+fn should_display_transaction(analysis: &screenerbot::transactions_detector::TransactionAnalysis, filter: &str) -> bool {
     match filter.to_lowercase().as_str() {
         "swap" => matches!(analysis.transaction_type, TransactionType::Swap),
         "transfer" => matches!(analysis.transaction_type, TransactionType::SolTransfer | TransactionType::TokenTransfer),
@@ -366,7 +366,7 @@ impl TransactionStats {
         Default::default()
     }
     
-    fn add_analysis(&mut self, analysis: &screenerbot::transaction_detector::TransactionAnalysis) {
+    fn add_analysis(&mut self, analysis: &screenerbot::transactions_detector::TransactionAnalysis) {
         self.total += 1;
         self.total_fees += analysis.fees_paid;
         self.total_sol_flow += analysis.sol_change.abs();
