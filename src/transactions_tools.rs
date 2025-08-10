@@ -16,8 +16,7 @@ use crate::{
     logger::{init_file_logging, log, LogTag},
     global::is_debug_transactions_enabled,
     global::read_configs,
-    tokens::{get_token_decimals, TokenDatabase},
-    tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol},
+    tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol, raw_to_ui_amount},
     wallets_manager::WalletsManager,
 };
 use clap::Parser;
@@ -221,12 +220,27 @@ async fn analyze_jupiter_swap(
 ) -> Option<(bool, BasicSwapInfo)> {
     if is_debug_transactions_enabled() {
         log(LogTag::Transactions, "DEBUG", "🔍 Analyzing Jupiter swap transaction");
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter analysis - Transaction message keys: {:?}", 
+            transaction.transaction.message.as_object().map(|obj| obj.keys().collect::<Vec<_>>())));
     }
     
     // For Jupiter swaps, look at SOL balance changes and token balance changes
     // Parse the message from JSON to get account keys
-    let account_keys_value = transaction.transaction.message.get("accountKeys")?;
-    let account_keys_array = account_keys_value.as_array()?;
+    let account_keys_value = transaction.transaction.message.get("accountKeys");
+    if account_keys_value.is_none() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Jupiter analysis - No accountKeys found in message");
+        }
+        return None;
+    }
+    let account_keys_array = account_keys_value.unwrap().as_array();
+    if account_keys_array.is_none() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Jupiter analysis - accountKeys is not an array");
+        }
+        return None;
+    }
+    let account_keys_array = account_keys_array.unwrap();
     
     // Convert to pubkeys and find wallet index
     let mut account_keys = Vec::new();
@@ -832,7 +846,7 @@ async fn analyze_transaction_for_detailed_swap(
     // Get token information from database
     let (token_symbol, token_name, token_decimals) = get_token_info_safe(&swap_info.token_mint).await;
     
-    let formatted_token_amount = swap_info.token_amount as f64 / 10f64.powi(token_decimals as i32);
+    let formatted_token_amount = raw_to_ui_amount(swap_info.token_amount, token_decimals);
     let price_per_token = if formatted_token_amount > 0.0 {
         swap_info.sol_amount / formatted_token_amount
     } else {
@@ -889,32 +903,30 @@ async fn detect_swap_from_transaction(
         log(LogTag::Transactions, "DEBUG", "🔍 Starting swap detection");
     }
     
-    // Router detection is now handled by transactions_detector.rs - this is legacy code
-    let router_name = Some("Unknown".to_string());
+    // Get actual router name from transactions_detector.rs
+    let router_name = if let Some(signature) = transaction.transaction.signatures.get(0) {
+        use crate::transactions_detector::TransactionDetector;
+        let detector = TransactionDetector::new(wallet_address.to_string());
+        detector.analyze_transaction(signature).await
+            .ok()
+            .and_then(|analysis| analysis.router)
+    } else {
+        None
+    };
+    
     if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "DEBUG", "📊 Router detection moved to transactions_detector.rs");
+        log(LogTag::Transactions, "DEBUG", &format!(
+            "📊 Detected router: {}", 
+            router_name.as_ref().unwrap_or(&"Unknown".to_string())
+        ));
     }
     
-    // For now, test Jupiter analysis on transactions with token balances
-    if meta.pre_token_balances.is_some() && meta.post_token_balances.is_some() {
-        if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "DEBUG", "📊 Transaction has token balances - testing Jupiter analysis");
-        }
-        if let Some(result) = {
-            let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
-                TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
-            } else {
-                None
-            };
-            analyze_jupiter_swap(transaction, meta, wallet_address, json_data.as_ref()).await
-        } {
-            return Some(result);
-        }
-    }
-    
-    // If we detect a Jupiter transaction, analyze it differently
+    // If we detect a specific router, analyze it with appropriate method first
     if let Some(ref router) = router_name {
         if router.contains("Jupiter") {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "📊 Detected Jupiter transaction - analyzing with Jupiter method");
+            }
             return {
                 let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
                     TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
@@ -928,7 +940,36 @@ async fn detect_swap_from_transaction(
                 log(LogTag::Transactions, "DEBUG", "📊 Detected Pump.fun transaction - analyzing with balance changes");
             }
             return analyze_pumpfun_swap(transaction, meta, wallet_address).await;
+        } else if router.contains("GMGN") {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "📊 Detected GMGN transaction - analyzing with balance changes");
+            }
+            return analyze_pumpfun_swap(transaction, meta, wallet_address).await; // Use same logic as pump.fun for now
         }
+    }
+    
+    // For unknown routers, test Jupiter analysis on transactions with token balances as fallback
+    if meta.pre_token_balances.is_some() && meta.post_token_balances.is_some() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Unknown router - testing Jupiter analysis as fallback");
+        }
+        if let Some(result) = {
+            let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
+                TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
+            } else {
+                None
+            };
+            analyze_jupiter_swap(transaction, meta, wallet_address, json_data.as_ref()).await
+        } {
+            return Some(result);
+        }
+        
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Jupiter analysis failed - trying generic balance analysis");
+        }
+        
+        // If Jupiter analysis fails, try generic balance-based analysis
+        return analyze_generic_swap_by_balances(transaction, meta, wallet_address).await;
     }
     
     // Parse the message from JSON to get account keys
@@ -1246,9 +1287,9 @@ fn find_token_balance(
         for balance in balances {
             if balance.mint == token_mint {
                 // Check if this is the wallet's token account (simplified check)
-                let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0);
                 let decimals = balance.ui_token_amount.decimals;
-                return Some(amount / 10f64.powi(decimals as i32));
+                return Some(raw_to_ui_amount(amount, decimals));
             }
         }
     }
@@ -1257,30 +1298,19 @@ fn find_token_balance(
 
 async fn get_token_info_safe(mint: &str) -> (String, Option<String>, u8) {
     // Try to get token information from database
-    let symbol = if let Ok(db) = TokenDatabase::new() {
+    let (symbol, name) = if let Ok(db) = crate::tokens::TokenDatabase::new() {
         if let Ok(Some(token)) = db.get_token_by_mint(mint) {
-            token.symbol
+            (token.symbol, Some(token.name))
         } else {
-            format!("TOKEN_{}", &mint[..8])
+            (format!("TOKEN_{}", &mint[..8]), None)
         }
     } else {
-        format!("TOKEN_{}", &mint[..8])
+        (format!("TOKEN_{}", &mint[..8]), None)
     };
     
-    let name = if let Ok(db) = TokenDatabase::new() {
-        if let Ok(Some(token)) = db.get_token_by_mint(mint) {
-            Some(token.name)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    
-    let decimals = if let Some(decimals) = get_token_decimals(mint).await {
-        decimals
-    } else {
-        9 // Default to 9 decimals
+    let decimals = match get_token_decimals_from_chain(mint).await {
+        Ok(d) => d,
+        Err(_) => 9, // Default to 9 decimals if lookup fails
     };
     
     (symbol, name, decimals)
@@ -1934,4 +1964,300 @@ pub struct PostSwapAnalysis {
     pub token_decimals: Option<u8>,
     pub direction: String,
     pub ata_rent_reclaimed: Option<f64>,
+}
+
+/// Generic swap analysis based purely on balance changes
+/// Works for any protocol by analyzing SOL and token balance changes
+async fn analyze_generic_swap_by_balances(
+    transaction: &TransactionDetails,
+    meta: &TransactionMeta,
+    wallet_address: &str,
+) -> Option<(bool, BasicSwapInfo)> {
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "🔍 Analyzing generic swap by balance changes");
+    }
+    
+    // Debug - check if we have token balances
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!(
+            "📊 Generic analysis - Has pre_token_balances: {}, Has post_token_balances: {}", 
+            meta.pre_token_balances.is_some(), meta.post_token_balances.is_some()
+        ));
+    }
+    
+    // Debug - inspect transaction message structure
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Generic analysis - Transaction message keys: {:?}", 
+            transaction.transaction.message.as_object().map(|obj| obj.keys().collect::<Vec<_>>())));
+    }
+
+    // Parse account keys to find wallet index
+    // The accountKeys are nested inside transaction.transaction.message.message.accountKeys
+    let message_obj = transaction.transaction.message.get("message");
+    if message_obj.is_none() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - No inner message found");
+        }
+        return None;
+    }
+    
+    let account_keys_value = message_obj.unwrap().get("accountKeys");
+    if account_keys_value.is_none() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - No accountKeys found in inner message");
+        }
+        return None;
+    }
+    let account_keys_array = account_keys_value.unwrap().as_array();
+    if account_keys_array.is_none() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - accountKeys is not an array");
+        }
+        return None;
+    }
+    let account_keys_array = account_keys_array.unwrap();
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Generic analysis - Found {} account keys", account_keys_array.len()));
+    }
+    
+    let mut account_keys = Vec::new();
+    for key_value in account_keys_array {
+        if let Some(key_str) = key_value.get("pubkey").and_then(|k| k.as_str()) {
+            if let Ok(pubkey) = Pubkey::from_str(key_str) {
+                account_keys.push(pubkey);
+            }
+        }
+    }
+    
+    let wallet_pubkey = Pubkey::from_str(wallet_address);
+    if wallet_pubkey.is_err() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - Failed to parse wallet address");
+        }
+        return None;
+    }
+    let wallet_pubkey = wallet_pubkey.unwrap();
+    
+    let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey);
+    if wallet_index.is_none() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - Wallet not found in account keys");
+        }
+        return None;
+    }
+    let wallet_index = wallet_index.unwrap();
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Generic analysis - wallet index: {}", wallet_index));
+    }
+    
+    // Analyze SOL balance changes
+    let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
+        let pre_balance = meta.pre_balances[wallet_index] as i64;
+        let post_balance = meta.post_balances[wallet_index] as i64;
+        let change_lamports = post_balance - pre_balance;
+        let change_sol = lamports_to_sol(change_lamports.abs() as u64);
+        if change_lamports >= 0 { change_sol } else { -change_sol }
+    } else {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - cannot find wallet SOL balances");
+        }
+        return None;
+    };
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Generic analysis - SOL change: {:.6} SOL", sol_change));
+    }
+    
+    // Analyze token balance changes for the wallet
+    if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
+        // Find all token changes for wallet-owned accounts
+        let mut wallet_token_changes = HashMap::new();
+        
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!(
+                "📊 Generic analysis - Pre balances: {}, Post balances: {}", 
+                pre_balances.len(), post_balances.len()
+            ));
+            
+            // Debug - let's see the actual balances
+            if !pre_balances.is_empty() {
+                log(LogTag::Transactions, "DEBUG", &format!(
+                    "📊 Generic analysis - Pre balance sample: mint={}, owner={}, amount={}", 
+                    &pre_balances[0].mint[..8], 
+                    pre_balances[0].owner.as_ref().map(|o| &o[..8]).unwrap_or("None"),
+                    pre_balances[0].ui_token_amount.amount
+                ));
+            }
+            if !post_balances.is_empty() {
+                log(LogTag::Transactions, "DEBUG", &format!(
+                    "📊 Generic analysis - Post balance sample: mint={}, owner={}, amount={}", 
+                    &post_balances[0].mint[..8], 
+                    post_balances[0].owner.as_ref().map(|o| &o[..8]).unwrap_or("None"),
+                    post_balances[0].ui_token_amount.amount
+                ));
+            }
+        }
+        
+        if pre_balances.is_empty() && post_balances.is_empty() {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - both token balance arrays are empty, analyzing instruction data");
+            }
+            
+            // If no token balances, this might be a different type of swap
+            // Let's detect based on SOL change pattern and try to find the token mint
+            if sol_change.abs() > 0.001 {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!(
+                        "📊 Generic analysis - SOL-only transaction detected: {:.6} SOL change", 
+                        sol_change
+                    ));
+                }
+                
+                // Try to extract token mint from account keys
+                // In swap transactions, the token mint is often one of the accounts
+                let mut potential_mint = "UNKNOWN".to_string();
+                
+                // Look through account keys for known token program accounts
+                for (i, account_key) in account_keys.iter().enumerate() {
+                    let account_key_str = account_key.to_string();
+                    
+                    // Skip system accounts and known program IDs
+                    if !account_key_str.starts_with("11111111") && // System Program
+                       !account_key_str.starts_with("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") && // Token Program
+                       !account_key_str.starts_with("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") && // Associated Token Program
+                       !account_key_str.starts_with("ComputeBudget111111111111111111111111111111") && // Compute Budget
+                       !account_key_str.starts_with("DGMgNKpqygARV2pHZfW4kNQSHT9F3Ly2BKWqvpYrAg5C") && // GMGN Router
+                       !account_key_str.starts_with(&wallet_address[..10]) && // Skip wallet addresses
+                       account_key_str.len() >= 40 { // Valid pubkey length
+                        
+                        // This could be a token mint, save the first candidate
+                        if potential_mint == "UNKNOWN" {
+                            potential_mint = account_key_str.clone();
+                            
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "DEBUG", &format!(
+                                    "📊 Generic analysis - potential token mint found: {}", 
+                                    &account_key_str[..8]
+                                ));
+                            }
+                        }
+                    }
+                }
+                
+                // This could be a buy transaction if SOL decreased
+                if sol_change < -0.001 {
+                    return Some((true, BasicSwapInfo {
+                        swap_type: "BUY".to_string(),
+                        token_mint: potential_mint,
+                        sol_amount: sol_change.abs(),
+                        token_amount: 0, // Unknown without token balances
+                        effective_price: 0.0,
+                        fees_paid: lamports_to_sol(meta.fee),
+                    }));
+                }
+            }
+            
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - no clear swap pattern detected");
+            }
+            return None;
+        }
+        
+        // Check all token accounts in the transaction for wallet ownership
+        for post_balance in post_balances {
+            if let Some(owner) = &post_balance.owner {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!(
+                        "📊 Generic analysis - Post account: mint={}, owner={}, amount={}", 
+                        &post_balance.mint[..8], &owner[..8], post_balance.ui_token_amount.amount
+                    ));
+                }
+                
+                if owner == wallet_address {
+                    let mint = &post_balance.mint;
+                    let post_amount = post_balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                    
+                    // Find corresponding pre-balance (account may not exist in pre-balances if newly created)
+                    let pre_amount = pre_balances.iter()
+                        .find(|pre| pre.account_index == post_balance.account_index)
+                        .map(|pre| pre.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64)
+                        .unwrap_or(0.0); // Default to 0 if account didn't exist before
+                    
+                    let change = post_amount - pre_amount;
+                    
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!(
+                            "📊 Generic analysis - Token {}: pre={}, post={}, change={}", 
+                            &mint[..8], pre_amount, post_amount, change
+                        ));
+                    }
+                    
+                    if change.abs() > 0.1 { // Only record significant changes
+                        wallet_token_changes.insert(mint.clone(), change);
+                    }
+                }
+            }
+        }
+        
+        // Check for buy pattern: SOL decrease + token increase
+        if sol_change < -0.001 {
+            for (mint, token_change) in &wallet_token_changes {
+                if *token_change > 1.0 { // Token increased significantly
+                    let sol_spent = sol_change.abs();
+                    let effective_price = sol_spent / token_change;
+                    
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!(
+                            "📊 Generic analysis - BUY detected: {} SOL → {} tokens, price: {:.10}", 
+                            sol_spent, token_change, effective_price
+                        ));
+                    }
+                    
+                    return Some((true, BasicSwapInfo {
+                        swap_type: "BUY".to_string(),
+                        token_mint: mint.clone(),
+                        sol_amount: sol_spent,
+                        token_amount: *token_change as u64,
+                        effective_price,
+                        fees_paid: lamports_to_sol(meta.fee),
+                    }));
+                }
+            }
+        }
+        
+        // Check for sell pattern: SOL increase + token decrease
+        if sol_change > 0.001 {
+            for (mint, token_change) in &wallet_token_changes {
+                if *token_change < -1.0 { // Token decreased significantly
+                    let tokens_sold = token_change.abs();
+                    let sol_received = sol_change;
+                    let effective_price = sol_received / tokens_sold;
+                    
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!(
+                            "📊 Generic analysis - SELL detected: {} tokens → {} SOL, price: {:.10}", 
+                            tokens_sold, sol_received, effective_price
+                        ));
+                    }
+                    
+                    return Some((true, BasicSwapInfo {
+                        swap_type: "SELL".to_string(),
+                        token_mint: mint.clone(),
+                        sol_amount: sol_received,
+                        token_amount: tokens_sold as u64,
+                        effective_price,
+                        fees_paid: lamports_to_sol(meta.fee),
+                    }));
+                }
+            }
+        }
+    }
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - no clear swap pattern detected");
+    }
+    
+    None
 }

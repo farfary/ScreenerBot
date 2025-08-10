@@ -26,7 +26,7 @@ use crate::{
     logger::{log, LogTag},
     global::{is_debug_transactions_enabled, DATA_DIR},
     rpc::{TransactionDetails, TransactionMeta},
-    tokens::decimals::get_token_decimals_from_chain,
+    tokens::decimals::{get_token_decimals_from_chain, lamports_to_sol, LAMPORTS_PER_SOL},
 };
 
 /// Comprehensive transaction analysis result
@@ -191,6 +191,7 @@ impl TransactionDetector {
             
             // GMGN
             ("9W959DqEETiGZocYWisQaak33ZHo2L8SrXcBJj2iqJLx", "GMGN"),
+            ("DGMgNKpqygARV2pHZfW4kNQSHT9F3Ly2BKWqvpYrAg5C", "GMGN_Router"), // New GMGN routing program
             
             // Meteora DLMM
             ("LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo", "Meteora"),
@@ -688,11 +689,6 @@ impl TransactionDetector {
     }
 }
 
-/// Utility function to convert lamports to SOL
-fn lamports_to_sol(lamports: u64) -> f64 {
-    lamports as f64 / 1_000_000_000.0
-}
-
 /// Public convenience function for quick transaction analysis
 pub async fn analyze_transaction_comprehensive(signature: &str, wallet_address: &str) -> Result<TransactionAnalysis, String> {
     let detector = TransactionDetector::new(wallet_address.to_string());
@@ -767,7 +763,7 @@ fn analyze_bulk_transfer_pattern(transaction: &TransactionDetails) -> Option<(us
             }
 
             if transfer_count > 1 {
-                let total_sol = total_lamports as f64 / 1_000_000_000.0;
+                let total_sol = lamports_to_sol(total_lamports);
                 if is_debug_transactions_enabled() {
                     log(LogTag::Transactions, "BULK", &format!(
                         "📦 Detected bulk transfer pattern: {} transfers, {:.9} SOL total",

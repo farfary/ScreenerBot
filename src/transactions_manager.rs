@@ -5,8 +5,8 @@ use crate::{
     rpc::RpcClient,
     logger::{log, LogTag},
     global::is_debug_transactions_enabled,
-    tokens::{get_token_decimals, TokenDatabase},
-    tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol},
+    tokens::TokenDatabase,
+    tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol},
 };
 use solana_sdk::{
     signature::{Signature, Signer},
@@ -1267,7 +1267,7 @@ impl TransactionsManager {
         let token_decimals = if main_token.is_empty() { 
             0 
         } else { 
-            get_token_decimals_safe_local(&main_token).await.unwrap_or(6) 
+            get_token_decimals_from_chain(&main_token).await.unwrap_or(6) 
         };
         
         // Calculate effective price
@@ -1467,16 +1467,19 @@ impl TransactionsManager {
                     let token_symbol = get_token_symbol_safe(mint_str).await;
                     
                     // Validate decimals from transaction against our token database
-                    let validated_decimals = if let Some(db_decimals) = get_token_decimals_safe_local(mint_str).await {
-                        if db_decimals != decimals {
-                            log(LogTag::Transactions, "WARNING", &format!("Decimal mismatch for {}: transaction={}, database={}, using database value", 
-                                &mint_str[..8], decimals, db_decimals));
-                            db_decimals
-                        } else {
-                            decimals
+                    let validated_decimals = match get_token_decimals_from_chain(mint_str).await {
+                        Ok(db_decimals) => {
+                            if db_decimals != decimals {
+                                log(LogTag::Transactions, "WARNING", &format!("Decimal mismatch for {}: transaction={}, database={}, using database value", 
+                                    &mint_str[..8], decimals, db_decimals));
+                                db_decimals
+                            } else {
+                                decimals
+                            }
                         }
-                    } else {
-                        decimals // Fallback to transaction data if database lookup fails
+                        Err(_) => {
+                            decimals // Fallback to transaction data if database lookup fails
+                        }
                     };
                     
                     // Calculate effective price using validated decimals
@@ -1679,12 +1682,6 @@ async fn get_token_info_safe(mint: &str) -> (String, String) {
     };
     
     (fallback.clone(), fallback)
-}
-
-/// Get token decimals with proper error handling and cache
-async fn get_token_decimals_safe_local(mint: &str) -> Option<u8> {
-    // Use the centralized decimals function from tokens module
-    get_token_decimals(mint).await
 }
 
 /// Comprehensive Swap Transaction Discovery and Analysis Functions
