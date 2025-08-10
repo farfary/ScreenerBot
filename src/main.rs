@@ -125,6 +125,24 @@ async fn main() {
     };
     log(LogTag::System, "INFO", "Wallet transaction periodic sync task started successfully");
 
+    // Initialize position verifier for automatic transaction verification
+    if let Err(e) = screenerbot::position_verifier::init_position_verifier().await {
+        log(LogTag::System, "ERROR", &format!("Failed to initialize position verifier: {}", e));
+        std::process::exit(1);
+    }
+    log(LogTag::System, "INFO", "Position verifier initialized successfully");
+
+    // Start position verification monitoring background service
+    let shutdown_position_verifier = shutdown.clone();
+    let position_verifier_handle = match screenerbot::position_verifier::start_position_verification(shutdown_position_verifier).await {
+        Ok(handle) => handle,
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to start position verification service: {}", e));
+            std::process::exit(1);
+        }
+    };
+    log(LogTag::System, "INFO", "Position verification monitoring service started successfully");
+
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
 
@@ -413,6 +431,15 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("Wallet transactions sync task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for position verification service
+            if let Err(e) = position_verifier_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Position verification task failed to shutdown cleanly: {}", e)
                 );
             }
 

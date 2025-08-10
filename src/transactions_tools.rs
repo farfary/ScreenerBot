@@ -230,12 +230,41 @@ async fn analyze_jupiter_swap(
     
     // Convert to pubkeys and find wallet index
     let mut account_keys = Vec::new();
-    for key_value in account_keys_array {
-        if let Some(key_str) = key_value.get("pubkey").and_then(|k| k.as_str()) {
-            if let Ok(pubkey) = Pubkey::from_str(key_str) {
-                account_keys.push(pubkey);
-            }
+    for (i, key_value) in account_keys_array.iter().enumerate() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - account key {}: {:?}", i, key_value));
         }
+        
+        // Handle both string format and object format
+        let key_str = if let Some(key_str) = key_value.as_str() {
+            // Direct string format
+            key_str
+        } else if let Some(key_str) = key_value.get("pubkey").and_then(|k| k.as_str()) {
+            // Object format with pubkey field
+            key_str
+        } else {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - unable to extract pubkey from key_value"));
+            }
+            continue;
+        };
+        
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - found pubkey string: {}", key_str));
+        }
+        
+        if let Ok(pubkey) = Pubkey::from_str(key_str) {
+            account_keys.push(pubkey);
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - converted pubkey {}: {}", account_keys.len() - 1, pubkey));
+            }
+        } else if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - failed to parse pubkey: {}", key_str));
+        }
+    }
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - converted {} total pubkeys", account_keys.len()));
     }
     
     let wallet_pubkey = Pubkey::from_str(wallet_address).ok()?;
@@ -385,6 +414,165 @@ async fn analyze_jupiter_swap(
     
     if is_debug_transactions_enabled() {
         log(LogTag::Transactions, "DEBUG", "📊 Jupiter swap - no significant changes detected");
+    }
+    None
+}
+
+async fn analyze_pumpfun_swap(
+    transaction: &TransactionDetails,
+    meta: &TransactionMeta,
+    wallet_address: &str,
+) -> Option<(bool, BasicSwapInfo)> {
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "🔍 Analyzing Pump.fun swap transaction");
+    }
+    
+    // Parse the message to get account keys
+    let account_keys_value = transaction.transaction.message.get("accountKeys")?;
+    let account_keys_array = account_keys_value.as_array()?;
+    
+    // Convert to pubkeys and find wallet index
+    let mut account_keys = Vec::new();
+    for key_value in account_keys_array {
+        // Handle both string format and object format
+        let key_str = if let Some(key_str) = key_value.as_str() {
+            // Direct string format
+            key_str
+        } else if let Some(key_str) = key_value.get("pubkey").and_then(|k| k.as_str()) {
+            // Object format with pubkey field
+            key_str
+        } else {
+            continue;
+        };
+        
+        if let Ok(pubkey) = Pubkey::from_str(key_str) {
+            account_keys.push(pubkey);
+        }
+    }
+    
+    let wallet_pubkey = Pubkey::from_str(wallet_address).ok()?;
+    let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey)?;
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - wallet index: {}", wallet_index));
+    }
+    
+    // Analyze SOL balance changes
+    let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
+        let pre_balance = meta.pre_balances[wallet_index] as i64;
+        let post_balance = meta.post_balances[wallet_index] as i64;
+        lamports_to_sol((post_balance - pre_balance).abs() as u64) * if post_balance > pre_balance { 1.0 } else { -1.0 }
+    } else {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Pump.fun swap - cannot find wallet SOL balances");
+        }
+        return None;
+    };
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - SOL change: {} SOL", sol_change));
+    }
+    
+    // Look for token balance changes involving wallet
+    if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
+        let mut wallet_token_changes = HashMap::new();
+        let wallet_pubkey_str = wallet_address;
+        
+        // Collect pre-token balances for wallet-owned accounts only
+        for balance in pre_balances {
+            if let Some(ref owner) = balance.owner {
+                if owner == wallet_pubkey_str {
+                    let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                    let decimals = balance.ui_token_amount.decimals;
+                    let formatted_amount = amount / 10f64.powi(decimals as i32);
+                    *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) -= formatted_amount;
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - pre token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                    }
+                }
+            }
+        }
+        
+        // Collect post-token balances for wallet-owned accounts only
+        for balance in post_balances {
+            if let Some(ref owner) = balance.owner {
+                if owner == wallet_pubkey_str {
+                    let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
+                    let decimals = balance.ui_token_amount.decimals;
+                    let formatted_amount = amount / 10f64.powi(decimals as i32);
+                    *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - post token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                    }
+                }
+            }
+        }
+        
+        // Look for meaningful token changes (positive = gained, negative = lost)
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - analyzing {} total token changes", wallet_token_changes.len()));
+            for (mint, change) in &wallet_token_changes {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - token change candidate: mint={}, change={}, significant={}", 
+                    mint, change, change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112"));
+            }
+        }
+        
+        let significant_changes: Vec<_> = wallet_token_changes.iter()
+            .filter(|(mint, &change)| change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112") // Ignore SOL token and dust
+            .collect();
+        
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - found {} significant token changes", significant_changes.len()));
+            
+            for (mint, change) in &significant_changes {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap - token change: mint={}, change={}", mint, change));
+            }
+        }
+        
+        // If we have token changes and SOL changes, this is likely a swap
+        if !significant_changes.is_empty() && sol_change.abs() > 0.001 {
+            // Determine if this is a buy or sell based on SOL change
+            let is_buy = sol_change < 0.0; // SOL decreased = buying tokens
+            
+            // Find the main token being traded (largest absolute change)
+            let main_token = significant_changes.iter()
+                .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+                .map(|(mint, _)| mint.clone())?;
+            
+            let token_change = *significant_changes.iter()
+                .find(|(mint, _)| mint.as_str() == main_token)?
+                .1;
+            
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap detected: {} {} tokens, SOL change: {}", 
+                    if is_buy { "BUY" } else { "SELL" }, main_token, sol_change));
+            }
+            
+            // For Pump.fun, use balance change method as it's simpler than Jupiter's inner instructions
+            let actual_sol_amount = sol_change.abs();
+            let actual_token_amount = token_change.abs();
+            let actual_price = if actual_token_amount > 0.0 { actual_sol_amount / actual_token_amount } else { 0.0 };
+            
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Pump.fun swap amounts: {} SOL ↔ {} tokens, price: {} SOL/token", 
+                    actual_sol_amount, actual_token_amount, actual_price));
+            }
+            
+            let swap_info = BasicSwapInfo {
+                swap_type: if is_buy { "BUY".to_string() } else { "SELL".to_string() },
+                token_mint: main_token.to_string(),
+                sol_amount: actual_sol_amount,
+                token_amount: (actual_token_amount * 1_000_000.0) as u64, // Convert to token base units
+                effective_price: actual_price,
+                fees_paid: lamports_to_sol(meta.fee), // Convert lamports to SOL
+            };
+            
+            return Some((true, swap_info)); // Always return true since we detected a swap
+        }
+    }
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "📊 Pump.fun swap - no significant changes detected");
     }
     None
 }
@@ -735,6 +923,11 @@ async fn detect_swap_from_transaction(
                 };
                 analyze_jupiter_swap(transaction, meta, wallet_address, json_data.as_ref()).await
             };
+        } else if router.contains("Pump.fun") {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "📊 Detected Pump.fun transaction - analyzing with balance changes");
+            }
+            return analyze_pumpfun_swap(transaction, meta, wallet_address).await;
         }
     }
     
@@ -915,6 +1108,8 @@ fn identify_swap_router(
                                         "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
                                         "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt" => "Invariant",
                                         "SoLFiHG9TfgtdUXUjWAxi3LtvYuFyDLVhBWxdMZxyCe" => "SolFi",
+                                        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => "Pump.fun AMM",
+                                        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => "Pump.fun Program",
                                         _ => continue,
                                     };
                                     

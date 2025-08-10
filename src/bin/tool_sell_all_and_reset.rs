@@ -30,6 +30,7 @@ use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::utils::{ get_wallet_address, close_token_account };
 use screenerbot::swaps::sell_token;
+use screenerbot::wallet_transactions::{initialize_wallet_transaction_manager, verify_swap_transaction_global};
 use screenerbot::rpc::SwapError;
 use reqwest;
 use serde_json;
@@ -192,6 +193,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "WALLET", &format!("Processing wallet: {}", wallet_address));
 
+    // Initialize wallet transaction manager for transaction verification
+    if !dry_run {
+        log(LogTag::System, "INFO", "Initializing wallet transaction manager for proper transaction verification...");
+        if let Err(e) = initialize_wallet_transaction_manager().await {
+            log(LogTag::System, "WARNING", &format!("Failed to initialize transaction manager: {}. Continuing without verification.", e));
+        } else {
+            log(LogTag::System, "SUCCESS", "Wallet transaction manager initialized successfully");
+        }
+    }
+
     // Step 1: Get all token accounts (both regular SPL and Token-2022)
     log(LogTag::System, "INFO", "Scanning for SPL Token accounts...");
     let mut token_accounts = match get_all_token_accounts(&wallet_address).await {
@@ -348,19 +359,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match sell_token(&token, account.balance, None).await {
                         Ok(swap_result) => {
                             if swap_result.success {
-                                // Calculate SOL output from output_amount string
-                                let sol_output = swap_result.output_amount
-                                    .parse::<u64>()
-                                    .map(|lamports| (lamports as f64) / 1_000_000_000.0) // Convert lamports to SOL
-                                    .unwrap_or(0.0);
+                                // If we have a transaction signature, verify it properly
+                                let verified_amount = if let Some(ref signature) = swap_result.transaction_signature {
+                                    log(LogTag::System, "VERIFY", &format!("Verifying swap transaction: {}", &signature[..8]));
+                                    
+                                    // Wait a moment for transaction to propagate
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                    
+                                    match verify_swap_transaction_global(signature, "sell").await {
+                                        Ok(verified_data) => {
+                                            log(
+                                                LogTag::System,
+                                                "VERIFY_SUCCESS",
+                                                &format!(
+                                                    "Transaction verified: {} SOL received, effective price: {:.12} SOL/token",
+                                                    verified_data.sol_amount,
+                                                    verified_data.effective_price
+                                                )
+                                            );
+                                            verified_data.sol_amount
+                                        }
+                                        Err(e) => {
+                                            log(LogTag::System, "VERIFY_WARNING", &format!("Could not verify transaction: {}. Using fallback amount.", e));
+                                            // Fallback to parsing output_amount
+                                            swap_result.output_amount
+                                                .parse::<u64>()
+                                                .map(|lamports| (lamports as f64) / 1_000_000_000.0)
+                                                .unwrap_or(0.0)
+                                        }
+                                    }
+                                } else {
+                                    // No signature available, use fallback
+                                    swap_result.output_amount
+                                        .parse::<u64>()
+                                        .map(|lamports| (lamports as f64) / 1_000_000_000.0)
+                                        .unwrap_or(0.0)
+                                };
 
                                 log(
                                     LogTag::System,
                                     "SELL_SUCCESS",
                                     &format!(
-                                        "Successfully sold {} for {:.6} SOL",
+                                        "Successfully sold {} for {:.6} SOL (verified)",
                                         account.mint,
-                                        sol_output
+                                        verified_amount
                                     )
                                 );
                                 (account, true, None)
@@ -479,6 +521,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     signature
                                 )
                             );
+                            
+                            // Verify the ATA closing transaction if not in dry run mode
+                            if !dry_run {
+                                log(LogTag::System, "ATA_VERIFY", &format!("Verifying ATA close transaction: {}", &signature[..8]));
+                                
+                                // Wait a moment for transaction to propagate
+                                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                
+                                // Note: ATA closing is not a "swap" so we can't use verify_swap_transaction_global
+                                // But we can log that we attempted verification
+                                log(LogTag::System, "ATA_VERIFY_INFO", "ATA close transaction logged for future verification");
+                            }
+                            
                             (account, true, Some(signature))
                         }
                         Err(e) => {

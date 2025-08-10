@@ -34,8 +34,12 @@ name = "screenerbot"
 path = "src/main.rs"
 
 [[bin]]
-name = "tool_sell_all_and_close_atas"
-path = "src/bin/tool_sell_all_and_close_atas.rs"
+name = "debug_transaction_verification"
+path = "src/bin/debug_transaction_verification.rs"
+
+[[bin]]
+name = "update_position_verification"
+path = "src/bin/update_position_verification.rs"
 
 [[bin]]
 name = "tool_ata_cleanup"
@@ -52,14 +56,6 @@ path = "src/bin/tool_price_history_cache.rs"
 [[bin]]
 name = "tool_wallet_manager"
 path = "src/bin/tool_wallet_manager.rs"
-
-[[bin]]
-name = "test_dual_router_comparison"
-path = "src/bin/test_dual_router_comparison.rs"
-
-[[bin]]
-name = "test_jupiter_swap_real"
-path = "src/bin/test_jupiter_swap_real.rs"
 
 
 [dependencies]
@@ -190,7 +186,3 @@ fast = []
 
 # Full feature set
 full = ["web", "telegram", "logging", "firebase", "jupiter", "ui", "time-zones", "http-client", "crypto-extra"]
-
-[[bin]]
-name = "tool_analyze_wallet_swaps"
-path = "src/bin/tool_analyze_wallet_swaps.rs"

@@ -9,6 +9,7 @@ use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
 use crate::wallet_transactions::get_global_wallet_transaction_stats;
+use crate::position_verifier::get_position_verification_stats;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
@@ -230,6 +231,23 @@ pub struct WalletTransactionDisplay {
     oldest_signature: String,
     #[tabled(rename = "🆕 Newest Signature")]
     newest_signature: String,
+}
+
+/// Display structure for position verification statistics
+#[derive(Tabled)]
+pub struct PositionVerificationDisplay {
+    #[tabled(rename = "📊 Total Positions")]
+    total_positions: String,
+    #[tabled(rename = "✅ Entry Verified")]
+    entry_verified: String,
+    #[tabled(rename = "🚪 Exit Verified")]
+    exit_verified: String,
+    #[tabled(rename = "⏳ Unverified")]
+    unverified: String,
+    #[tabled(rename = "📈 Entry Rate")]
+    entry_verification_rate: String,
+    #[tabled(rename = "🚪 Exit Rate")]
+    exit_verification_rate: String,
 }
 
 /// Background task to display positions table every 10 seconds
@@ -817,6 +835,23 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         );
     }
 
+    // Display position verification statistics
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "Displaying position verification statistics");
+    }
+    let verification_start = Instant::now();
+    display_position_verification_statistics();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Position verification statistics rendered in {} ms",
+                verification_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Display frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
     if !active_cooldowns.is_empty() {
@@ -1032,6 +1067,69 @@ pub fn display_wallet_transaction_statistics() {
         println!("⚠️  Wallet transaction manager not initialized");
         
         log(LogTag::Summary, "WARNING", "Wallet transaction manager not available for statistics");
+    }
+}
+
+/// Display position verification statistics
+pub fn display_position_verification_statistics() {
+    let (total_positions, entry_verified, exit_verified, unverified) = get_position_verification_stats();
+    
+    if total_positions > 0 {
+        println!("\n🔍 POSITION VERIFICATION STATISTICS");
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        
+        let entry_rate = if total_positions > 0 {
+            (entry_verified as f64 / total_positions as f64 * 100.0)
+        } else {
+            0.0
+        };
+        
+        let exit_rate = if total_positions > 0 {
+            (exit_verified as f64 / total_positions as f64 * 100.0)
+        } else {
+            0.0
+        };
+        
+        let verification_display = vec![PositionVerificationDisplay {
+            total_positions: total_positions.to_string(),
+            entry_verified: entry_verified.to_string(),
+            exit_verified: exit_verified.to_string(),
+            unverified: unverified.to_string(),
+            entry_verification_rate: format!("{:.1}%", entry_rate),
+            exit_verification_rate: format!("{:.1}%", exit_rate),
+        }];
+        
+        let verification_table = Table::new(verification_display)
+            .with(Style::modern())
+            .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
+            .to_string();
+        
+        println!("{}", verification_table);
+        
+        // Display verification status details
+        println!("\n📊 Verification Status:");
+        println!("   ✅ Entry Transactions: {}/{} verified ({:.1}%)", 
+                 entry_verified, total_positions, entry_rate);
+        println!("   🚪 Exit Transactions: {}/{} verified ({:.1}%)", 
+                 exit_verified, total_positions, exit_rate);
+        
+        if unverified > 0 {
+            println!("   ⏳ Unverified: {} positions pending verification", unverified);
+            println!("   🔄 Background verification: Active (checking every 60 seconds)");
+        } else {
+            println!("   🎉 All positions fully verified!");
+        }
+        
+        log(LogTag::Summary, "VERIFICATION_STATS", &format!(
+            "Position verification: {}/{} entry, {}/{} exit, {} unverified", 
+            entry_verified, total_positions, exit_verified, total_positions, unverified
+        ));
+    } else {
+        println!("\n🔍 POSITION VERIFICATION STATISTICS");
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        println!("📝 No positions found");
+        
+        log(LogTag::Summary, "INFO", "No positions found for verification statistics");
     }
 }
 
