@@ -817,7 +817,7 @@ async fn analyze_transaction_for_detailed_swap(
     }
     
     // Extract additional details
-    let router_info = identify_swap_router(transaction);
+    let router_info = (Some("Unknown".to_string()), Some("Unknown".to_string())); // Removed identify_swap_router - use transaction_detector.rs instead
     let (instructions_count, ata_created, ata_closed) = analyze_instruction_patterns(transaction, meta);
     let priority_fee = extract_priority_fee(transaction);
     let compute_units = extract_compute_units(transaction);
@@ -889,10 +889,10 @@ async fn detect_swap_from_transaction(
         log(LogTag::Transactions, "DEBUG", "🔍 Starting swap detection");
     }
     
-    // First check if this transaction involves Jupiter or other known DEX programs
-    let (router_name, _program_id) = identify_swap_router(transaction);
+    // Router detection is now handled by transaction_detector.rs - this is legacy code
+    let router_name = Some("Unknown".to_string());
     if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "DEBUG", &format!("📊 Detected swap router: {:?}", router_name));
+        log(LogTag::Transactions, "DEBUG", "📊 Router detection moved to transaction_detector.rs");
     }
     
     // For now, test Jupiter analysis on transactions with token balances
@@ -1084,46 +1084,6 @@ fn analyze_token_balance_changes(
         log(LogTag::Transactions, "DEBUG", &format!("📊 Total token changes found: {}", changes.len()));
     }
     changes
-}
-
-fn identify_swap_router(
-    transaction: &TransactionDetails,
-) -> (Option<String>, Option<String>) {
-    // Parse instructions from the message JSON
-    if let Some(instructions_value) = transaction.transaction.message.get("instructions") {
-        if let Some(instructions_array) = instructions_value.as_array() {
-            // Get account keys for looking up program IDs
-            if let Some(account_keys_value) = transaction.transaction.message.get("accountKeys") {
-                if let Some(account_keys_array) = account_keys_value.as_array() {
-                    for instruction in instructions_array {
-                        if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|p| p.as_u64()) {
-                            if let Some(program_key_value) = account_keys_array.get(program_id_index as usize) {
-                                if let Some(program_id) = program_key_value.as_str() {
-                                    let router_name = match program_id {
-                                        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => "Jupiter Aggregator v6",
-                                        "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => "Jupiter Aggregator v4",
-                                        "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM" => "Raydium AMM",
-                                        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "Raydium AMM v4",
-                                        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "Raydium CPMM",
-                                        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "Meteora DLMM",
-                                        "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt" => "Invariant",
-                                        "SoLFiHG9TfgtdUXUjWAxi3LtvYuFyDLVhBWxdMZxyCe" => "SolFi",
-                                        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => "Pump.fun AMM",
-                                        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => "Pump.fun Program",
-                                        _ => continue,
-                                    };
-                                    
-                                    return (Some(program_id.to_string()), Some(router_name.to_string()));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    (None, None)
 }
 
 fn analyze_instruction_patterns(
@@ -1827,7 +1787,9 @@ pub async fn analyze_post_swap_transaction_simple(
         ));
     }
     
-    // Fetch transaction details using RPC client
+    // TODO: Replace direct RPC call with cached transaction access
+    // Currently using direct RPC for immediate fix, but should be migrated to use
+    // wallet transaction manager cache in the future
     let rpc_client = get_rpc_client();
     let transaction = rpc_client.get_transaction_details(signature).await
         .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
@@ -1839,12 +1801,8 @@ pub async fn analyze_post_swap_transaction_simple(
             meta, 
             wallet_address
         ).await {
-            // Determine direction based on SOL balance change
-            let direction = if swap_info.sol_amount > 0.0 {
-                "sell" // SOL increased = token was sold for SOL
-            } else {
-                "buy" // SOL decreased = SOL was used to buy tokens
-            };
+            // Use the swap_type from detect_swap_from_transaction instead of re-determining
+            let direction = swap_info.swap_type.to_lowercase();
             
             let effective_price = if swap_info.token_amount > 0 {
                 swap_info.sol_amount.abs() / (swap_info.token_amount as f64)
@@ -1900,7 +1858,9 @@ pub async fn analyze_post_swap_transaction(
         &signature[..8], direction
     ));
     
-    // Fetch transaction details using RPC client
+    // TODO: Replace direct RPC call with cached transaction access
+    // Currently using direct RPC for immediate fix, but should be migrated to use
+    // wallet transaction manager cache in the future
     let rpc_client = get_rpc_client();
     let transaction = rpc_client.get_transaction_details(signature).await
         .map_err(|e| format!("Failed to fetch transaction: {}", e))?;

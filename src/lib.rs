@@ -19,4 +19,5 @@ pub mod swaps;
 pub mod wallet_tracker;
 pub mod wallet_transactions;
 pub mod transactions_tools;
+pub mod transaction_detector;
 pub mod position_verifier;
