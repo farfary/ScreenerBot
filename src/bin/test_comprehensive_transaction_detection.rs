@@ -16,7 +16,7 @@
 use clap::Parser;
 use screenerbot::{
     logger::{init_file_logging, log, LogTag},
-    transaction_detector::{analyze_transaction_comprehensive, format_transaction_analysis, TransactionType, TransactionDirection},
+    transaction_detector::{analyze_transaction_comprehensive, TransactionType, TransactionDirection},
     utils::get_wallet_address,
     wallet_transactions::initialize_wallet_transaction_manager,
 };
@@ -196,6 +196,7 @@ fn print_transaction_analysis(analysis: &screenerbot::transaction_detector::Tran
         TransactionType::SolTransfer => "💰".to_string(),
         TransactionType::TokenTransfer => "🪙".to_string(),
         TransactionType::MultiHopSwap => "🔀".to_string(),
+        TransactionType::BulkTransfer => "📦".to_string(),
         TransactionType::DeFiInteraction => "🏦".to_string(),
         TransactionType::LiquidityProvision => "💧".to_string(),
         TransactionType::Unknown => "❓".to_string(),
@@ -287,6 +288,9 @@ fn print_analysis_insights(analysis: &screenerbot::transaction_detector::Transac
         }
         TransactionType::LiquidityProvision => {
             println!("📊 Liquidity provision or removal");
+        }
+        TransactionType::BulkTransfer => {
+            println!("📊 Bulk transfer operation - multiple small transfers in one transaction");
         }
         TransactionType::Unknown => {
             println!("📊 Unknown transaction type - may need enhanced detection");

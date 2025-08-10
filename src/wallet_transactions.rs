@@ -688,7 +688,7 @@ impl WalletTransactionManager {
         log(LogTag::Transactions, "INFO", &format!("Fetching and caching {} transactions concurrently", signatures.len()));
         
         // Configuration for concurrent processing
-        const MAX_CONCURRENT_REQUESTS: usize = 8; // Limit concurrent requests to avoid overwhelming RPC
+        const MAX_CONCURRENT_REQUESTS: usize = 5; // Limit concurrent requests to avoid overwhelming RPC
         const BATCH_DELAY_MS: u64 = 100; // Small delay between batches to be nice to RPC
         
         // Filter out already cached signatures

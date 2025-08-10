@@ -18,11 +18,12 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use crate::{
     logger::{log, LogTag},
-    global::is_debug_transactions_enabled,
+    global::{is_debug_transactions_enabled, DATA_DIR},
     rpc::{TransactionDetails, TransactionMeta},
     tokens::decimals::get_token_decimals_from_chain,
 };
@@ -44,19 +45,21 @@ pub struct TransactionAnalysis {
 /// Supported transaction types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TransactionType {
-    /// Token swap (buy/sell tokens for SOL or other tokens)
+    /// Token swap (BUY/SELL via DEX)
     Swap,
-    /// Simple SOL transfer between accounts
+    /// Simple SOL transfer between accounts  
     SolTransfer,
-    /// SPL token transfer between accounts
+    /// SPL token transfer
     TokenTransfer,
     /// Multi-hop swap (token->USDC->SOL, etc.)
     MultiHopSwap,
-    /// DeFi protocol interaction (staking, lending, etc.)
+    /// Bulk transfer (multiple small transfers in one transaction)
+    BulkTransfer,
+    /// DeFi protocol interaction (lending, staking, etc.)
     DeFiInteraction,
-    /// DEX liquidity provision
+    /// Liquidity provision/removal
     LiquidityProvision,
-    /// Unknown or unsupported transaction type
+    /// Unknown/unclassified transaction
     Unknown,
 }
 
@@ -96,7 +99,13 @@ impl TransactionDetector {
             ));
         }
 
-        // Fetch transaction details
+        // First try to load cached JSON data from disk for enhanced analysis
+        let cached_json = self.load_cached_transaction_data(signature);
+        if cached_json.is_some() && is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "CACHE", &format!("📁 Using cached JSON data for enhanced analysis: {}", &signature[..8]));
+        }
+
+        // Fetch transaction details using wallet transaction manager
         let transaction = self.fetch_transaction(signature).await?;
 
         // Extract meta information
@@ -122,6 +131,13 @@ impl TransactionDetector {
         let sol_change = self.calculate_sol_change(&transaction, meta)?;
         let token_changes = self.analyze_token_changes(&transaction, meta).await?;
         
+        // Enhanced analysis using cached JSON data if available
+        let enhanced_analysis = if let Some(json_data) = &cached_json {
+            self.analyze_with_cached_data(json_data, &router, &token_changes, sol_change)
+        } else {
+            None
+        };
+        
         if is_debug_transactions_enabled() {
             log(LogTag::Transactions, "CLASSIFY", &format!(
                 "🔍 Classification data: router={:?}, token_changes={}, sol_change={:.6}", 
@@ -129,7 +145,10 @@ impl TransactionDetector {
             ));
         }
         
-        let transaction_type = self.classify_transaction_type(&router, &token_changes, sol_change);
+        let transaction_type = enhanced_analysis.unwrap_or_else(|| {
+            self.classify_transaction_type(&router, &token_changes, sol_change)
+        });
+        
         let direction = self.determine_direction(&transaction_type, &token_changes, sol_change);
         let effective_price = self.calculate_effective_price(&token_changes, sol_change, &direction);
 
@@ -378,7 +397,7 @@ impl TransactionDetector {
             ));
         }
 
-        // If there's a DEX router, prioritize swap classification
+        // First priority: Check if this is a swap by detecting DEX routers
         if let Some(router_name) = router {
             if is_debug_transactions_enabled() {
                 log(LogTag::Transactions, "CLASSIFY", &format!("🔄 DEX router detected: {} - checking token changes", router_name));
@@ -407,15 +426,26 @@ impl TransactionDetector {
             }
         }
 
-        // If only SOL change and no tokens, it's a SOL transfer
+        // Second priority: Check for token transfers (SPL token operations)
+        // This will be implemented when we have instruction analysis
+
+        // Third priority: Check for SOL transfers
         if token_changes.is_empty() && sol_change.abs() > 0.001 {
-            if is_debug_transactions_enabled() {
-                log(LogTag::Transactions, "CLASSIFY", "💰 No router, no tokens, SOL change - classifying as SolTransfer");
+            // Check if this might be a bulk transfer by looking at the SOL change amount
+            if sol_change.abs() < 0.00001 {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "CLASSIFY", "📦 Very small SOL change suggests bulk transfer - classifying as BulkTransfer");
+                }
+                return TransactionType::BulkTransfer;
+            } else {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "CLASSIFY", "� No router, no tokens, significant SOL change - classifying as SolTransfer");
+                }
+                return TransactionType::SolTransfer;
             }
-            return TransactionType::SolTransfer;
         }
 
-        // If only token changes and no significant SOL change (except fees), it's a token transfer
+        // Fourth priority: Check for token transfers
         if !token_changes.is_empty() && sol_change.abs() < 0.01 {
             if is_debug_transactions_enabled() {
                 log(LogTag::Transactions, "CLASSIFY", "🪙 Token changes without significant SOL change - classifying as TokenTransfer");
@@ -423,7 +453,7 @@ impl TransactionDetector {
             return TransactionType::TokenTransfer;
         }
 
-        // If there are both token and SOL changes but no router, could be DeFi
+        // Fifth priority: Check for DeFi interactions
         if !token_changes.is_empty() && sol_change.abs() > 0.001 && router.is_none() {
             if is_debug_transactions_enabled() {
                 log(LogTag::Transactions, "CLASSIFY", "🏦 Token and SOL changes without router - classifying as DeFiInteraction");
@@ -519,14 +549,159 @@ impl TransactionDetector {
         Ok(account_keys)
     }
 
-    /// Fetch transaction details (with caching support)
+    /// Fetch transaction details using wallet transaction manager (with caching)
     async fn fetch_transaction(&self, signature: &str) -> Result<TransactionDetails, String> {
-        // TODO: Check wallet transaction manager cache first
-        // For now, use direct RPC call
+        // Use wallet transaction manager for cached access with automatic RPC fallback
+        use crate::wallet_transactions::get_wallet_transaction_manager;
+        
+        let manager_lock = get_wallet_transaction_manager()
+            .map_err(|e| format!("Failed to get wallet transaction manager: {}", e))?;
+        
+        // Check if transaction is cached first
+        let is_cached = {
+            let manager_guard = manager_lock.read().unwrap();
+            if let Some(ref manager) = *manager_guard {
+                manager.get_cached_transaction(signature).is_some()
+            } else {
+                false
+            }
+        };
+        
+        if is_cached {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "CACHE_HIT", &format!("📁 Using cached transaction: {}", &signature[..8]));
+            }
+            
+            // Try to load from disk cache
+            if let Some(json_data) = self.load_cached_transaction_data(signature) {
+                if let Some(transaction_data) = json_data.get("transaction_data") {
+                    // Parse the transaction data into our TransactionDetails format
+                    match serde_json::from_value::<TransactionDetails>(transaction_data.clone()) {
+                        Ok(transaction_details) => return Ok(transaction_details),
+                        Err(e) => {
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "ERROR", &format!("Failed to parse cached transaction: {}", e));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If not cached or parsing failed, fall back to RPC
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "CACHE_MISS", &format!("📁 Transaction not cached, fetching via RPC: {}", &signature[..8]));
+        }
+        
         use crate::rpc::get_rpc_client;
         let rpc_client = get_rpc_client();
         rpc_client.get_transaction_details(signature).await
-            .map_err(|e| format!("Failed to fetch transaction: {}", e))
+            .map_err(|e| format!("Failed to fetch transaction via RPC: {}", e))
+    }
+
+    /// Load cached transaction JSON data from disk if available
+    fn load_cached_transaction_data(&self, signature: &str) -> Option<serde_json::Value> {
+        use crate::global::DATA_DIR;
+        let transaction_file = format!("{}/transactions/{}.json", DATA_DIR, signature);
+        if Path::new(&transaction_file).exists() {
+            if let Ok(content) = std::fs::read_to_string(&transaction_file) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "CACHE", &format!("📁 Loaded cached JSON data for {}", &signature[..8]));
+                    }
+                    return Some(json);
+                }
+            }
+        }
+        None
+    }
+
+    /// Enhanced analysis using cached JSON data for better classification
+    fn analyze_with_cached_data(&self, json_data: &serde_json::Value, router: &Option<String>, token_changes: &[TokenChange], sol_change: f64) -> Option<TransactionType> {
+        // Analyze instruction patterns from cached JSON
+        if let Some(transaction_data) = json_data.get("transaction_data") {
+            if let Some(transaction) = transaction_data.get("transaction") {
+                if let Some(message) = transaction.get("message") {
+                    if let Some(instructions) = message.get("instructions") {
+                        if let Some(instructions_array) = instructions.as_array() {
+                            return self.analyze_instruction_patterns(instructions_array, router, token_changes, sol_change);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Analyze instruction patterns to determine transaction type
+    fn analyze_instruction_patterns(&self, instructions: &[serde_json::Value], router: &Option<String>, token_changes: &[TokenChange], sol_change: f64) -> Option<TransactionType> {
+        let mut transfer_count = 0;
+        let mut sol_transfer_count = 0;
+        let mut token_program_count = 0;
+
+        for instruction in instructions {
+            if let Some(program) = instruction.get("program").and_then(|p| p.as_str()) {
+                match program {
+                    "system" => {
+                        if let Some(parsed) = instruction.get("parsed") {
+                            if let Some(type_str) = parsed.get("type").and_then(|t| t.as_str()) {
+                                if type_str == "transfer" {
+                                    sol_transfer_count += 1;
+                                }
+                            }
+                        }
+                    }
+                    "spl-token" => {
+                        token_program_count += 1;
+                        if let Some(parsed) = instruction.get("parsed") {
+                            if let Some(type_str) = parsed.get("type").and_then(|t| t.as_str()) {
+                                if type_str == "transfer" || type_str == "transferChecked" {
+                                    transfer_count += 1;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "PATTERN", &format!(
+                "🔍 Instruction analysis: sol_transfers={}, token_transfers={}, token_programs={}", 
+                sol_transfer_count, transfer_count, token_program_count
+            ));
+        }
+
+        // Enhanced classification based on instruction patterns
+        if router.is_some() {
+            // If there's a router, it's likely a swap regardless of token detection issues
+            if token_changes.len() > 1 {
+                return Some(TransactionType::MultiHopSwap);
+            } else {
+                return Some(TransactionType::Swap);
+            }
+        }
+
+        // Check for bulk transfers (multiple small SOL transfers)
+        if sol_transfer_count > 5 && sol_change.abs() < 0.0001 {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "PATTERN", &format!("📦 Detected bulk transfer pattern: {} SOL transfers", sol_transfer_count));
+            }
+            return Some(TransactionType::BulkTransfer);
+        }
+
+        // Check for token transfers
+        if transfer_count > 0 && token_program_count > 0 {
+            return Some(TransactionType::TokenTransfer);
+        }
+
+        // Check for simple SOL transfers
+        if sol_transfer_count == 1 && token_program_count == 0 && sol_change.abs() > 0.001 {
+            return Some(TransactionType::SolTransfer);
+        }
+
+        None
     }
 }
 
@@ -580,6 +755,63 @@ pub fn format_transaction_analysis(analysis: &TransactionAnalysis) -> String {
     }
     
     result
+}
+
+/// Load cached transaction data from disk if available
+fn load_cached_transaction_data(signature: &str) -> Option<serde_json::Value> {
+    let transaction_file = format!("{}/transactions/{}.json", DATA_DIR, signature);
+    if Path::new(&transaction_file).exists() {
+        if let Ok(content) = std::fs::read_to_string(&transaction_file) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "CACHE", &format!("📁 Loaded cached transaction data for {}", signature));
+                }
+                return Some(json);
+            }
+        }
+    }
+    None
+}
+
+/// Analyze transaction patterns to detect bulk transfers
+fn analyze_bulk_transfer_pattern(transaction: &TransactionDetails) -> Option<(usize, f64)> {
+    if let Some(instructions) = transaction.transaction.message.get("instructions") {
+        if let Some(instructions_array) = instructions.as_array() {
+            let mut transfer_count = 0;
+            let mut total_lamports = 0u64;
+
+            for instruction in instructions_array {
+                if let Some(program) = instruction.get("program").and_then(|p| p.as_str()) {
+                    if program == "system" {
+                        if let Some(parsed) = instruction.get("parsed") {
+                            if let Some(transfer_type) = parsed.get("type").and_then(|t| t.as_str()) {
+                                if transfer_type == "transfer" {
+                                    transfer_count += 1;
+                                    if let Some(info) = parsed.get("info") {
+                                        if let Some(lamports) = info.get("lamports").and_then(|l| l.as_u64()) {
+                                            total_lamports += lamports;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if transfer_count > 1 {
+                let total_sol = total_lamports as f64 / 1_000_000_000.0;
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "BULK", &format!(
+                        "📦 Detected bulk transfer pattern: {} transfers, {:.9} SOL total",
+                        transfer_count, total_sol
+                    ));
+                }
+                return Some((transfer_count, total_sol));
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
