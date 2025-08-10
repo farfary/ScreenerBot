@@ -342,7 +342,152 @@ pub fn update_position_tracking(position: &mut Position, current_price: f64) {
     // Track position extremes without logging
 }
 
-/// Opens a new buy position for a token with real swap execution
+/// Verify and update a position by signature - used for background verification
+pub async fn verify_and_update_position_by_signature(signature: &str, token_symbol: &str) -> Result<(), String> {
+    log(LogTag::Trader, "VERIFY_BG", &format!("🔍 Background verification for {}: {}", token_symbol, signature));
+    
+    match crate::wallet_transactions::verify_swap_transaction_global(signature, "buy").await {
+        Ok(verified_data) => {
+            // Find and update the position
+            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                if let Some(position) = positions.iter_mut().find(|p| 
+                    p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+                ) {
+                    // Update position with verified data
+                    position.effective_entry_price = Some(verified_data.effective_price);
+                    position.token_amount = Some(verified_data.token_amount);
+                    position.entry_fee_lamports = Some(verified_data.transaction_fee);
+                    position.transaction_entry_verified = true;
+                    position.total_size_sol = verified_data.sol_amount;
+                    
+                    log(
+                        LogTag::Trader,
+                        "VERIFIED_BG",
+                        &format!(
+                            "✅ BACKGROUND VERIFICATION SUCCESS: {} | Effective Price: {:.12} SOL | Tokens: {} | SOL Spent: {:.6}",
+                            position.symbol,
+                            verified_data.effective_price,
+                            verified_data.token_amount,
+                            verified_data.sol_amount
+                        )
+                    );
+                    
+                    // Save updated positions
+                    save_positions_to_file(&positions);
+                    return Ok(());
+                }
+            }
+            
+            Err("Position not found for signature".to_string())
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR_BG",
+                &format!("❌ Background verification failed for {}: {}", token_symbol, e)
+            );
+            Err(format!("Background verification failed: {}", e))
+        }
+    }
+}
+/// Updates position with verified data including effective price, token amount, and fees
+/// Only sets transaction_entry_verified to true when verification succeeds
+pub async fn verify_position_entry_transaction(position: &mut Position) -> Result<(), String> {
+    if position.transaction_entry_verified {
+        log(LogTag::Trader, "SKIP", &format!("Position {} entry already verified", position.symbol));
+        return Ok(());
+    }
+    
+    let Some(ref signature) = position.entry_transaction_signature else {
+        return Err("No entry transaction signature available".to_string());
+    };
+    
+    log(LogTag::Trader, "VERIFY", &format!("🔍 Verifying entry transaction for {}: {}", position.symbol, signature));
+    
+    match crate::wallet_transactions::verify_swap_transaction_global(signature, "buy").await {
+        Ok(verified_data) => {
+            // Update position with verified data
+            position.effective_entry_price = Some(verified_data.effective_price);
+            position.token_amount = Some(verified_data.token_amount);
+            position.entry_fee_lamports = Some(verified_data.transaction_fee);
+            position.transaction_entry_verified = true;
+            
+            // Update total size with actual SOL spent
+            position.total_size_sol = verified_data.sol_amount;
+            
+            log(
+                LogTag::Trader,
+                "VERIFIED",
+                &format!(
+                    "✅ ENTRY VERIFIED: {} | Effective Price: {:.12} SOL | Tokens: {} | SOL Spent: {:.6} | Fee: {} lamports",
+                    position.symbol,
+                    verified_data.effective_price,
+                    verified_data.token_amount,
+                    verified_data.sol_amount,
+                    verified_data.transaction_fee
+                )
+            );
+            
+            Ok(())
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("❌ Failed to verify entry transaction for {}: {}", position.symbol, e)
+            );
+            Err(format!("Entry verification failed: {}", e))
+        }
+    }
+}
+
+/// Verify a position's exit transaction using wallet transaction manager
+/// Updates position with verified data including effective exit price, SOL received, and fees
+/// Only sets transaction_exit_verified to true when verification succeeds
+pub async fn verify_position_exit_transaction(position: &mut Position) -> Result<(), String> {
+    if position.transaction_exit_verified {
+        log(LogTag::Trader, "SKIP", &format!("Position {} exit already verified", position.symbol));
+        return Ok(());
+    }
+    
+    let Some(ref signature) = position.exit_transaction_signature else {
+        return Err("No exit transaction signature available".to_string());
+    };
+    
+    log(LogTag::Trader, "VERIFY", &format!("🔍 Verifying exit transaction for {}: {}", position.symbol, signature));
+    
+    match crate::wallet_transactions::verify_swap_transaction_global(signature, "sell").await {
+        Ok(verified_data) => {
+            // Update position with verified data
+            position.effective_exit_price = Some(verified_data.effective_price);
+            position.sol_received = Some(verified_data.sol_amount);
+            position.exit_fee_lamports = Some(verified_data.transaction_fee);
+            position.transaction_exit_verified = true;
+            
+            log(
+                LogTag::Trader,
+                "VERIFIED",
+                &format!(
+                    "✅ EXIT VERIFIED: {} | Effective Price: {:.12} SOL | SOL Received: {:.6} | Fee: {} lamports",
+                    position.symbol,
+                    verified_data.effective_price,
+                    verified_data.sol_amount,
+                    verified_data.transaction_fee
+                )
+            );
+            
+            Ok(())
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("❌ Failed to verify exit transaction for {}: {}", position.symbol, e)
+            );
+            Err(format!("Exit verification failed: {}", e))
+        }
+    }
+}
 pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
     // CRITICAL SAFETY CHECK: Validate price before any trading operations
     if price <= 0.0 || !price.is_finite() {
@@ -492,6 +637,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
 
             // Add position to saved positions immediately
             if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                let position_index = positions.len(); // Index where it will be inserted
                 positions.push(new_position);
                 save_positions_to_file(&positions);
 
@@ -499,10 +645,37 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                     LogTag::Trader,
                     "SAVED",
                     &format!(
-                        "💾 Unverified position saved to disk: {} - background verification will update",
+                        "💾 Unverified position saved to disk: {} - requesting verification from wallet transaction manager",
                         token.symbol
                     )
                 );
+
+                // Request verification from wallet transaction manager
+                let signature_clone = transaction_signature.clone();
+                let symbol_clone = token.symbol.clone();
+                
+                tokio::spawn(async move {
+                    // Give transaction a moment to propagate
+                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                    
+                    // Attempt verification
+                    match verify_and_update_position_by_signature(&signature_clone, &symbol_clone).await {
+                        Ok(()) => {
+                            log(
+                                LogTag::Trader,
+                                "SUCCESS_BG",
+                                &format!("🎉 Position {} fully verified and updated", symbol_clone)
+                            );
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Trader,
+                                "WARNING_BG",
+                                &format!("Position {} verification will be retried later: {}", symbol_clone, e)
+                            );
+                        }
+                    }
+                });
             }
 
             // Simplified approach - no complex transaction monitoring
@@ -731,66 +904,38 @@ pub async fn close_position(
                     .clone()
                     .unwrap_or_default();
 
-                // Simplified approach - no complex transaction monitoring
+                // Request verification from wallet transaction manager
                 log(
                     LogTag::Trader,
-                    "TRANSACTION",
+                    "VERIFY_EXIT",
                     &format!(
-                        "📡 Position exit transaction completed: {}",
-                        &transaction_signature[..8]
+                        "� Requesting wallet transaction manager to verify exit transaction: {}",
+                        transaction_signature
                     )
                 );
 
-                // Simplified verification - assume success if we have a transaction signature
-                let verification_success = !transaction_signature.is_empty();
-                
-                if verification_success {
-                    // CRITICAL: Calculate actual SOL received from swap result
-                    let sol_received_str = swap_result.output_amount.clone();
-                    let sol_received_lamports: u64 = sol_received_str.parse().unwrap_or(0);
-                    let sol_received = lamports_to_sol(sol_received_lamports);
-
-                    if sol_received == 0.0 {
-                            log(
-                                LogTag::Trader,
-                                "ERROR",
-                                &format!(
-                                    "❌ Transaction verified but no SOL received for {}. TX: {}",
-                                    position.symbol,
-                                    transaction_signature
-                                )
-                            );
-                            return false; // Failed to close properly
-                        }
-
-                        // Calculate effective exit price and other metrics
-                        let token_amount_sold = position.token_amount.unwrap_or(0) as f64; // Full position sold
-                        let effective_exit_price = if token_amount_sold > 0.0 {
-                            sol_received / token_amount_sold
-                        } else {
-                            0.0
-                        };
-
+                match crate::wallet_transactions::verify_swap_transaction_global(&transaction_signature, "sell").await {
+                    Ok(verified_data) => {
                         log(
                             LogTag::Trader,
-                            "VERIFIED",
+                            "VERIFIED_EXIT",
                             &format!(
-                                "✅ Exit verified: {} sold {} tokens, received {:.9} SOL, effective price: {:.12}",
+                                "✅ EXIT TRANSACTION VERIFIED: {} | Effective Price: {:.12} SOL | SOL Received: {:.6} | Fee: {} lamports",
                                 position.symbol,
-                                token_amount_sold,
-                                sol_received,
-                                effective_exit_price
+                                verified_data.effective_price,
+                                verified_data.sol_amount,
+                                verified_data.transaction_fee
                             )
                         );
 
                         // Update position with verified exit data
                         position.exit_price = Some(exit_price);
                         position.exit_time = Some(exit_time);
-                        position.effective_exit_price = Some(effective_exit_price);
-                        position.sol_received = Some(sol_received);
+                        position.effective_exit_price = Some(verified_data.effective_price);
+                        position.sol_received = Some(verified_data.sol_amount);
+                        position.exit_fee_lamports = Some(verified_data.transaction_fee);
                         position.exit_transaction_signature = Some(transaction_signature.clone());
-                        position.transaction_exit_verified = true;
-                        position.exit_fee_lamports = Some(0); // Fee calculated elsewhere
+                        position.transaction_exit_verified = true; // Only set when verification succeeds
 
                         // Calculate actual P&L using unified function
                         let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
@@ -804,7 +949,7 @@ pub async fn close_position(
                                 "LOSS"
                             },
                             &format!(
-                                "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {} (verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
+                                "{} POSITION CLOSED: {} | Exit TX: {} | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
                                 if is_profitable {
                                     "💰"
                                 } else {
@@ -812,8 +957,7 @@ pub async fn close_position(
                                 },
                                 position.symbol,
                                 transaction_signature,
-                                token_amount_sold,
-                                sol_received,
+                                verified_data.sol_amount,
                                 net_pnl_percent,
                                 net_pnl_sol
                             )
@@ -829,16 +973,19 @@ pub async fn close_position(
                         }
 
                         return true; // Successfully closed and verified
-                } else {
-                    log(
-                        LogTag::Trader,
-                        "ERROR",
-                        &format!(
-                            "❌ Exit transaction verification failed - no SOL received from verified transaction for {}",
-                            position.symbol
-                        )
-                    );
-                    return false;
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!(
+                                "❌ Failed to verify exit transaction for {}: {}. Position remains open for retry",
+                                position.symbol,
+                                e
+                            )
+                        );
+                        return false; // Verification failed, keep position open
+                    }
                 }
             }
             Err(e) => {

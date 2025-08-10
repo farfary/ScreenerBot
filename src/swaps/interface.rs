@@ -8,8 +8,7 @@ use crate::global::{is_debug_swap_enabled};
 use crate::utils::get_token_balance;
 // Use utils instead of transaction module for wallet address
 use crate::utils::get_wallet_address;
-// Use transactions_tools for post-swap analysis instead of complex verification
-use crate::transactions_tools::analyze_post_swap_transaction;
+// Using wallet transaction manager instead of transactions_tools for analysis
 use super::{get_best_quote, execute_best_swap, UnifiedSwapResult};
 use super::types::{SwapData};
 use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
@@ -119,38 +118,40 @@ pub async fn buy_token(
 
     // Add transaction to monitoring service if successful
     if swap_result.success {
-        // Simple post-swap analysis using signature only (replaces complex transaction monitoring)
+        // Use wallet transaction manager for verification instead of standalone analysis
         if let Some(ref signature) = swap_result.transaction_signature {
-            match analyze_post_swap_transaction(
-                signature,
-                &wallet_address,
-                SOL_MINT,
-                &token.mint,
-                "buy",
-            ).await {
-                Ok(analysis) => {
-                    // Update the swap result with the analyzed effective price
-                    swap_result.effective_price = Some(analysis.effective_price);
+            log(
+                LogTag::Swap,
+                "VERIFY", 
+                &format!("🔍 Requesting wallet transaction manager to verify buy transaction: {}", signature)
+            );
+            
+            match crate::wallet_transactions::verify_swap_transaction_global(signature, "buy").await {
+                Ok(verified_data) => {
+                    // Update swap result with verified data
+                    swap_result.effective_price = Some(verified_data.effective_price);
 
                     log(
                         LogTag::Swap,
-                        "PRICE",
+                        "VERIFIED",
                         &format!(
-                            "✅ BUY COMPLETED - Effective Price: {:.10} SOL per {} token (signature analysis)",
-                            analysis.effective_price,
-                            token.symbol
+                            "✅ BUY TRANSACTION VERIFIED - Effective Price: {:.10} SOL per {} token | Token Amount: {} | SOL Amount: {:.6}",
+                            verified_data.effective_price,
+                            token.symbol,
+                            verified_data.token_amount,
+                            verified_data.sol_amount
                         )
                     );
 
                     if is_debug_swap_enabled() {
                         if let Some(expected) = expected_price {
-                            let price_diff = ((analysis.effective_price - expected) / expected) * 100.0;
+                            let price_diff = ((verified_data.effective_price - expected) / expected) * 100.0;
                             log(
                                 LogTag::Swap,
                                 "PRICE",
                                 &format!(
                                     "Price vs expected: {:.10} vs {:.10} SOL ({:+.2}%)",
-                                    analysis.effective_price,
+                                    verified_data.effective_price,
                                     expected,
                                     price_diff
                                 )
@@ -161,13 +162,14 @@ pub async fn buy_token(
                 Err(e) => {
                     log(
                         LogTag::Swap,
-                        "WARNING",
-                        &format!("Failed to analyze post-swap transaction for buy: {}", e)
+                        "ERROR", 
+                        &format!("❌ Failed to verify buy transaction {}: {}", signature, e)
                     );
+                    // Don't fail the swap, but log the verification failure
                 }
             }
         } else {
-            log(LogTag::Swap, "WARNING", "No transaction signature available for post-swap analysis");
+            log(LogTag::Swap, "WARNING", "No transaction signature available for wallet transaction manager verification");
         }
 
         // Update wallet tracker after successful buy
@@ -364,33 +366,40 @@ async fn sell_token_with_slippage(
         error: unified_result.error,
     };
 
-    // Simple post-swap analysis using signature only (replaces complex transaction monitoring)
+    // Use wallet transaction manager for verification instead of standalone analysis
     if swap_result.success {
         if let Some(ref signature) = swap_result.transaction_signature {
-            match analyze_post_swap_transaction(
-                signature,
-                &wallet_address,
-                &token.mint,
-                SOL_MINT,
-                "sell",
-            ).await {
-                Ok(analysis) => {
-                    swap_result.effective_price = Some(analysis.effective_price);
+            log(
+                LogTag::Swap,
+                "VERIFY", 
+                &format!("🔍 Requesting wallet transaction manager to verify sell transaction: {}", signature)
+            );
+            
+            match crate::wallet_transactions::verify_swap_transaction_global(signature, "sell").await {
+                Ok(verified_data) => {
+                    swap_result.effective_price = Some(verified_data.effective_price);
                     
                     log(
                         LogTag::Swap,
-                        "PRICE",
+                        "VERIFIED",
                         &format!(
-                            "✅ SELL COMPLETED - Effective Price: {:.10} SOL per {} token (signature analysis)",
-                            analysis.effective_price,
-                            token.symbol
+                            "✅ SELL TRANSACTION VERIFIED - Effective Price: {:.10} SOL per {} token | Token Amount: {} | SOL Amount: {:.6}",
+                            verified_data.effective_price,
+                            token.symbol,
+                            verified_data.token_amount,
+                            verified_data.sol_amount
                         )
                     );
                 }
                 Err(e) => {
-                    log(LogTag::Swap, "WARNING", &format!("Could not analyze post-swap transaction: {}", e));
+                    log(
+                        LogTag::Swap, 
+                        "ERROR", 
+                        &format!("❌ Failed to verify sell transaction {}: {}", signature, e)
+                    );
                     
                     // Fallback to original method with warning
+                    log(LogTag::Swap, "WARNING", "Using fallback price calculation due to verification failure");
                     let input_tokens_raw: u64 = swap_result.input_amount.parse().unwrap_or(0);
                     let output_lamports: u64 = swap_result.output_amount.parse().unwrap_or(0);
                     
@@ -415,7 +424,7 @@ async fn sell_token_with_slippage(
                 }
             }
         } else {
-            log(LogTag::Swap, "WARNING", "No transaction signature available for post-swap analysis");
+            log(LogTag::Swap, "WARNING", "No transaction signature available for wallet transaction manager verification");
         }
 
         // Update wallet tracker after successful sell

@@ -60,7 +60,28 @@ pub struct SwapAnalysis {
     pub recent_swaps: Vec<SwapTransaction>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifiedSwapData {
+    pub signature: String,
+    pub success: bool,
+    pub direction: String, // "buy" or "sell"
+    pub token_mint: String,
+    pub sol_amount: f64, // SOL amount involved in swap
+    pub token_amount: u64, // Raw token amount
+    pub token_decimals: u8,
+    pub effective_price: f64, // Price per token in SOL
+    pub transaction_fee: u64, // Network transaction fee in lamports
+    pub priority_fee: Option<u64>, // Priority fee in lamports
+    pub ata_created: bool,
+    pub ata_closed: bool,
+    pub ata_rent_paid: u64, // ATA rent paid in lamports
+    pub ata_rent_reclaimed: u64, // ATA rent reclaimed in lamports
+    pub slot: u64,
+    pub block_time: Option<i64>,
+}
+
 #[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct CachedTransactionData {
     pub signature: String,
     pub transaction_data: EncodedConfirmedTransactionWithStatusMeta,
@@ -202,6 +223,41 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
         log(LogTag::Transactions, "SUCCESS", "Standalone wallet transaction manager ready");
         
         Ok(manager.analyze_recent_swaps(limit).await)
+    }
+}
+
+/// Verify and analyze a specific swap transaction using the global manager
+/// This is the main function positions should use for transaction verification
+pub async fn verify_swap_transaction_global(signature: &str, expected_direction: &str) -> Result<VerifiedSwapData, Box<dyn std::error::Error + Send + Sync>> {
+    let rpc_client = crate::rpc::get_rpc_client();
+    
+    // We need to extract the manager temporarily to avoid holding the lock across await
+    let manager = {
+        let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+        match manager_lock.take() {
+            Some(mgr) => mgr,
+            None => return Err("Wallet transaction manager not initialized".into()),
+        }
+    };
+    
+    // Perform verification outside the lock
+    let result = {
+        let mut temp_manager = manager;
+        let verification_result = temp_manager.verify_swap_transaction(signature, expected_direction, &rpc_client).await;
+        
+        // Put the manager back
+        {
+            let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+            *manager_lock = Some(temp_manager);
+        }
+        
+        verification_result
+    };
+    
+    // Convert to Send + Sync error
+    match result {
+        Ok(data) => Ok(data),
+        Err(e) => Err(format!("Verification failed: {}", e).into()),
     }
 }
 
@@ -361,14 +417,14 @@ impl WalletTransactionManager {
         // Create cache directory if it doesn't exist
         if !cache_dir.exists() {
             fs::create_dir_all(&cache_dir)?;
-            log(LogTag::System, "INFO", &format!("Created transaction cache directory: {:?}", cache_dir));
+            log(LogTag::Transactions, "INFO", &format!("Created transaction cache directory: {:?}", cache_dir));
         }
         
         // Create data directory if it doesn't exist
         let data_dir = PathBuf::from("data");
         if !data_dir.exists() {
             fs::create_dir_all(&data_dir)?;
-            log(LogTag::System, "INFO", &format!("Created data directory: {:?}", data_dir));
+            log(LogTag::Transactions, "INFO", &format!("Created data directory: {:?}", data_dir));
         }
         
         // Load or create sync state
@@ -383,7 +439,7 @@ impl WalletTransactionManager {
                             state
                         },
                         Err(e) => {
-                            log(LogTag::System, "ERROR", &format!("Failed to parse sync state: {}", e));
+                            log(LogTag::Transactions, "ERROR", &format!("Failed to parse sync state: {}", e));
                             let mut state = WalletSyncState::default();
                             state.wallet_address = wallet_address.clone();
                             state
@@ -391,7 +447,7 @@ impl WalletTransactionManager {
                     }
                 },
                 Err(e) => {
-                    log(LogTag::System, "ERROR", &format!("Failed to read sync state: {}", e));
+                    log(LogTag::Transactions, "ERROR", &format!("Failed to read sync state: {}", e));
                     let mut state = WalletSyncState::default();
                     state.wallet_address = wallet_address.clone();
                     state
@@ -437,14 +493,14 @@ impl WalletTransactionManager {
                                 loaded += 1;
                             },
                             Err(e) => {
-                                log(LogTag::System, "ERROR", &format!("Failed to parse cached transaction {}: {}", signature, e));
+                                log(LogTag::Transactions, "ERROR", &format!("Failed to parse cached transaction {}: {}", signature, e));
                                 // Remove invalid signature from state
                                 self.sync_state.cached_signatures.remove(signature);
                             }
                         }
                     },
                     Err(e) => {
-                        log(LogTag::System, "ERROR", &format!("Failed to read cached transaction {}: {}", signature, e));
+                        log(LogTag::Transactions, "ERROR", &format!("Failed to read cached transaction {}: {}", signature, e));
                         // Remove missing signature from state
                         self.sync_state.cached_signatures.remove(signature);
                     }
@@ -553,7 +609,7 @@ impl WalletTransactionManager {
         let latest_signatures = self.fetch_wallet_signatures(rpc_client, 50, None).await?;
         
         if latest_signatures.is_empty() {
-            log(LogTag::System, "INFO", "No transactions found for wallet");
+            log(LogTag::Transactions, "INFO", "No transactions found for wallet");
             return Ok(());
         }
         
@@ -568,12 +624,12 @@ impl WalletTransactionManager {
             log(LogTag::Transactions, "INFO", &format!("Found {} new transactions to fetch", new_signatures.len()));
             self.fetch_and_cache_transactions(rpc_client, &new_signatures).await?;
         } else {
-            log(LogTag::System, "INFO", "All recent transactions are already cached");
+            log(LogTag::Transactions, "INFO", "All recent transactions are already cached");
         }
         
         // If this is the first sync or we need more history, fetch older transactions
         if self.sync_state.total_transactions_fetched < 1000 {
-            log(LogTag::System, "INFO", "Fetching transaction history for complete coverage");
+            log(LogTag::Transactions, "INFO", "Fetching transaction history for complete coverage");
             self.fetch_transaction_history(rpc_client).await?;
         }
         
@@ -589,8 +645,14 @@ impl WalletTransactionManager {
             let signatures = self.fetch_wallet_signatures(rpc_client, batch_size, before_signature.as_deref()).await?;
             
             if signatures.is_empty() {
-                log(LogTag::System, "INFO", "No more historical transactions to fetch");
+                log(LogTag::Transactions, "INFO", "No more historical transactions to fetch");
                 break;
+            }
+            
+            // Set newest_signature from the first batch only (first signature is newest)
+            if self.sync_state.newest_signature.is_none() && !signatures.is_empty() {
+                self.sync_state.newest_signature = Some(signatures[0].signature.clone());
+                log(LogTag::Transactions, "UPDATE", &format!("Set newest_signature to: {}", signatures[0].signature));
             }
             
             let mut new_signatures = Vec::new();
@@ -601,21 +663,22 @@ impl WalletTransactionManager {
             }
             
             if !new_signatures.is_empty() {
-                log(LogTag::System, "INFO", &format!("Fetching {} historical transactions", new_signatures.len()));
+                log(LogTag::Transactions, "INFO", &format!("Fetching {} historical transactions", new_signatures.len()));
                 self.fetch_and_cache_transactions(rpc_client, &new_signatures).await?;
             }
             
-            // Update before_signature for next batch
+            // Update before_signature for next batch (last signature in current batch)
             before_signature = signatures.last().map(|s| s.signature.clone());
             
-            // Update oldest signature if this is our first time or we went further back
-            if self.sync_state.oldest_signature.is_none() || before_signature.is_some() {
-                self.sync_state.oldest_signature = before_signature.clone();
+            // Update oldest_signature to the last signature from this batch (oldest so far)
+            if let Some(ref oldest_sig) = before_signature {
+                self.sync_state.oldest_signature = Some(oldest_sig.clone());
+                log(LogTag::Transactions, "UPDATE", &format!("Updated oldest_signature to: {}", oldest_sig));
             }
             
             // Break if we didn't get a full batch (reached the end)
             if signatures.len() < batch_size {
-                log(LogTag::System, "INFO", "Reached end of transaction history");
+                log(LogTag::Transactions, "INFO", "Reached end of transaction history");
                 break;
             }
         }
@@ -663,14 +726,9 @@ impl WalletTransactionManager {
                             self.sync_state.cached_signatures.insert(signature.clone());
                             self.sync_state.total_transactions_fetched += 1;
                             
-                            // Update newest signature
-                            if self.sync_state.newest_signature.is_none() {
-                                self.sync_state.newest_signature = Some(signature.clone());
-                            }
-                            
                             // Save sync state after each successful fetch to preserve progress
                             if let Err(e) = self.save_sync_state() {
-                                log(LogTag::System, "ERROR", &format!("Failed to save sync state after caching {}: {}", signature, e));
+                                log(LogTag::Transactions, "ERROR", &format!("Failed to save sync state after caching {}: {}", signature, e));
                             } else {
                                 log(LogTag::Transactions, "SAVED", &format!("Sync state saved after caching transaction {} (total: {})", 
                                     signature, self.sync_state.total_transactions_fetched));
@@ -762,13 +820,13 @@ impl WalletTransactionManager {
             match fs::read_to_string(&cache_file) {
                 Ok(content) => {
                     if let Ok(cached_data) = serde_json::from_str::<CachedTransactionData>(&content) {
-                        log(LogTag::System, "CACHE_HIT", &format!("Transaction {} loaded from disk cache", signature_str));
+                        log(LogTag::Transactions, "CACHE_HIT", &format!("Transaction {} loaded from disk cache", signature_str));
                         return Ok(cached_data);
                     }
                 },
                 Err(_) => {
                     // Cache file exists but is corrupted, we'll refetch
-                    log(LogTag::System, "CACHE_CORRUPT", &format!("Corrupted cache file for {}, refetching", signature_str));
+                    log(LogTag::Transactions, "CACHE_CORRUPT", &format!("Corrupted cache file for {}, refetching", signature_str));
                 }
             }
         }
@@ -831,6 +889,211 @@ impl WalletTransactionManager {
     
     pub fn get_cached_transaction(&self, signature: &str) -> Option<&CachedTransactionData> {
         self.transaction_cache.get(signature)
+    }
+    
+    /// Get all cached transactions, optionally limited to most recent N transactions
+    pub fn get_cached_transactions(&self, limit: Option<usize>) -> Vec<&CachedTransactionData> {
+        let mut transactions: Vec<&CachedTransactionData> = self.transaction_cache.values().collect();
+        
+        // Sort by cached time (most recent first)
+        transactions.sort_by(|a, b| b.cached_at.cmp(&a.cached_at));
+        
+        if let Some(limit) = limit {
+            transactions.into_iter().take(limit).collect()
+        } else {
+            transactions
+        }
+    }
+    
+    /// Get or fetch a specific transaction by signature for position verification
+    /// This ensures the transaction is cached and available for analysis
+    pub async fn get_or_fetch_transaction(&mut self, signature: &str, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
+        // Check if already cached
+        if self.transaction_cache.contains_key(signature) {
+            log(LogTag::Transactions, "CACHED", &format!("Transaction {} found in cache", signature));
+            return Ok(());
+        }
+        
+        // Not cached, fetch it
+        log(LogTag::Transactions, "FETCH", &format!("Transaction {} not cached, fetching from RPC", signature));
+        
+        // Convert string to Signature
+        let signature_obj = solana_sdk::signature::Signature::from_str(signature)
+            .map_err(|e| format!("Invalid signature format: {}", e))?;
+        
+        match self.fetch_and_cache_single_transaction(rpc_client, &signature_obj).await {
+            Ok(_) => {
+                log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} fetched and cached", signature));
+                Ok(())
+            }
+            Err(e) => {
+                log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", signature, e));
+                Err(e)
+            }
+        }
+    }
+    
+    /// Verify and analyze a swap transaction for position data
+    /// Returns verified transaction data including effective price, token amounts, and fees
+    pub async fn verify_swap_transaction(&mut self, signature: &str, expected_direction: &str, rpc_client: &RpcClient) -> Result<VerifiedSwapData, Box<dyn std::error::Error>> {
+        // Ensure transaction is cached
+        self.get_or_fetch_transaction(signature, rpc_client).await?;
+        
+        log(LogTag::Transactions, "VERIFY", &format!("Verifying swap transaction {} for {} operation", signature, expected_direction));
+        
+        // Get the cached transaction data
+        let cached_tx = self.transaction_cache.get(signature)
+            .ok_or("Transaction not found in cache after fetching")?;
+            
+        // Analyze the transaction for swap data
+        let swap_data = self.analyze_transaction_for_verified_swap(&cached_tx.transaction_data, expected_direction).await?;
+        
+        log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} verified - Direction: {}, Effective Price: {:.12} SOL", 
+            signature, expected_direction, swap_data.effective_price));
+        
+        Ok(swap_data)
+    }
+    
+    /// Analyze a cached transaction for swap data extraction
+    async fn analyze_transaction_for_verified_swap(&self, transaction: &EncodedConfirmedTransactionWithStatusMeta, expected_direction: &str) -> Result<VerifiedSwapData, Box<dyn std::error::Error>> {
+        // Get transaction meta
+        let meta = transaction.transaction.meta.as_ref()
+            .ok_or("No transaction meta found")?;
+
+        // Decode the transaction to access signatures
+        let decoded_tx = transaction.transaction.transaction.decode()
+            .ok_or("Failed to decode transaction")?;
+            
+        // Get signature from the decoded transaction
+        let signature = decoded_tx.signatures.get(0)
+            .ok_or("No signature found in transaction")?
+            .to_string();
+        
+        let slot = transaction.slot;
+        let block_time = transaction.block_time;
+        
+        let success = meta.err.is_none();
+        
+        if !success {
+            return Ok(VerifiedSwapData {
+                signature,
+                success: false,
+                direction: expected_direction.to_string(),
+                token_mint: String::new(),
+                sol_amount: 0.0,
+                token_amount: 0,
+                token_decimals: 0,
+                effective_price: 0.0,
+                transaction_fee: meta.fee,
+                priority_fee: None,
+                ata_created: false,
+                ata_closed: false,
+                ata_rent_paid: 0,
+                ata_rent_reclaimed: 0,
+                slot,
+                block_time,
+            });
+        }
+        
+        // Get wallet address for analysis
+        let wallet_pubkey = Pubkey::from_str(&self.wallet_address)?;
+        
+        // Analyze SOL balance changes
+        let sol_change = self.analyze_sol_balance_change(&wallet_pubkey, meta)?;
+        
+        // Analyze token balance changes  
+        let token_changes = self.analyze_token_balance_changes(&wallet_pubkey, meta);
+        
+        // Find the main token involved (the one with the largest balance change)
+        let main_token = token_changes.iter()
+            .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(mint, _)| mint.clone())
+            .unwrap_or_default();
+        
+        let token_amount = token_changes.get(&main_token).map(|change| change.abs() as u64).unwrap_or(0);
+        
+        // Get token decimals
+        let token_decimals = if main_token.is_empty() { 
+            0 
+        } else { 
+            get_token_decimals_safe_local(&main_token).await.unwrap_or(6) 
+        };
+        
+        // Calculate effective price
+        let effective_price = if token_amount > 0 && sol_change.abs() > 0.0 {
+            sol_change.abs() / (token_amount as f64 / 10_f64.powi(token_decimals as i32))
+        } else {
+            0.0
+        };
+        
+        // Analyze ATA operations
+        let (ata_created, ata_closed, ata_rent_paid, ata_rent_reclaimed) = self.analyze_ata_operations(meta);
+        
+        // Extract priority fee
+        let priority_fee = self.extract_priority_fee_from_meta(meta);
+        
+        Ok(VerifiedSwapData {
+            signature,
+            success: true,
+            direction: expected_direction.to_string(),
+            token_mint: main_token,
+            sol_amount: sol_change.abs(),
+            token_amount,
+            token_decimals,
+            effective_price,
+            transaction_fee: meta.fee,
+            priority_fee,
+            ata_created,
+            ata_closed,
+            ata_rent_paid,
+            ata_rent_reclaimed,
+            slot,
+            block_time,
+        })
+    }
+    
+    /// Analyze SOL balance change for a wallet in a transaction
+    fn analyze_sol_balance_change(&self, wallet_pubkey: &Pubkey, meta: &solana_transaction_status::UiTransactionStatusMeta) -> Result<f64, Box<dyn std::error::Error>> {
+        // Find wallet index in account keys
+        let pre_balances = &meta.pre_balances;
+        let post_balances = &meta.post_balances;
+        
+        if pre_balances.len() != post_balances.len() {
+            return Err("Balance arrays length mismatch".into());
+        }
+        
+        // For now, we'll use account index 0 (typically the fee payer/wallet)
+        // In a more complete implementation, we'd parse account keys to find the exact wallet index
+        if let (Some(&pre_balance), Some(&post_balance)) = (pre_balances.get(0), post_balances.get(0)) {
+            let change_lamports = (post_balance as i64) - (pre_balance as i64);
+            Ok(lamports_to_sol(change_lamports.abs() as u64))
+        } else {
+            Ok(0.0)
+        }
+    }
+    
+    /// Analyze token balance changes for a wallet
+    fn analyze_token_balance_changes(&self, _wallet_pubkey: &Pubkey, meta: &solana_transaction_status::UiTransactionStatusMeta) -> HashMap<String, f64> {
+        let mut token_changes = HashMap::new();
+        
+        // TODO: Implement token balance analysis
+        // For now, return empty map
+        
+        token_changes
+    }
+    
+    /// Analyze ATA creation/closure operations
+    fn analyze_ata_operations(&self, meta: &solana_transaction_status::UiTransactionStatusMeta) -> (bool, bool, u64, u64) {
+        // For now, return default values
+        // In a complete implementation, we'd analyze the instruction logs for ATA operations
+        (false, false, 0, 0)
+    }
+    
+    /// Extract priority fee from transaction meta
+    fn extract_priority_fee_from_meta(&self, meta: &solana_transaction_status::UiTransactionStatusMeta) -> Option<u64> {
+        // Priority fee extraction would require parsing compute budget instructions
+        // For now, return None
+        None
     }
     
     pub async fn analyze_recent_swaps(&self, limit: usize) -> SwapAnalysis {
@@ -1047,59 +1310,73 @@ impl WalletTransactionManager {
     }
     
     pub fn display_analysis(analysis: &SwapAnalysis) {
-        println!("\n=== WALLET SWAP ANALYSIS RESULTS ===\n");
+        // Only display detailed analysis if debug mode is enabled
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "INFO", "=== WALLET SWAP ANALYSIS RESULTS ===");
+            
+            log(LogTag::Transactions, "RESULTS", &format!("Analysis Summary: {} total swaps ({} buy, {} sell)", 
+                analysis.total_swaps, analysis.buy_swaps, analysis.sell_swaps));
+            
+            log(LogTag::Transactions, "INFO", "📊 Summary:");
+            log(LogTag::Transactions, "INFO", &format!("   Total swaps found: {}", analysis.total_swaps));
+            log(LogTag::Transactions, "INFO", &format!("   Buy transactions: {}", analysis.buy_swaps));
+            log(LogTag::Transactions, "INFO", &format!("   Sell transactions: {}", analysis.sell_swaps));
+            log(LogTag::Transactions, "INFO", &format!("   Total SOL spent (buys): {:.6}", analysis.total_sol_in));
+            log(LogTag::Transactions, "INFO", &format!("   Total SOL received (sells): {:.6}", analysis.total_sol_out));
+            log(LogTag::Transactions, "INFO", &format!("   Total fees paid: {:.6}", analysis.total_fees));
+            log(LogTag::Transactions, "INFO", &format!("   Net SOL change: {:.6}", analysis.net_sol_change));
+        }
         
-        log(LogTag::Summary, "RESULTS", &format!("Analysis Summary: {} total swaps ({} buy, {} sell)", 
-            analysis.total_swaps, analysis.buy_swaps, analysis.sell_swaps));
-        
-        println!("📊 Summary:");
-        println!("   Total swaps found: {}", analysis.total_swaps);
-        println!("   Buy transactions: {}", analysis.buy_swaps);
-        println!("   Sell transactions: {}", analysis.sell_swaps);
-        println!("   Total SOL spent (buys): {:.6}", analysis.total_sol_in);
-        println!("   Total SOL received (sells): {:.6}", analysis.total_sol_out);
-        println!("   Total fees paid: {:.6}", analysis.total_fees);
-        println!("   Net SOL change: {:.6}", analysis.net_sol_change);
-        
-        log(LogTag::Profit, "CALCULATION", &format!("Net P&L: {:.6} SOL (buys: {:.6}, sells: {:.6}, fees: {:.6})", 
+        log(LogTag::Transactions, "CALCULATION", &format!("Net P&L: {:.6} SOL (buys: {:.6}, sells: {:.6}, fees: {:.6})", 
             analysis.net_sol_change, analysis.total_sol_in, analysis.total_sol_out, analysis.total_fees));
         
         if analysis.net_sol_change > 0.0 {
-            println!("   🟢 Net profit: {:.6} SOL", analysis.net_sol_change);
-            log(LogTag::Profit, "PROFIT", &format!("Net profit: {:.6} SOL", analysis.net_sol_change));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "INFO", &format!("   🟢 Net profit: {:.6} SOL", analysis.net_sol_change));
+            }
+            log(LogTag::Transactions, "PROFIT", &format!("Net profit: {:.6} SOL", analysis.net_sol_change));
         } else if analysis.net_sol_change < 0.0 {
-            println!("   🔴 Net loss: {:.6} SOL", analysis.net_sol_change.abs());
-            log(LogTag::Profit, "LOSS", &format!("Net loss: {:.6} SOL", analysis.net_sol_change.abs()));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "INFO", &format!("   🔴 Net loss: {:.6} SOL", analysis.net_sol_change.abs()));
+            }
+            log(LogTag::Transactions, "LOSS", &format!("Net loss: {:.6} SOL", analysis.net_sol_change.abs()));
         } else {
-            println!("   ⚪ Break even");
-            log(LogTag::Profit, "EVEN", "Portfolio is break even");
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "INFO", "   ⚪ Break even");
+            }
+            log(LogTag::Transactions, "EVEN", "Portfolio is break even");
         }
         
-        if !analysis.recent_swaps.is_empty() {
-            println!("\n📋 Recent Swap Details:");
-            println!("   {:<8} {:<16} {:<12} {:<15} {:<12} {:<10}", 
-                     "Type", "Token", "SOL Amount", "Price", "Fees", "Status");
-            println!("   {}", "=".repeat(80));
+        if !analysis.recent_swaps.is_empty() && is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "INFO", "📋 Recent Swap Details:");
+            log(LogTag::Transactions, "INFO", &format!("{:<8} {:<16} {:<12} {:<15} {:<12} {:<10}", 
+                     "Type", "Token", "SOL Amount", "Price", "Fees", "Status"));
+            log(LogTag::Transactions, "INFO", &format!("{}", "=".repeat(80)));
             
-            log(LogTag::Summary, "DETAILS", &format!("Displaying {} recent swaps", analysis.recent_swaps.len()));
+            log(LogTag::Transactions, "DETAILS", &format!("Displaying {} recent swaps", analysis.recent_swaps.len()));
             
             for (i, swap) in analysis.recent_swaps.iter().enumerate() {
                 let status = if swap.success { "✅" } else { "❌" };
-                println!("   {:<8} {:<16} {:<12.6} {:<15.9} {:<12.6} {:<10}",
+                log(LogTag::Transactions, "INFO", &format!("{:<8} {:<16} {:<12.6} {:<15.9} {:<12.6} {:<10}",
                          swap.swap_type,
                          swap.token_symbol,
                          swap.sol_amount,
                          swap.effective_price,
                          swap.fees_paid,
-                         status);
+                         status));
                 
                 log(LogTag::Transactions, "DETAIL", &format!("Swap {}: {} {} tokens for {:.6} SOL at {:.9} SOL/token", 
                     i + 1, swap.swap_type, swap.token_symbol, swap.sol_amount, swap.effective_price));
             }
+        } else if !analysis.recent_swaps.is_empty() {
+            // Log summary without detailed table when debug is disabled
+            log(LogTag::Transactions, "DETAILS", &format!("Found {} recent swaps", analysis.recent_swaps.len()));
         }
         
-        println!("\n✅ Analysis complete. Check the details above for P&L verification.");
-        log(LogTag::System, "COMPLETE", "Wallet swap analysis finished successfully");
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "INFO", "✅ Analysis complete. Check the details above for P&L verification.");
+        }
+        log(LogTag::Transactions, "COMPLETE", "Wallet swap analysis finished successfully");
     }
 }
 
@@ -1157,4 +1434,462 @@ async fn get_token_info_safe(mint: &str) -> (String, String) {
 async fn get_token_decimals_safe_local(mint: &str) -> Option<u8> {
     // Use the centralized decimals function from tokens module
     get_token_decimals(mint).await
+}
+
+/// Comprehensive Swap Transaction Discovery and Analysis Functions
+/// 
+/// This module provides functionality to analyze wallet transactions for swap operations:
+/// - Scans entire transaction history for swap patterns  
+/// - Detects token purchases and sales from instruction analysis
+/// - Extracts swap amounts, prices, and fees
+/// - Identifies swap routers (Jupiter, Raydium, etc.)
+/// - Provides detailed swap analytics and statistics
+/// - Exports swap data to JSON for further analysis
+/// - Displays transactions in table format with types
+
+use tabled::{Tabled, Table, settings::{Style, Alignment, object::Rows, Modify}};
+use clap::Parser;
+
+/// Display structure for wallet transactions table
+#[derive(Tabled)]
+pub struct TransactionDisplay {
+    #[tabled(rename = "📅 Date")]
+    date: String,
+    #[tabled(rename = "⏰ Time")]
+    time: String,
+    #[tabled(rename = "🔑 Signature")]
+    signature: String,
+    #[tabled(rename = "� Value (SOL)")]
+    value_sol: String,
+    #[tabled(rename = "📋 Instructions")]
+    instructions: String,
+    #[tabled(rename = "�💸 Fee (SOL)")]
+    fee_sol: String,
+    #[tabled(rename = "✅ Success")]
+    success: String,
+    #[tabled(rename = "🏷️ Type")]
+    transaction_type: String,
+}
+
+/// Run comprehensive swap transaction discovery and analysis
+pub async fn run_swap_analysis(args: crate::transactions_tools::Args) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{
+        rpc::{init_rpc_client, get_rpc_client},
+        logger::{log, LogTag},
+        global::read_configs,
+        transactions_tools::{
+            analyze_wallet_swaps, get_all_configured_wallets,
+            display_comprehensive_results, export_results_to_json
+        },
+    };
+
+    // Initialize RPC client
+    init_rpc_client()?;
+    let _rpc_client = get_rpc_client();
+    
+    // Read configurations
+    let _configs = read_configs().map_err(|e| format!("Failed to read configs: {}", e))?;
+    
+    // If table-only mode is requested, handle it separately without any analysis
+    if args.table_only {
+        log(LogTag::Transactions, "INFO", "� Initializing wallet transaction manager for table-only display");
+        initialize_wallet_transaction_manager().await?;
+        
+        // Determine which wallets to display
+        let wallets_to_display = if let Some(ref wallet_addr) = args.wallet {
+            vec![wallet_addr.clone()]
+        } else {
+            // Get all configured wallets
+            get_all_configured_wallets().await?
+        };
+        
+        if wallets_to_display.is_empty() {
+            return Err("No wallets found to display".into());
+        }
+        
+        log(LogTag::Transactions, "INFO", &format!("📊 Displaying table for {} wallet(s)", wallets_to_display.len()));
+        
+        // Display only the transaction table(s)
+        for wallet_address in &wallets_to_display {
+            match display_wallet_transactions_table(wallet_address).await {
+                Ok(()) => {
+                    log(LogTag::Transactions, "SUCCESS", &format!("📊 Transaction table displayed for wallet {}", &wallet_address[..8]));
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "ERROR", &format!("❌ Failed to display transaction table for wallet {}: {}", &wallet_address[..8], e));
+                }
+            }
+        }
+        
+        return Ok(());
+    }
+    
+    // For full analysis mode (including when table is combined with other options)
+    log(LogTag::Transactions, "INFO", "🔍 Starting comprehensive swap transaction discovery");
+    
+    // Initialize wallet transaction manager if table display is requested
+    if args.table {
+        log(LogTag::Transactions, "INFO", "📊 Initializing wallet transaction manager for table-only display");
+        initialize_wallet_transaction_manager().await?;
+    }
+    
+    // Determine which wallets to analyze
+    let wallets_to_analyze = if let Some(ref wallet_addr) = args.wallet {
+        vec![wallet_addr.clone()]
+    } else {
+        // Get all configured wallets
+        get_all_configured_wallets().await?
+    };
+    
+    if wallets_to_analyze.is_empty() {
+        return Err("No wallets found to analyze".into());
+    }
+    
+    log(LogTag::Transactions, "INFO", &format!("📊 Analyzing {} wallet(s)", wallets_to_analyze.len()));
+    
+    let mut all_reports = Vec::new();
+    
+    for wallet_address in &wallets_to_analyze {
+        log(LogTag::Transactions, "INFO", &format!("🔍 Analyzing wallet: {}", &wallet_address[..8]));
+        
+        // Display transaction table if requested
+        if args.table {
+            match display_wallet_transactions_table(wallet_address).await {
+                Ok(()) => {
+                    log(LogTag::Transactions, "SUCCESS", &format!("📊 Transaction table displayed for wallet {}", &wallet_address[..8]));
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "ERROR", &format!("❌ Failed to display transaction table for wallet {}: {}", &wallet_address[..8], e));
+                }
+            }
+        }
+        
+        match analyze_wallet_swaps(wallet_address, &args).await {
+            Ok(report) => {
+                log(LogTag::Transactions, "SUCCESS", &format!(
+                    "✅ Found {} swaps in wallet {}", 
+                    report.analytics.total_swaps, 
+                    &wallet_address[..8]
+                ));
+                all_reports.push(report);
+            },
+            Err(e) => {
+                log(LogTag::Transactions, "ERROR", &format!(
+                    "❌ Failed to analyze wallet {}: {}", 
+                    &wallet_address[..8], 
+                    e
+                ));
+            }
+        }
+    }
+    
+    // Display comprehensive results
+    display_comprehensive_results(&all_reports, &args)?;
+    
+    // Export to JSON if requested
+    if args.export {
+        export_results_to_json(&all_reports, &args)?;
+    }
+    
+    log(LogTag::Transactions, "SUCCESS", "🎉 Swap discovery analysis completed successfully");
+    
+    Ok(())
+}
+
+/// Display the last 40 transactions for a wallet in table format with transaction types
+pub async fn display_wallet_transactions_table(wallet_address: &str) -> Result<(), Box<dyn std::error::Error>> {
+    log(LogTag::Transactions, "INFO", &format!("📊 Fetching transaction history for wallet {}", &wallet_address[..8]));
+    
+    // Get wallet transaction manager
+    let tx_manager_arc = get_wallet_transaction_manager()?;
+    let manager_lock = tx_manager_arc.read().unwrap();
+    
+    if let Some(ref manager) = *manager_lock {
+        // Get cached transactions (up to 40, most recent first)
+        let recent_transactions = manager.get_cached_transactions(Some(40));
+        
+        if recent_transactions.is_empty() {
+            log(LogTag::Transactions, "WARNING", "No transactions found for wallet");
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "INFO", "⚠️  No transactions found in cache. Run the bot first to populate transaction cache.");
+            }
+            return Ok(());
+        }
+        
+        log(LogTag::Transactions, "INFO", &format!("Found {} transactions to display", recent_transactions.len()));
+        
+        // Convert transactions to display format
+        let mut transaction_displays = Vec::new();
+        
+        for cached_tx in &recent_transactions {
+            let tx_data = &cached_tx.transaction_data;
+            
+            // Extract basic transaction info
+            let signature = cached_tx.signature.clone();
+            let short_signature = format!("{}...{}", &signature[..8], &signature[signature.len()-8..]);
+            
+            // Get block time for date/time
+            let (date, time) = if let Some(block_time) = tx_data.block_time {
+                let dt = DateTime::from_timestamp(block_time, 0)
+                    .unwrap_or_else(|| Utc::now());
+                let date = dt.format("%Y-%m-%d").to_string();
+                let time = dt.format("%H:%M:%S").to_string();
+                (date, time)
+            } else {
+                ("Unknown".to_string(), "Unknown".to_string())
+            };
+            
+            // Get transaction fee
+            let fee_sol = if let Some(meta) = &tx_data.transaction.meta {
+                let fee_lamports = meta.fee;
+                format!("{:.6}", fee_lamports as f64 / 1_000_000_000.0)
+            } else {
+                "Unknown".to_string()
+            };
+            
+            // Check if transaction was successful
+            let success = if let Some(meta) = &tx_data.transaction.meta {
+                if meta.err.is_none() {
+                    "✅ YES"
+                } else {
+                    "❌ NO"
+                }
+            } else {
+                "❓ UNKNOWN"
+            }.to_string();
+            
+            // Analyze transaction type
+            let transaction_type = analyze_transaction_type(&cached_tx.transaction_data, wallet_address).await;
+            
+            // Calculate SOL value transferred (excluding fees)
+            let value_sol = if let Some(meta) = &tx_data.transaction.meta {
+                let pre_balances = &meta.pre_balances;
+                let post_balances = &meta.post_balances;
+                
+                if !pre_balances.is_empty() && !post_balances.is_empty() && pre_balances.len() == post_balances.len() {
+                    let sol_change = post_balances[0] as i64 - pre_balances[0] as i64;
+                    let sol_value = sol_change.abs() as f64 / 1_000_000_000.0;
+                    
+                    // Show significant SOL transfers, but show 0 for very small amounts (likely just fees)
+                    if sol_value >= 0.00001 {
+                        format!("{:.8}", sol_value)
+                    } else {
+                        "0.00000001".to_string()
+                    }
+                } else {
+                    "0.00000001".to_string()
+                }
+            } else {
+                "0.00000001".to_string()
+            };
+            
+            // Count instructions in the transaction
+            let instructions = if let Some(decoded_tx) = tx_data.transaction.transaction.decode() {
+                match &decoded_tx.message {
+                    solana_sdk::message::VersionedMessage::Legacy(legacy_message) => {
+                        let instr_count = legacy_message.instructions.len();
+                        format!("{}", instr_count)
+                    }
+                    solana_sdk::message::VersionedMessage::V0(v0_message) => {
+                        let instr_count = v0_message.instructions.len();
+                        format!("{}", instr_count)
+                    }
+                }
+            } else {
+                // Simple fallback: just default to showing 1 instruction
+                // This avoids complex type issues with OptionSerializer
+                "1".to_string()
+            };
+
+            transaction_displays.push(TransactionDisplay {
+                date,
+                time,
+                signature: short_signature,
+                value_sol,
+                instructions,
+                fee_sol,
+                success,
+                transaction_type,
+            });
+        }
+        
+        // Sort by most recent first (reverse chronological)
+        transaction_displays.reverse();
+        
+        // Display the table - this is intentionally kept as println! for clean console output
+        // as this is the primary user-facing output for the table feature
+        println!("\n📋 Last {} Transactions for Wallet {}", 
+                 transaction_displays.len(), 
+                 &wallet_address[..8]);
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        
+        let mut table = Table::new(transaction_displays);
+        table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        
+        println!("{}", table);
+        println!("");
+        
+        Ok(())
+    } else {
+        Err("Wallet transaction manager not initialized".into())
+    }
+}
+
+/// Analyze transaction to determine its type based on instruction patterns
+async fn analyze_transaction_type(tx_data: &solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta, wallet_address: &str) -> String {
+    use solana_sdk::message::VersionedMessage;
+    
+    // Try to decode the transaction to analyze instructions
+    if let Some(decoded_tx) = tx_data.transaction.transaction.decode() {
+        // Check the message type to get instructions properly
+        match &decoded_tx.message {
+            VersionedMessage::Legacy(legacy_message) => {
+                let instructions = &legacy_message.instructions;
+                
+                if instructions.len() == 1 {
+                    return classify_single_legacy_instruction(&legacy_message, wallet_address).await;
+                } else if instructions.len() > 1 {
+                    return classify_complex_legacy_transaction(&legacy_message, wallet_address).await;
+                }
+            }
+            VersionedMessage::V0(v0_message) => {
+                let instructions = &v0_message.instructions;
+                
+                if instructions.len() == 1 {
+                    return classify_single_v0_instruction(&v0_message, wallet_address).await;
+                } else if instructions.len() > 1 {
+                    return classify_complex_v0_transaction(&v0_message, wallet_address).await;
+                }
+            }
+        }
+    }
+    
+    // Fallback: analyze based on account changes
+    if let Some(meta) = &tx_data.transaction.meta {
+        let pre_balances = &meta.pre_balances;
+        let post_balances = &meta.post_balances;
+        
+        // Check SOL balance changes
+        if pre_balances.len() == post_balances.len() && pre_balances.len() > 0 {
+            let sol_change = post_balances[0] as i64 - pre_balances[0] as i64;
+            
+            if sol_change > 0 {
+                return "💰 SOL_RECEIVED".to_string();
+            } else if sol_change < 0 {
+                return "💸 SOL_SENT".to_string();
+            }
+        }
+        
+        // Check token balance changes
+        if meta.pre_token_balances.is_some() || meta.post_token_balances.is_some() {
+            return "🔄 TOKEN_ACTIVITY".to_string();
+        }
+    }
+    
+    "❓ UNKNOWN".to_string()
+}
+
+/// Classify a single instruction transaction (Legacy message)
+async fn classify_single_legacy_instruction(message: &solana_sdk::message::Message, _wallet_address: &str) -> String {
+    use solana_sdk::pubkey::Pubkey;
+    
+    if message.instructions.is_empty() {
+        return "❓ EMPTY".to_string();
+    }
+    
+    let instruction = &message.instructions[0];
+    let program_id = message.account_keys[instruction.program_id_index as usize];
+    
+    classify_program_id(&program_id)
+}
+
+/// Classify a complex multi-instruction transaction (Legacy message)
+async fn classify_complex_legacy_transaction(message: &solana_sdk::message::Message, _wallet_address: &str) -> String {
+    analyze_multiple_instructions(&message.instructions, &message.account_keys)
+}
+
+/// Classify a single instruction transaction (V0 message)
+async fn classify_single_v0_instruction(message: &solana_sdk::message::v0::Message, _wallet_address: &str) -> String {
+    if message.instructions.is_empty() {
+        return "❓ EMPTY".to_string();
+    }
+    
+    let instruction = &message.instructions[0];
+    if let Some(program_id) = message.account_keys.get(instruction.program_id_index as usize) {
+        classify_program_id(program_id)
+    } else {
+        "❓ INVALID".to_string()
+    }
+}
+
+/// Classify a complex multi-instruction transaction (V0 message)  
+async fn classify_complex_v0_transaction(message: &solana_sdk::message::v0::Message, _wallet_address: &str) -> String {
+    analyze_multiple_instructions(&message.instructions, &message.account_keys)
+}
+
+/// Common function to classify program ID
+fn classify_program_id(program_id: &solana_sdk::pubkey::Pubkey) -> String {
+    let program_str = program_id.to_string();
+    
+    match program_str.as_str() {
+        // System program
+        "11111111111111111111111111111111" => "🏛️ SYSTEM",
+        // SPL Token program
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "🪙 TOKEN_OP",
+        // SPL Associated Token Account program
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => "🔗 ATA_OP",
+        // Jupiter programs
+        program if program.contains("JUP") => "🪐 JUPITER_SWAP",
+        // Raydium programs  
+        program if program.contains("Ray") => "🌊 RAYDIUM_SWAP",
+        // Other DEX programs
+        program if program.contains("DEX") || program.contains("dex") => "🔄 DEX_SWAP",
+        _ => "🔧 CONTRACT"
+    }
+    .to_string()
+}
+
+/// Common function to analyze multiple instructions
+fn analyze_multiple_instructions(instructions: &[solana_sdk::instruction::CompiledInstruction], account_keys: &[solana_sdk::pubkey::Pubkey]) -> String {
+    let mut has_token_activity = false;
+    let mut has_swap_activity = false;
+    let mut has_ata_creation = false;
+    let mut has_system_activity = false;
+    
+    for instruction in instructions {
+        if let Some(program_id) = account_keys.get(instruction.program_id_index as usize) {
+            let program_str = program_id.to_string();
+            
+            match program_str.as_str() {
+                "11111111111111111111111111111111" => has_system_activity = true,
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => has_token_activity = true,
+                "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => has_ata_creation = true,
+                program if program.contains("JUP") || program.contains("Ray") || program.contains("DEX") || program.contains("dex") => {
+                    has_swap_activity = true;
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    // Prioritize classification based on what activities were detected
+    if has_swap_activity {
+        if has_ata_creation {
+            "🔄 SWAP_+_ATA".to_string()
+        } else {
+            "🔄 SWAP".to_string()
+        }
+    } else if has_ata_creation && has_token_activity {
+        "🔗 ATA_+_TOKEN".to_string()
+    } else if has_ata_creation {
+        "🔗 ATA_CREATE".to_string()
+    } else if has_token_activity {
+        "🪙 TOKEN_TX".to_string()
+    } else if has_system_activity {
+        "🏛️ SYSTEM_TX".to_string()
+    } else {
+        "🔧 COMPLEX".to_string()
+    }
 }

@@ -14,6 +14,7 @@
 use crate::{
     rpc::{get_rpc_client, init_rpc_client, TransactionDetails, TokenBalance, TransactionMeta, TransactionData, UiTokenAmount},
     logger::{init_file_logging, log, LogTag},
+    global::is_debug_transactions_enabled,
     global::read_configs,
     tokens::{get_token_decimals, TokenDatabase},
     tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, lamports_to_sol},
@@ -71,6 +72,14 @@ pub struct Args {
     /// Filter by swap type (buy/sell)
     #[arg(long)]
     pub swap_type: Option<String>,
+    
+    /// Display last 40 transactions in table format with types
+    #[arg(short, long)]
+    pub table: bool,
+    
+    /// Display ONLY transaction table without any analysis (clean output)
+    #[arg(long)]
+    pub table_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,13 +167,17 @@ fn extract_actual_swap_amounts_from_json(transaction_json: &serde_json::Value, t
                                                         // Check if this is SOL (wrapped SOL mint)
                                                         if mint == "So11111111111111111111111111111111111111112" {
                                                             // This is the SOL amount being spent for the swap
-                                                            log(LogTag::System, "DEBUG", &format!("📊 Found SOL transfer in swap: {} SOL", ui_amount));
+                                                        if is_debug_transactions_enabled() {
+                                                            log(LogTag::Transactions, "DEBUG", &format!("📊 Found SOL transfer in swap: {} SOL", ui_amount));
+                                                        }
                                                             sol_amount = ui_amount;
                                                         } 
                                                         // Check if this is our target token
                                                         else if mint == target_token_mint {
                                                             // This is the token amount being received/sent
-                                                            log(LogTag::System, "DEBUG", &format!("📊 Found token transfer in swap: {} tokens (mint: {})", ui_amount, mint));
+                                                        if is_debug_transactions_enabled() {
+                                                            log(LogTag::Transactions, "DEBUG", &format!("📊 Found token transfer in swap: {} tokens (mint: {})", ui_amount, mint));
+                                                        }
                                                             token_amount = ui_amount;
                                                         }
                                                     }
@@ -182,14 +195,20 @@ fn extract_actual_swap_amounts_from_json(transaction_json: &serde_json::Value, t
         
         // Return the extracted amounts if we found both
         if sol_amount > 0.0 && token_amount > 0.0 {
-            log(LogTag::System, "DEBUG", &format!("📊 Extracted actual swap amounts: {} SOL ↔ {} tokens", sol_amount, token_amount));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Extracted actual swap amounts: {} SOL ↔ {} tokens", sol_amount, token_amount));
+            }
             Some((sol_amount, token_amount))
+        } else if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Could not extract both SOL and token amounts from inner instructions");
+            None
         } else {
-            log(LogTag::System, "DEBUG", "📊 Could not extract both SOL and token amounts from inner instructions");
             None
         }
+    } else if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "📊 No inner instructions found in transaction");
+        None
     } else {
-        log(LogTag::System, "DEBUG", "📊 No inner instructions found in transaction");
         None
     }
 }
@@ -200,7 +219,9 @@ async fn analyze_jupiter_swap(
     wallet_address: &str,
     transaction_json: Option<&serde_json::Value>,
 ) -> Option<(bool, BasicSwapInfo)> {
-    log(LogTag::System, "DEBUG", "🔍 Analyzing Jupiter swap transaction");
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "🔍 Analyzing Jupiter swap transaction");
+    }
     
     // For Jupiter swaps, look at SOL balance changes and token balance changes
     // Parse the message from JSON to get account keys
@@ -220,7 +241,9 @@ async fn analyze_jupiter_swap(
     let wallet_pubkey = Pubkey::from_str(wallet_address).ok()?;
     let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey)?;
     
-    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - wallet index: {}", wallet_index));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - wallet index: {}", wallet_index));
+    }
     
     // Analyze SOL balance changes
     let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
@@ -228,11 +251,15 @@ async fn analyze_jupiter_swap(
         let post_balance = meta.post_balances[wallet_index] as i64;
         lamports_to_sol((post_balance - pre_balance).abs() as u64) * if post_balance > pre_balance { 1.0 } else { -1.0 }
     } else {
-        log(LogTag::System, "DEBUG", "📊 Jupiter swap - cannot find wallet SOL balances");
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Jupiter swap - cannot find wallet SOL balances");
+        }
         return None;
     };
     
-    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - SOL change: {} SOL", sol_change));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - SOL change: {} SOL", sol_change));
+    }
     
     // Look for token balance changes involving wallet
     if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
@@ -251,7 +278,9 @@ async fn analyze_jupiter_swap(
                     let decimals = balance.ui_token_amount.decimals;
                     let formatted_amount = amount / 10f64.powi(decimals as i32);
                     *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) -= formatted_amount;
-                    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - pre token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - pre token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                }
                 }
             }
         }
@@ -265,26 +294,32 @@ async fn analyze_jupiter_swap(
                     let decimals = balance.ui_token_amount.decimals;
                     let formatted_amount = amount / 10f64.powi(decimals as i32);
                     *wallet_token_changes.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
-                    log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - post token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - post token (wallet-owned): mint={}, amount={}", balance.mint, formatted_amount));
+                }
                 }
             }
         }
         
         // Look for meaningful token changes (positive = gained, negative = lost)
-        log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - analyzing {} total token changes", wallet_token_changes.len()));
-        for (mint, change) in &wallet_token_changes {
-            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - token change candidate: mint={}, change={}, significant={}", 
-                mint, change, change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112"));
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - analyzing {} total token changes", wallet_token_changes.len()));
+            for (mint, change) in &wallet_token_changes {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - token change candidate: mint={}, change={}, significant={}", 
+                    mint, change, change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112"));
+            }
         }
         
         let significant_changes: Vec<_> = wallet_token_changes.iter()
             .filter(|(mint, &change)| change.abs() > 0.0001 && *mint != "So11111111111111111111111111111111111111112") // Ignore SOL token and dust
             .collect();
         
-        log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - found {} significant token changes", significant_changes.len()));
-        
-        for (mint, change) in &significant_changes {
-            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap - token change: mint={}, change={}", mint, change));
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - found {} significant token changes", significant_changes.len()));
+            
+            for (mint, change) in &significant_changes {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap - token change: mint={}, change={}", mint, change));
+            }
         }
         
         // If we have token changes and SOL changes, this is likely a swap
@@ -301,29 +336,37 @@ async fn analyze_jupiter_swap(
                 .find(|(mint, _)| mint.as_str() == main_token)?
                 .1;
             
-            log(LogTag::System, "DEBUG", &format!("📊 Jupiter swap detected: {} {} tokens, SOL change: {}", 
-                if is_buy { "BUY" } else { "SELL" }, main_token, sol_change));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Jupiter swap detected: {} {} tokens, SOL change: {}", 
+                    if is_buy { "BUY" } else { "SELL" }, main_token, sol_change));
+            }
             
             // Try to extract actual swap amounts from inner instructions
             let (actual_sol_amount, actual_token_amount, actual_price) = 
                 if let Some(json_data) = transaction_json {
                     if let Some((inner_sol, inner_token)) = extract_actual_swap_amounts_from_json(json_data, &main_token) {
                         let price = if inner_token > 0.0 { inner_sol / inner_token } else { 0.0 };
-                        log(LogTag::System, "DEBUG", &format!("📊 Using actual swap amounts: {} SOL ↔ {} tokens, price: {} SOL/token", 
-                            inner_sol, inner_token, price));
+                        if is_debug_transactions_enabled() {
+                            log(LogTag::Transactions, "DEBUG", &format!("📊 Using actual swap amounts: {} SOL ↔ {} tokens, price: {} SOL/token", 
+                                inner_sol, inner_token, price));
+                        }
                         (inner_sol, inner_token, price)
                     } else {
                         // Fallback to balance change method
                         let fallback_price = if token_change != 0.0 { sol_change.abs() / token_change.abs() } else { 0.0 };
-                        log(LogTag::System, "DEBUG", &format!("📊 Using fallback balance change method: {} SOL ↔ {} tokens, price: {} SOL/token", 
-                            sol_change.abs(), token_change.abs(), fallback_price));
+                        if is_debug_transactions_enabled() {
+                            log(LogTag::Transactions, "DEBUG", &format!("📊 Using fallback balance change method: {} SOL ↔ {} tokens, price: {} SOL/token", 
+                                sol_change.abs(), token_change.abs(), fallback_price));
+                        }
                         (sol_change.abs(), token_change.abs(), fallback_price)
                     }
                 } else {
                     // Fallback to balance change method when no JSON data available
                     let fallback_price = if token_change != 0.0 { sol_change.abs() / token_change.abs() } else { 0.0 };
-                    log(LogTag::System, "DEBUG", &format!("📊 Using fallback balance change method (no JSON): {} SOL ↔ {} tokens, price: {} SOL/token", 
-                        sol_change.abs(), token_change.abs(), fallback_price));
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!("📊 Using fallback balance change method (no JSON): {} SOL ↔ {} tokens, price: {} SOL/token", 
+                            sol_change.abs(), token_change.abs(), fallback_price));
+                    }
                     (sol_change.abs(), token_change.abs(), fallback_price)
                 };
             
@@ -340,7 +383,9 @@ async fn analyze_jupiter_swap(
         }
     }
     
-    log(LogTag::System, "DEBUG", "📊 Jupiter swap - no significant changes detected");
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "📊 Jupiter swap - no significant changes detected");
+    }
     None
 }
 
@@ -377,12 +422,12 @@ pub async fn analyze_wallet_swaps(
     wallet_address: &str,
     args: &Args,
 ) -> Result<WalletSwapReport, Box<dyn std::error::Error>> {
-    log(LogTag::System, "INFO", &format!("🔄 Fetching transactions for wallet {}", &wallet_address[..8]));
+    log(LogTag::Transactions, "INFO", &format!("🔄 Fetching transactions for wallet {}", &wallet_address[..8]));
     
     // Get all transactions for this wallet
     let transactions = fetch_wallet_transactions(wallet_address, args.limit).await?;
     
-    log(LogTag::System, "INFO", &format!("📊 Analyzing {} transactions for swaps", transactions.len()));
+    log(LogTag::Transactions, "INFO", &format!("📊 Analyzing {} transactions for swaps", transactions.len()));
     
     let mut detailed_swaps = Vec::new();
     let mut processed = 0;
@@ -398,7 +443,7 @@ pub async fn analyze_wallet_swaps(
         processed += 1;
         
         if processed % 100 == 0 {
-            log(LogTag::System, "INFO", &format!("📊 Processed {}/{} transactions...", processed, transactions.len()));
+            log(LogTag::Transactions, "INFO", &format!("📊 Processed {}/{} transactions...", processed, transactions.len()));
         }
         
         // Apply time filter - skip since TransactionDetails doesn't have block_time
@@ -407,9 +452,13 @@ pub async fn analyze_wallet_swaps(
         // }
         
         // Analyze transaction for swap patterns
-        log(LogTag::System, "DEBUG", &format!("🔍 Analyzing transaction with {} signatures", transaction.transaction.signatures.len()));
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("🔍 Analyzing transaction with {} signatures", transaction.transaction.signatures.len()));
+        }
         if let Some(swap) = analyze_transaction_for_detailed_swap(transaction, wallet_address).await {
-            log(LogTag::System, "DEBUG", &format!("✅ Swap detected: {} {}", swap.swap_type, swap.token_symbol));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("✅ Swap detected: {} {}", swap.swap_type, swap.token_symbol));
+            }
             // Apply filters
             if let Some(ref token_filter) = args.token {
                 if swap.token_mint != *token_filter {
@@ -435,7 +484,7 @@ pub async fn analyze_wallet_swaps(
     // Generate analytics
     let analytics = generate_swap_analytics(&detailed_swaps);
     
-    log(LogTag::System, "SUCCESS", &format!(
+    log(LogTag::Transactions, "SUCCESS", &format!(
         "✅ Wallet analysis complete: {} swaps found from {} transactions", 
         detailed_swaps.len(), 
         transactions.len()
@@ -454,12 +503,12 @@ async fn fetch_wallet_transactions(
 ) -> Result<Vec<TransactionDetails>, Box<dyn std::error::Error>> {
     let _rpc_client = get_rpc_client();
     
-    log(LogTag::System, "INFO", "📥 Loading transaction files from data/transactions/...");
+    log(LogTag::Transactions, "INFO", "📥 Loading transaction files from data/transactions/...");
     
     // Read all JSON files from data/transactions directory
     let transactions_dir = Path::new("data/transactions");
     if !transactions_dir.exists() {
-        log(LogTag::System, "WARN", "No transactions directory found at data/transactions/");
+        log(LogTag::Transactions, "WARN", "No transactions directory found at data/transactions/");
         return Ok(Vec::new());
     }
     
@@ -475,7 +524,7 @@ async fn fetch_wallet_transactions(
             files_processed += 1;
             
             if files_processed % 10 == 0 {
-                log(LogTag::System, "INFO", &format!("📊 Processed {} transaction files...", files_processed));
+                log(LogTag::Transactions, "INFO", &format!("📊 Processed {} transaction files...", files_processed));
             }
             
             match load_transaction_from_file(&path).await {
@@ -486,14 +535,18 @@ async fn fetch_wallet_transactions(
                         .unwrap_or_else(|| format!("no_signature_{}", files_processed));
                     
                     if processed_signatures.contains(&signature) {
-                        log(LogTag::System, "DEBUG", &format!("📊 Skipping duplicate transaction: {}", signature));
+                        if is_debug_transactions_enabled() {
+                            log(LogTag::Transactions, "DEBUG", &format!("📊 Skipping duplicate transaction: {}", signature));
+                        }
                         continue;
                     }
                     
                     // Check if this transaction involves the target wallet
                     let involves_wallet = transaction_involves_wallet(&transaction, wallet_address);
-                    log(LogTag::System, "DEBUG", &format!("📊 Transaction in {:?} involves wallet {}: {}", 
-                        path.file_name().unwrap_or_default(), wallet_address, involves_wallet));
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!("📊 Transaction in {:?} involves wallet {}: {}", 
+                            path.file_name().unwrap_or_default(), wallet_address, involves_wallet));
+                    }
                     if involves_wallet {
                         processed_signatures.insert(signature.clone());
                         transactions.push(transaction);
@@ -508,7 +561,7 @@ async fn fetch_wallet_transactions(
                     continue;
                 },
                 Err(e) => {
-                    log(LogTag::System, "WARN", &format!(
+                    log(LogTag::Transactions, "WARN", &format!(
                         "Failed to load transaction from {}: {}", 
                         path.display(), 
                         e
@@ -518,12 +571,12 @@ async fn fetch_wallet_transactions(
         }
     }
     
-    log(LogTag::System, "INFO", &format!("� Simulating transaction fetch for wallet {}", &wallet_address[..8]));
+    log(LogTag::Transactions, "INFO", &format!("� Simulating transaction fetch for wallet {}", &wallet_address[..8]));
     
     // For demonstration, we'll return an empty list
     // In a real implementation, you would use the Solana RPC to get signatures first
     
-    log(LogTag::System, "SUCCESS", &format!("✅ Fetched {} transactions", transactions.len()));
+    log(LogTag::Transactions, "SUCCESS", &format!("✅ Fetched {} transactions", transactions.len()));
     
     Ok(transactions)
 }
@@ -532,15 +585,21 @@ async fn analyze_transaction_for_detailed_swap(
     transaction: &TransactionDetails,
     wallet_address: &str,
 ) -> Option<DetailedSwapTransaction> {
-    log(LogTag::System, "DEBUG", &format!("📊 Analyzing transaction for wallet {}", &wallet_address[..8]));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Analyzing transaction for wallet {}", &wallet_address[..8]));
+    }
     
     let meta = transaction.meta.as_ref()?;
     
-    log(LogTag::System, "DEBUG", &format!("📊 Transaction has meta: success={}", meta.err.is_none()));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Transaction has meta: success={}", meta.err.is_none()));
+    }
     
     // Check if transaction was successful
     if meta.err.is_some() {
-        log(LogTag::System, "DEBUG", "❌ Transaction failed, skipping");
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "❌ Transaction failed, skipping");
+        }
         return None;
     }
     
@@ -553,13 +612,19 @@ async fn analyze_transaction_for_detailed_swap(
     });
     
     // Analyze for swap patterns
-    log(LogTag::System, "DEBUG", "🔍 Calling detect_swap_from_transaction");
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "🔍 Calling detect_swap_from_transaction");
+    }
     let (swap_detected, swap_info) = detect_swap_from_transaction(transaction, meta, wallet_address).await?;
     
-    log(LogTag::System, "DEBUG", &format!("🔍 Swap detection result: {}", swap_detected));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("🔍 Swap detection result: {}", swap_detected));
+    }
     
     if !swap_detected {
-        log(LogTag::System, "DEBUG", "❌ No swap detected in transaction");
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "❌ No swap detected in transaction");
+        }
         return None;
     }
     
@@ -632,15 +697,21 @@ async fn detect_swap_from_transaction(
     meta: &TransactionMeta,
     wallet_address: &str,
 ) -> Option<(bool, BasicSwapInfo)> {
-    log(LogTag::System, "DEBUG", "🔍 Starting swap detection");
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "🔍 Starting swap detection");
+    }
     
     // First check if this transaction involves Jupiter or other known DEX programs
     let (router_name, _program_id) = identify_swap_router(transaction);
-    log(LogTag::System, "DEBUG", &format!("📊 Detected swap router: {:?}", router_name));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Detected swap router: {:?}", router_name));
+    }
     
     // For now, test Jupiter analysis on transactions with token balances
     if meta.pre_token_balances.is_some() && meta.post_token_balances.is_some() {
-        log(LogTag::System, "DEBUG", "📊 Transaction has token balances - testing Jupiter analysis");
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 Transaction has token balances - testing Jupiter analysis");
+        }
         if let Some(result) = {
             let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
                 TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
@@ -671,7 +742,9 @@ async fn detect_swap_from_transaction(
     let account_keys_value = transaction.transaction.message.get("accountKeys")?;
     let account_keys_array = account_keys_value.as_array()?;
     
-    log(LogTag::System, "DEBUG", &format!("📊 Found {} account keys", account_keys_array.len()));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Found {} account keys", account_keys_array.len()));
+    }
     
     // Convert to pubkeys
     let mut account_keys = Vec::new();
@@ -683,13 +756,17 @@ async fn detect_swap_from_transaction(
         }
     }
     
-    log(LogTag::System, "DEBUG", &format!("📊 Converted {} pubkeys", account_keys.len()));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Converted {} pubkeys", account_keys.len()));
+    }
     
     // Find wallet account index
     let wallet_pubkey = Pubkey::from_str(wallet_address).ok()?;
     let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey)?;
     
-    log(LogTag::System, "DEBUG", &format!("📊 Wallet index: {}", wallet_index));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Wallet index: {}", wallet_index));
+    }
     
     // Analyze SOL balance changes
     let sol_change = if wallet_index < meta.pre_balances.len() && wallet_index < meta.post_balances.len() {
@@ -745,40 +822,52 @@ fn analyze_token_balance_changes(
 ) -> HashMap<String, f64> {
     let mut changes = HashMap::new();
     
-    log(LogTag::System, "DEBUG", &format!("📊 Analyzing token balance changes for wallet_index: {}", wallet_index));
-    
-    log(LogTag::System, "DEBUG", &format!("📊 Has pre_token_balances: {}", meta.pre_token_balances.is_some()));
-    log(LogTag::System, "DEBUG", &format!("📊 Has post_token_balances: {}", meta.post_token_balances.is_some()));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Analyzing token balance changes for wallet_index: {}", wallet_index));
+        
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Has pre_token_balances: {}", meta.pre_token_balances.is_some()));
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Has post_token_balances: {}", meta.post_token_balances.is_some()));
+    }
     
     if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
-        log(LogTag::System, "DEBUG", &format!("📊 Pre token balances: {}, Post token balances: {}", pre_balances.len(), post_balances.len()));
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Pre token balances: {}, Post token balances: {}", pre_balances.len(), post_balances.len()));
+        }
         
         // Create maps for easier lookup
         let mut pre_map = HashMap::new();
         let mut post_map = HashMap::new();
         
         for balance in pre_balances {
-            log(LogTag::System, "DEBUG", &format!("📊 Pre balance: account_index={}, mint={}, amount={}", 
-                balance.account_index, balance.mint, balance.ui_token_amount.amount));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Pre balance: account_index={}, mint={}, amount={}", 
+                    balance.account_index, balance.mint, balance.ui_token_amount.amount));
+            }
             // Remove the wallet_index filter - analyze all token changes in the transaction
             let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
             let decimals = balance.ui_token_amount.decimals;
             let formatted_amount = amount / 10f64.powi(decimals as i32);
             // Accumulate amounts for the same mint
             *pre_map.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
-            log(LogTag::System, "DEBUG", &format!("📊 Pre balance accumulated: mint={}, amount={}", balance.mint, formatted_amount));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Pre balance accumulated: mint={}, amount={}", balance.mint, formatted_amount));
+            }
         }
         
         for balance in post_balances {
-            log(LogTag::System, "DEBUG", &format!("📊 Post balance: account_index={}, mint={}, amount={}", 
-                balance.account_index, balance.mint, balance.ui_token_amount.amount));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Post balance: account_index={}, mint={}, amount={}", 
+                    balance.account_index, balance.mint, balance.ui_token_amount.amount));
+            }
             // Remove the wallet_index filter - analyze all token changes in the transaction
             let amount = balance.ui_token_amount.amount.parse::<u64>().unwrap_or(0) as f64;
             let decimals = balance.ui_token_amount.decimals;
             let formatted_amount = amount / 10f64.powi(decimals as i32);
             // Accumulate amounts for the same mint
             *post_map.entry(balance.mint.clone()).or_insert(0.0) += formatted_amount;
-            log(LogTag::System, "DEBUG", &format!("📊 Post balance accumulated: mint={}, amount={}", balance.mint, formatted_amount));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Post balance accumulated: mint={}, amount={}", balance.mint, formatted_amount));
+            }
         }
         
         // Calculate changes for all tokens
@@ -791,12 +880,16 @@ fn analyze_token_balance_changes(
             
             if change.abs() > 0.000001 { // Filter out dust
                 changes.insert(mint.clone(), change);
-                log(LogTag::System, "DEBUG", &format!("📊 Token change: mint={}, change={}", mint, change));
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("📊 Token change: mint={}, change={}", mint, change));
+                }
             }
         }
     }
     
-    log(LogTag::System, "DEBUG", &format!("📊 Total token changes found: {}", changes.len()));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Total token changes found: {}", changes.len()));
+    }
     changes
 }
 
@@ -1288,14 +1381,16 @@ pub fn export_results_to_json(
     println!("  📁 File: {}", filepath.display());
     println!("  📊 Data: {} wallet reports with detailed swap information", reports.len());
     
-    log(LogTag::System, "SUCCESS", &format!("Exported swap analysis to: {}", filepath.display()));
+    log(LogTag::Transactions, "SUCCESS", &format!("Exported swap analysis to: {}", filepath.display()));
     
     Ok(())
 }
 
 // Helper function to load a transaction from a JSON file
 async fn load_transaction_from_file(file_path: &Path) -> Result<Option<TransactionDetails>, Box<dyn std::error::Error>> {
-    log(LogTag::System, "DEBUG", &format!("📊 Loading transaction from file: {:?}", file_path));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Loading transaction from file: {:?}", file_path));
+    }
     let content = fs::read_to_string(file_path)?;
     let json_data: serde_json::Value = serde_json::from_str(&content)?;
     
@@ -1307,7 +1402,9 @@ async fn load_transaction_from_file(file_path: &Path) -> Result<Option<Transacti
             if let Some(signature) = transaction_details.transaction.signatures.get(0) {
                 if let Ok(mut cache) = TRANSACTION_JSON_CACHE.lock() {
                     cache.insert(signature.clone(), transaction_data.clone());
-                    log(LogTag::System, "DEBUG", &format!("📊 Cached raw JSON for transaction: {}", signature));
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("📊 Cached raw JSON for transaction: {}", signature));
+                }
                 }
             }
             return Ok(Some(transaction_details));
@@ -1326,11 +1423,15 @@ fn convert_json_to_transaction_details(data: &serde_json::Value) -> Result<Trans
     
     // Extract meta data if present
     let meta = if let Some(meta_json) = data.get("meta") {
-        log(LogTag::System, "DEBUG", &format!("📊 Found meta field with keys: {:?}", 
-            meta_json.as_object().map(|obj| obj.keys().collect::<Vec<_>>()).unwrap_or_default()));
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Found meta field with keys: {:?}", 
+                meta_json.as_object().map(|obj| obj.keys().collect::<Vec<_>>()).unwrap_or_default()));
+        }
         Some(convert_meta_from_json(meta_json)?)
     } else {
-        log(LogTag::System, "DEBUG", "📊 No meta field found in transaction data");
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 No meta field found in transaction data");
+        }
         None
     };
     
@@ -1377,12 +1478,16 @@ fn convert_meta_from_json(meta_json: &serde_json::Value) -> Result<TransactionMe
     
     // Convert token balances
     let pre_token_balances_result = convert_token_balances(meta_json.get("preTokenBalances"));
-    log(LogTag::System, "DEBUG", &format!("📊 Pre token balances conversion result: {:?}", 
-        pre_token_balances_result.as_ref().map(|v| v.len()).unwrap_or(0)));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Pre token balances conversion result: {:?}", 
+            pre_token_balances_result.as_ref().map(|v| v.len()).unwrap_or(0)));
+    }
     
     let post_token_balances_result = convert_token_balances(meta_json.get("postTokenBalances"));
-    log(LogTag::System, "DEBUG", &format!("📊 Post token balances conversion result: {:?}", 
-        post_token_balances_result.as_ref().map(|v| v.len()).unwrap_or(0)));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 Post token balances conversion result: {:?}", 
+            post_token_balances_result.as_ref().map(|v| v.len()).unwrap_or(0)));
+    }
     
     Ok(TransactionMeta {
         err,
@@ -1397,30 +1502,38 @@ fn convert_meta_from_json(meta_json: &serde_json::Value) -> Result<TransactionMe
 
 // Helper function to convert token balance arrays
 fn convert_token_balances(balances_json: Option<&serde_json::Value>) -> Option<Vec<TokenBalance>> {
-    log(LogTag::System, "DEBUG", &format!("📊 convert_token_balances called with: {:?}", 
-        balances_json.map(|v| format!("is_array={}", v.is_array()))));
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!("📊 convert_token_balances called with: {:?}", 
+            balances_json.map(|v| format!("is_array={}", v.is_array()))));
+    }
     
     if let Some(balances_array) = balances_json.and_then(|b| b.as_array()) {
-        log(LogTag::System, "DEBUG", &format!("📊 Converting {} token balances", balances_array.len()));
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("📊 Converting {} token balances", balances_array.len()));
+        }
         let mut balances = Vec::new();
         
         for balance_json in balances_array {
             if let Ok(balance) = convert_single_token_balance(balance_json) {
-                log(LogTag::System, "DEBUG", &format!("📊 Converted token balance for mint: {}", balance.mint));
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("📊 Converted token balance for mint: {}", balance.mint));
+                }
                 balances.push(balance);
-            } else {
-                log(LogTag::System, "DEBUG", "📊 Failed to convert a token balance");
+            } else if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "📊 Failed to convert a token balance");
             }
         }
         
         if !balances.is_empty() {
-            log(LogTag::System, "DEBUG", &format!("📊 Successfully converted {} token balances", balances.len()));
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!("📊 Successfully converted {} token balances", balances.len()));
+            }
             return Some(balances);
-        } else {
-            log(LogTag::System, "DEBUG", "📊 No token balances converted successfully");
+        } else if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "📊 No token balances converted successfully");
         }
-    } else {
-        log(LogTag::System, "DEBUG", "📊 No token balances array found in JSON");
+    } else if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", "📊 No token balances array found in JSON");
     }
     None
 }
@@ -1496,7 +1609,7 @@ pub async fn analyze_post_swap_transaction(
 ) -> Result<PostSwapAnalysis, String> {
     use crate::rpc::get_rpc_client;
     
-    log(LogTag::System, "POST_SWAP", &format!(
+    log(LogTag::Transactions, "POST_SWAP", &format!(
         "📊 Analyzing post-swap transaction: {} ({})", 
         &signature[..8], direction
     ));
@@ -1529,7 +1642,7 @@ pub async fn analyze_post_swap_transaction(
                 }
             };
             
-            log(LogTag::System, "POST_SWAP", &format!(
+            log(LogTag::Transactions, "POST_SWAP", &format!(
                 "✅ Post-swap analysis complete: price={:.10} SOL/token, fees={:.6} SOL",
                 effective_price, swap_info.fees_paid
             ));
