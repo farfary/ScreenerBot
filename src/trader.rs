@@ -63,7 +63,7 @@ pub const MAX_OPEN_POSITIONS: usize = 1;
 pub const TRADE_SIZE_SOL: f64 = 0.004;
 
 
-pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.0;
+pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.0000005;
 
 // -----------------------------------------------------------------------------
 // Position Timing Configuration - Improved for longer holding
