@@ -10,6 +10,7 @@ use crate::tokens::pool::get_pool_service;
 use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
 use crate::wallet_transactions::get_global_wallet_transaction_stats;
 use crate::position_verifier::get_position_verification_stats;
+use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
@@ -36,7 +37,7 @@ pub struct ClosedPositionDisplay {
     #[tabled(rename = "📊 P&L (%)")]
     pnl_percent: String,
     #[tabled(rename = "💳 Fees (SOL)")]
-    fees_sol: String,
+    pub fees_sol: String,
     #[tabled(rename = "⏱️ Duration")]
     duration: String,
     #[tabled(rename = "🎯 Status")]
@@ -61,7 +62,7 @@ pub struct OpenPositionDisplay {
     #[tabled(rename = "📊 P&L (%)")]
     pnl_percent: String,
     #[tabled(rename = "💳 Fees (SOL)")]
-    fees_sol: String,
+    pub fees_sol: String,
     #[tabled(rename = "⏱️ Duration")]
     duration: String,
     #[tabled(rename = "🎯 Status")]
@@ -1160,12 +1161,12 @@ fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
 }
 
 impl ClosedPositionDisplay {
-    fn from_position(position: &Position) -> Self {
+    pub fn from_position(position: &Position) -> Self {
         // Check if position is fully verified (both entry and exit must be verified for closed positions)
         let is_verified = position.transaction_entry_verified && position.transaction_exit_verified;
         
-        // Calculate total fees for the position
-        let total_fees = calculate_position_total_fees(position);
+        // Calculate total fees for the position including profit buffer for display
+        let total_fees = calculate_position_total_fees(position) + PROFIT_EXTRA_NEEDED_SOL;
         
         if !is_verified {
             // For unverified positions, hide sensitive data
@@ -1236,12 +1237,12 @@ impl ClosedPositionDisplay {
 }
 
 impl OpenPositionDisplay {
-    fn from_position(position: &Position, current_price: Option<f64>) -> Self {
+    pub fn from_position(position: &Position, current_price: Option<f64>) -> Self {
         // Check if position entry is verified (for open positions, only entry needs to be verified)
         let is_verified = position.transaction_entry_verified;
         
-        // Calculate total fees for the position (for open positions, only entry fees + manual adjustment)
-        let total_fees = calculate_position_total_fees(position);
+        // Calculate total fees for the position including profit buffer for display (for open positions, only entry fees + manual adjustment)
+        let total_fees = calculate_position_total_fees(position) + PROFIT_EXTRA_NEEDED_SOL;
         
         let duration = format_duration_compact(position.entry_time, Utc::now());
 
