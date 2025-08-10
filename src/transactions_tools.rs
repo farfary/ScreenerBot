@@ -1041,6 +1041,23 @@ fn extract_compute_units(transaction: &TransactionDetails) -> Option<u32> {
     None
 }
 
+/// Helper function to extract priority fee as u64
+fn extract_priority_fee_u64(transaction: &TransactionDetails) -> Option<u64> {
+    if let Some(fee) = extract_priority_fee(transaction) {
+        Some(fee as u64)
+    } else {
+        None
+    }
+}
+
+/// Helper function to extract block time from transaction
+fn extract_block_time(_transaction: &TransactionDetails) -> Option<i64> {
+    // TransactionDetails might not have block_time directly
+    // This would need to be extracted from the actual transaction data
+    // For now, return None as a placeholder
+    None
+}
+
 fn get_token_balance_changes(
     meta: &TransactionMeta,
     token_mint: &str,
@@ -1600,6 +1617,80 @@ fn transaction_involves_wallet(transaction: &TransactionDetails, wallet_address:
 /// Analyze a swap transaction after execution using only the signature
 /// This replaces the complex verify_swap_transaction approach with simple signature-based analysis
 /// Returns effective price, fees, and all swap details
+/// Simplified post-swap transaction analysis using only signature and wallet address
+/// This is useful when we don't know the exact input/output mints beforehand
+pub async fn analyze_post_swap_transaction_simple(
+    signature: &str,
+    wallet_address: &str,
+) -> Result<PostSwapAnalysis, String> {
+    use crate::rpc::get_rpc_client;
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "DEBUG", &format!(
+            "📊 Starting simple post-swap analysis for: {}", 
+            &signature[..8]
+        ));
+    }
+    
+    // Fetch transaction details using RPC client
+    let rpc_client = get_rpc_client();
+    let transaction = rpc_client.get_transaction_details(signature).await
+        .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
+    
+    // Analyze the transaction for swap information
+    if let Some(meta) = &transaction.meta {
+        if let Some((success, swap_info)) = detect_swap_from_transaction(
+            &transaction, 
+            meta, 
+            wallet_address
+        ).await {
+            // Determine direction based on SOL balance change
+            let direction = if swap_info.sol_amount > 0.0 {
+                "sell" // SOL increased = token was sold for SOL
+            } else {
+                "buy" // SOL decreased = SOL was used to buy tokens
+            };
+            
+            let effective_price = if swap_info.token_amount > 0 {
+                swap_info.sol_amount.abs() / (swap_info.token_amount as f64)
+            } else {
+                0.0
+            };
+            
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &format!(
+                    "✅ Simple post-swap analysis complete: direction={}, price={:.10} SOL/token, fees={:.6} SOL",
+                    direction, effective_price, swap_info.fees_paid
+                ));
+            }
+            
+            Ok(PostSwapAnalysis {
+                signature: signature.to_string(),
+                effective_price,
+                sol_amount: swap_info.sol_amount.abs(),
+                token_amount: swap_info.token_amount as f64,
+                transaction_fee: Some(meta.fee),
+                priority_fee: None, // Simplified - can be enhanced later
+                slot: Some(transaction.slot),
+                block_time: None, // TransactionDetails doesn't have block_time field
+                success,
+                token_mint: Some(swap_info.token_mint.clone()),
+                token_decimals: None, // Not available in BasicSwapInfo
+                fees_paid: swap_info.fees_paid,
+                direction: direction.to_string(),
+                ata_rent_reclaimed: None, // Not available in BasicSwapInfo
+                ata_created: false, // Default value
+                ata_closed: false, // Default value  
+                router_name: Some("Unknown".to_string()), // Default value
+            })
+        } else {
+            Err("No swap detected in transaction".to_string())
+        }
+    } else {
+        Err("No transaction metadata found".to_string())
+    }
+}
+
 pub async fn analyze_post_swap_transaction(
     signature: &str,
     wallet_address: &str,
@@ -1657,6 +1748,14 @@ pub async fn analyze_post_swap_transaction(
                 ata_closed: false, // BasicSwapInfo doesn't have this field  
                 router_name: Some("Unknown".to_string()), // BasicSwapInfo doesn't have this field
                 success,
+                transaction_fee: Some(meta.fee),
+                priority_fee: None, // Simplified - can be enhanced later
+                slot: Some(transaction.slot),
+                block_time: None, // TransactionDetails doesn't have block_time field
+                token_mint: Some(swap_info.token_mint.clone()),
+                token_decimals: None, // Not available in BasicSwapInfo
+                direction: direction.to_string(),
+                ata_rent_reclaimed: None, // Not available in BasicSwapInfo
             })
         } else {
             Err("No swap data found in transaction".to_string())
@@ -1678,4 +1777,12 @@ pub struct PostSwapAnalysis {
     pub ata_closed: bool,
     pub router_name: Option<String>,
     pub success: bool,
+    pub transaction_fee: Option<u64>,
+    pub priority_fee: Option<u64>,
+    pub slot: Option<u64>,
+    pub block_time: Option<i64>,
+    pub token_mint: Option<String>,
+    pub token_decimals: Option<u8>,
+    pub direction: String,
+    pub ata_rent_reclaimed: Option<f64>,
 }

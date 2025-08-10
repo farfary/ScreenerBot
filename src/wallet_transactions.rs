@@ -907,36 +907,57 @@ impl WalletTransactionManager {
     
     /// Get or fetch a specific transaction by signature for position verification
     /// This ensures the transaction is cached and available for analysis
-    pub async fn get_or_fetch_transaction(&mut self, signature: &str, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn get_or_fetch_transaction(&mut self, signature: &str, rpc_client: &RpcClient) -> Result<(), String> {
         // Check if already cached
         if self.transaction_cache.contains_key(signature) {
             log(LogTag::Transactions, "CACHED", &format!("Transaction {} found in cache", signature));
             return Ok(());
         }
         
-        // Not cached, fetch it
+        // Not cached, fetch it with retry logic
         log(LogTag::Transactions, "FETCH", &format!("Transaction {} not cached, fetching from RPC", signature));
         
         // Convert string to Signature
         let signature_obj = solana_sdk::signature::Signature::from_str(signature)
             .map_err(|e| format!("Invalid signature format: {}", e))?;
         
-        match self.fetch_and_cache_single_transaction(rpc_client, &signature_obj).await {
-            Ok(_) => {
-                log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} fetched and cached", signature));
-                Ok(())
-            }
-            Err(e) => {
-                log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction {}: {}", signature, e));
-                Err(e)
+        // Retry logic for fresh transactions that might not be confirmed yet
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: u32 = 3;
+        const RETRY_DELAY_MS: u64 = 1000; // 1 second between retries
+        
+        loop {
+            attempts += 1;
+            
+            match self.fetch_and_cache_single_transaction(rpc_client, &signature_obj).await {
+                Ok(_) => {
+                    log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} fetched and cached on attempt {}", signature, attempts));
+                    return Ok(());
+                }
+                Err(e) => {
+                    let error_string = format!("{}", e);
+                    drop(e); // Explicitly drop the error to avoid Send issues
+                    
+                    if attempts >= MAX_ATTEMPTS {
+                        let error_msg = format!("Failed to fetch transaction {} after {} attempts: {}", signature, attempts, error_string);
+                        log(LogTag::Transactions, "ERROR", &error_msg);
+                        return Err(error_msg.into());
+                    } else {
+                        let retry_msg = format!("Fetch attempt {} failed for {}: {}. Retrying in {}ms...", attempts, signature, error_string, RETRY_DELAY_MS);
+                        if is_debug_transactions_enabled() {
+                            log(LogTag::Transactions, "DEBUG", &retry_msg);
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    }
+                }
             }
         }
     }
     
     /// Verify and analyze a swap transaction for position data
     /// Returns verified transaction data including effective price, token amounts, and fees
-    pub async fn verify_swap_transaction(&mut self, signature: &str, expected_direction: &str, rpc_client: &RpcClient) -> Result<VerifiedSwapData, Box<dyn std::error::Error>> {
-        // Ensure transaction is cached
+    pub async fn verify_swap_transaction(&mut self, signature: &str, expected_direction: &str, rpc_client: &RpcClient) -> Result<VerifiedSwapData, String> {
+        // Ensure transaction is cached with retry logic
         self.get_or_fetch_transaction(signature, rpc_client).await?;
         
         log(LogTag::Transactions, "VERIFY", &format!("Verifying swap transaction {} for {} operation", signature, expected_direction));
@@ -945,29 +966,100 @@ impl WalletTransactionManager {
         let cached_tx = self.transaction_cache.get(signature)
             .ok_or("Transaction not found in cache after fetching")?;
             
-        // Analyze the transaction for swap data
-        let swap_data = self.analyze_transaction_for_verified_swap(&cached_tx.transaction_data, expected_direction).await?;
-        
-        log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} verified - Direction: {}, Effective Price: {:.12} SOL", 
-            signature, expected_direction, swap_data.effective_price));
-        
-        Ok(swap_data)
+        // Use the comprehensive swap analysis from transactions_tools
+        // First try to analyze using the signature-only method
+        match crate::transactions_tools::analyze_post_swap_transaction_simple(signature, &self.wallet_address).await {
+            Ok(analysis) => {
+                log(LogTag::Transactions, "SUCCESS", &format!(
+                    "Transaction {} verified using simple analysis - Direction: {}, Effective Price: {:.12} SOL", 
+                    signature, expected_direction, analysis.effective_price
+                ));
+                
+                // Convert the analysis to our VerifiedSwapData format
+                Ok(VerifiedSwapData {
+                    signature: signature.to_string(),
+                    success: true,
+                    direction: expected_direction.to_string(),
+                    token_mint: analysis.token_mint.unwrap_or_default(),
+                    sol_amount: analysis.sol_amount,
+                    token_amount: analysis.token_amount as u64,
+                    token_decimals: analysis.token_decimals.unwrap_or(9) as u8,
+                    effective_price: analysis.effective_price,
+                    transaction_fee: analysis.transaction_fee.unwrap_or(0),
+                    priority_fee: analysis.priority_fee,
+                    ata_created: analysis.ata_created,
+                    ata_closed: analysis.ata_closed,
+                    ata_rent_paid: 0, // Default value
+                    ata_rent_reclaimed: (analysis.ata_rent_reclaimed.unwrap_or(0.0) * 1_000_000_000.0) as u64,
+                    slot: analysis.slot.unwrap_or(0),
+                    block_time: analysis.block_time,
+                })
+            }
+            Err(e) => {
+                log(LogTag::Transactions, "WARNING", &format!(
+                    "Simple analysis failed for {}, falling back to legacy analysis: {}", 
+                    signature, e
+                ));
+                
+                // Fallback to the original analysis method
+                self.analyze_transaction_for_verified_swap(&cached_tx.transaction_data, expected_direction).await
+            }
+        }
     }
     
     /// Analyze a cached transaction for swap data extraction
-    async fn analyze_transaction_for_verified_swap(&self, transaction: &EncodedConfirmedTransactionWithStatusMeta, expected_direction: &str) -> Result<VerifiedSwapData, Box<dyn std::error::Error>> {
+    async fn analyze_transaction_for_verified_swap(&self, transaction: &EncodedConfirmedTransactionWithStatusMeta, expected_direction: &str) -> Result<VerifiedSwapData, String> {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "Starting transaction analysis for swap verification");
+        }
+        
         // Get transaction meta
         let meta = transaction.transaction.meta.as_ref()
             .ok_or("No transaction meta found")?;
 
-        // Decode the transaction to access signatures
-        let decoded_tx = transaction.transaction.transaction.decode()
-            .ok_or("Failed to decode transaction")?;
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("Transaction meta found, error: {:?}", meta.err));
+        }
+
+        // Try to get signature from multiple possible sources
+        let signature = if let Some(decoded_tx) = transaction.transaction.transaction.decode() {
+            // Raw transaction format
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "Successfully decoded raw transaction");
+            }
+            decoded_tx.signatures.get(0)
+                .ok_or("No signature found in decoded transaction")?
+                .to_string()
+        } else {
+            // Fallback: try to extract from the transaction structure
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", "Raw transaction decode failed, trying alternative signature extraction");
+            }
             
-        // Get signature from the decoded transaction
-        let signature = decoded_tx.signatures.get(0)
-            .ok_or("No signature found in transaction")?
-            .to_string();
+            // For JsonParsed transactions, we might need to extract differently
+            match &transaction.transaction.transaction {
+                solana_transaction_status::EncodedTransaction::Json(ui_tx) => {
+                    if let Some(first_signature) = ui_tx.signatures.get(0) {
+                        first_signature.clone()
+                    } else {
+                        return Err("No signature found in JSON transaction".into());
+                    }
+                }
+                solana_transaction_status::EncodedTransaction::LegacyBinary(_) => {
+                    return Err("Cannot extract signature from legacy binary transaction without decoding".into());
+                }
+                solana_transaction_status::EncodedTransaction::Binary(_, _) => {
+                    return Err("Cannot extract signature from binary transaction without decoding".into());
+                }
+                _ => {
+                    return Err("Unknown transaction encoding format".into());
+                }
+            }
+        };
+        
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", &format!("Extracted signature: {}", signature));
+        }
         
         let slot = transaction.slot;
         let block_time = transaction.block_time;
@@ -996,10 +1088,12 @@ impl WalletTransactionManager {
         }
         
         // Get wallet address for analysis
-        let wallet_pubkey = Pubkey::from_str(&self.wallet_address)?;
+        let wallet_pubkey = Pubkey::from_str(&self.wallet_address)
+            .map_err(|e| format!("Invalid wallet address: {}", e))?;
         
         // Analyze SOL balance changes
-        let sol_change = self.analyze_sol_balance_change(&wallet_pubkey, meta)?;
+        let sol_change = self.analyze_sol_balance_change(&wallet_pubkey, meta)
+            .map_err(|e| format!("Failed to analyze SOL balance change: {}", e))?;
         
         // Analyze token balance changes  
         let token_changes = self.analyze_token_balance_changes(&wallet_pubkey, meta);
@@ -1053,13 +1147,13 @@ impl WalletTransactionManager {
     }
     
     /// Analyze SOL balance change for a wallet in a transaction
-    fn analyze_sol_balance_change(&self, wallet_pubkey: &Pubkey, meta: &solana_transaction_status::UiTransactionStatusMeta) -> Result<f64, Box<dyn std::error::Error>> {
+    fn analyze_sol_balance_change(&self, wallet_pubkey: &Pubkey, meta: &solana_transaction_status::UiTransactionStatusMeta) -> Result<f64, String> {
         // Find wallet index in account keys
         let pre_balances = &meta.pre_balances;
         let post_balances = &meta.post_balances;
         
         if pre_balances.len() != post_balances.len() {
-            return Err("Balance arrays length mismatch".into());
+            return Err("Balance arrays length mismatch".to_string());
         }
         
         // For now, we'll use account index 0 (typically the fee payer/wallet)

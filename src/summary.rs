@@ -970,7 +970,7 @@ fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
 }
 
 /// Display wallet transaction statistics
-fn display_wallet_transaction_statistics() {
+pub fn display_wallet_transaction_statistics() {
     if let Some((cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)) = get_global_wallet_transaction_stats() {
         println!("\n📝 WALLET TRANSACTION STATISTICS");
         println!("═══════════════════════════════════════════════════════════════════════════════════════");
@@ -1006,15 +1006,17 @@ fn display_wallet_transaction_statistics() {
         println!("{}", transaction_table);
         
         // Display sync efficiency metrics
-        let sync_efficiency = if total_fetched > 0 {
-            (cached_count as f64 / total_fetched as f64) * 100.0
-        } else {
-            0.0
-        };
-        
         println!("\n📊 Transaction Cache Efficiency:");
-        println!("   💾 Cache Hit Rate: {:.1}% ({} cached out of {} fetched)", 
-                 sync_efficiency, cached_count, total_fetched);
+        println!("   💾 Cache Status: {} signatures cached, {} fetched this session", cached_count, total_fetched);
+        
+        // Only show cache efficiency if we have meaningful data
+        if total_fetched > 0 && cached_count >= total_fetched {
+            let cache_efficiency = ((cached_count - total_fetched) as f64 / cached_count as f64) * 100.0;
+            println!("   � Cache Efficiency: {:.1}% ({} existing + {} new)", 
+                     cache_efficiency, cached_count - total_fetched, total_fetched);
+        } else if total_fetched > 0 {
+            println!("   🔄 Fresh Session: {} new transactions fetched", total_fetched);
+        }
         
         if is_periodic_running {
             println!("   🔄 Auto-sync: Active (checking every 5 seconds for new transactions)");
