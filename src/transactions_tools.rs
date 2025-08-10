@@ -226,10 +226,11 @@ async fn analyze_jupiter_swap(
     
     // For Jupiter swaps, look at SOL balance changes and token balance changes
     // Parse the message from JSON to get account keys
-    let account_keys_value = transaction.transaction.message.get("accountKeys");
+    let account_keys_value = transaction.transaction.message.get("message")
+        .and_then(|msg| msg.get("accountKeys"));
     if account_keys_value.is_none() {
         if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "DEBUG", "📊 Jupiter analysis - No accountKeys found in message");
+            log(LogTag::Transactions, "DEBUG", "📊 Jupiter analysis - No accountKeys found in message.message");
         }
         return None;
     }
@@ -1832,7 +1833,10 @@ pub async fn analyze_post_swap_transaction_simple(
             // Use the swap_type from detect_swap_from_transaction instead of re-determining
             let direction = swap_info.swap_type.to_lowercase();
             
-            let effective_price = if swap_info.token_amount > 0 {
+            // Use the effective_price from BasicSwapInfo if available, otherwise calculate it
+            let effective_price = if swap_info.effective_price > 0.0 {
+                swap_info.effective_price
+            } else if swap_info.token_amount > 0 {
                 swap_info.sol_amount.abs() / (swap_info.token_amount as f64)
             } else {
                 0.0
@@ -1992,19 +1996,12 @@ async fn analyze_generic_swap_by_balances(
     }
 
     // Parse account keys to find wallet index
-    // The accountKeys are nested inside transaction.transaction.message.message.accountKeys
-    let message_obj = transaction.transaction.message.get("message");
-    if message_obj.is_none() {
-        if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - No inner message found");
-        }
-        return None;
-    }
-    
-    let account_keys_value = message_obj.unwrap().get("accountKeys");
+    // The accountKeys are nested inside the message field
+    let account_keys_value = transaction.transaction.message.get("message")
+        .and_then(|msg| msg.get("accountKeys"));
     if account_keys_value.is_none() {
         if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - No accountKeys found in inner message");
+            log(LogTag::Transactions, "DEBUG", "📊 Generic analysis - No accountKeys found in message.message");
         }
         return None;
     }
@@ -2081,21 +2078,27 @@ async fn analyze_generic_swap_by_balances(
                 pre_balances.len(), post_balances.len()
             ));
             
-            // Debug - let's see the actual balances
-            if !pre_balances.is_empty() {
+            // Debug - let's see the actual balances with detailed owner info
+            log(LogTag::Transactions, "DEBUG", &format!(
+                "📊 Generic analysis - Wallet address to match: {}", 
+                wallet_address
+            ));
+            
+            for (i, balance) in pre_balances.iter().enumerate() {
                 log(LogTag::Transactions, "DEBUG", &format!(
-                    "📊 Generic analysis - Pre balance sample: mint={}, owner={}, amount={}", 
-                    &pre_balances[0].mint[..8], 
-                    pre_balances[0].owner.as_ref().map(|o| &o[..8]).unwrap_or("None"),
-                    pre_balances[0].ui_token_amount.amount
+                    "📊 Generic analysis - Pre balance {}: mint={}, owner={}, amount={}", 
+                    i, &balance.mint[..8], 
+                    balance.owner.as_ref().map(|o| o.as_str()).unwrap_or("None"),
+                    balance.ui_token_amount.amount
                 ));
             }
-            if !post_balances.is_empty() {
+            
+            for (i, balance) in post_balances.iter().enumerate() {
                 log(LogTag::Transactions, "DEBUG", &format!(
-                    "📊 Generic analysis - Post balance sample: mint={}, owner={}, amount={}", 
-                    &post_balances[0].mint[..8], 
-                    post_balances[0].owner.as_ref().map(|o| &o[..8]).unwrap_or("None"),
-                    post_balances[0].ui_token_amount.amount
+                    "📊 Generic analysis - Post balance {}: mint={}, owner={}, amount={}", 
+                    i, &balance.mint[..8], 
+                    balance.owner.as_ref().map(|o| o.as_str()).unwrap_or("None"),
+                    balance.ui_token_amount.amount
                 ));
             }
         }

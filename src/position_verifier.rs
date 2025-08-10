@@ -17,7 +17,7 @@ use tokio::time::{sleep, Duration};
 use chrono::Utc;
 
 /// Position verification monitoring interval (every 60 seconds)
-const VERIFICATION_CHECK_INTERVAL_SECONDS: u64 = 60;
+const VERIFICATION_CHECK_INTERVAL_SECONDS: u64 = 5;
 
 /// Maximum number of positions to verify per cycle to avoid overwhelming the system
 const MAX_VERIFICATIONS_PER_CYCLE: usize = 5;
