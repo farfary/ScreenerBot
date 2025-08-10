@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::{ Arc, Mutex };
+use std::sync::{ Arc, Mutex, LazyLock };
 use std::path::Path;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{ Hash, Hasher };
@@ -2005,7 +2005,6 @@ impl TradingLearner {
 }
 
 // Global singleton for the learning system
-use std::sync::LazyLock;
 static GLOBAL_TRADING_LEARNER: LazyLock<TradingLearner> = LazyLock::new(|| {
     TradingLearner::new()
 });

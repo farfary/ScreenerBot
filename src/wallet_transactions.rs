@@ -890,7 +890,7 @@ impl WalletTransactionManager {
         &mut self,
         rpc_client: &RpcClient,
         signature: &Signature,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let sig_str = signature.to_string();
         
         // Check if already cached
