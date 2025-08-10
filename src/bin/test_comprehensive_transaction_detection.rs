@@ -18,7 +18,7 @@ use screenerbot::{
     logger::{init_file_logging, log, LogTag},
     transactions_detector::{analyze_transaction_comprehensive, TransactionType, TransactionDirection},
     utils::get_wallet_address,
-    transactions_manager::initialize_wallet_transaction_manager,
+    transactions_manager::initialize_transactions_manager,
 };
 use std::fs;
 use colored::Colorize;
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize wallet transaction manager for cached transactions
     if args.test_all_cached || args.analyze_recent.is_some() {
         println!("⚡ Initializing wallet transaction manager...");
-        initialize_wallet_transaction_manager().await?;
+        initialize_transactions_manager().await?;
         println!("✅ Wallet transaction manager ready");
         println!();
     }

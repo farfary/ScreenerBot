@@ -30,7 +30,7 @@ use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::utils::{ get_wallet_address, close_token_account };
 use screenerbot::swaps::sell_token;
-use screenerbot::transactions_manager::{initialize_wallet_transaction_manager, verify_swap_transaction_global};
+use screenerbot::transactions_manager::{initialize_transactions_manager, verify_swap_transaction_global};
 use screenerbot::rpc::SwapError;
 use reqwest;
 use serde_json;
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize wallet transaction manager for transaction verification
     if !dry_run {
         log(LogTag::System, "INFO", "Initializing wallet transaction manager for proper transaction verification...");
-        if let Err(e) = initialize_wallet_transaction_manager().await {
+        if let Err(e) = initialize_transactions_manager().await {
             log(LogTag::System, "WARNING", &format!("Failed to initialize transaction manager: {}. Continuing without verification.", e));
         } else {
             log(LogTag::System, "SUCCESS", "Wallet transaction manager initialized successfully");

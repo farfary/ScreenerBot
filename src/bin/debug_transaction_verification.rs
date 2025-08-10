@@ -14,7 +14,7 @@ use clap::Parser;
 use screenerbot::{
     logger::{init_file_logging, log, LogTag},
     positions::{get_open_positions, get_closed_positions},
-    transactions_manager::{initialize_wallet_transaction_manager, verify_swap_transaction_global},
+    transactions_manager::{initialize_transactions_manager, verify_swap_transaction_global},
     transactions_tools::{analyze_post_swap_transaction_simple},
     rpc::get_rpc_client,
     utils::get_wallet_address,
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::Transactions, "INFO", "🔍 STARTING TRANSACTION VERIFICATION DEBUGGING");
     
     // Initialize global transaction manager
-    initialize_wallet_transaction_manager().await?;
+    initialize_transactions_manager().await?;
     
     if args.rpc_test {
         test_rpc_basic().await;

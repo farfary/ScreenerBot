@@ -553,9 +553,9 @@ impl TransactionDetector {
     /// Fetch transaction details using wallet transaction manager (with caching)
     async fn fetch_transaction(&self, signature: &str) -> Result<TransactionDetails, String> {
         // Use wallet transaction manager for cached access with automatic RPC fallback
-        use crate::transactions_manager::get_wallet_transaction_manager;
+        use crate::transactions_manager::get_transactions_manager;
         
-        let manager_lock = get_wallet_transaction_manager()
+        let manager_lock = get_transactions_manager()
             .map_err(|e| format!("Failed to get wallet transaction manager: {}", e))?;
         
         // Check if transaction is cached first

@@ -9,7 +9,7 @@ use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
 use crate::global::{read_configs, Configs};
-use crate::transactions_manager::get_global_wallet_transaction_stats;
+use crate::transactions_manager::get_global_transactions_stats;
 use crate::position_verifier::get_position_verification_stats;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 // New pool price system is now integrated via background services
@@ -829,7 +829,7 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         log(LogTag::Summary, "DEBUG", "Displaying wallet transaction statistics");
     }
     let tx_start = Instant::now();
-    display_wallet_transaction_statistics();
+    display_transactions_statistics();
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -1011,8 +1011,8 @@ fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
 }
 
 /// Display wallet transaction statistics
-pub fn display_wallet_transaction_statistics() {
-    if let Some((cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)) = get_global_wallet_transaction_stats() {
+pub fn display_transactions_statistics() {
+    if let Some((cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)) = get_global_transactions_stats() {
         println!("\n📝 WALLET TRANSACTION STATISTICS");
         println!("═══════════════════════════════════════════════════════════════════════════════════════");
         

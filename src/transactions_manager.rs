@@ -29,7 +29,7 @@ use std::time::Duration;
 use tokio::sync::Notify;
 
 lazy_static! {
-    static ref WALLET_TRANSACTION_MANAGER: Arc<RwLock<Option<WalletTransactionManager>>> = Arc::new(RwLock::new(None));
+    static ref TRANSACTIONS_MANAGER: Arc<RwLock<Option<TransactionsManager>>> = Arc::new(RwLock::new(None));
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,7 +121,7 @@ impl Default for WalletSyncState {
     }
 }
 
-pub struct WalletTransactionManager {
+pub struct TransactionsManager {
     wallet_address: String,
     cache_dir: PathBuf,
     sync_state_file: PathBuf,
@@ -131,7 +131,7 @@ pub struct WalletTransactionManager {
 }
 
 /// Initialize the global wallet transaction manager
-pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn initialize_transactions_manager() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::Transactions, "INFO", "Initializing global wallet transaction manager");
     
     // Get the main bot wallet address from global configs
@@ -146,7 +146,7 @@ pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::
     log(LogTag::Transactions, "INFO", &format!("Initializing transaction manager for wallet: {}", wallet_address));
     
     // Create and initialize the manager
-    let mut manager = WalletTransactionManager::new(wallet_address)?;
+    let mut manager = TransactionsManager::new(wallet_address)?;
     
     // Get RPC client
     let rpc_client = crate::rpc::get_rpc_client();
@@ -156,7 +156,7 @@ pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::
     
     // Store in global state
     {
-        let mut global_manager = WALLET_TRANSACTION_MANAGER.write().unwrap();
+        let mut global_manager = TRANSACTIONS_MANAGER.write().unwrap();
         *global_manager = Some(manager);
     }
     
@@ -165,8 +165,8 @@ pub async fn initialize_wallet_transaction_manager() -> Result<(), Box<dyn std::
 }
 
 /// Start the periodic sync background task for the global wallet transaction manager
-pub async fn start_wallet_transaction_sync_task(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
-    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+pub async fn start_transactions_sync_task(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
+    let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
     if let Some(ref manager) = *manager_lock {
         let sync_handle = manager.start_periodic_sync(shutdown).await;
         drop(manager_lock);
@@ -177,13 +177,13 @@ pub async fn start_wallet_transaction_sync_task(shutdown: Arc<Notify>) -> Result
 }
 
 /// Get access to the global wallet transaction manager
-pub fn get_wallet_transaction_manager() -> Result<Arc<RwLock<Option<WalletTransactionManager>>>, Box<dyn std::error::Error>> {
-    Ok(WALLET_TRANSACTION_MANAGER.clone())
+pub fn get_transactions_manager() -> Result<Arc<RwLock<Option<TransactionsManager>>>, Box<dyn std::error::Error>> {
+    Ok(TRANSACTIONS_MANAGER.clone())
 }
 
 /// Get global wallet transaction statistics for summary display
-pub fn get_global_wallet_transaction_stats() -> Option<(usize, usize, String, bool, Option<String>, Option<String>)> {
-    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+pub fn get_global_transactions_stats() -> Option<(usize, usize, String, bool, Option<String>, Option<String>)> {
+    let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
     if let Some(ref manager) = *manager_lock {
         Some(manager.get_detailed_sync_stats())
     } else {
@@ -193,7 +193,7 @@ pub fn get_global_wallet_transaction_stats() -> Option<(usize, usize, String, bo
 
 /// Convenient function to analyze recent swaps using the global manager
 pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, Box<dyn std::error::Error>> {
-    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+    let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
     if let Some(ref manager) = *manager_lock {
         Ok(manager.analyze_recent_swaps(limit).await)
     } else {
@@ -212,7 +212,7 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
         log(LogTag::Transactions, "INFO", &format!("Creating standalone manager for wallet: {}", wallet_address));
         
         // Create and initialize the manager
-        let mut manager = WalletTransactionManager::new(wallet_address)?;
+        let mut manager = TransactionsManager::new(wallet_address)?;
         
         // Get RPC client
         let rpc_client = crate::rpc::get_rpc_client();
@@ -232,7 +232,7 @@ pub async fn get_transaction_details_global(signature: &str) -> Result<crate::rp
     
     // Get the manager with proper locking
     let manager = {
-        let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+        let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
         match manager_lock.take() {
             Some(mgr) => mgr,
             None => return Err("Wallet transaction manager not initialized".into()),
@@ -246,7 +246,7 @@ pub async fn get_transaction_details_global(signature: &str) -> Result<crate::rp
         
         // Return the manager
         {
-            let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+            let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
             *manager_lock = Some(manager);
         }
         
@@ -263,7 +263,7 @@ pub async fn get_transaction_details_global(signature: &str) -> Result<crate::rp
                 
                 // Return the manager
                 {
-                    let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+                    let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
                     *manager_lock = Some(manager);
                 }
                 
@@ -271,7 +271,7 @@ pub async fn get_transaction_details_global(signature: &str) -> Result<crate::rp
             } else {
                 // Return the manager
                 {
-                    let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+                    let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
                     *manager_lock = Some(manager);
                 }
                 Err("Transaction not found after fetch".into())
@@ -280,7 +280,7 @@ pub async fn get_transaction_details_global(signature: &str) -> Result<crate::rp
         Err(e) => {
             // Return the manager
             {
-                let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+                let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
                 *manager_lock = Some(manager);
             }
             Err(format!("Failed to fetch transaction: {}", e).into())
@@ -333,7 +333,7 @@ fn convert_cached_to_transaction_details(cached_tx: &CachedTransactionData) -> R
 /// Global helper function to get cached transaction JSON data via wallet transaction manager
 /// This replaces direct file access to maintain architectural compliance
 pub async fn get_cached_transaction_json_global(signature: &str) -> Option<serde_json::Value> {
-    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+    let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
     if let Some(ref manager) = *manager_lock {
         if let Some(cached_data) = manager.get_cached_transaction(signature) {
             // Convert the transaction data to JSON for compatibility with existing code
@@ -358,7 +358,7 @@ pub async fn verify_swap_transaction_global(signature: &str, expected_direction:
     
     // We need to extract the manager temporarily to avoid holding the lock across await
     let manager = {
-        let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+        let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
         match manager_lock.take() {
             Some(mgr) => mgr,
             None => return Err("Wallet transaction manager not initialized".into()),
@@ -372,7 +372,7 @@ pub async fn verify_swap_transaction_global(signature: &str, expected_direction:
         
         // Put the manager back
         {
-            let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+            let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
             *manager_lock = Some(temp_manager);
         }
         
@@ -393,7 +393,7 @@ async fn perform_periodic_sync_check() {
     
     // Read lock first to check if manager exists and get wallet address
     let wallet_address = {
-        let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+        let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
         if let Some(ref manager) = *manager_lock {
             manager.wallet_address.clone()
         } else {
@@ -422,7 +422,7 @@ async fn perform_periodic_sync_check() {
     // Check which signatures are new (briefly lock to read cached signatures)
     let mut new_signatures = Vec::new();
     {
-        let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+        let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
         if let Some(ref manager) = *manager_lock {
             for sig_info in &latest_signatures {
                 if !manager.sync_state.cached_signatures.contains(&sig_info.signature) {
@@ -446,7 +446,7 @@ async fn perform_periodic_sync_check() {
             }
             
             // Update manager with new data (brief write lock)
-            let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+            let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
             if let Some(ref mut manager) = *manager_lock {
                 // Only add signatures for transactions we successfully fetched
                 for (sig, _) in &new_transactions {
@@ -532,7 +532,7 @@ fn save_sync_state_to_file(
     Ok(())
 }
 
-impl WalletTransactionManager {
+impl TransactionsManager {
     pub fn new(wallet_address: String) -> Result<Self, Box<dyn std::error::Error>> {
         let cache_dir = PathBuf::from("data/transactions");
         let sync_state_file = PathBuf::from("data/wallet_transactions_stats.json");
@@ -1744,7 +1744,7 @@ pub async fn run_swap_analysis(args: crate::transactions_tools::Args) -> Result<
     // If table-only mode is requested, handle it separately without any analysis
     if args.table_only {
         log(LogTag::Transactions, "INFO", "� Initializing wallet transaction manager for table-only display");
-        initialize_wallet_transaction_manager().await?;
+        initialize_transactions_manager().await?;
         
         // Determine which wallets to display
         let wallets_to_display = if let Some(ref wallet_addr) = args.wallet {
@@ -1781,7 +1781,7 @@ pub async fn run_swap_analysis(args: crate::transactions_tools::Args) -> Result<
     // Initialize wallet transaction manager if table display is requested
     if args.table {
         log(LogTag::Transactions, "INFO", "📊 Initializing wallet transaction manager for table-only display");
-        initialize_wallet_transaction_manager().await?;
+        initialize_transactions_manager().await?;
     }
     
     // Determine which wallets to analyze
@@ -1852,7 +1852,7 @@ pub async fn display_wallet_transactions_table(wallet_address: &str) -> Result<(
     log(LogTag::Transactions, "INFO", &format!("📊 Fetching transaction history for wallet {}", &wallet_address[..8]));
     
     // Get wallet transaction manager
-    let tx_manager_arc = get_wallet_transaction_manager()?;
+    let tx_manager_arc = get_transactions_manager()?;
     let manager_lock = tx_manager_arc.read().unwrap();
     
     if let Some(ref manager) = *manager_lock {

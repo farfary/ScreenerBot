@@ -12,7 +12,7 @@ use clap::Parser;
 use screenerbot::{
     logger::{init_file_logging, log, LogTag},
     positions::{get_open_positions, get_closed_positions, SAVED_POSITIONS},
-    transactions_manager::{initialize_wallet_transaction_manager},
+    transactions_manager::{initialize_transactions_manager},
     transactions_tools::{analyze_post_swap_transaction_simple},
     utils::{get_wallet_address, save_positions_to_file},
 };
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log(LogTag::Transactions, "INFO", "🔄 STARTING POSITION VERIFICATION UPDATE");
     
     // Initialize global transaction manager
-    initialize_wallet_transaction_manager().await?;
+    initialize_transactions_manager().await?;
     
     if args.all {
         update_all_positions(&args).await?;

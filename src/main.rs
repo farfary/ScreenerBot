@@ -108,15 +108,15 @@ async fn main() {
     log(LogTag::System, "INFO", "Wallet tracker initialized successfully");
 
         // Initialize wallet transaction manager for enhanced transaction caching/analysis
-    if let Err(e) = screenerbot::transactions_manager::initialize_wallet_transaction_manager().await {
+    if let Err(e) = screenerbot::transactions_manager::initialize_transactions_manager().await {
         log(LogTag::System, "ERROR", &format!("Failed to initialize wallet transaction manager: {}", e));
         return;
     }
     log(LogTag::System, "INFO", "Wallet transaction manager initialized successfully");
 
     // Start wallet transaction periodic sync background service
-    let shutdown_wallet_transactions = shutdown.clone();
-    let wallet_transactions_handle = match screenerbot::transactions_manager::start_wallet_transaction_sync_task(shutdown_wallet_transactions).await {
+    let shutdown_transactions = shutdown.clone();
+    let transactions_handle = match screenerbot::transactions_manager::start_transactions_sync_task(shutdown_transactions).await {
         Ok(handle) => handle,
         Err(e) => {
             log(LogTag::System, "ERROR", &format!("Failed to start wallet transaction sync task: {}", e));
@@ -426,7 +426,7 @@ async fn main() {
             }
 
             // Wait for wallet transactions sync task
-            if let Err(e) = wallet_transactions_handle.await {
+            if let Err(e) = transactions_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
