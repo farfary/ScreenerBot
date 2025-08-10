@@ -1787,11 +1787,9 @@ pub async fn analyze_post_swap_transaction_simple(
         ));
     }
     
-    // TODO: Replace direct RPC call with cached transaction access
-    // Currently using direct RPC for immediate fix, but should be migrated to use
-    // wallet transaction manager cache in the future
-    let rpc_client = get_rpc_client();
-    let transaction = rpc_client.get_transaction_details(signature).await
+    // Use wallet transaction manager for cached transaction access
+    use crate::wallet_transactions::get_transaction_details_global;
+    let transaction = get_transaction_details_global(signature).await
         .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
     
     // Analyze the transaction for swap information
@@ -1851,18 +1849,14 @@ pub async fn analyze_post_swap_transaction(
     output_mint: &str,
     direction: &str, // "buy" or "sell"
 ) -> Result<PostSwapAnalysis, String> {
-    use crate::rpc::get_rpc_client;
-    
     log(LogTag::Transactions, "POST_SWAP", &format!(
         "📊 Analyzing post-swap transaction: {} ({})", 
         &signature[..8], direction
     ));
     
-    // TODO: Replace direct RPC call with cached transaction access
-    // Currently using direct RPC for immediate fix, but should be migrated to use
-    // wallet transaction manager cache in the future
-    let rpc_client = get_rpc_client();
-    let transaction = rpc_client.get_transaction_details(signature).await
+    // Use wallet transaction manager for cached transaction access
+    use crate::wallet_transactions::get_transaction_details_global;
+    let transaction = get_transaction_details_global(signature).await
         .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
     
     // Analyze the transaction for swap information

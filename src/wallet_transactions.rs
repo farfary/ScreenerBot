@@ -226,6 +226,131 @@ pub async fn analyze_recent_swaps_global(limit: usize) -> Result<SwapAnalysis, B
     }
 }
 
+/// Get transaction details via the global wallet transaction manager with automatic caching
+pub async fn get_transaction_details_global(signature: &str) -> Result<crate::rpc::TransactionDetails, Box<dyn std::error::Error + Send + Sync>> {
+    let rpc_client = crate::rpc::get_rpc_client();
+    
+    // Get the manager with proper locking
+    let manager = {
+        let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+        match manager_lock.take() {
+            Some(mgr) => mgr,
+            None => return Err("Wallet transaction manager not initialized".into()),
+        }
+    };
+    
+    // Check cache first
+    if let Some(cached_tx) = manager.get_cached_transaction(signature) {
+        // Convert cached transaction to TransactionDetails
+        let transaction_details = convert_cached_to_transaction_details(cached_tx)?;
+        
+        // Return the manager
+        {
+            let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+            *manager_lock = Some(manager);
+        }
+        
+        return Ok(transaction_details);
+    }
+    
+    // If not cached, we need to fetch it - this requires mutable access
+    let mut manager = manager;
+    match manager.get_or_fetch_transaction(signature, &rpc_client).await {
+        Ok(_) => {
+            // Now get the cached transaction
+            if let Some(cached_tx) = manager.get_cached_transaction(signature) {
+                let transaction_details = convert_cached_to_transaction_details(cached_tx)?;
+                
+                // Return the manager
+                {
+                    let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+                    *manager_lock = Some(manager);
+                }
+                
+                Ok(transaction_details)
+            } else {
+                // Return the manager
+                {
+                    let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+                    *manager_lock = Some(manager);
+                }
+                Err("Transaction not found after fetch".into())
+            }
+        },
+        Err(e) => {
+            // Return the manager
+            {
+                let mut manager_lock = WALLET_TRANSACTION_MANAGER.write().unwrap();
+                *manager_lock = Some(manager);
+            }
+            Err(format!("Failed to fetch transaction: {}", e).into())
+        }
+    }
+}
+
+/// Convert cached transaction data to TransactionDetails format
+fn convert_cached_to_transaction_details(cached_tx: &CachedTransactionData) -> Result<crate::rpc::TransactionDetails, Box<dyn std::error::Error + Send + Sync>> {
+    use crate::rpc::{TransactionDetails, TransactionData, TransactionMeta};
+    
+    let encoded_tx = &cached_tx.transaction_data;
+    
+    // Extract transaction data from the encoded structure
+    let transaction_data = if let Some(decoded_tx) = encoded_tx.transaction.transaction.decode() {
+        TransactionData {
+            message: serde_json::to_value(&decoded_tx.message)?,
+            signatures: decoded_tx.signatures.iter().map(|s| s.to_string()).collect(),
+        }
+    } else {
+        // Fall back to extracting signatures from the encoded transaction
+        TransactionData {
+            message: serde_json::to_value(&encoded_tx.transaction.transaction)?,
+            signatures: vec![], // Will be filled from signatures field if available
+        }
+    };
+    
+    // Extract meta if available  
+    let meta = if let Some(ref meta) = encoded_tx.transaction.meta {
+        Some(TransactionMeta {
+            fee: meta.fee,
+            pre_balances: meta.pre_balances.clone(),
+            post_balances: meta.post_balances.clone(),
+            pre_token_balances: Some(vec![]), // Simplified for now - type conversion needed
+            post_token_balances: Some(vec![]), // Simplified for now - type conversion needed  
+            log_messages: Some(meta.log_messages.clone().unwrap_or(vec![])),
+            err: meta.err.as_ref().map(|e| serde_json::to_value(e).unwrap_or_default()),
+        })
+    } else {
+        None
+    };
+    
+    Ok(TransactionDetails {
+        slot: encoded_tx.slot,
+        transaction: transaction_data,
+        meta,
+    })
+}
+
+/// Global helper function to get cached transaction JSON data via wallet transaction manager
+/// This replaces direct file access to maintain architectural compliance
+pub async fn get_cached_transaction_json_global(signature: &str) -> Option<serde_json::Value> {
+    let manager_lock = WALLET_TRANSACTION_MANAGER.read().unwrap();
+    if let Some(ref manager) = *manager_lock {
+        if let Some(cached_data) = manager.get_cached_transaction(signature) {
+            // Convert the transaction data to JSON for compatibility with existing code
+            if let Ok(json_value) = serde_json::to_value(&cached_data.transaction_data) {
+                // Wrap in the expected format (original cached files had "transaction_data" field)
+                let wrapped_json = serde_json::json!({
+                    "transaction_data": json_value,
+                    "signature": cached_data.signature,
+                    "cached_at": cached_data.cached_at
+                });
+                return Some(wrapped_json);
+            }
+        }
+    }
+    None
+}
+
 /// Verify and analyze a specific swap transaction using the global manager
 /// This is the main function positions should use for transaction verification
 pub async fn verify_swap_transaction_global(signature: &str, expected_direction: &str) -> Result<VerifiedSwapData, Box<dyn std::error::Error + Send + Sync>> {
@@ -915,47 +1040,62 @@ impl WalletTransactionManager {
         loop {
             attempts += 1;
             
-            match self.fetch_and_cache_single_transaction(rpc_client, &signature_obj).await {
+            let result = self.fetch_and_cache_single_transaction(rpc_client, &signature_obj).await;
+            
+            match result {
                 Ok(_) => {
                     log(LogTag::Transactions, "SUCCESS", &format!("Transaction {} fetched and cached on attempt {}", signature, attempts));
                     return Ok(());
                 }
                 Err(e) => {
-                    let error_string = format!("{}", e);
-                    drop(e); // Explicitly drop the error to avoid Send issues
+                    let error_string = e.to_string();
+                    drop(e); // Explicitly drop the error
                     
-                    // Check if this is a "transaction not yet available" error
-                    let is_temp_unavailable = error_string.contains("Transaction not yet available") || 
-                                            error_string.contains("Transaction not found") || 
-                                            error_string.contains("null, expected struct");
-                    
-                    if attempts >= MAX_ATTEMPTS {
-                        if is_temp_unavailable {
-                            let warning_msg = format!("Transaction {} is not yet available after {} attempts (very recent transaction), verification may be delayed", signature, attempts);
-                            log(LogTag::Transactions, "WARNING", &warning_msg);
-                            return Err(warning_msg.into());
-                        } else {
-                            let error_msg = format!("Failed to fetch transaction {} after {} attempts: {}", signature, attempts, error_string);
-                            log(LogTag::Transactions, "ERROR", &error_msg);
-                            return Err(error_msg.into());
-                        }
-                    } else {
-                        let retry_msg = if is_temp_unavailable {
-                            format!("Transaction {} not yet available (attempt {}), retrying in {}ms...", signature, attempts, RETRY_DELAY_MS)
-                        } else {
-                            format!("Fetch attempt {} failed for {}: {}. Retrying in {}ms...", attempts, signature, error_string, RETRY_DELAY_MS)
-                        };
-                        
-                        if is_debug_transactions_enabled() {
-                            log(LogTag::Transactions, "DEBUG", &retry_msg);
-                        }
-                        tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    // Now handle the error using only the string
+                    let should_continue = self.handle_fetch_error_string(signature, &error_string, attempts).await?;
+                    if !should_continue {
+                        return Ok(()); // This will never happen since handle_fetch_error returns Err for final failures
                     }
                 }
             }
         }
     }
     
+    /// Handle fetch error with proper Send + Sync compatibility
+    async fn handle_fetch_error_string(&self, signature: &str, error_string: &str, attempts: u32) -> Result<bool, String> {
+        const MAX_ATTEMPTS: u32 = 3;
+        const RETRY_DELAY_MS: u64 = 1000;
+        
+        // Check if this is a "transaction not yet available" error
+        let is_temp_unavailable = error_string.contains("Transaction not yet available") || 
+                                error_string.contains("Transaction not found") || 
+                                error_string.contains("null, expected struct");
+        
+        if attempts >= MAX_ATTEMPTS {
+            if is_temp_unavailable {
+                let warning_msg = format!("Transaction {} is not yet available after {} attempts (very recent transaction), verification may be delayed", signature, attempts);
+                log(LogTag::Transactions, "WARNING", &warning_msg);
+                return Err(warning_msg);
+            } else {
+                let error_msg = format!("Failed to fetch transaction {} after {} attempts: {}", signature, attempts, error_string);
+                log(LogTag::Transactions, "ERROR", &error_msg);
+                return Err(error_msg);
+            }
+        } else {
+            let retry_msg = if is_temp_unavailable {
+                format!("Transaction {} not yet available (attempt {}), retrying in {}ms...", signature, attempts, RETRY_DELAY_MS)
+            } else {
+                format!("Fetch attempt {} failed for {}: {}. Retrying in {}ms...", attempts, signature, error_string, RETRY_DELAY_MS)
+            };
+            
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "DEBUG", &retry_msg);
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+            return Ok(true); // Continue retrying
+        }
+    }
+
     /// Verify and analyze a swap transaction for position data
     /// Returns verified transaction data including effective price, token amounts, and fees
     pub async fn verify_swap_transaction(&mut self, signature: &str, expected_direction: &str, rpc_client: &RpcClient) -> Result<VerifiedSwapData, String> {

@@ -198,13 +198,14 @@ async fn debug_transaction_signature_internal(signature: &str, _args: &Args) -> 
         }
     }
     
-    // Test 3: Check if transaction exists in cache
-    println!("💾 Checking transaction cache...");
-    let rpc_client = get_rpc_client();
-    match rpc_client.get_transaction_details(signature).await {
+    // Test 3: Check if transaction exists using wallet transaction manager
+    println!("💾 Checking transaction via wallet transaction manager...");
+    use screenerbot::wallet_transactions::get_transaction_details_global;
+    
+    match get_transaction_details_global(signature).await {
         Ok(_) => {
             result.rpc_fetch_success = true;
-            println!("✅ Transaction found via RPC");
+            println!("✅ Transaction found via wallet transaction manager");
         },
         Err(e) => {
             result.rpc_fetch_error = Some(e.to_string());

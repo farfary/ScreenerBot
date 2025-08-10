@@ -11,8 +11,9 @@
 /// Key Features:
 /// - Router-agnostic detection (works with any DEX)
 /// - Comprehensive transaction type classification
-/// - Accurate direction detection (BUY vs SELL)
-/// - Precise effective price calculations
+/// - Accurate direction detection (BUY vs SELL)    }
+
+    /// Safely convert a transaction instruction to string for displaytive price calculations
 /// - Fee analysis and separation
 /// - Multi-token transaction support
 
@@ -99,8 +100,8 @@ impl TransactionDetector {
             ));
         }
 
-        // First try to load cached JSON data from disk for enhanced analysis
-        let cached_json = self.load_cached_transaction_data(signature);
+        // First try to load cached JSON data via wallet transaction manager for enhanced analysis
+        let cached_json = crate::wallet_transactions::get_cached_transaction_json_global(signature).await;
         if cached_json.is_some() && is_debug_transactions_enabled() {
             log(LogTag::Transactions, "CACHE", &format!("📁 Using cached JSON data for enhanced analysis: {}", &signature[..8]));
         }
@@ -572,8 +573,8 @@ impl TransactionDetector {
                 log(LogTag::Transactions, "CACHE_HIT", &format!("📁 Using cached transaction: {}", &signature[..8]));
             }
             
-            // Try to load from disk cache
-            if let Some(json_data) = self.load_cached_transaction_data(signature) {
+            // Try to load from disk cache via wallet transaction manager
+            if let Some(json_data) = crate::wallet_transactions::get_cached_transaction_json_global(signature).await {
                 if let Some(transaction_data) = json_data.get("transaction_data") {
                     // Parse the transaction data into our TransactionDetails format
                     match serde_json::from_value::<TransactionDetails>(transaction_data.clone()) {
@@ -588,32 +589,14 @@ impl TransactionDetector {
             }
         }
         
-        // If not cached or parsing failed, fall back to RPC
+        // If not cached or parsing failed, use wallet transaction manager for access
         if is_debug_transactions_enabled() {
-            log(LogTag::Transactions, "CACHE_MISS", &format!("📁 Transaction not cached, fetching via RPC: {}", &signature[..8]));
+            log(LogTag::Transactions, "CACHE_MISS", &format!("📁 Transaction not cached, using wallet transaction manager: {}", &signature[..8]));
         }
         
-        use crate::rpc::get_rpc_client;
-        let rpc_client = get_rpc_client();
-        rpc_client.get_transaction_details(signature).await
-            .map_err(|e| format!("Failed to fetch transaction via RPC: {}", e))
-    }
-
-    /// Load cached transaction JSON data from disk if available
-    fn load_cached_transaction_data(&self, signature: &str) -> Option<serde_json::Value> {
-        use crate::global::DATA_DIR;
-        let transaction_file = format!("{}/transactions/{}.json", DATA_DIR, signature);
-        if Path::new(&transaction_file).exists() {
-            if let Ok(content) = std::fs::read_to_string(&transaction_file) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if is_debug_transactions_enabled() {
-                        log(LogTag::Transactions, "CACHE", &format!("📁 Loaded cached JSON data for {}", &signature[..8]));
-                    }
-                    return Some(json);
-                }
-            }
-        }
-        None
+        use crate::wallet_transactions::get_transaction_details_global;
+        get_transaction_details_global(signature).await
+            .map_err(|e| format!("Failed to fetch transaction via wallet transaction manager: {}", e))
     }
 
     /// Enhanced analysis using cached JSON data for better classification
@@ -755,22 +738,6 @@ pub fn format_transaction_analysis(analysis: &TransactionAnalysis) -> String {
     }
     
     result
-}
-
-/// Load cached transaction data from disk if available
-fn load_cached_transaction_data(signature: &str) -> Option<serde_json::Value> {
-    let transaction_file = format!("{}/transactions/{}.json", DATA_DIR, signature);
-    if Path::new(&transaction_file).exists() {
-        if let Ok(content) = std::fs::read_to_string(&transaction_file) {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "CACHE", &format!("📁 Loaded cached transaction data for {}", signature));
-                }
-                return Some(json);
-            }
-        }
-    }
-    None
 }
 
 /// Analyze transaction patterns to detect bulk transfers
