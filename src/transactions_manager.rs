@@ -100,9 +100,12 @@ pub struct CachedTransactionData {
     pub signature: String,
     pub transaction_data: EncodedConfirmedTransactionWithStatusMeta,
     pub cached_at: DateTime<Utc>,
-    pub commitment_level: String, // "confirmed" or "finalized"
+    pub commitment_level: String, // "processed", "confirmed", or "finalized"
     pub finalized_at: Option<DateTime<Utc>>,
+    pub processed_at: Option<DateTime<Utc>>, // When first detected as processed
+    pub confirmed_at: Option<DateTime<Utc>>, // When upgraded to confirmed
     pub slot: u64, // For finalization time estimation
+    pub commitment_progression: Vec<CommitmentEvent>, // Full lifecycle tracking
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +139,14 @@ pub struct FinalizationStats {
     pub finalization_errors: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitmentEvent {
+    pub commitment_level: String, // "processed", "confirmed", "finalized"
+    pub timestamp: DateTime<Utc>,
+    pub slot: u64,
+    pub time_from_previous_ms: Option<i64>, // Time since previous commitment level
+}
+
 impl Default for WalletSyncState {
     fn default() -> Self {
         Self {
@@ -166,40 +177,158 @@ impl Default for FinalizationStats {
 }
 
 impl CachedTransactionData {
-    /// Create new CachedTransactionData with confirmed commitment level
-    pub fn new_confirmed(signature: String, transaction_data: EncodedConfirmedTransactionWithStatusMeta) -> Self {
+    /// Create new CachedTransactionData starting from processed commitment level
+    pub fn new_processed(signature: String, transaction_data: EncodedConfirmedTransactionWithStatusMeta) -> Self {
         let slot = transaction_data.slot;
+        let now = Utc::now();
+        
+        let commitment_event = CommitmentEvent {
+            commitment_level: "processed".to_string(),
+            timestamp: now,
+            slot,
+            time_from_previous_ms: None, // First event
+        };
+        
         Self {
             signature,
             transaction_data,
-            cached_at: Utc::now(),
+            cached_at: now,
+            commitment_level: "processed".to_string(),
+            finalized_at: None,
+            processed_at: Some(now),
+            confirmed_at: None,
+            slot,
+            commitment_progression: vec![commitment_event],
+        }
+    }
+    
+    /// Create new CachedTransactionData with confirmed commitment level (legacy support)
+    pub fn new_confirmed(signature: String, transaction_data: EncodedConfirmedTransactionWithStatusMeta) -> Self {
+        let slot = transaction_data.slot;
+        let now = Utc::now();
+        
+        let commitment_event = CommitmentEvent {
+            commitment_level: "confirmed".to_string(),
+            timestamp: now,
+            slot,
+            time_from_previous_ms: None, // Direct confirmed (no processed tracking)
+        };
+        
+        Self {
+            signature,
+            transaction_data,
+            cached_at: now,
             commitment_level: "confirmed".to_string(),
             finalized_at: None,
+            processed_at: None, // Unknown when it was processed
+            confirmed_at: Some(now),
             slot,
+            commitment_progression: vec![commitment_event],
         }
+    }
+    
+    /// Upgrade transaction from processed to confirmed
+    pub fn upgrade_to_confirmed(&mut self, confirmed_transaction_data: EncodedConfirmedTransactionWithStatusMeta) {
+        let now = Utc::now();
+        let time_from_previous = if let Some(processed_time) = self.processed_at {
+            Some(now.signed_duration_since(processed_time).num_milliseconds())
+        } else {
+            None
+        };
+        
+        // Extract slot before moving the data
+        let confirmed_slot = confirmed_transaction_data.slot;
+        
+        self.transaction_data = confirmed_transaction_data;
+        self.commitment_level = "confirmed".to_string();
+        self.confirmed_at = Some(now);
+        self.slot = confirmed_slot;
+        
+        // Add commitment progression event
+        self.commitment_progression.push(CommitmentEvent {
+            commitment_level: "confirmed".to_string(),
+            timestamp: now,
+            slot: confirmed_slot,
+            time_from_previous_ms: time_from_previous,
+        });
     }
     
     /// Upgrade transaction to finalized status
     pub fn upgrade_to_finalized(&mut self, finalized_transaction_data: EncodedConfirmedTransactionWithStatusMeta) {
+        let now = Utc::now();
+        let time_from_previous = if let Some(confirmed_time) = self.confirmed_at {
+            Some(now.signed_duration_since(confirmed_time).num_milliseconds())
+        } else if let Some(processed_time) = self.processed_at {
+            Some(now.signed_duration_since(processed_time).num_milliseconds())
+        } else {
+            None
+        };
+        
         // Extract slot before moving the data
         let finalized_slot = finalized_transaction_data.slot;
         
         self.transaction_data = finalized_transaction_data;
         self.commitment_level = "finalized".to_string();
-        self.finalized_at = Some(Utc::now());
-        // Update slot with finalized data
+        self.finalized_at = Some(now);
         self.slot = finalized_slot;
+        
+        // Add commitment progression event
+        self.commitment_progression.push(CommitmentEvent {
+            commitment_level: "finalized".to_string(),
+            timestamp: now,
+            slot: finalized_slot,
+            time_from_previous_ms: time_from_previous,
+        });
     }
     
-    /// Check if transaction is eligible for finalization upgrade (older than 3 minutes)
+    /// Check if transaction is eligible for confirmed upgrade (processed for >5 seconds)
+    pub fn is_eligible_for_confirmed_upgrade(&self) -> bool {
+        self.commitment_level == "processed" && 
+        self.processed_at.map_or(false, |t| Utc::now().signed_duration_since(t).num_seconds() >= 5)
+    }
+    
+    /// Check if transaction is eligible for finalization upgrade (confirmed for >3 minutes)
     pub fn is_eligible_for_finalization(&self) -> bool {
         self.commitment_level == "confirmed" && 
-        Utc::now().signed_duration_since(self.cached_at).num_minutes() >= 3
+        self.confirmed_at.map_or(false, |t| Utc::now().signed_duration_since(t).num_minutes() >= 3)
+    }
+    
+    /// Get total time from submission to finalization
+    pub fn get_total_finalization_time(&self) -> Option<i64> {
+        if let (Some(processed), Some(finalized)) = (self.processed_at, self.finalized_at) {
+            Some(finalized.signed_duration_since(processed).num_milliseconds())
+        } else {
+            None
+        }
+    }
+    
+    /// Get commitment progression summary
+    pub fn get_commitment_summary(&self) -> String {
+        if self.commitment_progression.len() == 1 {
+            format!("{} ({})", self.commitment_level, 
+                   self.commitment_progression[0].timestamp.format("%H:%M:%S"))
+        } else {
+            let timings: Vec<String> = self.commitment_progression.iter()
+                .map(|event| {
+                    let time_str = if let Some(ms) = event.time_from_previous_ms {
+                        format!("{}ms", ms)
+                    } else {
+                        "start".to_string()
+                    };
+                    format!("{}({})", &event.commitment_level[..1].to_uppercase(), time_str)
+                })
+                .collect();
+            timings.join(" → ")
+        }
     }
     
     /// Get estimated finalization time (confirmed + ~1-2 minutes)
     pub fn estimated_finalization_time(&self) -> DateTime<Utc> {
-        self.cached_at + chrono::Duration::minutes(2)
+        if let Some(confirmed_time) = self.confirmed_at {
+            confirmed_time + chrono::Duration::minutes(2)
+        } else {
+            self.cached_at + chrono::Duration::minutes(3)
+        }
     }
 }
 
@@ -297,6 +426,29 @@ pub fn get_global_finalization_stats() -> Option<(usize, usize, f64, usize, Stri
         ))
     } else {
         None
+    }
+}
+
+/// Add a transaction at processed level to the global transaction manager
+pub async fn add_transaction_at_processed_level_global(signature: &str, transaction_data: EncodedConfirmedTransactionWithStatusMeta) -> Result<(), String> {
+    let manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
+    if let Some(ref manager) = *manager_lock {
+        // We need to temporarily drop the lock to call non-static method
+        drop(manager_lock);
+        
+        // Get the RPC client
+        let rpc_client = crate::rpc::get_rpc_client();
+        
+        // Get mutable access to the manager
+        let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
+        if let Some(ref mut manager) = *manager_lock {
+            manager.add_processed_transaction(signature, transaction_data).await;
+            Ok(())
+        } else {
+            Err("Transaction manager not available".to_string())
+        }
+    } else {
+        Err("Transaction manager not initialized".to_string())
     }
 }
 
@@ -593,6 +745,9 @@ async fn perform_periodic_sync_check() {
         log(LogTag::Transactions, "DEBUG", "No new transactions found in periodic sync");
     }
     
+    // Perform processed-to-confirmed upgrade check for rapid transaction progression
+    perform_confirmed_upgrade_check(&rpc_client).await;
+    
     // Perform finalization upgrade check for confirmed transactions
     perform_finalization_upgrade_check(&rpc_client).await;
 }
@@ -613,6 +768,119 @@ async fn fetch_wallet_signatures_standalone(
     
     log(LogTag::Transactions, "SUCCESS", &format!("Retrieved {} signatures from main RPC", signatures.len()));
     Ok(signatures)
+}
+
+/// Perform confirmed upgrade check for processed transactions that are eligible
+async fn perform_confirmed_upgrade_check(rpc_client: &RpcClient) {
+    // Get transactions eligible for confirmed upgrade (processed for >5 seconds)
+    let eligible_signatures = {
+        let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
+        if let Some(ref manager) = *manager_lock {
+            let mut eligible = Vec::new();
+            
+            // Find processed transactions older than 5 seconds
+            for (signature, cached_tx) in &manager.transaction_cache {
+                if cached_tx.is_eligible_for_confirmed_upgrade() {
+                    eligible.push(signature.clone());
+                }
+            }
+            
+            // Limit batch size for frequent checking
+            eligible.into_iter().take(20).collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        }
+    };
+    
+    if eligible_signatures.is_empty() {
+        return;
+    }
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "CONFIRMED_UPGRADE", &format!("Checking {} processed transactions for confirmed upgrade", eligible_signatures.len()));
+    }
+    
+    // Fetch confirmed versions of these transactions
+    let confirmed_transactions = match fetch_confirmed_transactions_batch(&eligible_signatures, rpc_client).await {
+        Ok(txs) => txs,
+        Err(e) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "ERROR", &format!("Failed to fetch confirmed transactions: {}", e));
+            }
+            return;
+        }
+    };
+    
+    if confirmed_transactions.is_empty() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "No confirmed upgrades available yet");
+        }
+        return;
+    }
+    
+    // Update transactions to confirmed status
+    let mut upgrade_count = 0;
+    
+    {
+        let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
+        if let Some(ref mut manager) = *manager_lock {
+            for (signature, confirmed_tx) in confirmed_transactions {
+                if let Some(cached_tx) = manager.transaction_cache.get_mut(&signature) {
+                    // Upgrade to confirmed
+                    cached_tx.upgrade_to_confirmed(confirmed_tx);
+                    
+                    // Add to pending finalization tracking
+                    manager.sync_state.confirmed_awaiting_finalization.insert(signature.clone());
+                    
+                    upgrade_count += 1;
+                    
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "UPGRADE", &format!(
+                            "Transaction {} upgraded from processed to confirmed", 
+                            &signature[..8]
+                        ));
+                    }
+                    
+                    // Save updated transaction to disk
+                    let cache_file = manager.cache_dir.join(format!("{}.json", signature));
+                    if let Ok(content) = serde_json::to_string_pretty(cached_tx) {
+                        if let Err(e) = fs::write(&cache_file, content) {
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "ERROR", &format!("Failed to save confirmed transaction {}: {}", &signature[..8], e));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if upgrade_count > 0 {
+        log(LogTag::Transactions, "SUCCESS", &format!("Upgraded {} transactions from processed to confirmed", upgrade_count));
+    }
+}
+
+/// Fetch confirmed versions of transactions using confirmed commitment level
+async fn fetch_confirmed_transactions_batch(
+    signatures: &[String],
+    rpc_client: &RpcClient,
+) -> Result<Vec<(String, EncodedConfirmedTransactionWithStatusMeta)>, Box<dyn std::error::Error>> {
+    if signatures.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "CONFIRMED_RPC", &format!("Fetching {} transactions with confirmed commitment", signatures.len()));
+    }
+    
+    // Use main RPC for confirmed commitment (balance between speed and reliability)
+    let confirmed_transactions = rpc_client.batch_get_transaction_details_premium_rpc(signatures).await
+        .map_err(|e| format!("Failed to fetch confirmed transactions: {}", e))?;
+    
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "SUCCESS", &format!("Successfully fetched {}/{} confirmed transactions", confirmed_transactions.len(), signatures.len()));
+    }
+    Ok(confirmed_transactions)
 }
 
 /// Perform finalization upgrade check for confirmed transactions that are eligible
@@ -1300,6 +1568,18 @@ impl TransactionsManager {
         } else {
             transactions
         }
+    }
+    
+    /// Add a transaction at processed level for immediate tracking
+    pub async fn add_processed_transaction(&mut self, signature: &str, transaction_data: EncodedConfirmedTransactionWithStatusMeta) {
+        // Create cached transaction data at processed level
+        let cached_data = CachedTransactionData::new_processed(signature.to_string(), transaction_data);
+        
+        // Store in cache and tracking
+        self.transaction_cache.insert(signature.to_string(), cached_data);
+        self.sync_state.cached_signatures.insert(signature.to_string());
+        
+        log(LogTag::Transactions, "PROCESSED", &format!("Added transaction {} at processed level", &signature[..8]));
     }
     
     /// Get or fetch a specific transaction by signature for position verification

@@ -33,10 +33,11 @@ use solana_sdk::{
     client::SyncClient,
     transaction::VersionedTransaction,
     signer::Signer,
-    signature::Keypair,
+    signature::{Keypair, Signature},
     transaction::Transaction,
     hash::Hash,
 };
+use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
 use std::sync::Arc;
 use std::str::FromStr;
 use std::collections::HashMap;
@@ -3172,6 +3173,50 @@ impl RpcClient {
         log(LogTag::Rpc, "SUCCESS", &format!("Successfully fetched {}/{} transactions from premium RPC", successful_fetches, signatures.len()));
         Ok(results)
     }
+
+    /// Get transaction details using finalized commitment level for critical operations
+    pub async fn get_transaction_details_finalized_rpc(
+        &self,
+        signature: &str,
+    ) -> Result<EncodedConfirmedTransactionWithStatusMeta, SwapError> {
+        self.wait_for_rate_limit().await;
+        self.record_call("get_transaction_finalized");
+
+        let client = self.create_premium_client().unwrap_or_else(|| {
+            log(LogTag::Rpc, "WARNING", "No premium RPC available for finalized transaction, using main RPC");
+            self.client.clone()
+        });
+
+        let signature = Signature::from_str(signature)
+            .map_err(|e| SwapError::InvalidResponse(format!("Invalid signature: {}", e)))?;
+
+        tokio::task::spawn_blocking({
+            let client = client.clone();
+            move || {
+                client
+                    .get_transaction_with_config(
+                        &signature,
+                        solana_client::rpc_config::RpcTransactionConfig {
+                            encoding: Some(UiTransactionEncoding::Json),
+                            commitment: Some(CommitmentConfig::finalized()),
+                            max_supported_transaction_version: Some(0),
+                        }
+                    )
+                    .map_err(|e| {
+                        let error_msg = e.to_string();
+                        if error_msg.contains("not found") {
+                            SwapError::TransactionError(
+                                "Transaction not found or not finalized yet".to_string()
+                            )
+                        } else {
+                            SwapError::TransactionError(format!("RPC error: {}", error_msg))
+                        }
+                    })
+            }
+        })
+        .await
+        .map_err(|e| SwapError::TransactionError(format!("Task error: {}", e)))?
+    }
     
     /// Batch get transaction details using finalized commitment level for transaction verification
     /// This ensures we get the final, immutable state of transactions for important operations
@@ -3245,6 +3290,45 @@ impl RpcClient {
         
         log(LogTag::Rpc, "SUCCESS", &format!("Successfully fetched {}/{} finalized transactions", successful_fetches, signatures.len()));
         Ok(results)
+    }
+    
+    /// Get single transaction details using processed commitment level for immediate feedback
+    /// This provides the fastest possible response for transaction status checking
+    pub async fn get_transaction_details_processed_rpc(
+        &self,
+        signature: &str
+    ) -> Result<solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta, SwapError> {
+        // Record call
+        self.wait_for_rate_limit().await;
+        self.record_call("get_transaction_processed");
+        
+        if let Ok(signature_obj) = solana_sdk::signature::Signature::from_str(signature) {
+            // Use main RPC for processed transactions (faster response, lower latency)
+            match self.client.get_transaction_with_config(
+                &signature_obj,
+                solana_client::rpc_config::RpcTransactionConfig {
+                    encoding: Some(solana_transaction_status::UiTransactionEncoding::JsonParsed),
+                    commitment: Some(CommitmentConfig::processed()), // Use processed commitment for speed
+                    max_supported_transaction_version: Some(0),
+                }
+            ) {
+                Ok(tx) => {
+                    log(LogTag::Rpc, "PROCESSED", &format!("Retrieved transaction {} with processed commitment", &signature[..8]));
+                    Ok(tx)
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
+                        log(LogTag::Rpc, "NOT_PROCESSED", &format!("Transaction {} not yet processed", &signature[..8]));
+                    } else {
+                        log(LogTag::Rpc, "ERROR", &format!("Failed to fetch processed transaction {}: {}", &signature[..8], e));
+                    }
+                    Err(SwapError::TransactionError(format!("Failed to fetch processed transaction: {}", e)))
+                }
+            }
+        } else {
+            Err(SwapError::InvalidAmount(format!("Invalid signature format: {}", signature)))
+        }
     }
 }
 

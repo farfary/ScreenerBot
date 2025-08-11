@@ -382,25 +382,26 @@ pub async fn display_positions_table() {
         );
     }
 
-    // Log position summary to file
-    // log_positions_summary(&open_positions, &closed_positions, total_invested, total_pnl).await;
+    // Build all positions output in one shot
+    let mut positions_output = String::new();
 
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();
     let summary_start = Instant::now();
-    display_bot_summary(&closed_refs).await;
+    let bot_summary = build_bot_summary(&closed_refs).await;
+    positions_output.push_str(&bot_summary);
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Bot summary generated in {} ms",
+                "Bot summary built in {} ms",
                 summary_start.elapsed().as_millis()
             )
         );
     }
 
-    // Display closed positions first (last 10, sorted by close time)
+    // Build closed positions first (last 10, sorted by close time)
     if !closed_positions.is_empty() {
         if is_debug_summary_enabled() {
             log(
@@ -438,21 +439,20 @@ pub async fn display_positions_table() {
                 log(
                     LogTag::Summary,
                     "DEBUG",
-                    &format!("Displaying {} recent closed positions", recent_closed.len())
+                    &format!("Building {} recent closed positions table", recent_closed.len())
                 );
             }
 
-            println!("\n📋 Recently Closed Positions (Last 10):");
+            positions_output.push_str(&format!("\n📋 Recently Closed Positions (Last 10):\n"));
             let mut closed_table = Table::new(recent_closed);
             closed_table
                 .with(Style::rounded())
                 .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-            println!("{}", closed_table);
-            println!("");
+            positions_output.push_str(&format!("{}\n\n", closed_table));
         }
     }
 
-    // Display open positions (sorted by entry time, latest at bottom)
+    // Build open positions (sorted by entry time, latest at bottom)
     if !open_positions.is_empty() {
         if is_debug_summary_enabled() {
             log(
@@ -519,18 +519,20 @@ pub async fn display_positions_table() {
             displays
         };
 
-        println!("\n🔄 Open Positions ({}):", open_positions.len());
+        positions_output.push_str(&format!("\n🔄 Open Positions ({}):\n", open_positions.len()));
         let mut open_table = Table::new(open_position_displays);
         open_table
             .with(Style::rounded())
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        println!("{}", open_table);
-        println!("");
+        positions_output.push_str(&format!("{}\n\n", open_table));
 
         if is_debug_summary_enabled() {
-            log(LogTag::Summary, "DEBUG", "Open positions table display complete");
+            log(LogTag::Summary, "DEBUG", "Open positions table built");
         }
     }
+
+    // Display everything in one shot
+    print!("{}", positions_output);
 
     if is_debug_summary_enabled() {
         log(
@@ -544,15 +546,15 @@ pub async fn display_positions_table() {
     }
 }
 
-/// Convenience function to display bot summary using current positions
-pub async fn display_current_bot_summary() {
+/// Convenience function to build bot summary using current positions and return as string
+pub async fn build_current_bot_summary() -> String {
     let closed_positions = get_closed_positions();
     let refs: Vec<&_> = closed_positions.iter().collect();
-    display_bot_summary(&refs).await;
+    build_bot_summary(&refs).await
 }
 
-/// Displays comprehensive bot summary with detailed statistics and performance metrics
-pub async fn display_bot_summary(closed_positions: &[&Position]) {
+/// Builds comprehensive bot summary with detailed statistics and performance metrics and returns as string
+pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     let fn_start = Instant::now();
     if is_debug_summary_enabled() {
         log(
@@ -561,6 +563,8 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
             &format!("Starting bot summary generation with {} closed positions", closed_positions.len())
         );
     }
+
+    let mut summary_output = String::new();
 
     // Get open positions count using existing function
     let open_count = get_open_positions_count();
@@ -756,41 +760,48 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         price_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
     };
 
-    // Display all tables
+    // Build all table strings first, then display in one shot
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Displaying bot overview tables");
+        log(LogTag::Summary, "DEBUG", "Building bot overview tables");
     }
 
-    println!("\n📊 Bot Overview");
+    let mut summary_output = String::new();
+
+    // Build Bot Overview table
+    summary_output.push_str("\n📊 Bot Overview\n");
     let mut overview_table = Table::new(vec![overview]);
     overview_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", overview_table);
+    summary_output.push_str(&format!("{}\n", overview_table));
 
-    println!("\n📈 Trading Statistics");
+    // Build Trading Statistics table
+    summary_output.push_str("\n📈 Trading Statistics\n");
     let mut stats_table = Table::new(vec![trading_stats]);
     stats_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", stats_table);
+    summary_output.push_str(&format!("{}\n", stats_table));
 
-    println!("\n🎯 Performance Metrics");
+    // Build Performance Metrics table
+    summary_output.push_str("\n🎯 Performance Metrics\n");
     let mut performance_table = Table::new(vec![performance]);
     performance_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", performance_table);
+    summary_output.push_str(&format!("{}\n", performance_table));
 
-    println!("\n🧹 ATA Cleanup Statistics");
+    // Build ATA Cleanup Statistics table
+    summary_output.push_str("\n🧹 ATA Cleanup Statistics\n");
     let mut ata_table = Table::new(vec![ata_cleanup]);
     ata_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", ata_table);
+    summary_output.push_str(&format!("{}\n", ata_table));
 
-    println!("\n🏊 Pool Service Statistics");
+    // Build Pool Service Statistics table
+    summary_output.push_str("\n🏊 Pool Service Statistics\n");
     let mut pool_table = Table::new(vec![pool_service_stats]);
     pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", pool_table);
+    summary_output.push_str(&format!("{}\n", pool_table));
 
-    // Display wallet tracker statistics if available
+    // Build Wallet Tracker Statistics table if available
     let wallet_analysis_start = Instant::now();
     if let Some(wallet_analysis) = get_wallet_analysis().await {
         if is_debug_summary_enabled() {
@@ -812,106 +823,148 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
             worst_value: format!("{:.6} SOL", wallet_analysis.worst_day_value),
         };
 
-        println!("\n💼 Wallet Tracker Statistics");
+        summary_output.push_str("\n💼 Wallet Tracker Statistics\n");
         let mut wallet_table = Table::new(vec![wallet_tracker_stats]);
         wallet_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        println!("{}", wallet_table);
+        summary_output.push_str(&format!("{}\n", wallet_table));
     } else {
-        println!("\n💼 Wallet Tracker: No historical data available");
+        summary_output.push_str("\n💼 Wallet Tracker: No historical data available\n");
     }
 
-    // Display RPC statistics if available
+    // Build RPC statistics tables if available
     if let Some(rpc_stats) = get_global_rpc_stats() {
         if is_debug_summary_enabled() {
-            log(LogTag::Summary, "DEBUG", "Displaying RPC statistics tables");
+            log(LogTag::Summary, "DEBUG", "Building RPC statistics tables");
         }
         let rpc_start = Instant::now();
-        display_rpc_statistics(&rpc_stats);
+        let rpc_tables = build_rpc_statistics_tables(&rpc_stats);
+        summary_output.push_str(&rpc_tables);
         if is_debug_summary_enabled() {
             log(
                 LogTag::Summary,
                 "DEBUG",
                 &format!(
-                    "RPC statistics tables rendered in {} ms",
+                    "RPC statistics tables built in {} ms",
                     rpc_start.elapsed().as_millis()
                 )
             );
         }
     }
 
-    // Display wallet transaction statistics
+    // Build wallet transaction statistics
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Displaying wallet transaction statistics");
+        log(LogTag::Summary, "DEBUG", "Building wallet transaction statistics");
     }
     let tx_start = Instant::now();
-    display_transactions_statistics();
+    let tx_tables = build_transactions_statistics_tables();
+    summary_output.push_str(&tx_tables);
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Wallet transaction statistics rendered in {} ms",
+                "Wallet transaction statistics built in {} ms",
                 tx_start.elapsed().as_millis()
             )
         );
     }
 
-    // Display transaction finalization statistics
+    // Build transaction finalization statistics
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Displaying transaction finalization statistics");
+        log(LogTag::Summary, "DEBUG", "Building transaction finalization statistics");
     }
     let finalization_start = Instant::now();
-    display_transaction_finalization_statistics();
+    let finalization_tables = build_transaction_finalization_statistics_tables();
+    summary_output.push_str(&finalization_tables);
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Transaction finalization statistics rendered in {} ms",
+                "Transaction finalization statistics built in {} ms",
                 finalization_start.elapsed().as_millis()
             )
         );
     }
 
-    // Display position verification statistics
+    // Build position verification statistics
     if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Displaying position verification statistics");
+        log(LogTag::Summary, "DEBUG", "Building position verification statistics");
     }
     let verification_start = Instant::now();
-    display_position_verification_statistics();
+    let verification_tables = build_position_verification_statistics_tables();
+    summary_output.push_str(&verification_tables);
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Position verification statistics rendered in {} ms",
+                "Position verification statistics built in {} ms",
                 verification_start.elapsed().as_millis()
             )
         );
     }
 
-    // Display frozen account cooldowns if any exist
+    // Build frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
     if !active_cooldowns.is_empty() {
-        println!("\n❄️ Frozen Account Cooldowns");
+        summary_output.push_str("\n❄️ Frozen Account Cooldowns\n");
         for (mint, remaining_minutes) in active_cooldowns {
             let short_mint = format!("{}...", &mint[..8]);
-            println!("  {} - {} minutes remaining", short_mint, remaining_minutes);
+            summary_output.push_str(&format!("  {} - {} minutes remaining\n", short_mint, remaining_minutes));
         }
     }
 
-    println!("");
+    summary_output.push_str("\n");
 
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
             &format!(
-                "Bot summary display generation complete in {} ms",
+                "Bot summary build generation complete in {} ms",
                 fn_start.elapsed().as_millis()
             )
         );
     }
+
+    summary_output
+}
+
+/// Display comprehensive bot summary with detailed statistics and performance metrics (backwards compatibility)
+pub async fn display_bot_summary(closed_positions: &[&Position]) {
+    let summary = build_bot_summary(closed_positions).await;
+    print!("{}", summary);
+}
+
+/// Convenience function to display bot summary using current positions (backwards compatibility)
+pub async fn display_current_bot_summary() {
+    let summary = build_current_bot_summary().await;
+    print!("{}", summary);
+}
+
+/// Display wallet transaction statistics (backwards compatibility)
+pub fn display_transactions_statistics() {
+    let tx_tables = build_transactions_statistics_tables();
+    print!("{}", tx_tables);
+}
+
+/// Display transaction finalization statistics (backwards compatibility)
+pub fn display_transaction_finalization_statistics() {
+    let finalization_tables = build_transaction_finalization_statistics_tables();
+    print!("{}", finalization_tables);
+}
+
+/// Display position verification statistics (backwards compatibility)
+pub fn display_position_verification_statistics() {
+    let verification_tables = build_position_verification_statistics_tables();
+    print!("{}", verification_tables);
+}
+
+/// Display RPC usage statistics (backwards compatibility)
+fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
+    let rpc_tables = build_rpc_statistics_tables(rpc_stats);
+    print!("{}", rpc_tables);
 }
 
 /// Calculate consecutive win/loss streaks
@@ -944,11 +997,12 @@ fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
     (best_win_streak, worst_loss_streak)
 }
 
-/// Display RPC usage statistics
-fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
+/// Build RPC usage statistics tables and return as string
+fn build_rpc_statistics_tables(rpc_stats: &crate::rpc::RpcStats) -> String {
+    let mut output = String::new();
     let total_calls = rpc_stats.total_calls();
     if total_calls == 0 {
-        return; // No calls to display
+        return output; // No calls to display
     }
 
     // RPC Overview
@@ -961,12 +1015,12 @@ fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
         uptime,
     };
 
-    println!("\n📡 RPC Overview");
+    output.push_str("\n📡 RPC Overview\n");
     let mut overview_table = Table::new(vec![rpc_overview]);
     overview_table
         .with(Style::rounded())
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-    println!("{}", overview_table);
+    output.push_str(&format!("{}\n", overview_table));
 
     // RPC URL Statistics (top 5)
     let mut url_stats: Vec<_> = rpc_stats.calls_per_url.iter().collect();
@@ -1002,12 +1056,12 @@ fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
             })
             .collect();
 
-        println!("\n🌐 RPC URL Usage (Top 5)");
+        output.push_str("\n🌐 RPC URL Usage (Top 5)\n");
         let mut url_table = Table::new(url_displays);
         url_table
             .with(Style::rounded())
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        println!("{}", url_table);
+        output.push_str(&format!("{}\n", url_table));
     }
 
     // RPC Method Statistics (top 10)
@@ -1033,20 +1087,24 @@ fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
             })
             .collect();
 
-        println!("\n⚙️ RPC Method Usage (Top 10)");
+        output.push_str("\n⚙️ RPC Method Usage (Top 10)\n");
         let mut method_table = Table::new(method_displays);
         method_table
             .with(Style::rounded())
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        println!("{}", method_table);
+        output.push_str(&format!("{}\n", method_table));
     }
+
+    output
 }
 
-/// Display wallet transaction statistics
-pub fn display_transactions_statistics() {
+/// Build wallet transaction statistics tables and return as string
+fn build_transactions_statistics_tables() -> String {
+    let mut output = String::new();
+    
     if let Some((cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)) = get_global_transactions_stats() {
-        println!("\n📝 WALLET TRANSACTION STATISTICS");
-        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        output.push_str("\n📝 WALLET TRANSACTION STATISTICS\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
         
         let periodic_status = if is_periodic_running {
             "🟢 Running (5s interval)".to_string()
@@ -1076,43 +1134,47 @@ pub fn display_transactions_statistics() {
             .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
             .to_string();
         
-        println!("{}", transaction_table);
+        output.push_str(&format!("{}\n", transaction_table));
         
         // Display sync efficiency metrics
-        println!("\n📊 Transaction Cache Efficiency:");
-        println!("   💾 Cache Status: {} signatures cached, {} fetched this session", cached_count, total_fetched);
+        output.push_str("\n📊 Transaction Cache Efficiency:\n");
+        output.push_str(&format!("   💾 Cache Status: {} signatures cached, {} fetched this session\n", cached_count, total_fetched));
         
         // Only show cache efficiency if we have meaningful data
         if total_fetched > 0 && cached_count >= total_fetched {
             let cache_efficiency = ((cached_count - total_fetched) as f64 / cached_count as f64) * 100.0;
-            println!("   � Cache Efficiency: {:.1}% ({} existing + {} new)", 
-                     cache_efficiency, cached_count - total_fetched, total_fetched);
+            output.push_str(&format!("   🎯 Cache Efficiency: {:.1}% ({} existing + {} new)\n", 
+                     cache_efficiency, cached_count - total_fetched, total_fetched));
         } else if total_fetched > 0 {
-            println!("   🔄 Fresh Session: {} new transactions fetched", total_fetched);
+            output.push_str(&format!("   🔄 Fresh Session: {} new transactions fetched\n", total_fetched));
         }
         
         if is_periodic_running {
-            println!("   🔄 Auto-sync: Active (checking every 5 seconds for new transactions)");
+            output.push_str("   🔄 Auto-sync: Active (checking every 5 seconds for new transactions)\n");
         } else {
-            println!("   ⚠️  Auto-sync: Inactive (manual sync only)");
+            output.push_str("   ⚠️  Auto-sync: Inactive (manual sync only)\n");
         }
         
         log(LogTag::Summary, "STATISTICS", &format!("Wallet transactions: {} cached, {} total, sync: {}", 
             cached_count, total_fetched, if is_periodic_running { "active" } else { "inactive" }));
     } else {
-        println!("\n📝 WALLET TRANSACTION STATISTICS");
-        println!("═══════════════════════════════════════════════════════════════════════════════════════");
-        println!("⚠️  Wallet transaction manager not initialized");
+        output.push_str("\n📝 WALLET TRANSACTION STATISTICS\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
+        output.push_str("⚠️  Wallet transaction manager not initialized\n");
         
         log(LogTag::Summary, "WARNING", "Wallet transaction manager not available for statistics");
     }
+    
+    output
 }
 
-/// Display transaction finalization statistics
-pub fn display_transaction_finalization_statistics() {
+/// Build transaction finalization statistics tables and return as string
+fn build_transaction_finalization_statistics_tables() -> String {
+    let mut output = String::new();
+    
     if let Some((total_finalized, pending_finalization, avg_finalization_time, last_batch_size, next_check_status)) = get_global_finalization_stats() {
-        println!("\n🔒 TRANSACTION FINALIZATION STATISTICS");
-        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        output.push_str("\n🔒 TRANSACTION FINALIZATION STATISTICS\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
         
         let finalization_display = vec![TransactionFinalizationDisplay {
             total_finalized: total_finalized.to_string(),
@@ -1127,48 +1189,51 @@ pub fn display_transaction_finalization_statistics() {
             .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
             .to_string();
         
-        println!("{}", finalization_table);
+        output.push_str(&format!("{}\n", finalization_table));
         
         // Display finalization efficiency metrics
-        println!("\n📊 Finalization Performance:");
+        output.push_str("\n📊 Finalization Performance:\n");
         
         if total_finalized > 0 {
-            println!("   🔒 Finalization Rate: {} transactions upgraded to finalized", total_finalized);
-            println!("   ⏱️  Average Time: {:.1} seconds from confirmed to finalized", avg_finalization_time);
+            output.push_str(&format!("   🔒 Finalization Rate: {} transactions upgraded to finalized\n", total_finalized));
+            output.push_str(&format!("   ⏱️  Average Time: {:.1} seconds from confirmed to finalized\n", avg_finalization_time));
         } else {
-            println!("   📋 No transactions finalized yet");
+            output.push_str("   📋 No transactions finalized yet\n");
         }
         
         if pending_finalization > 0 {
-            println!("   ⏳ Pending: {} confirmed transactions awaiting finalization", pending_finalization);
+            output.push_str(&format!("   ⏳ Pending: {} confirmed transactions awaiting finalization\n", pending_finalization));
         } else {
-            println!("   ✅ All cached transactions are finalized");
+            output.push_str("   ✅ All cached transactions are finalized\n");
         }
         
         if last_batch_size > 0 {
-            println!("   📦 Last Upgrade: {} transactions finalized in last check", last_batch_size);
+            output.push_str(&format!("   📦 Last Upgrade: {} transactions finalized in last check\n", last_batch_size));
         }
         
-        println!("   🔄 Next Check: {}", next_check_status);
+        output.push_str(&format!("   🔄 Next Check: {}\n", next_check_status));
         
         log(LogTag::Summary, "FINALIZATION", &format!("Finalization stats: {} finalized, {} pending, {:.1}s avg", 
             total_finalized, pending_finalization, avg_finalization_time));
     } else {
-        println!("\n🔒 TRANSACTION FINALIZATION STATISTICS");
-        println!("═══════════════════════════════════════════════════════════════════════════════════════");
-        println!("⚠️  Transaction finalization tracking not available");
+        output.push_str("\n🔒 TRANSACTION FINALIZATION STATISTICS\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
+        output.push_str("⚠️  Transaction finalization tracking not available\n");
         
         log(LogTag::Summary, "WARNING", "Transaction finalization statistics not available");
     }
+    
+    output
 }
 
-/// Display position verification statistics
-pub fn display_position_verification_statistics() {
+/// Build position verification statistics tables and return as string
+fn build_position_verification_statistics_tables() -> String {
+    let mut output = String::new();
     let (total_positions, entry_verified, exit_verified, unverified) = get_position_verification_stats();
     
     if total_positions > 0 {
-        println!("\n🔍 POSITION VERIFICATION STATISTICS");
-        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        output.push_str("\n🔍 POSITION VERIFICATION STATISTICS\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
         
         let entry_rate = if total_positions > 0 {
             (entry_verified as f64 / total_positions as f64 * 100.0)
@@ -1196,20 +1261,20 @@ pub fn display_position_verification_statistics() {
             .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
             .to_string();
         
-        println!("{}", verification_table);
+        output.push_str(&format!("{}\n", verification_table));
         
         // Display verification status details
-        println!("\n📊 Verification Status:");
-        println!("   ✅ Entry Transactions: {}/{} verified ({:.1}%)", 
-                 entry_verified, total_positions, entry_rate);
-        println!("   🚪 Exit Transactions: {}/{} verified ({:.1}%)", 
-                 exit_verified, total_positions, exit_rate);
+        output.push_str("\n📊 Verification Status:\n");
+        output.push_str(&format!("   ✅ Entry Transactions: {}/{} verified ({:.1}%)\n", 
+                 entry_verified, total_positions, entry_rate));
+        output.push_str(&format!("   🚪 Exit Transactions: {}/{} verified ({:.1}%)\n", 
+                 exit_verified, total_positions, exit_rate));
         
         if unverified > 0 {
-            println!("   ⏳ Unverified: {} positions pending verification", unverified);
-            println!("   🔄 Background verification: Active (checking every 60 seconds)");
+            output.push_str(&format!("   ⏳ Unverified: {} positions pending verification\n", unverified));
+            output.push_str("   🔄 Background verification: Active (checking every 60 seconds)\n");
         } else {
-            println!("   🎉 All positions fully verified!");
+            output.push_str("   🎉 All positions fully verified!\n");
         }
         
         log(LogTag::Summary, "VERIFICATION_STATS", &format!(
@@ -1217,12 +1282,14 @@ pub fn display_position_verification_statistics() {
             entry_verified, total_positions, exit_verified, total_positions, unverified
         ));
     } else {
-        println!("\n🔍 POSITION VERIFICATION STATISTICS");
-        println!("═══════════════════════════════════════════════════════════════════════════════════════");
-        println!("📝 No positions found");
+        output.push_str("\n🔍 POSITION VERIFICATION STATISTICS\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
+        output.push_str("📝 No positions found\n");
         
         log(LogTag::Summary, "INFO", "No positions found for verification statistics");
     }
+    
+    output
 }
 
 /// Calculate maximum drawdown percentage

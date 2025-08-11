@@ -463,8 +463,58 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 .clone()
                 .unwrap_or_default();
 
-            // IMMEDIATE: Create unverified position right after successful swap (with signature)
-            // This ensures position is created immediately when swap succeeds
+            // CRITICAL: Wait for transaction finalization before creating position
+            log(
+                LogTag::Trader,
+                "FINALIZATION_WAIT",
+                &format!(
+                    "⏳ Waiting for transaction finalization before creating position for {}: {}",
+                    token.symbol,
+                    &transaction_signature[..8]
+                )
+            );
+
+            // Use finalization guard to ensure transaction is finalized
+            match crate::finalization_guard::wait_for_finalization(&transaction_signature, 6).await {
+                Ok(true) => {
+                    log(
+                        LogTag::Trader,
+                        "FINALIZED",
+                        &format!(
+                            "✅ Transaction finalized for {}, proceeding with position creation: {}",
+                            token.symbol,
+                            &transaction_signature[..8]
+                        )
+                    );
+                }
+                Ok(false) => {
+                    log(
+                        LogTag::Trader,
+                        "TIMEOUT",
+                        &format!(
+                            "⏰ Transaction finalization timeout for {} - position NOT created: {}",
+                            token.symbol,
+                            &transaction_signature[..8]
+                        )
+                    );
+                    return; // Do not create position if not finalized
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!(
+                            "❌ Finalization check error for {} - position NOT created: {}",
+                            token.symbol,
+                            e
+                        )
+                    );
+                    return; // Do not create position on finalization error
+                }
+            }
+
+            // IMMEDIATE: Create verified position only after finalization
+            // This ensures position is created only when swap is permanently on blockchain
             let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
 
             let new_position = Position {
@@ -489,7 +539,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 profit_target_min: Some(profit_min),
                 profit_target_max: Some(profit_max),
                 liquidity_tier: calculate_liquidity_tier(token),
-                transaction_entry_verified: false, // UNVERIFIED initially
+                transaction_entry_verified: true, // VERIFIED because finalized
                 transaction_exit_verified: false,
                 entry_fee_lamports: None, // Will be updated when verified
                 exit_fee_lamports: None,
@@ -499,7 +549,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 LogTag::Trader,
                 "SUCCESS",
                 &format!(
-                    "✅ POSITION CREATED (UNVERIFIED): {} | TX: {} | Signal Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}%",
+                    "✅ POSITION CREATED (FINALIZED): {} | TX: {} | Signal Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}%",
                     token.symbol,
                     transaction_signature,
                     price,
@@ -517,7 +567,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                     LogTag::Trader,
                     "SAVED",
                     &format!(
-                        "💾 Unverified position saved to disk: {} - background verification will update",
+                        "💾 Finalized position saved to disk: {} - ready for trading",
                         token.symbol
                     )
                 );
@@ -568,7 +618,7 @@ pub async fn close_position(
     exit_price: f64,
     exit_time: DateTime<Utc>
 ) -> bool {
-    // CRITICAL: Check if entry transaction is verified before allowing position closure
+    // CRITICAL: Check if entry transaction is finalized before allowing position closure
     if !position.transaction_entry_verified {
         log(
             LogTag::Trader,
@@ -577,6 +627,44 @@ pub async fn close_position(
                 "⏳ Cannot close position for {} - entry transaction not yet verified. Waiting for background verification to complete",
                 position.symbol
             )
+        );
+        return false;
+    }
+
+    // ADDITIONAL: Ensure entry transaction is actually finalized
+    if let Some(ref entry_signature) = position.entry_transaction_signature {
+        match crate::finalization_guard::ensure_transaction_finalized(entry_signature).await {
+            Ok(true) => {
+                log(
+                    LogTag::Trader,
+                    "ENTRY_FINALIZED",
+                    &format!("✅ Entry transaction confirmed finalized for {}: {}", 
+                            position.symbol, &entry_signature[..8])
+                );
+            }
+            Ok(false) => {
+                log(
+                    LogTag::Trader,
+                    "ENTRY_NOT_FINALIZED",
+                    &format!("⏳ Entry transaction not finalized for {} - cannot close position: {}", 
+                            position.symbol, &entry_signature[..8])
+                );
+                return false;
+            }
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "ENTRY_CHECK_ERROR",
+                    &format!("❌ Error checking entry finalization for {}: {}", position.symbol, e)
+                );
+                return false;
+            }
+        }
+    } else {
+        log(
+            LogTag::Trader,
+            "NO_ENTRY_SIGNATURE",
+            &format!("❌ No entry transaction signature for {} - cannot verify finalization", position.symbol)
         );
         return false;
     }
@@ -748,6 +836,61 @@ pub async fn close_position(
                 let transaction_signature = swap_result.transaction_signature
                     .clone()
                     .unwrap_or_default();
+
+                // CRITICAL: Wait for exit transaction finalization before closing position
+                log(
+                    LogTag::Trader,
+                    "EXIT_FINALIZATION_WAIT",
+                    &format!(
+                        "⏳ Waiting for exit transaction finalization before closing position for {}: {}",
+                        position.symbol,
+                        &transaction_signature[..8]
+                    )
+                );
+
+                // Use finalization guard to ensure exit transaction is finalized
+                let exit_finalized = match crate::finalization_guard::wait_for_finalization(&transaction_signature, 6).await {
+                    Ok(true) => {
+                        log(
+                            LogTag::Trader,
+                            "EXIT_FINALIZED",
+                            &format!(
+                                "✅ Exit transaction finalized for {}, proceeding with position closure: {}",
+                                position.symbol,
+                                &transaction_signature[..8]
+                            )
+                        );
+                        true
+                    }
+                    Ok(false) => {
+                        log(
+                            LogTag::Trader,
+                            "EXIT_TIMEOUT",
+                            &format!(
+                                "⏰ Exit transaction finalization timeout for {} - position NOT closed: {}",
+                                position.symbol,
+                                &transaction_signature[..8]
+                            )
+                        );
+                        false
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Trader,
+                            "EXIT_ERROR",
+                            &format!(
+                                "❌ Exit finalization check error for {} - position NOT closed: {}",
+                                position.symbol,
+                                e
+                            )
+                        );
+                        false
+                    }
+                };
+
+                if !exit_finalized {
+                    return false; // Do not close position if exit not finalized
+                }
 
                 // Simplified approach - no complex transaction monitoring
                 log(

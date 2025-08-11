@@ -1878,6 +1878,27 @@ pub async fn analyze_post_swap_transaction(
         &signature[..8], direction
     ));
     
+    // CRITICAL: Ensure transaction is finalized before analysis
+    match crate::finalization_guard::ensure_transaction_finalized(signature).await {
+        Ok(true) => {
+            log(LogTag::Transactions, "FINALIZED", &format!(
+                "✅ Transaction {} is finalized, proceeding with analysis", &signature[..8]
+            ));
+        }
+        Ok(false) => {
+            return Err(format!(
+                "Transaction {} is not finalized yet - analysis requires finalized state", 
+                signature
+            ));
+        }
+        Err(e) => {
+            return Err(format!(
+                "Failed to verify finalization for {}: {}", 
+                signature, e
+            ));
+        }
+    }
+    
     // Use wallet transaction manager for cached transaction access
     use crate::transactions_manager::get_transaction_details_global;
     let transaction = get_transaction_details_global(signature).await

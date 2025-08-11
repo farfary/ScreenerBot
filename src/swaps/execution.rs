@@ -12,6 +12,25 @@ use crate::utils::get_wallet_address;
 use super::config::{SOL_MINT, GMGN_PARTNER, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS};
 use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, get_token_decimals_from_chain};
 
+/// Track transaction immediately at processed level for rapid feedback
+async fn track_transaction_at_processed_level(signature: &str) {
+    // Attempt to fetch transaction with processed commitment for immediate feedback
+    let rpc_client = crate::rpc::get_rpc_client();
+    
+    // Try to get transaction details with processed commitment (fastest response)
+    if let Ok(tx_data) = rpc_client.get_transaction_details_processed_rpc(signature).await {
+        // Add to transaction manager at processed level using global function
+        if let Err(e) = crate::transactions_manager::add_transaction_at_processed_level_global(signature, tx_data).await {
+            log(LogTag::Swap, "ERROR", &format!("Failed to track processed transaction {}: {}", &signature[..8], e));
+        } else {
+            log(LogTag::Swap, "PROCESSED", &format!("Transaction {} tracked at processed level", &signature[..8]));
+        }
+    } else {
+        // Transaction not yet visible at processed level - very fresh submission
+        log(LogTag::Swap, "SUBMITTED", &format!("Transaction {} submitted but not yet processed", &signature[..8]));
+    }
+}
+
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
     if request.input_mint.is_empty() {
@@ -436,6 +455,9 @@ pub async fn execute_swap_with_quote(
         "PENDING",
         &format!("Transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
+
+    // Immediately track transaction at processed level for rapid feedback
+    track_transaction_at_processed_level(&transaction_signature).await;
 
     // Add transaction to monitoring service instead of blocking verification
     let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
