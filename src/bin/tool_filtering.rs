@@ -11,13 +11,11 @@ use screenerbot::{
     filtering::{ should_buy_token, FilterReason },
     tokens::{
         cache::TokenDatabase,
-        types::{ Token, ApiToken },
+        types::Token,
         rugcheck::{ is_token_safe_for_trading, get_high_risk_issues },
-        api::{ get_global_dexscreener_api },
         init_dexscreener_api,
         get_token_rugcheck_data_safe,
     },
-    logger::{ log, LogTag },
     global::read_configs,
 };
 use std::collections::HashMap;
@@ -87,6 +85,7 @@ fn print_help() {
 }
 
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 struct FilteringStats {
     total_tokens: usize,
     passed_filtering: usize,

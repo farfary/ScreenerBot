@@ -5,7 +5,7 @@ use screenerbot::{
     global::read_configs,
     logger::{log, LogTag},
     swaps::{
-        get_best_quote, execute_best_swap,
+        get_best_quote,
         types::SOL_MINT,
     },
     utils::get_wallet_address,
@@ -24,7 +24,7 @@ async fn main() {
 
     // Known tokens for testing
     let usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    let bonk_mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+    let _bonk_mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
 
     match test_dual_router_comparison(test_sol_amount, usdc_mint, slippage, fee, anti_mev).await {
         Ok(_) => {

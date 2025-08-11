@@ -1,6 +1,5 @@
 use screenerbot::{
     global::{ read_configs, set_cmd_args, CACHE_PRICES_DIR },
-    logger::{ log, LogTag },
     tokens::{
         pool::{
             init_pool_service,

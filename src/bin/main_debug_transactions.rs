@@ -388,11 +388,6 @@ fn print_analysis_insights(analysis: &screenerbot::transactions_detector::Transa
     println!();
 }
 
-fn display_transaction_result(result: &screenerbot::transactions_detector::TransactionAnalysis) {
-    print_transaction_analysis(result, ""); // Pass empty signature since we don't have it in the struct
-    print_analysis_insights(result);
-}
-
 fn print_transaction_statistics(stats: &TransactionStats) {
     println!();
     println!("{}", "📊 TRANSACTION STATISTICS".bright_green().bold());

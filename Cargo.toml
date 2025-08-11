@@ -7,22 +7,32 @@ edition = "2021"
 [workspace]
 resolver = "2"
 
-# Development profile - Fastest compilation for debugging (ALWAYS USE THIS)
+# Dev profile — fastest possible compile + good debugging
 [profile.dev]
-opt-level = 0         # No optimizations, fastest compile
-debug = 2             # Full debug info for better error messages
-incremental = true    # Enable incremental compilation
-codegen-units = 256   # Maximum parallelism for fastest builds
-lto = false           # Disable link-time optimization
-panic = "unwind"      # Keep unwinding for better debugging
+opt-level = 0
+debug = 1
+incremental = true
+codegen-units = 256
+lto = false
+panic = "unwind"
 
-# Release profile - Normal optimized build (rarely needed)
+# Release profile — optimized but still fast to compile
 [profile.release]
-opt-level = 2         # Moderate optimization
-lto = "thin"          # Light link-time optimization
-codegen-units = 16    # Balanced compilation
-debug = true          # Keep debug info
-panic = "abort"       # Smaller binary size
+opt-level = 3         # Full optimizations for runtime speed
+lto = "thin"          # Faster LTO than "fat"
+codegen-units = 1     # Better runtime perf (slower compile, but still reasonable)
+incremental = false   # Avoids some LTO instability
+debug = false         # Smaller binary, faster link
+panic = "abort"       # Reduces binary size
+strip = "debuginfo"   # Strips symbols except needed for backtraces
+
+# Optional: profile for "fast-release" builds (good runtime perf, much faster than full release)
+[profile.fast-release]
+inherits = "release"
+lto = false
+codegen-units = 8
+opt-level = 2
+
 
 
 [lib]
@@ -33,37 +43,6 @@ path = "src/lib.rs"
 name = "screenerbot"
 path = "src/main.rs"
 
-[[bin]]
-name = "debug_transaction_verification"
-path = "src/bin/debug_transaction_verification.rs"
-
-[[bin]]
-name = "update_position_verification"
-path = "src/bin/update_position_verification.rs"
-
-[[bin]]
-name = "tool_ata_cleanup"
-path = "src/bin/tool_ata_cleanup.rs"
-
-[[bin]]
-name = "tool_pool_price"
-path = "src/bin/tool_pool_price.rs"
-
-[[bin]]
-name = "tool_price_history_cache"
-path = "src/bin/tool_price_history_cache.rs"
-
-[[bin]]
-name = "tool_wallet_manager"
-path = "src/bin/tool_wallet_manager.rs"
-
-[[bin]]
-name = "tool_fix_exit_fees"
-path = "src/bin/tool_fix_exit_fees.rs"
-
-[[bin]]
-name = "tool_verify_fees"
-path = "src/bin/tool_verify_fees.rs"
 
 
 [dependencies]

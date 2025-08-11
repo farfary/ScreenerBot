@@ -1,6 +1,6 @@
 /// Test script to verify debug summary functionality in summary functions
 use screenerbot::{
-    logger::{log, LogTag, init_file_logging},
+    logger::init_file_logging,
     global::{set_cmd_args, is_debug_summary_enabled},
     summary::display_current_bot_summary,
 };

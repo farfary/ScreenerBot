@@ -1,7 +1,7 @@
 use chrono::Utc;
 use screenerbot::{
     logger::{ log, LogTag },
-    global::{ read_configs },
+    global::read_configs,
     rl_learning::{ get_trading_learner, LearningRecord },
 };
 

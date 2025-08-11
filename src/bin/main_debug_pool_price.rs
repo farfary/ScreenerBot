@@ -20,7 +20,6 @@ use screenerbot::global::set_cmd_args;
 use clap::{ Arg, Command };
 use std::time::Duration;
 use std::str::FromStr;
-use solana_sdk::pubkey::Pubkey;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -759,48 +758,6 @@ fn extract_reserves_from_raydium_legacy(data: &[u8]) -> Option<(u64, u64)> {
     }
 
     None
-}
-
-/// Search for vault addresses in pool data
-async fn search_for_vault_addresses(data: &[u8], pool_type: &str) {
-    log(
-        LogTag::Pool,
-        "VAULT_SEARCH",
-        &format!("🔍 Searching for vault addresses in {} pool", pool_type)
-    );
-
-    // Look for 32-byte sequences that could be pubkeys
-    let mut vault_candidates = Vec::new();
-
-    for i in 0..data.len().saturating_sub(32) {
-        let potential_pubkey = &data[i..i + 32];
-
-        // Basic validation - pubkeys shouldn't be all zeros or all 255s
-        if !potential_pubkey.iter().all(|&b| b == 0) && !potential_pubkey.iter().all(|&b| b == 255) {
-            if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::try_from(potential_pubkey) {
-                // Check if this could be a token account by fetching it
-                if let Ok(account) = get_rpc_client().get_account(&pubkey).await {
-                    // Token accounts are owned by the SPL Token program
-                    if account.owner.to_string() == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
-                        vault_candidates.push((i, pubkey.to_string()));
-                    }
-                }
-            }
-        }
-    }
-
-    if vault_candidates.is_empty() {
-        log(LogTag::Pool, "NO_VAULTS", "❌ No vault addresses found");
-    } else {
-        log(
-            LogTag::Pool,
-            "VAULTS_FOUND",
-            &format!("✅ Found {} potential vault addresses:", vault_candidates.len())
-        );
-        for (offset, address) in vault_candidates {
-            log(LogTag::Pool, "VAULT", &format!("  Offset {}: {}", offset, address));
-        }
-    }
 }
 
 /// Test monitoring service
