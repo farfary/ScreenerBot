@@ -100,6 +100,9 @@ pub struct CachedTransactionData {
     pub signature: String,
     pub transaction_data: EncodedConfirmedTransactionWithStatusMeta,
     pub cached_at: DateTime<Utc>,
+    pub commitment_level: String, // "confirmed" or "finalized"
+    pub finalized_at: Option<DateTime<Utc>>,
+    pub slot: u64, // For finalization time estimation
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +114,9 @@ pub struct WalletSyncState {
     pub last_sync_time: DateTime<Utc>,
     pub cached_signatures: HashSet<String>,
     pub fetch_ranges: Vec<FetchRange>,
+    pub last_finalization_check: DateTime<Utc>,
+    pub confirmed_awaiting_finalization: HashSet<String>, // Signatures pending finalization
+    pub finalization_stats: FinalizationStats,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +125,15 @@ pub struct FetchRange {
     pub end_signature: Option<String>,
     pub fetched_at: DateTime<Utc>,
     pub transaction_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalizationStats {
+    pub total_finalized: usize,
+    pub pending_finalization: usize,
+    pub average_finalization_time_seconds: f64,
+    pub last_finalization_batch_size: usize,
+    pub finalization_errors: usize,
 }
 
 impl Default for WalletSyncState {
@@ -131,7 +146,60 @@ impl Default for WalletSyncState {
             last_sync_time: Utc::now(),
             cached_signatures: HashSet::new(),
             fetch_ranges: Vec::new(),
+            last_finalization_check: Utc::now(),
+            confirmed_awaiting_finalization: HashSet::new(),
+            finalization_stats: FinalizationStats::default(),
         }
+    }
+}
+
+impl Default for FinalizationStats {
+    fn default() -> Self {
+        Self {
+            total_finalized: 0,
+            pending_finalization: 0,
+            average_finalization_time_seconds: 0.0,
+            last_finalization_batch_size: 0,
+            finalization_errors: 0,
+        }
+    }
+}
+
+impl CachedTransactionData {
+    /// Create new CachedTransactionData with confirmed commitment level
+    pub fn new_confirmed(signature: String, transaction_data: EncodedConfirmedTransactionWithStatusMeta) -> Self {
+        let slot = transaction_data.slot;
+        Self {
+            signature,
+            transaction_data,
+            cached_at: Utc::now(),
+            commitment_level: "confirmed".to_string(),
+            finalized_at: None,
+            slot,
+        }
+    }
+    
+    /// Upgrade transaction to finalized status
+    pub fn upgrade_to_finalized(&mut self, finalized_transaction_data: EncodedConfirmedTransactionWithStatusMeta) {
+        // Extract slot before moving the data
+        let finalized_slot = finalized_transaction_data.slot;
+        
+        self.transaction_data = finalized_transaction_data;
+        self.commitment_level = "finalized".to_string();
+        self.finalized_at = Some(Utc::now());
+        // Update slot with finalized data
+        self.slot = finalized_slot;
+    }
+    
+    /// Check if transaction is eligible for finalization upgrade (older than 3 minutes)
+    pub fn is_eligible_for_finalization(&self) -> bool {
+        self.commitment_level == "confirmed" && 
+        Utc::now().signed_duration_since(self.cached_at).num_minutes() >= 3
+    }
+    
+    /// Get estimated finalization time (confirmed + ~1-2 minutes)
+    pub fn estimated_finalization_time(&self) -> DateTime<Utc> {
+        self.cached_at + chrono::Duration::minutes(2)
     }
 }
 
@@ -200,6 +268,33 @@ pub fn get_global_transactions_stats() -> Option<(usize, usize, String, bool, Op
     let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
     if let Some(ref manager) = *manager_lock {
         Some(manager.get_detailed_sync_stats())
+    } else {
+        None
+    }
+}
+
+/// Get global finalization statistics for summary display
+pub fn get_global_finalization_stats() -> Option<(usize, usize, f64, usize, String)> {
+    let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
+    if let Some(ref manager) = *manager_lock {
+        let stats = &manager.sync_state.finalization_stats;
+        let next_check_in = {
+            let minutes_since_last = Utc::now().signed_duration_since(manager.sync_state.last_finalization_check).num_minutes();
+            (5 - minutes_since_last).max(0)
+        };
+        let next_check_status = if next_check_in == 0 {
+            "ready for next check".to_string()
+        } else {
+            format!("next check in {}m", next_check_in)
+        };
+        
+        Some((
+            stats.total_finalized,
+            stats.pending_finalization,
+            stats.average_finalization_time_seconds,
+            stats.last_finalization_batch_size,
+            next_check_status,
+        ))
     } else {
         None
     }
@@ -441,6 +536,12 @@ async fn perform_periodic_sync_check() {
             for sig_info in &latest_signatures {
                 if !manager.sync_state.cached_signatures.contains(&sig_info.signature) {
                     new_signatures.push(sig_info.signature.clone());
+                } else {
+                    // Hit a cached transaction - stop here as we're up to date
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "DEBUG", &format!("Found cached transaction {}, stopping periodic sync check", &sig_info.signature[..8]));
+                    }
+                    break;
                 }
             }
         } else {
@@ -469,11 +570,10 @@ async fn perform_periodic_sync_check() {
                 
                 // Update cached transactions  
                 for (sig, tx) in new_transactions {
-                    manager.transaction_cache.insert(sig.clone(), CachedTransactionData {
-                        signature: sig,
-                        transaction_data: tx,
-                        cached_at: Utc::now(),
-                    });
+                    let cached_data = CachedTransactionData::new_confirmed(sig.clone(), tx);
+                    manager.transaction_cache.insert(sig.clone(), cached_data);
+                    // Add to pending finalization tracking
+                    manager.sync_state.confirmed_awaiting_finalization.insert(sig);
                 }
                 
                 // Save sync state (outside the lock to avoid blocking)
@@ -492,6 +592,9 @@ async fn perform_periodic_sync_check() {
     } else if is_debug_transactions_enabled() {
         log(LogTag::Transactions, "DEBUG", "No new transactions found in periodic sync");
     }
+    
+    // Perform finalization upgrade check for confirmed transactions
+    perform_finalization_upgrade_check(&rpc_client).await;
 }
 
 /// Helper function to fetch wallet signatures without holding manager lock
@@ -510,6 +613,165 @@ async fn fetch_wallet_signatures_standalone(
     
     log(LogTag::Transactions, "SUCCESS", &format!("Retrieved {} signatures from main RPC", signatures.len()));
     Ok(signatures)
+}
+
+/// Perform finalization upgrade check for confirmed transactions that are eligible
+async fn perform_finalization_upgrade_check(rpc_client: &RpcClient) {
+    // Check if enough time has passed since last finalization check (run every 5 minutes)
+    let should_check = {
+        let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
+        if let Some(ref manager) = *manager_lock {
+            let time_since_last_check = Utc::now().signed_duration_since(manager.sync_state.last_finalization_check);
+            time_since_last_check.num_minutes() >= 5
+        } else {
+            false
+        }
+    };
+    
+    if !should_check {
+        return;
+    }
+    
+    // Get transactions eligible for finalization upgrade
+    let eligible_signatures = {
+        let manager_lock = TRANSACTIONS_MANAGER.read().unwrap();
+        if let Some(ref manager) = *manager_lock {
+            let mut eligible = Vec::new();
+            
+            // Find confirmed transactions older than 3 minutes
+            for (signature, cached_tx) in &manager.transaction_cache {
+                if cached_tx.is_eligible_for_finalization() {
+                    eligible.push(signature.clone());
+                }
+            }
+            
+            // Limit batch size to avoid overwhelming RPC
+            eligible.into_iter().take(10).collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        }
+    };
+    
+    if eligible_signatures.is_empty() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "No transactions eligible for finalization upgrade");
+        }
+        return;
+    }
+    
+    log(LogTag::Transactions, "FINALIZATION", &format!("Checking {} transactions for finalization upgrade", eligible_signatures.len()));
+    
+    // Fetch finalized versions of these transactions
+    let finalized_transactions = match fetch_finalized_transactions_batch(&eligible_signatures, rpc_client).await {
+        Ok(txs) => txs,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch finalized transactions: {}", e));
+            return;
+        }
+    };
+    
+    if finalized_transactions.is_empty() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "DEBUG", "No finalized transactions available yet");
+        }
+        return;
+    }
+    
+    log(LogTag::Transactions, "SUCCESS", &format!("Successfully fetched {} finalized transactions for upgrade", finalized_transactions.len()));
+    
+    // Update transactions to finalized status
+    let finalization_start_time = Utc::now();
+    let mut upgrade_count = 0;
+    
+    {
+        let mut manager_lock = TRANSACTIONS_MANAGER.write().unwrap();
+        if let Some(ref mut manager) = *manager_lock {
+            for (signature, finalized_tx) in finalized_transactions {
+                if let Some(cached_tx) = manager.transaction_cache.get_mut(&signature) {
+                    // Calculate finalization time for statistics
+                    let finalization_time = Utc::now().signed_duration_since(cached_tx.cached_at).num_seconds() as f64;
+                    
+                    // Upgrade to finalized
+                    cached_tx.upgrade_to_finalized(finalized_tx);
+                    
+                    // Remove from pending finalization
+                    manager.sync_state.confirmed_awaiting_finalization.remove(&signature);
+                    
+                    // Update statistics
+                    manager.sync_state.finalization_stats.total_finalized += 1;
+                    
+                    // Update running average finalization time
+                    let current_avg = manager.sync_state.finalization_stats.average_finalization_time_seconds;
+                    let total_finalized = manager.sync_state.finalization_stats.total_finalized as f64;
+                    manager.sync_state.finalization_stats.average_finalization_time_seconds = 
+                        (current_avg * (total_finalized - 1.0) + finalization_time) / total_finalized;
+                    
+                    upgrade_count += 1;
+                    
+                    if is_debug_transactions_enabled() {
+                        log(LogTag::Transactions, "UPGRADE", &format!(
+                            "Transaction {} upgraded to finalized ({:.1}s finalization time)", 
+                            &signature[..8], finalization_time
+                        ));
+                    }
+                    
+                    // Save updated transaction to disk
+                    let cache_file = manager.cache_dir.join(format!("{}.json", signature));
+                    if let Ok(content) = serde_json::to_string_pretty(cached_tx) {
+                        if let Err(e) = fs::write(&cache_file, content) {
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "ERROR", &format!("Failed to save finalized transaction {}: {}", &signature[..8], e));
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Update finalization check timestamp and statistics
+            manager.sync_state.last_finalization_check = Utc::now();
+            manager.sync_state.finalization_stats.last_finalization_batch_size = upgrade_count;
+            manager.sync_state.finalization_stats.pending_finalization = manager.sync_state.confirmed_awaiting_finalization.len();
+            
+            // Save sync state
+            let sync_state_clone = manager.sync_state.clone();
+            let sync_state_file = manager.sync_state_file.clone();
+            drop(manager_lock);
+            
+            // Save to disk outside of lock
+            if let Err(e) = save_sync_state_to_file(&sync_state_clone, &sync_state_file) {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "ERROR", &format!("Failed to save sync state after finalization: {}", e));
+                }
+            }
+        }
+    }
+    
+    if upgrade_count > 0 {
+        log(LogTag::Transactions, "SUCCESS", &format!(
+            "Upgraded {} transactions to finalized status in {:.2}s", 
+            upgrade_count, 
+            Utc::now().signed_duration_since(finalization_start_time).num_milliseconds() as f64 / 1000.0
+        ));
+    }
+}
+
+/// Fetch finalized versions of transactions using finalized commitment level
+async fn fetch_finalized_transactions_batch(
+    signatures: &[String],
+    rpc_client: &RpcClient,
+) -> Result<Vec<(String, EncodedConfirmedTransactionWithStatusMeta)>, Box<dyn std::error::Error>> {
+    if signatures.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    log(LogTag::Transactions, "FINALIZED_RPC", &format!("Fetching {} transactions with finalized commitment", signatures.len()));
+    
+    // Use premium RPC with finalized commitment for reliability
+    let finalized_transactions = rpc_client.batch_get_transaction_details_finalized_rpc(signatures).await
+        .map_err(|e| format!("Failed to fetch finalized transactions: {}", e))?;
+    
+    log(LogTag::Transactions, "SUCCESS", &format!("Successfully fetched {}/{} finalized transactions", finalized_transactions.len(), signatures.len()));
+    Ok(finalized_transactions)
 }
 
 /// Helper function to fetch transaction details without holding manager lock
@@ -725,6 +987,12 @@ impl TransactionsManager {
         for sig_info in &latest_signatures {
             if !self.sync_state.cached_signatures.contains(&sig_info.signature) {
                 new_signatures.push(sig_info.signature.clone());
+            } else {
+                // Hit a cached transaction - stop here as we're up to date
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "DEBUG", &format!("Found cached transaction {}, stopping periodic sync", &sig_info.signature[..8]));
+                }
+                break;
             }
         }
         
@@ -754,6 +1022,10 @@ impl TransactionsManager {
         for sig_info in &latest_signatures {
             if !self.sync_state.cached_signatures.contains(&sig_info.signature) {
                 new_signatures.push(sig_info.signature.clone());
+            } else {
+                // Found a transaction we already have - stop here to avoid unnecessary fetching
+                log(LogTag::Transactions, "INFO", &format!("Found cached transaction {}, stopping fetch to avoid redundant work", &sig_info.signature[..8]));
+                break;
             }
         }
         
@@ -764,19 +1036,22 @@ impl TransactionsManager {
             log(LogTag::Transactions, "INFO", "All recent transactions are already cached");
         }
         
-        // If this is the first sync or we need more history, fetch older transactions
-        if self.sync_state.total_transactions_fetched < 1000 {
-            log(LogTag::Transactions, "INFO", "Fetching transaction history for complete coverage");
-            self.fetch_transaction_history(rpc_client).await?;
+        // Only fetch historical transactions if this is the first time (no cached signatures)
+        // and we have less than 100 transactions. Don't fetch thousands unnecessarily.
+        if self.sync_state.cached_signatures.is_empty() && self.sync_state.total_transactions_fetched < 100 {
+            log(LogTag::Transactions, "INFO", "First sync - fetching initial transaction history (limited to 100)");
+            self.fetch_initial_transaction_history(rpc_client).await?;
         }
         
         Ok(())
     }
     
-    async fn fetch_transaction_history(&mut self, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
+    async fn fetch_initial_transaction_history(&mut self, rpc_client: &RpcClient) -> Result<(), Box<dyn std::error::Error>> {
         let mut before_signature = self.sync_state.oldest_signature.clone();
-        let batch_size = 100;
-        let max_total = 1000; // Limit to reasonable number
+        let batch_size = 50;
+        let max_total = 100; // Much more reasonable limit for initial sync
+        
+        log(LogTag::Transactions, "INFO", &format!("Fetching initial transaction history (max {} transactions)", max_total));
         
         while self.sync_state.total_transactions_fetched < max_total {
             let signatures = self.fetch_wallet_signatures(rpc_client, batch_size, before_signature.as_deref()).await?;
@@ -796,11 +1071,15 @@ impl TransactionsManager {
             for sig_info in &signatures {
                 if !self.sync_state.cached_signatures.contains(&sig_info.signature) {
                     new_signatures.push(sig_info.signature.clone());
+                } else {
+                    // Hit a transaction we already have - stop fetching to avoid redundancy
+                    log(LogTag::Transactions, "INFO", &format!("Found existing transaction {}, stopping initial history fetch", &sig_info.signature[..8]));
+                    return Ok(());
                 }
             }
             
             if !new_signatures.is_empty() {
-                log(LogTag::Transactions, "INFO", &format!("Fetching {} historical transactions", new_signatures.len()));
+                log(LogTag::Transactions, "INFO", &format!("Fetching {} initial historical transactions", new_signatures.len()));
                 self.fetch_and_cache_transactions(rpc_client, &new_signatures).await?;
             }
             
@@ -815,11 +1094,12 @@ impl TransactionsManager {
             
             // Break if we didn't get a full batch (reached the end)
             if signatures.len() < batch_size {
-                log(LogTag::Transactions, "INFO", "Reached end of transaction history");
+                log(LogTag::Transactions, "INFO", "Reached end of available transaction history");
                 break;
             }
         }
         
+        log(LogTag::Transactions, "SUCCESS", &format!("Initial history fetch completed, {} total transactions fetched", self.sync_state.total_transactions_fetched));
         Ok(())
     }
     
@@ -928,11 +1208,7 @@ impl TransactionsManager {
             })?;
         
         // Create cached data
-        let cached_tx = CachedTransactionData {
-            signature: sig_str.clone(),
-            transaction_data: tx_result,
-            cached_at: Utc::now(),
-        };
+        let cached_tx = CachedTransactionData::new_confirmed(sig_str.clone(), tx_result);
         
         // Save to disk
         let cache_file = self.cache_dir.join(format!("{}.json", sig_str));
@@ -978,11 +1254,7 @@ impl TransactionsManager {
             .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error + Send + Sync>)?;
         
         // Create cached data
-        let cached_tx = CachedTransactionData {
-            signature: signature_str.to_string(),
-            transaction_data: tx_result,
-            cached_at: Utc::now(),
-        };
+        let cached_tx = CachedTransactionData::new_confirmed(signature_str.to_string(), tx_result);
         
         // Save to disk
         let content = serde_json::to_string_pretty(&cached_tx)

@@ -9,7 +9,7 @@ use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
 use crate::global::{read_configs, Configs};
-use crate::transactions_manager::get_global_transactions_stats;
+use crate::transactions_manager::{get_global_transactions_stats, get_global_finalization_stats};
 use crate::position_verifier::get_position_verification_stats;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 // New pool price system is now integrated via background services
@@ -237,6 +237,21 @@ pub struct WalletTransactionDisplay {
     oldest_signature: String,
     #[tabled(rename = "🆕 Newest Signature")]
     newest_signature: String,
+}
+
+/// Display structure for transaction finalization statistics
+#[derive(Tabled)]
+pub struct TransactionFinalizationDisplay {
+    #[tabled(rename = "🔒 Total Finalized")]
+    total_finalized: String,
+    #[tabled(rename = "⏳ Pending Finalization")]
+    pending_finalization: String,
+    #[tabled(rename = "⏱️ Avg Finalization Time")]
+    average_finalization_time: String,
+    #[tabled(rename = "📦 Last Batch Size")]
+    last_batch_size: String,
+    #[tabled(rename = "🔄 Next Check")]
+    next_check_status: String,
 }
 
 /// Display structure for position verification statistics
@@ -841,6 +856,23 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
         );
     }
 
+    // Display transaction finalization statistics
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "Displaying transaction finalization statistics");
+    }
+    let finalization_start = Instant::now();
+    display_transaction_finalization_statistics();
+    if is_debug_summary_enabled() {
+        log(
+            LogTag::Summary,
+            "DEBUG",
+            &format!(
+                "Transaction finalization statistics rendered in {} ms",
+                finalization_start.elapsed().as_millis()
+            )
+        );
+    }
+
     // Display position verification statistics
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "Displaying position verification statistics");
@@ -1073,6 +1105,60 @@ pub fn display_transactions_statistics() {
         println!("⚠️  Wallet transaction manager not initialized");
         
         log(LogTag::Summary, "WARNING", "Wallet transaction manager not available for statistics");
+    }
+}
+
+/// Display transaction finalization statistics
+pub fn display_transaction_finalization_statistics() {
+    if let Some((total_finalized, pending_finalization, avg_finalization_time, last_batch_size, next_check_status)) = get_global_finalization_stats() {
+        println!("\n🔒 TRANSACTION FINALIZATION STATISTICS");
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        
+        let finalization_display = vec![TransactionFinalizationDisplay {
+            total_finalized: total_finalized.to_string(),
+            pending_finalization: pending_finalization.to_string(),
+            average_finalization_time: format!("{:.1}s", avg_finalization_time),
+            last_batch_size: last_batch_size.to_string(),
+            next_check_status: next_check_status.clone(),
+        }];
+        
+        let finalization_table = Table::new(finalization_display)
+            .with(Style::modern())
+            .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
+            .to_string();
+        
+        println!("{}", finalization_table);
+        
+        // Display finalization efficiency metrics
+        println!("\n📊 Finalization Performance:");
+        
+        if total_finalized > 0 {
+            println!("   🔒 Finalization Rate: {} transactions upgraded to finalized", total_finalized);
+            println!("   ⏱️  Average Time: {:.1} seconds from confirmed to finalized", avg_finalization_time);
+        } else {
+            println!("   📋 No transactions finalized yet");
+        }
+        
+        if pending_finalization > 0 {
+            println!("   ⏳ Pending: {} confirmed transactions awaiting finalization", pending_finalization);
+        } else {
+            println!("   ✅ All cached transactions are finalized");
+        }
+        
+        if last_batch_size > 0 {
+            println!("   📦 Last Upgrade: {} transactions finalized in last check", last_batch_size);
+        }
+        
+        println!("   🔄 Next Check: {}", next_check_status);
+        
+        log(LogTag::Summary, "FINALIZATION", &format!("Finalization stats: {} finalized, {} pending, {:.1}s avg", 
+            total_finalized, pending_finalization, avg_finalization_time));
+    } else {
+        println!("\n🔒 TRANSACTION FINALIZATION STATISTICS");
+        println!("═══════════════════════════════════════════════════════════════════════════════════════");
+        println!("⚠️  Transaction finalization tracking not available");
+        
+        log(LogTag::Summary, "WARNING", "Transaction finalization statistics not available");
     }
 }
 

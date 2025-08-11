@@ -23,7 +23,7 @@
 const FORCE_PREMIUM_RPC_ONLY: bool = false;
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ read_configs, is_debug_wallet_enabled, RPC_STATS };
+use crate::global::{ read_configs, is_debug_wallet_enabled, is_debug_transactions_enabled, RPC_STATS };
 use crate::tokens::decimals::{LAMPORTS_PER_SOL};
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{
@@ -3170,6 +3170,80 @@ impl RpcClient {
         }
         
         log(LogTag::Rpc, "SUCCESS", &format!("Successfully fetched {}/{} transactions from premium RPC", successful_fetches, signatures.len()));
+        Ok(results)
+    }
+    
+    /// Batch get transaction details using finalized commitment level for transaction verification
+    /// This ensures we get the final, immutable state of transactions for important operations
+    pub async fn batch_get_transaction_details_finalized_rpc(
+        &self,
+        signatures: &[String]
+    ) -> Result<Vec<(String, solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta)>, SwapError> {
+        if signatures.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        // Use premium RPC for finalized operations to ensure reliability
+        let premium_client = if let Some(client) = self.create_premium_client() {
+            client
+        } else {
+            log(LogTag::Rpc, "WARNING", "No premium RPC available for finalized transactions, using main RPC");
+            self.client.clone()
+        };
+        
+        log(LogTag::Rpc, "FINALIZED", &format!("Batch fetching {} transaction details with finalized commitment", signatures.len()));
+        
+        let mut results = Vec::new();
+        let mut successful_fetches = 0;
+        let mut not_finalized_count = 0;
+        
+        for signature_str in signatures {
+            // Record call for each transaction
+            if self.premium_url.is_some() {
+                self.record_call_for_url(self.premium_url.as_ref().unwrap(), "get_transaction_finalized");
+            } else {
+                self.wait_for_rate_limit().await;
+                self.record_call("get_transaction_finalized");
+            }
+            
+            if let Ok(signature) = solana_sdk::signature::Signature::from_str(signature_str) {
+                match premium_client.get_transaction_with_config(
+                    &signature,
+                    solana_client::rpc_config::RpcTransactionConfig {
+                        encoding: Some(solana_transaction_status::UiTransactionEncoding::JsonParsed),
+                        commitment: Some(CommitmentConfig::finalized()), // Use finalized commitment
+                        max_supported_transaction_version: Some(0),
+                    }
+                ) {
+                    Ok(tx) => {
+                        results.push((signature_str.clone(), tx));
+                        successful_fetches += 1;
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        if error_msg.contains("Transaction not found") || error_msg.contains("null, expected struct") {
+                            not_finalized_count += 1;
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Rpc, "PENDING", &format!("Transaction {} not yet finalized", &signature_str[..8]));
+                            }
+                        } else {
+                            log(LogTag::Rpc, "ERROR", &format!("Failed to fetch finalized transaction {}: {}", &signature_str[..8], e));
+                        }
+                    }
+                }
+            }
+            
+            // Small delay between requests to avoid overwhelming RPC
+            if signatures.len() > 3 {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+        
+        if not_finalized_count > 0 {
+            log(LogTag::Rpc, "INFO", &format!("{}/{} transactions not yet finalized, will retry later", not_finalized_count, signatures.len()));
+        }
+        
+        log(LogTag::Rpc, "SUCCESS", &format!("Successfully fetched {}/{} finalized transactions", successful_fetches, signatures.len()));
         Ok(results)
     }
 }
