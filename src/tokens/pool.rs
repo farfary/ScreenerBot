@@ -1848,7 +1848,7 @@ impl PoolPriceService {
         };
 
         // Return success if we have pools and recent price data
-        Ok(has_cached_pools && (has_recent_price || has_cached_pools))
+        Ok(has_cached_pools)
     }
 
     /// Get current watch list
