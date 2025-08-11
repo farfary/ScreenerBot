@@ -1,19 +1,18 @@
-/// Comprehensive Transaction Detection and Analysis System
+/// Transaction Detection Engine Module
 /// 
-/// This module provides unified detection and analysis for various Solana transaction types:
-/// - Token swaps (BUY/SELL via Jupiter, Raydium, GMGN, Pump.fun)
-/// - SOL transfers (simple SOL to SOL transfers)
-/// - Token transfers (SPL token transfers)
-/// - Multi-hop swaps (token->USDC->SOL, etc.)
-/// - DEX interactions
-/// - DeFi protocol interactions
+/// This module provides the core transaction detection and classification system:
+/// - Advanced transaction type detection (swaps, transfers, DeFi, etc.)
+/// - Router-specific analysis (Jupiter, Pump.fun, Raydium, etc.)
+/// - Token balance change analysis and price calculation
+/// - Transaction direction classification (BUY/SELL)
+/// - Integration with TransactionsManager for cached data access
+///
+/// This module works as part of the unified transaction system:
+/// - TransactionsManager: Handles caching, fetching, and data management
+/// - TransactionsDetector: Core detection and classification logic (this module)
+/// - TransactionsTools: Analysis utilities and reporting tools
 /// 
-/// Key Features:
-/// - Router-agnostic detection (works with any DEX)
-/// - Comprehensive transaction type classification
-/// - Accurate direction detection (BUY vs SELL)    }
-
-    /// Safely convert a transaction instruction to string for displaytive price calculations
+/// IMPORTANT: Uses data structures from TransactionsManager to avoid duplication.
 /// - Fee analysis and separation
 /// - Multi-token transaction support
 
@@ -321,32 +320,57 @@ impl TransactionDetector {
     async fn analyze_token_changes(&self, transaction: &TransactionDetails, meta: &TransactionMeta) -> Result<Vec<TokenChange>, String> {
         let mut token_changes = Vec::new();
 
-        let wallet_pubkey = Pubkey::from_str(&self.wallet_address)
-            .map_err(|e| format!("Invalid wallet address: {}", e))?;
-
-        let account_keys = self.extract_account_keys(transaction)?;
-        let wallet_index = account_keys.iter().position(|key| *key == wallet_pubkey)
-            .ok_or_else(|| "Wallet not found in transaction".to_string())?;
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "TOKEN_ANALYSIS", &format!(
+                "🔍 Starting token change analysis - has pre_balances: {}, has post_balances: {}", 
+                meta.pre_token_balances.is_some(), meta.post_token_balances.is_some()
+            ));
+        }
 
         if let (Some(pre_balances), Some(post_balances)) = (&meta.pre_token_balances, &meta.post_token_balances) {
-            // Create maps for easier lookup
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "TOKEN_ANALYSIS", &format!(
+                    "📊 Token balances found - pre: {}, post: {}", 
+                    pre_balances.len(), post_balances.len()
+                ));
+            }
+
+            // Create maps for easier lookup by mint
             let mut pre_map = HashMap::new();
             let mut post_map = HashMap::new();
 
-            // Map pre-balances by account index and mint
+            // Map pre-balances - focus on wallet-owned accounts
             for balance in pre_balances {
-                if balance.account_index == wallet_index as u32 {
-                    if let Some(ui_amount) = balance.ui_token_amount.ui_amount {
-                        pre_map.insert(balance.mint.clone(), ui_amount);
+                if let Some(owner) = &balance.owner {
+                    if owner == &self.wallet_address {
+                        if let Some(ui_amount) = balance.ui_token_amount.ui_amount {
+                            if ui_amount > 0.0 {
+                                pre_map.insert(balance.mint.clone(), ui_amount);
+                                if is_debug_transactions_enabled() {
+                                    log(LogTag::Transactions, "TOKEN_ANALYSIS", &format!(
+                                        "📊 Pre-balance: {} = {:.6} (wallet-owned)", 
+                                        &balance.mint[..8], ui_amount
+                                    ));
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // Map post-balances by account index and mint
+            // Map post-balances - focus on wallet-owned accounts
             for balance in post_balances {
-                if balance.account_index == wallet_index as u32 {
-                    if let Some(ui_amount) = balance.ui_token_amount.ui_amount {
-                        post_map.insert(balance.mint.clone(), ui_amount);
+                if let Some(owner) = &balance.owner {
+                    if owner == &self.wallet_address {
+                        if let Some(ui_amount) = balance.ui_token_amount.ui_amount {
+                            post_map.insert(balance.mint.clone(), ui_amount);
+                            if is_debug_transactions_enabled() {
+                                log(LogTag::Transactions, "TOKEN_ANALYSIS", &format!(
+                                    "📊 Post-balance: {} = {:.6} (wallet-owned)", 
+                                    &balance.mint[..8], ui_amount
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -355,6 +379,12 @@ impl TransactionDetector {
             let mut all_mints: std::collections::HashSet<String> = std::collections::HashSet::new();
             all_mints.extend(pre_map.keys().cloned());
             all_mints.extend(post_map.keys().cloned());
+
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "TOKEN_ANALYSIS", &format!(
+                    "🔍 Analyzing changes for {} unique tokens", all_mints.len()
+                ));
+            }
 
             for mint in all_mints {
                 let pre_amount = pre_map.get(&mint).copied().unwrap_or(0.0);
@@ -379,12 +409,22 @@ impl TransactionDetector {
 
                     if is_debug_transactions_enabled() {
                         log(LogTag::Transactions, "TOKEN_CHANGE", &format!(
-                            "🪙 Token change: {} = {:.6} (pre: {:.6}, post: {:.6})", 
+                            "🪙 Significant token change: {} = {:.6} (pre: {:.6}, post: {:.6})", 
                             &mint[..8], amount_change, pre_amount, post_amount
                         ));
                     }
                 }
             }
+        } else {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "TOKEN_ANALYSIS", "⚠️ No token balance data available in transaction");
+            }
+        }
+
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "TOKEN_ANALYSIS", &format!(
+                "✅ Token analysis complete: {} significant changes found", token_changes.len()
+            ));
         }
 
         Ok(token_changes)

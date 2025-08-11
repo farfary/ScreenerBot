@@ -1,15 +1,18 @@
-/// Comprehensive Swap Transaction Discovery Tool
+/// Transaction Analysis Tools Module
 /// 
-/// This tool analyzes all wallet transactions to find swap operations:
-/// - Scans entire transaction history for swap patterns
-/// - Detects token purchases and sales from instruction analysis
-/// - Extracts swap amounts, prices, and fees
-/// - Identifies swap routers (Jupiter, Raydium, etc.)
-/// - Provides detailed swap analytics and statistics
-/// - Exports swap data to JSON for further analysis
+/// This module provides analysis tools and utilities for the unified transaction system:
+/// - Comprehensive swap analysis and reporting
+/// - Historical transaction analysis
+/// - Wallet-specific swap reports and analytics
+/// - Export functionality for transaction data
+/// - Integration with TransactionsManager for cached data access
 ///
-/// Usage:
-///   cargo run --bin tool_find_all_swaps [--wallet WALLET] [--limit LIMIT] [--export] [--detailed]
+/// This module works as part of the unified transaction system:
+/// - TransactionsManager: Handles caching, fetching, and data management
+/// - TransactionsDetector: Core detection and classification logic  
+/// - TransactionsTools: Analysis utilities and reporting tools (this module)
+/// 
+/// IMPORTANT: Uses data structures from TransactionsManager to avoid duplication.
 
 use crate::{
     rpc::{get_rpc_client, init_rpc_client, TransactionDetails, TokenBalance, TransactionMeta, TransactionData, UiTokenAmount},
@@ -33,13 +36,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use chrono::{DateTime, Utc};
-use std::sync::{Arc, Mutex};
-
-// Global storage for raw transaction JSON data
-lazy_static::lazy_static! {
-    static ref TRANSACTION_JSON_CACHE: Arc<Mutex<HashMap<String, serde_json::Value>>> = 
-        Arc::new(Mutex::new(HashMap::new()));
-}
 
 #[derive(Parser)]
 #[command(about = "Find and analyze all swap transactions in wallet history")]
@@ -930,7 +926,7 @@ async fn detect_swap_from_transaction(
             }
             return {
                 let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
-                    TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
+                    crate::transactions_manager::get_cached_transaction_json_global(signature).await
                 } else {
                     None
                 };
@@ -956,7 +952,7 @@ async fn detect_swap_from_transaction(
         }
         if let Some(result) = {
             let json_data = if let Some(signature) = transaction.transaction.signatures.get(0) {
-                TRANSACTION_JSON_CACHE.lock().ok().and_then(|cache| cache.get(signature).cloned())
+                crate::transactions_manager::get_cached_transaction_json_global(signature).await
             } else {
                 None
             };
@@ -1601,13 +1597,10 @@ async fn load_transaction_from_file(file_path: &Path) -> Result<Option<Transacti
     if let Some(transaction_data) = json_data.get("transaction_data") {
         // Convert to TransactionDetails format
         if let Ok(transaction_details) = convert_json_to_transaction_details(transaction_data) {
-            // Store the raw JSON data in the cache using the signature as key
+            // Transaction manager handles caching automatically
             if let Some(signature) = transaction_details.transaction.signatures.get(0) {
-                if let Ok(mut cache) = TRANSACTION_JSON_CACHE.lock() {
-                    cache.insert(signature.clone(), transaction_data.clone());
                 if is_debug_transactions_enabled() {
-                    log(LogTag::Transactions, "DEBUG", &format!("📊 Cached raw JSON for transaction: {}", signature));
-                }
+                    log(LogTag::Transactions, "DEBUG", &format!("📊 Transaction processed: {}", signature));
                 }
             }
             return Ok(Some(transaction_details));

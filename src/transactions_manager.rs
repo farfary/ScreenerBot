@@ -1,5 +1,19 @@
-/// Wallet Transaction Manager
-/// Manages wallet transaction fetching, caching, and analysis with efficient sync tracking
+/// Transaction Management System - Core Module
+/// 
+/// This module is the central transaction management system that provides:
+/// - Transaction caching and persistence (disk & memory)
+/// - Wallet transaction fetching and synchronization
+/// - Global transaction access and lifecycle management
+/// - Centralized data structures for transaction analysis
+/// - Background sync processes for wallet monitoring
+///
+/// UNIFIED TRANSACTION SYSTEM ARCHITECTURE:
+/// - TransactionsManager (this module): Core data management, caching, storage
+/// - TransactionsDetector: Transaction detection and classification engine  
+/// - TransactionsTools: Analysis utilities and reporting tools
+/// 
+/// IMPORTANT: This module contains ALL shared data structures and caching.
+/// Other transaction modules should import structures from here to avoid duplication.
 
 use crate::{
     rpc::RpcClient,
