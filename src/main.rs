@@ -100,31 +100,6 @@ async fn main() {
         "Pool price service with disk caching initialized and monitoring started"
     );
 
-    // Initialize wallet tracker for balance and value monitoring
-    if let Err(e) = screenerbot::wallet_tracker::init_wallet_tracker().await {
-        log(LogTag::System, "ERROR", &format!("Failed to initialize wallet tracker: {}", e));
-        std::process::exit(1);
-    }
-    log(LogTag::System, "INFO", "Wallet tracker initialized successfully");
-
-        // Initialize wallet transaction manager for enhanced transaction caching/analysis
-    if let Err(e) = screenerbot::transactions_manager::initialize_transactions_manager().await {
-        log(LogTag::System, "ERROR", &format!("Failed to initialize wallet transaction manager: {}", e));
-        return;
-    }
-    log(LogTag::System, "INFO", "Wallet transaction manager initialized successfully");
-
-    // Start wallet transaction periodic sync background service
-    let shutdown_transactions = shutdown.clone();
-    let transactions_handle = match screenerbot::transactions_manager::start_transactions_lifecycle_task(shutdown_transactions).await {
-        Ok(handle) => handle,
-        Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to start wallet transaction sync task: {}", e));
-            std::process::exit(1);
-        }
-    };
-    log(LogTag::System, "INFO", "Wallet transaction periodic sync task started successfully");
-
     let shutdown_tokens = shutdown.clone();
     let shutdown_pricing = shutdown.clone();
 
@@ -235,21 +210,12 @@ async fn main() {
         log(LogTag::Trader, "INFO", "Positions display task ended");
     });
 
-    // Start wallet tracker background service
-    let shutdown_wallet = shutdown.clone();
-    let wallet_tracker_handle = tokio::spawn(async move {
-        log(LogTag::Wallet, "INFO", "Wallet tracker service task started");
-        match screenerbot::wallet_tracker::start_wallet_tracking(shutdown_wallet).await {
-            Ok(handle) => {
-                if let Err(e) = handle.await {
-                    log(LogTag::Wallet, "ERROR", &format!("Wallet tracker task error: {:?}", e));
-                }
-            }
-            Err(e) => {
-                log(LogTag::Wallet, "ERROR", &format!("Failed to start wallet tracker: {}", e));
-            }
-        }
-        log(LogTag::Wallet, "INFO", "Wallet tracker service task ended");
+    // Start transaction manager background service
+    let shutdown_transactions = shutdown.clone();
+    let transaction_manager_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "Transaction manager service task started");
+        screenerbot::transactions_manager::start_transactions_manager_service(shutdown_transactions).await;
+        log(LogTag::System, "INFO", "Transaction manager service task ended");
     });
 
     log(
@@ -399,23 +365,6 @@ async fn main() {
                 );
             }
 
-            if let Err(e) = wallet_tracker_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Wallet tracker task failed to shutdown cleanly: {}", e)
-                );
-            }
-
-            // Wait for wallet transactions sync task
-            if let Err(e) = transactions_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("Wallet transactions sync task failed to shutdown cleanly: {}", e)
-                );
-            }
-
             // Wait for RPC stats auto-save service
             if let Err(e) = rpc_stats_handle.await {
                 log(
@@ -431,6 +380,15 @@ async fn main() {
                     LogTag::System,
                     "WARN",
                     &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
+                );
+            }
+
+            // Wait for transaction manager service
+            if let Err(e) = transaction_manager_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("Transaction manager task failed to shutdown cleanly: {}", e)
                 );
             }
 

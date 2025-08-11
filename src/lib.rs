@@ -1,3 +1,12 @@
+#![allow(warnings)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+#![allow(unused_mut)]
+#![allow(unreachable_code)]
+#![allow(unused_assignments)]
+#![allow(clippy::all)]
+
 pub mod global;
 pub mod utils;
 pub mod trader;
@@ -9,6 +18,7 @@ pub mod profit;
 pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;
+pub mod transactions_manager;
 pub mod entry;
 pub mod ohlcv_analysis;
 pub mod rl_learning;

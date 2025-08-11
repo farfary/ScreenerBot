@@ -188,35 +188,7 @@ pub struct RpcOverviewDisplay {
     uptime: String,
 }
 
-/// Display structure for wallet tracker statistics
-#[derive(Tabled)]
-pub struct WalletTrackerDisplay {
-    #[tabled(rename = "💰 Current Value")]
-    current_value: String,
-    #[tabled(rename = "📈 Change from Start")]
-    value_change: String,
-    #[tabled(rename = "📊 Change %")]
-    change_percent: String,
-    #[tabled(rename = "📅 Days Tracked")]
-    days_tracked: String,
-    #[tabled(rename = "🏆 Best Value")]
-    best_value: String,
-    #[tabled(rename = "📉 Worst Value")]
-    worst_value: String,
-}
 
-/// Display structure for wallet holdings breakdown
-#[derive(Tabled)]
-pub struct WalletHoldingsDisplay {
-    #[tabled(rename = "🏷️ Symbol")]
-    symbol: String,
-    #[tabled(rename = "💰 Balance")]
-    balance: String,
-    #[tabled(rename = "💵 Value (SOL)")]
-    value_sol: String,
-    #[tabled(rename = "📊 Percentage")]
-    percentage: String,
-}
 
 /// Display structure for wallet transaction statistics
 #[derive(Tabled)]
@@ -842,7 +814,7 @@ pub async fn display_current_bot_summary() {
 
 
 /// Display RPC usage statistics (backwards compatibility)
-fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
+pub fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
     let rpc_tables = build_rpc_statistics_tables(rpc_stats);
     print!("{}", rpc_tables);
 }
