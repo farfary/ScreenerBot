@@ -1,11 +1,4 @@
 #![allow(warnings)]
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_imports)]
-#![allow(unused_mut)]
-#![allow(unreachable_code)]
-#![allow(unused_assignments)]
-#![allow(clippy::all)]
 
 pub mod global;
 pub mod utils;
