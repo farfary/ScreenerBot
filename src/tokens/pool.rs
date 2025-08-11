@@ -7,7 +7,7 @@
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_pool_prices_enabled, CACHE_PRICES_DIR };
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
-use crate::tokens::decimals::{ get_token_decimals_from_chain, get_cached_decimals };
+use crate::tokens::decimals::{ get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;

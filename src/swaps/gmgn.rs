@@ -2,22 +2,16 @@
 /// Handles GMGN-specific API calls and swap execution
 
 use crate::tokens::Token;
-use crate::rpc::{SwapError, lamports_to_sol, get_premium_transaction_rpc};
+use crate::rpc::{SwapError, lamports_to_sol};
 use crate::logger::{log, LogTag};
-use crate::global::{read_configs, is_debug_swap_enabled};
-use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL};
+use crate::global::is_debug_swap_enabled;
 use super::config::{
-    GMGN_QUOTE_API, SOL_MINT, GMGN_ANTI_MEV, GMGN_PARTNER,
-    QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, QUOTE_TIMEOUT_SECS, 
-    API_TIMEOUT_SECS, RETRY_ATTEMPTS, GMGN_DEFAULT_SWAP_MODE,
+    GMGN_QUOTE_API, SOL_MINT, GMGN_PARTNER,
+    QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
     TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
-use super::execution::{sign_and_send_transaction, verify_swap_transaction};
-// Use utils for wallet address instead of transaction module
-use crate::utils::get_wallet_address;
-use super::types::{SwapData, SwapQuote, SwapRequest, GMGNApiResponse, deserialize_string_or_number, deserialize_optional_string_or_number};
+use super::types::{SwapData, GMGNApiResponse};
 
-use serde::{Deserialize, Serialize};
 use reqwest;
 
 /// GMGN swap result structure
@@ -39,7 +33,6 @@ pub struct GMGNSwapResult {
 /// Uses GMGN swap transaction format and premium RPC endpoints
 pub async fn gmgn_sign_and_send_transaction(
     swap_transaction_base64: &str,
-    configs: &crate::global::Configs
 ) -> Result<String, SwapError> {
     if is_debug_swap_enabled() {
         log(
@@ -49,14 +42,11 @@ pub async fn gmgn_sign_and_send_transaction(
         );
     }
 
-    // Use premium RPC for GMGN transactions
-    let selected_rpc = get_premium_transaction_rpc(configs);
-    
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
             "GMGN_RPC_SELECTED",
-            &format!("📡 GMGN: Using RPC endpoint: {}", &selected_rpc[..50])
+            "📡 GMGN: Using centralized RPC client"
         );
     }
     
@@ -399,8 +389,6 @@ pub async fn execute_gmgn_swap(
     input_amount: u64,
     swap_data: SwapData
 ) -> Result<GMGNSwapResult, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
-
     // Determine if this is SOL to token or token to SOL
     let is_sol_to_token = input_mint == SOL_MINT;
     let input_display = if is_sol_to_token {
@@ -424,13 +412,9 @@ pub async fn execute_gmgn_swap(
 
     let start_time = std::time::Instant::now();
 
-    // Get wallet address for logging
-    let wallet_address = get_wallet_address()?;
-
     // Sign and send the transaction using GMGN-specific method
     let transaction_signature = gmgn_sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction,
-        &configs
     ).await?;
 
     log(
@@ -438,17 +422,6 @@ pub async fn execute_gmgn_swap(
         "GMGN_PENDING",
         &format!("🔵 GMGN transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
-
-    // Add transaction to monitoring service instead of blocking verification
-    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
-    let amount_sol = if input_mint == SOL_MINT {
-        // Buy: input is SOL
-        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
-    } else {
-        // Sell: output is SOL  
-        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
-    };
 
     // Return success result - verification handled by signature-only analysis
     let execution_time = start_time.elapsed().as_secs_f64();

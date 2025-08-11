@@ -179,7 +179,7 @@ use crate::tokens::{
     monitor_tokens_once,
     get_token_price_blocking_safe,
     sync_watch_list_with_trader,
-    pool::{ get_pool_service, get_price_history_for_rl_learning },
+    pool::{ get_pool_service },
 };
 use crate::positions::{
     Position,
@@ -202,8 +202,7 @@ use crate::entry::{ should_buy };
 // =============================================================================
 
 use once_cell::sync::Lazy;
-use std::sync::{ Arc as StdArc, Mutex as StdMutex };
-use chrono::{ Utc, Duration as ChronoDuration, DateTime };
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use std::time::Duration;
@@ -649,7 +648,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Use centralized filtering system to get eligible tokens
         use crate::filtering::{ filter_tokens_with_reasons, get_filtering_stats };
 
-        let (eligible_tokens, rejected_tokens) = filter_tokens_with_reasons(&tokens);
+        let (eligible_tokens, _) = filter_tokens_with_reasons(&tokens);
 
         // Log filtering statistics
         let (total, passed, pass_rate) = get_filtering_stats(&tokens);
@@ -719,11 +718,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
         // Process all tokens in parallel with concurrent tasks
         let mut handles = Vec::new();
 
-        // Get the total token count before starting the loop
-        let total_tokens = tokens.len();
-        let token_processing_start = std::time::Instant::now();
         // Note: tokens are still sorted by liquidity from highest to lowest
-        for (index, token) in tokens.iter().enumerate() {
+        for token in tokens.iter() {
             // Check for shutdown before spawning tasks
             if
                 check_shutdown_or_delay(
@@ -905,11 +901,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     filter_start.elapsed().as_millis()
                                 )
                             );
-
-                            let liquidity_usd = token.liquidity
-                                .as_ref()
-                                .and_then(|l| l.usd)
-                                .unwrap_or(0.0);
 
                             // Price history is now handled by the pool service automatically
                             // No manual tracking needed here
@@ -1871,7 +1862,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                     update_position_tracking(&mut position, current_price);
 
                     // Calculate P&L using unified function with pool price
-                    let (pnl_sol, pnl_percent) = calculate_position_pnl(
+                    let (_, pnl_percent) = calculate_position_pnl(
                         &position,
                         Some(current_price)
                     );

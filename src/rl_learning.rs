@@ -6,7 +6,6 @@ use std::hash::{ Hash, Hasher };
 use chrono::{ DateTime, Utc };
 use tokio::time::{ Duration, interval };
 use tokio::sync::Notify;
-use tokio::fs;
 use serde::{ Deserialize, Serialize };
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::ensemble::random_forest_regressor::{
@@ -16,7 +15,7 @@ use smartcore::ensemble::random_forest_regressor::{
 use smartcore::api::{ SupervisedEstimator, Predictor };
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ is_debug_trader_enabled, is_debug_rl_learn_enabled, RL_LEARNING_RECORDS };
+use crate::global::{ is_debug_rl_learn_enabled, RL_LEARNING_RECORDS };
 use crate::tokens::pool::{ get_pool_service, get_price_history_for_rl_learning };
 use crate::positions::get_open_positions;
 

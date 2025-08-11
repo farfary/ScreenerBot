@@ -3,19 +3,18 @@
 /// Based on official Jupiter API documentation: https://dev.jup.ag/docs/swap-api/
 
 use crate::tokens::Token;
-use crate::tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS, LAMPORTS_PER_SOL};
+use crate::tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS};
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
-use crate::global::{is_debug_swap_enabled, is_debug_api_enabled, read_configs};
+use crate::global::{is_debug_swap_enabled, is_debug_api_enabled};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, JupiterQuoteResponse, JupiterSwapResponse};
 use super::config::{
     JUPITER_QUOTE_API, JUPITER_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
-    RETRY_ATTEMPTS, JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
-    JUPITER_DEFAULT_SWAP_MODE, SOL_MINT, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
+    JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
+    SOL_MINT, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
     TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
 
-use serde::{Deserialize, Serialize};
 use reqwest;
 use tokio::time::{Duration, timeout};
 
@@ -158,7 +157,7 @@ pub async fn get_jupiter_quote(
 
     let slippage_bps = ((slippage * 100.0) as u16).max(1).min(5000);
     
-    let mut params = vec![
+    let params = vec![
         ("inputMint".to_string(), input_mint.to_string()),
         ("outputMint".to_string(), output_mint.to_string()),
         ("amount".to_string(), input_amount.to_string()),
@@ -465,10 +464,8 @@ pub async fn execute_jupiter_swap(
     token: &Token,
     input_mint: &str,
     output_mint: &str,
-    input_amount: u64,
     swap_data: SwapData
 ) -> Result<JupiterSwapResult, SwapError> {
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
     let wallet_address = crate::utils::get_wallet_address()?;
 
     log(
@@ -483,9 +480,6 @@ pub async fn execute_jupiter_swap(
     );
 
     let start_time = std::time::Instant::now();
-
-    // Get wallet address for logging
-    let wallet_address = crate::utils::get_wallet_address()?;
 
     // Get swap transaction from Jupiter
     let jupiter_tx = get_jupiter_swap_transaction(
@@ -507,17 +501,6 @@ pub async fn execute_jupiter_swap(
         "JUPITER_PENDING",
         &format!("🟡 Jupiter transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
-
-    // Add transaction to monitoring service instead of blocking verification
-    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
-    let amount_sol = if input_mint == SOL_MINT {
-        // Buy: input is SOL
-        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
-    } else {
-        // Sell: output is SOL  
-        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
-    };
 
     // Simplified approach - no complex transaction monitoring
     log(

@@ -8,10 +8,10 @@ use crate::tokens::Token;
 use crate::tokens::pool::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
 use crate::logger::{ log, LogTag };
-use crate::global::{ is_debug_trader_enabled, is_debug_entry_enabled };
+use crate::global::{ is_debug_entry_enabled };
 use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
-use chrono::{ DateTime, Utc };
+use chrono::Utc;
 
 /// Helper function to get rugcheck score for a token
 pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
@@ -142,7 +142,6 @@ pub async fn should_buy(token: &Token) -> bool {
 
     // Enhanced entry decision with multiple strategies
     let entry_decision = analyze_entry_signals(
-        &token.symbol,
         current_pool_price,
         &price_history,
         &token
@@ -211,7 +210,6 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
 /// Advanced entry signal analysis with multiple strategies
 /// Returns Some(reason) if entry is recommended, None if rejected
 async fn analyze_entry_signals(
-    symbol: &str,
     current_price: f64,
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
     token: &Token
@@ -570,7 +568,6 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
     // Factor 1: Price history analysis (0-35 points)
     if
         let Some(reason) = analyze_entry_signals(
-            &token.symbol,
             current_pool_price,
             &price_history,
             token

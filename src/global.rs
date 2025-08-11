@@ -1,6 +1,6 @@
 use serde::{ Deserialize, Serialize };
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use chrono::{ DateTime, Utc };
@@ -39,6 +39,7 @@ pub const ENTRY_ANALYSIS: &str = "data/entry_analysis.json";
 /// Cache directories
 pub const CACHE_PRICES_DIR: &str = "data/cache_prices";
 pub const CACHE_OHLCVS_DIR: &str = "data/cache_ohlcvs";
+pub const TRANSACTIONS_CACHE_DIR: &str = "data/transactions";
 
 /// Log directory
 pub const LOGS_DIR: &str = "logs";
@@ -54,6 +55,7 @@ pub fn ensure_data_directories() -> Result<(), Box<dyn std::error::Error>> {
     // Create cache subdirectories
     fs::create_dir_all(CACHE_PRICES_DIR)?;
     fs::create_dir_all(CACHE_OHLCVS_DIR)?;
+    fs::create_dir_all(TRANSACTIONS_CACHE_DIR)?;
 
     // Create logs directory
     fs::create_dir_all(LOGS_DIR)?;
@@ -64,6 +66,11 @@ pub fn ensure_data_directories() -> Result<(), Box<dyn std::error::Error>> {
 /// Get the full path for a data file (convenience function)
 pub fn get_data_path(filename: &str) -> String {
     format!("{}/{}", DATA_DIR, filename)
+}
+
+/// Get the transactions cache directory path
+pub fn get_transactions_cache_dir() -> PathBuf {
+    PathBuf::from(TRANSACTIONS_CACHE_DIR)
 }
 
 // ================================================================================================

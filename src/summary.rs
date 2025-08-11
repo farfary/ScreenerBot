@@ -7,10 +7,6 @@ use crate::global::{STARTUP_TIME, is_debug_summary_enabled};
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
-use crate::wallet_tracker::{ get_wallet_summary, get_wallet_analysis };
-use crate::global::{read_configs, Configs};
-use crate::transactions_manager::{get_global_transactions_stats, get_global_finalization_stats};
-use crate::position_verifier::get_position_verification_stats;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
 // New pool price system is now integrated via background services
 
@@ -254,22 +250,7 @@ pub struct TransactionFinalizationDisplay {
     next_check_status: String,
 }
 
-/// Display structure for position verification statistics
-#[derive(Tabled)]
-pub struct PositionVerificationDisplay {
-    #[tabled(rename = "📊 Total Positions")]
-    total_positions: String,
-    #[tabled(rename = "✅ Entry Verified")]
-    entry_verified: String,
-    #[tabled(rename = "🚪 Exit Verified")]
-    exit_verified: String,
-    #[tabled(rename = "⏳ Unverified")]
-    unverified: String,
-    #[tabled(rename = "📈 Entry Rate")]
-    entry_verification_rate: String,
-    #[tabled(rename = "🚪 Exit Rate")]
-    exit_verification_rate: String,
-}
+
 
 /// Background task to display positions table every 10 seconds
 pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
@@ -564,8 +545,6 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         );
     }
 
-    let mut summary_output = String::new();
-
     // Get open positions count using existing function
     let open_count = get_open_positions_count();
 
@@ -658,7 +637,6 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 
     // Get wallet balance from wallet tracker
     let wallet_start = Instant::now();
-    let wallet_balance = get_wallet_summary().await;
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -689,7 +667,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 
     // Create display structures
     let overview = BotOverviewDisplay {
-        wallet_balance,
+        wallet_balance: "N/A".to_string(), // TODO: Add wallet balance calculation
         open_positions: format!("{}", open_count),
         total_trades,
         bot_uptime: uptime,
@@ -801,35 +779,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", pool_table));
 
-    // Build Wallet Tracker Statistics table if available
-    let wallet_analysis_start = Instant::now();
-    if let Some(wallet_analysis) = get_wallet_analysis().await {
-        if is_debug_summary_enabled() {
-            log(
-                LogTag::Summary,
-                "DEBUG",
-                &format!(
-                    "Fetched wallet analysis in {} ms",
-                    wallet_analysis_start.elapsed().as_millis()
-                )
-            );
-        }
-        let wallet_tracker_stats = WalletTrackerDisplay {
-            current_value: format!("{:.6} SOL", wallet_analysis.current_value),
-            value_change: format!("{:+.6} SOL", wallet_analysis.value_change),
-            change_percent: format!("{:+.2}%", wallet_analysis.value_change_percent),
-            days_tracked: format!("{} days", wallet_analysis.period_days),
-            best_value: format!("{:.6} SOL", wallet_analysis.best_day_value),
-            worst_value: format!("{:.6} SOL", wallet_analysis.worst_day_value),
-        };
-
-        summary_output.push_str("\n💼 Wallet Tracker Statistics\n");
-        let mut wallet_table = Table::new(vec![wallet_tracker_stats]);
-        wallet_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
-        summary_output.push_str(&format!("{}\n", wallet_table));
-    } else {
-        summary_output.push_str("\n💼 Wallet Tracker: No historical data available\n");
-    }
+    
 
     // Build RPC statistics tables if available
     if let Some(rpc_stats) = get_global_rpc_stats() {
@@ -851,59 +801,6 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         }
     }
 
-    // Build wallet transaction statistics
-    if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Building wallet transaction statistics");
-    }
-    let tx_start = Instant::now();
-    let tx_tables = build_transactions_statistics_tables();
-    summary_output.push_str(&tx_tables);
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "Wallet transaction statistics built in {} ms",
-                tx_start.elapsed().as_millis()
-            )
-        );
-    }
-
-    // Build transaction finalization statistics
-    if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Building transaction finalization statistics");
-    }
-    let finalization_start = Instant::now();
-    let finalization_tables = build_transaction_finalization_statistics_tables();
-    summary_output.push_str(&finalization_tables);
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "Transaction finalization statistics built in {} ms",
-                finalization_start.elapsed().as_millis()
-            )
-        );
-    }
-
-    // Build position verification statistics
-    if is_debug_summary_enabled() {
-        log(LogTag::Summary, "DEBUG", "Building position verification statistics");
-    }
-    let verification_start = Instant::now();
-    let verification_tables = build_position_verification_statistics_tables();
-    summary_output.push_str(&verification_tables);
-    if is_debug_summary_enabled() {
-        log(
-            LogTag::Summary,
-            "DEBUG",
-            &format!(
-                "Position verification statistics built in {} ms",
-                verification_start.elapsed().as_millis()
-            )
-        );
-    }
 
     // Build frozen account cooldowns if any exist
     let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
@@ -943,23 +840,6 @@ pub async fn display_current_bot_summary() {
     print!("{}", summary);
 }
 
-/// Display wallet transaction statistics (backwards compatibility)
-pub fn display_transactions_statistics() {
-    let tx_tables = build_transactions_statistics_tables();
-    print!("{}", tx_tables);
-}
-
-/// Display transaction finalization statistics (backwards compatibility)
-pub fn display_transaction_finalization_statistics() {
-    let finalization_tables = build_transaction_finalization_statistics_tables();
-    print!("{}", finalization_tables);
-}
-
-/// Display position verification statistics (backwards compatibility)
-pub fn display_position_verification_statistics() {
-    let verification_tables = build_position_verification_statistics_tables();
-    print!("{}", verification_tables);
-}
 
 /// Display RPC usage statistics (backwards compatibility)
 fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
@@ -1098,199 +978,6 @@ fn build_rpc_statistics_tables(rpc_stats: &crate::rpc::RpcStats) -> String {
     output
 }
 
-/// Build wallet transaction statistics tables and return as string
-fn build_transactions_statistics_tables() -> String {
-    let mut output = String::new();
-    
-    if let Some((cached_count, total_fetched, last_sync, is_periodic_running, oldest_sig, newest_sig)) = get_global_transactions_stats() {
-        output.push_str("\n📝 WALLET TRANSACTION STATISTICS\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
-        
-        let periodic_status = if is_periodic_running {
-            "🟢 Running (5s interval)".to_string()
-        } else {
-            "🔴 Stopped".to_string()
-        };
-        
-        let oldest_display = oldest_sig
-            .map(|sig| format!("{}...{}", &sig[..8], &sig[sig.len()-8..]))
-            .unwrap_or_else(|| "None".to_string());
-        
-        let newest_display = newest_sig
-            .map(|sig| format!("{}...{}", &sig[..8], &sig[sig.len()-8..]))
-            .unwrap_or_else(|| "None".to_string());
-        
-        let transaction_display = vec![WalletTransactionDisplay {
-            cached_transactions: cached_count.to_string(),
-            total_fetched: total_fetched.to_string(),
-            last_sync,
-            periodic_sync_status: periodic_status,
-            oldest_signature: oldest_display,
-            newest_signature: newest_display,
-        }];
-        
-        let transaction_table = Table::new(transaction_display)
-            .with(Style::modern())
-            .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
-            .to_string();
-        
-        output.push_str(&format!("{}\n", transaction_table));
-        
-        // Display sync efficiency metrics
-        output.push_str("\n📊 Transaction Cache Efficiency:\n");
-        output.push_str(&format!("   💾 Cache Status: {} signatures cached, {} fetched this session\n", cached_count, total_fetched));
-        
-        // Only show cache efficiency if we have meaningful data
-        if total_fetched > 0 && cached_count >= total_fetched {
-            let cache_efficiency = ((cached_count - total_fetched) as f64 / cached_count as f64) * 100.0;
-            output.push_str(&format!("   🎯 Cache Efficiency: {:.1}% ({} existing + {} new)\n", 
-                     cache_efficiency, cached_count - total_fetched, total_fetched));
-        } else if total_fetched > 0 {
-            output.push_str(&format!("   🔄 Fresh Session: {} new transactions fetched\n", total_fetched));
-        }
-        
-        if is_periodic_running {
-            output.push_str("   🔄 Auto-sync: Active (checking every 5 seconds for new transactions)\n");
-        } else {
-            output.push_str("   ⚠️  Auto-sync: Inactive (manual sync only)\n");
-        }
-        
-        log(LogTag::Summary, "STATISTICS", &format!("Wallet transactions: {} cached, {} total, sync: {}", 
-            cached_count, total_fetched, if is_periodic_running { "active" } else { "inactive" }));
-    } else {
-        output.push_str("\n📝 WALLET TRANSACTION STATISTICS\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
-        output.push_str("⚠️  Wallet transaction manager not initialized\n");
-        
-        log(LogTag::Summary, "WARNING", "Wallet transaction manager not available for statistics");
-    }
-    
-    output
-}
-
-/// Build transaction finalization statistics tables and return as string
-fn build_transaction_finalization_statistics_tables() -> String {
-    let mut output = String::new();
-    
-    if let Some((total_finalized, pending_finalization, avg_finalization_time, last_batch_size, next_check_status)) = get_global_finalization_stats() {
-        output.push_str("\n🔒 TRANSACTION FINALIZATION STATISTICS\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
-        
-        let finalization_display = vec![TransactionFinalizationDisplay {
-            total_finalized: total_finalized.to_string(),
-            pending_finalization: pending_finalization.to_string(),
-            average_finalization_time: format!("{:.1}s", avg_finalization_time),
-            last_batch_size: last_batch_size.to_string(),
-            next_check_status: next_check_status.clone(),
-        }];
-        
-        let finalization_table = Table::new(finalization_display)
-            .with(Style::modern())
-            .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
-            .to_string();
-        
-        output.push_str(&format!("{}\n", finalization_table));
-        
-        // Display finalization efficiency metrics
-        output.push_str("\n📊 Finalization Performance:\n");
-        
-        if total_finalized > 0 {
-            output.push_str(&format!("   🔒 Finalization Rate: {} transactions upgraded to finalized\n", total_finalized));
-            output.push_str(&format!("   ⏱️  Average Time: {:.1} seconds from confirmed to finalized\n", avg_finalization_time));
-        } else {
-            output.push_str("   📋 No transactions finalized yet\n");
-        }
-        
-        if pending_finalization > 0 {
-            output.push_str(&format!("   ⏳ Pending: {} confirmed transactions awaiting finalization\n", pending_finalization));
-        } else {
-            output.push_str("   ✅ All cached transactions are finalized\n");
-        }
-        
-        if last_batch_size > 0 {
-            output.push_str(&format!("   📦 Last Upgrade: {} transactions finalized in last check\n", last_batch_size));
-        }
-        
-        output.push_str(&format!("   🔄 Next Check: {}\n", next_check_status));
-        
-        log(LogTag::Summary, "FINALIZATION", &format!("Finalization stats: {} finalized, {} pending, {:.1}s avg", 
-            total_finalized, pending_finalization, avg_finalization_time));
-    } else {
-        output.push_str("\n🔒 TRANSACTION FINALIZATION STATISTICS\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
-        output.push_str("⚠️  Transaction finalization tracking not available\n");
-        
-        log(LogTag::Summary, "WARNING", "Transaction finalization statistics not available");
-    }
-    
-    output
-}
-
-/// Build position verification statistics tables and return as string
-fn build_position_verification_statistics_tables() -> String {
-    let mut output = String::new();
-    let (total_positions, entry_verified, exit_verified, unverified) = get_position_verification_stats();
-    
-    if total_positions > 0 {
-        output.push_str("\n🔍 POSITION VERIFICATION STATISTICS\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
-        
-        let entry_rate = if total_positions > 0 {
-            (entry_verified as f64 / total_positions as f64 * 100.0)
-        } else {
-            0.0
-        };
-        
-        let exit_rate = if total_positions > 0 {
-            (exit_verified as f64 / total_positions as f64 * 100.0)
-        } else {
-            0.0
-        };
-        
-        let verification_display = vec![PositionVerificationDisplay {
-            total_positions: total_positions.to_string(),
-            entry_verified: entry_verified.to_string(),
-            exit_verified: exit_verified.to_string(),
-            unverified: unverified.to_string(),
-            entry_verification_rate: format!("{:.1}%", entry_rate),
-            exit_verification_rate: format!("{:.1}%", exit_rate),
-        }];
-        
-        let verification_table = Table::new(verification_display)
-            .with(Style::modern())
-            .with(Modify::new(Rows::new(0..=0)).with(Alignment::center()))
-            .to_string();
-        
-        output.push_str(&format!("{}\n", verification_table));
-        
-        // Display verification status details
-        output.push_str("\n📊 Verification Status:\n");
-        output.push_str(&format!("   ✅ Entry Transactions: {}/{} verified ({:.1}%)\n", 
-                 entry_verified, total_positions, entry_rate));
-        output.push_str(&format!("   🚪 Exit Transactions: {}/{} verified ({:.1}%)\n", 
-                 exit_verified, total_positions, exit_rate));
-        
-        if unverified > 0 {
-            output.push_str(&format!("   ⏳ Unverified: {} positions pending verification\n", unverified));
-            output.push_str("   🔄 Background verification: Active (checking every 60 seconds)\n");
-        } else {
-            output.push_str("   🎉 All positions fully verified!\n");
-        }
-        
-        log(LogTag::Summary, "VERIFICATION_STATS", &format!(
-            "Position verification: {}/{} entry, {}/{} exit, {} unverified", 
-            entry_verified, total_positions, exit_verified, total_positions, unverified
-        ));
-    } else {
-        output.push_str("\n🔍 POSITION VERIFICATION STATISTICS\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════\n");
-        output.push_str("📝 No positions found\n");
-        
-        log(LogTag::Summary, "INFO", "No positions found for verification statistics");
-    }
-    
-    output
-}
 
 /// Calculate maximum drawdown percentage
 fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {

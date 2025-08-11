@@ -1,35 +1,14 @@
 /// Swap execution and quote management functions
 /// Handles GMGN router integration, quote fetching, and swap execution
 
-use crate::global::{read_configs, is_debug_swap_enabled};
+use crate::global::{is_debug_swap_enabled};
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
-use crate::rpc::{get_premium_transaction_rpc, SwapError, lamports_to_sol};
+use crate::rpc::{SwapError, lamports_to_sol};
 use crate::swaps::types::{SwapData, SwapRequest, GMGNApiResponse};
 use crate::swaps::interface::SwapResult;
-/// Use utils for wallet address instead of transaction module
-use crate::utils::get_wallet_address;
 use super::config::{SOL_MINT, GMGN_PARTNER, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS};
-use crate::tokens::decimals::{SOL_DECIMALS, LAMPORTS_PER_SOL, get_token_decimals_from_chain};
 
-/// Track transaction immediately at processed level for rapid feedback
-async fn track_transaction_at_processed_level(signature: &str) {
-    // Attempt to fetch transaction with processed commitment for immediate feedback
-    let rpc_client = crate::rpc::get_rpc_client();
-    
-    // Try to get transaction details with processed commitment (fastest response)
-    if let Ok(tx_data) = rpc_client.get_transaction_details_processed_rpc(signature).await {
-        // Add to transaction manager at processed level using global function
-        if let Err(e) = crate::transactions_manager::add_transaction_at_processed_level_global(signature, tx_data).await {
-            log(LogTag::Swap, "ERROR", &format!("Failed to track processed transaction {}: {}", &signature[..8], e));
-        } else {
-            log(LogTag::Swap, "PROCESSED", &format!("Transaction {} tracked at processed level", &signature[..8]));
-        }
-    } else {
-        // Transaction not yet visible at processed level - very fresh submission
-        log(LogTag::Swap, "SUBMITTED", &format!("Transaction {} submitted but not yet processed", &signature[..8]));
-    }
-}
 
 /// Validates swap parameters before execution
 fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
@@ -411,7 +390,6 @@ pub async fn execute_swap_with_quote(
     swap_data: SwapData
 ) -> Result<SwapResult, SwapError> {
     let start_time = std::time::Instant::now();
-    let configs = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
 
     // Determine if this is SOL to token or token to SOL
     let is_sol_to_token = input_mint == SOL_MINT;
@@ -442,9 +420,6 @@ pub async fn execute_swap_with_quote(
         )
     );
 
-    // Get wallet address for logging
-    let wallet_address = get_wallet_address()?;
-
     // Sign and send the transaction using global RPC client
     let transaction_signature = sign_and_send_transaction(
         &swap_data.raw_tx.swap_transaction
@@ -456,25 +431,12 @@ pub async fn execute_swap_with_quote(
         &format!("Transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
     );
 
-    // Immediately track transaction at processed level for rapid feedback
-    track_transaction_at_processed_level(&transaction_signature).await;
-
-    // Add transaction to monitoring service instead of blocking verification
-    let expected_direction = if input_mint == SOL_MINT { "buy" } else { "sell" };
-    let target_mint = if input_mint == SOL_MINT { output_mint } else { input_mint };
-    let amount_sol = if input_mint == SOL_MINT {
-        // Buy: input is SOL
-        swap_data.quote.in_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
-    } else {
-        // Sell: output is SOL  
-        swap_data.quote.out_amount.parse::<u64>().unwrap_or(0) as f64 / LAMPORTS_PER_SOL as f64
-    };
-
     // Return success result - verification handled by signature-only analysis
     let execution_time = start_time.elapsed().as_secs_f64();
     
     Ok(SwapResult {
         success: true,
+        router_used: None, // TODO: Pass router type from caller
         transaction_signature: Some(transaction_signature),
         input_amount: swap_data.quote.in_amount.clone(),
         output_amount: swap_data.quote.out_amount.clone(),
@@ -589,70 +551,6 @@ pub async fn sign_and_send_transaction(
     }
     
     Ok(signature)
-}
-
-/// Simple transaction verification stub
-/// This replaces the complex verify_swap_transaction with our signature-only analysis
-pub async fn verify_swap_transaction(
-    transaction_signature: &str,
-    input_mint: &str,
-    output_mint: &str,
-    expected_direction: &str, // "buy" or "sell"
-) -> Result<TransactionVerificationResult, SwapError> {
-    use crate::transactions_tools::analyze_post_swap_transaction;
-    
-    let wallet_address = get_wallet_address()?;
-    
-    // Get proper decimals for input and output mints
-    let input_decimals = if input_mint == SOL_MINT {
-        SOL_DECIMALS
-    } else {
-        get_token_decimals_from_chain(input_mint).await.unwrap_or(SOL_DECIMALS)
-    };
-    
-    let output_decimals = if output_mint == SOL_MINT {
-        SOL_DECIMALS
-    } else {
-        get_token_decimals_from_chain(output_mint).await.unwrap_or(SOL_DECIMALS)
-    };
-    
-    match analyze_post_swap_transaction(
-        transaction_signature,
-        &wallet_address,
-        input_mint,
-        output_mint,
-        expected_direction,
-    ).await {
-        Ok(analysis) => {
-            Ok(TransactionVerificationResult {
-                success: analysis.success,
-                transaction_signature: analysis.signature,
-                confirmed: true,
-                input_amount: None, // We don't extract raw amounts in simplified version
-                output_amount: None,
-                sol_spent: None,
-                sol_received: None,
-                sol_from_swap: None,
-                transaction_fee: (analysis.fees_paid * LAMPORTS_PER_SOL as f64) as u64, // Convert SOL to lamports
-                priority_fee: None,
-                ata_created: analysis.ata_created,
-                ata_closed: analysis.ata_closed,
-                ata_rent_paid: 0,
-                ata_rent_reclaimed: 0,
-                effective_price: Some(analysis.effective_price),
-                price_impact: None,
-                input_mint: input_mint.to_string(),
-                output_mint: output_mint.to_string(),
-                input_decimals: input_decimals as u32,
-                output_decimals: output_decimals as u32,
-                creation_status: "Success".to_string(),
-                error_details: None,
-            })
-        }
-        Err(e) => {
-            Err(SwapError::TransactionError(format!("Transaction verification failed: {}", e)))
-        }
-    }
 }
 
 /// Transaction verification result structure

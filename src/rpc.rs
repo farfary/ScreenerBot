@@ -44,7 +44,7 @@ use std::collections::HashMap;
 use std::time::{ Duration, Instant };
 use serde::{ Deserialize, Serialize };
 use chrono::{ DateTime, Utc };
-use base64::{ engine::general_purpose, Engine as _ };
+use base64::Engine as _;
 use reqwest;
 use serde_json;
 use bincode;
@@ -260,8 +260,6 @@ pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
     
     Ok(FALLBACK_ATA_RENT)
 }
-
-use tokio::sync::Notify;
 
 /// Error types for RPC and wallet operations
 #[derive(Debug)]

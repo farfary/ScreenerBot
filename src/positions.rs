@@ -474,47 +474,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 )
             );
 
-            // Use finalization guard to ensure transaction is finalized
-            match crate::finalization_guard::wait_for_finalization(&transaction_signature, 6).await {
-                Ok(true) => {
-                    log(
-                        LogTag::Trader,
-                        "FINALIZED",
-                        &format!(
-                            "✅ Transaction finalized for {}, proceeding with position creation: {}",
-                            token.symbol,
-                            &transaction_signature[..8]
-                        )
-                    );
-                }
-                Ok(false) => {
-                    log(
-                        LogTag::Trader,
-                        "TIMEOUT",
-                        &format!(
-                            "⏰ Transaction finalization timeout for {} - position NOT created: {}",
-                            token.symbol,
-                            &transaction_signature[..8]
-                        )
-                    );
-                    return; // Do not create position if not finalized
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Trader,
-                        "ERROR",
-                        &format!(
-                            "❌ Finalization check error for {} - position NOT created: {}",
-                            token.symbol,
-                            e
-                        )
-                    );
-                    return; // Do not create position on finalization error
-                }
-            }
-
-            // IMMEDIATE: Create verified position only after finalization
-            // This ensures position is created only when swap is permanently on blockchain
+            
             let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
 
             let new_position = Position {
@@ -631,43 +591,7 @@ pub async fn close_position(
         return false;
     }
 
-    // ADDITIONAL: Ensure entry transaction is actually finalized
-    if let Some(ref entry_signature) = position.entry_transaction_signature {
-        match crate::finalization_guard::ensure_transaction_finalized(entry_signature).await {
-            Ok(true) => {
-                log(
-                    LogTag::Trader,
-                    "ENTRY_FINALIZED",
-                    &format!("✅ Entry transaction confirmed finalized for {}: {}", 
-                            position.symbol, &entry_signature[..8])
-                );
-            }
-            Ok(false) => {
-                log(
-                    LogTag::Trader,
-                    "ENTRY_NOT_FINALIZED",
-                    &format!("⏳ Entry transaction not finalized for {} - cannot close position: {}", 
-                            position.symbol, &entry_signature[..8])
-                );
-                return false;
-            }
-            Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "ENTRY_CHECK_ERROR",
-                    &format!("❌ Error checking entry finalization for {}: {}", position.symbol, e)
-                );
-                return false;
-            }
-        }
-    } else {
-        log(
-            LogTag::Trader,
-            "NO_ENTRY_SIGNATURE",
-            &format!("❌ No entry transaction signature for {} - cannot verify finalization", position.symbol)
-        );
-        return false;
-    }
+   
 
     // Check if this mint is in frozen account cooldown
     if is_mint_in_frozen_cooldown(&position.mint) {
@@ -848,59 +772,7 @@ pub async fn close_position(
                     )
                 );
 
-                // Use finalization guard to ensure exit transaction is finalized
-                let exit_finalized = match crate::finalization_guard::wait_for_finalization(&transaction_signature, 6).await {
-                    Ok(true) => {
-                        log(
-                            LogTag::Trader,
-                            "EXIT_FINALIZED",
-                            &format!(
-                                "✅ Exit transaction finalized for {}, proceeding with position closure: {}",
-                                position.symbol,
-                                &transaction_signature[..8]
-                            )
-                        );
-                        true
-                    }
-                    Ok(false) => {
-                        log(
-                            LogTag::Trader,
-                            "EXIT_TIMEOUT",
-                            &format!(
-                                "⏰ Exit transaction finalization timeout for {} - position NOT closed: {}",
-                                position.symbol,
-                                &transaction_signature[..8]
-                            )
-                        );
-                        false
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Trader,
-                            "EXIT_ERROR",
-                            &format!(
-                                "❌ Exit finalization check error for {} - position NOT closed: {}",
-                                position.symbol,
-                                e
-                            )
-                        );
-                        false
-                    }
-                };
-
-                if !exit_finalized {
-                    return false; // Do not close position if exit not finalized
-                }
-
-                // Simplified approach - no complex transaction monitoring
-                log(
-                    LogTag::Trader,
-                    "TRANSACTION",
-                    &format!(
-                        "📡 Position exit transaction completed: {}",
-                        &transaction_signature[..8]
-                    )
-                );
+            
 
                 // Simplified verification - assume success if we have a transaction signature
                 let verification_success = !transaction_signature.is_empty();
@@ -944,39 +816,6 @@ pub async fn close_position(
                             )
                         );
 
-                        // Extract actual exit transaction fee
-                        let exit_fee_lamports = match crate::transactions_tools::analyze_post_swap_transaction(
-                            &transaction_signature,
-                            &crate::utils::get_wallet_address().unwrap_or_default(),
-                            &position.mint,
-                            "So11111111111111111111111111111111111111112", // SOL mint
-                            "sell"
-                        ).await {
-                            Ok(analysis) => {
-                                log(
-                                    LogTag::Trader,
-                                    "FEE_EXTRACTED",
-                                    &format!(
-                                        "✅ Exit fee extracted for {}: {} lamports ({:.9} SOL)",
-                                        position.symbol,
-                                        analysis.transaction_fee.unwrap_or(0),
-                                        analysis.fees_paid
-                                    )
-                                );
-                                analysis.transaction_fee
-                            }
-                            Err(e) => {
-                                log(
-                                    LogTag::Trader,
-                                    "WARNING",
-                                    &format!(
-                                        "⚠️ Failed to extract exit fee for {}: {}. Using 0.",
-                                        position.symbol, e
-                                    )
-                                );
-                                Some(0)
-                            }
-                        };
 
                         // Update position with verified exit data
                         position.exit_price = Some(exit_price);
@@ -985,7 +824,7 @@ pub async fn close_position(
                         position.sol_received = Some(sol_received);
                         position.exit_transaction_signature = Some(transaction_signature.clone());
                         position.transaction_exit_verified = true;
-                        position.exit_fee_lamports = exit_fee_lamports;
+                        position.exit_fee_lamports = None;
 
                         // Calculate actual P&L using unified function
                         let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);

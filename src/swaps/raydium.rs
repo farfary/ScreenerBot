@@ -12,7 +12,7 @@ use super::config::{
     API_TIMEOUT_SECS, RETRY_ATTEMPTS, RAYDIUM_SWAP_API,
     TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
-use super::execution::{sign_and_send_transaction, verify_swap_transaction};
+use super::execution::{sign_and_send_transaction};
 // Use utils for wallet address instead of transaction module  
 use crate::utils::get_wallet_address;
 
