@@ -4056,19 +4056,23 @@ impl TransactionsManager {
                             position_state.total_tokens + swap.token_amount
                         ));
                     }
+
+                    // If this is the first buy after a position was closed (total_tokens <= 0), this is a new position opening
+                    if position_state.total_tokens <= 0.0001 {
+                        position_state.first_buy_timestamp = Some(swap.timestamp);
+                        position_state.first_buy_slot = swap.slot;
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "DEBUG_POSITION", &format!(
+                                "New position opened for {} at {}", swap.token_symbol, swap.timestamp
+                            ));
+                        }
+                    }
                     
                     position_state.total_tokens += swap.token_amount;
                     position_state.total_sol_invested += swap.sol_amount;
                     position_state.total_fees += swap.fee_sol;
                     position_state.total_ata_rents += swap.ata_rents;
                     position_state.buy_count += 1;
-
-                    // Track first buy
-                    if position_state.first_buy_slot.is_none() || 
-                       (swap.slot.is_some() && position_state.first_buy_slot.unwrap_or(u64::MAX) > swap.slot.unwrap()) {
-                        position_state.first_buy_slot = swap.slot;
-                        position_state.first_buy_timestamp = Some(swap.timestamp);
-                    }
 
                     // Calculate average buy price (weighted by amount)
                     if position_state.total_tokens > 0.0 {
@@ -4084,19 +4088,30 @@ impl TransactionsManager {
                         ));
                     }
                     
+                    let previous_total = position_state.total_tokens;
                     position_state.total_tokens -= swap.token_amount.abs(); // Always use absolute value for sells
                     position_state.total_sol_received += swap.sol_amount;
                     position_state.total_fees += swap.fee_sol;
                     position_state.total_ata_rents += swap.ata_rents;
                     position_state.sell_count += 1;
 
-                    // If position is fully closed (or oversold), move to completed
-                    if position_state.total_tokens <= 0.0001 { // Small epsilon for rounding
-                        let position_analysis = self.finalize_position_analysis(position_state.clone());
+                    // If position was just closed (went from > 0 to <= 0), this is the closing timestamp
+                    if previous_total > 0.0001 && position_state.total_tokens <= 0.0001 {
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "DEBUG_POSITION", &format!(
+                                "Position closed for {} at {} (tokens went from {:.2} to {:.2})", 
+                                swap.token_symbol, swap.timestamp, previous_total, position_state.total_tokens
+                            ));
+                        }
+                        
+                        // This swap closed the position - create the final analysis with this closing timestamp
+                        let mut final_state = position_state.clone();
+                        final_state.last_activity_timestamp = Some(swap.timestamp);
+                        
+                        let position_analysis = self.finalize_position_analysis(final_state);
                         completed_positions.push(position_analysis);
                         
-                        // Mark this position as processed by clearing the buy count
-                        // This prevents it from being re-added in the final loop
+                        // Reset the position state for potential future reopening
                         *position_state = PositionState {
                             token_mint: swap.token_mint.clone(),
                             token_symbol: swap.token_symbol.clone(),
@@ -4119,7 +4134,7 @@ impl TransactionsManager {
                 _ => {} // Ignore other transaction types
             }
 
-            // Update last activity
+            // Update last activity (for open positions)
             position_state.last_activity_slot = swap.slot;
             position_state.last_activity_timestamp = Some(swap.timestamp);
         }
@@ -4191,11 +4206,26 @@ impl TransactionsManager {
         };
 
         // Calculate position duration
-        let duration_hours = if let (Some(first), Some(last)) = (&state.first_buy_timestamp, &state.last_activity_timestamp) {
-            let duration = last.signed_duration_since(*first);
-            duration.num_hours() as f64 + (duration.num_minutes() % 60) as f64 / 60.0
-        } else {
-            0.0
+        let duration_hours = match status {
+            PositionStatus::Closed | PositionStatus::Oversold => {
+                // For closed positions, calculate from open to close
+                if let (Some(first), Some(last)) = (&state.first_buy_timestamp, &state.last_activity_timestamp) {
+                    let duration = last.signed_duration_since(*first);
+                    (duration.num_hours() as f64 + (duration.num_minutes() % 60) as f64 / 60.0).max(0.0)
+                } else {
+                    0.0
+                }
+            },
+            PositionStatus::Open | PositionStatus::PartiallyReduced => {
+                // For open positions, calculate from open to now
+                if let Some(first) = &state.first_buy_timestamp {
+                    let now = chrono::Utc::now();
+                    let duration = now.signed_duration_since(*first);
+                    (duration.num_hours() as f64 + (duration.num_minutes() % 60) as f64 / 60.0).max(0.0)
+                } else {
+                    0.0
+                }
+            },
         };
 
         PositionAnalysis {
@@ -4318,6 +4348,7 @@ impl TransactionsManager {
                 },
                 closed: match position.status {
                     PositionStatus::Closed | PositionStatus::Oversold => {
+                        // For closed positions, use the last activity timestamp (when position was actually closed)
                         if let Some(timestamp) = position.last_activity_timestamp {
                             format!("{} {}", 
                                 timestamp.format("%m-%d"),
@@ -4327,7 +4358,9 @@ impl TransactionsManager {
                             "N/A".to_string()
                         }
                     },
-                    _ => "Open".to_string(),
+                    PositionStatus::Open | PositionStatus::PartiallyReduced => {
+                        "Open".to_string()
+                    },
                 },
                 buys: bought_display,
                 sold: sold_display,
