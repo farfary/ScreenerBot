@@ -4454,13 +4454,23 @@ pub async fn add_priority_transaction(signature: String) -> Result<(), String> {
     ));
     
     // Add to global manager if available
-    let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    if let Some(manager) = manager_guard.as_ref() {
-        // This would be implemented when we have a proper global manager
-        log(LogTag::Transactions, "PRIORITY", &format!(
-            "Transaction {} added to monitoring queue", 
-            &signature[..8]
-        ));
+    let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+    if let Some(manager) = manager_guard.as_mut() {
+        // Add to priority queue
+        manager.add_priority_transaction(signature.clone());
+        
+        // Immediately try to process the transaction
+        if let Err(e) = manager.process_transaction(&signature).await {
+            log(LogTag::Transactions, "WARN", &format!(
+                "Failed to immediately process priority transaction {}: {}", 
+                &signature[..8], e
+            ));
+        } else {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Priority transaction {} processed immediately", 
+                &signature[..8]
+            ));
+        }
     } else {
         log(LogTag::Transactions, "WARN", "No global transaction manager available for monitoring");
     }

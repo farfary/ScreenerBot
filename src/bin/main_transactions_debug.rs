@@ -63,6 +63,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::interval;
 use chrono::{DateTime, Utc};
@@ -2795,6 +2796,27 @@ async fn test_real_position_management(
         return;
     }
 
+    // Start lightweight transaction monitoring for the test
+    log(LogTag::Transactions, "POSITION_TEST", "🔄 Starting transaction monitoring for position test...");
+    let shutdown_monitor = Arc::new(tokio::sync::Notify::new());
+    let monitor_handle = {
+        let shutdown_clone = shutdown_monitor.clone();
+        tokio::spawn(async move {
+            // Run monitoring for 5 minutes max (longer than position test)
+            tokio::select! {
+                _ = shutdown_clone.notified() => {
+                    log(LogTag::Transactions, "POSITION_TEST", "Transaction monitoring stopped");
+                }
+                _ = tokio::time::sleep(Duration::from_secs(300)) => {
+                    log(LogTag::Transactions, "POSITION_TEST", "Transaction monitoring timeout (5 minutes)");
+                }
+                _ = start_lightweight_transaction_monitoring(wallet_pubkey) => {
+                    log(LogTag::Transactions, "POSITION_TEST", "Transaction monitoring completed");
+                }
+            }
+        })
+    };
+
     // Load token with updated information from tokens module
     let test_token = match load_token_with_updated_info(token_mint, token_symbol).await {
         Ok(token) => {
@@ -2888,6 +2910,12 @@ async fn test_real_position_management(
     } else {
         log(LogTag::Transactions, "POSITION_TEST", "❌ Position was not created");
     }
+
+    // Stop transaction monitoring
+    shutdown_monitor.notify_one();
+    
+    // Give monitor a moment to stop
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     log(LogTag::Transactions, "POSITION_TEST", "=== REAL POSITION MANAGEMENT TEST COMPLETED ===");
 }
@@ -3182,4 +3210,71 @@ async fn generate_comprehensive_position_test_report(
     println!("\n{}", "=".repeat(80));
     println!("📊 END OF COMPREHENSIVE POSITION TEST REPORT");
     println!("{}", "=".repeat(80));
+}
+
+/// Lightweight transaction monitoring for position tests
+async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
+    log(LogTag::Transactions, "MONITOR", "Starting lightweight transaction monitoring...");
+    
+    // Create a monitoring manager
+    let mut manager = match screenerbot::transactions_manager::TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create monitoring manager: {}", e));
+            return;
+        }
+    };
+    
+    // Initialize known signatures
+    if let Err(e) = manager.initialize_known_signatures().await {
+        log(LogTag::Transactions, "ERROR", &format!("Failed to initialize monitoring: {}", e));
+        return;
+    }
+
+    log(LogTag::Transactions, "MONITOR", &format!(
+        "Monitoring initialized with {} known transactions", 
+        manager.known_signatures.len()
+    ));
+
+    // Monitor frequently for position tests (every 2 seconds)
+    let mut interval = tokio::time::interval(Duration::from_secs(2));
+    
+    loop {
+        interval.tick().await;
+        
+        // Check for new transactions
+        match manager.check_new_transactions().await {
+            Ok(new_signatures) => {
+                if !new_signatures.is_empty() {
+                    log(LogTag::Transactions, "MONITOR", &format!(
+                        "Found {} new transactions, processing...", 
+                        new_signatures.len()
+                    ));
+                    
+                    // Process each new transaction
+                    for signature in new_signatures {
+                        if let Err(e) = manager.process_transaction(&signature).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to process transaction {}: {}", 
+                                &signature[..8], e
+                            ));
+                        } else {
+                            log(LogTag::Transactions, "SUCCESS", &format!(
+                                "Successfully processed transaction {}", 
+                                &signature[..8]
+                            ));
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::Transactions, "WARN", &format!("Monitoring cycle failed: {}", e));
+            }
+        }
+        
+        // Check priority transactions
+        if let Err(e) = manager.check_priority_transactions().await {
+            log(LogTag::Transactions, "WARN", &format!("Priority check failed: {}", e));
+        }
+    }
 }
