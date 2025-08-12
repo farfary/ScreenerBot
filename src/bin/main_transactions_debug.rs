@@ -12,6 +12,7 @@
 /// - Validate transaction analysis
 /// - Performance benchmarking
 /// - Cache management and stats
+/// - Execute real swap tests with transaction analysis
 ///
 /// Usage Examples:
 /// - Monitor wallet transactions: cargo run --bin main_transactions_debug -- --monitor
@@ -22,6 +23,7 @@
 /// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50 (preserves raw data)
 /// - Analyze all swaps with PnL: cargo run --bin main_transactions_debug -- --analyze-swaps
 /// - Performance test: cargo run --bin main_transactions_debug -- --benchmark --count 100
+/// - Test real swaps: cargo run --bin main_transactions_debug -- --test-swap --swap-type round-trip --token-mint <MINT> --sol-amount 0.002
 
 use screenerbot::transactions_manager::{
     TransactionsManager, Transaction, TransactionType, TransactionDirection,
@@ -31,9 +33,15 @@ use screenerbot::logger::{log, LogTag, init_file_logging};
 use screenerbot::global::{
     set_cmd_args, get_transactions_cache_dir
 };
-use screenerbot::rpc::get_rpc_client;
+use screenerbot::rpc::{get_rpc_client, SwapError, sol_to_lamports};
 use screenerbot::utils::get_wallet_address;
 use screenerbot::tokens::types::PriceSourceType;
+use screenerbot::tokens::{Token, get_token_decimals_sync};
+use screenerbot::swaps::{
+    get_jupiter_quote, execute_jupiter_swap, get_gmgn_quote,
+    JupiterSwapResult
+};
+
 
 use clap::{Arg, Command};
 use std::collections::HashMap;
@@ -109,6 +117,54 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("test-swap")
+                .long("test-swap")
+                .help("Execute real swap test with transaction analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("swap-type")
+                .long("swap-type")
+                .help("Swap type: 'sol-to-token', 'token-to-sol', or 'round-trip' (default: round-trip)")
+                .value_name("TYPE")
+                .default_value("round-trip")
+        )
+        .arg(
+            Arg::new("token-mint")
+                .long("token-mint")
+                .help("Token mint address for swap test")
+                .value_name("MINT")
+                .default_value("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263") // BONK
+        )
+        .arg(
+            Arg::new("token-symbol")
+                .long("token-symbol")
+                .help("Token symbol for display purposes")
+                .value_name("SYMBOL")
+                .default_value("BONK")
+        )
+        .arg(
+            Arg::new("sol-amount")
+                .long("sol-amount")
+                .help("SOL amount to trade (default: 0.002 SOL)")
+                .value_name("AMOUNT")
+                .default_value("0.002")
+        )
+        .arg(
+            Arg::new("slippage")
+                .long("slippage")
+                .help("Slippage tolerance percentage (default: 15%)")
+                .value_name("PERCENT")
+                .default_value("15.0")
+        )
+        .arg(
+            Arg::new("router")
+                .long("router")
+                .help("Swap router: 'jupiter' or 'gmgn' (default: jupiter)")
+                .value_name("ROUTER")
+                .default_value("jupiter")
+        )
+        .arg(
             Arg::new("count")
                 .long("count")
                 .help("Number of transactions to process")
@@ -178,6 +234,31 @@ async fn main() {
             .parse()
             .unwrap_or(100);
         run_benchmark_tests(wallet_pubkey, count).await;
+    } else if matches.get_flag("analyze-swaps") {
+        analyze_all_swaps(wallet_pubkey).await;
+    } else if matches.get_flag("test-swap") {
+        let swap_type = matches.get_one::<String>("swap-type").unwrap();
+        let token_mint = matches.get_one::<String>("token-mint").unwrap();
+        let token_symbol = matches.get_one::<String>("token-symbol").unwrap();
+        let sol_amount: f64 = matches.get_one::<String>("sol-amount")
+            .unwrap()
+            .parse()
+            .unwrap_or(0.002);
+        let slippage: f64 = matches.get_one::<String>("slippage")
+            .unwrap()
+            .parse()
+            .unwrap_or(15.0);
+        let router = matches.get_one::<String>("router").unwrap();
+        
+        test_real_swap(
+            wallet_pubkey,
+            swap_type,
+            token_mint,
+            token_symbol,
+            sol_amount,
+            slippage,
+            router
+        ).await;
     } else if matches.get_flag("analyze-swaps") {
         analyze_all_swaps(wallet_pubkey).await;
     } else if matches.get_flag("update-cache") {
@@ -454,7 +535,7 @@ async fn analyze_specific_transaction(signature: &str) {
 
     // Process the transaction with comprehensive analysis
     match manager.process_transaction(signature).await {
-        Ok(mut transaction) => {
+        Ok(transaction) => {
             log(LogTag::Transactions, "SUCCESS", "Transaction analyzed successfully");
             
             // Force comprehensive analysis if not already done (check if fee_breakdown is None)
@@ -1110,7 +1191,8 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
         log(LogTag::Transactions, "DETAIL", &format!("Priority Fee: {:.9} SOL", fee_breakdown.priority_fee));
         log(LogTag::Transactions, "DETAIL", &format!("ATA Creation Cost: {:.9} SOL", fee_breakdown.ata_creation_cost));
         log(LogTag::Transactions, "DETAIL", &format!("Rent Costs: {:.9} SOL", fee_breakdown.rent_costs));
-        log(LogTag::Transactions, "DETAIL", &format!("Total Fees: {:.9} SOL ({:.2}%)", fee_breakdown.total_fees, fee_breakdown.fee_percentage));
+        log(LogTag::Transactions, "DETAIL", &format!("Trading Fees Total: {:.9} SOL ({:.2}%)", fee_breakdown.total_fees, fee_breakdown.fee_percentage));
+        log(LogTag::Transactions, "DETAIL", &format!("Infrastructure Costs: {:.9} SOL (one-time setup)", fee_breakdown.rent_costs));
         log(LogTag::Transactions, "DETAIL", &format!("Compute Units: {} consumed / {} price = Priority: {}", 
             fee_breakdown.compute_units_consumed, 
             fee_breakdown.compute_unit_price,
@@ -1328,6 +1410,563 @@ impl CacheStats {
         }
         
         log(LogTag::Transactions, "CACHE", "=== END CACHE ANALYSIS ===");
+    }
+}
+
+/// Execute real swap test with comprehensive transaction analysis
+async fn test_real_swap(
+    wallet_pubkey: Pubkey,
+    swap_type: &str,
+    token_mint: &str,
+    token_symbol: &str,
+    sol_amount: f64,
+    slippage: f64,
+    router: &str,
+) {
+    log(LogTag::Transactions, "SWAP_TEST", "=== REAL SWAP TEST STARTING ===");
+    log(LogTag::Transactions, "SWAP_TEST", &format!(
+        "📋 Test Configuration:\n  • Swap Type: {}\n  • Token: {} ({})\n  • SOL Amount: {:.6} SOL\n  • Slippage: {:.1}%\n  • Router: {}",
+        swap_type, token_symbol, &token_mint[..8], sol_amount, slippage, router
+    ));
+
+    // Safety warning
+    log(LogTag::Transactions, "WARNING", "⚠️ This test performs REAL blockchain transactions with REAL SOL!");
+    log(LogTag::Transactions, "WARNING", "⚠️ Starting in 5 seconds... Press Ctrl+C to cancel!");
+    
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    // Create transactions manager for monitoring
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Pre-flight checks
+    if let Err(e) = perform_preflight_checks(wallet_pubkey, sol_amount, token_mint, router).await {
+        log(LogTag::Transactions, "ERROR", &format!("Pre-flight check failed: {}", e));
+        return;
+    }
+
+    log(LogTag::Transactions, "SUCCESS", "✅ All pre-flight checks passed");
+
+    // Create test token for swap operations
+    let test_token = Token {
+        mint: token_mint.to_string(),
+        symbol: token_symbol.to_string(),
+        name: token_symbol.to_string(),
+        chain: "solana".to_string(),
+        logo_url: None,
+        coingecko_id: None,
+        website: None,
+        description: None,
+        tags: vec![],
+        is_verified: false,
+        created_at: None,
+        price_dexscreener_sol: None,
+        price_dexscreener_usd: None,
+        price_pool_sol: None,
+        price_pool_usd: None,
+        dex_id: None,
+        pair_address: None,
+        pair_url: None,
+        labels: vec![],
+        fdv: None,
+        market_cap: None,
+        txns: None,
+        volume: None,
+        price_change: None,
+        liquidity: None,
+        info: None,
+        boosts: None,
+    };
+
+    match swap_type {
+        "sol-to-token" => {
+            execute_sol_to_token_test(&mut manager, &test_token, sol_amount, slippage, router).await;
+        }
+        "token-to-sol" => {
+            log(LogTag::Transactions, "ERROR", "token-to-sol test requires existing token balance - not implemented");
+        }
+        "round-trip" => {
+            execute_round_trip_test(&mut manager, &test_token, sol_amount, slippage, router).await;
+        }
+        _ => {
+            log(LogTag::Transactions, "ERROR", &format!("Unknown swap type: {}", swap_type));
+        }
+    }
+
+    log(LogTag::Transactions, "SWAP_TEST", "=== REAL SWAP TEST COMPLETED ===");
+}
+
+/// Perform pre-flight safety checks before executing swaps
+async fn perform_preflight_checks(
+    wallet_pubkey: Pubkey,
+    sol_amount: f64,
+    token_mint: &str,
+    router: &str,
+) -> Result<(), String> {
+    log(LogTag::Transactions, "PREFLIGHT", "🔍 Performing pre-flight checks...");
+    
+    let slippage = 1.0; // 1% slippage for testing
+
+    // Check wallet SOL balance
+    let rpc_client = get_rpc_client();
+    let sol_balance = match rpc_client.get_sol_balance(&wallet_pubkey.to_string()).await {
+        Ok(balance) => balance,
+        Err(e) => return Err(format!("Failed to get wallet balance: {}", e)),
+    };
+
+    let minimum_required = sol_amount + 0.01; // Buffer for fees
+    if sol_balance < minimum_required {
+        return Err(format!(
+            "Insufficient SOL balance: {:.6} SOL, required: {:.6} SOL",
+            sol_balance, minimum_required
+        ));
+    }
+
+    log(LogTag::Transactions, "PREFLIGHT", &format!(
+        "✅ Wallet balance check: {:.6} SOL (required: {:.6} SOL)",
+        sol_balance, minimum_required
+    ));
+
+    // Test quote availability
+    let wallet_address = get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+    let lamport_amount = sol_to_lamports(sol_amount);
+
+    let quote_result = match router {
+        "jupiter" => {
+            get_jupiter_quote(
+                "So11111111111111111111111111111111111111112", // SOL mint
+                token_mint,
+                lamport_amount,
+                &wallet_address,
+                slippage,
+                "ExactIn",
+                0.25,
+                false,
+            ).await
+        }
+        "gmgn" => {
+            get_gmgn_quote(
+                "So11111111111111111111111111111111111111112",
+                token_mint,
+                lamport_amount,
+                &wallet_address,
+                slippage,
+                "ExactIn",
+                0.25,
+                false,
+            ).await
+        }
+        _ => return Err(format!("Unknown router: {}", router)),
+    };
+
+    match quote_result {
+        Ok(quote) => {
+            log(LogTag::Transactions, "PREFLIGHT", &format!(
+                "✅ {} quote test: {} SOL -> {} tokens",
+                router, quote.quote.in_amount, quote.quote.out_amount
+            ));
+        }
+        Err(e) => {
+            return Err(format!("{} quote test failed: {}", router, e));
+        }
+    }
+
+    log(LogTag::Transactions, "PREFLIGHT", "✅ All pre-flight checks completed successfully");
+    Ok(())
+}
+
+/// Execute SOL to Token swap test
+async fn execute_sol_to_token_test(
+    manager: &mut TransactionsManager,
+    token: &Token,
+    sol_amount: f64,
+    slippage: f64,
+    router: &str,
+) {
+    log(LogTag::Transactions, "BUY_TEST", &format!(
+        "🔵 Starting {} BUY test (SOL -> {})",
+        router.to_uppercase(), token.symbol
+    ));
+
+    let start_time = Instant::now();
+    
+    let swap_result = match router {
+        "jupiter" => execute_jupiter_swap_test(token, sol_amount, slippage, true).await,
+        "gmgn" => execute_gmgn_swap_test(token, sol_amount, slippage, true).await,
+        _ => {
+            log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
+            return;
+        }
+    };
+
+    match swap_result {
+        Ok(result) => {
+            let execution_time = start_time.elapsed();
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "✅ {} BUY completed in {:.2}s!",
+                router.to_uppercase(), execution_time.as_secs_f64()
+            ));
+
+            if let Some(signature) = &result.transaction_signature {
+                log(LogTag::Transactions, "BUY_RESULT", &format!(
+                    "• Signature: {}\n  • Input: {} SOL\n  • Output: {} tokens\n  • Price Impact: {}%\n  • Fee: {} lamports",
+                    &signature[..12], result.input_amount, result.output_amount,
+                    result.price_impact, result.fee_lamports
+                ));
+
+                // Wait for transaction confirmation and analyze
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                analyze_swap_transaction(manager, signature, "BUY").await;
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("❌ {} BUY failed: {}", router.to_uppercase(), e));
+        }
+    }
+}
+
+/// Execute round-trip swap test (SOL -> Token -> SOL)
+async fn execute_round_trip_test(
+    manager: &mut TransactionsManager,
+    token: &Token,
+    sol_amount: f64,
+    slippage: f64,
+    router: &str,
+) {
+    log(LogTag::Transactions, "ROUND_TRIP", &format!(
+        "🔄 Starting {} ROUND-TRIP test (SOL -> {} -> SOL)",
+        router.to_uppercase(), token.symbol
+    ));
+
+    let mut test_results = SwapTestResults::new();
+
+    // Phase 1: SOL -> Token (BUY)
+    log(LogTag::Transactions, "BUY_PHASE", &format!(
+        "🔵 Phase 1: {} BUY (SOL -> {})", router.to_uppercase(), token.symbol
+    ));
+
+    let buy_start = Instant::now();
+    let buy_result = match router {
+        "jupiter" => execute_jupiter_swap_test(token, sol_amount, slippage, true).await,
+        "gmgn" => execute_gmgn_swap_test(token, sol_amount, slippage, true).await,
+        _ => {
+            log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
+            return;
+        }
+    };
+
+    let mut tokens_received = 0.0;
+    let mut _buy_signature = String::new();
+
+    match buy_result {
+        Ok(result) => {
+            let buy_time = buy_start.elapsed();
+            test_results.buy_success = true;
+            test_results.buy_execution_time = buy_time.as_secs_f64();
+            
+            if let Some(signature) = &result.transaction_signature {
+                _buy_signature = signature.clone();
+                test_results.buy_signature = Some(signature.clone());
+                
+                tokens_received = result.output_amount.parse::<f64>().unwrap_or(0.0);
+                test_results.tokens_received = tokens_received;
+                test_results.sol_spent = result.input_amount.parse::<f64>().unwrap_or(0.0);
+
+                log(LogTag::Transactions, "BUY_SUCCESS", &format!(
+                    "✅ BUY completed in {:.2}s: {} SOL -> {} tokens ({})",
+                    buy_time.as_secs_f64(), result.input_amount, result.output_amount, &signature[..12]
+                ));
+
+                // Analyze buy transaction
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                analyze_swap_transaction(manager, signature, "BUY").await;
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("❌ BUY phase failed: {}", e));
+            test_results.display_results();
+            return;
+        }
+    }
+
+    // Wait a bit between phases
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Phase 2: Token -> SOL (SELL)
+    log(LogTag::Transactions, "SELL_PHASE", &format!(
+        "🔴 Phase 2: {} SELL ({} -> SOL)", router.to_uppercase(), token.symbol
+    ));
+
+    if tokens_received <= 0.0 {
+        log(LogTag::Transactions, "ERROR", "❌ No tokens received from buy phase, cannot proceed with sell");
+        test_results.display_results();
+        return;
+    }
+
+    let sell_start = Instant::now();
+    let sell_result = match router {
+        "jupiter" => execute_jupiter_swap_test(token, tokens_received, slippage, false).await,
+        "gmgn" => execute_gmgn_swap_test(token, tokens_received, slippage, false).await,
+        _ => {
+            log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
+            return;
+        }
+    };
+
+    match sell_result {
+        Ok(result) => {
+            let sell_time = sell_start.elapsed();
+            test_results.sell_success = true;
+            test_results.sell_execution_time = sell_time.as_secs_f64();
+            
+            if let Some(signature) = &result.transaction_signature {
+                test_results.sell_signature = Some(signature.clone());
+                test_results.sol_received = result.output_amount.parse::<f64>().unwrap_or(0.0);
+
+                log(LogTag::Transactions, "SELL_SUCCESS", &format!(
+                    "✅ SELL completed in {:.2}s: {} tokens -> {} SOL ({})",
+                    sell_time.as_secs_f64(), result.input_amount, result.output_amount, &signature[..12]
+                ));
+
+                // Analyze sell transaction
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                analyze_swap_transaction(manager, signature, "SELL").await;
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("❌ SELL phase failed: {}", e));
+        }
+    }
+
+    // Display comprehensive results
+    test_results.display_results();
+}
+
+/// Execute Jupiter swap test
+async fn execute_jupiter_swap_test(
+    token: &Token,
+    amount: f64,
+    slippage: f64,
+    is_buy: bool, // true for SOL->Token, false for Token->SOL
+) -> Result<JupiterSwapResult, SwapError> {
+    let wallet_address = get_wallet_address()?;
+    let sol_mint = "So11111111111111111111111111111111111111112";
+    
+    let token_decimals = match get_token_decimals_sync(&token.mint) {
+        Some(decimals) => decimals,
+        None => {
+            log(LogTag::Transactions, "WARN", "Could not get token decimals from cache, using default 9");
+            9
+        }
+    };
+    
+    let (input_mint, output_mint, input_amount) = if is_buy {
+        // SOL -> Token
+        (sol_mint.to_string(), token.mint.clone(), sol_to_lamports(amount))
+    } else {
+        // Token -> SOL
+        let token_amount = (amount * 10_f64.powi(token_decimals as i32)) as u64;
+        (token.mint.clone(), sol_mint.to_string(), token_amount)
+    };
+
+    // Get quote first
+    let quote = get_jupiter_quote(
+        &input_mint,
+        &output_mint,
+        input_amount,
+        &wallet_address,
+        slippage,
+        "ExactIn",
+        0.25,
+        false,
+    ).await?;
+
+    // Execute the swap
+    execute_jupiter_swap(token, &input_mint, &output_mint, quote).await
+}
+
+/// Execute GMGN swap test
+async fn execute_gmgn_swap_test(
+    token: &Token,
+    amount: f64,
+    slippage: f64,
+    is_buy: bool,
+) -> Result<JupiterSwapResult, SwapError> {
+    let wallet_address = get_wallet_address()?;
+    let sol_mint = "So11111111111111111111111111111111111111112";
+    
+    let token_decimals = match get_token_decimals_sync(&token.mint) {
+        Some(decimals) => decimals,
+        None => {
+            log(LogTag::Transactions, "WARN", "Could not get token decimals from cache, using default 9");
+            9
+        }
+    };
+    
+    let (input_mint, output_mint, input_amount) = if is_buy {
+        (sol_mint.to_string(), token.mint.clone(), sol_to_lamports(amount))
+    } else {
+        let token_amount = (amount * 10_f64.powi(token_decimals as i32)) as u64;
+        (token.mint.clone(), sol_mint.to_string(), token_amount)
+    };
+
+    // Get quote first
+    let _quote = get_gmgn_quote(
+        &input_mint,
+        &output_mint,
+        input_amount,
+        &wallet_address,
+        slippage,
+        "ExactIn",
+        0.25,
+        false,
+    ).await?;
+
+    // Execute the swap (note: execute_gmgn_swap has different signature, adapt as needed)
+    // For now, return a placeholder result
+    Err(SwapError::ConfigError("GMGN swap execution not yet implemented in test".to_string()))
+}
+
+/// Analyze a specific swap transaction
+async fn analyze_swap_transaction(
+    manager: &mut TransactionsManager,
+    signature: &str,
+    swap_type: &str,
+) {
+    log(LogTag::Transactions, "ANALYSIS", &format!(
+        "📊 Analyzing {} transaction: {}...", swap_type, &signature[..12]
+    ));
+
+    tokio::time::sleep(Duration::from_secs(2)).await; // Wait for RPC propagation
+
+    match manager.process_transaction(signature).await {
+        Ok(transaction) => {
+            log(LogTag::Transactions, "ANALYSIS_SUCCESS", &format!(
+                "✅ Transaction analysis completed for {}", &signature[..12]
+            ));
+            
+            // Display comprehensive transaction details
+            display_detailed_transaction_info(&transaction);
+            
+            // Add to swap analysis if it's a swap
+            if matches!(transaction.transaction_type, 
+                       TransactionType::SwapSolToToken { .. } | 
+                       TransactionType::SwapTokenToSol { .. } |
+                       TransactionType::SwapTokenToToken { .. }) {
+                log(LogTag::Transactions, "SWAP_DETECTED", "✅ Transaction confirmed as swap and analyzed");
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ANALYSIS_ERROR", &format!(
+                "❌ Failed to analyze transaction {}: {}", &signature[..12], e
+            ));
+        }
+    }
+}
+
+/// Test results tracking structure
+struct SwapTestResults {
+    buy_success: bool,
+    sell_success: bool,
+    buy_signature: Option<String>,
+    sell_signature: Option<String>,
+    buy_execution_time: f64,
+    sell_execution_time: f64,
+    sol_spent: f64,
+    tokens_received: f64,
+    sol_received: f64,
+}
+
+impl SwapTestResults {
+    fn new() -> Self {
+        Self {
+            buy_success: false,
+            sell_success: false,
+            buy_signature: None,
+            sell_signature: None,
+            buy_execution_time: 0.0,
+            sell_execution_time: 0.0,
+            sol_spent: 0.0,
+            tokens_received: 0.0,
+            sol_received: 0.0,
+        }
+    }
+
+    fn display_results(&self) {
+        log(LogTag::Transactions, "RESULTS", "📊 === COMPLETE SWAP TEST RESULTS ===");
+        
+        log(LogTag::Transactions, "RESULTS", " 🔵 BUY PHASE:");
+        if self.buy_success {
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • Status: ✅ Success ({:.2}s)", self.buy_execution_time
+            ));
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • SOL Spent: {:.6} SOL", self.sol_spent
+            ));
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • Tokens Received: {:.2} tokens", self.tokens_received
+            ));
+            if let Some(sig) = &self.buy_signature {
+                log(LogTag::Transactions, "RESULTS", &format!("  • TX: {}...", &sig[..12]));
+            }
+        } else {
+            log(LogTag::Transactions, "RESULTS", "  • Status: ❌ Failed");
+        }
+
+        log(LogTag::Transactions, "RESULTS", " 🔴 SELL PHASE:");
+        if self.sell_success {
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • Status: ✅ Success ({:.2}s)", self.sell_execution_time
+            ));
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • Tokens Sold: {:.2} tokens", self.tokens_received
+            ));
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • SOL Received: {:.6} SOL", self.sol_received
+            ));
+            if let Some(sig) = &self.sell_signature {
+                log(LogTag::Transactions, "RESULTS", &format!("  • TX: {}...", &sig[..12]));
+            }
+        } else {
+            log(LogTag::Transactions, "RESULTS", "  • Status: ❌ Failed");
+        }
+
+        log(LogTag::Transactions, "RESULTS", " 💰 NET RESULT:");
+        if self.buy_success && self.sell_success {
+            let net_sol = self.sol_received - self.sol_spent;
+            let success_indicator = if net_sol >= -0.001 { "✅ Good" } else { "⚠️ High Cost" };
+            
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • Net SOL Change: {:.6} SOL", net_sol
+            ));
+            log(LogTag::Transactions, "RESULTS", &format!(
+                "  • Success: {}", success_indicator
+            ));
+            
+            if self.tokens_received > 0.0 {
+                let effective_price = self.sol_spent / self.tokens_received;
+                log(LogTag::Transactions, "RESULTS", &format!(
+                    "  • Effective Price: {:.12} SOL per token", effective_price
+                ));
+            }
+        } else {
+            log(LogTag::Transactions, "RESULTS", "  • Net SOL Change: N/A (incomplete test)");
+        }
+
+        log(LogTag::Transactions, "RESULTS", " 📋 SIGNATURES:");
+        if let Some(buy_sig) = &self.buy_signature {
+            log(LogTag::Transactions, "RESULTS", &format!("  • Buy TX: {}", buy_sig));
+        }
+        if let Some(sell_sig) = &self.sell_signature {
+            log(LogTag::Transactions, "RESULTS", &format!("  • Sell TX: {}", sell_sig));
+        }
+
+        log(LogTag::Transactions, "RESULTS", "=== END RESULTS ===");
     }
 }
 

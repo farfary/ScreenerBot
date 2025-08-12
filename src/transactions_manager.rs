@@ -213,10 +213,10 @@ pub struct FeeBreakdown {
     pub compute_units_consumed: u64, // Compute units used
     pub compute_unit_price: u64,     // Price per compute unit (micro-lamports)
     pub priority_fee: f64,          // Priority fee paid (in SOL)
-    pub rent_costs: f64,            // Account rent costs (in SOL)
-    pub ata_creation_cost: f64,     // Associated Token Account creation costs (in SOL)
-    pub total_fees: f64,            // Total of all fees (in SOL)
-    pub fee_percentage: f64,        // Fee as percentage of transaction value
+    pub rent_costs: f64,            // Account rent costs (in SOL) - infrastructure, not trading fees
+    pub ata_creation_cost: f64,     // Associated Token Account creation costs (in SOL) - infrastructure
+    pub total_fees: f64,            // Total of TRADING fees only (excludes infrastructure costs)
+    pub fee_percentage: f64,        // Trading fee as percentage of transaction value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,6 +242,7 @@ pub struct SwapPnLInfo {
     pub router: String,
     pub fee_sol: f64,
     pub ata_rents: f64,     // ATA creation and rent costs (in SOL)
+    pub slot: Option<u64>,  // Solana slot number for reliable chronological sorting
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1259,29 +1260,34 @@ impl TransactionsManager {
                 // Note: ATA creation cost is a form of rent payment, so include it in rent_costs
                 fee_breakdown.rent_costs += fee_breakdown.ata_creation_cost;
                 
+                // IMPORTANT: total_fees should ONLY include actual trading fees, NOT infrastructure costs
+                // ATA creation and rent costs are one-time infrastructure costs, not trading fees
                 fee_breakdown.total_fees = fee_breakdown.transaction_fee + 
                                          fee_breakdown.router_fee + 
                                          fee_breakdown.platform_fee + 
-                                         fee_breakdown.priority_fee +
-                                         fee_breakdown.rent_costs;
+                                         fee_breakdown.priority_fee;
+                                         // rent_costs and ata_creation_cost are tracked separately
 
                 // Calculate fee percentage of transaction value
-                // For swaps, calculate percentage against the actual swap amount (excluding fees)
+                // For swaps, calculate percentage against the actual swap amount (excluding ALL costs)
                 if transaction.sol_balance_change.abs() > 0.0 {
-                    // The actual swap amount is the SOL balance change minus the fees
-                    let swap_amount = transaction.sol_balance_change.abs() - fee_breakdown.total_fees;
+                    // The actual swap amount is the SOL balance change minus ALL costs (fees + infrastructure)
+                    let total_costs = fee_breakdown.total_fees + fee_breakdown.rent_costs;
+                    let swap_amount = transaction.sol_balance_change.abs() - total_costs;
                     if swap_amount > 0.0 {
+                        // Calculate fee percentage based on trading fees only (not infrastructure costs)
                         fee_breakdown.fee_percentage = (fee_breakdown.total_fees / swap_amount) * 100.0;
                     } else {
-                        // If fees >= balance change, calculate against balance change
+                        // If total costs >= balance change, calculate against balance change
                         fee_breakdown.fee_percentage = (fee_breakdown.total_fees / transaction.sol_balance_change.abs()) * 100.0;
                     }
                     
                     if self.debug_enabled {
                         log(LogTag::Transactions, "FEE_DEBUG", &format!(
-                            "{} - Fee calculation: total_fees={:.9}, balance_change={:.9}, swap_amount={:.9}", 
+                            "{} - Fee calculation: trading_fees={:.9}, infrastructure_costs={:.9}, balance_change={:.9}, swap_amount={:.9}", 
                             &transaction.signature[..8], 
                             fee_breakdown.total_fees,
+                            fee_breakdown.rent_costs,
                             transaction.sol_balance_change.abs(),
                             swap_amount
                         ));
@@ -1290,10 +1296,11 @@ impl TransactionsManager {
 
                 if self.debug_enabled {
                     log(LogTag::Transactions, "FEE_SUMMARY", &format!(
-                        "{} - Total fees: {:.9} SOL ({:.2}%)", 
+                        "{} - Trading fees: {:.9} SOL ({:.2}%), Infrastructure costs: {:.9} SOL", 
                         &transaction.signature[..8], 
                         fee_breakdown.total_fees,
-                        fee_breakdown.fee_percentage
+                        fee_breakdown.fee_percentage,
+                        fee_breakdown.rent_costs
                     ));
                 }
             }
@@ -2564,8 +2571,16 @@ impl TransactionsManager {
             "Processed {} transactions, found {} swaps", processed_count, swap_count
         ));
 
-        // Sort by timestamp (newest first)
-        swap_transactions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        // Sort by slot (newest first for proper chronological order)
+        // Handle Option<u64> slots properly - None slots go to end
+        swap_transactions.sort_by(|a, b| {
+            match (b.slot, a.slot) {
+                (Some(b_slot), Some(a_slot)) => b_slot.cmp(&a_slot),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        });
 
         Ok(swap_transactions)
     }
@@ -2678,6 +2693,7 @@ impl TransactionsManager {
             router,
             fee_sol: transaction.fee_sol,
             ata_rents,
+            slot: transaction.slot,
         })
     }
 
@@ -2691,7 +2707,7 @@ impl TransactionsManager {
         log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS ===");
         log(LogTag::Transactions, "TABLE", &format!(
             "{:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<12} {:<12} {:<8}",
-            "Timestamp", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
+            "Slot", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
         ));
         log(LogTag::Transactions, "TABLE", &"-".repeat(120));
 
@@ -2702,11 +2718,15 @@ impl TransactionsManager {
         let mut total_sol_received = 0.0;
 
         for swap in swaps {
-            let timestamp_str = swap.timestamp.format("%m-%d %H:%M").to_string();
+            // Use slot number for reliable chronological order instead of unreliable timestamps
+            let slot_str = match swap.slot {
+                Some(slot) => format!("{}", slot),
+                None => "Unknown".to_string(),
+            };
 
             log(LogTag::Transactions, "TABLE", &format!(
                 "{:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
-                timestamp_str,
+                slot_str,
                 swap.swap_type,
                 &swap.token_symbol[..15.min(swap.token_symbol.len())],
                 swap.sol_amount,
