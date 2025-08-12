@@ -29,6 +29,7 @@
 /// - Recalculate analysis: cargo run --bin main_transactions_debug -- --recalculate-cache
 /// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50 (preserves raw data)
 /// - Analyze all swaps with PnL: cargo run --bin main_transactions_debug -- --analyze-swaps
+/// - Analyze position lifecycle: cargo run --bin main_transactions_debug -- --analyze-positions
 /// - Analyze ALL transaction types: cargo run --bin main_transactions_debug -- --analyze-all --count 500
 /// - Performance test: cargo run --bin main_transactions_debug -- --benchmark --count 100
 /// - Fetch and analyze: cargo run --bin main_transactions_debug -- --fetch-new --analyze --count 50
@@ -113,6 +114,12 @@ async fn main() {
             Arg::new("analyze-swaps")
                 .long("analyze-swaps")
                 .help("Analyze all swap transactions with comprehensive PnL")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("analyze-positions")
+                .long("analyze-positions")
+                .help("Analyze position lifecycle with entry/exit tracking and PnL")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -322,6 +329,8 @@ async fn main() {
         run_benchmark_tests(wallet_pubkey, count).await;
     } else if matches.get_flag("analyze-swaps") {
         analyze_all_swaps(wallet_pubkey).await;
+    } else if matches.get_flag("analyze-positions") {
+        analyze_all_positions(wallet_pubkey).await;
     } else if matches.get_flag("analyze-all") {
         let count: usize = matches.get_one::<String>("count")
             .unwrap()
@@ -472,6 +481,29 @@ fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions_manager::
     ));
     
     log(LogTag::Transactions, "STATS", "=== END STATISTICS ===");
+}
+
+/// Analyze all positions with comprehensive lifecycle tracking and PnL
+async fn analyze_all_positions(wallet_pubkey: Pubkey) {
+    log(LogTag::Transactions, "INFO", "Starting comprehensive position analysis for all transactions");
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Analyze positions
+    match manager.analyze_positions(None).await {
+        Ok(()) => {
+            log(LogTag::Transactions, "SUCCESS", "Position analysis completed successfully");
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to analyze positions: {}", e));
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -316,6 +316,72 @@ pub struct ProfitCalculation {
     pub hold_duration: Option<Duration>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionAnalysis {
+    pub token_mint: String,
+    pub token_symbol: String,
+    pub status: PositionStatus,
+    pub total_tokens_bought: f64,
+    pub total_tokens_sold: f64,
+    pub remaining_tokens: f64,
+    pub total_sol_invested: f64,
+    pub total_sol_received: f64,
+    pub net_sol_flow: f64,
+    pub average_buy_price: f64,
+    pub realized_pnl: f64,
+    pub unrealized_pnl: f64,
+    pub total_pnl: f64,
+    pub total_fees: f64,
+    pub total_ata_rents: f64,
+    pub buy_count: u32,
+    pub sell_count: u32,
+    pub first_buy_timestamp: Option<DateTime<Utc>>,
+    pub last_activity_timestamp: Option<DateTime<Utc>>,
+    pub duration_hours: f64,
+    pub transactions: Vec<PositionTransaction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PositionStatus {
+    Open,           // Has remaining tokens, no sells
+    Closed,         // No remaining tokens, fully sold
+    PartiallyReduced, // Has remaining tokens, some sells
+    Oversold,       // Negative token balance (sold more than bought)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionState {
+    pub token_mint: String,
+    pub token_symbol: String,
+    pub total_tokens: f64,
+    pub total_sol_invested: f64,
+    pub total_sol_received: f64,
+    pub total_fees: f64,
+    pub total_ata_rents: f64,
+    pub buy_count: u32,
+    pub sell_count: u32,
+    pub first_buy_slot: Option<u64>,
+    pub last_activity_slot: Option<u64>,
+    pub first_buy_timestamp: Option<DateTime<Utc>>,
+    pub last_activity_timestamp: Option<DateTime<Utc>>,
+    pub average_buy_price: f64,
+    pub transactions: Vec<PositionTransaction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionTransaction {
+    pub signature: String,
+    pub swap_type: String,
+    pub sol_amount: f64,
+    pub token_amount: f64,
+    pub price: f64,
+    pub timestamp: DateTime<Utc>,
+    pub slot: Option<u64>,
+    pub router: String,
+    pub fee_sol: f64,
+    pub ata_rents: f64,
+}
+
 // =============================================================================
 // TRANSACTIONS MANAGER
 // =============================================================================
@@ -3810,6 +3876,351 @@ impl TransactionsManager {
             total_sol_received - total_sol_spent - total_fees
         ));
         log(LogTag::Transactions, "TABLE", "=== END ANALYSIS ===");
+    }
+
+    /// Analyze and display position lifecycle with PnL calculations
+    pub async fn analyze_positions(&mut self, max_count: Option<usize>) -> Result<(), String> {
+        let swaps = self.get_all_swap_transactions().await?;
+        let positions = self.calculate_position_analysis(&swaps);
+        self.display_position_analysis_table(&positions);
+        Ok(())
+    }
+
+    /// Calculate position analysis from swap transactions
+    fn calculate_position_analysis(&self, swaps: &[SwapPnLInfo]) -> Vec<PositionAnalysis> {
+        use std::collections::HashMap;
+        
+        let mut positions: HashMap<String, PositionState> = HashMap::new();
+        let mut completed_positions = Vec::new();
+
+        // Sort swaps by slot for proper chronological processing
+        let mut sorted_swaps = swaps.to_vec();
+        sorted_swaps.sort_by(|a, b| {
+            match (a.slot, b.slot) {
+                (Some(a_slot), Some(b_slot)) => a_slot.cmp(&b_slot),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.timestamp.cmp(&b.timestamp),
+            }
+        });
+
+        log(LogTag::Transactions, "POSITION_CALC", &format!(
+            "Processing {} swaps for position analysis", sorted_swaps.len()
+        ));
+
+        for swap in &sorted_swaps {
+            // Skip failed transactions
+            if swap.swap_type.starts_with("Failed") {
+                continue;
+            }
+
+            let position_state = positions.entry(swap.token_mint.clone()).or_insert_with(|| {
+                PositionState {
+                    token_mint: swap.token_mint.clone(),
+                    token_symbol: swap.token_symbol.clone(),
+                    total_tokens: 0.0,
+                    total_sol_invested: 0.0,
+                    total_sol_received: 0.0,
+                    total_fees: 0.0,
+                    total_ata_rents: 0.0,
+                    buy_count: 0,
+                    sell_count: 0,
+                    first_buy_slot: None,
+                    last_activity_slot: None,
+                    first_buy_timestamp: None,
+                    last_activity_timestamp: None,
+                    average_buy_price: 0.0,
+                    transactions: Vec::new(),
+                }
+            });
+
+            // Track transaction
+            position_state.transactions.push(PositionTransaction {
+                signature: swap.signature.clone(),
+                swap_type: swap.swap_type.clone(),
+                sol_amount: swap.sol_amount,
+                token_amount: swap.token_amount,
+                price: swap.calculated_price_sol,
+                timestamp: swap.timestamp,
+                slot: swap.slot,
+                router: swap.router.clone(),
+                fee_sol: swap.fee_sol,
+                ata_rents: swap.ata_rents,
+            });
+
+            // Update position state
+            match swap.swap_type.as_str() {
+                "Buy" => {
+                    position_state.total_tokens += swap.token_amount;
+                    position_state.total_sol_invested += swap.sol_amount;
+                    position_state.total_fees += swap.fee_sol;
+                    position_state.total_ata_rents += swap.ata_rents;
+                    position_state.buy_count += 1;
+
+                    // Track first buy
+                    if position_state.first_buy_slot.is_none() || 
+                       (swap.slot.is_some() && position_state.first_buy_slot.unwrap_or(u64::MAX) > swap.slot.unwrap()) {
+                        position_state.first_buy_slot = swap.slot;
+                        position_state.first_buy_timestamp = Some(swap.timestamp);
+                    }
+
+                    // Calculate average buy price (weighted by amount)
+                    if position_state.total_tokens > 0.0 {
+                        position_state.average_buy_price = position_state.total_sol_invested / position_state.total_tokens;
+                    }
+                }
+                "Sell" => {
+                    position_state.total_tokens -= swap.token_amount;
+                    position_state.total_sol_received += swap.sol_amount;
+                    position_state.total_fees += swap.fee_sol;
+                    position_state.total_ata_rents += swap.ata_rents;
+                    position_state.sell_count += 1;
+
+                    // If position is fully closed (or oversold), move to completed
+                    if position_state.total_tokens <= 0.0001 { // Small epsilon for rounding
+                        let position_analysis = self.finalize_position_analysis(position_state.clone());
+                        completed_positions.push(position_analysis);
+                        
+                        // Reset position state for potential re-entry
+                        *position_state = PositionState {
+                            token_mint: swap.token_mint.clone(),
+                            token_symbol: swap.token_symbol.clone(),
+                            total_tokens: position_state.total_tokens.min(0.0), // Keep negative if oversold
+                            total_sol_invested: 0.0,
+                            total_sol_received: position_state.total_sol_received,
+                            total_fees: position_state.total_fees,
+                            total_ata_rents: position_state.total_ata_rents,
+                            buy_count: position_state.buy_count,
+                            sell_count: position_state.sell_count,
+                            first_buy_slot: None,
+                            last_activity_slot: swap.slot,
+                            first_buy_timestamp: None,
+                            last_activity_timestamp: Some(swap.timestamp),
+                            average_buy_price: 0.0,
+                            transactions: vec![position_state.transactions.last().unwrap().clone()],
+                        };
+                    }
+                }
+                _ => {} // Ignore other transaction types
+            }
+
+            // Update last activity
+            position_state.last_activity_slot = swap.slot;
+            position_state.last_activity_timestamp = Some(swap.timestamp);
+        }
+
+        // Add remaining open positions
+        for (_, position_state) in positions {
+            if position_state.total_tokens > 0.0001 || position_state.buy_count > 0 {
+                let position_analysis = self.finalize_position_analysis(position_state);
+                completed_positions.push(position_analysis);
+            }
+        }
+
+        // Sort by first buy timestamp (newest first)
+        completed_positions.sort_by(|a, b| {
+            match (&b.first_buy_timestamp, &a.first_buy_timestamp) {
+                (Some(b_time), Some(a_time)) => b_time.cmp(a_time),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        });
+
+        log(LogTag::Transactions, "POSITION_CALC", &format!(
+            "Generated {} position analyses", completed_positions.len()
+        ));
+
+        completed_positions
+    }
+
+    /// Finalize position analysis with PnL calculations
+    fn finalize_position_analysis(&self, state: PositionState) -> PositionAnalysis {
+        let net_sol_flow = state.total_sol_received - state.total_sol_invested;
+        let total_costs = state.total_fees + state.total_ata_rents;
+        let realized_pnl = net_sol_flow - total_costs;
+        
+        // Calculate unrealized PnL for open positions
+        let unrealized_pnl = if state.total_tokens > 0.0001 {
+            // Would need current token price for accurate unrealized PnL
+            // For now, estimate based on average buy price
+            0.0 // TODO: Integrate with current price data
+        } else {
+            0.0
+        };
+
+        let total_pnl = realized_pnl + unrealized_pnl;
+        
+        // Determine position status
+        let status = if state.total_tokens > 0.0001 {
+            if state.sell_count > 0 {
+                PositionStatus::PartiallyReduced
+            } else {
+                PositionStatus::Open
+            }
+        } else if state.total_tokens < -0.0001 {
+            PositionStatus::Oversold
+        } else {
+            PositionStatus::Closed
+        };
+
+        // Calculate position duration
+        let duration_hours = if let (Some(first), Some(last)) = (&state.first_buy_timestamp, &state.last_activity_timestamp) {
+            let duration = last.signed_duration_since(*first);
+            duration.num_hours() as f64 + (duration.num_minutes() % 60) as f64 / 60.0
+        } else {
+            0.0
+        };
+
+        PositionAnalysis {
+            token_mint: state.token_mint,
+            token_symbol: state.token_symbol,
+            status,
+            total_tokens_bought: state.transactions.iter()
+                .filter(|t| t.swap_type == "Buy")
+                .map(|t| t.token_amount)
+                .sum(),
+            total_tokens_sold: state.transactions.iter()
+                .filter(|t| t.swap_type == "Sell")
+                .map(|t| t.token_amount)
+                .sum(),
+            remaining_tokens: state.total_tokens,
+            total_sol_invested: state.total_sol_invested,
+            total_sol_received: state.total_sol_received,
+            net_sol_flow,
+            average_buy_price: state.average_buy_price,
+            realized_pnl,
+            unrealized_pnl,
+            total_pnl,
+            total_fees: state.total_fees,
+            total_ata_rents: state.total_ata_rents,
+            buy_count: state.buy_count,
+            sell_count: state.sell_count,
+            first_buy_timestamp: state.first_buy_timestamp,
+            last_activity_timestamp: state.last_activity_timestamp,
+            duration_hours,
+            transactions: state.transactions,
+        }
+    }
+
+    /// Display comprehensive position analysis table
+    pub fn display_position_analysis_table(&self, positions: &[PositionAnalysis]) {
+        if positions.is_empty() {
+            log(LogTag::Transactions, "INFO", "No positions found");
+            return;
+        }
+
+        log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE POSITION ANALYSIS ===");
+        log(LogTag::Transactions, "TABLE", &format!(
+            "{:<15} {:<12} {:<8} {:<12} {:<12} {:<12} {:<12} {:<12} {:<10} {:<8} {:<10}",
+            "Token", "Status", "Buys", "Sold", "Remaining", "SOL In", "SOL Out", "Net PnL", "Avg Price", "Fees", "Duration"
+        ));
+        log(LogTag::Transactions, "TABLE", &"─".repeat(138));
+
+        let mut total_invested = 0.0;
+        let mut total_received = 0.0;
+        let mut total_fees = 0.0;
+        let mut total_pnl = 0.0;
+        let mut open_positions = 0;
+        let mut closed_positions = 0;
+
+        for position in positions {
+            let status_display = match position.status {
+                PositionStatus::Open => "🟢Open",
+                PositionStatus::Closed => "🔴Closed", 
+                PositionStatus::PartiallyReduced => "🟡Partial",
+                PositionStatus::Oversold => "🔶Oversold",
+            };
+
+            // Format SOL amounts with proper signs for intuitive display
+            // Invested: negative (outflow), Received: positive (inflow)
+            let sol_in_display = if position.total_sol_invested > 0.0 {
+                format!("\x1b[31m-\x1b[0m{:.3}", position.total_sol_invested)
+            } else {
+                format!("{:.3}", position.total_sol_invested)
+            };
+
+            let sol_out_display = if position.total_sol_received > 0.0 {
+                format!("\x1b[32m+\x1b[0m{:.3}", position.total_sol_received)
+            } else {
+                format!("{:.3}", position.total_sol_received)
+            };
+
+            // Color-code PnL
+            let pnl_display = if position.total_pnl > 0.0 {
+                format!("\x1b[32m+\x1b[0m{:.3}", position.total_pnl)
+            } else if position.total_pnl < 0.0 {
+                format!("\x1b[31m-\x1b[0m{:.3}", position.total_pnl.abs())
+            } else {
+                format!("{:.3}", position.total_pnl)
+            };
+
+            // Format token amounts
+            let bought_display = format!("{}", position.buy_count);
+            let sold_display = if position.total_tokens_sold > 0.0 {
+                format!("{:.2}", position.total_tokens_sold)
+            } else {
+                "0.00".to_string()
+            };
+            let remaining_display = if position.remaining_tokens > 0.0 {
+                format!("{:.2}", position.remaining_tokens)
+            } else {
+                "0.00".to_string()
+            };
+
+            // Format duration - fix negative duration issue
+            let duration_display = if position.duration_hours > 0.0 {
+                if position.duration_hours > 24.0 {
+                    format!("{:.1}d", position.duration_hours / 24.0)
+                } else {
+                    format!("{:.1}h", position.duration_hours)
+                }
+            } else {
+                "0.0h".to_string()
+            };
+
+            log(LogTag::Transactions, "TABLE", &format!(
+                "{:<15} {:<12} {:<8} {:<12} {:<12} {:<12} {:<12} {:<12} {:<10.6} {:<8.3} {:<10}",
+                &position.token_symbol[..15.min(position.token_symbol.len())],
+                status_display,
+                bought_display,
+                sold_display,
+                remaining_display,
+                sol_in_display,
+                sol_out_display,
+                pnl_display,
+                position.average_buy_price,
+                position.total_fees + position.total_ata_rents,
+                duration_display
+            ));
+
+            // Update totals
+            total_invested += position.total_sol_invested;
+            total_received += position.total_sol_received;
+            total_fees += position.total_fees + position.total_ata_rents;
+            total_pnl += position.total_pnl;
+
+            match position.status {
+                PositionStatus::Open | PositionStatus::PartiallyReduced => open_positions += 1,
+                PositionStatus::Closed | PositionStatus::Oversold => closed_positions += 1,
+            }
+        }
+
+        log(LogTag::Transactions, "TABLE", &"─".repeat(138));
+        
+        let net_pnl_display = if total_pnl > 0.0 {
+            format!("\x1b[32m+{:.3}\x1b[0m", total_pnl)
+        } else if total_pnl < 0.0 {
+            format!("\x1b[31m{:.3}\x1b[0m", total_pnl)
+        } else {
+            format!("{:.3}", total_pnl)
+        };
+
+        log(LogTag::Transactions, "TABLE", &format!(
+            "📊 SUMMARY: {} Open, {} Closed | Invested: {:.3} SOL | Received: {:.3} SOL | Fees: {:.3} SOL | Net PnL: {}",
+            open_positions, closed_positions, total_invested, total_received, total_fees, net_pnl_display
+        ));
+        log(LogTag::Transactions, "TABLE", "=== END POSITION ANALYSIS ===");
     }
 }
 
