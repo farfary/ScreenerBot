@@ -4,8 +4,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
 use crate::rpc::lamports_to_sol;
-use crate::swaps::{ buy_token, sell_token };
-// Transaction monitoring removed - using simplified signature-only analysis
+use crate::swaps::{ buy_token, sell_token, wait_for_swap_verification };
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
 
@@ -463,16 +462,54 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 .clone()
                 .unwrap_or_default();
 
-            // CRITICAL: Wait for transaction finalization before creating position
             log(
                 LogTag::Trader,
-                "FINALIZATION_WAIT",
+                "VERIFICATION_WAIT",
                 &format!(
-                    "⏳ Waiting for transaction finalization before creating position for {}: {}",
+                    "⏳ Waiting for transaction verification before creating position for {}: {}",
                     token.symbol,
                     &transaction_signature[..8]
                 )
             );
+
+            // Wait for transaction verification with 60 second timeout
+            match wait_for_swap_verification(&transaction_signature, 60).await {
+                Ok(true) => {
+                    log(
+                        LogTag::Trader,
+                        "VERIFIED",
+                        &format!(
+                            "✅ Transaction verified successfully for {}: {}",
+                            token.symbol,
+                            &transaction_signature[..8]
+                        )
+                    );
+                }
+                Ok(false) => {
+                    log(
+                        LogTag::Trader,
+                        "TIMEOUT",
+                        &format!(
+                            "⏰ Transaction verification timeout for {}: {} - proceeding anyway",
+                            token.symbol,
+                            &transaction_signature[..8]
+                        )
+                    );
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!(
+                            "❌ Transaction verification failed for {}: {} - error: {}",
+                            token.symbol,
+                            &transaction_signature[..8],
+                            e
+                        )
+                    );
+                    return; // Don't create position if verification failed
+                }
+            }
 
             
             let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
@@ -761,16 +798,54 @@ pub async fn close_position(
                     .clone()
                     .unwrap_or_default();
 
-                // CRITICAL: Wait for exit transaction finalization before closing position
                 log(
                     LogTag::Trader,
-                    "EXIT_FINALIZATION_WAIT",
+                    "VERIFICATION_WAIT",
                     &format!(
-                        "⏳ Waiting for exit transaction finalization before closing position for {}: {}",
+                        "⏳ Waiting for exit transaction verification before closing position for {}: {}",
                         position.symbol,
                         &transaction_signature[..8]
                     )
                 );
+
+                // Wait for transaction verification with 60 second timeout
+                match wait_for_swap_verification(&transaction_signature, 60).await {
+                    Ok(true) => {
+                        log(
+                            LogTag::Trader,
+                            "VERIFIED",
+                            &format!(
+                                "✅ Exit transaction verified successfully for {}: {}",
+                                position.symbol,
+                                &transaction_signature[..8]
+                            )
+                        );
+                    }
+                    Ok(false) => {
+                        log(
+                            LogTag::Trader,
+                            "TIMEOUT",
+                            &format!(
+                                "⏰ Exit transaction verification timeout for {}: {} - proceeding anyway",
+                                position.symbol,
+                                &transaction_signature[..8]
+                            )
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!(
+                                "❌ Exit transaction verification failed for {}: {} - error: {}",
+                                position.symbol,
+                                &transaction_signature[..8],
+                                e
+                            )
+                        );
+                        return false; // Don't close position if verification failed
+                    }
+                }
 
             
 

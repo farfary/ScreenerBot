@@ -50,7 +50,7 @@ pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
 // =============================================================================
 
 // Main swap functions
-pub use interface::{buy_token, sell_token, SwapResult};
+pub use interface::{buy_token, sell_token, wait_for_swap_verification, SwapResult};
 
 // Common types and structures
 pub use types::{

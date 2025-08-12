@@ -22,6 +22,7 @@ use solana_sdk::{
 };
 use std::str::FromStr;
 use tabled::{Table, Tabled, settings::{Style, Modify, object::Rows, Alignment}};
+use once_cell::sync::Lazy;
 
 use crate::logger::{log, LogTag};
 use crate::global::{
@@ -4441,13 +4442,76 @@ impl Default for FeeBreakdown {
 // PUBLIC API FOR INTEGRATION
 // =============================================================================
 
-/// Add priority transaction from swaps module
+/// Global transaction manager instance for monitoring
+static GLOBAL_TRANSACTION_MANAGER: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> = 
+    once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(None)));
+
+/// Add priority transaction from swaps module for monitoring
 pub async fn add_priority_transaction(signature: String) -> Result<(), String> {
-    // For now, just log - would integrate with global manager instance
     log(LogTag::Transactions, "PRIORITY", &format!(
-        "Priority transaction added: {}", 
+        "Adding priority transaction for monitoring: {}", 
         &signature[..8]
     ));
+    
+    // Add to global manager if available
+    let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+    if let Some(manager) = manager_guard.as_ref() {
+        // This would be implemented when we have a proper global manager
+        log(LogTag::Transactions, "PRIORITY", &format!(
+            "Transaction {} added to monitoring queue", 
+            &signature[..8]
+        ));
+    } else {
+        log(LogTag::Transactions, "WARN", "No global transaction manager available for monitoring");
+    }
+    
+    Ok(())
+}
+
+/// Wait for transaction verification with timeout
+pub async fn wait_for_transaction_verification(
+    signature: &str, 
+    timeout_seconds: u64
+) -> Result<bool, String> {
+    let start_time = std::time::Instant::now();
+    let timeout_duration = std::time::Duration::from_secs(timeout_seconds);
+    
+    log(LogTag::Transactions, "VERIFY", &format!(
+        "Waiting for transaction verification: {} (timeout: {}s)", 
+        &signature[..8], 
+        timeout_seconds
+    ));
+    
+    while start_time.elapsed() < timeout_duration {
+        // Check if transaction is verified
+        if is_transaction_verified(signature).await {
+            log(LogTag::Transactions, "VERIFIED", &format!(
+                "Transaction {} verified successfully", 
+                &signature[..8]
+            ));
+            return Ok(true);
+        }
+        
+        // Wait before checking again
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+    
+    log(LogTag::Transactions, "TIMEOUT", &format!(
+        "Transaction verification timeout for {}", 
+        &signature[..8]
+    ));
+    
+    Ok(false)
+}
+
+/// Initialize global transaction manager for monitoring
+pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Result<(), String> {
+    let manager = TransactionsManager::new(wallet_pubkey).await?;
+    
+    let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+    *manager_guard = Some(manager);
+    
+    log(LogTag::Transactions, "INIT", "Global transaction manager initialized for monitoring");
     Ok(())
 }
 

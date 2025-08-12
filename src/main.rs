@@ -2,6 +2,7 @@ use screenerbot::logger::{ log, LogTag, init_file_logging };
 
 use std::sync::Arc;
 use tokio::sync::Notify;
+use solana_sdk::signer::Signer;
 
 #[tokio::main]
 async fn main() {
@@ -209,6 +210,31 @@ async fn main() {
         screenerbot::summary::monitor_positions_display(shutdown_display).await;
         log(LogTag::Trader, "INFO", "Positions display task ended");
     });
+
+    // Initialize global transaction manager for monitoring
+    // Load wallet address from config for transaction monitoring
+    match screenerbot::global::read_configs() {
+        Ok(configs) => {
+            match screenerbot::global::load_wallet_from_config(&configs) {
+                Ok(keypair) => {
+                    let wallet_pubkey = keypair.pubkey();
+                    if let Err(e) = screenerbot::transactions_manager::initialize_global_transaction_manager(wallet_pubkey).await {
+                        log(LogTag::System, "ERROR", &format!("Failed to initialize global transaction manager: {}", e));
+                        std::process::exit(1);
+                    }
+                    log(LogTag::System, "INFO", "Global transaction manager initialized for swap monitoring");
+                }
+                Err(e) => {
+                    log(LogTag::System, "ERROR", &format!("Failed to load wallet keypair for transaction manager: {}", e));
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to read configs for transaction manager: {}", e));
+            std::process::exit(1);
+        }
+    }
 
     // Start transaction manager background service
     let shutdown_transactions = shutdown.clone();

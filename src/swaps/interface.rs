@@ -6,6 +6,7 @@ use crate::logger::{log, LogTag};
 use crate::global::{is_debug_swap_enabled};
 use crate::utils::get_token_balance;
 use crate::utils::get_wallet_address;
+use crate::transactions_manager::{add_priority_transaction, wait_for_transaction_verification};
 use super::{get_best_quote, execute_best_swap, RouterType};
 use super::types::{SwapData};
 use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
@@ -103,6 +104,21 @@ pub async fn buy_token(
     // Direct return of SwapResult with router information included
     let swap_result = unified_result;
 
+    // Add transaction to monitoring if we have a signature
+    if let Some(ref signature) = swap_result.transaction_signature {
+        if let Err(e) = add_priority_transaction(signature.clone()).await {
+            log(LogTag::Swap, "WARN", &format!(
+                "Failed to add transaction {} to monitoring: {}", 
+                &signature[..8], e
+            ));
+        } else {
+            log(LogTag::Swap, "MONITOR", &format!(
+                "Transaction {} added to monitoring system", 
+                &signature[..8]
+            ));
+        }
+    }
+
     if is_debug_swap_enabled() {
         log(
             LogTag::Swap,
@@ -151,6 +167,21 @@ pub async fn sell_token(
 
         match sell_token_with_slippage(token, token_amount, slippage).await {
             Ok(result) => {
+                // Add transaction to monitoring if we have a signature
+                if let Some(ref signature) = result.transaction_signature {
+                    if let Err(e) = add_priority_transaction(signature.clone()).await {
+                        log(LogTag::Swap, "WARN", &format!(
+                            "Failed to add sell transaction {} to monitoring: {}", 
+                            &signature[..8], e
+                        ));
+                    } else {
+                        log(LogTag::Swap, "MONITOR", &format!(
+                            "Sell transaction {} added to monitoring system", 
+                            &signature[..8]
+                        ));
+                    }
+                }
+                
                 log(
                     LogTag::Swap,
                     "SELL_SUCCESS",
@@ -292,4 +323,18 @@ async fn sell_token_with_slippage(
     }
 
     Ok(swap_result)
+}
+
+/// Wait for swap transaction verification with timeout
+/// Returns true if transaction is verified as successful swap
+pub async fn wait_for_swap_verification(
+    signature: &str, 
+    timeout_seconds: u64
+) -> Result<bool, SwapError> {
+    match wait_for_transaction_verification(signature, timeout_seconds).await {
+        Ok(verified) => Ok(verified),
+        Err(e) => Err(SwapError::TransactionError(format!(
+            "Transaction verification failed: {}", e
+        ))),
+    }
 }

@@ -37,10 +37,11 @@
 /// - Monitor and analyze: cargo run --bin main_transactions_debug -- --monitor --analyze --duration 300
 /// - Just analyze: cargo run --bin main_transactions_debug -- --analyze
 /// - Test real swaps: cargo run --bin main_transactions_debug -- --test-swap --swap-type round-trip --token-mint <MINT> --sol-amount 0.002
+/// - Test real position management: cargo run --bin main_transactions_debug -- --test-position --token-mint <MINT> --sol-amount 0.002
 
 use screenerbot::transactions_manager::{
     TransactionsManager, Transaction, TransactionType, TransactionDirection,
-    get_transaction
+    get_transaction, initialize_global_transaction_manager, wait_for_transaction_verification
 };
 use screenerbot::logger::{log, LogTag, init_file_logging};
 use screenerbot::global::{
@@ -52,8 +53,9 @@ use screenerbot::tokens::types::PriceSourceType;
 use screenerbot::tokens::{Token, get_token_decimals_sync};
 use screenerbot::swaps::{
     get_jupiter_quote, execute_jupiter_swap, get_gmgn_quote,
-    JupiterSwapResult
+    JupiterSwapResult, buy_token, sell_token, wait_for_swap_verification
 };
+use screenerbot::positions;
 
 
 use clap::{Arg, Command};
@@ -163,6 +165,12 @@ async fn main() {
             Arg::new("test-swap")
                 .long("test-swap")
                 .help("Execute real swap test with transaction analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("test-position")
+                .long("test-position")
+                .help("Test real position management with transaction verification")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -365,6 +373,25 @@ async fn main() {
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after swap test...");
             analyze_all_swaps(wallet_pubkey).await;
+        }
+    } else if matches.get_flag("test-position") {
+        let token_mint = matches.get_one::<String>("token-mint").unwrap();
+        let token_symbol = matches.get_one::<String>("token-symbol").unwrap();
+        let sol_amount: f64 = matches.get_one::<String>("sol-amount")
+            .unwrap()
+            .parse()
+            .unwrap_or(0.002);
+        
+        test_real_position_management(
+            wallet_pubkey,
+            token_mint,
+            token_symbol,
+            sol_amount
+        ).await;
+        
+        if should_analyze {
+            log(LogTag::System, "INFO", "Running analysis after position test...");
+            analyze_all_positions(wallet_pubkey).await;
         }
     } else if matches.get_flag("update-cache") {
         let count: usize = matches.get_one::<String>("count")
@@ -2731,4 +2758,119 @@ impl BenchmarkStats {
         
         log(LogTag::Transactions, "BENCHMARK", "=== END BENCHMARK ===");
     }
+}
+
+/// Test real position management with transaction verification (like main bot)
+async fn test_real_position_management(
+    wallet_pubkey: Pubkey,
+    token_mint: &str,
+    token_symbol: &str,
+    sol_amount: f64,
+) {
+    log(LogTag::Transactions, "POSITION_TEST", "=== REAL POSITION MANAGEMENT TEST ===");
+    log(LogTag::Transactions, "POSITION_TEST", &format!(
+        "📋 Test Configuration:\n  • Token: {} ({})\n  • SOL Amount: {:.6} SOL\n  • This test mimics main bot position management",
+        token_symbol, &token_mint[..8], sol_amount
+    ));
+
+    // Safety warning
+    log(LogTag::Transactions, "WARNING", "⚠️ This test performs REAL blockchain transactions with REAL SOL!");
+    log(LogTag::Transactions, "WARNING", "⚠️ This test will open and close a position like the main bot!");
+    log(LogTag::Transactions, "WARNING", "⚠️ Starting in 10 seconds... Press Ctrl+C to cancel!");
+    
+    tokio::time::sleep(Duration::from_secs(10)).await;
+
+    // Initialize global transaction manager for monitoring
+    if let Err(e) = initialize_global_transaction_manager(wallet_pubkey).await {
+        log(LogTag::Transactions, "ERROR", &format!("Failed to initialize transaction manager: {}", e));
+        return;
+    }
+
+    // Create test token
+    let test_token = Token {
+        mint: token_mint.to_string(),
+        symbol: token_symbol.to_string(),
+        name: token_symbol.to_string(),
+        chain: "solana".to_string(),
+        logo_url: None,
+        coingecko_id: None,
+        website: None,
+        description: None,
+        tags: vec![],
+        is_verified: false,
+        created_at: None,
+        price_dexscreener_sol: None,
+        price_dexscreener_usd: None,
+        price_pool_sol: None,
+        price_pool_usd: None,
+        dex_id: None,
+        pair_address: None,
+        pair_url: None,
+        labels: vec![],
+        fdv: None,
+        market_cap: None,
+        txns: None,
+        volume: None,
+        price_change: None,
+        liquidity: None,
+        info: None,
+        boosts: None,
+    };
+
+    // Get current price for the test
+    let current_price = sol_amount / 1000.0; // Simulate price for testing
+
+    log(LogTag::Transactions, "POSITION_TEST", "🟢 STEP 1: Opening position with transaction verification...");
+
+    // Open position using the main bot logic
+    positions::open_position(&test_token, current_price, -5.0).await;
+
+    // Wait a moment for position to be created
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Check if position was created
+    let open_positions = positions::get_open_positions();
+    let test_position = open_positions.iter().find(|p| p.mint == token_mint);
+
+    if let Some(position) = test_position {
+        log(LogTag::Transactions, "POSITION_TEST", &format!(
+            "✅ Position opened successfully: {} | Entry: {:.9} SOL | TX: {}",
+            position.symbol,
+            position.entry_price,
+            position.entry_transaction_signature.as_ref().unwrap_or(&"None".to_string())
+        ));
+
+        log(LogTag::Transactions, "POSITION_TEST", "⏳ Waiting 10 seconds before closing position...");
+        tokio::time::sleep(Duration::from_secs(10)).await;
+
+        log(LogTag::Transactions, "POSITION_TEST", "🔴 STEP 2: Closing position with transaction verification...");
+
+        // Get the position again in case it was updated
+        let open_positions = positions::get_open_positions();
+        if let Some(mut position) = open_positions.iter().find(|p| p.mint == token_mint).cloned() {
+            let exit_price = current_price * 1.02; // Simulate 2% profit
+            let exit_time = chrono::Utc::now();
+
+            let success = positions::close_position(&mut position, &test_token, exit_price, exit_time).await;
+
+            if success {
+                log(LogTag::Transactions, "POSITION_TEST", &format!(
+                    "✅ Position closed successfully: {} | Exit: {:.9} SOL | TX: {}",
+                    position.symbol,
+                    exit_price,
+                    position.exit_transaction_signature.as_ref().unwrap_or(&"None".to_string())
+                ));
+            } else {
+                log(LogTag::Transactions, "POSITION_TEST", &format!(
+                    "❌ Failed to close position for {}", position.symbol
+                ));
+            }
+        } else {
+            log(LogTag::Transactions, "POSITION_TEST", "❌ Position not found for closing");
+        }
+    } else {
+        log(LogTag::Transactions, "POSITION_TEST", "❌ Position was not created");
+    }
+
+    log(LogTag::Transactions, "POSITION_TEST", "=== REAL POSITION MANAGEMENT TEST COMPLETED ===");
 }
