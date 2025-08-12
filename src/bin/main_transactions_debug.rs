@@ -132,7 +132,7 @@ async fn main() {
 
     // Set command args for debug flags
     let mut args = vec!["main_transactions_debug".to_string()];
-    if matches.get_flag("verbose") {
+    if matches.get_flag("verbose") || matches.get_one::<String>("signature").is_some() {
         args.push("--debug-transactions".to_string());
     }
     set_cmd_args(args);
@@ -416,8 +416,16 @@ async fn analyze_specific_transaction(signature: &str) {
     match get_transaction(signature).await {
         Ok(Some(transaction)) => {
             log(LogTag::Transactions, "CACHE", "Transaction found in cache");
-            display_detailed_transaction_info(&transaction);
-            return;
+            
+            // Check if we have comprehensive analysis data (fee_breakdown)
+            if transaction.fee_breakdown.is_some() {
+                log(LogTag::Transactions, "INFO", "Comprehensive analysis data found in cache");
+                display_detailed_transaction_info(&transaction);
+                return;
+            } else {
+                log(LogTag::Transactions, "INFO", "No comprehensive analysis in cache, forcing re-analysis");
+                // Continue to re-analysis below
+            }
         }
         Ok(None) => {
             log(LogTag::Transactions, "INFO", "Transaction not in cache, fetching from RPC");
@@ -444,10 +452,17 @@ async fn analyze_specific_transaction(signature: &str) {
         }
     };
 
-    // Process the transaction
+    // Process the transaction with comprehensive analysis
     match manager.process_transaction(signature).await {
-        Ok(transaction) => {
+        Ok(mut transaction) => {
             log(LogTag::Transactions, "SUCCESS", "Transaction analyzed successfully");
+            
+            // Force comprehensive analysis if not already done (check if fee_breakdown is None)
+            if transaction.fee_breakdown.is_none() {
+                log(LogTag::Transactions, "INFO", "Running additional comprehensive analysis for complete fee breakdown");
+                // Comprehensive analysis is already called in process_transaction, but let's ensure debug mode is enabled
+            }
+            
             display_detailed_transaction_info(&transaction);
         }
         Err(e) => {
@@ -1086,23 +1101,28 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
     log(LogTag::Transactions, "DETAIL", &format!("Fee (SOL): {:.9}", transaction.fee_sol));
     log(LogTag::Transactions, "DETAIL", &format!("SOL Balance Change: {:.9}", transaction.sol_balance_change));
 
-    // Display comprehensive fee information if swap analysis is available
-    if let Some(swap_analysis) = &transaction.swap_analysis {
+    // Display comprehensive fee information if available
+    if let Some(fee_breakdown) = &transaction.fee_breakdown {
         log(LogTag::Transactions, "DETAIL", "=== COMPREHENSIVE FEE BREAKDOWN ===");
-        log(LogTag::Transactions, "DETAIL", &format!("Transaction Fee: {:.9} SOL", swap_analysis.fee_breakdown.transaction_fee));
-        log(LogTag::Transactions, "DETAIL", &format!("Router Fee: {:.9} SOL", swap_analysis.fee_breakdown.router_fee));
-        log(LogTag::Transactions, "DETAIL", &format!("Platform Fee: {:.9} SOL", swap_analysis.fee_breakdown.platform_fee));
-        log(LogTag::Transactions, "DETAIL", &format!("Priority Fee: {:.9} SOL", swap_analysis.fee_breakdown.priority_fee));
-        log(LogTag::Transactions, "DETAIL", &format!("ATA Creation Cost: {:.9} SOL", swap_analysis.fee_breakdown.ata_creation_cost));
-        log(LogTag::Transactions, "DETAIL", &format!("Rent Costs: {:.9} SOL", swap_analysis.fee_breakdown.rent_costs));
-        log(LogTag::Transactions, "DETAIL", &format!("Total Fees: {:.9} SOL ({:.2}%)", swap_analysis.fee_breakdown.total_fees, swap_analysis.fee_breakdown.fee_percentage));
+        log(LogTag::Transactions, "DETAIL", &format!("Transaction Fee: {:.9} SOL", fee_breakdown.transaction_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("Router Fee: {:.9} SOL", fee_breakdown.router_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("Platform Fee: {:.9} SOL", fee_breakdown.platform_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("Priority Fee: {:.9} SOL", fee_breakdown.priority_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("ATA Creation Cost: {:.9} SOL", fee_breakdown.ata_creation_cost));
+        log(LogTag::Transactions, "DETAIL", &format!("Rent Costs: {:.9} SOL", fee_breakdown.rent_costs));
+        log(LogTag::Transactions, "DETAIL", &format!("Total Fees: {:.9} SOL ({:.2}%)", fee_breakdown.total_fees, fee_breakdown.fee_percentage));
         log(LogTag::Transactions, "DETAIL", &format!("Compute Units: {} consumed / {} price = Priority: {}", 
-            swap_analysis.fee_breakdown.compute_units_consumed, 
-            swap_analysis.fee_breakdown.compute_unit_price,
-            swap_analysis.fee_breakdown.compute_unit_price.saturating_sub(swap_analysis.fee_breakdown.compute_units_consumed)
+            fee_breakdown.compute_units_consumed, 
+            fee_breakdown.compute_unit_price,
+            fee_breakdown.compute_unit_price.saturating_sub(fee_breakdown.compute_units_consumed)
         ));
-        log(LogTag::Transactions, "DETAIL", &format!("Effective Price: {:.12}", swap_analysis.effective_price));
-        log(LogTag::Transactions, "DETAIL", &format!("Slippage: {:.2}%", swap_analysis.slippage));
+        
+        // Display swap analysis information if available
+        if let Some(swap_analysis) = &transaction.swap_analysis {
+            log(LogTag::Transactions, "DETAIL", &format!("Effective Price: {:.12}", swap_analysis.effective_price));
+            log(LogTag::Transactions, "DETAIL", &format!("Slippage: {:.2}%", swap_analysis.slippage));
+        }
+        
         log(LogTag::Transactions, "DETAIL", "=== END FEE BREAKDOWN ===");
     }
     

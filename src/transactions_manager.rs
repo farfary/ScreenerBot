@@ -1220,22 +1220,33 @@ impl TransactionsManager {
                     }
                 }
 
-                // Calculate priority fee (difference between cost units and base compute cost)
-                // Cost units include both compute cost + priority fee
-                let base_compute_cost = fee_breakdown.compute_units_consumed * 5; // 5 micro-lamports per compute unit
-                if fee_breakdown.compute_unit_price > base_compute_cost {
-                    let priority_fee_lamports = fee_breakdown.compute_unit_price - base_compute_cost;
+                // Calculate priority fee from actual transaction data
+                // Transaction fee = base fee (5000 lamports) + compute cost + priority fee
+                let total_fee_lamports = (transaction.fee_sol * 1_000_000_000.0) as u64;
+                let base_fee_lamports = 5000; // Standard Solana base fee
+                let compute_cost_lamports = fee_breakdown.compute_units_consumed * 5; // 5 micro-lamports per CU converted to lamports
+                
+                // Priority fee is what's left after base fee and compute cost
+                if total_fee_lamports > base_fee_lamports + compute_cost_lamports {
+                    let priority_fee_lamports = total_fee_lamports - base_fee_lamports - compute_cost_lamports;
                     fee_breakdown.priority_fee = priority_fee_lamports as f64 / 1_000_000_000.0;
                     
                     if self.debug_enabled {
                         log(LogTag::Transactions, "FEE_DEBUG", &format!(
-                            "{} - Priority fee: {:.9} SOL (base: {}, total: {})", 
+                            "{} - Priority fee: {:.9} SOL (total: {} lamports, base: {}, compute: {}, priority: {})", 
                             &transaction.signature[..8], 
                             fee_breakdown.priority_fee,
-                            base_compute_cost,
-                            fee_breakdown.compute_unit_price
+                            total_fee_lamports,
+                            base_fee_lamports,
+                            compute_cost_lamports,
+                            priority_fee_lamports
                         ));
                     }
+                } else if self.debug_enabled {
+                    log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                        "{} - No priority fee detected (total fee covers base + compute only)", 
+                        &transaction.signature[..8]
+                    ));
                 }
 
                 // Analyze log messages for fee information
@@ -1245,11 +1256,14 @@ impl TransactionsManager {
                 self.analyze_rent_costs(&mut fee_breakdown, transaction).await?;
 
                 // Calculate total fees
+                // Note: ATA creation cost is a form of rent payment, so include it in rent_costs
+                fee_breakdown.rent_costs += fee_breakdown.ata_creation_cost;
+                
                 fee_breakdown.total_fees = fee_breakdown.transaction_fee + 
                                          fee_breakdown.router_fee + 
                                          fee_breakdown.platform_fee + 
-                                         fee_breakdown.rent_costs + 
-                                         fee_breakdown.ata_creation_cost;
+                                         fee_breakdown.priority_fee +
+                                         fee_breakdown.rent_costs;
 
                 // Calculate fee percentage of transaction value
                 // For swaps, calculate percentage against the actual swap amount (excluding fees)
@@ -1457,7 +1471,7 @@ impl TransactionsManager {
             
             // Categorize token transfers
             for transfer in &transaction.token_transfers {
-                if transfer.mint == "So11111111111111111111111111111111111111111112" {
+                if transfer.mint == "So11111111111111111111111111111111111111112" {
                     // This is WSOL (wrapped SOL)
                     wsol_transfer = Some(transfer);
                 } else if transfer.amount < 0.0 && transfer.amount.abs() > 0.001 {
@@ -1470,16 +1484,77 @@ impl TransactionsManager {
             }
             
             if self.debug_enabled {
-                log(LogTag::Transactions, "JUPITER", &format!("Analysis: input_token={}, output_token={}, wsol_transfer={}, sol_change={:.6}", 
+                log(LogTag::Transactions, "JUPITER", &format!("Analysis: input_token={}, output_token={}, wsol_transfer={}, sol_change={:.9}", 
                     input_token.is_some(), output_token.is_some(), wsol_transfer.is_some(), transaction.sol_balance_change));
+                if let Some(wsol) = wsol_transfer {
+                    log(LogTag::Transactions, "JUPITER", &format!("WSOL transfer amount: {:.9}", wsol.amount));
+                }
+                if let Some(input) = input_token {
+                    log(LogTag::Transactions, "JUPITER", &format!("Input token: {} amount: {:.9}", &input.mint[..8], input.amount));
+                }
+                if let Some(output) = output_token {
+                    log(LogTag::Transactions, "JUPITER", &format!("Output token: {} amount: {:.9}", &output.mint[..8], output.amount));
+                }
             }
             
-            // Pattern 1: Token-to-SOL swap (token sold, WSOL received)
-            // Check this pattern FIRST before token-to-token, since wSOL should be treated as SOL
+            // Enhanced Pattern Matching: Use SOL balance change as primary indicator
+            // since token transfer directions can be misleading in complex DEX operations
+            
+            // Pattern 1: Token-to-SOL swap - SOL balance increased (received SOL)
+            if transaction.sol_balance_change > 0.00001 && wsol_transfer.is_some() {
+                // Find the token being sold (prefer input_token, but use output_token if no input)
+                let token_transfer = input_token.or(output_token);
+                if let Some(token) = token_transfer {
+                    if token.mint != "So11111111111111111111111111111111111111112" {
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "JUPITER", &format!("✅ Token-to-SOL swap detected: {} -> SOL (SOL balance increased)", 
+                                &token.mint[..8]));
+                        }
+                        return Ok(TransactionType::SwapTokenToSol {
+                            token_mint: token.mint.clone(),
+                            token_amount: token.amount.abs(),
+                            sol_amount: transaction.sol_balance_change, // Use actual SOL received
+                            router: "Jupiter".to_string(),
+                        });
+                    }
+                } else if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 1: no token transfer found"));
+                }
+            } else if self.debug_enabled {
+                log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 1: sol_change={:.9} > 0.00001? {}, wsol_transfer.is_some()? {}", 
+                    transaction.sol_balance_change, transaction.sol_balance_change > 0.00001, wsol_transfer.is_some()));
+            }
+            
+            // Pattern 2: SOL-to-Token swap - SOL balance decreased (spent SOL)
+            if transaction.sol_balance_change < -0.00001 && wsol_transfer.is_some() {
+                // Find the token being bought (prefer output_token, but use input_token if no output)
+                let token_transfer = output_token.or(input_token);
+                if let Some(token) = token_transfer {
+                    if token.mint != "So11111111111111111111111111111111111111112" {
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "JUPITER", &format!("✅ SOL-to-token swap detected: SOL -> {} (SOL balance decreased)", 
+                                &token.mint[..8]));
+                        }
+                        return Ok(TransactionType::SwapSolToToken {
+                            token_mint: token.mint.clone(),
+                            sol_amount: transaction.sol_balance_change.abs(), // SOL spent
+                            token_amount: token.amount.abs(),
+                            router: "Jupiter".to_string(),
+                        });
+                    }
+                } else if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 2: no token transfer found"));
+                }
+            } else if self.debug_enabled {
+                log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 2: sol_change={:.9} < -0.00001? {}, wsol_transfer.is_some()? {}", 
+                    transaction.sol_balance_change, transaction.sol_balance_change < -0.00001, wsol_transfer.is_some()));
+            }
+            
+            // Fallback Pattern 1: Traditional logic - Token-to-SOL swap (token sold, WSOL received)
             if let (Some(input), Some(wsol)) = (input_token, wsol_transfer) {
                 if wsol.amount > 0.0 { // WSOL received
                     if self.debug_enabled {
-                        log(LogTag::Transactions, "JUPITER", &format!("Token-to-SOL swap detected: {} -> SOL", 
+                        log(LogTag::Transactions, "JUPITER", &format!("Token-to-SOL swap detected (fallback): {} -> SOL", 
                             &input.mint[..8]));
                     }
                     return Ok(TransactionType::SwapTokenToSol {
@@ -1491,12 +1566,11 @@ impl TransactionsManager {
                 }
             }
             
-            // Pattern 2: SOL-to-Token swap (WSOL sent, token received)
-            // Check this pattern SECOND before token-to-token
+            // Fallback Pattern 2: Traditional logic - SOL-to-Token swap (WSOL sent, token received)
             if let (Some(output), Some(wsol)) = (output_token, wsol_transfer) {
                 if wsol.amount < 0.0 { // WSOL sent
                     if self.debug_enabled {
-                        log(LogTag::Transactions, "JUPITER", &format!("SOL-to-token swap detected: SOL -> {}", 
+                        log(LogTag::Transactions, "JUPITER", &format!("SOL-to-token swap detected (fallback): SOL -> {}", 
                             &output.mint[..8]));
                     }
                     return Ok(TransactionType::SwapSolToToken {
