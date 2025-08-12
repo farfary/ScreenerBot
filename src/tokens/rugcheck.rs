@@ -587,22 +587,24 @@ impl RugcheckService {
                         let score = data.score_normalised.or(data.score);
                         let is_safe = is_token_safe_for_trading(&data);
 
-                        log(
-                            LogTag::Rugcheck,
-                            "STORED",
-                            &format!(
-                                "✓ Stored {} | Risk Score: {} | Status: {} | {}/{}",
-                                symbol,
-                                score.map_or("N/A".to_string(), |s| s.to_string()),
-                                if is_safe {
-                                    "🟢 SAFE"
-                                } else {
-                                    "🔴 RISKY"
-                                },
-                                success_count,
-                                total_mints
-                            )
-                        );
+                        if is_debug_rugcheck_enabled() {
+                            log(
+                                LogTag::Rugcheck,
+                                "STORED",
+                                &format!(
+                                    "✓ Stored {} | Risk Score: {} | Status: {} | {}/{}",
+                                    symbol,
+                                    score.map_or("N/A".to_string(), |s| s.to_string()),
+                                    if is_safe {
+                                        "🟢 SAFE"
+                                    } else {
+                                        "🔴 RISKY"
+                                    },
+                                    success_count,
+                                    total_mints
+                                )
+                            );
+                        }
                     } else if is_debug_rugcheck_enabled() {
                         log(
                             LogTag::Rugcheck,
