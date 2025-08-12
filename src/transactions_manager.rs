@@ -1059,18 +1059,39 @@ impl TransactionsManager {
                     if let Some(message) = transaction_data.get("message") {
                         if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
                             for (index, instruction) in instructions.iter().enumerate() {
-                                if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|v| v.as_u64()) {
+                                
+                                // Handle direct programId format (already parsed format)
+                                if let Some(program_id) = instruction.get("programId").and_then(|v| v.as_str()) {
+                                    transaction.instructions.push(InstructionInfo {
+                                        program_id: program_id.to_string(),
+                                        instruction_type: format!("instruction_{}", index),
+                                        accounts: vec![], // Would extract account details if needed
+                                        data: instruction.get("data").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                    });
+                                }
+                                // Handle programIdIndex format (raw format that needs resolution)
+                                else if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|v| v.as_u64()) {
                                     if let Some(account_keys) = message.get("accountKeys").and_then(|v| v.as_array()) {
-                                        if let Some(program_id_value) = account_keys.get(program_id_index as usize) {
-                                            let program_id = program_id_value.as_str().unwrap_or("unknown").to_string();
-                                            
-                                            transaction.instructions.push(InstructionInfo {
-                                                program_id: program_id.clone(),
-                                                instruction_type: format!("instruction_{}", index),
-                                                accounts: vec![], // Would extract account indices if needed
-                                                data: instruction.get("data").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                                            });
-                                        }
+                                        // Try to get program ID from account keys
+                                        let program_id = if let Some(program_id_value) = account_keys.get(program_id_index as usize) {
+                                            // Handle both string format and object format
+                                            if let Some(pubkey_str) = program_id_value.as_str() {
+                                                pubkey_str.to_string()
+                                            } else if let Some(pubkey_obj) = program_id_value.get("pubkey").and_then(|v| v.as_str()) {
+                                                pubkey_obj.to_string()
+                                            } else {
+                                                "unknown".to_string()
+                                            }
+                                        } else {
+                                            "unknown".to_string()
+                                        };
+                                        
+                                        transaction.instructions.push(InstructionInfo {
+                                            program_id,
+                                            instruction_type: format!("instruction_{}", index),
+                                            accounts: vec![], // Would extract account indices if needed
+                                            data: instruction.get("data").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                        });
                                     }
                                 }
                             }
@@ -1678,6 +1699,12 @@ impl TransactionsManager {
                     return "Raydium".to_string();
                 }
                 "CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ" => {
+                    return "Raydium CAMM".to_string();
+                }
+                "CPMMoo8L3wrBtphwOYMpCX4LtjRWB3gjCMFdukgp6EEh" => {
+                    return "Raydium CPMM".to_string();
+                }
+                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => {
                     return "Raydium CPMM".to_string();
                 }
                 "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" => {
@@ -1696,6 +1723,15 @@ impl TransactionsManager {
                     }
                     if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
                         return "Jupiter (via Raydium)".to_string();
+                    }
+                    if log_text.contains("CPMMoo8L3wrBtphwOYMpCX4LtjRWB3gjCMFdukgp6EEh") {
+                        return "Jupiter (via Raydium CPMM)".to_string();
+                    }
+                    if log_text.contains("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C") {
+                        return "Jupiter (via Raydium CPMM)".to_string();
+                    }
+                    if log_text.contains("CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ") {
+                        return "Jupiter (via Raydium CAMM)".to_string();
                     }
                     if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
                         return "Jupiter (via Orca)".to_string();
@@ -1731,6 +1767,12 @@ impl TransactionsManager {
         }
         if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
             return "Raydium".to_string();
+        }
+        if log_text.contains("CPMMoo8L3wrBtphwOYMpCX4LtjRWB3gjCMFdukgp6EEh") {
+            return "Raydium CLMM".to_string();
+        }
+        if log_text.contains("CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ") {
+            return "Raydium CPMM".to_string();
         }
         if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
             return "Orca".to_string();
@@ -3597,10 +3639,10 @@ impl TransactionsManager {
 
         log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS ===");
         log(LogTag::Transactions, "TABLE", &format!(
-            "{:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<12} {:<12} {:<8}",
-            "Slot", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
+            "{:<8} {:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<12} {:<12} {:<8}",
+            "Sig", "Slot", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
         ));
-        log(LogTag::Transactions, "TABLE", &"-".repeat(120));
+        log(LogTag::Transactions, "TABLE", &"-".repeat(128));
 
         let mut total_fees = 0.0;
         let mut buy_count = 0;
@@ -3615,8 +3657,11 @@ impl TransactionsManager {
                 None => "Unknown".to_string(),
             };
 
+            let sig_short = &swap.signature[..8.min(swap.signature.len())];
+
             log(LogTag::Transactions, "TABLE", &format!(
-                "{:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
+                "{:<8} {:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
+                sig_short,
                 slot_str,
                 swap.swap_type,
                 &swap.token_symbol[..15.min(swap.token_symbol.len())],
@@ -3638,7 +3683,7 @@ impl TransactionsManager {
             }
         }
 
-        log(LogTag::Transactions, "TABLE", &"-".repeat(120));
+        log(LogTag::Transactions, "TABLE", &"-".repeat(128));
         log(LogTag::Transactions, "TABLE", &format!(
             "SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
             buy_count, total_sol_spent, sell_count, total_sol_received, total_fees, 

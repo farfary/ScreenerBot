@@ -536,15 +536,16 @@ async fn analyze_all_transactions(wallet_pubkey: Pubkey, max_count: usize) {
 /// Display comprehensive table of ALL transaction types
 fn display_all_transactions_table(transactions: &[screenerbot::transactions_manager::Transaction]) {
     log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE TRANSACTION ANALYSIS ===");
-    log(LogTag::Transactions, "TABLE", "Slot         Type                    Details                          SOL Change   Fee SOL      Success");
-    log(LogTag::Transactions, "TABLE", "---------------------------------------------------------------------------------------------------------------");
+    log(LogTag::Transactions, "TABLE", "Sig      Slot         Type                    Details                          SOL Change   Fee SOL      Success");
+    log(LogTag::Transactions, "TABLE", "-----------------------------------------------------------------------------------------------------------------------");
     
     for transaction in transactions.iter().take(50) { // Show first 50 transactions
         let slot = transaction.slot.unwrap_or(0);
         let sol_change_str = format!("{:+.6}", transaction.sol_balance_change);
         let fee_str = format!("{:.6}", transaction.fee_sol);
         let success_icon = if transaction.success { "✅" } else { "❌" };
-        let timestamp = transaction.timestamp.format("%H:%M:%S").to_string();
+        let sig_short = &transaction.signature[..8.min(transaction.signature.len())];
+        let _timestamp = transaction.timestamp.format("%H:%M:%S").to_string();
         
         let (tx_type, details) = match &transaction.transaction_type {
             screenerbot::transactions_manager::TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, router } => {
@@ -608,8 +609,8 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
         };
 
         log(LogTag::Transactions, "TABLE", &format!(
-            "{:<12} {:<19} {:<32} {:<12} {:<12} {}",
-            slot, tx_type, 
+            "{:<8} {:<12} {:<19} {:<32} {:<12} {:<12} {}",
+            sig_short, slot, tx_type, 
             if details.len() > 30 { format!("{}...", &details[..27]) } else { details },
             sol_change_str, fee_str, success_icon
         ));
@@ -621,7 +622,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
         ));
     }
     
-    log(LogTag::Transactions, "TABLE", "---------------------------------------------------------------------------------------------------------------");
+    log(LogTag::Transactions, "TABLE", "-----------------------------------------------------------------------------------------------------------------------");
     log(LogTag::Transactions, "TABLE", "=== END TRANSACTION TABLE ===");
 }
 
@@ -2047,7 +2048,7 @@ async fn test_real_swap(
             execute_sol_to_token_test(&mut manager, &test_token, sol_amount, slippage, router).await;
         }
         "token-to-sol" => {
-            log(LogTag::Transactions, "ERROR", "token-to-sol test requires existing token balance - not implemented");
+            execute_token_to_sol_test(&mut manager, &test_token, slippage, router).await;
         }
         "round-trip" => {
             execute_round_trip_test(&mut manager, &test_token, sol_amount, slippage, router).await;
@@ -2185,6 +2186,100 @@ async fn execute_sol_to_token_test(
         }
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("❌ {} BUY failed: {}", router.to_uppercase(), e));
+        }
+    }
+}
+
+/// Execute Token to SOL swap test
+async fn execute_token_to_sol_test(
+    manager: &mut TransactionsManager,
+    token: &Token,
+    slippage: f64,
+    router: &str,
+) {
+    log(LogTag::Transactions, "SELL_TEST", &format!(
+        "🟠 Starting {} SELL test ({} -> SOL)",
+        router.to_uppercase(), token.symbol
+    ));
+
+    // Get wallet address for balance check
+    let wallet_address = match get_wallet_address() {
+        Ok(addr) => addr,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to get wallet address: {}", e));
+            return;
+        }
+    };
+
+    // Check existing token balance
+    let token_balance = match screenerbot::utils::get_token_balance(&wallet_address, &token.mint).await {
+        Ok(balance) => balance,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to get token balance: {}", e));
+            return;
+        }
+    };
+
+    if token_balance == 0 {
+        log(LogTag::Transactions, "ERROR", &format!(
+            "No {} balance found in wallet. Cannot execute token-to-sol test.",
+            token.symbol
+        ));
+        return;
+    }
+
+    // Get token decimals for proper amount calculation
+    let token_decimals = match get_token_decimals_sync(&token.mint) {
+        Some(decimals) => decimals,
+        None => {
+            log(LogTag::Transactions, "WARN", "Could not get token decimals from cache, using default 9");
+            9
+        }
+    };
+
+    let token_amount_raw = token_balance as f64 / 10_f64.powi(token_decimals as i32);
+    
+    log(LogTag::Transactions, "SELL_TEST", &format!(
+        "🔍 Found token balance: {} raw tokens ({:.6} decimal-adjusted tokens)",
+        token_balance, token_amount_raw
+    ));
+
+    // Use all available tokens for the sell test
+    let tokens_to_sell = token_amount_raw;
+
+    let start_time = Instant::now();
+    
+    let swap_result = match router {
+        "jupiter" => execute_jupiter_swap_test(token, tokens_to_sell, slippage, false).await,
+        "gmgn" => execute_gmgn_swap_test(token, tokens_to_sell, slippage, false).await,
+        _ => {
+            log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
+            return;
+        }
+    };
+
+    match swap_result {
+        Ok(result) => {
+            let execution_time = start_time.elapsed();
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "✅ {} SELL completed in {:.2}s!",
+                router.to_uppercase(), execution_time.as_secs_f64()
+            ));
+
+            if let Some(signature) = &result.transaction_signature {
+                log(LogTag::Transactions, "SELL_RESULT", &format!(
+                    "• Signature: {}\n  • Input: {} tokens\n  • Output: {} SOL\n  • Price Impact: {}%\n  • Fee: {} lamports",
+                    &signature[..12], result.input_amount, result.output_amount,
+                    result.price_impact, result.fee_lamports
+                ));
+
+                // Wait for transaction confirmation and analyze
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                analyze_swap_transaction(manager, signature, "SELL").await;
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("❌ {} SELL failed: {}", router.to_uppercase(), e));
         }
     }
 }
