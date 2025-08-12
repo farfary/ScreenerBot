@@ -57,7 +57,7 @@ use screenerbot::swaps::{
 };
 use screenerbot::positions;
 
-
+use spl_associated_token_account::get_associated_token_address;
 use clap::{Arg, Command};
 use std::collections::HashMap;
 use std::fs;
@@ -2072,35 +2072,14 @@ async fn test_real_swap(
 
     log(LogTag::Transactions, "SUCCESS", "✅ All pre-flight checks passed");
 
-    // Create test token for swap operations
-    let test_token = Token {
-        mint: token_mint.to_string(),
-        symbol: token_symbol.to_string(),
-        name: token_symbol.to_string(),
-        chain: "solana".to_string(),
-        logo_url: None,
-        coingecko_id: None,
-        website: None,
-        description: None,
-        tags: vec![],
-        is_verified: false,
-        created_at: None,
-        price_dexscreener_sol: None,
-        price_dexscreener_usd: None,
-        price_pool_sol: None,
-        price_pool_usd: None,
-        dex_id: None,
-        pair_address: None,
-        pair_url: None,
-        labels: vec![],
-        fdv: None,
-        market_cap: None,
-        txns: None,
-        volume: None,
-        price_change: None,
-        liquidity: None,
-        info: None,
-        boosts: None,
+    // Load token with updated information from tokens module
+    let test_token = match load_token_with_updated_info(token_mint, token_symbol).await {
+        Ok(token) => token,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to load token info: {}", e));
+            log(LogTag::Transactions, "INFO", "Creating basic token for testing...");
+            create_basic_token(token_mint, token_symbol)
+        }
     };
 
     match swap_type {
@@ -2780,41 +2759,59 @@ async fn test_real_position_management(
     
     tokio::time::sleep(Duration::from_secs(10)).await;
 
+    // Initialize token system and price service
+    log(LogTag::Transactions, "POSITION_TEST", "🔧 Initializing token systems...");
+    
+    // Initialize token database
+    let _token_database = match screenerbot::tokens::TokenDatabase::new() {
+        Ok(db) => {
+            log(LogTag::Transactions, "POSITION_TEST", "✅ Token database initialized");
+            db
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to initialize token database: {}", e));
+            return;
+        }
+    };
+
+    // Initialize price service
+    if let Err(e) = screenerbot::tokens::initialize_price_service().await {
+        log(LogTag::Transactions, "ERROR", &format!("Failed to initialize price service: {}", e));
+        return;
+    }
+    log(LogTag::Transactions, "POSITION_TEST", "✅ Price service initialized");
+
+    // Initialize DexScreener API
+    if let Err(e) = screenerbot::tokens::init_dexscreener_api().await {
+        log(LogTag::Transactions, "WARN", &format!("Failed to initialize DexScreener API: {}", e));
+        // Continue anyway as this is not critical for position testing
+    } else {
+        log(LogTag::Transactions, "POSITION_TEST", "✅ DexScreener API initialized");
+    }
+
     // Initialize global transaction manager for monitoring
     if let Err(e) = initialize_global_transaction_manager(wallet_pubkey).await {
         log(LogTag::Transactions, "ERROR", &format!("Failed to initialize transaction manager: {}", e));
         return;
     }
 
-    // Create test token
-    let test_token = Token {
-        mint: token_mint.to_string(),
-        symbol: token_symbol.to_string(),
-        name: token_symbol.to_string(),
-        chain: "solana".to_string(),
-        logo_url: None,
-        coingecko_id: None,
-        website: None,
-        description: None,
-        tags: vec![],
-        is_verified: false,
-        created_at: None,
-        price_dexscreener_sol: None,
-        price_dexscreener_usd: None,
-        price_pool_sol: None,
-        price_pool_usd: None,
-        dex_id: None,
-        pair_address: None,
-        pair_url: None,
-        labels: vec![],
-        fdv: None,
-        market_cap: None,
-        txns: None,
-        volume: None,
-        price_change: None,
-        liquidity: None,
-        info: None,
-        boosts: None,
+    // Load token with updated information from tokens module
+    let test_token = match load_token_with_updated_info(token_mint, token_symbol).await {
+        Ok(token) => {
+            log(LogTag::Transactions, "POSITION_TEST", &format!(
+                "✅ Loaded token: {} ({}) with updated info - Price: {} SOL, Liquidity: {} USD",
+                token.symbol,
+                &token.mint[..8],
+                token.price_dexscreener_sol.map(|p| format!("{:.12}", p)).unwrap_or("N/A".to_string()),
+                token.liquidity.as_ref().and_then(|l| l.usd).map(|l| format!("{:.0}", l)).unwrap_or("N/A".to_string())
+            ));
+            token
+        },
+        Err(e) => {
+            log(LogTag::Transactions, "WARNING", &format!("Failed to load token info: {}", e));
+            log(LogTag::Transactions, "INFO", "Creating basic token for testing...");
+            create_basic_token(token_mint, token_symbol)
+        }
     };
 
     // Get current price for the test
@@ -2860,10 +2857,30 @@ async fn test_real_position_management(
                     exit_price,
                     position.exit_transaction_signature.as_ref().unwrap_or(&"None".to_string())
                 ));
+                
+                // Generate comprehensive test report
+                generate_comprehensive_position_test_report(
+                    &test_token,
+                    token_symbol,
+                    token_mint,
+                    sol_amount,
+                    wallet_pubkey,
+                    &position,
+                ).await;
             } else {
                 log(LogTag::Transactions, "POSITION_TEST", &format!(
                     "❌ Failed to close position for {}", position.symbol
                 ));
+                
+                // Generate report even if closing failed
+                generate_comprehensive_position_test_report(
+                    &test_token,
+                    token_symbol,
+                    token_mint,
+                    sol_amount,
+                    wallet_pubkey,
+                    &position,
+                ).await;
             }
         } else {
             log(LogTag::Transactions, "POSITION_TEST", "❌ Position not found for closing");
@@ -2873,4 +2890,296 @@ async fn test_real_position_management(
     }
 
     log(LogTag::Transactions, "POSITION_TEST", "=== REAL POSITION MANAGEMENT TEST COMPLETED ===");
+}
+
+/// Load token with updated information from tokens module
+async fn load_token_with_updated_info(token_mint: &str, token_symbol: &str) -> Result<Token, String> {
+    log(LogTag::Transactions, "TOKEN_LOAD", &format!("Loading token {} ({}) with updated info...", token_symbol, &token_mint[..8]));
+
+    // Initialize tokens system if not already done
+    if let Err(e) = screenerbot::tokens::initialize_tokens_system().await {
+        log(LogTag::Transactions, "WARNING", &format!("Failed to initialize tokens system: {}", e));
+    }
+
+    // Try to get token from database first
+    if let Some(mut token) = screenerbot::tokens::get_token_from_db(token_mint).await {
+        log(LogTag::Transactions, "TOKEN_LOAD", &format!("✅ Found token in database: {}", token.symbol));
+        
+        // Update with current price if available
+        if let Some(current_price) = screenerbot::tokens::get_current_token_price(token_mint).await {
+            token.price_dexscreener_sol = Some(current_price);
+            log(LogTag::Transactions, "TOKEN_LOAD", &format!("✅ Updated current price: {:.12} SOL", current_price));
+        }
+        
+        // Get token decimals and ensure they are set
+        if token.price_dexscreener_sol.is_none() {
+            log(LogTag::Transactions, "TOKEN_LOAD", "⚠️ No price available, fetching decimals for safety...");
+        }
+        
+        // Ensure decimals are available
+        if let Some(decimals) = screenerbot::tokens::get_token_decimals(token_mint).await {
+            log(LogTag::Transactions, "TOKEN_LOAD", &format!("✅ Token decimals: {}", decimals));
+        }
+        
+        return Ok(token);
+    }
+
+    // If not in database, try to fetch from discovery system
+    log(LogTag::Transactions, "TOKEN_LOAD", "Token not in database, attempting discovery...");
+    
+    // Run discovery to fetch the token
+    if let Err(e) = screenerbot::tokens::discover_tokens_once().await {
+        log(LogTag::Transactions, "WARNING", &format!("Discovery failed: {}", e));
+    }
+    
+    // Try again after discovery
+    if let Some(token) = screenerbot::tokens::get_token_from_db(token_mint).await {
+        log(LogTag::Transactions, "TOKEN_LOAD", &format!("✅ Found token after discovery: {}", token.symbol));
+        return Ok(token);
+    }
+
+    // If still not found, create a basic token but try to get current info
+    log(LogTag::Transactions, "TOKEN_LOAD", "Token not found in discovery, creating with current data...");
+    let mut basic_token = create_basic_token(token_mint, token_symbol);
+    
+    // Try to get current price
+    if let Some(current_price) = screenerbot::tokens::get_current_token_price(token_mint).await {
+        basic_token.price_dexscreener_sol = Some(current_price);
+        log(LogTag::Transactions, "TOKEN_LOAD", &format!("✅ Got current price: {:.12} SOL", current_price));
+    }
+    
+    Ok(basic_token)
+}
+
+/// Create a basic token structure for testing
+fn create_basic_token(token_mint: &str, token_symbol: &str) -> Token {
+    Token {
+        mint: token_mint.to_string(),
+        symbol: token_symbol.to_string(),
+        name: token_symbol.to_string(),
+        chain: "solana".to_string(),
+        logo_url: None,
+        coingecko_id: None,
+        website: None,
+        description: None,
+        tags: vec![],
+        is_verified: false,
+        created_at: None,
+        price_dexscreener_sol: None,
+        price_dexscreener_usd: None,
+        price_pool_sol: None,
+        price_pool_usd: None,
+        dex_id: None,
+        pair_address: None,
+        pair_url: None,
+        labels: vec![],
+        fdv: None,
+        market_cap: None,
+        txns: None,
+        volume: None,
+        price_change: None,
+        liquidity: None,
+        info: None,
+        boosts: None,
+    }
+}
+
+async fn generate_comprehensive_position_test_report(
+    original_token: &Token,
+    token_symbol: &str,
+    token_mint: &str,
+    sol_amount: f64,
+    wallet_pubkey: Pubkey,
+    position: &positions::Position,
+) {
+    println!("\n{}", "=".repeat(80));
+    println!("🔍 COMPREHENSIVE POSITION TEST REPORT");
+    println!("{}", "=".repeat(80));
+
+    // Get current wallet balance
+    let rpc_client = get_rpc_client();
+    let current_sol_balance = match rpc_client.get_sol_balance(&wallet_pubkey.to_string()).await {
+        Ok(balance) => balance,
+        Err(_) => 0.0,
+    };
+
+    // Position Overview
+    println!("\n📊 POSITION OVERVIEW:");
+    println!("Token Address: {}", token_mint);
+    println!("Token Symbol: {}", token_symbol);
+    println!("Token Name: {}", original_token.name);
+    println!("Test SOL Amount: {:.6} SOL", sol_amount);
+    
+    // Price Analysis
+    println!("\n💰 PRICE ANALYSIS:");
+    println!("Entry Price: {:.9} SOL", position.entry_price);
+    if let Some(exit_price) = position.exit_price {
+        println!("Exit Price: {:.9} SOL", exit_price);
+        
+        let price_change = ((exit_price - position.entry_price) / position.entry_price) * 100.0;
+        let price_change_emoji = if price_change > 0.0 { "📈" } else { "📉" };
+        println!("{} Price Change: {:.2}%", price_change_emoji, price_change);
+    }
+
+    // Token Amount Analysis
+    println!("\n🪙 TOKEN AMOUNT ANALYSIS:");
+    if let Some(token_amount) = position.token_amount {
+        // Token amount is stored in raw units, need to convert to human readable
+        let human_readable = token_amount as f64 / 1_000_000.0; // Assuming 6 decimals for most tokens
+        println!("Token Amount (raw units): {}", token_amount);
+        println!("Token Amount (human readable): {:.6}", human_readable);
+    }
+
+    // SOL Balance Analysis
+    println!("\n💎 SOL BALANCE ANALYSIS:");
+    println!("Entry SOL Size: {:.9} SOL", position.entry_size_sol);
+    println!("Total Position SOL: {:.9} SOL", position.total_size_sol);
+    println!("Current Wallet Balance: {:.9} SOL", current_sol_balance);
+    
+    if let Some(sol_received) = position.sol_received {
+        println!("SOL Received on Exit: {:.9} SOL", sol_received);
+        let sol_change = sol_received - position.entry_size_sol;
+        let sol_change_emoji = if sol_change > 0.0 { "📈" } else { "📉" };
+        println!("{} SOL P&L: {:.9} SOL", sol_change_emoji, sol_change);
+        
+        if position.entry_size_sol > 0.0 {
+            let sol_change_percent = (sol_change / position.entry_size_sol) * 100.0;
+            println!("SOL P&L Percentage: {:.2}%", sol_change_percent);
+        }
+    }
+
+    // Price Tracking
+    println!("\n� PRICE TRACKING:");
+    println!("Highest Price: {:.9} SOL", position.price_highest);
+    println!("Lowest Price: {:.9} SOL", position.price_lowest);
+    
+    let highest_gain = ((position.price_highest - position.entry_price) / position.entry_price) * 100.0;
+    let lowest_loss = ((position.price_lowest - position.entry_price) / position.entry_price) * 100.0;
+    println!("Max Gain Potential: {:.2}%", highest_gain);
+    println!("Max Loss Experienced: {:.2}%", lowest_loss);
+
+    // Transaction Analysis
+    println!("\n📋 TRANSACTION ANALYSIS:");
+    if let Some(entry_sig) = &position.entry_transaction_signature {
+        println!("Entry Transaction: https://solscan.io/tx/{}", entry_sig);
+    }
+    if let Some(exit_sig) = &position.exit_transaction_signature {
+        println!("Exit Transaction: https://solscan.io/tx/{}", exit_sig);
+    }
+
+    // Verification Status
+    println!("\n✅ VERIFICATION STATUS:");
+    println!("Entry Transaction Verified: {}", if position.transaction_entry_verified { "✅ Yes" } else { "❌ No" });
+    
+    // Position Timing
+    println!("\n⏱️ TIMING ANALYSIS:");
+    println!("Position Opened: {}", position.entry_time.format("%Y-%m-%d %H:%M:%S UTC"));
+    if let Some(exit_time) = position.exit_time {
+        println!("Position Closed: {}", exit_time.format("%Y-%m-%d %H:%M:%S UTC"));
+        
+        if let Ok(duration) = exit_time.signed_duration_since(position.entry_time).to_std() {
+            println!("Position Duration: {:.2} seconds", duration.as_secs_f64());
+        }
+    }
+
+    // Performance Summary
+    println!("\n🎯 PERFORMANCE SUMMARY:");
+    if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
+        let price_pnl = ((exit_price - position.entry_price) / position.entry_price) * 100.0;
+        let sol_pnl = sol_received - position.entry_size_sol;
+        let sol_pnl_percent = (sol_pnl / position.entry_size_sol) * 100.0;
+        
+        let performance_emoji = if sol_pnl > 0.0 { "🟢" } else { "🔴" };
+        println!("{} Price P&L: {:.2}%", performance_emoji, price_pnl);
+        println!("{} SOL P&L: {:.9} SOL ({:.2}%)", performance_emoji, sol_pnl, sol_pnl_percent);
+        
+        // Risk assessment
+        let risk_level = if sol_pnl_percent.abs() > 10.0 {
+            "HIGH"
+        } else if sol_pnl_percent.abs() > 5.0 {
+            "MEDIUM"
+        } else {
+            "LOW"
+        };
+        println!("Risk Level: {}", risk_level);
+    }
+
+    // Position Status
+    println!("\n📈 POSITION STATUS:");
+    if position.exit_price.is_some() {
+        println!("✅ Position closed successfully");
+        println!("Status: COMPLETED");
+    } else {
+        println!("⚠️ Position still open or closure failed");
+        println!("Status: OPEN/FAILED");
+    }
+
+    // Smart Targeting Analysis
+    println!("\n🎯 SMART TARGETING:");
+    if let Some(min_target) = position.profit_target_min {
+        println!("Minimum Profit Target: {:.2}%", min_target);
+    }
+    if let Some(max_target) = position.profit_target_max {
+        println!("Maximum Profit Target: {:.2}%", max_target);
+    }
+    if let Some(liquidity_tier) = &position.liquidity_tier {
+        println!("Liquidity Tier: {}", liquidity_tier);
+    }
+
+    // ATA Information
+    println!("\n🏦 ATA (Associated Token Account) STATUS:");
+    println!("Token ATA Address: {}", get_associated_token_address(
+        &wallet_pubkey,
+        &Pubkey::from_str(token_mint).unwrap_or_default()
+    ));
+
+    // Additional Insights
+    println!("\n💡 INSIGHTS & ANALYSIS:");
+    
+    // Transaction verification insights
+    if position.transaction_entry_verified {
+        println!("✅ Transaction verification system worked correctly");
+    } else {
+        println!("⚠️ Transaction verification may have issues");
+    }
+    
+    // Effective pricing insights
+    if let Some(effective_entry) = position.effective_entry_price {
+        println!("Effective Entry Price: {:.9} SOL", effective_entry);
+        let slippage = ((effective_entry - position.entry_price) / position.entry_price) * 100.0;
+        if slippage.abs() < 1.0 {
+            println!("✅ Low slippage detected ({:.2}%)", slippage);
+        } else {
+            println!("⚠️ High slippage detected ({:.2}%)", slippage);
+        }
+    }
+    
+    if let Some(effective_exit) = position.effective_exit_price {
+        println!("Effective Exit Price: {:.9} SOL", effective_exit);
+    }
+    
+    // Position size analysis
+    if position.total_size_sol > position.entry_size_sol {
+        println!("📊 Position was accumulated (total > entry size)");
+    } else {
+        println!("📊 Single entry position");
+    }
+
+    // Market timing insights
+    if let (Some(exit_price), Some(exit_time)) = (position.exit_price, position.exit_time) {
+        let hold_duration = exit_time.signed_duration_since(position.entry_time);
+        if let Ok(duration) = hold_duration.to_std() {
+            if duration.as_secs() < 60 {
+                println!("⚡ Very short position (< 1 minute) - High frequency strategy");
+            } else if duration.as_secs() < 300 {
+                println!("🕐 Short position (< 5 minutes) - Quick scalp trade");
+            } else {
+                println!("🕰️ Extended position (> 5 minutes) - Swing trade");
+            }
+        }
+    }
+
+    println!("\n{}", "=".repeat(80));
+    println!("📊 END OF COMPREHENSIVE POSITION TEST REPORT");
+    println!("{}", "=".repeat(80));
 }

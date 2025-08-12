@@ -514,6 +514,69 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             
             let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
 
+            // Fetch transaction details to get actual token amount and prices
+            let (token_amount, effective_entry_price, entry_fee, actual_sol_spent) = 
+                match crate::transactions_manager::get_transaction(&transaction_signature).await {
+                    Ok(Some(tx)) => {
+                        let mut token_amount = None;
+                        let mut effective_price = None;
+                        let mut fee_lamports = None;
+                        let mut sol_spent = TRADE_SIZE_SOL;
+
+                        // Try to get token amount from swap analysis first
+                        if let Some(ref swap) = tx.swap_analysis {
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!("Swap analysis found - Output token: '{}', Expected: '{}', Match: {}",
+                                    swap.output_token, token.mint, swap.output_token == token.mint)
+                            );
+                            if swap.output_token == token.mint {
+                                // Handle token amount with proper decimal consideration
+                                // For display purposes, we store the actual received amount (with decimals)
+                                // The token amount should represent the actual token units received
+                                let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
+                                let token_amount_units = (swap.output_amount * 10_f64.powi(token_decimals as i32)) as u64;
+                                
+                                log(
+                                    LogTag::Trader,
+                                    "DEBUG",
+                                    &format!("TOKEN CONVERSION DEBUG: swap.output_amount={}, decimals={}, calculation={}*10^{}={}, as_u64={}",
+                                        swap.output_amount, token_decimals, swap.output_amount, token_decimals, 
+                                        swap.output_amount * 10_f64.powi(token_decimals as i32), token_amount_units)
+                                );
+                                
+                                token_amount = Some(token_amount_units);
+                                effective_price = Some(swap.effective_price);
+                                sol_spent = swap.input_amount;
+                                log(
+                                    LogTag::Trader,
+                                    "SUCCESS",
+                                    &format!("✅ Extracted from swap analysis: {} tokens ({} units with {} decimals), {} SOL", 
+                                        swap.output_amount, token_amount_units, token_decimals, swap.input_amount)
+                                );
+                            }
+                        } else {
+                            log(LogTag::Trader, "DEBUG", "No swap analysis found in transaction");
+                        }
+
+                        // Get fee information
+                        if let Some(ref fee_breakdown) = tx.fee_breakdown {
+                            fee_lamports = Some((fee_breakdown.total_fees * 1_000_000_000.0) as u64);
+                        }
+
+                        (token_amount, effective_price, fee_lamports, sol_spent)
+                    },
+                    _ => {
+                        log(
+                            LogTag::Trader,
+                            "WARNING",
+                            &format!("⚠️ Could not fetch transaction details for {}, using defaults", &transaction_signature[..8])
+                        );
+                        (None, None, None, TRADE_SIZE_SOL)
+                    }
+                };
+
             let new_position = Position {
                 mint: token.mint.clone(),
                 symbol: token.symbol.clone(),
@@ -524,13 +587,13 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 exit_time: None,
                 position_type: "buy".to_string(),
                 entry_size_sol: TRADE_SIZE_SOL,
-                total_size_sol: TRADE_SIZE_SOL, // Will be updated when verified
+                total_size_sol: actual_sol_spent,
                 price_highest: price,
                 price_lowest: price,
                 entry_transaction_signature: Some(transaction_signature.clone()),
                 exit_transaction_signature: None,
-                token_amount: None, // Will be updated when verified
-                effective_entry_price: None, // Will be updated when verified
+                token_amount,
+                effective_entry_price,
                 effective_exit_price: None,
                 sol_received: None,
                 profit_target_min: Some(profit_min),
@@ -538,7 +601,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 liquidity_tier: calculate_liquidity_tier(token),
                 transaction_entry_verified: true, // VERIFIED because finalized
                 transaction_exit_verified: false,
-                entry_fee_lamports: None, // Will be updated when verified
+                entry_fee_lamports: entry_fee,
                 exit_fee_lamports: None,
             };
 
@@ -546,10 +609,14 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 LogTag::Trader,
                 "SUCCESS",
                 &format!(
-                    "✅ POSITION CREATED (FINALIZED): {} | TX: {} | Signal Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}%",
+                    "✅ POSITION CREATED (FINALIZED): {} | TX: {} | Signal Price: {:.12} SOL | Token Amount: {} | Profit Target: {:.1}%-{:.1}%",
                     token.symbol,
-                    transaction_signature,
+                    &transaction_signature[..8],
                     price,
+                    match token_amount {
+                        Some(amount) => format!("{:.6}", amount),
+                        None => "NOT_FOUND".to_string()
+                    },
                     profit_min,
                     profit_max
                 )

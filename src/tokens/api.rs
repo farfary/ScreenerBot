@@ -750,6 +750,12 @@ static GLOBAL_DEXSCREENER_API: OnceCell<Arc<Mutex<DexScreenerApi>>> = OnceCell::
 
 /// Initialize the global DexScreener API client (creates single instance)
 pub async fn init_dexscreener_api() -> Result<(), String> {
+    // Check if already initialized
+    if GLOBAL_DEXSCREENER_API.get().is_some() {
+        log(LogTag::Api, "INIT", "DexScreener API already initialized, skipping");
+        return Ok(());
+    }
+
     let api = Arc::new(Mutex::new(DexScreenerApi::new()));
 
     // Initialize the API instance once
@@ -762,6 +768,7 @@ pub async fn init_dexscreener_api() -> Result<(), String> {
         |_| "Failed to initialize global DexScreener API state"
     )?;
 
+    log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
     Ok(())
 }
 
