@@ -19,6 +19,8 @@
 /// - Test analyzer on recent transactions: cargo run --bin main_transactions_debug -- --test-analyzer --count 10
 /// - Debug cache system: cargo run --bin main_transactions_debug -- --debug-cache
 /// - Clear transaction cache: cargo run --bin main_transactions_debug -- --clear-cache
+/// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50
+/// - Analyze all swaps with PnL: cargo run --bin main_transactions_debug -- --analyze-swaps
 /// - Performance test: cargo run --bin main_transactions_debug -- --benchmark --count 100
 
 use screenerbot::transactions_manager::{
@@ -31,6 +33,7 @@ use screenerbot::global::{
 };
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::utils::get_wallet_address;
+use screenerbot::tokens::types::PriceSourceType;
 
 use clap::{Arg, Command};
 use std::collections::HashMap;
@@ -48,22 +51,20 @@ async fn main() {
     // Initialize logger first
     init_file_logging();
 
-    let matches = Command::new("Transaction Manager & Analyzer Debug Tool")
+        let matches = Command::new("Transaction Manager & Analyzer Debug Tool")
         .version("1.0")
         .about("Comprehensive debugging tool for transactions management system")
         .arg(
             Arg::new("monitor")
-                .short('m')
                 .long("monitor")
                 .help("Monitor wallet transactions in real-time")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
             Arg::new("signature")
-                .short('s')
                 .long("signature")
-                .value_name("SIGNATURE")
                 .help("Analyze specific transaction by signature")
+                .value_name("SIGNATURE")
         )
         .arg(
             Arg::new("test-analyzer")
@@ -74,7 +75,7 @@ async fn main() {
         .arg(
             Arg::new("debug-cache")
                 .long("debug-cache")
-                .help("Debug transaction cache system")
+                .help("Debug the transaction cache system")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -90,26 +91,35 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("analyze-swaps")
+                .long("analyze-swaps")
+                .help("Analyze all swap transactions with comprehensive PnL")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("update-cache")
+                .long("update-cache")
+                .help("Re-analyze and update all cached transactions with new analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("count")
-                .short('c')
                 .long("count")
+                .help("Number of transactions to process")
                 .value_name("COUNT")
-                .help("Number of transactions to process (for test-analyzer, benchmark)")
                 .default_value("10")
         )
         .arg(
             Arg::new("duration")
-                .short('d')
                 .long("duration")
+                .help("Duration in seconds for monitoring")
                 .value_name("SECONDS")
-                .help("Duration to monitor (for --monitor)")
                 .default_value("60")
         )
         .arg(
             Arg::new("verbose")
-                .short('v')
                 .long("verbose")
-                .help("Enable verbose output")
+                .help("Enable verbose debug output")
                 .action(clap::ArgAction::SetTrue)
         )
         .get_matches();
@@ -162,12 +172,138 @@ async fn main() {
             .parse()
             .unwrap_or(100);
         run_benchmark_tests(wallet_pubkey, count).await;
+    } else if matches.get_flag("analyze-swaps") {
+        analyze_all_swaps(wallet_pubkey).await;
+    } else if matches.get_flag("update-cache") {
+        let count: usize = matches.get_one::<String>("count")
+            .unwrap()
+            .parse()
+            .unwrap_or(100);
+        update_transaction_cache(wallet_pubkey, count).await;
     } else {
         log(LogTag::System, "ERROR", "No command specified. Use --help for usage information.");
         std::process::exit(1);
     }
 
     log(LogTag::System, "INFO", "Transaction Manager & Analyzer Debug Tool completed");
+}
+
+/// Analyze all swap transactions with comprehensive PnL
+async fn analyze_all_swaps(wallet_pubkey: Pubkey) {
+    log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis for all transactions");
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Get all swap transactions
+    match manager.get_all_swap_transactions().await {
+        Ok(swaps) => {
+            log(LogTag::Transactions, "SUCCESS", &format!("Found {} swap transactions", swaps.len()));
+            
+            // Display comprehensive analysis table
+            manager.display_swap_analysis_table(&swaps);
+            
+            // Additional statistics
+            display_detailed_swap_statistics(&swaps);
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to analyze swaps: {}", e));
+        }
+    }
+}
+
+/// Display detailed swap statistics
+fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions_manager::SwapPnLInfo]) {
+    if swaps.is_empty() {
+        return;
+    }
+
+    log(LogTag::Transactions, "STATS", "=== DETAILED SWAP STATISTICS ===");
+    
+    let mut token_stats: std::collections::HashMap<String, TokenSwapStats> = std::collections::HashMap::new();
+    let mut router_stats: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+    
+    let mut total_profit_loss = 0.0;
+    let mut profitable_swaps = 0;
+    let mut loss_swaps = 0;
+    
+    for swap in swaps {
+        // Token statistics
+        let token_stat = token_stats.entry(swap.token_symbol.clone()).or_insert(TokenSwapStats::new());
+        if swap.swap_type == "Buy" {
+            token_stat.buy_count += 1;
+            token_stat.total_sol_spent += swap.sol_amount;
+        } else {
+            token_stat.sell_count += 1;
+            token_stat.total_sol_received += swap.sol_amount;
+        }
+        token_stat.total_fees += swap.fee_sol;
+        
+        // Router statistics
+        *router_stats.entry(swap.router.clone()).or_insert(0) += 1;
+        
+        // PnL calculation (simplified)
+        if let Some(price_diff_percent) = swap.price_difference_percent {
+            if price_diff_percent > 0.0 {
+                profitable_swaps += 1;
+                total_profit_loss += swap.sol_amount * (price_diff_percent / 100.0);
+            } else {
+                loss_swaps += 1;
+                total_profit_loss += swap.sol_amount * (price_diff_percent / 100.0);
+            }
+        }
+    }
+    
+    // Display token statistics
+    log(LogTag::Transactions, "STATS", "Token Trading Summary:");
+    for (token, stats) in &token_stats {
+        let net_sol = stats.total_sol_received - stats.total_sol_spent - stats.total_fees;
+        log(LogTag::Transactions, "STATS", &format!(
+            "  {}: {} buys ({:.3} SOL), {} sells ({:.3} SOL), fees: {:.6} SOL, net: {:.3} SOL",
+            token, stats.buy_count, stats.total_sol_spent, stats.sell_count, 
+            stats.total_sol_received, stats.total_fees, net_sol
+        ));
+    }
+    
+    // Display router statistics
+    log(LogTag::Transactions, "STATS", "Router Usage:");
+    for (router, count) in &router_stats {
+        log(LogTag::Transactions, "STATS", &format!("  {}: {} swaps", router, count));
+    }
+    
+    // Display overall PnL
+    log(LogTag::Transactions, "STATS", &format!(
+        "Overall Performance: {} profitable, {} loss swaps, estimated P&L: {:.6} SOL",
+        profitable_swaps, loss_swaps, total_profit_loss
+    ));
+    
+    log(LogTag::Transactions, "STATS", "=== END STATISTICS ===");
+}
+
+#[derive(Debug)]
+struct TokenSwapStats {
+    buy_count: i32,
+    sell_count: i32,
+    total_sol_spent: f64,
+    total_sol_received: f64,
+    total_fees: f64,
+}
+
+impl TokenSwapStats {
+    fn new() -> Self {
+        Self {
+            buy_count: 0,
+            sell_count: 0,
+            total_sol_spent: 0.0,
+            total_sol_received: 0.0,
+            total_fees: 0.0,
+        }
+    }
 }
 
 /// Load wallet pubkey from configuration
@@ -185,7 +321,13 @@ async fn monitor_transactions(wallet_pubkey: Pubkey, duration_seconds: u64) {
         "Starting real-time transaction monitoring for {} seconds", duration_seconds
     ));
 
-    let mut manager = TransactionsManager::new(wallet_pubkey);
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
     
     // Initialize known signatures
     if let Err(e) = manager.initialize_known_signatures().await {
@@ -284,7 +426,13 @@ async fn analyze_specific_transaction(signature: &str) {
         }
     };
 
-    let mut manager = TransactionsManager::new(wallet_pubkey);
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
 
     // Process the transaction
     match manager.process_transaction(signature).await {
@@ -304,7 +452,13 @@ async fn test_transaction_analyzer(wallet_pubkey: Pubkey, count: usize) {
         "Testing transaction analyzer on {} recent transactions", count
     ));
 
-    let mut manager = TransactionsManager::new(wallet_pubkey);
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
 
     // Get recent transactions
     match manager.check_new_transactions().await {
@@ -449,13 +603,182 @@ async fn clear_transaction_cache() {
     }
 }
 
+/// Update and re-analyze all cached transactions
+async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
+    log(LogTag::Transactions, "INFO", &format!(
+        "Updating transaction cache with re-analysis (max {} transactions)", max_count
+    ));
+
+    let cache_dir = get_transactions_cache_dir();
+    
+    if !cache_dir.exists() {
+        log(LogTag::Transactions, "INFO", "Cache directory does not exist");
+        return;
+    }
+
+    // Create manager for re-analysis
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    log(LogTag::Transactions, "INFO", "Scanning cache directory for transactions to update");
+
+    let mut updated_count = 0;
+    let mut error_count = 0;
+    let mut signatures_to_process = Vec::new();
+
+    // Collect all transaction signatures from cache files
+    match fs::read_dir(&cache_dir) {
+        Ok(entries) => {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
+                            signatures_to_process.push(file_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to read cache directory: {}", e));
+            return;
+        }
+    }
+
+    let total_signatures = signatures_to_process.len().min(max_count);
+    signatures_to_process.truncate(max_count);
+
+    log(LogTag::Transactions, "INFO", &format!(
+        "Found {} cached transactions, processing {} with updated analysis", 
+        signatures_to_process.len(), total_signatures
+    ));
+
+    let start_time = Instant::now();
+    let mut swap_count = 0;
+    let mut unknown_count = 0;
+
+    for (index, signature) in signatures_to_process.iter().enumerate() {
+        log(LogTag::Transactions, "PROGRESS", &format!(
+            "Processing transaction {}/{}: {}...", 
+            index + 1, total_signatures, &signature[..8]
+        ));
+
+        match manager.process_transaction(signature).await {
+            Ok(transaction) => {
+                updated_count += 1;
+                
+                // Log transaction type for statistics
+                match &transaction.transaction_type {
+                    TransactionType::SwapSolToToken { router, .. } |
+                    TransactionType::SwapTokenToSol { router, .. } |
+                    TransactionType::SwapTokenToToken { router, .. } => {
+                        swap_count += 1;
+                        log(LogTag::Transactions, "SWAP", &format!(
+                            "✅ Updated swap via {}: {} ({})", 
+                            router, &signature[..8], 
+                            format!("{:?}", transaction.transaction_type).split('{').next().unwrap_or("Swap")
+                        ));
+                    }
+                    TransactionType::Unknown => {
+                        unknown_count += 1;
+                        log(LogTag::Transactions, "UNKNOWN", &format!(
+                            "❓ Updated unknown transaction: {}", &signature[..8]
+                        ));
+                    }
+                    _ => {
+                        log(LogTag::Transactions, "OTHER", &format!(
+                            "ℹ️  Updated {}: {}", 
+                            format!("{:?}", transaction.transaction_type).split('{').next().unwrap_or("Other"),
+                            &signature[..8]
+                        ));
+                    }
+                }
+
+                // Show comprehensive token info if it's a swap with token data
+                if let Some(ref token_info) = transaction.token_info {
+                    log(LogTag::Transactions, "TOKEN", &format!(
+                        "   Token: {} ({}) - Price: {:.2e} SOL (source: {:?})",
+                        token_info.symbol, 
+                        &token_info.mint[..8],
+                        token_info.current_price_sol.unwrap_or(0.0),
+                        token_info.price_source.as_ref().unwrap_or(&PriceSourceType::DexScreenerApi)
+                    ));
+                }
+            }
+            Err(e) => {
+                error_count += 1;
+                log(LogTag::Transactions, "ERROR", &format!(
+                    "Failed to update transaction {}: {}", &signature[..8], e
+                ));
+            }
+        }
+
+        // Add small delay to avoid overwhelming the system
+        if index % 10 == 0 && index > 0 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    let total_time = start_time.elapsed();
+
+    log(LogTag::Transactions, "RESULTS", "=== CACHE UPDATE RESULTS ===");
+    log(LogTag::Transactions, "RESULTS", &format!("Total Processed: {}", total_signatures));
+    log(LogTag::Transactions, "RESULTS", &format!("Successfully Updated: {}", updated_count));
+    log(LogTag::Transactions, "RESULTS", &format!("Errors: {}", error_count));
+    log(LogTag::Transactions, "RESULTS", &format!("Swap Transactions: {}", swap_count));
+    log(LogTag::Transactions, "RESULTS", &format!("Unknown Transactions: {}", unknown_count));
+    log(LogTag::Transactions, "RESULTS", &format!("Other Transactions: {}", updated_count - swap_count - unknown_count));
+    log(LogTag::Transactions, "RESULTS", &format!("Success Rate: {:.1}%", 
+        (updated_count as f64 / total_signatures as f64) * 100.0));
+    log(LogTag::Transactions, "RESULTS", &format!("Processing Time: {:.2}s", total_time.as_secs_f64()));
+    
+    if updated_count > 0 {
+        let avg_time = total_time / updated_count as u32;
+        log(LogTag::Transactions, "RESULTS", &format!("Avg Time per Transaction: {:.2}ms", avg_time.as_millis()));
+    }
+    
+    log(LogTag::Transactions, "RESULTS", "=== END RESULTS ===");
+
+    // After updating cache, show comprehensive swap analysis if any swaps were found
+    if swap_count > 0 {
+        log(LogTag::Transactions, "INFO", "Performing comprehensive swap analysis on updated cache...");
+        
+        match manager.get_all_swap_transactions().await {
+            Ok(swaps) => {
+                log(LogTag::Transactions, "SUCCESS", &format!("Found {} total swap transactions for analysis", swaps.len()));
+                
+                // Display comprehensive analysis table
+                manager.display_swap_analysis_table(&swaps);
+                
+                // Additional statistics
+                display_detailed_swap_statistics(&swaps);
+            }
+            Err(e) => {
+                log(LogTag::Transactions, "ERROR", &format!("Failed to analyze updated swaps: {}", e));
+            }
+        }
+    }
+}
+
 /// Run performance benchmark tests
 async fn run_benchmark_tests(wallet_pubkey: Pubkey, count: usize) {
     log(LogTag::Transactions, "INFO", &format!(
         "Running performance benchmark with {} transactions", count
     ));
 
-    let mut manager = TransactionsManager::new(wallet_pubkey);
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
 
     // Get signatures for testing
     let signatures = match manager.check_new_transactions().await {
@@ -547,8 +870,28 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
     log(LogTag::Transactions, "DETAIL", &format!("Success: {}", transaction.success));
     log(LogTag::Transactions, "DETAIL", &format!("Finalized: {}", transaction.finalized));
     log(LogTag::Transactions, "DETAIL", &format!("Direction: {:?}", transaction.direction));
-    log(LogTag::Transactions, "DETAIL", &format!("Fee (SOL): {:.6}", transaction.fee_sol));
-    log(LogTag::Transactions, "DETAIL", &format!("SOL Balance Change: {:.6}", transaction.sol_balance_change));
+    log(LogTag::Transactions, "DETAIL", &format!("Fee (SOL): {:.9}", transaction.fee_sol));
+    log(LogTag::Transactions, "DETAIL", &format!("SOL Balance Change: {:.9}", transaction.sol_balance_change));
+
+    // Display comprehensive fee information if swap analysis is available
+    if let Some(swap_analysis) = &transaction.swap_analysis {
+        log(LogTag::Transactions, "DETAIL", "=== COMPREHENSIVE FEE BREAKDOWN ===");
+        log(LogTag::Transactions, "DETAIL", &format!("Transaction Fee: {:.9} SOL", swap_analysis.fee_breakdown.transaction_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("Router Fee: {:.9} SOL", swap_analysis.fee_breakdown.router_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("Platform Fee: {:.9} SOL", swap_analysis.fee_breakdown.platform_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("Priority Fee: {:.9} SOL", swap_analysis.fee_breakdown.priority_fee));
+        log(LogTag::Transactions, "DETAIL", &format!("ATA Creation Cost: {:.9} SOL", swap_analysis.fee_breakdown.ata_creation_cost));
+        log(LogTag::Transactions, "DETAIL", &format!("Rent Costs: {:.9} SOL", swap_analysis.fee_breakdown.rent_costs));
+        log(LogTag::Transactions, "DETAIL", &format!("Total Fees: {:.9} SOL ({:.2}%)", swap_analysis.fee_breakdown.total_fees, swap_analysis.fee_breakdown.fee_percentage));
+        log(LogTag::Transactions, "DETAIL", &format!("Compute Units: {} consumed / {} price = Priority: {}", 
+            swap_analysis.fee_breakdown.compute_units_consumed, 
+            swap_analysis.fee_breakdown.compute_unit_price,
+            swap_analysis.fee_breakdown.compute_unit_price.saturating_sub(swap_analysis.fee_breakdown.compute_units_consumed)
+        ));
+        log(LogTag::Transactions, "DETAIL", &format!("Effective Price: {:.12}", swap_analysis.effective_price));
+        log(LogTag::Transactions, "DETAIL", &format!("Slippage: {:.2}%", swap_analysis.slippage));
+        log(LogTag::Transactions, "DETAIL", "=== END FEE BREAKDOWN ===");
+    }
     
     // Transaction type details
     match &transaction.transaction_type {

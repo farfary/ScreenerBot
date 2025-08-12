@@ -31,6 +31,14 @@ use crate::global::{
 };
 use crate::rpc::get_rpc_client;
 use crate::utils::get_wallet_address;
+use crate::tokens::{
+    get_token_decimals,
+    get_token_decimals_safe,
+    initialize_price_service,
+    TokenDatabase,
+    types::PriceSourceType,
+};
+use crate::tokens::price::get_token_price_blocking_safe;
 
 // =============================================================================
 // CORE DATA STRUCTURES
@@ -75,6 +83,14 @@ pub struct Transaction {
     pub swap_analysis: Option<SwapAnalysis>,
     pub position_impact: Option<PositionImpact>,
     pub profit_calculation: Option<ProfitCalculation>,
+    pub fee_breakdown: Option<FeeBreakdown>,
+    
+    // Token information integration
+    pub token_info: Option<TokenSwapInfo>,
+    pub calculated_token_price_sol: Option<f64>,
+    pub price_source: Option<PriceSourceType>,
+    pub token_symbol: Option<String>,
+    pub token_decimals: Option<u8>,
     
     // Priority and tracking
     pub is_priority: bool,
@@ -191,10 +207,42 @@ pub struct SwapAnalysis {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeeBreakdown {
-    pub transaction_fee: f64,
-    pub router_fee: f64,
-    pub platform_fee: f64,
-    pub total_fees: f64,
+    pub transaction_fee: f64,        // Base Solana transaction fee (in SOL)
+    pub router_fee: f64,            // DEX router fee (in SOL)
+    pub platform_fee: f64,          // Platform/referral fee (in SOL)
+    pub compute_units_consumed: u64, // Compute units used
+    pub compute_unit_price: u64,     // Price per compute unit (micro-lamports)
+    pub priority_fee: f64,          // Priority fee paid (in SOL)
+    pub rent_costs: f64,            // Account rent costs (in SOL)
+    pub ata_creation_cost: f64,     // Associated Token Account creation costs (in SOL)
+    pub total_fees: f64,            // Total of all fees (in SOL)
+    pub fee_percentage: f64,        // Fee as percentage of transaction value
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenSwapInfo {
+    pub mint: String,
+    pub symbol: String,
+    pub decimals: u8,
+    pub current_price_sol: Option<f64>,
+    pub price_source: Option<PriceSourceType>,
+    pub is_verified: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwapPnLInfo {
+    pub token_mint: String,
+    pub token_symbol: String,
+    pub swap_type: String,  // "Buy" or "Sell"
+    pub sol_amount: f64,
+    pub token_amount: f64,
+    pub calculated_price_sol: f64,
+    pub market_price_sol: Option<f64>,
+    pub price_difference_percent: Option<f64>,
+    pub timestamp: DateTime<Utc>,
+    pub signature: String,
+    pub router: String,
+    pub fee_sol: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,12 +282,29 @@ pub struct TransactionsManager {
     pub last_signature_check: Option<String>,
     pub total_transactions: u64,
     pub new_transactions_count: u64,
+    
+    // Token database integration
+    pub token_database: Option<TokenDatabase>,
 }
 
 impl TransactionsManager {
-    /// Create new TransactionsManager instance
-    pub fn new(wallet_pubkey: Pubkey) -> Self {
-        Self {
+    /// Create new TransactionsManager instance with token database integration
+    pub async fn new(wallet_pubkey: Pubkey) -> Result<Self, String> {
+        // Initialize token database
+        let token_database = match TokenDatabase::new() {
+            Ok(db) => Some(db),
+            Err(e) => {
+                log(LogTag::Transactions, "WARN", &format!("Failed to initialize token database: {}", e));
+                None
+            }
+        };
+
+        // Initialize price service
+        if let Err(e) = initialize_price_service().await {
+            log(LogTag::Transactions, "WARN", &format!("Failed to initialize price service: {}", e));
+        }
+
+        Ok(Self {
             wallet_pubkey,
             debug_enabled: is_debug_transactions_enabled(),
             known_signatures: HashSet::new(),
@@ -247,7 +312,8 @@ impl TransactionsManager {
             last_signature_check: None,
             total_transactions: 0,
             new_transactions_count: 0,
-        }
+            token_database,
+        })
     }
 
     /// Load existing cached signatures to avoid re-processing
@@ -376,6 +442,12 @@ impl TransactionsManager {
             swap_analysis: None,
             position_impact: None,
             profit_calculation: None,
+            fee_breakdown: None,
+            token_info: None,
+            calculated_token_price_sol: None,
+            price_source: None,
+            token_symbol: None,
+            token_decimals: None,
             is_priority,
             priority_added_at: if is_priority { self.priority_transactions.get(signature).copied() } else { None },
             last_updated: Utc::now(),
@@ -530,7 +602,13 @@ pub async fn start_transactions_manager_service(shutdown: Arc<Notify>) {
     };
 
     // Create TransactionsManager instance
-    let mut manager = TransactionsManager::new(wallet_address);
+    let mut manager = match TransactionsManager::new(wallet_address).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
     
     // Initialize known signatures
     if let Err(e) = manager.initialize_known_signatures().await {
@@ -612,45 +690,10 @@ async fn load_wallet_address_from_config() -> Result<Pubkey, String> {
 }
 
 // =============================================================================
-// TRANSACTION ANALYSIS METHODS
+// TRANSACTION ANALYSIS METHODS  
 // =============================================================================
 
 impl TransactionsManager {
-    /// Comprehensive transaction analysis - detects type, extracts swap data, calculates impact
-    pub async fn analyze_transaction_comprehensive(&mut self, transaction: &mut Transaction) -> Result<(), String> {
-        if self.debug_enabled {
-            log(LogTag::Transactions, "ANALYZE", &format!("Starting comprehensive analysis for {}", &transaction.signature[..8]));
-        }
-
-        // Step 1: Fetch full transaction data from RPC if not already present
-        if transaction.raw_transaction_data.is_none() {
-            if let Err(e) = self.fetch_transaction_data(transaction).await {
-                return Err(format!("Failed to fetch transaction data: {}", e));
-            }
-        }
-
-        // Step 2: Extract basic transaction info (slot, block_time, fee, success)
-        self.extract_basic_transaction_info(transaction).await?;
-
-        // Step 3: Analyze transaction type and extract swap data
-        self.analyze_transaction_type(transaction).await?;
-
-        // Step 4: Calculate balance changes and position impact
-        self.calculate_balance_changes(transaction).await?;
-
-        // Step 5: Detect DEX router and extract router-specific data
-        self.detect_dex_router(transaction).await?;
-
-        if self.debug_enabled {
-            log(LogTag::Transactions, "ANALYZED", &format!(
-                "Analysis complete for {} - Type: {:?}", 
-                &transaction.signature[..8], 
-                transaction.transaction_type
-            ));
-        }
-
-        Ok(())
-    }
 
     /// Fetch full transaction data from RPC
     async fn fetch_transaction_data(&self, transaction: &mut Transaction) -> Result<(), String> {
@@ -748,7 +791,9 @@ impl TransactionsManager {
             }
         }
         
-        // Detect Jupiter swaps - multiple ways to identify
+        // Enhanced swap detection - try multiple approaches
+        
+        // 1. Detect Jupiter swaps - multiple ways to identify
         if log_text.contains("Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") || 
            log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") ||
            log_text.contains("Jupiter") {
@@ -763,7 +808,7 @@ impl TransactionsManager {
             }
         }
 
-        // Detect Raydium swaps
+        // 2. Detect Raydium swaps
         if log_text.contains("Program 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") ||
            log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
             
@@ -777,7 +822,7 @@ impl TransactionsManager {
             }
         }
 
-        // Detect Pump.fun transactions
+        // 3. Detect Pump.fun transactions
         if log_text.contains("Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
            log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
             
@@ -791,7 +836,7 @@ impl TransactionsManager {
             }
         }
 
-        // Detect GMGN swaps (look for GMGN-specific patterns in logs)
+        // 4. Detect GMGN swaps
         if log_text.to_lowercase().contains("gmgn") {
             if let Ok(swap_data) = self.extract_gmgn_swap_data(transaction).await {
                 transaction.transaction_type = swap_data;
@@ -803,7 +848,7 @@ impl TransactionsManager {
             }
         }
 
-        // Detect Orca swaps
+        // 5. Detect Orca swaps
         if log_text.contains("Program 9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") ||
            log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
             
@@ -817,7 +862,27 @@ impl TransactionsManager {
             }
         }
 
-        // Check for generic swap patterns in logs
+        // 6. Enhanced: Balance-based swap detection (catches swaps that failed overall but had meaningful transfers)
+        if let Ok(swap_data) = self.extract_balance_based_swap_data(transaction).await {
+            transaction.transaction_type = swap_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Balance-based swap detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 7. Enhanced: Token-to-token swap detection based on multiple token transfers
+        if let Ok(swap_data) = self.extract_token_to_token_swap_data(transaction).await {
+            transaction.transaction_type = swap_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Token-to-token swap detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 8. Check for generic swap patterns in logs
         if log_text.contains("swap") || log_text.contains("Swap") || 
            log_text.contains("buy") || log_text.contains("sell") {
             
@@ -831,7 +896,7 @@ impl TransactionsManager {
             }
         }
 
-        // Detect simple SOL/token transfers
+        // 9. Detect simple SOL/token transfers
         if log_text.contains("Transfer") && transaction.sol_balance_change != 0.0 {
             if let Ok(transfer_data) = self.extract_transfer_data(transaction).await {
                 transaction.transaction_type = transfer_data;
@@ -854,7 +919,225 @@ impl TransactionsManager {
         Ok(())
     }
 
-    /// Extract Jupiter swap data from transaction
+    /// Comprehensive fee analysis to extract all fee types
+    async fn analyze_fees(&self, transaction: &Transaction) -> Result<FeeBreakdown, String> {
+        let mut fee_breakdown = FeeBreakdown {
+            transaction_fee: transaction.fee_sol,
+            router_fee: 0.0,
+            platform_fee: 0.0,
+            compute_units_consumed: 0,
+            compute_unit_price: 0,
+            priority_fee: 0.0,
+            rent_costs: 0.0,
+            ata_creation_cost: 0.0,
+            total_fees: transaction.fee_sol,
+            fee_percentage: 0.0,
+        };
+
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                // Extract compute units information
+                if let Some(compute_units) = meta.get("computeUnitsConsumed").and_then(|v| v.as_u64()) {
+                    fee_breakdown.compute_units_consumed = compute_units;
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                            "{} - Compute units consumed: {}", 
+                            &transaction.signature[..8], 
+                            compute_units
+                        ));
+                    }
+                }
+
+                // Extract cost units (compute unit price)
+                if let Some(cost_units) = meta.get("costUnits").and_then(|v| v.as_u64()) {
+                    fee_breakdown.compute_unit_price = cost_units;
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                            "{} - Cost units: {}", 
+                            &transaction.signature[..8], 
+                            cost_units
+                        ));
+                    }
+                }
+
+                // Calculate priority fee (difference between cost units and base compute cost)
+                // Cost units include both compute cost + priority fee
+                let base_compute_cost = fee_breakdown.compute_units_consumed * 5; // 5 micro-lamports per compute unit
+                if fee_breakdown.compute_unit_price > base_compute_cost {
+                    let priority_fee_lamports = fee_breakdown.compute_unit_price - base_compute_cost;
+                    fee_breakdown.priority_fee = priority_fee_lamports as f64 / 1_000_000_000.0;
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                            "{} - Priority fee: {:.9} SOL (base: {}, total: {})", 
+                            &transaction.signature[..8], 
+                            fee_breakdown.priority_fee,
+                            base_compute_cost,
+                            fee_breakdown.compute_unit_price
+                        ));
+                    }
+                }
+
+                // Analyze log messages for fee information
+                self.analyze_fee_logs(&mut fee_breakdown, transaction).await?;
+
+                // Analyze balance changes for rent costs
+                self.analyze_rent_costs(&mut fee_breakdown, transaction).await?;
+
+                // Calculate total fees
+                fee_breakdown.total_fees = fee_breakdown.transaction_fee + 
+                                         fee_breakdown.router_fee + 
+                                         fee_breakdown.platform_fee + 
+                                         fee_breakdown.rent_costs + 
+                                         fee_breakdown.ata_creation_cost;
+
+                // Calculate fee percentage of transaction value
+                // For swaps, calculate percentage against the actual swap amount (excluding fees)
+                if transaction.sol_balance_change.abs() > 0.0 {
+                    // The actual swap amount is the SOL balance change minus the fees
+                    let swap_amount = transaction.sol_balance_change.abs() - fee_breakdown.total_fees;
+                    if swap_amount > 0.0 {
+                        fee_breakdown.fee_percentage = (fee_breakdown.total_fees / swap_amount) * 100.0;
+                    } else {
+                        // If fees >= balance change, calculate against balance change
+                        fee_breakdown.fee_percentage = (fee_breakdown.total_fees / transaction.sol_balance_change.abs()) * 100.0;
+                    }
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                            "{} - Fee calculation: total_fees={:.9}, balance_change={:.9}, swap_amount={:.9}", 
+                            &transaction.signature[..8], 
+                            fee_breakdown.total_fees,
+                            transaction.sol_balance_change.abs(),
+                            swap_amount
+                        ));
+                    }
+                }
+
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FEE_SUMMARY", &format!(
+                        "{} - Total fees: {:.9} SOL ({:.2}%)", 
+                        &transaction.signature[..8], 
+                        fee_breakdown.total_fees,
+                        fee_breakdown.fee_percentage
+                    ));
+                }
+            }
+        }
+
+        Ok(fee_breakdown)
+    }
+
+    /// Analyze log messages for fee-related information
+    async fn analyze_fee_logs(&self, fee_breakdown: &mut FeeBreakdown, transaction: &Transaction) -> Result<(), String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Look for Jupiter fee patterns (but only apply if Jupiter is detected)
+        let is_jupiter = log_text.contains("Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
+        let is_raydium = log_text.contains("Program 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
+        
+        if is_jupiter && !is_raydium {
+            // Jupiter only - typically takes 0.1% fee
+            if transaction.sol_balance_change.abs() > 0.0 {
+                fee_breakdown.router_fee = transaction.sol_balance_change.abs() * 0.001; // 0.1%
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                        "{} - Estimated Jupiter router fee: {:.9} SOL", 
+                        &transaction.signature[..8], 
+                        fee_breakdown.router_fee
+                    ));
+                }
+            }
+        } else if is_raydium && !is_jupiter {
+            // Raydium only - typically takes 0.25% fee
+            if transaction.sol_balance_change.abs() > 0.0 {
+                fee_breakdown.router_fee = transaction.sol_balance_change.abs() * 0.0025; // 0.25%
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                        "{} - Estimated Raydium router fee: {:.9} SOL", 
+                        &transaction.signature[..8], 
+                        fee_breakdown.router_fee
+                    ));
+                }
+            }
+        } else if is_jupiter && is_raydium {
+            // Both Jupiter and Raydium detected - use Jupiter fee (usually the aggregator)
+            if transaction.sol_balance_change.abs() > 0.0 {
+                fee_breakdown.router_fee = transaction.sol_balance_change.abs() * 0.001; // 0.1%
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                        "{} - Jupiter + Raydium detected, using Jupiter fee: {:.9} SOL", 
+                        &transaction.signature[..8], 
+                        fee_breakdown.router_fee
+                    ));
+                }
+            }
+        }
+
+        // Look for platform/referral fees in logs
+        if log_text.contains("referral") || log_text.contains("platform") {
+            // Platform fees are typically small, estimate 0.05%
+            if transaction.sol_balance_change.abs() > 0.0 {
+                fee_breakdown.platform_fee = transaction.sol_balance_change.abs() * 0.0005; // 0.05%
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                        "{} - Estimated platform fee: {:.9} SOL", 
+                        &transaction.signature[..8], 
+                        fee_breakdown.platform_fee
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Analyze balance changes for rent costs
+    async fn analyze_rent_costs(&self, fee_breakdown: &mut FeeBreakdown, transaction: &Transaction) -> Result<(), String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Count ATA creations (each costs ~0.00203928 SOL)
+        let ata_creations = log_text.matches("CreateIdempotent").count() + 
+                           log_text.matches("Initialize the associated token account").count();
+        
+        if ata_creations > 0 {
+            fee_breakdown.ata_creation_cost = ata_creations as f64 * 0.00203928; // Standard ATA rent
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                    "{} - ATA creation costs: {} accounts = {:.9} SOL", 
+                    &transaction.signature[..8], 
+                    ata_creations,
+                    fee_breakdown.ata_creation_cost
+                ));
+            }
+        }
+
+        // Look for other rent costs in logs
+        let rent_occurrences = log_text.matches("rent").count();
+        if rent_occurrences > 0 {
+            // Estimate additional rent costs
+            fee_breakdown.rent_costs = rent_occurrences as f64 * 0.001; // Rough estimate
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "FEE_DEBUG", &format!(
+                    "{} - Additional rent costs: {} occurrences = {:.9} SOL", 
+                    &transaction.signature[..8], 
+                    rent_occurrences,
+                    fee_breakdown.rent_costs
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     async fn extract_jupiter_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
         // Parse Jupiter-specific swap data from logs and balance changes
         let log_text = transaction.log_messages.join(" ");
@@ -862,6 +1145,8 @@ impl TransactionsManager {
         if self.debug_enabled {
             log(LogTag::Transactions, "JUPITER", &format!("Analyzing Jupiter transaction {}", 
                 &transaction.signature[..8]));
+            log(LogTag::Transactions, "JUPITER", &format!("SOL change: {:.6}, Token transfers: {}", 
+                transaction.sol_balance_change, transaction.token_transfers.len()));
         }
         
         // Look for Jupiter swap patterns in logs
@@ -869,35 +1154,142 @@ impl TransactionsManager {
             // Calculate amounts from balance changes
             let sol_change = transaction.sol_balance_change.abs();
             
+            if self.debug_enabled {
+                log(LogTag::Transactions, "JUPITER", &format!("Jupiter program detected, SOL change: {:.6}", sol_change));
+                for (i, transfer) in transaction.token_transfers.iter().enumerate() {
+                    log(LogTag::Transactions, "JUPITER", &format!("Token transfer {}: {} of {}", 
+                        i, transfer.amount, &transfer.mint[..8]));
+                }
+            }
+            
             // Check token transfers for the other side of the swap
             let mut token_mint = "unknown".to_string();
             let mut token_amount = 0.0;
             
-            if !transaction.token_transfers.is_empty() {
-                // Use first token transfer as the token side
-                token_mint = transaction.token_transfers[0].mint.clone();
-                token_amount = transaction.token_transfers[0].amount;
+            // Enhanced: Look for the most significant token transfer
+            let mut largest_transfer: Option<&TokenTransfer> = None;
+            for transfer in &transaction.token_transfers {
+                // Skip very small amounts (dust)
+                if transfer.amount.abs() > 0.001 {
+                    if largest_transfer.is_none() || transfer.amount.abs() > largest_transfer.unwrap().amount.abs() {
+                        largest_transfer = Some(transfer);
+                    }
+                }
+            }
+            
+            if let Some(transfer) = largest_transfer {
+                token_mint = transfer.mint.clone();
+                token_amount = transfer.amount.abs();
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!(
+                        "{} - Jupiter swap: SOL {:.6}, Token {:.6} ({})", 
+                        &transaction.signature[..8], sol_change, token_amount, &token_mint[..8]
+                    ));
+                }
+            } else if self.debug_enabled {
+                log(LogTag::Transactions, "JUPITER", &format!("No significant token transfers found"));
+            }
+            
+            // Enhanced: Detect different swap patterns
+            let mut input_token: Option<&TokenTransfer> = None;
+            let mut output_token: Option<&TokenTransfer> = None;
+            let mut wsol_transfer: Option<&TokenTransfer> = None;
+            
+            // Categorize token transfers
+            for transfer in &transaction.token_transfers {
+                if transfer.mint == "So11111111111111111111111111111111111111111112" {
+                    // This is WSOL (wrapped SOL)
+                    wsol_transfer = Some(transfer);
+                } else if transfer.amount < 0.0 && transfer.amount.abs() > 0.001 {
+                    // Token being sold (negative amount)
+                    input_token = Some(transfer);
+                } else if transfer.amount > 0.0 && transfer.amount > 0.001 {
+                    // Token being bought (positive amount)
+                    output_token = Some(transfer);
+                }
+            }
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "JUPITER", &format!("Analysis: input_token={}, output_token={}, wsol_transfer={}, sol_change={:.6}", 
+                    input_token.is_some(), output_token.is_some(), wsol_transfer.is_some(), transaction.sol_balance_change));
+            }
+            
+            // Pattern 1: Token-to-Token swap (2+ token transfers, minimal SOL change)
+            if let (Some(input), Some(output)) = (input_token, output_token) {
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!("Token-to-token swap detected: {} -> {}", 
+                        &input.mint[..8], &output.mint[..8]));
+                }
+                return Ok(TransactionType::SwapTokenToToken {
+                    from_mint: input.mint.clone(),
+                    to_mint: output.mint.clone(),
+                    from_amount: input.amount.abs(),
+                    to_amount: output.amount,
+                    router: "Jupiter".to_string(),
+                });
+            }
+            
+            // Pattern 2: Token-to-SOL swap (token sold, WSOL received, net SOL change)
+            if let (Some(input), Some(wsol)) = (input_token, wsol_transfer) {
+                if wsol.amount > 0.0 { // WSOL received
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "JUPITER", &format!("Token-to-SOL swap detected: {} -> SOL", 
+                            &input.mint[..8]));
+                    }
+                    return Ok(TransactionType::SwapTokenToSol {
+                        token_mint: input.mint.clone(),
+                        token_amount: input.amount.abs(),
+                        sol_amount: wsol.amount, // WSOL received represents SOL obtained
+                        router: "Jupiter".to_string(),
+                    });
+                }
+            }
+            
+            // Pattern 3: SOL-to-Token swap (WSOL sent, token received)
+            if let (Some(output), Some(wsol)) = (output_token, wsol_transfer) {
+                if wsol.amount < 0.0 { // WSOL sent
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "JUPITER", &format!("SOL-to-token swap detected: SOL -> {}", 
+                            &output.mint[..8]));
+                    }
+                    return Ok(TransactionType::SwapSolToToken {
+                        token_mint: output.mint.clone(),
+                        sol_amount: wsol.amount.abs(), // WSOL sent represents SOL spent
+                        token_amount: output.amount,
+                        router: "Jupiter".to_string(),
+                    });
+                }
             }
             
             // Determine swap direction based on SOL balance change
-            if transaction.sol_balance_change < 0.0 {
+            if transaction.sol_balance_change < -0.001 {
                 // Negative SOL change = buying tokens with SOL
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!("Detected SOL to token swap"));
+                }
                 return Ok(TransactionType::SwapSolToToken {
                     token_mint,
                     sol_amount: sol_change,
                     token_amount,
                     router: "Jupiter".to_string(),
                 });
-            } else if transaction.sol_balance_change > 0.0 {
+            } else if transaction.sol_balance_change > 0.001 {
                 // Positive SOL change = selling tokens for SOL
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!("Detected token to SOL swap"));
+                }
                 return Ok(TransactionType::SwapTokenToSol {
                     token_mint,
                     token_amount,
                     sol_amount: sol_change,
                     router: "Jupiter".to_string(),
                 });
-            } else {
-                // Zero SOL change might be token-to-token swap
+            } else if !transaction.token_transfers.is_empty() && sol_change < 0.01 {
+                // Minimal SOL change but token transfers exist - could be token-to-token
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "JUPITER", &format!("Detected potential token-to-token swap"));
+                }
                 return Ok(TransactionType::SwapTokenToToken {
                     from_mint: "unknown".to_string(),
                     to_mint: token_mint,
@@ -905,6 +1297,10 @@ impl TransactionsManager {
                     to_amount: token_amount,
                     router: "Jupiter".to_string(),
                 });
+            }
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "JUPITER", &format!("Jupiter detected but no swap pattern matched"));
             }
         }
 
@@ -1054,33 +1450,87 @@ impl TransactionsManager {
         
         // Look for generic swap indicators
         if log_text.contains("swap") || log_text.contains("Swap") || 
-           log_text.contains("buy") || log_text.contains("sell") {
+           log_text.contains("buy") || log_text.contains("sell") ||
+           log_text.contains("exchange") || log_text.contains("trade") {
             
             let sol_change = transaction.sol_balance_change.abs();
             
-            // Only consider it a swap if there's actual SOL movement
-            if sol_change > 0.001 { // More than 0.001 SOL
+            // Enhanced: Lower threshold and also check for meaningful token transfers
+            if sol_change > 0.0001 || !transaction.token_transfers.is_empty() {
                 let mut token_mint = "unknown".to_string();
                 let mut token_amount = 0.0;
                 
-                if !transaction.token_transfers.is_empty() {
-                    token_mint = transaction.token_transfers[0].mint.clone();
-                    token_amount = transaction.token_transfers[0].amount;
+                // Enhanced: Find the most significant token transfer
+                let mut largest_transfer: Option<&TokenTransfer> = None;
+                for transfer in &transaction.token_transfers {
+                    if transfer.amount.abs() > 0.001 {
+                        if largest_transfer.is_none() || transfer.amount.abs() > largest_transfer.unwrap().amount.abs() {
+                            largest_transfer = Some(transfer);
+                        }
+                    }
                 }
                 
-                if transaction.sol_balance_change < 0.0 {
+                if let Some(transfer) = largest_transfer {
+                    token_mint = transfer.mint.clone();
+                    token_amount = transfer.amount.abs();
+                }
+                
+                // Determine router from any program mentions in logs
+                let mut router = "Unknown DEX".to_string();
+                if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+                    router = "Jupiter".to_string();
+                } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+                    router = "Raydium".to_string();
+                } else if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+                    router = "Orca".to_string();
+                } else if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
+                    router = "Pump.fun".to_string();
+                }
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "GENERIC_SWAP", &format!(
+                        "{} - Generic swap detected via {}: SOL {:.6}, Token {:.6}", 
+                        &transaction.signature[..8], router, sol_change, token_amount
+                    ));
+                }
+                
+                // Enhanced token-to-token detection for generic swaps
+                if sol_change < 0.01 && transaction.token_transfers.len() >= 2 {
+                    let mut input_token: Option<&TokenTransfer> = None;
+                    let mut output_token: Option<&TokenTransfer> = None;
+                    
+                    for transfer in &transaction.token_transfers {
+                        if transfer.amount < 0.0 && transfer.amount.abs() > 0.001 {
+                            input_token = Some(transfer);
+                        } else if transfer.amount > 0.0 && transfer.amount > 0.001 {
+                            output_token = Some(transfer);
+                        }
+                    }
+                    
+                    if let (Some(input), Some(output)) = (input_token, output_token) {
+                        return Ok(TransactionType::SwapTokenToToken {
+                            from_mint: input.mint.clone(),
+                            to_mint: output.mint.clone(),
+                            from_amount: input.amount.abs(),
+                            to_amount: output.amount,
+                            router,
+                        });
+                    }
+                }
+                
+                if transaction.sol_balance_change < -0.0001 {
                     return Ok(TransactionType::SwapSolToToken {
                         token_mint,
                         sol_amount: sol_change,
                         token_amount,
-                        router: "Unknown DEX".to_string(),
+                        router,
                     });
-                } else if transaction.sol_balance_change > 0.0 {
+                } else if transaction.sol_balance_change > 0.0001 {
                     return Ok(TransactionType::SwapTokenToSol {
                         token_mint,
                         token_amount,
                         sol_amount: sol_change,
-                        router: "Unknown DEX".to_string(),
+                        router,
                     });
                 }
             }
@@ -1104,6 +1554,135 @@ impl TransactionsManager {
         Err("Not a simple transfer".to_string())
     }
 
+    /// Enhanced: Balance-based swap detection - detects swaps even if transaction failed
+    /// but had meaningful SOL and token balance changes
+    async fn extract_balance_based_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        // Check if we have meaningful balance changes
+        let sol_change = transaction.sol_balance_change.abs();
+        
+        // Only consider as swap if SOL change is significant (more than dust + fees)
+        if sol_change > 0.001 && !transaction.token_transfers.is_empty() {
+            
+            let mut significant_token_transfers = Vec::new();
+            
+            // Look for significant token transfers (not just tiny amounts)
+            for transfer in &transaction.token_transfers {
+                // Filter out very small amounts that are likely dust/spam
+                if transfer.amount > 0.001 || transfer.mint.contains("So111111") { // Always include wrapped SOL
+                    significant_token_transfers.push(transfer);
+                }
+            }
+            
+            if !significant_token_transfers.is_empty() {
+                let token_mint = significant_token_transfers[0].mint.clone();
+                let token_amount = significant_token_transfers[0].amount;
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "BALANCE_SWAP", &format!(
+                        "{} - Balance-based detection: SOL change {:.6}, token transfers: {}", 
+                        &transaction.signature[..8], sol_change, significant_token_transfers.len()
+                    ));
+                }
+                
+                // Determine router from any available program IDs in logs
+                let mut router = "Unknown DEX".to_string();
+                let log_text = transaction.log_messages.join(" ");
+                
+                if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+                    router = "Jupiter".to_string();
+                } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+                    router = "Raydium".to_string();
+                } else if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+                    router = "Orca".to_string();
+                } else if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
+                    router = "Pump.fun".to_string();
+                }
+                
+                // Determine swap direction
+                if transaction.sol_balance_change < -0.001 {
+                    // Bought tokens with SOL
+                    return Ok(TransactionType::SwapSolToToken {
+                        token_mint,
+                        sol_amount: sol_change,
+                        token_amount,
+                        router,
+                    });
+                } else if transaction.sol_balance_change > 0.001 {
+                    // Sold tokens for SOL
+                    return Ok(TransactionType::SwapTokenToSol {
+                        token_mint,
+                        token_amount,
+                        sol_amount: sol_change,
+                        router,
+                    });
+                }
+            }
+        }
+
+        Err("No significant balance-based swap detected".to_string())
+    }
+
+    /// Enhanced: Token-to-token swap detection based on multiple token transfers
+    async fn extract_token_to_token_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        // Look for token-to-token swaps where SOL change is minimal (mostly fees)
+        // but there are significant token movements in both directions
+        
+        if transaction.token_transfers.len() >= 2 {
+            let mut input_tokens = Vec::new();
+            let mut output_tokens = Vec::new();
+            
+            // Categorize token transfers by direction (negative = outgoing, positive = incoming)
+            for transfer in &transaction.token_transfers {
+                if transfer.amount < 0.0 {
+                    input_tokens.push(transfer);
+                } else if transfer.amount > 0.0 {
+                    output_tokens.push(transfer);
+                }
+            }
+            
+            // Check if we have tokens going in both directions
+            if !input_tokens.is_empty() && !output_tokens.is_empty() {
+                let from_token = input_tokens[0];
+                let to_token = output_tokens[0];
+                
+                // Filter out very small amounts (likely dust)
+                if from_token.amount.abs() > 0.001 && to_token.amount > 0.001 {
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "TOKEN_SWAP", &format!(
+                            "{} - Token-to-token detected: {} {} -> {} {}", 
+                            &transaction.signature[..8], 
+                            from_token.amount.abs(), &from_token.mint[..8],
+                            to_token.amount, &to_token.mint[..8]
+                        ));
+                    }
+                    
+                    // Determine router
+                    let mut router = "Unknown DEX".to_string();
+                    let log_text = transaction.log_messages.join(" ");
+                    
+                    if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+                        router = "Jupiter".to_string();
+                    } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+                        router = "Raydium".to_string();
+                    } else if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+                        router = "Orca".to_string();
+                    }
+                    
+                    return Ok(TransactionType::SwapTokenToToken {
+                        from_mint: from_token.mint.clone(),
+                        to_mint: to_token.mint.clone(),
+                        from_amount: from_token.amount.abs(),
+                        to_amount: to_token.amount,
+                        router,
+                    });
+                }
+            }
+        }
+
+        Err("No token-to-token swap detected".to_string())
+    }
+
     /// Calculate balance changes from transaction data
     async fn calculate_balance_changes(&self, transaction: &mut Transaction) -> Result<(), String> {
         if let Some(raw_data) = &transaction.raw_transaction_data {
@@ -1117,31 +1696,75 @@ impl TransactionsManager {
                         let pre_sol = pre_balances[0].as_u64().unwrap_or(0) as f64 / 1_000_000_000.0;
                         let post_sol = post_balances[0].as_u64().unwrap_or(0) as f64 / 1_000_000_000.0;
                         transaction.sol_balance_change = post_sol - pre_sol;
+                        
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "BALANCE", &format!(
+                                "{} - SOL balance: {:.9} -> {:.9} (change: {:.9})", 
+                                &transaction.signature[..8], pre_sol, post_sol, transaction.sol_balance_change
+                            ));
+                        }
                     }
                 }
 
-                // Extract token transfers from post token balances
-                if let Some(token_balances) = meta.get("postTokenBalances").and_then(|v| v.as_array()) {
-                    for token_balance in token_balances {
+                // Enhanced: Calculate token balance changes by comparing pre and post token balances
+                let mut token_balance_map: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
+                
+                // Collect pre token balances
+                if let Some(pre_token_balances) = meta.get("preTokenBalances").and_then(|v| v.as_array()) {
+                    for token_balance in pre_token_balances {
                         if let Some(mint) = token_balance.get("mint").and_then(|v| v.as_str()) {
-                            let amount = if let Some(ui_amount) = token_balance
+                            let amount = token_balance
                                 .get("uiTokenAmount")
                                 .and_then(|ui| ui.get("uiAmount"))
-                                .and_then(|v| v.as_f64()) {
-                                ui_amount
-                            } else {
-                                0.0
-                            };
-
-                            transaction.token_transfers.push(TokenTransfer {
-                                mint: mint.to_string(),
-                                amount,
-                                from: "unknown".to_string(), // Would need to analyze instructions for actual from/to
-                                to: "unknown".to_string(),
-                                program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
-                            });
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            token_balance_map.entry(mint.to_string()).or_insert((0.0, 0.0)).0 = amount;
                         }
                     }
+                }
+                
+                // Collect post token balances
+                if let Some(post_token_balances) = meta.get("postTokenBalances").and_then(|v| v.as_array()) {
+                    for token_balance in post_token_balances {
+                        if let Some(mint) = token_balance.get("mint").and_then(|v| v.as_str()) {
+                            let amount = token_balance
+                                .get("uiTokenAmount")
+                                .and_then(|ui| ui.get("uiAmount"))
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            token_balance_map.entry(mint.to_string()).or_insert((0.0, 0.0)).1 = amount;
+                        }
+                    }
+                }
+                
+                // Calculate token balance changes and create token transfers
+                for (mint, (pre_amount, post_amount)) in token_balance_map {
+                    let change = post_amount - pre_amount;
+                    
+                    // Only record significant changes (not dust)
+                    if change.abs() > 0.000001 {
+                        transaction.token_transfers.push(TokenTransfer {
+                            mint: mint.clone(),
+                            amount: change, // Positive = received, negative = sent
+                            from: "unknown".to_string(),
+                            to: "unknown".to_string(),
+                            program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+                        });
+                        
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "TOKEN", &format!(
+                                "{} - Token {} balance: {:.6} -> {:.6} (change: {:.6})", 
+                                &transaction.signature[..8], &mint[..8], pre_amount, post_amount, change
+                            ));
+                        }
+                    }
+                }
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "BALANCE", &format!(
+                        "{} - Found {} token balance changes", 
+                        &transaction.signature[..8], transaction.token_transfers.len()
+                    ));
                 }
             }
         }
@@ -1166,12 +1789,18 @@ impl TransactionsManager {
                     output_amount: 0.0, // Would calculate from token transfers
                     effective_price: 0.0, // Would calculate
                     slippage: 0.0, // Would calculate
-                    fee_breakdown: FeeBreakdown {
+                    fee_breakdown: transaction.fee_breakdown.clone().unwrap_or(FeeBreakdown {
                         transaction_fee: transaction.fee_sol,
                         router_fee: 0.0,
                         platform_fee: 0.0,
+                        compute_units_consumed: 0,
+                        compute_unit_price: 0,
+                        priority_fee: 0.0,
+                        rent_costs: 0.0,
+                        ata_creation_cost: 0.0,
                         total_fees: transaction.fee_sol,
-                    },
+                        fee_percentage: 0.0,
+                    }),
                 });
             }
             _ => {}
@@ -1236,7 +1865,430 @@ impl TransactionsManager {
             _ => "Other Transaction".to_string(),
         }
     }
+
+    // =============================================================================
+    // COMPREHENSIVE SWAP ANALYSIS AND PNL CALCULATION
+    // =============================================================================
+
+    /// Enhanced transaction analysis with token information integration
+    async fn analyze_transaction_comprehensive(&mut self, transaction: &mut Transaction) -> Result<(), String> {
+        if self.debug_enabled {
+            log(LogTag::Transactions, "ANALYSIS", &format!(
+                "Starting comprehensive analysis for {}", &transaction.signature[..8]
+            ));
+        }
+
+        // Step 1: Fetch full transaction data from RPC if not already present
+        if transaction.raw_transaction_data.is_none() {
+            self.fetch_transaction_data(transaction).await?;
+        }
+
+        // Step 2: Extract basic transaction info
+        self.extract_basic_transaction_info(transaction).await?;
+
+        // Step 3: Calculate balance changes BEFORE analyzing transaction type (needed for swap detection)
+        self.calculate_balance_changes(transaction).await?;
+
+        // Step 4: Analyze transaction type and extract swap data (now has balance data)
+        self.analyze_transaction_type(transaction).await?;
+
+        // Step 5: For swap transactions, integrate token information
+        if self.is_swap_transaction(transaction) {
+            self.integrate_token_information(transaction).await?;
+            self.calculate_swap_price(transaction).await?;
+            self.enhance_swap_analysis(transaction).await?;
+        }
+
+        // Step 6: Analyze fees comprehensively
+        let fee_breakdown = self.analyze_fees(transaction).await?;
+        transaction.fee_breakdown = Some(fee_breakdown.clone());
+
+        if self.debug_enabled {
+            log(LogTag::Transactions, "ANALYSIS", &format!(
+                "Comprehensive analysis complete for {}", &transaction.signature[..8]
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Integrate token information from tokens module
+    async fn integrate_token_information(&mut self, transaction: &mut Transaction) -> Result<(), String> {
+        let token_mint = match self.extract_token_mint_from_transaction(transaction) {
+            Some(mint) => mint,
+            None => return Ok(()), // No token involved
+        };
+
+        if self.debug_enabled {
+            log(LogTag::Transactions, "TOKEN_INFO", &format!(
+                "Integrating token info for mint: {}", &token_mint[..8]
+            ));
+        }
+
+        // Get token decimals
+        let decimals = get_token_decimals(&token_mint).await.unwrap_or(9);
+        transaction.token_decimals = Some(decimals);
+
+        // Get token symbol from database
+        let symbol = if let Some(ref db) = self.token_database {
+            match db.get_token_by_mint(&token_mint) {
+                Ok(Some(token_info)) => token_info.symbol,
+                _ => format!("TOKEN_{}", &token_mint[..8]),
+            }
+        } else {
+            format!("TOKEN_{}", &token_mint[..8])
+        };
+        transaction.token_symbol = Some(symbol.clone());
+
+        // Get current market price from price service
+        match get_token_price_blocking_safe(&token_mint).await {
+            Some(price_sol) => {
+                transaction.calculated_token_price_sol = Some(price_sol);
+                transaction.price_source = Some(PriceSourceType::CachedPrice);
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "PRICE", &format!(
+                        "Market price for {}: {:.12} SOL", 
+                        symbol, price_sol
+                    ));
+                }
+            }
+            None => {
+                log(LogTag::Transactions, "WARN", &format!(
+                    "Failed to get market price for {}", symbol
+                ));
+            }
+        }
+
+        // Create TokenSwapInfo
+        transaction.token_info = Some(TokenSwapInfo {
+            mint: token_mint,
+            symbol: symbol.clone(),
+            decimals,
+            current_price_sol: transaction.calculated_token_price_sol,
+            price_source: transaction.price_source.clone(),
+            is_verified: transaction.success,
+        });
+
+        Ok(())
+    }
+
+    /// Calculate effective price paid/received in the swap
+    async fn calculate_swap_price(&mut self, transaction: &mut Transaction) -> Result<(), String> {
+        let (sol_amount, token_amount) = match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { sol_amount, token_amount, .. } => (*sol_amount, *token_amount),
+            TransactionType::SwapTokenToSol { sol_amount, token_amount, .. } => (*sol_amount, *token_amount),
+            _ => return Ok(()), // Not a swap
+        };
+
+        if token_amount > 0.0 {
+            let effective_price = sol_amount / token_amount;
+            
+            // Update swap analysis with calculated price
+            if let Some(ref mut swap_analysis) = transaction.swap_analysis {
+                swap_analysis.effective_price = effective_price;
+            } else {
+                // Create basic swap analysis
+                let router = self.extract_router_from_transaction(transaction);
+                transaction.swap_analysis = Some(SwapAnalysis {
+                    router,
+                    input_token: self.extract_input_token(transaction),
+                    output_token: self.extract_output_token(transaction),
+                    input_amount: if matches!(transaction.transaction_type, TransactionType::SwapSolToToken { .. }) { sol_amount } else { token_amount },
+                    output_amount: if matches!(transaction.transaction_type, TransactionType::SwapSolToToken { .. }) { token_amount } else { sol_amount },
+                    effective_price,
+                    slippage: 0.0, // Calculate separately if needed
+                    fee_breakdown: transaction.fee_breakdown.clone().unwrap_or_default(),
+                });
+            }
+
+            if self.debug_enabled {
+                log(LogTag::Transactions, "PRICE_CALC", &format!(
+                    "Effective price for {}: {:.12} SOL per token", 
+                    &transaction.signature[..8], effective_price
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Enhance swap analysis with additional calculations
+    async fn enhance_swap_analysis(&mut self, transaction: &mut Transaction) -> Result<(), String> {
+        if let Some(ref mut swap_analysis) = transaction.swap_analysis {
+            // Calculate slippage if we have market price
+            if let Some(market_price) = transaction.calculated_token_price_sol {
+                if market_price > 0.0 {
+                    let price_diff = (swap_analysis.effective_price - market_price).abs();
+                    swap_analysis.slippage = (price_diff / market_price) * 100.0;
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "SLIPPAGE", &format!(
+                            "Slippage for {}: {:.2}% (effective: {:.12}, market: {:.12})", 
+                            &transaction.signature[..8], 
+                            swap_analysis.slippage,
+                            swap_analysis.effective_price,
+                            market_price
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Extract token mint from transaction
+    fn extract_token_mint_from_transaction(&self, transaction: &Transaction) -> Option<String> {
+        match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { token_mint, .. } => Some(token_mint.clone()),
+            TransactionType::SwapTokenToSol { token_mint, .. } => Some(token_mint.clone()),
+            _ => None,
+        }
+    }
+
+    /// Extract router from transaction
+    fn extract_router_from_transaction(&self, transaction: &Transaction) -> String {
+        match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { router, .. } => router.clone(),
+            TransactionType::SwapTokenToSol { router, .. } => router.clone(),
+            _ => "Unknown".to_string(),
+        }
+    }
+
+    /// Extract input token
+    fn extract_input_token(&self, transaction: &Transaction) -> String {
+        match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { .. } => "SOL".to_string(),
+            TransactionType::SwapTokenToSol { token_mint, .. } => token_mint.clone(),
+            _ => "Unknown".to_string(),
+        }
+    }
+
+    /// Extract output token
+    fn extract_output_token(&self, transaction: &Transaction) -> String {
+        match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { token_mint, .. } => token_mint.clone(),
+            TransactionType::SwapTokenToSol { .. } => "SOL".to_string(),
+            _ => "Unknown".to_string(),
+        }
+    }
+
+    /// Get all swap transactions for comprehensive analysis
+    pub async fn get_all_swap_transactions(&mut self) -> Result<Vec<SwapPnLInfo>, String> {
+        let mut swap_transactions = Vec::new();
+        
+        // Load all cached transactions
+        let cache_dir = get_transactions_cache_dir();
+        
+        if !cache_dir.exists() {
+            log(LogTag::Transactions, "WARN", "Transaction cache directory does not exist");
+            return Ok(swap_transactions);
+        }
+
+        let entries = fs::read_dir(&cache_dir)
+            .map_err(|e| format!("Failed to read cache directory: {}", e))?;
+
+        let mut processed_count = 0;
+        let mut swap_count = 0;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+            let path = entry.path();
+            
+            if !path.is_file() || !path.extension().map_or(false, |ext| ext == "json") {
+                continue;
+            }
+
+            // Read and parse transaction
+            match self.load_transaction_from_cache(&path).await {
+                Ok(mut transaction) => {
+                    processed_count += 1;
+                    
+                    // Re-analyze if needed to ensure we have complete information
+                    if transaction.token_info.is_none() && self.is_swap_transaction(&transaction) {
+                        if let Err(e) = self.analyze_transaction_comprehensive(&mut transaction).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to re-analyze transaction {}: {}", &transaction.signature[..8], e
+                            ));
+                            continue;
+                        }
+                        
+                        // Re-cache with updated information
+                        if let Err(e) = self.cache_transaction(&transaction).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to re-cache transaction {}: {}", &transaction.signature[..8], e
+                            ));
+                        }
+                    }
+                    
+                    // Convert to SwapPnLInfo if it's a swap
+                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction) {
+                        swap_transactions.push(swap_info);
+                        swap_count += 1;
+                    }
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "WARN", &format!(
+                        "Failed to load transaction from {}: {}", path.display(), e
+                    ));
+                }
+            }
+        }
+
+        log(LogTag::Transactions, "INFO", &format!(
+            "Processed {} transactions, found {} swaps", processed_count, swap_count
+        ));
+
+        // Sort by timestamp (newest first)
+        swap_transactions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        Ok(swap_transactions)
+    }
+
+    /// Load transaction from cache file
+    async fn load_transaction_from_cache(&self, path: &Path) -> Result<Transaction, String> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+        
+        let transaction: Transaction = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse transaction: {}", e))?;
+        
+        Ok(transaction)
+    }
+
+    /// Convert transaction to SwapPnLInfo
+    fn convert_to_swap_pnl_info(&self, transaction: &Transaction) -> Option<SwapPnLInfo> {
+        if !self.is_swap_transaction(transaction) {
+            return None;
+        }
+
+        let (swap_type, sol_amount, token_amount, token_mint) = match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, .. } => {
+                ("Buy".to_string(), *sol_amount, *token_amount, token_mint.clone())
+            }
+            TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, .. } => {
+                ("Sell".to_string(), *sol_amount, *token_amount, token_mint.clone())
+            }
+            _ => return None,
+        };
+
+        let calculated_price_sol = if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 };
+        
+        let market_price_sol = transaction.calculated_token_price_sol;
+        let price_difference_percent = if let Some(market_price) = market_price_sol {
+            if market_price > 0.0 {
+                Some(((calculated_price_sol - market_price) / market_price) * 100.0)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let token_symbol = transaction.token_symbol.clone()
+            .unwrap_or_else(|| format!("TOKEN_{}", &token_mint[..8]));
+        
+        let router = self.extract_router_from_transaction(transaction);
+
+        Some(SwapPnLInfo {
+            token_mint,
+            token_symbol,
+            swap_type,
+            sol_amount,
+            token_amount,
+            calculated_price_sol,
+            market_price_sol,
+            price_difference_percent,
+            timestamp: transaction.timestamp,
+            signature: transaction.signature.clone(),
+            router,
+            fee_sol: transaction.fee_sol,
+        })
+    }
+
+    /// Display comprehensive swap analysis table
+    pub fn display_swap_analysis_table(&self, swaps: &[SwapPnLInfo]) {
+        if swaps.is_empty() {
+            log(LogTag::Transactions, "INFO", "No swap transactions found");
+            return;
+        }
+
+        log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS ===");
+        log(LogTag::Transactions, "TABLE", &format!(
+            "{:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<15} {:<8} {:<12} {:<8}",
+            "Timestamp", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "Market Price", "Diff %", "Router", "Fee SOL"
+        ));
+        log(LogTag::Transactions, "TABLE", &"-".repeat(140));
+
+        let mut total_fees = 0.0;
+        let mut buy_count = 0;
+        let mut sell_count = 0;
+        let mut total_sol_spent = 0.0;
+        let mut total_sol_received = 0.0;
+
+        for swap in swaps {
+            let timestamp_str = swap.timestamp.format("%m-%d %H:%M").to_string();
+            let diff_str = match swap.price_difference_percent {
+                Some(diff) => format!("{:+.1}%", diff),
+                None => "N/A".to_string(),
+            };
+            let market_price_str = match swap.market_price_sol {
+                Some(price) => format!("{:.2e}", price),
+                None => "N/A".to_string(),
+            };
+
+            log(LogTag::Transactions, "TABLE", &format!(
+                "{:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.2e} {:<15} {:<8} {:<12} {:<8.6}",
+                timestamp_str,
+                swap.swap_type,
+                &swap.token_symbol[..15.min(swap.token_symbol.len())],
+                swap.sol_amount,
+                swap.token_amount,
+                swap.calculated_price_sol,
+                market_price_str,
+                diff_str,
+                &swap.router[..12.min(swap.router.len())],
+                swap.fee_sol
+            ));
+
+            total_fees += swap.fee_sol;
+            if swap.swap_type == "Buy" {
+                buy_count += 1;
+                total_sol_spent += swap.sol_amount;
+            } else {
+                sell_count += 1;
+                total_sol_received += swap.sol_amount;
+            }
+        }
+
+        log(LogTag::Transactions, "TABLE", &"-".repeat(140));
+        log(LogTag::Transactions, "TABLE", &format!(
+            "SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
+            buy_count, total_sol_spent, sell_count, total_sol_received, total_fees, 
+            total_sol_received - total_sol_spent - total_fees
+        ));
+        log(LogTag::Transactions, "TABLE", "=== END ANALYSIS ===");
+    }
 }
+
+impl Default for FeeBreakdown {
+    fn default() -> Self {
+        Self {
+            transaction_fee: 0.0,
+            router_fee: 0.0,
+            platform_fee: 0.0,
+            compute_units_consumed: 0,
+            compute_unit_price: 0,
+            priority_fee: 0.0,
+            rent_costs: 0.0,
+            ata_creation_cost: 0.0,
+            total_fees: 0.0,
+            fee_percentage: 0.0,
+        }
+    }
+}
+
 
 // =============================================================================
 // PUBLIC API FOR INTEGRATION
