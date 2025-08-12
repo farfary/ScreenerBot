@@ -21,6 +21,7 @@ use solana_sdk::{
     commitment_config::CommitmentConfig,
 };
 use std::str::FromStr;
+use tabled::{Table, Tabled, settings::{Style, Modify, object::Rows, Alignment}};
 
 use crate::logger::{log, LogTag};
 use crate::global::{
@@ -380,6 +381,62 @@ pub struct PositionTransaction {
     pub router: String,
     pub fee_sol: f64,
     pub ata_rents: f64,
+}
+
+// =============================================================================
+// TABLED DISPLAY STRUCTURES
+// =============================================================================
+
+/// Tabled structure for swap analysis display
+#[derive(Tabled)]
+pub struct SwapDisplayRow {
+    #[tabled(rename = "Sig")]
+    pub signature: String,
+    #[tabled(rename = "Slot")]
+    pub slot: String,
+    #[tabled(rename = "Type")]
+    pub swap_type: String,
+    #[tabled(rename = "Token")]
+    pub token: String,
+    #[tabled(rename = "SOL Amount")]
+    pub sol_amount: String,
+    #[tabled(rename = "Token Amount")]
+    pub token_amount: String,
+    #[tabled(rename = "Price (SOL)")]
+    pub price: String,
+    #[tabled(rename = "ATA Rents")]
+    pub ata_rents: String,
+    #[tabled(rename = "Router")]
+    pub router: String,
+    #[tabled(rename = "Fee")]
+    pub fee: String,
+}
+
+/// Tabled structure for position analysis display
+#[derive(Tabled)]
+pub struct PositionDisplayRow {
+    #[tabled(rename = "Token")]
+    pub token: String,
+    #[tabled(rename = "Status")]
+    pub status: String,
+    #[tabled(rename = "Buys")]
+    pub buys: String,
+    #[tabled(rename = "Sold")]
+    pub sold: String,
+    #[tabled(rename = "Remaining")]
+    pub remaining: String,
+    #[tabled(rename = "SOL In")]
+    pub sol_in: String,
+    #[tabled(rename = "SOL Out")]
+    pub sol_out: String,
+    #[tabled(rename = "Net PnL")]
+    pub net_pnl: String,
+    #[tabled(rename = "Avg Price")]
+    pub avg_price: String,
+    #[tabled(rename = "Fees")]
+    pub fees: String,
+    #[tabled(rename = "Duration")]
+    pub duration: String,
 }
 
 // =============================================================================
@@ -3806,12 +3863,9 @@ impl TransactionsManager {
         }
 
         log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS ===");
-        log(LogTag::Transactions, "TABLE", &format!(
-            "{:<8} {:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<12} {:<12} {:<8}",
-            "Sig", "Slot", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
-        ));
-        log(LogTag::Transactions, "TABLE", &"─".repeat(128));
 
+        // Convert swaps to display rows
+        let mut display_rows: Vec<SwapDisplayRow> = Vec::new();
         let mut total_fees = 0.0;
         let mut buy_count = 0;
         let mut sell_count = 0;
@@ -3819,7 +3873,6 @@ impl TransactionsManager {
         let mut total_sol_received = 0.0;
 
         for swap in swaps {
-            // Use slot number for reliable chronological order instead of unreliable timestamps
             let slot_str = match swap.slot {
                 Some(slot) => format!("{}", slot),
                 None => "Unknown".to_string(),
@@ -3840,24 +3893,37 @@ impl TransactionsManager {
 
             // Color coding for better readability
             let type_display = if swap.swap_type == "Buy" {
-                format!("🟢Buy")  // Green for buy
+                "🟢Buy".to_string()  // Green for buy
             } else {
-                format!("🔴Sell") // Red for sell
+                "🔴Sell".to_string() // Red for sell
             };
 
-            log(LogTag::Transactions, "TABLE", &format!(
-                "{:<8} {:<12} {:<8} {:<15} {:<+12.6} {:<+15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
-                sig_short,
-                slot_str,
-                type_display,
-                &swap.token_symbol[..15.min(swap.token_symbol.len())],
-                display_sol_amount,
-                display_token_amount,
-                swap.calculated_price_sol,
-                swap.ata_rents,
-                &swap.router[..12.min(swap.router.len())],
-                swap.fee_sol
-            ));
+            // Format SOL amount with colored sign
+            let sol_formatted = if display_sol_amount >= 0.0 {
+                format!("+{:.6}", display_sol_amount)
+            } else {
+                format!("{:.6}", display_sol_amount)
+            };
+
+            // Format token amount with colored sign
+            let token_formatted = if display_token_amount >= 0.0 {
+                format!("+{:.2}", display_token_amount)
+            } else {
+                format!("{:.2}", display_token_amount)
+            };
+
+            display_rows.push(SwapDisplayRow {
+                signature: sig_short.to_string(),
+                slot: slot_str,
+                swap_type: type_display,
+                token: swap.token_symbol[..15.min(swap.token_symbol.len())].to_string(),
+                sol_amount: sol_formatted,
+                token_amount: token_formatted,
+                price: format!("{:.9}", swap.calculated_price_sol),
+                ata_rents: format!("{:.6}", swap.ata_rents),
+                router: swap.router[..12.min(swap.router.len())].to_string(),
+                fee: format!("{:.6}", swap.fee_sol),
+            });
 
             total_fees += swap.fee_sol;
             if swap.swap_type == "Buy" {
@@ -3869,7 +3935,22 @@ impl TransactionsManager {
             }
         }
 
-        log(LogTag::Transactions, "TABLE", &"─".repeat(128));
+        // Create and display the table
+        let table_string = Table::new(display_rows)
+            .with(Style::modern())
+            .with(Modify::new(Rows::first()).with(Alignment::center()))
+            .to_string();
+
+        // Print the entire table directly to console
+        println!("{}", table_string);
+
+        // Print summary
+        println!("📊 SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
+            buy_count, total_sol_spent, sell_count, total_sol_received, total_fees, 
+            total_sol_received - total_sol_spent - total_fees
+        );
+        println!("=== END ANALYSIS ===");
+        
         log(LogTag::Transactions, "TABLE", &format!(
             "📊 SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
             buy_count, total_sol_spent, sell_count, total_sol_received, total_fees, 
@@ -3951,6 +4032,14 @@ impl TransactionsManager {
             // Update position state
             match swap.swap_type.as_str() {
                 "Buy" => {
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "DEBUG_BUY", &format!(
+                            "Processing BUY for {}: +{:.2} tokens, current total: {:.2} -> {:.2}",
+                            swap.token_symbol, swap.token_amount, position_state.total_tokens, 
+                            position_state.total_tokens + swap.token_amount
+                        ));
+                    }
+                    
                     position_state.total_tokens += swap.token_amount;
                     position_state.total_sol_invested += swap.sol_amount;
                     position_state.total_fees += swap.fee_sol;
@@ -3970,7 +4059,15 @@ impl TransactionsManager {
                     }
                 }
                 "Sell" => {
-                    position_state.total_tokens -= swap.token_amount;
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "DEBUG_SELL", &format!(
+                            "Processing SELL for {}: -{:.2} tokens, current total: {:.2} -> {:.2}",
+                            swap.token_symbol, swap.token_amount.abs(), position_state.total_tokens, 
+                            position_state.total_tokens - swap.token_amount.abs()
+                        ));
+                    }
+                    
+                    position_state.total_tokens -= swap.token_amount.abs(); // Always use absolute value for sells
                     position_state.total_sol_received += swap.sol_amount;
                     position_state.total_fees += swap.fee_sol;
                     position_state.total_ata_rents += swap.ata_rents;
@@ -3981,7 +4078,8 @@ impl TransactionsManager {
                         let position_analysis = self.finalize_position_analysis(position_state.clone());
                         completed_positions.push(position_analysis);
                         
-                        // Reset position state for potential re-entry
+                        // Mark this position as processed by clearing the buy count
+                        // This prevents it from being re-added in the final loop
                         *position_state = PositionState {
                             token_mint: swap.token_mint.clone(),
                             token_symbol: swap.token_symbol.clone(),
@@ -3990,7 +4088,7 @@ impl TransactionsManager {
                             total_sol_received: position_state.total_sol_received,
                             total_fees: position_state.total_fees,
                             total_ata_rents: position_state.total_ata_rents,
-                            buy_count: position_state.buy_count,
+                            buy_count: 0, // Reset to 0 to prevent re-addition
                             sell_count: position_state.sell_count,
                             first_buy_slot: None,
                             last_activity_slot: swap.slot,
@@ -4111,12 +4209,12 @@ impl TransactionsManager {
         }
 
         log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE POSITION ANALYSIS ===");
-        log(LogTag::Transactions, "TABLE", &format!(
-            "{:<15} {:<12} {:<8} {:<12} {:<12} {:<12} {:<12} {:<12} {:<10} {:<8} {:<10}",
-            "Token", "Status", "Buys", "Sold", "Remaining", "SOL In", "SOL Out", "Net PnL", "Avg Price", "Fees", "Duration"
-        ));
-        log(LogTag::Transactions, "TABLE", &"─".repeat(138));
+        
+        // Print header
+        println!("=== COMPREHENSIVE POSITION ANALYSIS ===");
 
+        // Convert positions to display rows
+        let mut display_rows: Vec<PositionDisplayRow> = Vec::new();
         let mut total_invested = 0.0;
         let mut total_received = 0.0;
         let mut total_fees = 0.0;
@@ -4126,31 +4224,31 @@ impl TransactionsManager {
 
         for position in positions {
             let status_display = match position.status {
-                PositionStatus::Open => "🟢Open",
-                PositionStatus::Closed => "🔴Closed", 
-                PositionStatus::PartiallyReduced => "🟡Partial",
-                PositionStatus::Oversold => "🔶Oversold",
+                PositionStatus::Open => "🟢Open".to_string(),
+                PositionStatus::Closed => "🔴Closed".to_string(), 
+                PositionStatus::PartiallyReduced => "🟡Partial".to_string(),
+                PositionStatus::Oversold => "🔶Oversold".to_string(),
             };
 
             // Format SOL amounts with proper signs for intuitive display
             // Invested: negative (outflow), Received: positive (inflow)
             let sol_in_display = if position.total_sol_invested > 0.0 {
-                format!("\x1b[31m-\x1b[0m{:.3}", position.total_sol_invested)
+                format!("-{:.3}", position.total_sol_invested)
             } else {
                 format!("{:.3}", position.total_sol_invested)
             };
 
             let sol_out_display = if position.total_sol_received > 0.0 {
-                format!("\x1b[32m+\x1b[0m{:.3}", position.total_sol_received)
+                format!("+{:.3}", position.total_sol_received)
             } else {
                 format!("{:.3}", position.total_sol_received)
             };
 
-            // Color-code PnL
+            // Format PnL
             let pnl_display = if position.total_pnl > 0.0 {
-                format!("\x1b[32m+\x1b[0m{:.3}", position.total_pnl)
+                format!("+{:.3}", position.total_pnl)
             } else if position.total_pnl < 0.0 {
-                format!("\x1b[31m-\x1b[0m{:.3}", position.total_pnl.abs())
+                format!("{:.3}", position.total_pnl)
             } else {
                 format!("{:.3}", position.total_pnl)
             };
@@ -4179,20 +4277,19 @@ impl TransactionsManager {
                 "0.0h".to_string()
             };
 
-            log(LogTag::Transactions, "TABLE", &format!(
-                "{:<15} {:<12} {:<8} {:<12} {:<12} {:<12} {:<12} {:<12} {:<10.6} {:<8.3} {:<10}",
-                &position.token_symbol[..15.min(position.token_symbol.len())],
-                status_display,
-                bought_display,
-                sold_display,
-                remaining_display,
-                sol_in_display,
-                sol_out_display,
-                pnl_display,
-                position.average_buy_price,
-                position.total_fees + position.total_ata_rents,
-                duration_display
-            ));
+            display_rows.push(PositionDisplayRow {
+                token: position.token_symbol[..15.min(position.token_symbol.len())].to_string(),
+                status: status_display,
+                buys: bought_display,
+                sold: sold_display,
+                remaining: remaining_display,
+                sol_in: sol_in_display,
+                sol_out: sol_out_display,
+                net_pnl: pnl_display,
+                avg_price: format!("{:.9}", position.average_buy_price),
+                fees: format!("{:.6}", position.total_fees + position.total_ata_rents),
+                duration: duration_display,
+            });
 
             // Update totals
             total_invested += position.total_sol_invested;
@@ -4206,15 +4303,28 @@ impl TransactionsManager {
             }
         }
 
-        log(LogTag::Transactions, "TABLE", &"─".repeat(138));
+        // Create and display the table
+        let table_string = Table::new(display_rows)
+            .with(Style::modern())
+            .with(Modify::new(Rows::first()).with(Alignment::center()))
+            .to_string();
+
+        // Print the entire table directly to console
+        println!("{}", table_string);
         
         let net_pnl_display = if total_pnl > 0.0 {
-            format!("\x1b[32m+{:.3}\x1b[0m", total_pnl)
+            format!("+{:.3}", total_pnl)
         } else if total_pnl < 0.0 {
-            format!("\x1b[31m{:.3}\x1b[0m", total_pnl)
+            format!("{:.3}", total_pnl)
         } else {
             format!("{:.3}", total_pnl)
         };
+
+        // Print summary
+        println!("📊 SUMMARY: {} Open, {} Closed | Invested: {:.3} SOL | Received: {:.3} SOL | Fees: {:.3} SOL | Net PnL: {}",
+            open_positions, closed_positions, total_invested, total_received, total_fees, net_pnl_display
+        );
+        println!("=== END POSITION ANALYSIS ===");
 
         log(LogTag::Transactions, "TABLE", &format!(
             "📊 SUMMARY: {} Open, {} Closed | Invested: {:.3} SOL | Received: {:.3} SOL | Fees: {:.3} SOL | Net PnL: {}",
