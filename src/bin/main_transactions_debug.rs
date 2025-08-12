@@ -575,12 +575,16 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
     if !transaction.token_transfers.is_empty() {
         log(LogTag::Transactions, "DETAIL", "Token Transfers:");
         for transfer in &transaction.token_transfers {
+            let from_display = if transfer.from.len() >= 8 { &transfer.from[..8] } else { &transfer.from };
+            let to_display = if transfer.to.len() >= 8 { &transfer.to[..8] } else { &transfer.to };
+            let mint_display = if transfer.mint.len() >= 8 { &transfer.mint[..8] } else { &transfer.mint };
+            
             log(LogTag::Transactions, "DETAIL", &format!(
                 "  {} -> {}: {:.6} ({})",
-                &transfer.from[..8],
-                &transfer.to[..8],
+                from_display,
+                to_display,
                 transfer.amount,
-                &transfer.mint[..8]
+                mint_display
             ));
         }
     }

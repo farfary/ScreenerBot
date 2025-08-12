@@ -404,60 +404,20 @@ impl TransactionsManager {
 
     /// Analyze transaction to determine type and extract data
     async fn analyze_transaction(&mut self, transaction: &mut Transaction) -> Result<(), String> {
-        // Basic analysis - this would be expanded with transactions_analyzer.rs integration
-        
-        // Check if it's a swap by looking for known program IDs in instructions
-        if let Some(raw_data) = &transaction.raw_transaction_data {
-            if let Some(tx_obj) = raw_data.as_object() {
-                if let Some(tx_data) = tx_obj.get("transaction") {
-                    if let Some(message) = tx_data.get("message") {
-                        if let Some(instructions) = message.get("instructions") {
-                            if let Some(instructions_array) = instructions.as_array() {
-                                // Look for Jupiter, Raydium, or other DEX program IDs
-                                for instruction in instructions_array {
-                                    if let Some(program_id_index) = instruction.get("programIdIndex") {
-                                        // This is a simplified check - would be expanded with proper program ID detection
-                                        transaction.transaction_type = TransactionType::Unknown;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Calculate SOL balance change
-        if let Some(raw_data) = &transaction.raw_transaction_data {
-            if let Some(meta) = raw_data.get("transaction").and_then(|tx| tx.get("meta")) {
-                if let (Some(pre_balances), Some(post_balances)) = (
-                    meta.get("preBalances").and_then(|b| b.as_array()),
-                    meta.get("postBalances").and_then(|b| b.as_array())
-                ) {
-                    // Calculate balance changes (simplified - would be expanded)
-                    if let (Some(pre_first), Some(post_first)) = (
-                        pre_balances.get(0).and_then(|b| b.as_u64()),
-                        post_balances.get(0).and_then(|b| b.as_u64())
-                    ) {
-                        transaction.sol_balance_change = (post_first as i64 - pre_first as i64) as f64 / 1_000_000_000.0;
-                    }
-                }
-            }
-        }
+        // Use comprehensive analysis instead of basic analysis
+        self.analyze_transaction_comprehensive(transaction).await?;
 
         if self.debug_enabled {
             log(LogTag::Transactions, "ANALYZE", &format!(
                 "Transaction {} - Type: {:?}, SOL change: {:.6}", 
-                &transaction.signature[..8],
+                &transaction.signature[..8], 
                 transaction.transaction_type,
                 transaction.sol_balance_change
             ));
         }
 
         Ok(())
-    }
-
-    /// Cache transaction to disk
+    }    /// Cache transaction to disk
     async fn cache_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         let cache_dir = get_transactions_cache_dir();
         
@@ -714,6 +674,11 @@ impl TransactionsManager {
                 transaction.slot = Some(slot);
             }
 
+            // Extract block time
+            if let Some(block_time) = raw_data.get("blockTime").and_then(|v| v.as_i64()) {
+                transaction.block_time = Some(block_time);
+            }
+
             // Extract meta information
             if let Some(meta) = raw_data.get("meta") {
                 // Extract fee
@@ -728,11 +693,40 @@ impl TransactionsManager {
                     transaction.error_message = Some(err.to_string());
                 }
 
-                // Extract log messages for analysis
+                // Extract log messages for analysis - THIS IS CRITICAL FOR SWAP DETECTION
                 if let Some(logs) = meta.get("logMessages").and_then(|v| v.as_array()) {
                     transaction.log_messages = logs.iter()
                         .filter_map(|v| v.as_str().map(|s| s.to_string()))
                         .collect();
+                    
+                    if self.debug_enabled && !transaction.log_messages.is_empty() {
+                        log(LogTag::Transactions, "LOGS", &format!("Found {} log messages for {}", 
+                            transaction.log_messages.len(), &transaction.signature[..8]));
+                    }
+                }
+
+                // Extract instruction information for program ID detection
+                if let Some(transaction_data) = raw_data.get("transaction") {
+                    if let Some(message) = transaction_data.get("message") {
+                        if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
+                            for (index, instruction) in instructions.iter().enumerate() {
+                                if let Some(program_id_index) = instruction.get("programIdIndex").and_then(|v| v.as_u64()) {
+                                    if let Some(account_keys) = message.get("accountKeys").and_then(|v| v.as_array()) {
+                                        if let Some(program_id_value) = account_keys.get(program_id_index as usize) {
+                                            let program_id = program_id_value.as_str().unwrap_or("unknown").to_string();
+                                            
+                                            transaction.instructions.push(InstructionInfo {
+                                                program_id: program_id.clone(),
+                                                instruction_type: format!("instruction_{}", index),
+                                                accounts: vec![], // Would extract account indices if needed
+                                                data: instruction.get("data").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -745,48 +739,118 @@ impl TransactionsManager {
         // Analyze log messages to detect swap patterns
         let log_text = transaction.log_messages.join(" ");
         
-        // Detect Jupiter swaps
-        if log_text.contains("Program JUP") || log_text.contains("Jupiter") {
+        if self.debug_enabled {
+            log(LogTag::Transactions, "DEBUG", &format!("Analyzing {} with {} log messages", 
+                &transaction.signature[..8], transaction.log_messages.len()));
+            if !log_text.is_empty() {
+                log(LogTag::Transactions, "DEBUG", &format!("Log preview (first 200 chars): {}", 
+                    &log_text.chars().take(200).collect::<String>()));
+            }
+        }
+        
+        // Detect Jupiter swaps - multiple ways to identify
+        if log_text.contains("Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") || 
+           log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") ||
+           log_text.contains("Jupiter") {
+            
             if let Ok(swap_data) = self.extract_jupiter_swap_data(transaction).await {
                 transaction.transaction_type = swap_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - Jupiter swap detected", 
+                        &transaction.signature[..8]));
+                }
                 return Ok(());
             }
         }
 
         // Detect Raydium swaps
-        if log_text.contains("Program 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+        if log_text.contains("Program 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") ||
+           log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+            
             if let Ok(swap_data) = self.extract_raydium_swap_data(transaction).await {
                 transaction.transaction_type = swap_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - Raydium swap detected", 
+                        &transaction.signature[..8]));
+                }
                 return Ok(());
             }
         }
 
         // Detect Pump.fun transactions
-        if log_text.contains("Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
+        if log_text.contains("Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
+           log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
+            
             if let Ok(swap_data) = self.extract_pump_fun_swap_data(transaction).await {
                 transaction.transaction_type = swap_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - Pump.fun transaction detected", 
+                        &transaction.signature[..8]));
+                }
                 return Ok(());
             }
         }
 
-        // Detect GMGN swaps (look for GMGN-specific patterns)
-        if log_text.contains("gmgn") || log_text.contains("GMGN") {
+        // Detect GMGN swaps (look for GMGN-specific patterns in logs)
+        if log_text.to_lowercase().contains("gmgn") {
             if let Ok(swap_data) = self.extract_gmgn_swap_data(transaction).await {
                 transaction.transaction_type = swap_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - GMGN swap detected", 
+                        &transaction.signature[..8]));
+                }
+                return Ok(());
+            }
+        }
+
+        // Detect Orca swaps
+        if log_text.contains("Program 9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") ||
+           log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+            
+            if let Ok(swap_data) = self.extract_orca_swap_data(transaction).await {
+                transaction.transaction_type = swap_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - Orca swap detected", 
+                        &transaction.signature[..8]));
+                }
+                return Ok(());
+            }
+        }
+
+        // Check for generic swap patterns in logs
+        if log_text.contains("swap") || log_text.contains("Swap") || 
+           log_text.contains("buy") || log_text.contains("sell") {
+            
+            if let Ok(swap_data) = self.extract_generic_swap_data(transaction).await {
+                transaction.transaction_type = swap_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - Generic swap detected", 
+                        &transaction.signature[..8]));
+                }
                 return Ok(());
             }
         }
 
         // Detect simple SOL/token transfers
-        if log_text.contains("Transfer") {
+        if log_text.contains("Transfer") && transaction.sol_balance_change != 0.0 {
             if let Ok(transfer_data) = self.extract_transfer_data(transaction).await {
                 transaction.transaction_type = transfer_data;
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "DETECTED", &format!("{} - Transfer detected", 
+                        &transaction.signature[..8]));
+                }
                 return Ok(());
             }
         }
 
         // Default to Unknown if we can't identify the type
         transaction.transaction_type = TransactionType::Unknown;
+        
+        if self.debug_enabled {
+            log(LogTag::Transactions, "UNKNOWN", &format!("{} - Could not classify transaction type", 
+                &transaction.signature[..8]));
+        }
+        
         Ok(())
     }
 
@@ -795,16 +859,53 @@ impl TransactionsManager {
         // Parse Jupiter-specific swap data from logs and balance changes
         let log_text = transaction.log_messages.join(" ");
         
+        if self.debug_enabled {
+            log(LogTag::Transactions, "JUPITER", &format!("Analyzing Jupiter transaction {}", 
+                &transaction.signature[..8]));
+        }
+        
         // Look for Jupiter swap patterns in logs
-        if log_text.contains("SwapEvent") {
-            // Try to extract swap amounts from logs
-            // This is a simplified version - real implementation would parse instruction data
-            return Ok(TransactionType::SwapSolToToken {
-                token_mint: "unknown".to_string(),
-                sol_amount: 0.0,
-                token_amount: 0.0,
-                router: "Jupiter".to_string(),
-            });
+        if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+            // Calculate amounts from balance changes
+            let sol_change = transaction.sol_balance_change.abs();
+            
+            // Check token transfers for the other side of the swap
+            let mut token_mint = "unknown".to_string();
+            let mut token_amount = 0.0;
+            
+            if !transaction.token_transfers.is_empty() {
+                // Use first token transfer as the token side
+                token_mint = transaction.token_transfers[0].mint.clone();
+                token_amount = transaction.token_transfers[0].amount;
+            }
+            
+            // Determine swap direction based on SOL balance change
+            if transaction.sol_balance_change < 0.0 {
+                // Negative SOL change = buying tokens with SOL
+                return Ok(TransactionType::SwapSolToToken {
+                    token_mint,
+                    sol_amount: sol_change,
+                    token_amount,
+                    router: "Jupiter".to_string(),
+                });
+            } else if transaction.sol_balance_change > 0.0 {
+                // Positive SOL change = selling tokens for SOL
+                return Ok(TransactionType::SwapTokenToSol {
+                    token_mint,
+                    token_amount,
+                    sol_amount: sol_change,
+                    router: "Jupiter".to_string(),
+                });
+            } else {
+                // Zero SOL change might be token-to-token swap
+                return Ok(TransactionType::SwapTokenToToken {
+                    from_mint: "unknown".to_string(),
+                    to_mint: token_mint,
+                    from_amount: 0.0,
+                    to_amount: token_amount,
+                    router: "Jupiter".to_string(),
+                });
+            }
         }
 
         Err("Not a Jupiter swap".to_string())
@@ -814,13 +915,31 @@ impl TransactionsManager {
     async fn extract_raydium_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
         
-        if log_text.contains("SwapBaseIn") || log_text.contains("SwapBaseOut") {
-            return Ok(TransactionType::SwapSolToToken {
-                token_mint: "unknown".to_string(),
-                sol_amount: 0.0,
-                token_amount: 0.0,
-                router: "Raydium".to_string(),
-            });
+        if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+            let sol_change = transaction.sol_balance_change.abs();
+            let mut token_mint = "unknown".to_string();
+            let mut token_amount = 0.0;
+            
+            if !transaction.token_transfers.is_empty() {
+                token_mint = transaction.token_transfers[0].mint.clone();
+                token_amount = transaction.token_transfers[0].amount;
+            }
+            
+            if transaction.sol_balance_change < 0.0 {
+                return Ok(TransactionType::SwapSolToToken {
+                    token_mint,
+                    sol_amount: sol_change,
+                    token_amount,
+                    router: "Raydium".to_string(),
+                });
+            } else if transaction.sol_balance_change > 0.0 {
+                return Ok(TransactionType::SwapTokenToSol {
+                    token_mint,
+                    token_amount,
+                    sol_amount: sol_change,
+                    router: "Raydium".to_string(),
+                });
+            }
         }
 
         Err("Not a Raydium swap".to_string())
@@ -830,13 +949,31 @@ impl TransactionsManager {
     async fn extract_pump_fun_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
         
-        if log_text.contains("buy") || log_text.contains("sell") {
-            return Ok(TransactionType::SwapSolToToken {
-                token_mint: "unknown".to_string(),
-                sol_amount: 0.0,
-                token_amount: 0.0,
-                router: "Pump.fun".to_string(),
-            });
+        if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
+            let sol_change = transaction.sol_balance_change.abs();
+            let mut token_mint = "unknown".to_string();
+            let mut token_amount = 0.0;
+            
+            if !transaction.token_transfers.is_empty() {
+                token_mint = transaction.token_transfers[0].mint.clone();
+                token_amount = transaction.token_transfers[0].amount;
+            }
+            
+            if transaction.sol_balance_change < 0.0 {
+                return Ok(TransactionType::SwapSolToToken {
+                    token_mint,
+                    sol_amount: sol_change,
+                    token_amount,
+                    router: "Pump.fun".to_string(),
+                });
+            } else if transaction.sol_balance_change > 0.0 {
+                return Ok(TransactionType::SwapTokenToSol {
+                    token_mint,
+                    token_amount,
+                    sol_amount: sol_change,
+                    router: "Pump.fun".to_string(),
+                });
+            }
         }
 
         Err("Not a Pump.fun transaction".to_string())
@@ -847,16 +984,109 @@ impl TransactionsManager {
         let log_text = transaction.log_messages.join(" ");
         
         // GMGN-specific detection logic
-        if log_text.contains("swap") {
-            return Ok(TransactionType::SwapSolToToken {
-                token_mint: "unknown".to_string(),
-                sol_amount: 0.0,
-                token_amount: 0.0,
-                router: "GMGN".to_string(),
-            });
+        if log_text.to_lowercase().contains("gmgn") {
+            let sol_change = transaction.sol_balance_change.abs();
+            let mut token_mint = "unknown".to_string();
+            let mut token_amount = 0.0;
+            
+            if !transaction.token_transfers.is_empty() {
+                token_mint = transaction.token_transfers[0].mint.clone();
+                token_amount = transaction.token_transfers[0].amount;
+            }
+            
+            if transaction.sol_balance_change < 0.0 {
+                return Ok(TransactionType::SwapSolToToken {
+                    token_mint,
+                    sol_amount: sol_change,
+                    token_amount,
+                    router: "GMGN".to_string(),
+                });
+            } else if transaction.sol_balance_change > 0.0 {
+                return Ok(TransactionType::SwapTokenToSol {
+                    token_mint,
+                    token_amount,
+                    sol_amount: sol_change,
+                    router: "GMGN".to_string(),
+                });
+            }
         }
 
         Err("Not a GMGN swap".to_string())
+    }
+
+    /// Extract Orca swap data from transaction
+    async fn extract_orca_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+            let sol_change = transaction.sol_balance_change.abs();
+            let mut token_mint = "unknown".to_string();
+            let mut token_amount = 0.0;
+            
+            if !transaction.token_transfers.is_empty() {
+                token_mint = transaction.token_transfers[0].mint.clone();
+                token_amount = transaction.token_transfers[0].amount;
+            }
+            
+            if transaction.sol_balance_change < 0.0 {
+                return Ok(TransactionType::SwapSolToToken {
+                    token_mint,
+                    sol_amount: sol_change,
+                    token_amount,
+                    router: "Orca".to_string(),
+                });
+            } else if transaction.sol_balance_change > 0.0 {
+                return Ok(TransactionType::SwapTokenToSol {
+                    token_mint,
+                    token_amount,
+                    sol_amount: sol_change,
+                    router: "Orca".to_string(),
+                });
+            }
+        }
+
+        Err("Not an Orca swap".to_string())
+    }
+
+    /// Extract generic swap data from transaction (for unidentified DEXes)
+    async fn extract_generic_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Look for generic swap indicators
+        if log_text.contains("swap") || log_text.contains("Swap") || 
+           log_text.contains("buy") || log_text.contains("sell") {
+            
+            let sol_change = transaction.sol_balance_change.abs();
+            
+            // Only consider it a swap if there's actual SOL movement
+            if sol_change > 0.001 { // More than 0.001 SOL
+                let mut token_mint = "unknown".to_string();
+                let mut token_amount = 0.0;
+                
+                if !transaction.token_transfers.is_empty() {
+                    token_mint = transaction.token_transfers[0].mint.clone();
+                    token_amount = transaction.token_transfers[0].amount;
+                }
+                
+                if transaction.sol_balance_change < 0.0 {
+                    return Ok(TransactionType::SwapSolToToken {
+                        token_mint,
+                        sol_amount: sol_change,
+                        token_amount,
+                        router: "Unknown DEX".to_string(),
+                    });
+                } else if transaction.sol_balance_change > 0.0 {
+                    return Ok(TransactionType::SwapTokenToSol {
+                        token_mint,
+                        token_amount,
+                        sol_amount: sol_change,
+                        router: "Unknown DEX".to_string(),
+                    });
+                }
+            }
+        }
+
+        Err("Not a generic swap".to_string())
     }
 
     /// Extract transfer data from transaction
