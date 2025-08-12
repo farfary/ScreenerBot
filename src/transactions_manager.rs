@@ -4184,7 +4184,7 @@ impl TransactionsManager {
                 .sum(),
             total_tokens_sold: state.transactions.iter()
                 .filter(|t| t.swap_type == "Sell")
-                .map(|t| t.token_amount)
+                .map(|t| t.token_amount.abs())  // Use absolute value for sell amounts
                 .sum(),
             remaining_tokens: state.total_tokens,
             total_sol_invested: state.total_sol_invested,
