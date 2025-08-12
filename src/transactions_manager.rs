@@ -184,6 +184,11 @@ pub enum TransactionType {
         compute_units: u32,
         compute_unit_price: u64,
     },
+    NftMint {
+        collection_id: String,
+        leaf_asset_id: String,
+        nft_type: String, // "Compressed NFT", "Standard NFT", etc.
+    },
     Spam,
     Unknown,
 }
@@ -2711,6 +2716,37 @@ impl TransactionsManager {
                 });
             }
             
+            // Bubblegum Program (Compressed NFTs)
+            "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY" => {
+                // Check for NFT minting operations
+                let mut collection_id = "Unknown".to_string();
+                let mut leaf_asset_id = "Unknown".to_string();
+                
+                // Extract information from log messages
+                for log in &transaction.log_messages {
+                    if log.contains("MintToCollectionV1") || log.contains("MintV1") {
+                        // This is an NFT minting operation
+                    }
+                    if log.contains("Leaf asset ID:") {
+                        // Extract the leaf asset ID
+                        if let Some(start) = log.find("Leaf asset ID:") {
+                            let id_part = &log[start + 15..];
+                            if let Some(end) = id_part.find(' ') {
+                                leaf_asset_id = id_part[..end].trim().to_string();
+                            } else {
+                                leaf_asset_id = id_part.trim().to_string();
+                            }
+                        }
+                    }
+                }
+                
+                return Ok(TransactionType::NftMint {
+                    collection_id,
+                    leaf_asset_id,
+                    nft_type: "Compressed NFT".to_string(),
+                });
+            }
+            
             _ => {
                 // For unknown programs, try to classify based on behavior
                 if transaction.sol_balance_change.abs() > 0.001 && transaction.token_transfers.is_empty() {
@@ -2915,6 +2951,9 @@ impl TransactionsManager {
             }
             TransactionType::TokenTransfer { mint, amount, .. } => {
                 format!("Token Transfer: {} of {}", amount, &mint[..8])
+            }
+            TransactionType::NftMint { leaf_asset_id, nft_type, .. } => {
+                format!("NFT Mint: {} ({})", &leaf_asset_id[..8], nft_type)
             }
             TransactionType::Spam => "SPAM Transaction".to_string(),
             TransactionType::Unknown => "Unknown Transaction".to_string(),

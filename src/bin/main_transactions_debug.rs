@@ -595,6 +595,10 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
             screenerbot::transactions_manager::TransactionType::SpamBulk { transaction_count, suspected_spam_type } => {
                 ("Spam Bulk", format!("{} txs, Type: {}", transaction_count, suspected_spam_type))
             }
+            screenerbot::transactions_manager::TransactionType::NftMint { collection_id, leaf_asset_id, nft_type } => {
+                let leaf_short = if leaf_asset_id.len() >= 8 { &leaf_asset_id[..8] } else { leaf_asset_id };
+                ("NFT Mint", format!("{}: {}...", nft_type, leaf_short))
+            }
             screenerbot::transactions_manager::TransactionType::Spam => {
                 ("Spam", "Spam transaction".to_string())
             }
@@ -650,6 +654,7 @@ fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::tra
             screenerbot::transactions_manager::TransactionType::ProgramUpgrade { .. } => "Program Upgrade", 
             screenerbot::transactions_manager::TransactionType::ComputeBudget { .. } => "Compute Budget",
             screenerbot::transactions_manager::TransactionType::SpamBulk { .. } => "Spam Bulk",
+            screenerbot::transactions_manager::TransactionType::NftMint { .. } => "NFT Mint",
             screenerbot::transactions_manager::TransactionType::Spam => "Spam",
             screenerbot::transactions_manager::TransactionType::Unknown => "Unknown",
         };
@@ -1552,6 +1557,7 @@ async fn fetch_all_wallet_transactions(wallet_pubkey: Pubkey, max_count: usize) 
                     TransactionType::ProgramDeploy { .. } |
                     TransactionType::ProgramUpgrade { .. } => program_count += 1,
                     TransactionType::ComputeBudget { .. } => other_count += 1,
+                    TransactionType::NftMint { .. } => other_count += 1,
                     TransactionType::Unknown => unknown_count += 1,
                 }
             }
@@ -1693,6 +1699,9 @@ fn log_transaction_summary(transaction: &Transaction) {
         }
         TransactionType::ComputeBudget { compute_units, compute_unit_price } => {
             format!("Compute Budget: {} units @ {} μSOL/unit", compute_units, compute_unit_price)
+        }
+        TransactionType::NftMint { collection_id, leaf_asset_id, nft_type } => {
+            format!("NFT Mint: {} ({})", leaf_asset_id, nft_type)
         }
         TransactionType::Spam => "Spam".to_string(),
         TransactionType::Unknown => "Unknown".to_string(),
