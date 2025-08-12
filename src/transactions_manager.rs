@@ -4139,7 +4139,8 @@ impl TransactionsManager {
     /// Finalize position analysis with PnL calculations
     fn finalize_position_analysis(&self, state: PositionState) -> PositionAnalysis {
         let net_sol_flow = state.total_sol_received - state.total_sol_invested;
-        let total_costs = state.total_fees + state.total_ata_rents;
+        // Only include trading fees in costs, not ATA rents (they're mostly recoverable infrastructure costs)
+        let total_costs = state.total_fees;
         let realized_pnl = net_sol_flow - total_costs;
         
         // Calculate unrealized PnL for open positions
@@ -4291,7 +4292,7 @@ impl TransactionsManager {
                 sol_out: sol_out_display,
                 net_pnl: pnl_display,
                 avg_price: format!("{:.9}", position.average_buy_price),
-                fees: format!("{:.6}", position.total_fees + position.total_ata_rents),
+                fees: format!("{:.6}", position.total_fees), // Only trading fees, not ATA rents
                 duration: duration_display,
             });
 

@@ -1,3 +1,4 @@
+
 /// Transaction Manager & Analyzer Debug Tool
 ///
 /// Comprehensive debugging and testing tool for the transactions management system.
@@ -580,13 +581,13 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
         let _timestamp = transaction.timestamp.format("%H:%M:%S").to_string();
         
         let (tx_type, details) = match &transaction.transaction_type {
-            screenerbot::transactions_manager::TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, router } => {
+            screenerbot::transactions_manager::TransactionType::SwapSolToToken { token_mint: _, sol_amount, token_amount, router } => {
                 ("SOL->Token", format!("{:.4} SOL -> {:.0} tokens via {}", sol_amount, token_amount, router))
             }
-            screenerbot::transactions_manager::TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, router } => {
+            screenerbot::transactions_manager::TransactionType::SwapTokenToSol { token_mint: _, token_amount, sol_amount, router } => {
                 ("Token->SOL", format!("{:.0} tokens -> {:.4} SOL via {}", token_amount, sol_amount, router))
             }
-            screenerbot::transactions_manager::TransactionType::SwapTokenToToken { from_mint, to_mint, from_amount, to_amount, router } => {
+            screenerbot::transactions_manager::TransactionType::SwapTokenToToken { from_mint: _, to_mint: _, from_amount, to_amount, router } => {
                 ("Token->Token", format!("{:.0} -> {:.0} via {}", from_amount, to_amount, router))
             }
             screenerbot::transactions_manager::TransactionType::SolTransfer { from, to, amount } => {
@@ -594,31 +595,31 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
                 let to_short = if to.len() >= 8 { &to[..8] } else { to };
                 ("SOL Transfer", format!("{:.4} SOL: {}...->{}...", amount, from_short, to_short))
             }
-            screenerbot::transactions_manager::TransactionType::TokenTransfer { mint, from, to, amount } => {
+            screenerbot::transactions_manager::TransactionType::TokenTransfer { mint: _, from, to, amount } => {
                 let from_short = if from.len() >= 8 { &from[..8] } else { from };
                 let to_short = if to.len() >= 8 { &to[..8] } else { to };
                 ("Token Transfer", format!("{:.0} tokens: {}...->{}...", amount, from_short, to_short))
             }
-            screenerbot::transactions_manager::TransactionType::AtaCreate { mint, owner, ata_address, cost } => {
+            screenerbot::transactions_manager::TransactionType::AtaCreate { mint, owner: _, ata_address: _, cost } => {
                 let mint_short = if mint.len() >= 8 { &mint[..8] } else { mint };
                 ("ATA Create", format!("Token: {}..., Cost: {:.6} SOL", mint_short, cost))
             }
-            screenerbot::transactions_manager::TransactionType::AtaClose { mint, owner, ata_address, rent_reclaimed } => {
+            screenerbot::transactions_manager::TransactionType::AtaClose { mint, owner: _, ata_address: _, rent_reclaimed } => {
                 let mint_short = if mint.len() >= 8 { &mint[..8] } else { mint };
                 ("ATA Close", format!("Token: {}..., Reclaimed: {:.6} SOL", mint_short, rent_reclaimed))
             }
-            screenerbot::transactions_manager::TransactionType::StakingDelegate { stake_account, validator, amount } => {
+            screenerbot::transactions_manager::TransactionType::StakingDelegate { stake_account: _, validator, amount } => {
                 let validator_short = if validator.len() >= 8 { &validator[..8] } else { validator };
                 ("Staking", format!("Delegate {:.4} SOL to {}...", amount, validator_short))
             }
-            screenerbot::transactions_manager::TransactionType::StakingWithdraw { stake_account, amount } => {
+            screenerbot::transactions_manager::TransactionType::StakingWithdraw { stake_account: _, amount } => {
                 ("Staking", format!("Withdraw {:.4} SOL", amount))
             }
-            screenerbot::transactions_manager::TransactionType::ProgramDeploy { program_id, deployer } => {
+            screenerbot::transactions_manager::TransactionType::ProgramDeploy { program_id, deployer: _ } => {
                 let program_short = if program_id.len() >= 8 { &program_id[..8] } else { program_id };
                 ("Program Deploy", format!("Program: {}...", program_short))
             }
-            screenerbot::transactions_manager::TransactionType::ProgramUpgrade { program_id, authority } => {
+            screenerbot::transactions_manager::TransactionType::ProgramUpgrade { program_id, authority: _ } => {
                 let program_short = if program_id.len() >= 8 { &program_id[..8] } else { program_id };
                 ("Program Upgrade", format!("Program: {}...", program_short))
             }
@@ -628,7 +629,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
             screenerbot::transactions_manager::TransactionType::SpamBulk { transaction_count, suspected_spam_type } => {
                 ("Spam Bulk", format!("{} txs, Type: {}", transaction_count, suspected_spam_type))
             }
-            screenerbot::transactions_manager::TransactionType::NftMint { collection_id, leaf_asset_id, nft_type } => {
+            screenerbot::transactions_manager::TransactionType::NftMint { collection_id: _, leaf_asset_id, nft_type } => {
                 let leaf_short = if leaf_asset_id.len() >= 8 { &leaf_asset_id[..8] } else { leaf_asset_id };
                 ("NFT Mint", format!("{}: {}...", nft_type, leaf_short))
             }
@@ -1733,7 +1734,7 @@ fn log_transaction_summary(transaction: &Transaction) {
         TransactionType::ComputeBudget { compute_units, compute_unit_price } => {
             format!("Compute Budget: {} units @ {} μSOL/unit", compute_units, compute_unit_price)
         }
-        TransactionType::NftMint { collection_id, leaf_asset_id, nft_type } => {
+        TransactionType::NftMint { collection_id: _, leaf_asset_id, nft_type } => {
             format!("NFT Mint: {} ({})", leaf_asset_id, nft_type)
         }
         TransactionType::Spam => "Spam".to_string(),
