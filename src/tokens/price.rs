@@ -128,11 +128,20 @@ impl TokenPriceService {
         }
 
         // Cache miss - trigger background update, but don't wait
+        // DEADLOCK FIX: Don't hold mutex during spawn
         let mint_clone = mint.to_string();
         tokio::spawn(async move {
-            let service_guard = PRICE_SERVICE.lock().await;
-            if let Some(ref service) = *service_guard {
-                let _ = service.update_single_token_price(&mint_clone).await;
+            // Quick check if service is available, then release lock immediately
+            let has_service = {
+                let service_guard = PRICE_SERVICE.lock().await;
+                service_guard.is_some()
+            };
+            
+            if has_service {
+                let service_guard = PRICE_SERVICE.lock().await;
+                if let Some(ref service) = *service_guard {
+                    let _ = service.update_single_token_price(&mint_clone).await;
+                }
             }
         });
 

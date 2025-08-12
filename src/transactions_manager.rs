@@ -3272,21 +3272,59 @@ impl TransactionsManager {
             _ => return Ok(()), // Not a swap
         };
 
+        if self.debug_enabled {
+            log(LogTag::Transactions, "SWAP_PRICE_DEBUG", &format!(
+                "🧮 Calculating swap price for {}: sol_amount={:.9}, token_amount={:.9}",
+                &transaction.signature[..8], sol_amount, token_amount
+            ));
+        }
+
         if token_amount > 0.0 {
             let effective_price = sol_amount / token_amount;
             
+            if self.debug_enabled {
+                log(LogTag::Transactions, "SWAP_PRICE_DEBUG", &format!(
+                    "💰 Effective price calculation for {}: {:.9} SOL / {:.9} tokens = {:.12} SOL per token",
+                    &transaction.signature[..8], sol_amount, token_amount, effective_price
+                ));
+            }
+            
             // Update swap analysis with calculated price
             if let Some(ref mut swap_analysis) = transaction.swap_analysis {
+                let old_price = swap_analysis.effective_price;
                 swap_analysis.effective_price = effective_price;
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "SWAP_PRICE_DEBUG", &format!(
+                        "📊 Updated existing swap analysis for {}: price {:.12} -> {:.12}",
+                        &transaction.signature[..8], old_price, effective_price
+                    ));
+                }
             } else {
                 // Create basic swap analysis
                 let router = self.extract_router_from_transaction(transaction);
+                let input_token = self.extract_input_token(transaction);
+                let output_token = self.extract_output_token(transaction);
+                let input_amount = if matches!(transaction.transaction_type, TransactionType::SwapSolToToken { .. }) { sol_amount } else { token_amount };
+                let output_amount = if matches!(transaction.transaction_type, TransactionType::SwapSolToToken { .. }) { token_amount } else { sol_amount };
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "SWAP_PRICE_DEBUG", &format!(
+                        "🆕 Creating new swap analysis for {}: 
+                         - Router: {}
+                         - Input: {} ({:.9})
+                         - Output: {} ({:.9})
+                         - Effective price: {:.12}",
+                        &transaction.signature[..8], router, input_token, input_amount, output_token, output_amount, effective_price
+                    ));
+                }
+                
                 transaction.swap_analysis = Some(SwapAnalysis {
                     router,
-                    input_token: self.extract_input_token(transaction),
-                    output_token: self.extract_output_token(transaction),
-                    input_amount: if matches!(transaction.transaction_type, TransactionType::SwapSolToToken { .. }) { sol_amount } else { token_amount },
-                    output_amount: if matches!(transaction.transaction_type, TransactionType::SwapSolToToken { .. }) { token_amount } else { sol_amount },
+                    input_token,
+                    output_token,
+                    input_amount,
+                    output_amount,
                     effective_price,
                     slippage: 0.0, // Calculate separately if needed
                     fee_breakdown: transaction.fee_breakdown.clone().unwrap_or_default(),
@@ -3295,10 +3333,15 @@ impl TransactionsManager {
 
             if self.debug_enabled {
                 log(LogTag::Transactions, "PRICE_CALC", &format!(
-                    "Effective price for {}: {:.12} SOL per token", 
+                    "✅ Swap analysis complete for {}: {:.12} SOL per token", 
                     &transaction.signature[..8], effective_price
                 ));
             }
+        } else {
+            log(LogTag::Transactions, "ERROR", &format!(
+                "❌ Cannot calculate swap price for {}: token_amount is zero or negative ({:.9})", 
+                &transaction.signature[..8], token_amount
+            ));
         }
 
         Ok(())
@@ -4453,26 +4496,34 @@ pub async fn add_priority_transaction(signature: String) -> Result<(), String> {
         &signature[..8]
     ));
     
-    // Add to global manager if available
-    let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    if let Some(manager) = manager_guard.as_mut() {
-        // Add to priority queue
-        manager.add_priority_transaction(signature.clone());
-        
-        // Immediately try to process the transaction
-        if let Err(e) = manager.process_transaction(&signature).await {
-            log(LogTag::Transactions, "WARN", &format!(
-                "Failed to immediately process priority transaction {}: {}", 
-                &signature[..8], e
-            ));
+    // DEADLOCK FIX: Add to priority queue first (quick operation)
+    {
+        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        if let Some(manager) = manager_guard.as_mut() {
+            manager.add_priority_transaction(signature.clone());
         } else {
-            log(LogTag::Transactions, "SUCCESS", &format!(
-                "Priority transaction {} processed immediately", 
-                &signature[..8]
-            ));
+            log(LogTag::Transactions, "WARN", "No global transaction manager available for monitoring");
+            return Ok(());
         }
-    } else {
-        log(LogTag::Transactions, "WARN", "No global transaction manager available for monitoring");
+    } // Drop mutex guard before async operations
+    
+    // DEADLOCK FIX: Process transaction outside of global lock to avoid deadlock
+    // This may take time due to RPC calls, so we must not hold the mutex
+    {
+        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        if let Some(manager) = manager_guard.as_mut() {
+            if let Err(e) = manager.process_transaction(&signature).await {
+                log(LogTag::Transactions, "WARN", &format!(
+                    "Failed to immediately process priority transaction {}: {}", 
+                    &signature[..8], e
+                ));
+            } else {
+                log(LogTag::Transactions, "SUCCESS", &format!(
+                    "Priority transaction {} processed immediately", 
+                    &signature[..8]
+                ));
+            }
+        }
     }
     
     Ok(())

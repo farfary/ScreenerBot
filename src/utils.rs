@@ -208,8 +208,33 @@ pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, SwapError> {
 
 /// Checks wallet balance for a specific token
 pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, SwapError> {
+    use crate::logger::{log, LogTag};
+    
+    log(
+        LogTag::Wallet,
+        "DEBUG", 
+        &format!("🔍 Fetching token balance: wallet={}, mint={}", &wallet_address[..8], &mint[..8])
+    );
+    
     let rpc_client = crate::rpc::get_rpc_client();
-    rpc_client.get_token_balance(wallet_address, mint).await
+    match rpc_client.get_token_balance(wallet_address, mint).await {
+        Ok(balance) => {
+            log(
+                LogTag::Wallet,
+                "DEBUG",
+                &format!("✅ Token balance fetched successfully: {} units for mint {}", balance, &mint[..8])
+            );
+            Ok(balance)
+        },
+        Err(e) => {
+            log(
+                LogTag::Wallet,
+                "ERROR",
+                &format!("❌ Failed to fetch token balance for mint {}: {}", &mint[..8], e)
+            );
+            Err(e)
+        }
+    }
 }
 
 /// Gets all token accounts for a wallet

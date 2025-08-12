@@ -518,6 +518,13 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             let (token_amount, effective_entry_price, entry_fee, actual_sol_spent) = 
                 match crate::transactions_manager::get_transaction(&transaction_signature).await {
                     Ok(Some(tx)) => {
+                        log(
+                            LogTag::Trader,
+                            "DEBUG",
+                            &format!("📄 Transaction {} fetched successfully for {} analysis", 
+                                &transaction_signature[..16], token.symbol)
+                        );
+                        
                         let mut token_amount = None;
                         let mut effective_price = None;
                         let mut fee_lamports = None;
@@ -541,8 +548,13 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                                 log(
                                     LogTag::Trader,
                                     "DEBUG",
-                                    &format!("TOKEN CONVERSION DEBUG: swap.output_amount={}, decimals={}, calculation={}*10^{}={}, as_u64={}",
-                                        swap.output_amount, token_decimals, swap.output_amount, token_decimals, 
+                                    &format!("🧮 TOKEN CONVERSION DEBUG for {}: 
+                                        - swap.output_amount={} 
+                                        - decimals={} 
+                                        - calculation={}*10^{}={}
+                                        - as_u64={}
+                                        - This value will be stored as position.token_amount",
+                                        token.symbol, swap.output_amount, token_decimals, swap.output_amount, token_decimals, 
                                         swap.output_amount * 10_f64.powi(token_decimals as i32), token_amount_units)
                                 );
                                 
@@ -552,12 +564,13 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                                 log(
                                     LogTag::Trader,
                                     "SUCCESS",
-                                    &format!("✅ Extracted from swap analysis: {} tokens ({} units with {} decimals), {} SOL", 
-                                        swap.output_amount, token_amount_units, token_decimals, swap.input_amount)
+                                    &format!("✅ Position data extracted from swap analysis for {}: {} tokens ({} units with {} decimals), {} SOL", 
+                                        token.symbol, swap.output_amount, token_amount_units, token_decimals, swap.input_amount)
                                 );
                             }
                         } else {
-                            log(LogTag::Trader, "DEBUG", "No swap analysis found in transaction");
+                            log(LogTag::Trader, "WARNING", &format!("⚠️ No swap analysis found in transaction {} for {}", 
+                                &transaction_signature[..16], token.symbol));
                         }
 
                         // Get fee information
@@ -567,11 +580,21 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
 
                         (token_amount, effective_price, fee_lamports, sol_spent)
                     },
-                    _ => {
+                    Ok(None) => {
                         log(
                             LogTag::Trader,
                             "WARNING",
-                            &format!("⚠️ Could not fetch transaction details for {}, using defaults", &transaction_signature[..8])
+                            &format!("⚠️ Transaction {} not found in cache or blockchain for {} - using defaults", 
+                                &transaction_signature[..16], token.symbol)
+                        );
+                        (None, None, None, TRADE_SIZE_SOL)
+                    },
+                    Err(e) => {
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!("❌ Failed to fetch transaction {} for {}: {} - using defaults", 
+                                &transaction_signature[..16], token.symbol, e)
                         );
                         (None, None, None, TRADE_SIZE_SOL)
                     }
@@ -715,6 +738,29 @@ pub async fn close_position(
 
     // Only attempt to sell if we have tokens from the buy transaction
     if let Some(stored_token_amount) = position.token_amount {
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "📊 Starting position close analysis for {} ({}): stored_amount={} token units",
+                position.symbol,
+                &position.mint[..8],
+                stored_token_amount
+            )
+        );
+
+        // Debug: Log position creation details if available
+        if let Some(ref entry_tx) = position.entry_transaction_signature {
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "📝 Position created from transaction: {} (entry_price: {:.9} SOL)",
+                    &entry_tx[..16],
+                    position.entry_price
+                )
+            );
+        }
         // Check if we actually have tokens to sell
         if stored_token_amount == 0 {
             log(
@@ -757,15 +803,38 @@ pub async fn close_position(
             }
         };
 
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "🔍 Checking wallet balance for {} ({}): wallet={}, mint={}",
+                position.symbol,
+                position.mint,
+                wallet_address,
+                &position.mint[..8]
+            )
+        );
+
         let actual_balance = match
             crate::utils::get_token_balance(&wallet_address, &position.mint).await
         {
-            Ok(balance) => balance,
+            Ok(balance) => {
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!(
+                        "✅ Wallet balance check successful for {}: {} tokens (raw units)",
+                        position.symbol,
+                        balance
+                    )
+                );
+                balance
+            },
             Err(e) => {
                 log(
                     LogTag::Trader,
                     "ERROR",
-                    &format!("Failed to check current {} balance: {}", position.symbol, e)
+                    &format!("❌ Failed to check current {} balance: {}", position.symbol, e)
                 );
                 return false;
             }
@@ -774,7 +843,38 @@ pub async fn close_position(
         // Use the minimum of stored amount and actual balance to avoid "insufficient balance" errors
         let token_amount = std::cmp::min(stored_token_amount, actual_balance);
 
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "⚖️ Token amount comparison for {}: stored={}, actual={}, using_min={}",
+                position.symbol,
+                stored_token_amount,
+                actual_balance,
+                token_amount
+            )
+        );
+
         if token_amount == 0 {
+            // Enhanced debugging for zero token scenario
+            log(
+                LogTag::Trader,
+                "DEBUG",
+                &format!(
+                    "🔍 ZERO TOKENS DETECTED for {}:
+                     - Position stored: {} token units
+                     - Wallet actual: {} token units
+                     - Mint: {}
+                     - Entry TX: {}
+                     - Entry verified: {}",
+                    position.symbol,
+                    stored_token_amount,
+                    actual_balance,
+                    position.mint,
+                    position.entry_transaction_signature.as_ref().unwrap_or(&"None".to_string()),
+                    position.transaction_entry_verified
+                )
+            );
             log(
                 LogTag::Trader,
                 "WARNING",
@@ -786,6 +886,9 @@ pub async fn close_position(
                     actual_balance
                 )
             );
+
+            // Call debug function to investigate this issue
+            debug_position_token_mismatch(&position.mint).await;
 
             // DO NOT mark position as sold if we can't actually execute a sell transaction
             // This prevents phantom sells and P&L corruption
@@ -1051,6 +1154,107 @@ pub async fn close_position(
         );
         return false;
     }
+}
+
+/// Debug helper to investigate position state and wallet balance discrepancies
+pub async fn debug_position_token_mismatch(mint: &str) {
+    use crate::logger::{log, LogTag};
+    
+    log(LogTag::Trader, "DEBUG", &format!("🔬 DEBUGGING POSITION TOKEN MISMATCH for mint: {}", mint));
+    
+    // Extract position data without holding the lock across async operations
+    let position_data = {
+        if let Ok(positions) = SAVED_POSITIONS.lock() {
+            positions.iter().find(|p| p.mint == mint).cloned()
+        } else {
+            None
+        }
+    }; // Mutex guard is dropped here
+    
+    if let Some(pos) = position_data {
+        log(LogTag::Trader, "DEBUG", &format!("📊 Position found: 
+            - Symbol: {}
+            - Stored token_amount: {:?}
+            - Entry price: {:.9}
+            - Entry transaction: {:?}
+            - Entry verified: {}
+            - Exit price: {:?}
+            - Created: {}",
+            pos.symbol,
+            pos.token_amount,
+            pos.entry_price,
+            pos.entry_transaction_signature,
+            pos.transaction_entry_verified,
+            pos.exit_price,
+            pos.entry_time
+        ));
+        
+        // Check current wallet balance
+        if let Ok(wallet_address) = crate::utils::get_wallet_address() {
+            match crate::utils::get_token_balance(&wallet_address, mint).await {
+                Ok(balance) => {
+                    log(LogTag::Trader, "DEBUG", &format!("💰 Current wallet balance: {} tokens", balance));
+                    
+                    if let Some(stored) = pos.token_amount {
+                        let difference = balance as i64 - stored as i64;
+                        log(LogTag::Trader, "DEBUG", &format!("📉 Balance difference: {} tokens (negative = missing tokens)", difference));
+                    }
+                },
+                Err(e) => {
+                    log(LogTag::Trader, "ERROR", &format!("❌ Failed to check wallet balance: {}", e));
+                }
+            }
+            
+            // Check if we can find the entry transaction
+            if let Some(ref entry_tx) = pos.entry_transaction_signature {
+                log(LogTag::Trader, "DEBUG", &format!("🔍 Checking entry transaction: {}", entry_tx));
+                
+                match crate::transactions_manager::get_transaction(entry_tx).await {
+                    Ok(Some(tx)) => {
+                        log(LogTag::Trader, "DEBUG", &format!("✅ Entry transaction found: 
+                            - Success: {}
+                            - Finalized: {}
+                            - Transaction type: {:?}
+                            - SOL balance change: {:.9}
+                            - Token transfers: {}
+                            - Has swap analysis: {}",
+                            tx.success,
+                            tx.finalized,
+                            tx.transaction_type,
+                            tx.sol_balance_change,
+                            tx.token_transfers.len(),
+                            tx.swap_analysis.is_some()
+                        ));
+                        
+                        if let Some(swap) = &tx.swap_analysis {
+                            log(LogTag::Trader, "DEBUG", &format!("🔄 Swap analysis details:
+                                - Input token: {}
+                                - Output token: {}  
+                                - Input amount: {:.9}
+                                - Output amount: {:.9}
+                                - Effective price: {:.9}",
+                                &swap.input_token[..8],
+                                &swap.output_token[..8],
+                                swap.input_amount,
+                                swap.output_amount,
+                                swap.effective_price
+                            ));
+                        }
+                    },
+                    Ok(None) => {
+                        log(LogTag::Trader, "WARNING", "⚠️ Entry transaction not found in cache");
+                    },
+                    Err(e) => {
+                        log(LogTag::Trader, "ERROR", &format!("❌ Error fetching entry transaction: {}", e));
+                    }
+                }
+            }
+        }
+    } else {
+        log(LogTag::Trader, "WARNING", "⚠️ Position not found for the given mint");
+    }
+    
+    log(LogTag::Trader, "DEBUG", "🏁 Position debug analysis complete");
 }
 
 /// Gets the current count of open positions
