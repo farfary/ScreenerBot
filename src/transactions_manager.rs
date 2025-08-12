@@ -3437,7 +3437,20 @@ impl TransactionsManager {
 
     /// Convert transaction to SwapPnLInfo using precise ATA rent detection
     fn convert_to_swap_pnl_info(&self, transaction: &Transaction) -> Option<SwapPnLInfo> {
+        // Debug logging for our specific missing transaction
+        if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+            log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                "Processing missing transaction: {} is_swap={} type={:?}",
+                &transaction.signature[..8],
+                self.is_swap_transaction(transaction),
+                transaction.transaction_type
+            ));
+        }
+        
         if !self.is_swap_transaction(transaction) {
+            if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                log(LogTag::Transactions, "DEBUG_MISSING", "Missing transaction failed is_swap_transaction check - returning None");
+            }
             return None;
         }
 
@@ -3447,6 +3460,95 @@ impl TransactionsManager {
             }
             TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, .. } => {
                 ("Sell".to_string(), *sol_amount, *token_amount, token_mint.clone())
+            }
+            TransactionType::SwapTokenToToken { from_mint, to_mint, from_amount, to_amount, .. } => {
+                // Debug for our specific transaction
+                if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                    log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                        "SwapTokenToToken processing: from_amount={}, to_amount={}, sol_balance_change={}, token_transfers={}",
+                        from_amount, to_amount, transaction.sol_balance_change, transaction.token_transfers.len()
+                    ));
+                    
+                    if !transaction.token_transfers.is_empty() {
+                        let largest_transfer = transaction.token_transfers.iter()
+                            .max_by(|a, b| a.amount.abs().partial_cmp(&b.amount.abs()).unwrap_or(std::cmp::Ordering::Equal))
+                            .unwrap();
+                        log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                            "Largest token transfer: amount={}, mint={}",
+                            largest_transfer.amount, largest_transfer.mint
+                        ));
+                    }
+                }
+                
+                // For SwapTokenToToken, we need to determine if this involves SOL by checking:
+                // 1. SOL balance change direction (gained SOL = sell, spent SOL = buy)
+                // 2. Token transfer amounts to get the actual token amounts traded
+                
+                // Get the token amount from token transfers for more accurate data
+                let (token_transfer_amount, transfer_mint) = if !transaction.token_transfers.is_empty() {
+                    // Find the largest absolute token transfer (this is usually the main trade)
+                    let largest_transfer = transaction.token_transfers.iter()
+                        .max_by(|a, b| a.amount.abs().partial_cmp(&b.amount.abs()).unwrap_or(std::cmp::Ordering::Equal))
+                        .unwrap();
+                    (largest_transfer.amount, largest_transfer.mint.clone())
+                } else {
+                    // Fallback to from_amount/to_amount if no token transfers
+                    if *from_amount != 0.0 {
+                        (*from_amount, from_mint.clone())
+                    } else {
+                        (*to_amount, to_mint.clone())
+                    }
+                };
+
+                // If we gained SOL and have token outflow (negative), it's a sell
+                if transaction.sol_balance_change > 0.0 && token_transfer_amount < 0.0 {
+                    let result = ("Sell".to_string(), transaction.sol_balance_change, token_transfer_amount.abs(), transfer_mint);
+                    if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                        log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                            "Detected as SELL: sol_gained={}, token_sold={}, mint={}",
+                            result.1, result.2, result.3
+                        ));
+                    }
+                    result
+                }
+                // If we spent SOL and have token inflow (positive), it's a buy
+                else if transaction.sol_balance_change < 0.0 && token_transfer_amount > 0.0 {
+                    let result = ("Buy".to_string(), transaction.sol_balance_change.abs(), token_transfer_amount, transfer_mint);
+                    if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                        log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                            "Detected as BUY: sol_spent={}, token_bought={}, mint={}",
+                            result.1, result.2, result.3
+                        ));
+                    }
+                    result
+                }
+                // Fallback: use the original logic if token transfers don't help
+                else if transaction.sol_balance_change > 0.0 && *from_amount != 0.0 {
+                    let result = ("Sell".to_string(), transaction.sol_balance_change, *from_amount, from_mint.clone());
+                    if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                        log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                            "Fallback SELL (from_amount): sol_gained={}, token_sold={}, mint={}",
+                            result.1, result.2, result.3
+                        ));
+                    }
+                    result
+                }
+                else if transaction.sol_balance_change < 0.0 && *to_amount != 0.0 {
+                    let result = ("Buy".to_string(), transaction.sol_balance_change.abs(), *to_amount, to_mint.clone());
+                    if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                        log(LogTag::Transactions, "DEBUG_MISSING", &format!(
+                            "Fallback BUY (to_amount): sol_spent={}, token_bought={}, mint={}",
+                            result.1, result.2, result.3
+                        ));
+                    }
+                    result
+                }
+                else {
+                    if transaction.signature == "5ffzbggfC1DaE5fz6FTZvpcpALRANRJcQbK147ffqHTf5X18ewp5QGYYr9YngvWwfnrc8GhrHM5buYhzrFGHf4ZK" {
+                        log(LogTag::Transactions, "DEBUG_MISSING", "SwapTokenToToken: All conditions failed - returning None");
+                    }
+                    return None;
+                }
             }
             _ => return None,
         };
