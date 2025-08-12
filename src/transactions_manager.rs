@@ -3266,16 +3266,19 @@ impl TransactionsManager {
 
     /// Calculate effective price paid/received in the swap
     async fn calculate_swap_price(&mut self, transaction: &mut Transaction) -> Result<(), String> {
-        let (sol_amount, token_amount) = match &transaction.transaction_type {
+        let (sol_amount, token_amount_raw) = match &transaction.transaction_type {
             TransactionType::SwapSolToToken { sol_amount, token_amount, .. } => (*sol_amount, *token_amount),
             TransactionType::SwapTokenToSol { sol_amount, token_amount, .. } => (*sol_amount, *token_amount),
             _ => return Ok(()), // Not a swap
         };
 
+        // For price calculation, we always use absolute values since price is always positive
+        let token_amount = token_amount_raw.abs();
+
         if self.debug_enabled {
             log(LogTag::Transactions, "SWAP_PRICE_DEBUG", &format!(
-                "🧮 Calculating swap price for {}: sol_amount={:.9}, token_amount={:.9}",
-                &transaction.signature[..8], sol_amount, token_amount
+                "🧮 Calculating swap price for {}: sol_amount={:.9}, token_amount_raw={:.9}, token_amount_abs={:.9}",
+                &transaction.signature[..8], sol_amount, token_amount_raw, token_amount
             ));
         }
 
@@ -3339,8 +3342,8 @@ impl TransactionsManager {
             }
         } else {
             log(LogTag::Transactions, "ERROR", &format!(
-                "❌ Cannot calculate swap price for {}: token_amount is zero or negative ({:.9})", 
-                &transaction.signature[..8], token_amount
+                "❌ Cannot calculate swap price for {}: token_amount_raw={:.9}, token_amount_abs={:.9} (should be positive after abs())", 
+                &transaction.signature[..8], token_amount_raw, token_amount
             ));
         }
 
@@ -3952,9 +3955,9 @@ impl TransactionsManager {
 
             // Color coding for better readability
             let type_display = if swap.swap_type == "Buy" {
-                "🟢Buy".to_string()  // Green for buy
+                "🟢 Buy".to_string()  // Green for buy
             } else {
-                "🔴Sell".to_string() // Red for sell
+                "🔴 Sell".to_string() // Red for sell
             };
 
             // Format SOL amount with colored sign
