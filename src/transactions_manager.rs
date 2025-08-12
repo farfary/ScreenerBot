@@ -147,6 +147,43 @@ pub enum TransactionType {
         from: String,
         to: String,
     },
+    AtaCreate {
+        mint: String,
+        owner: String,
+        ata_address: String,
+        cost: f64,
+    },
+    AtaClose {
+        mint: String,
+        owner: String,
+        ata_address: String,
+        rent_reclaimed: f64,
+    },
+    SpamBulk {
+        transaction_count: usize,
+        suspected_spam_type: String,
+    },
+    ProgramDeploy {
+        program_id: String,
+        deployer: String,
+    },
+    ProgramUpgrade {
+        program_id: String,
+        authority: String,
+    },
+    StakingDelegate {
+        stake_account: String,
+        validator: String,
+        amount: f64,
+    },
+    StakingWithdraw {
+        stake_account: String,
+        amount: f64,
+    },
+    ComputeBudget {
+        compute_units: u32,
+        compute_unit_price: u64,
+    },
     Spam,
     Unknown,
 }
@@ -217,6 +254,11 @@ pub struct FeeBreakdown {
     pub ata_creation_cost: f64,     // Associated Token Account creation costs (in SOL) - infrastructure
     pub total_fees: f64,            // Total of TRADING fees only (excludes infrastructure costs)
     pub fee_percentage: f64,        // Trading fee as percentage of transaction value
+    
+    // Enhanced ATA tracking
+    pub ata_creations_count: u32,   // Number of ATAs created
+    pub ata_closures_count: u32,    // Number of ATAs closed  
+    pub net_ata_rent_flow: f64,     // Net ATA rent flow: positive = net recovery, negative = net cost
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -988,8 +1030,8 @@ impl TransactionsManager {
                     transaction.fee_sol = fee as f64 / 1_000_000_000.0; // Convert lamports to SOL
                 }
 
-                // Check if transaction succeeded (err field is None)
-                transaction.success = meta.get("err").is_none();
+                // Check if transaction succeeded (err field is None or null)
+                transaction.success = meta.get("err").map_or(true, |v| v.is_null());
                 
                 if let Some(err) = meta.get("err") {
                     transaction.error_message = Some(err.to_string());
@@ -1167,12 +1209,94 @@ impl TransactionsManager {
             }
         }
 
-        // Default to Unknown if we can't identify the type
+        // 10. Detect ATA (Associated Token Account) operations
+        if let Ok(ata_data) = self.extract_ata_operations(transaction).await {
+            transaction.transaction_type = ata_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - ATA operation detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 11. Detect staking operations
+        if let Ok(staking_data) = self.extract_staking_operations(transaction).await {
+            transaction.transaction_type = staking_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Staking operation detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 12. Detect program deployment/upgrade
+        if let Ok(program_data) = self.extract_program_operations(transaction).await {
+            transaction.transaction_type = program_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Program operation detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 13. Detect compute budget instructions
+        if let Ok(compute_data) = self.extract_compute_budget_operations(transaction).await {
+            transaction.transaction_type = compute_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Compute budget operation detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 14. Detect spam bulk transactions
+        if let Ok(spam_data) = self.extract_spam_bulk_operations(transaction).await {
+            transaction.transaction_type = spam_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Spam bulk operation detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 15. Enhanced: Instruction-based classification for remaining unknown transactions
+        if let Ok(instruction_data) = self.extract_instruction_based_type(transaction).await {
+            transaction.transaction_type = instruction_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "DETECTED", &format!("{} - Instruction-based type detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // Default to Unknown only after all detection methods have been tried
         transaction.transaction_type = TransactionType::Unknown;
         
         if self.debug_enabled {
-            log(LogTag::Transactions, "UNKNOWN", &format!("{} - Could not classify transaction type", 
+            log(LogTag::Transactions, "UNKNOWN", &format!("{} - Could not classify transaction type after comprehensive analysis", 
                 &transaction.signature[..8]));
+            
+            // Enhanced debugging for unknown transactions
+            log(LogTag::Transactions, "DEBUG", &format!("Transaction details for {}:", &transaction.signature[..8]));
+            log(LogTag::Transactions, "DEBUG", &format!("  Instructions: {}", transaction.instructions.len()));
+            log(LogTag::Transactions, "DEBUG", &format!("  Token transfers: {}", transaction.token_transfers.len()));
+            log(LogTag::Transactions, "DEBUG", &format!("  SOL balance change: {:.9}", transaction.sol_balance_change));
+            log(LogTag::Transactions, "DEBUG", &format!("  Success: {}", transaction.success));
+            
+            if !transaction.instructions.is_empty() {
+                log(LogTag::Transactions, "DEBUG", &format!("  First instruction program: {}", 
+                    transaction.instructions[0].program_id));
+            }
+            
+            if transaction.log_messages.len() > 0 {
+                let log_preview = transaction.log_messages.join(" ");
+                let preview = if log_preview.len() > 300 { 
+                    format!("{}...", &log_preview[..300]) 
+                } else { 
+                    log_preview 
+                };
+                log(LogTag::Transactions, "DEBUG", &format!("  Log preview: {}", preview));
+            }
         }
         
         Ok(())
@@ -1191,6 +1315,9 @@ impl TransactionsManager {
             ata_creation_cost: 0.0,
             total_fees: transaction.fee_sol,
             fee_percentage: 0.0,
+            ata_creations_count: 0,
+            ata_closures_count: 0,
+            net_ata_rent_flow: 0.0,
         };
 
         if let Some(raw_data) = &transaction.raw_transaction_data {
@@ -1377,54 +1504,247 @@ impl TransactionsManager {
         Ok(())
     }
 
-    /// Analyze balance changes for rent costs
+    /// Comprehensive ATA analysis - detects creations, closures, and net rent impact
+    /// ATA rent is recoverable: creating ATAs costs SOL, closing ATAs returns SOL
     async fn analyze_rent_costs(&self, fee_breakdown: &mut FeeBreakdown, transaction: &Transaction) -> Result<(), String> {
         let log_text = transaction.log_messages.join(" ");
         
-        // Count ATA creations (each costs ~0.00203928 SOL)
-        // Use only "Initialize the associated token account" to avoid double counting
-        // (CreateIdempotent and Initialize both happen for each ATA creation)
-        let ata_creations = log_text.matches("Initialize the associated token account").count();
+        // CRITICAL: Count ATA operations accurately by analyzing both logs and balance changes
+        let (ata_creations, ata_closures, net_ata_rent_flow) = self.calculate_precise_ata_operations(transaction).await?;
         
-        if ata_creations > 0 {
-            fee_breakdown.ata_creation_cost = ata_creations as f64 * 0.00203928; // Standard ATA rent
-            
-            if self.debug_enabled {
-                log(LogTag::Transactions, "FEE_DEBUG", &format!(
-                    "{} - ATA creation costs: {} accounts = {:.9} SOL", 
-                    &transaction.signature[..8], 
-                    ata_creations,
-                    fee_breakdown.ata_creation_cost
-                ));
-            }
+        if self.debug_enabled {
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                "Transaction {}: {} ATAs created, {} ATAs closed, net rent flow: {:.9} SOL", 
+                &transaction.signature[..8], ata_creations, ata_closures, net_ata_rent_flow
+            ));
         }
-
-        // Look for other rent costs in logs
-        let rent_occurrences = log_text.matches("rent").count();
-        if rent_occurrences > 0 {
-            // Estimate additional rent costs
-            fee_breakdown.rent_costs = rent_occurrences as f64 * 0.001; // Rough estimate
-            
-            if self.debug_enabled {
-                log(LogTag::Transactions, "FEE_DEBUG", &format!(
-                    "{} - Additional rent costs: {} occurrences = {:.9} SOL", 
-                    &transaction.signature[..8], 
-                    rent_occurrences,
-                    fee_breakdown.rent_costs
-                ));
-            }
+        
+        // Store all ATA information in fee breakdown
+        fee_breakdown.ata_creations_count = ata_creations;
+        fee_breakdown.ata_closures_count = ata_closures;
+        fee_breakdown.net_ata_rent_flow = net_ata_rent_flow;
+        fee_breakdown.ata_creation_cost = ata_creations as f64 * 0.00203928;
+        fee_breakdown.rent_costs = net_ata_rent_flow.abs(); // Absolute value for display
+        
+        if self.debug_enabled {
+            log(LogTag::Transactions, "ATA_DETAILED", &format!(
+                "ATA Details - Created: {} (cost: {:.9} SOL), Closed: {} (recovered: {:.9} SOL), Net: {:.9} SOL",
+                ata_creations, ata_creations as f64 * 0.00203928,
+                ata_closures, ata_closures as f64 * 0.00203928,
+                net_ata_rent_flow
+            ));
         }
 
         Ok(())
+    }
+
+    /// Calculate precise ATA operations and net rent flow
+    /// Returns: (ata_creations, ata_closures, net_rent_flow)
+    /// net_rent_flow: negative = net cost, positive = net recovery
+    async fn calculate_precise_ata_operations(&self, transaction: &Transaction) -> Result<(u32, u32, f64), String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Method 1: Count from log messages (most accurate)
+        let ata_creations = log_text.matches("Initialize the associated token account").count() as u32;
+        let ata_closures = log_text.matches("Instruction: CloseAccount").count() as u32;
+        
+        // Method 2: Verify with balance changes (cross-validation)
+        let balance_verification = self.verify_ata_operations_from_balances(transaction, ata_creations, ata_closures).await?;
+        
+        // Method 3: Calculate net rent flow
+        // ATA creation costs ≈0.00203928 SOL each
+        // ATA closure recovers ≈0.00203928 SOL each
+        let estimated_net_flow = (ata_closures as f64 * 0.00203928) - (ata_creations as f64 * 0.00203928);
+        
+        // Use balance verification if there's a significant discrepancy
+        let final_net_flow = if balance_verification.is_some() && 
+            (estimated_net_flow - balance_verification.unwrap()).abs() > 0.001 {
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "ATA_CORRECTION", &format!(
+                    "Using balance-based ATA calculation: {:.9} vs estimated {:.9}",
+                    balance_verification.unwrap(), estimated_net_flow
+                ));
+            }
+            balance_verification.unwrap()
+        } else {
+            estimated_net_flow
+        };
+        
+        if self.debug_enabled && (ata_creations > 0 || ata_closures > 0) {
+            log(LogTag::Transactions, "ATA_SUMMARY", &format!(
+                "Final ATA analysis: +{} created, -{} closed, net flow: {:.9} SOL",
+                ata_creations, ata_closures, final_net_flow
+            ));
+        }
+        
+        Ok((ata_creations, ata_closures, final_net_flow))
+    }
+
+    /// Verify ATA operations by analyzing account balance changes
+    /// This provides cross-validation for log-based counting
+    async fn verify_ata_operations_from_balances(&self, transaction: &Transaction, expected_creations: u32, expected_closures: u32) -> Result<Option<f64>, String> {
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                // Look for accounts that went from 0 to ATA_RENT (creations) or ATA_RENT to 0 (closures)
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preBalances").and_then(|v| v.as_array()),
+                    meta.get("postBalances").and_then(|v| v.as_array())
+                ) {
+                    let mut detected_creations = 0u32;
+                    let mut detected_closures = 0u32;
+                    let mut total_rent_recovered = 0.0;
+                    let mut total_rent_spent = 0.0;
+                    
+                    // Standard ATA rent in lamports (≈2039280 lamports = 0.00203928 SOL)
+                    let ata_rent_lamports = 2039280i64;
+                    let tolerance = 10000i64; // Small tolerance for rent variations
+                    
+                    for (i, (pre, post)) in pre_balances.iter().zip(post_balances.iter()).enumerate() {
+                        if let (Some(pre_val), Some(post_val)) = (pre.as_i64(), post.as_i64()) {
+                            let change = post_val - pre_val;
+                            
+                            // Detect ATA creation: account went from 0 to ~ATA_RENT
+                            if pre_val == 0 && (post_val - ata_rent_lamports).abs() < tolerance {
+                                detected_creations += 1;
+                                total_rent_spent += post_val as f64 / 1_000_000_000.0;
+                                
+                                if self.debug_enabled {
+                                    log(LogTag::Transactions, "ATA_DETECT", &format!(
+                                        "Detected ATA creation at account {}: {} lamports ({:.9} SOL)",
+                                        i, post_val, post_val as f64 / 1_000_000_000.0
+                                    ));
+                                }
+                            }
+                            
+                            // Detect ATA closure: account went from ~ATA_RENT to 0
+                            if post_val == 0 && (pre_val - ata_rent_lamports).abs() < tolerance {
+                                detected_closures += 1;
+                                total_rent_recovered += pre_val as f64 / 1_000_000_000.0;
+                                
+                                if self.debug_enabled {
+                                    log(LogTag::Transactions, "ATA_DETECT", &format!(
+                                        "Detected ATA closure at account {}: {} lamports ({:.9} SOL) recovered",
+                                        i, pre_val, pre_val as f64 / 1_000_000_000.0
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Cross-validate with log-based counting
+                    if detected_creations != expected_creations || detected_closures != expected_closures {
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "ATA_MISMATCH", &format!(
+                                "Balance-based vs log-based mismatch: created {}/{}, closed {}/{}",
+                                detected_creations, expected_creations, detected_closures, expected_closures
+                            ));
+                        }
+                    }
+                    
+                    // Return net rent flow (positive = net recovery, negative = net cost)
+                    let net_rent_flow = total_rent_recovered - total_rent_spent;
+                    if detected_creations > 0 || detected_closures > 0 {
+                        return Ok(Some(net_rent_flow));
+                    }
+                }
+            }
+        }
+        
+        Ok(None)
+    }
+
+    /// Determine the specific DEX router based on program IDs in the transaction
+    fn determine_swap_router(&self, transaction: &Transaction) -> String {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for specific DEX program IDs in the logs
+        if log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") {
+            return "Pump.fun".to_string();
+        }
+        
+        // Check instructions for program IDs
+        for instruction in &transaction.instructions {
+            match instruction.program_id.as_str() {
+                "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => {
+                    return "Pump.fun".to_string();
+                }
+                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
+                    return "Raydium".to_string();
+                }
+                "CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHdVPZo2vadqQ" => {
+                    return "Raydium CPMM".to_string();
+                }
+                "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP" => {
+                    return "Orca".to_string();
+                }
+                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => {
+                    return "Orca Whirlpool".to_string();
+                }
+                "srmqPiDkXBFmqxeQwEeozZGqw5VKc7QNNbE6Y5YNBqU" => {
+                    return "Serum".to_string();
+                }
+                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => {
+                    // Jupiter aggregator - check for underlying DEX
+                    if log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") {
+                        return "Jupiter (via Pump.fun)".to_string();
+                    }
+                    if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+                        return "Jupiter (via Raydium)".to_string();
+                    }
+                    if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+                        return "Jupiter (via Orca)".to_string();
+                    }
+                    return "Jupiter".to_string();
+                }
+                "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => {
+                    return "Jupiter v3".to_string();
+                }
+                "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo" => {
+                    return "Jupiter v2".to_string();
+                }
+                "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1" => {
+                    return "Orca v1".to_string();
+                }
+                "82yxjeMsvaURa4MbZZ7WZZHfobirZYkH1zF8fmeGtyaQ" => {
+                    return "Aldrin".to_string();
+                }
+                "SSwpkEEWHvVFuuiB1EePEIrkHTjLZZT3tMfnr5U3qL7n" => {
+                    return "Step Finance".to_string();
+                }
+                "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => {
+                    // Token program alone doesn't indicate a specific DEX
+                    continue;
+                }
+                _ => continue,
+            }
+        }
+        
+        // Fallback: check log messages for known DEX signatures
+        if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
+            return "Jupiter".to_string();
+        }
+        if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+            return "Raydium".to_string();
+        }
+        if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
+            return "Orca".to_string();
+        }
+        
+        // Default fallback
+        "Unknown DEX".to_string()
     }
 
     async fn extract_jupiter_swap_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
         // Parse Jupiter-specific swap data from logs and balance changes
         let log_text = transaction.log_messages.join(" ");
         
+        // Determine the actual router being used
+        let router = self.determine_swap_router(transaction);
+        
         if self.debug_enabled {
-            log(LogTag::Transactions, "JUPITER", &format!("Analyzing Jupiter transaction {}", 
-                &transaction.signature[..8]));
+            log(LogTag::Transactions, "JUPITER", &format!("Analyzing Jupiter transaction {} with router: {}", 
+                &transaction.signature[..8], router));
             log(LogTag::Transactions, "JUPITER", &format!("SOL change: {:.6}, Token transfers: {}", 
                 transaction.sol_balance_change, transaction.token_transfers.len()));
         }
@@ -1521,7 +1841,7 @@ impl TransactionsManager {
                             token_mint: token.mint.clone(),
                             token_amount: token.amount.abs(),
                             sol_amount: transaction.sol_balance_change, // Use actual SOL received
-                            router: "Jupiter".to_string(),
+                            router: router.clone(),
                         });
                     }
                 } else if self.debug_enabled {
@@ -1546,7 +1866,7 @@ impl TransactionsManager {
                             token_mint: token.mint.clone(),
                             sol_amount: transaction.sol_balance_change.abs(), // SOL spent
                             token_amount: token.amount.abs(),
-                            router: "Jupiter".to_string(),
+                            router: router.clone(),
                         });
                     }
                 } else if self.debug_enabled {
@@ -1568,7 +1888,7 @@ impl TransactionsManager {
                         token_mint: input.mint.clone(),
                         token_amount: input.amount.abs(),
                         sol_amount: wsol.amount, // WSOL received represents SOL obtained
-                        router: "Jupiter".to_string(),
+                        router: router.clone(),
                     });
                 }
             }
@@ -1584,7 +1904,7 @@ impl TransactionsManager {
                         token_mint: output.mint.clone(),
                         sol_amount: wsol.amount.abs(), // WSOL sent represents SOL spent
                         token_amount: output.amount,
-                        router: "Jupiter".to_string(),
+                        router: router.clone(),
                     });
                 }
             }
@@ -1603,7 +1923,7 @@ impl TransactionsManager {
                         to_mint: output.mint.clone(),
                         from_amount: input.amount.abs(),
                         to_amount: output.amount,
-                        router: "Jupiter".to_string(),
+                        router: router.clone(),
                     });
                 }
             }
@@ -1629,7 +1949,7 @@ impl TransactionsManager {
                     token_mint,
                     token_amount,
                     sol_amount: sol_change,
-                    router: "Jupiter".to_string(),
+                    router: router.clone(),
                 });
             } else if !transaction.token_transfers.is_empty() && sol_change < 0.01 {
                 // Minimal SOL change but token transfers exist - could be token-to-token
@@ -1641,7 +1961,7 @@ impl TransactionsManager {
                     to_mint: token_mint,
                     from_amount: 0.0,
                     to_amount: token_amount,
-                    router: "Jupiter".to_string(),
+                    router: router.clone(),
                 });
             }
             
@@ -1823,17 +2143,8 @@ impl TransactionsManager {
                     token_amount = transfer.amount.abs();
                 }
                 
-                // Determine router from any program mentions in logs
-                let mut router = "Unknown DEX".to_string();
-                if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
-                    router = "Jupiter".to_string();
-                } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
-                    router = "Raydium".to_string();
-                } else if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
-                    router = "Orca".to_string();
-                } else if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
-                    router = "Pump.fun".to_string();
-                }
+                // Determine router using comprehensive detection
+                let router = self.determine_swap_router(transaction);
                 
                 if self.debug_enabled {
                     log(LogTag::Transactions, "GENERIC_SWAP", &format!(
@@ -1934,19 +2245,8 @@ impl TransactionsManager {
                     ));
                 }
                 
-                // Determine router from any available program IDs in logs
-                let mut router = "Unknown DEX".to_string();
-                let log_text = transaction.log_messages.join(" ");
-                
-                if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
-                    router = "Jupiter".to_string();
-                } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
-                    router = "Raydium".to_string();
-                } else if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
-                    router = "Orca".to_string();
-                } else if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
-                    router = "Pump.fun".to_string();
-                }
+                // Determine router using comprehensive detection
+                let router = self.determine_swap_router(transaction);
                 
                 // Determine swap direction
                 if transaction.sol_balance_change < -0.001 {
@@ -2009,17 +2309,8 @@ impl TransactionsManager {
                         ));
                     }
                     
-                    // Determine router
-                    let mut router = "Unknown DEX".to_string();
-                    let log_text = transaction.log_messages.join(" ");
-                    
-                    if log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4") {
-                        router = "Jupiter".to_string();
-                    } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
-                        router = "Raydium".to_string();
-                    } else if log_text.contains("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP") {
-                        router = "Orca".to_string();
-                    }
+                    // Determine router using comprehensive detection
+                    let router = self.determine_swap_router(transaction);
                     
                     return Ok(TransactionType::SwapTokenToToken {
                         from_mint: from_token.mint.clone(),
@@ -2033,6 +2324,416 @@ impl TransactionsManager {
         }
 
         Err("No token-to-token swap detected".to_string())
+    }
+
+    /// Extract ATA (Associated Token Account) operations
+    async fn extract_ata_operations(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for ATA creation patterns
+        if log_text.contains("Create associated token account") || 
+           log_text.contains("AssociatedTokenAccountProgram") ||
+           log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") {
+            
+            // Look for rent amounts and account addresses in logs
+            let rent_cost = 0.00203928; // Standard ATA creation cost
+            
+            // Try to extract mint and owner from instruction data
+            let mut mint = "Unknown".to_string();
+            let mut owner = self.wallet_pubkey.to_string();
+            let mut ata_address = "Unknown".to_string();
+            
+            // Look for token account creation in instructions
+            for instruction in &transaction.instructions {
+                if instruction.program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
+                    if !instruction.accounts.is_empty() {
+                        ata_address = instruction.accounts[0].clone();
+                        if instruction.accounts.len() > 1 {
+                            mint = instruction.accounts[1].clone();
+                        }
+                        if instruction.accounts.len() > 2 {
+                            owner = instruction.accounts[2].clone();
+                        }
+                    }
+                }
+            }
+            
+            return Ok(TransactionType::AtaCreate {
+                mint,
+                owner,
+                ata_address,
+                cost: rent_cost,
+            });
+        }
+        
+        // Check for ATA closure patterns
+        if log_text.contains("Close account") || 
+           log_text.contains("CloseAccount") {
+            
+            let rent_reclaimed = 0.00203928; // Standard ATA rent reclaimed
+            
+            let mut mint = "Unknown".to_string();
+            let mut owner = self.wallet_pubkey.to_string();
+            let mut ata_address = "Unknown".to_string();
+            
+            // Try to extract account info from token transfers or instructions
+            if !transaction.token_transfers.is_empty() {
+                let transfer = &transaction.token_transfers[0];
+                mint = transfer.mint.clone();
+                ata_address = transfer.from.clone();
+            }
+            
+            return Ok(TransactionType::AtaClose {
+                mint,
+                owner,
+                ata_address,
+                rent_reclaimed,
+            });
+        }
+        
+        Err("No ATA operation detected".to_string())
+    }
+
+    /// Extract staking operations
+    async fn extract_staking_operations(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for staking delegation
+        if log_text.contains("Delegate") || log_text.contains("StakeProgram") ||
+           log_text.contains("Stake11111111111111111111111111111111111112") {
+            
+            // Look for delegation patterns
+            if log_text.contains("DelegateStake") || log_text.contains("delegate") {
+                let stake_account = if !transaction.instructions.is_empty() {
+                    transaction.instructions[0].accounts.get(0).cloned().unwrap_or_default()
+                } else {
+                    "Unknown".to_string()
+                };
+                
+                let validator = if !transaction.instructions.is_empty() {
+                    transaction.instructions[0].accounts.get(1).cloned().unwrap_or_default()
+                } else {
+                    "Unknown".to_string()
+                };
+                
+                let amount = transaction.sol_balance_change.abs();
+                
+                return Ok(TransactionType::StakingDelegate {
+                    stake_account,
+                    validator,
+                    amount,
+                });
+            }
+            
+            // Check for withdrawal patterns
+            if log_text.contains("Withdraw") || log_text.contains("withdraw") {
+                let stake_account = if !transaction.instructions.is_empty() {
+                    transaction.instructions[0].accounts.get(0).cloned().unwrap_or_default()
+                } else {
+                    "Unknown".to_string()
+                };
+                
+                let amount = transaction.sol_balance_change.abs();
+                
+                return Ok(TransactionType::StakingWithdraw {
+                    stake_account,
+                    amount,
+                });
+            }
+        }
+        
+        Err("No staking operation detected".to_string())
+    }
+
+    /// Extract program deployment/upgrade operations
+    async fn extract_program_operations(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for program deployment
+        if log_text.contains("Deploy") || log_text.contains("deploy") ||
+           log_text.contains("BPFLoaderUpgradeab1e11111111111111111111111") {
+            
+            let program_id = if !transaction.instructions.is_empty() {
+                transaction.instructions[0].program_id.clone()
+            } else {
+                "Unknown".to_string()
+            };
+            
+            let deployer = self.wallet_pubkey.to_string();
+            
+            if log_text.contains("DeployWithMaxDataLen") || log_text.contains("Upgrade") {
+                return Ok(TransactionType::ProgramUpgrade {
+                    program_id,
+                    authority: deployer,
+                });
+            } else {
+                return Ok(TransactionType::ProgramDeploy {
+                    program_id,
+                    deployer,
+                });
+            }
+        }
+        
+        Err("No program operation detected".to_string())
+    }
+
+    /// Extract compute budget operations
+    async fn extract_compute_budget_operations(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for compute budget instructions
+        if log_text.contains("ComputeBudgetProgram") ||
+           log_text.contains("ComputeBudget111111111111111111111111111111") {
+            
+            // Extract compute units and price from instructions or logs
+            let mut compute_units = 0u32;
+            let mut compute_unit_price = 0u64;
+            
+            // Look for compute budget patterns in logs
+            if let Some(start) = log_text.find("compute units") {
+                if let Some(number_start) = log_text[..start].rfind(char::is_numeric) {
+                    if let Some(number_end) = log_text[number_start..start].find(char::is_whitespace) {
+                        if let Ok(units) = log_text[number_start..number_start + number_end].parse::<u32>() {
+                            compute_units = units;
+                        }
+                    }
+                }
+            }
+            
+            // Look for priority fee information
+            if let Some(start) = log_text.find("priority fee") {
+                // Extract priority fee amount
+                compute_unit_price = 1000; // Default value
+            }
+            
+            return Ok(TransactionType::ComputeBudget {
+                compute_units,
+                compute_unit_price,
+            });
+        }
+        
+        Err("No compute budget operation detected".to_string())
+    }
+
+    /// Extract spam bulk operations
+    async fn extract_spam_bulk_operations(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        // Detect spam based on patterns
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for bulk airdrop patterns
+        if transaction.token_transfers.len() > 10 && transaction.sol_balance_change == 0.0 {
+            return Ok(TransactionType::SpamBulk {
+                transaction_count: transaction.token_transfers.len(),
+                suspected_spam_type: "Bulk Airdrop".to_string(),
+            });
+        }
+        
+        // Check for spam token creation
+        if log_text.contains("spam") || log_text.contains("Spam") {
+            return Ok(TransactionType::Spam);
+        }
+        
+        // Check for multiple failed instructions (common in spam)
+        if transaction.instructions.len() > 20 && !transaction.success {
+            return Ok(TransactionType::SpamBulk {
+                transaction_count: transaction.instructions.len(),
+                suspected_spam_type: "Failed Bulk Instructions".to_string(),
+            });
+        }
+        
+        // Enhanced: Detect system program spam - many identical system program instructions
+        if transaction.instructions.len() >= 10 {
+            let system_program_id = "11111111111111111111111111111111";
+            let system_instructions: Vec<_> = transaction.instructions
+                .iter()
+                .filter(|inst| inst.program_id == system_program_id)
+                .collect();
+            
+            // If 80% or more instructions are system program calls
+            let system_ratio = system_instructions.len() as f64 / transaction.instructions.len() as f64;
+            if system_ratio >= 0.8 && transaction.instructions.len() >= 15 {
+                // Check if they have repeated data patterns (spam characteristic)
+                if system_instructions.len() >= 3 {
+                    let first_data = &system_instructions[0].data;
+                    let repeated_data_count = system_instructions
+                        .iter()
+                        .filter(|inst| &inst.data == first_data)
+                        .count();
+                    
+                    // If most instructions have the same data, it's likely spam
+                    if repeated_data_count >= (system_instructions.len() * 2 / 3) {
+                        return Ok(TransactionType::SpamBulk {
+                            transaction_count: system_instructions.len(),
+                            suspected_spam_type: "System Program Spam".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Check for excessive system program calls (another spam pattern)
+        let system_program_count = transaction.instructions
+            .iter()
+            .filter(|inst| inst.program_id == "11111111111111111111111111111111")
+            .count();
+        
+        if system_program_count >= 18 && transaction.token_transfers.is_empty() {
+            // Very small SOL balance change with many system calls = likely spam
+            if transaction.sol_balance_change.abs() < 0.001 {
+                return Ok(TransactionType::SpamBulk {
+                    transaction_count: system_program_count,
+                    suspected_spam_type: "Excessive System Calls".to_string(),
+                });
+            }
+        }
+        
+        Err("No spam bulk operation detected".to_string())
+    }
+
+    /// Extract transaction type based on instruction analysis
+    async fn extract_instruction_based_type(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        if transaction.instructions.is_empty() {
+            return Err("No instructions to analyze".to_string());
+        }
+        
+        // Enhanced: Check for bulk system program operations first
+        let system_program_id = "11111111111111111111111111111111";
+        let system_instruction_count = transaction.instructions
+            .iter()
+            .filter(|inst| inst.program_id == system_program_id)
+            .count();
+        
+        // If most instructions are system program calls with minimal balance change
+        if system_instruction_count >= 10 {
+            let total_instructions = transaction.instructions.len();
+            let system_ratio = system_instruction_count as f64 / total_instructions as f64;
+            
+            // If 70% or more are system instructions with tiny balance change
+            if system_ratio >= 0.7 && transaction.sol_balance_change.abs() < 0.01 {
+                // Check for repeated data patterns
+                let system_instructions: Vec<_> = transaction.instructions
+                    .iter()
+                    .filter(|inst| inst.program_id == system_program_id)
+                    .collect();
+                
+                if system_instructions.len() >= 3 {
+                    let first_data = &system_instructions[0].data;
+                    let same_data_count = system_instructions
+                        .iter()
+                        .filter(|inst| &inst.data == first_data)
+                        .count();
+                    
+                    // If most have the same data, classify as bulk system operation
+                    if same_data_count >= (system_instructions.len() * 2 / 3) {
+                        return Ok(TransactionType::SpamBulk {
+                            transaction_count: system_instruction_count,
+                            suspected_spam_type: "Bulk System Operations".to_string(),
+                        });
+                    }
+                }
+                
+                // Even without repeated data, many system calls with tiny change = bulk operation
+                return Ok(TransactionType::SpamBulk {
+                    transaction_count: system_instruction_count,
+                    suspected_spam_type: "Multiple System Operations".to_string(),
+                });
+            }
+        }
+        
+        // Analyze the first instruction's program ID to classify transaction
+        let program_id = &transaction.instructions[0].program_id;
+        
+        match program_id.as_str() {
+            // System Program - usually transfers or account creation
+            "11111111111111111111111111111111" => {
+                if transaction.sol_balance_change.abs() > 0.001 {
+                    return Ok(TransactionType::SolTransfer {
+                        amount: transaction.sol_balance_change.abs(),
+                        from: if transaction.sol_balance_change < 0.0 { 
+                            self.wallet_pubkey.to_string() 
+                        } else { 
+                            "Unknown".to_string() 
+                        },
+                        to: if transaction.sol_balance_change > 0.0 { 
+                            self.wallet_pubkey.to_string() 
+                        } else { 
+                            "Unknown".to_string() 
+                        },
+                    });
+                }
+                
+                // Enhanced: For small system program transactions, classify as bulk operation
+                if transaction.instructions.len() >= 5 {
+                    return Ok(TransactionType::SpamBulk {
+                        transaction_count: transaction.instructions.len(),
+                        suspected_spam_type: "System Program Bulk".to_string(),
+                    });
+                }
+            }
+            
+            // Token Program - token transfers
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => {
+                if !transaction.token_transfers.is_empty() {
+                    let transfer = &transaction.token_transfers[0];
+                    return Ok(TransactionType::TokenTransfer {
+                        mint: transfer.mint.clone(),
+                        amount: transfer.amount.abs(),
+                        from: transfer.from.clone(),
+                        to: transfer.to.clone(),
+                    });
+                }
+            }
+            
+            // Compute Budget Program
+            "ComputeBudget111111111111111111111111111111" => {
+                return Ok(TransactionType::ComputeBudget {
+                    compute_units: 200000, // Default
+                    compute_unit_price: 1000, // Default
+                });
+            }
+            
+            // Associated Token Account Program
+            "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => {
+                return Ok(TransactionType::AtaCreate {
+                    mint: "Unknown".to_string(),
+                    owner: self.wallet_pubkey.to_string(),
+                    ata_address: "Unknown".to_string(),
+                    cost: 0.00203928,
+                });
+            }
+            
+            // Stake Program
+            "Stake11111111111111111111111111111111111112" => {
+                return Ok(TransactionType::StakingDelegate {
+                    stake_account: "Unknown".to_string(),
+                    validator: "Unknown".to_string(),
+                    amount: transaction.sol_balance_change.abs(),
+                });
+            }
+            
+            _ => {
+                // For unknown programs, try to classify based on behavior
+                if transaction.sol_balance_change.abs() > 0.001 && transaction.token_transfers.is_empty() {
+                    return Ok(TransactionType::SolTransfer {
+                        amount: transaction.sol_balance_change.abs(),
+                        from: "Unknown".to_string(),
+                        to: "Unknown".to_string(),
+                    });
+                }
+                
+                if !transaction.token_transfers.is_empty() && transaction.sol_balance_change.abs() < 0.001 {
+                    let transfer = &transaction.token_transfers[0];
+                    return Ok(TransactionType::TokenTransfer {
+                        mint: transfer.mint.clone(),
+                        amount: transfer.amount.abs(),
+                        from: transfer.from.clone(),
+                        to: transfer.to.clone(),
+                    });
+                }
+            }
+        }
+        
+        Err("Could not classify transaction from instructions".to_string())
     }
 
     /// Calculate balance changes from transaction data
@@ -2152,6 +2853,9 @@ impl TransactionsManager {
                         ata_creation_cost: 0.0,
                         total_fees: transaction.fee_sol,
                         fee_percentage: 0.0,
+                        ata_creations_count: 0,
+                        ata_closures_count: 0,
+                        net_ata_rent_flow: 0.0,
                     }),
                 });
             }
@@ -2636,7 +3340,7 @@ impl TransactionsManager {
         Ok(transaction)
     }
 
-    /// Convert transaction to SwapPnLInfo
+    /// Convert transaction to SwapPnLInfo using precise ATA rent detection
     fn convert_to_swap_pnl_info(&self, transaction: &Transaction) -> Option<SwapPnLInfo> {
         if !self.is_swap_transaction(transaction) {
             return None;
@@ -2652,19 +3356,148 @@ impl TransactionsManager {
             _ => return None,
         };
 
-        // Calculate ATA rents from fee breakdown
-        let ata_rents = if let Some(fee_breakdown) = &transaction.fee_breakdown {
-            fee_breakdown.ata_creation_cost + fee_breakdown.rent_costs
+        // Get precise ATA rent information from fee breakdown
+        let (net_ata_rent_flow, ata_rents_display) = if let Some(fee_breakdown) = &transaction.fee_breakdown {
+            (fee_breakdown.net_ata_rent_flow, fee_breakdown.ata_creation_cost + fee_breakdown.rent_costs)
         } else {
-            0.0
+            (0.0, 0.0)
         };
 
-        // Subtract ATA rents from sol_amount to get pure swap amount
-        // ATA rents should be excluded from the swap amount for accurate price calculations
-        let sol_amount_pure = sol_amount_raw - ata_rents;
+        if self.debug_enabled {
+            log(LogTag::Transactions, "PNL_CALC", &format!(
+                "Transaction {}: sol_balance_change={:.9}, net_ata_rent_flow={:.9}, type={}",
+                &transaction.signature[..8], transaction.sol_balance_change, net_ata_rent_flow, swap_type
+            ));
+        }
 
-        let calculated_price_sol = if token_amount.abs() > 0.0 { 
-            sol_amount_pure / token_amount.abs() 
+        // CRITICAL FIX: Skip failed transactions or handle them appropriately
+        if !transaction.success {
+            let failed_costs = transaction.sol_balance_change.abs();
+            
+            let token_symbol = transaction.token_symbol.clone()
+                .unwrap_or_else(|| format!("TOKEN_{}", &token_mint[..8]));
+            
+            let router = self.extract_router_from_transaction(transaction);
+            let blockchain_timestamp = if let Some(block_time) = transaction.block_time {
+                DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or(transaction.timestamp)
+            } else {
+                transaction.timestamp
+            };
+
+            return Some(SwapPnLInfo {
+                token_mint,
+                token_symbol,
+                swap_type: format!("Failed {}", swap_type),
+                sol_amount: failed_costs,
+                token_amount: 0.0,
+                calculated_price_sol: 0.0,
+                timestamp: blockchain_timestamp,
+                signature: transaction.signature.clone(),
+                router,
+                fee_sol: transaction.fee_sol,
+                ata_rents: ata_rents_display,
+                slot: transaction.slot,
+            });
+        }
+
+        // ADVANCED ALGORITHM: Calculate pure trade amount by separating ATA rent flows
+        // 
+        // Key insight: ATA rent is recoverable and NOT part of the actual trade
+        // - When you create ATAs: you pay rent (negative flow)  
+        // - When you close ATAs: you get rent back (positive flow)
+        // - Pure trade amount = total SOL flow - ATA rent flows
+        //
+        let pure_trade_amount = match swap_type.as_str() {
+            "Buy" => {
+                // For BUY transactions: 
+                // sol_balance_change is NEGATIVE (SOL spent)
+                // net_ata_rent_flow can be positive (net rent recovered) or negative (net rent paid)
+                // pure_trade_amount = |sol_balance_change| - |net_ata_rent_flow|
+                let total_sol_spent = transaction.sol_balance_change.abs();
+                let pure_trade = total_sol_spent - net_ata_rent_flow.abs();
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "BUY_CALC", &format!(
+                        "Buy calculation: total_spent={:.9}, ata_flow={:.9}, pure_trade={:.9}",
+                        total_sol_spent, net_ata_rent_flow, pure_trade
+                    ));
+                }
+                
+                pure_trade.max(0.0)
+            }
+            "Sell" => {
+                // For SELL transactions:
+                // sol_balance_change is POSITIVE (SOL received)  
+                // net_ata_rent_flow can be positive (net rent recovered) or negative (net rent paid)
+                // pure_trade_amount = sol_balance_change - net_ata_rent_flow
+                let total_sol_received = transaction.sol_balance_change;
+                let pure_trade = total_sol_received - net_ata_rent_flow;
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "SELL_CALC", &format!(
+                        "Sell calculation: total_received={:.9}, ata_flow={:.9}, pure_trade={:.9}",
+                        total_sol_received, net_ata_rent_flow, pure_trade
+                    ));
+                }
+                
+                pure_trade.max(0.0)
+            }
+            _ => {
+                // Fallback for unknown swap types
+                (transaction.sol_balance_change.abs() - net_ata_rent_flow.abs()).max(0.0)
+            }
+        };
+
+        // Cross-validation: Check if our calculation makes sense
+        let validation_threshold = 0.0001; // 0.1 mSOL tolerance
+        if pure_trade_amount < validation_threshold {
+            if self.debug_enabled {
+                log(LogTag::Transactions, "VALIDATION_WARN", &format!(
+                    "Pure trade amount very small ({:.9} SOL) - might be dust or calculation error",
+                    pure_trade_amount
+                ));
+            }
+            
+            // For very small amounts, fall back to using balance change directly
+            // This handles edge cases where ATA calculations might be imprecise
+            let fallback_amount = transaction.sol_balance_change.abs();
+            
+            if fallback_amount > validation_threshold {
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FALLBACK", &format!(
+                        "Using fallback calculation: {:.9} SOL", fallback_amount
+                    ));
+                }
+            }
+        }
+
+        // Final amount calculation with multiple validation checks
+        let final_sol_amount = if pure_trade_amount >= validation_threshold {
+            pure_trade_amount
+        } else {
+            // Last resort: try to find meaningful SOL transfer in token_transfers
+            let sol_transfer_amount = transaction.token_transfers
+                .iter()
+                .find(|transfer| transfer.mint == "So11111111111111111111111111111111111111112")
+                .map(|transfer| transfer.amount.abs())
+                .unwrap_or(0.0);
+                
+            if sol_transfer_amount >= validation_threshold {
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "SOL_TRANSFER", &format!(
+                        "Using SOL transfer amount: {:.9} SOL", sol_transfer_amount
+                    ));
+                }
+                sol_transfer_amount
+            } else {
+                // Ultimate fallback
+                transaction.sol_balance_change.abs()
+            }
+        };
+
+        // Calculate price using the pure trade amount
+        let calculated_price_sol = if token_amount.abs() > 0.0 && final_sol_amount > 0.0 { 
+            final_sol_amount / token_amount.abs() 
         } else { 
             0.0 
         };
@@ -2673,26 +3506,31 @@ impl TransactionsManager {
             .unwrap_or_else(|| format!("TOKEN_{}", &token_mint[..8]));
         
         let router = self.extract_router_from_transaction(transaction);
-
-        // Use blockchain timestamp if available, otherwise fall back to transaction timestamp
         let blockchain_timestamp = if let Some(block_time) = transaction.block_time {
             DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or(transaction.timestamp)
         } else {
             transaction.timestamp
         };
 
+        if self.debug_enabled {
+            log(LogTag::Transactions, "FINAL_RESULT", &format!(
+                "Final calculation for {}: {:.9} SOL, price={:.12} SOL/token",
+                &transaction.signature[..8], final_sol_amount, calculated_price_sol
+            ));
+        }
+
         Some(SwapPnLInfo {
             token_mint,
             token_symbol,
             swap_type,
-            sol_amount: sol_amount_pure, // Use pure swap amount excluding ATA rents
+            sol_amount: final_sol_amount,
             token_amount,
             calculated_price_sol,
             timestamp: blockchain_timestamp,
             signature: transaction.signature.clone(),
             router,
             fee_sol: transaction.fee_sol,
-            ata_rents,
+            ata_rents: ata_rents_display,
             slot: transaction.slot,
         })
     }
@@ -2770,6 +3608,9 @@ impl Default for FeeBreakdown {
             ata_creation_cost: 0.0,
             total_fees: 0.0,
             fee_percentage: 0.0,
+            ata_creations_count: 0,
+            ata_closures_count: 0,
+            net_ata_rent_flow: 0.0,
         }
     }
 }

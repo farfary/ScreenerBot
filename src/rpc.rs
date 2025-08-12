@@ -17,10 +17,13 @@
 /// - get_latest_blockhash()
 /// - send_transaction()
 /// - sign_and_send_transaction()
+/// - get_transaction_details()
+/// - get_wallet_signatures_main_rpc()
+/// - wait_for_transaction_confirmation() (via get_transaction_details)
 /// 
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = false;
+const FORCE_PREMIUM_RPC_ONLY: bool = true;
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ read_configs, is_debug_wallet_enabled, is_debug_transactions_enabled, RPC_STATS };
@@ -2644,11 +2647,6 @@ impl RpcClient {
         &self,
         transaction_signature: &str
     ) -> Result<TransactionDetails, SwapError> {
-        // Record call in stats
-        if let Ok(mut stats) = self.stats.lock() {
-            stats.record_call(&self.rpc_url, "getTransaction");
-        }
-
         let rpc_payload =
             serde_json::json!({
             "jsonrpc": "2.0",
@@ -2664,9 +2662,57 @@ impl RpcClient {
         });
 
         let client = reqwest::Client::new();
+
+        // If premium RPC only mode is active, use only premium RPC
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - getting transaction details from premium RPC only");
+            
+            if let Some(premium_url) = &self.premium_url {
+                self.record_call_for_url(premium_url, "getTransaction");
+                
+                match client
+                    .post(premium_url)
+                    .header("Content-Type", "application/json")
+                    .json(&rpc_payload)
+                    .send().await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                                if let Some(error) = rpc_response.get("error") {
+                                    return Err(SwapError::TransactionError(format!("Premium RPC error: {:?}", error)));
+                                }
+
+                                if let Some(result) = rpc_response.get("result") {
+                                    if result.is_null() {
+                                        return Err(SwapError::TransactionError("Transaction not found or not confirmed yet".to_string()));
+                                    }
+
+                                    let transaction_details: TransactionDetails = serde_json::from_value(result.clone())
+                                        .map_err(|e| SwapError::InvalidResponse(format!("Failed to parse transaction details: {}", e)))?;
+
+                                    return Ok(transaction_details);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        return Err(SwapError::NetworkError(e));
+                    }
+                }
+            }
+
+            return Err(SwapError::TransactionError("Premium RPC failed in premium-only mode".to_string()));
+        }
+
+        // Record call in stats for normal mode
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.record_call(&self.rpc_url, "getTransaction");
+        }
+
         let mut should_fallback = false;
 
-        // Try main RPC first
+        // Normal mode: Try main RPC first
         match
             client
                 .post(&self.rpc_url)
@@ -3032,19 +3078,42 @@ impl RpcClient {
         limit: usize,
         before: Option<&str>
     ) -> Result<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>, SwapError> {
-        // Use main RPC for this lightweight operation
-        let main_client = self.create_main_client();
-        
-        // Apply rate limiting for main RPC
-        self.wait_for_rate_limit().await;
-        self.record_call_for_url(&self.rpc_url, "get_signatures_for_address");
-        
         let config = solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
             before: before.and_then(|s| solana_sdk::signature::Signature::from_str(s).ok()),
             until: None,
             limit: Some(limit),
             commitment: Some(CommitmentConfig::confirmed()),
         };
+
+        // If premium RPC only mode is active, use premium RPC even for signature fetching
+        if is_premium_rpc_only() {
+            log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - fetching signatures from premium RPC only");
+            
+            if let Some(premium_url) = &self.premium_url {
+                let premium_client = SolanaRpcClient::new_with_commitment(
+                    premium_url.clone(),
+                    CommitmentConfig::confirmed()
+                );
+                
+                self.record_call_for_url(premium_url, "get_signatures_for_address");
+                
+                let signatures = premium_client
+                    .get_signatures_for_address_with_config(wallet_pubkey, config)
+                    .map_err(|e| SwapError::ApiError(format!("Failed to get signatures from premium RPC: {}", e)))?;
+                
+                log(LogTag::Rpc, "SUCCESS", &format!("Retrieved {} signatures from premium RPC (premium-only mode)", signatures.len()));
+                return Ok(signatures);
+            } else {
+                return Err(SwapError::ConfigError("Premium RPC URL not configured but premium-only mode is active".to_string()));
+            }
+        }
+
+        // Normal mode: Use main RPC for this lightweight operation
+        let main_client = self.create_main_client();
+        
+        // Apply rate limiting for main RPC
+        self.wait_for_rate_limit().await;
+        self.record_call_for_url(&self.rpc_url, "get_signatures_for_address");
         
         log(LogTag::Rpc, "MAIN", &format!("Fetching {} signatures using main RPC", limit));
         
