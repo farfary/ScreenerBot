@@ -390,6 +390,10 @@ pub struct PositionTransaction {
 /// Tabled structure for swap analysis display
 #[derive(Tabled)]
 pub struct SwapDisplayRow {
+    #[tabled(rename = "Date")]
+    pub date: String,
+    #[tabled(rename = "Time")]
+    pub time: String,
     #[tabled(rename = "Sig")]
     pub signature: String,
     #[tabled(rename = "Slot")]
@@ -419,6 +423,10 @@ pub struct PositionDisplayRow {
     pub token: String,
     #[tabled(rename = "Status")]
     pub status: String,
+    #[tabled(rename = "Opened")]
+    pub opened: String,
+    #[tabled(rename = "Closed")]
+    pub closed: String,
     #[tabled(rename = "Buys")]
     pub buys: String,
     #[tabled(rename = "Sold")]
@@ -1149,6 +1157,9 @@ impl TransactionsManager {
             // Extract block time
             if let Some(block_time) = raw_data.get("blockTime").and_then(|v| v.as_i64()) {
                 transaction.block_time = Some(block_time);
+                // Update timestamp to use blockchain time instead of processing time
+                transaction.timestamp = DateTime::<Utc>::from_timestamp(block_time, 0)
+                    .unwrap_or(transaction.timestamp);
             }
 
             // Extract meta information
@@ -3917,6 +3928,8 @@ impl TransactionsManager {
             };
 
             display_rows.push(SwapDisplayRow {
+                date: swap.timestamp.format("%m-%d").to_string(),
+                time: swap.timestamp.format("%H:%M").to_string(),
                 signature: sig_short.to_string(),
                 slot: slot_str,
                 swap_type: type_display,
@@ -4119,9 +4132,19 @@ impl TransactionsManager {
             }
         }
 
-        // Sort by first buy timestamp (newest first)
+        // Sort by last activity timestamp (newest first) - most recent transactions at top
         completed_positions.sort_by(|a, b| {
-            match (&b.first_buy_timestamp, &a.first_buy_timestamp) {
+            // Debug logging to verify timestamps
+            if self.debug_enabled {
+                if let (Some(a_time), Some(b_time)) = (&a.last_activity_timestamp, &b.last_activity_timestamp) {
+                    log(LogTag::Transactions, "SORT_DEBUG", &format!(
+                        "Comparing {} (last activity: {}) vs {} (last activity: {})",
+                        a.token_symbol, a_time, b.token_symbol, b_time
+                    ));
+                }
+            }
+            
+            match (&b.last_activity_timestamp, &a.last_activity_timestamp) {
                 (Some(b_time), Some(a_time)) => b_time.cmp(a_time),
                 (Some(_), None) => std::cmp::Ordering::Less,
                 (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -4285,6 +4308,27 @@ impl TransactionsManager {
             display_rows.push(PositionDisplayRow {
                 token: position.token_symbol[..15.min(position.token_symbol.len())].to_string(),
                 status: status_display,
+                opened: if let Some(timestamp) = position.first_buy_timestamp {
+                    format!("{} {}", 
+                        timestamp.format("%m-%d"),
+                        timestamp.format("%H:%M")
+                    )
+                } else {
+                    "N/A".to_string()
+                },
+                closed: match position.status {
+                    PositionStatus::Closed | PositionStatus::Oversold => {
+                        if let Some(timestamp) = position.last_activity_timestamp {
+                            format!("{} {}", 
+                                timestamp.format("%m-%d"),
+                                timestamp.format("%H:%M")
+                            )
+                        } else {
+                            "N/A".to_string()
+                        }
+                    },
+                    _ => "Open".to_string(),
+                },
                 buys: bought_display,
                 sold: sold_display,
                 remaining: remaining_display,
