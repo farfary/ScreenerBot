@@ -4228,10 +4228,10 @@ impl TransactionsManager {
 
         for position in positions {
             let status_display = match position.status {
-                PositionStatus::Open => "🟢Open".to_string(),
-                PositionStatus::Closed => "🔴Closed".to_string(), 
-                PositionStatus::PartiallyReduced => "🟡Partial".to_string(),
-                PositionStatus::Oversold => "🔶Oversold".to_string(),
+                PositionStatus::Open => "🟢 Open".to_string(),
+                PositionStatus::Closed => "🔴 Closed".to_string(), 
+                PositionStatus::PartiallyReduced => "🟡 Partial".to_string(),
+                PositionStatus::Oversold => "🟣 Oversold".to_string(),
             };
 
             // Format SOL amounts with proper signs for intuitive display
