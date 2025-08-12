@@ -2796,32 +2796,46 @@ impl TransactionsManager {
                 }
 
                 // Enhanced: Calculate token balance changes by comparing pre and post token balances
+                // Only consider token accounts owned by our wallet
+                let wallet_address = self.wallet_pubkey.to_string();
                 let mut token_balance_map: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
                 
-                // Collect pre token balances
+                // Collect pre token balances (only for our wallet)
                 if let Some(pre_token_balances) = meta.get("preTokenBalances").and_then(|v| v.as_array()) {
                     for token_balance in pre_token_balances {
-                        if let Some(mint) = token_balance.get("mint").and_then(|v| v.as_str()) {
-                            let amount = token_balance
-                                .get("uiTokenAmount")
-                                .and_then(|ui| ui.get("uiAmount"))
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
-                            token_balance_map.entry(mint.to_string()).or_insert((0.0, 0.0)).0 = amount;
+                        if let (Some(mint), Some(owner)) = (
+                            token_balance.get("mint").and_then(|v| v.as_str()),
+                            token_balance.get("owner").and_then(|v| v.as_str())
+                        ) {
+                            // Only process token accounts owned by our wallet
+                            if owner == wallet_address {
+                                let amount = token_balance
+                                    .get("uiTokenAmount")
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                token_balance_map.entry(mint.to_string()).or_insert((0.0, 0.0)).0 = amount;
+                            }
                         }
                     }
                 }
                 
-                // Collect post token balances
+                // Collect post token balances (only for our wallet)
                 if let Some(post_token_balances) = meta.get("postTokenBalances").and_then(|v| v.as_array()) {
                     for token_balance in post_token_balances {
-                        if let Some(mint) = token_balance.get("mint").and_then(|v| v.as_str()) {
-                            let amount = token_balance
-                                .get("uiTokenAmount")
-                                .and_then(|ui| ui.get("uiAmount"))
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
-                            token_balance_map.entry(mint.to_string()).or_insert((0.0, 0.0)).1 = amount;
+                        if let (Some(mint), Some(owner)) = (
+                            token_balance.get("mint").and_then(|v| v.as_str()),
+                            token_balance.get("owner").and_then(|v| v.as_str())
+                        ) {
+                            // Only process token accounts owned by our wallet
+                            if owner == wallet_address {
+                                let amount = token_balance
+                                    .get("uiTokenAmount")
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                token_balance_map.entry(mint.to_string()).or_insert((0.0, 0.0)).1 = amount;
+                            }
                         }
                     }
                 }
