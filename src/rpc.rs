@@ -3017,12 +3017,29 @@ impl RpcClient {
         for attempt in 1..=max_attempts {
             // Check if transaction exists and is confirmed
             match self.get_transaction_details(signature).await {
-                Ok(_transaction_details) => {
+                Ok(transaction_details) => {
+                    // CRITICAL FIX: Check if transaction actually succeeded on-chain
+                    if let Some(meta) = &transaction_details.meta {
+                        if meta.err.is_some() {
+                            log(
+                                LogTag::Rpc,
+                                "TRANSACTION_FAILED",
+                                &format!(
+                                    "❌ Transaction failed on-chain after {} attempts: {} - Error: {:?}",
+                                    attempt, &signature[..8], meta.err
+                                )
+                            );
+                            return Err(SwapError::TransactionError(
+                                format!("Transaction failed on-chain: {:?}", meta.err)
+                            ));
+                        }
+                    }
+                    
                     log(
                         LogTag::Rpc,
                         "CONFIRMATION_SUCCESS",
                         &format!(
-                            "✅ Transaction confirmed after {} attempts: {}",
+                            "✅ Transaction confirmed and succeeded after {} attempts: {}",
                             attempt, &signature[..8]
                         )
                     );

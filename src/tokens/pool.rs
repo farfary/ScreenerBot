@@ -5,7 +5,7 @@
 /// calculates prices from pool reserves, and maintains a watch list for continuous monitoring.
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ is_debug_pool_prices_enabled, CACHE_PRICES_DIR };
+use crate::global::{ is_debug_pool_prices_enabled, is_debug_rl_learn_enabled, CACHE_PRICES_DIR };
 use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
@@ -949,15 +949,18 @@ impl PoolPriceService {
         let disk_cache = self.disk_price_history.read().await;
         if let Some(cache) = disk_cache.get(token_address) {
             let history = cache.get_price_history();
-            log(
-                LogTag::Pool,
-                "RL_PRICE_HISTORY",
-                &format!(
-                    "🤖 RL Learning: Retrieved {} comprehensive price history entries for {}",
-                    history.len(),
-                    token_address
-                )
-            );
+            if is_debug_rl_learn_enabled() {
+                log(
+                    LogTag::Pool,
+                    "RL_PRICE_HISTORY",
+                    &format!(
+                        "🤖 RL Learning: Retrieved {} comprehensive price history entries for {}",
+                        history.len(),
+                        token_address
+                    )
+                );
+            }
+
             history
         } else {
             // Try to load from disk if not in memory
@@ -970,27 +973,31 @@ impl PoolPriceService {
                         let mut disk_cache = self.disk_price_history.write().await;
                         disk_cache.insert(token_address.to_string(), cache);
                     }
-                    log(
-                        LogTag::Pool,
-                        "RL_PRICE_HISTORY_LOADED",
-                        &format!(
-                            "🤖 RL Learning: Loaded {} price history entries from disk for {}",
-                            history.len(),
-                            token_address
-                        )
-                    );
+                    if is_debug_rl_learn_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "RL_PRICE_HISTORY_LOADED",
+                            &format!(
+                                "🤖 RL Learning: Loaded {} price history entries from disk for {}",
+                                history.len(),
+                                token_address
+                            )
+                        );
+                    }
                     history
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Pool,
-                        "RL_PRICE_HISTORY_ERROR",
-                        &format!(
-                            "🤖 RL Learning: Failed to load price history for {}: {}",
-                            token_address,
-                            e
-                        )
-                    );
+                    if is_debug_rl_learn_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "RL_PRICE_HISTORY_ERROR",
+                            &format!(
+                                "🤖 RL Learning: Failed to load price history for {}: {}",
+                                token_address,
+                                e
+                            )
+                        );
+                    }
                     Vec::new()
                 }
             }

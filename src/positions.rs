@@ -114,7 +114,7 @@ pub fn calculate_liquidity_tier(token: &crate::tokens::types::Token) -> Option<S
 pub fn calculate_position_total_fees(position: &Position) -> f64 {
     let entry_fees_sol = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
     let exit_fees_sol = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-    
+
     entry_fees_sol + exit_fees_sol
 }
 
@@ -123,7 +123,7 @@ pub fn calculate_position_fees_breakdown(position: &Position) -> (f64, f64, f64)
     let entry_fee_sol = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
     let exit_fee_sol = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
     let total_fees = entry_fee_sol + exit_fee_sol;
-    
+
     (entry_fee_sol, exit_fee_sol, total_fees)
 }
 
@@ -511,94 +511,131 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 }
             }
 
-            
             let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
 
             // Fetch transaction details to get actual token amount and prices
-            let (token_amount, effective_entry_price, entry_fee, actual_sol_spent) = 
-                match crate::transactions_manager::get_transaction(&transaction_signature).await {
-                    Ok(Some(tx)) => {
+            let (token_amount, effective_entry_price, entry_fee, actual_sol_spent) = match
+                crate::transactions_manager::get_transaction(&transaction_signature).await
+            {
+                Ok(Some(tx)) => {
+                    log(
+                        LogTag::Trader,
+                        "DEBUG",
+                        &format!(
+                            "📄 Transaction {} fetched successfully for {} analysis",
+                            &transaction_signature[..16],
+                            token.symbol
+                        )
+                    );
+
+                    let mut token_amount = None;
+                    let mut effective_price = None;
+                    let mut fee_lamports = None;
+                    let mut sol_spent = TRADE_SIZE_SOL;
+
+                    // Try to get token amount from swap analysis first
+                    if let Some(ref swap) = tx.swap_analysis {
                         log(
                             LogTag::Trader,
                             "DEBUG",
-                            &format!("📄 Transaction {} fetched successfully for {} analysis", 
-                                &transaction_signature[..16], token.symbol)
+                            &format!(
+                                "Swap analysis found - Output token: '{}', Expected: '{}', Match: {}",
+                                swap.output_token,
+                                token.mint,
+                                swap.output_token == token.mint
+                            )
                         );
-                        
-                        let mut token_amount = None;
-                        let mut effective_price = None;
-                        let mut fee_lamports = None;
-                        let mut sol_spent = TRADE_SIZE_SOL;
+                        if swap.output_token == token.mint {
+                            // Handle token amount with proper decimal consideration
+                            // For display purposes, we store the actual received amount (with decimals)
+                            // The token amount should represent the actual token units received
+                            let token_decimals = crate::tokens
+                                ::get_token_decimals(&token.mint).await
+                                .unwrap_or(9);
+                            let token_amount_units = (swap.output_amount *
+                                (10_f64).powi(token_decimals as i32)) as u64;
 
-                        // Try to get token amount from swap analysis first
-                        if let Some(ref swap) = tx.swap_analysis {
                             log(
                                 LogTag::Trader,
                                 "DEBUG",
-                                &format!("Swap analysis found - Output token: '{}', Expected: '{}', Match: {}",
-                                    swap.output_token, token.mint, swap.output_token == token.mint)
-                            );
-                            if swap.output_token == token.mint {
-                                // Handle token amount with proper decimal consideration
-                                // For display purposes, we store the actual received amount (with decimals)
-                                // The token amount should represent the actual token units received
-                                let token_decimals = crate::tokens::get_token_decimals(&token.mint).await.unwrap_or(9);
-                                let token_amount_units = (swap.output_amount * 10_f64.powi(token_decimals as i32)) as u64;
-                                
-                                log(
-                                    LogTag::Trader,
-                                    "DEBUG",
-                                    &format!("🧮 TOKEN CONVERSION DEBUG for {}: 
+                                &format!(
+                                    "🧮 TOKEN CONVERSION DEBUG for {}: 
                                         - swap.output_amount={} 
                                         - decimals={} 
                                         - calculation={}*10^{}={}
                                         - as_u64={}
                                         - This value will be stored as position.token_amount",
-                                        token.symbol, swap.output_amount, token_decimals, swap.output_amount, token_decimals, 
-                                        swap.output_amount * 10_f64.powi(token_decimals as i32), token_amount_units)
-                                );
-                                
-                                token_amount = Some(token_amount_units);
-                                effective_price = Some(swap.effective_price);
-                                sol_spent = swap.input_amount;
-                                log(
-                                    LogTag::Trader,
-                                    "SUCCESS",
-                                    &format!("✅ Position data extracted from swap analysis for {}: {} tokens ({} units with {} decimals), {} SOL", 
-                                        token.symbol, swap.output_amount, token_amount_units, token_decimals, swap.input_amount)
-                                );
-                            }
-                        } else {
-                            log(LogTag::Trader, "WARNING", &format!("⚠️ No swap analysis found in transaction {} for {}", 
-                                &transaction_signature[..16], token.symbol));
-                        }
+                                    token.symbol,
+                                    swap.output_amount,
+                                    token_decimals,
+                                    swap.output_amount,
+                                    token_decimals,
+                                    swap.output_amount * (10_f64).powi(token_decimals as i32),
+                                    token_amount_units
+                                )
+                            );
 
-                        // Get fee information
-                        if let Some(ref fee_breakdown) = tx.fee_breakdown {
-                            fee_lamports = Some((fee_breakdown.total_fees * 1_000_000_000.0) as u64);
+                            token_amount = Some(token_amount_units);
+                            effective_price = Some(swap.effective_price);
+                            sol_spent = swap.input_amount;
+                            log(
+                                LogTag::Trader,
+                                "SUCCESS",
+                                &format!(
+                                    "✅ Position data extracted from swap analysis for {}: {} tokens ({} units with {} decimals), {} SOL",
+                                    token.symbol,
+                                    swap.output_amount,
+                                    token_amount_units,
+                                    token_decimals,
+                                    swap.input_amount
+                                )
+                            );
                         }
-
-                        (token_amount, effective_price, fee_lamports, sol_spent)
-                    },
-                    Ok(None) => {
+                    } else {
                         log(
                             LogTag::Trader,
                             "WARNING",
-                            &format!("⚠️ Transaction {} not found in cache or blockchain for {} - using defaults", 
-                                &transaction_signature[..16], token.symbol)
+                            &format!(
+                                "⚠️ No swap analysis found in transaction {} for {}",
+                                &transaction_signature[..16],
+                                token.symbol
+                            )
                         );
-                        (None, None, None, TRADE_SIZE_SOL)
-                    },
-                    Err(e) => {
-                        log(
-                            LogTag::Trader,
-                            "ERROR",
-                            &format!("❌ Failed to fetch transaction {} for {}: {} - using defaults", 
-                                &transaction_signature[..16], token.symbol, e)
-                        );
-                        (None, None, None, TRADE_SIZE_SOL)
                     }
-                };
+
+                    // Get fee information
+                    if let Some(ref fee_breakdown) = tx.fee_breakdown {
+                        fee_lamports = Some((fee_breakdown.total_fees * 1_000_000_000.0) as u64);
+                    }
+
+                    (token_amount, effective_price, fee_lamports, sol_spent)
+                }
+                Ok(None) => {
+                    log(
+                        LogTag::Trader,
+                        "WARNING",
+                        &format!(
+                            "⚠️ Transaction {} not found in cache or blockchain for {} - using defaults",
+                            &transaction_signature[..16],
+                            token.symbol
+                        )
+                    );
+                    (None, None, None, TRADE_SIZE_SOL)
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!(
+                            "❌ Failed to fetch transaction {} for {}: {} - using defaults",
+                            &transaction_signature[..16],
+                            token.symbol,
+                            e
+                        )
+                    );
+                    (None, None, None, TRADE_SIZE_SOL)
+                }
+            };
 
             let new_position = Position {
                 mint: token.mint.clone(),
@@ -638,7 +675,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                     price,
                     match token_amount {
                         Some(amount) => format!("{:.6}", amount),
-                        None => "NOT_FOUND".to_string()
+                        None => "NOT_FOUND".to_string(),
                     },
                     profit_min,
                     profit_max
@@ -664,10 +701,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             log(
                 LogTag::Trader,
                 "TRANSACTION",
-                &format!(
-                    "📡 Position entry transaction completed: {}",
-                    &transaction_signature[..8]
-                )
+                &format!("📡 Position entry transaction completed: {}", &transaction_signature[..8])
             );
 
             // Record position for RL learning if enabled
@@ -675,11 +709,16 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             if learner.is_model_ready() {
                 if let Some(rugcheck_score) = get_rugcheck_score_for_token(&token.mint).await {
                     // Note: We'll record the complete trade when position is closed
-                    log(
-                        LogTag::Trader,
-                        "RL_READY",
-                        &format!("🤖 Position {} ready for RL learning when closed", token.symbol)
-                    );
+                    if is_debug_rl_learn_enabled() {
+                        log(
+                            LogTag::Trader,
+                            "RL_READY",
+                            &format!(
+                                "🤖 Position {} ready for RL learning when closed",
+                                token.symbol
+                            )
+                        );
+                    }
                 }
             }
         }
@@ -717,8 +756,6 @@ pub async fn close_position(
         );
         return false;
     }
-
-   
 
     // Check if this mint is in frozen account cooldown
     if is_mint_in_frozen_cooldown(&position.mint) {
@@ -829,7 +866,7 @@ pub async fn close_position(
                     )
                 );
                 balance
-            },
+            }
             Err(e) => {
                 log(
                     LogTag::Trader,
@@ -1017,11 +1054,9 @@ pub async fn close_position(
                     }
                 }
 
-            
-
                 // Simplified verification - assume success if we have a transaction signature
                 let verification_success = !transaction_signature.is_empty();
-                
+
                 if verification_success {
                     // CRITICAL: Calculate actual SOL received from swap result
                     let sol_received_str = swap_result.output_amount.clone();
@@ -1029,85 +1064,84 @@ pub async fn close_position(
                     let sol_received = lamports_to_sol(sol_received_lamports);
 
                     if sol_received == 0.0 {
-                            log(
-                                LogTag::Trader,
-                                "ERROR",
-                                &format!(
-                                    "❌ Transaction verified but no SOL received for {}. TX: {}",
-                                    position.symbol,
-                                    transaction_signature
-                                )
-                            );
-                            return false; // Failed to close properly
-                        }
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!(
+                                "❌ Transaction verified but no SOL received for {}. TX: {}",
+                                position.symbol,
+                                transaction_signature
+                            )
+                        );
+                        return false; // Failed to close properly
+                    }
 
-                        // Calculate effective exit price and other metrics
-                        let token_amount_sold = position.token_amount.unwrap_or(0) as f64; // Full position sold
-                        let effective_exit_price = if token_amount_sold > 0.0 {
-                            sol_received / token_amount_sold
+                    // Calculate effective exit price and other metrics
+                    let token_amount_sold = position.token_amount.unwrap_or(0) as f64; // Full position sold
+                    let effective_exit_price = if token_amount_sold > 0.0 {
+                        sol_received / token_amount_sold
+                    } else {
+                        0.0
+                    };
+
+                    log(
+                        LogTag::Trader,
+                        "VERIFIED",
+                        &format!(
+                            "✅ Exit verified: {} sold {} tokens, received {:.9} SOL, effective price: {:.12}",
+                            position.symbol,
+                            token_amount_sold,
+                            sol_received,
+                            effective_exit_price
+                        )
+                    );
+
+                    // Update position with verified exit data
+                    position.exit_price = Some(exit_price);
+                    position.exit_time = Some(exit_time);
+                    position.effective_exit_price = Some(effective_exit_price);
+                    position.sol_received = Some(sol_received);
+                    position.exit_transaction_signature = Some(transaction_signature.clone());
+                    position.transaction_exit_verified = true;
+                    position.exit_fee_lamports = None;
+
+                    // Calculate actual P&L using unified function
+                    let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
+                    let is_profitable = net_pnl_sol > 0.0;
+
+                    log(
+                        LogTag::Trader,
+                        if is_profitable {
+                            "PROFIT"
                         } else {
-                            0.0
-                        };
-
-                        log(
-                            LogTag::Trader,
-                            "VERIFIED",
-                            &format!(
-                                "✅ Exit verified: {} sold {} tokens, received {:.9} SOL, effective price: {:.12}",
-                                position.symbol,
-                                token_amount_sold,
-                                sol_received,
-                                effective_exit_price
-                            )
-                        );
-
-
-                        // Update position with verified exit data
-                        position.exit_price = Some(exit_price);
-                        position.exit_time = Some(exit_time);
-                        position.effective_exit_price = Some(effective_exit_price);
-                        position.sol_received = Some(sol_received);
-                        position.exit_transaction_signature = Some(transaction_signature.clone());
-                        position.transaction_exit_verified = true;
-                        position.exit_fee_lamports = None;
-
-                        // Calculate actual P&L using unified function
-                        let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
-                        let is_profitable = net_pnl_sol > 0.0;
-
-                        log(
-                            LogTag::Trader,
+                            "LOSS"
+                        },
+                        &format!(
+                            "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {} (verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
                             if is_profitable {
-                                "PROFIT"
+                                "💰"
                             } else {
-                                "LOSS"
+                                "📉"
                             },
-                            &format!(
-                                "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {} (verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
-                                if is_profitable {
-                                    "💰"
-                                } else {
-                                    "📉"
-                                },
-                                position.symbol,
-                                transaction_signature,
-                                token_amount_sold,
-                                sol_received,
-                                net_pnl_percent,
-                                net_pnl_sol
-                            )
+                            position.symbol,
+                            transaction_signature,
+                            token_amount_sold,
+                            sol_received,
+                            net_pnl_percent,
+                            net_pnl_sol
+                        )
+                    );
+
+                    // Record position for RL learning
+                    if let Err(e) = record_position_for_learning(position).await {
+                        log(
+                            LogTag::Trader,
+                            "WARNING",
+                            &format!("Failed to record position for RL learning: {}", e)
                         );
+                    }
 
-                        // Record position for RL learning
-                        if let Err(e) = record_position_for_learning(position).await {
-                            log(
-                                LogTag::Trader,
-                                "WARNING",
-                                &format!("Failed to record position for RL learning: {}", e)
-                            );
-                        }
-
-                        return true; // Successfully closed and verified
+                    return true; // Successfully closed and verified
                 } else {
                     log(
                         LogTag::Trader,
@@ -1158,21 +1192,32 @@ pub async fn close_position(
 
 /// Debug helper to investigate position state and wallet balance discrepancies
 pub async fn debug_position_token_mismatch(mint: &str) {
-    use crate::logger::{log, LogTag};
-    
-    log(LogTag::Trader, "DEBUG", &format!("🔬 DEBUGGING POSITION TOKEN MISMATCH for mint: {}", mint));
-    
+    use crate::logger::{ log, LogTag };
+
+    log(
+        LogTag::Trader,
+        "DEBUG",
+        &format!("🔬 DEBUGGING POSITION TOKEN MISMATCH for mint: {}", mint)
+    );
+
     // Extract position data without holding the lock across async operations
     let position_data = {
         if let Ok(positions) = SAVED_POSITIONS.lock() {
-            positions.iter().find(|p| p.mint == mint).cloned()
+            positions
+                .iter()
+                .find(|p| p.mint == mint)
+                .cloned()
         } else {
             None
         }
     }; // Mutex guard is dropped here
-    
+
     if let Some(pos) = position_data {
-        log(LogTag::Trader, "DEBUG", &format!("📊 Position found: 
+        log(
+            LogTag::Trader,
+            "DEBUG",
+            &format!(
+                "📊 Position found: 
             - Symbol: {}
             - Stored token_amount: {:?}
             - Entry price: {:.9}
@@ -1180,72 +1225,103 @@ pub async fn debug_position_token_mismatch(mint: &str) {
             - Entry verified: {}
             - Exit price: {:?}
             - Created: {}",
-            pos.symbol,
-            pos.token_amount,
-            pos.entry_price,
-            pos.entry_transaction_signature,
-            pos.transaction_entry_verified,
-            pos.exit_price,
-            pos.entry_time
-        ));
-        
+                pos.symbol,
+                pos.token_amount,
+                pos.entry_price,
+                pos.entry_transaction_signature,
+                pos.transaction_entry_verified,
+                pos.exit_price,
+                pos.entry_time
+            )
+        );
+
         // Check current wallet balance
         if let Ok(wallet_address) = crate::utils::get_wallet_address() {
             match crate::utils::get_token_balance(&wallet_address, mint).await {
                 Ok(balance) => {
-                    log(LogTag::Trader, "DEBUG", &format!("💰 Current wallet balance: {} tokens", balance));
-                    
+                    log(
+                        LogTag::Trader,
+                        "DEBUG",
+                        &format!("💰 Current wallet balance: {} tokens", balance)
+                    );
+
                     if let Some(stored) = pos.token_amount {
-                        let difference = balance as i64 - stored as i64;
-                        log(LogTag::Trader, "DEBUG", &format!("📉 Balance difference: {} tokens (negative = missing tokens)", difference));
+                        let difference = (balance as i64) - (stored as i64);
+                        log(
+                            LogTag::Trader,
+                            "DEBUG",
+                            &format!("📉 Balance difference: {} tokens (negative = missing tokens)", difference)
+                        );
                     }
-                },
+                }
                 Err(e) => {
-                    log(LogTag::Trader, "ERROR", &format!("❌ Failed to check wallet balance: {}", e));
+                    log(
+                        LogTag::Trader,
+                        "ERROR",
+                        &format!("❌ Failed to check wallet balance: {}", e)
+                    );
                 }
             }
-            
+
             // Check if we can find the entry transaction
             if let Some(ref entry_tx) = pos.entry_transaction_signature {
-                log(LogTag::Trader, "DEBUG", &format!("🔍 Checking entry transaction: {}", entry_tx));
-                
+                log(
+                    LogTag::Trader,
+                    "DEBUG",
+                    &format!("🔍 Checking entry transaction: {}", entry_tx)
+                );
+
                 match crate::transactions_manager::get_transaction(entry_tx).await {
                     Ok(Some(tx)) => {
-                        log(LogTag::Trader, "DEBUG", &format!("✅ Entry transaction found: 
+                        log(
+                            LogTag::Trader,
+                            "DEBUG",
+                            &format!(
+                                "✅ Entry transaction found: 
                             - Success: {}
                             - Finalized: {}
                             - Transaction type: {:?}
                             - SOL balance change: {:.9}
                             - Token transfers: {}
                             - Has swap analysis: {}",
-                            tx.success,
-                            tx.finalized,
-                            tx.transaction_type,
-                            tx.sol_balance_change,
-                            tx.token_transfers.len(),
-                            tx.swap_analysis.is_some()
-                        ));
-                        
+                                tx.success,
+                                tx.finalized,
+                                tx.transaction_type,
+                                tx.sol_balance_change,
+                                tx.token_transfers.len(),
+                                tx.swap_analysis.is_some()
+                            )
+                        );
+
                         if let Some(swap) = &tx.swap_analysis {
-                            log(LogTag::Trader, "DEBUG", &format!("🔄 Swap analysis details:
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!(
+                                    "🔄 Swap analysis details:
                                 - Input token: {}
                                 - Output token: {}  
                                 - Input amount: {:.9}
                                 - Output amount: {:.9}
                                 - Effective price: {:.9}",
-                                &swap.input_token[..8],
-                                &swap.output_token[..8],
-                                swap.input_amount,
-                                swap.output_amount,
-                                swap.effective_price
-                            ));
+                                    &swap.input_token[..8],
+                                    &swap.output_token[..8],
+                                    swap.input_amount,
+                                    swap.output_amount,
+                                    swap.effective_price
+                                )
+                            );
                         }
-                    },
+                    }
                     Ok(None) => {
                         log(LogTag::Trader, "WARNING", "⚠️ Entry transaction not found in cache");
-                    },
+                    }
                     Err(e) => {
-                        log(LogTag::Trader, "ERROR", &format!("❌ Error fetching entry transaction: {}", e));
+                        log(
+                            LogTag::Trader,
+                            "ERROR",
+                            &format!("❌ Error fetching entry transaction: {}", e)
+                        );
                     }
                 }
             }
@@ -1253,7 +1329,7 @@ pub async fn debug_position_token_mismatch(mint: &str) {
     } else {
         log(LogTag::Trader, "WARNING", "⚠️ Position not found for the given mint");
     }
-    
+
     log(LogTag::Trader, "DEBUG", "🏁 Position debug analysis complete");
 }
 
