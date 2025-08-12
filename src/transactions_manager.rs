@@ -3732,7 +3732,7 @@ impl TransactionsManager {
         })
     }
 
-    /// Display comprehensive swap analysis table
+    /// Display comprehensive swap analysis table with proper sign conventions
     pub fn display_swap_analysis_table(&self, swaps: &[SwapPnLInfo]) {
         if swaps.is_empty() {
             log(LogTag::Transactions, "INFO", "No swap transactions found");
@@ -3744,7 +3744,7 @@ impl TransactionsManager {
             "{:<8} {:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<12} {:<12} {:<8}",
             "Sig", "Slot", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
         ));
-        log(LogTag::Transactions, "TABLE", &"-".repeat(128));
+        log(LogTag::Transactions, "TABLE", &"─".repeat(128));
 
         let mut total_fees = 0.0;
         let mut buy_count = 0;
@@ -3761,14 +3761,32 @@ impl TransactionsManager {
 
             let sig_short = &swap.signature[..8.min(swap.signature.len())];
 
+            // Apply intuitive sign conventions for final display:
+            // SOL: negative for outflow (spent), positive for inflow (received)
+            // Token: negative for outflow (sold), positive for inflow (bought)
+            let (display_sol_amount, display_token_amount) = if swap.swap_type == "Buy" {
+                // Buy: SOL spent (negative), tokens received (positive)
+                (-swap.sol_amount, swap.token_amount.abs())
+            } else {
+                // Sell: SOL received (positive), tokens sold (negative)  
+                (swap.sol_amount, -swap.token_amount.abs())
+            };
+
+            // Color coding for better readability
+            let type_display = if swap.swap_type == "Buy" {
+                format!("🟢Buy")  // Green for buy
+            } else {
+                format!("🔴Sell") // Red for sell
+            };
+
             log(LogTag::Transactions, "TABLE", &format!(
-                "{:<8} {:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
+                "{:<8} {:<12} {:<8} {:<15} {:<+12.6} {:<+15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
                 sig_short,
                 slot_str,
-                swap.swap_type,
+                type_display,
                 &swap.token_symbol[..15.min(swap.token_symbol.len())],
-                swap.sol_amount,
-                swap.token_amount,
+                display_sol_amount,
+                display_token_amount,
                 swap.calculated_price_sol,
                 swap.ata_rents,
                 &swap.router[..12.min(swap.router.len())],
@@ -3785,9 +3803,9 @@ impl TransactionsManager {
             }
         }
 
-        log(LogTag::Transactions, "TABLE", &"-".repeat(128));
+        log(LogTag::Transactions, "TABLE", &"─".repeat(128));
         log(LogTag::Transactions, "TABLE", &format!(
-            "SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
+            "📊 SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
             buy_count, total_sol_spent, sell_count, total_sol_received, total_fees, 
             total_sol_received - total_sol_spent - total_fees
         ));
