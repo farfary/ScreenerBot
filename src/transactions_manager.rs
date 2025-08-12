@@ -237,12 +237,11 @@ pub struct SwapPnLInfo {
     pub sol_amount: f64,
     pub token_amount: f64,
     pub calculated_price_sol: f64,
-    pub market_price_sol: Option<f64>,
-    pub price_difference_percent: Option<f64>,
     pub timestamp: DateTime<Utc>,
     pub signature: String,
     pub router: String,
     pub fee_sol: f64,
+    pub ata_rents: f64,     // ATA creation and rent costs (in SOL)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -395,7 +394,7 @@ impl TransactionsManager {
         Ok(new_signatures)
     }
 
-    /// Process a single transaction (fetch, analyze, cache)
+    /// Process a single transaction (cache-first approach)
     pub async fn process_transaction(&mut self, signature: &str) -> Result<Transaction, String> {
         if self.debug_enabled {
             log(LogTag::Transactions, "PROCESS", &format!("Processing transaction: {}", &signature[..8]));
@@ -404,60 +403,85 @@ impl TransactionsManager {
         // Check if priority transaction
         let is_priority = self.priority_transactions.contains_key(signature);
 
-        // Fetch transaction data from RPC
-        let rpc_client = get_rpc_client();
-        let tx_data = rpc_client
-            .get_transaction_details_premium_rpc(signature)
-            .await
-            .map_err(|e| format!("Failed to fetch transaction details: {}", e))?;
+        // Check if we already have this transaction cached and can avoid RPC call
+        let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
+        let use_cache = Path::new(&cache_file).exists();
 
-        // Create Transaction structure
-        let mut transaction = Transaction {
-            signature: signature.to_string(),
-            slot: Some(tx_data.slot),
-            block_time: tx_data.block_time,
-            timestamp: Utc::now(),
-            commitment_state: CommitmentState::Finalized, // Since we fetched it
-            confirmation_status: ConfirmationStatus::Finalized,
-            finalized: true,
-            transaction_type: TransactionType::Unknown,
-            direction: TransactionDirection::Internal,
-            success: tx_data.transaction.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
-            error_message: tx_data.transaction.meta.as_ref()
-                .and_then(|meta| meta.err.as_ref())
-                .map(|err| format!("{:?}", err)),
-            fee_sol: tx_data.transaction.meta.as_ref().map_or(0.0, |meta| meta.fee as f64 / 1_000_000_000.0),
-            sol_balance_change: 0.0,
-            token_transfers: Vec::new(),
-            raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
-            log_messages: tx_data.transaction.meta.as_ref()
-                .map(|meta| match &meta.log_messages {
-                    solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => logs.clone(),
-                    _ => Vec::new(),
-                })
-                .unwrap_or_default(),
-            instructions: Vec::new(),
-            sol_balance_changes: Vec::new(),
-            token_balance_changes: Vec::new(),
-            swap_analysis: None,
-            position_impact: None,
-            profit_calculation: None,
-            fee_breakdown: None,
-            token_info: None,
-            calculated_token_price_sol: None,
-            price_source: None,
-            token_symbol: None,
-            token_decimals: None,
-            is_priority,
-            priority_added_at: if is_priority { self.priority_transactions.get(signature).copied() } else { None },
-            last_updated: Utc::now(),
-            cache_file_path: format!("{}/{}.json", get_transactions_cache_dir().display(), signature),
+        let mut transaction = if use_cache {
+            // Load from cache and recalculate
+            if self.debug_enabled {
+                log(LogTag::Transactions, "CACHE_LOAD", &format!("Loading cached transaction: {}", &signature[..8]));
+            }
+            self.recalculate_cached_transaction(Path::new(&cache_file)).await?
+        } else {
+            // Fetch fresh data from RPC
+            if self.debug_enabled {
+                log(LogTag::Transactions, "RPC_FETCH", &format!("Fetching new transaction: {}", &signature[..8]));
+            }
+            
+            let rpc_client = get_rpc_client();
+            let tx_data = rpc_client
+                .get_transaction_details_premium_rpc(signature)
+                .await
+                .map_err(|e| format!("Failed to fetch transaction details: {}", e))?;
+
+            // Create Transaction structure
+            // Convert block_time to proper timestamp if available
+            let timestamp = if let Some(block_time) = tx_data.block_time {
+                DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or_else(|| Utc::now())
+            } else {
+                Utc::now()
+            };
+
+            let mut transaction = Transaction {
+                signature: signature.to_string(),
+                slot: Some(tx_data.slot),
+                block_time: tx_data.block_time,
+                timestamp,
+                commitment_state: CommitmentState::Finalized, // Since we fetched it
+                confirmation_status: ConfirmationStatus::Finalized,
+                finalized: true,
+                transaction_type: TransactionType::Unknown,
+                direction: TransactionDirection::Internal,
+                success: tx_data.transaction.meta.as_ref().map_or(false, |meta| meta.err.is_none()),
+                error_message: tx_data.transaction.meta.as_ref()
+                    .and_then(|meta| meta.err.as_ref())
+                    .map(|err| format!("{:?}", err)),
+                fee_sol: tx_data.transaction.meta.as_ref().map_or(0.0, |meta| meta.fee as f64 / 1_000_000_000.0),
+                sol_balance_change: 0.0,
+                token_transfers: Vec::new(),
+                raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
+                log_messages: tx_data.transaction.meta.as_ref()
+                    .map(|meta| match &meta.log_messages {
+                        solana_transaction_status::option_serializer::OptionSerializer::Some(logs) => logs.clone(),
+                        _ => Vec::new(),
+                    })
+                    .unwrap_or_default(),
+                instructions: Vec::new(),
+                sol_balance_changes: Vec::new(),
+                token_balance_changes: Vec::new(),
+                swap_analysis: None,
+                position_impact: None,
+                profit_calculation: None,
+                fee_breakdown: None,
+                token_info: None,
+                calculated_token_price_sol: None,
+                price_source: None,
+                token_symbol: None,
+                token_decimals: None,
+                is_priority,
+                priority_added_at: if is_priority { self.priority_transactions.get(signature).copied() } else { None },
+                last_updated: Utc::now(),
+                cache_file_path: cache_file.clone(),
+            };
+
+            // Analyze transaction type and extract details
+            self.analyze_transaction(&mut transaction).await?;
+            
+            transaction
         };
 
-        // Analyze transaction type and extract details
-        self.analyze_transaction(&mut transaction).await?;
-
-        // Cache transaction to disk
+        // Always cache the result (updates existing cache with new analysis)
         self.cache_transaction(&transaction).await?;
 
         // Remove from priority tracking if it was priority
@@ -559,6 +583,211 @@ impl TransactionsManager {
                     }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Fetch and analyze ALL wallet transactions from blockchain
+    /// This method fetches comprehensive transaction history directly from the blockchain
+    /// and processes each transaction with full analysis, bypassing the cache
+    pub async fn fetch_all_wallet_transactions(&mut self, max_count: usize) -> Result<Vec<Transaction>, String> {
+        log(LogTag::Transactions, "INFO", &format!(
+            "Starting comprehensive blockchain fetch for wallet {} (max {} transactions)", 
+            self.wallet_pubkey, max_count
+        ));
+
+        let rpc_client = get_rpc_client();
+        let mut all_transactions = Vec::new();
+        let mut before_signature = None;
+        let batch_size = 100; // Fetch in batches to avoid rate limits
+        let mut total_fetched = 0;
+
+        log(LogTag::Transactions, "FETCH", "Fetching transaction signatures from blockchain...");
+
+        // Fetch transaction signatures in batches
+        while total_fetched < max_count {
+            let remaining = max_count - total_fetched;
+            let current_batch_size = batch_size.min(remaining);
+
+            let signatures = match rpc_client
+                .get_wallet_signatures_main_rpc(
+                    &self.wallet_pubkey,
+                    current_batch_size,
+                    before_signature.as_deref(),
+                )
+                .await
+            {
+                Ok(sigs) => sigs,
+                Err(e) => {
+                    log(LogTag::Transactions, "ERROR", &format!(
+                        "Failed to fetch signatures batch: {}", e
+                    ));
+                    break;
+                }
+            };
+
+            if signatures.is_empty() {
+                log(LogTag::Transactions, "INFO", "No more signatures available");
+                break;
+            }
+
+            let batch_count = signatures.len();
+            total_fetched += batch_count;
+            
+            log(LogTag::Transactions, "FETCH", &format!(
+                "Fetched batch of {} signatures (total: {}/{})", 
+                batch_count, total_fetched, max_count
+            ));
+
+            // Process each transaction in this batch
+            for (index, sig_info) in signatures.iter().enumerate() {
+                let signature = sig_info.signature.clone();
+                
+                if self.debug_enabled && index % 10 == 0 {
+                    log(LogTag::Transactions, "PROGRESS", &format!(
+                        "Processing signature {}/{} in batch: {}", 
+                        index + 1, batch_count, &signature[..8]
+                    ));
+                }
+
+                // Process transaction with full analysis (bypassing cache check)
+                match self.process_transaction_direct(&signature).await {
+                    Ok(transaction) => {
+                        all_transactions.push(transaction);
+                    }
+                    Err(e) => {
+                        log(LogTag::Transactions, "WARN", &format!(
+                            "Failed to process transaction {}: {}", &signature[..8], e
+                        ));
+                    }
+                }
+
+                // Small delay to avoid overwhelming RPC
+                if index % 5 == 0 {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+
+            // Set the before signature for the next batch
+            before_signature = Some(signatures.last().unwrap().signature.clone());
+
+            // Batch processing delay
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        log(LogTag::Transactions, "SUCCESS", &format!(
+            "Completed comprehensive fetch: {} transactions processed", 
+            all_transactions.len()
+        ));
+
+        Ok(all_transactions)
+    }
+
+    /// Process transaction directly from blockchain (bypassing cache)
+    /// This is similar to process_transaction but forces fresh fetch from RPC
+    async fn process_transaction_direct(&mut self, signature: &str) -> Result<Transaction, String> {
+        if self.debug_enabled {
+            log(LogTag::Transactions, "DIRECT", &format!(
+                "Processing transaction directly from blockchain: {}", &signature[..8]
+            ));
+        }
+
+        // Create new transaction struct
+        let mut transaction = Transaction {
+            signature: signature.to_string(),
+            slot: None,
+            block_time: None,
+            timestamp: Utc::now(),
+            commitment_state: CommitmentState::Confirmed,
+            confirmation_status: ConfirmationStatus::Confirmed,
+            finalized: true,
+            transaction_type: TransactionType::Unknown,
+            direction: TransactionDirection::Internal,
+            success: false,
+            error_message: None,
+            fee_sol: 0.0,
+            sol_balance_change: 0.0,
+            token_transfers: Vec::new(),
+            raw_transaction_data: None,
+            log_messages: Vec::new(),
+            instructions: Vec::new(),
+            sol_balance_changes: Vec::new(),
+            token_balance_changes: Vec::new(),
+            swap_analysis: None,
+            position_impact: None,
+            profit_calculation: None,
+            fee_breakdown: None,
+            token_info: None,
+            calculated_token_price_sol: None,
+            price_source: None,
+            token_symbol: None,
+            token_decimals: None,
+            is_priority: false,
+            priority_added_at: None,
+            last_updated: Utc::now(),
+            cache_file_path: format!("{}/{}.json", get_transactions_cache_dir().display(), signature),
+        };
+
+        // Fetch fresh transaction data from blockchain
+        self.fetch_transaction_data(&mut transaction).await?;
+
+        // Perform comprehensive analysis
+        self.analyze_transaction_comprehensive(&mut transaction).await?;
+
+        // Cache the processed transaction
+        self.cache_transaction(&transaction).await?;
+
+        // Update known signatures
+        self.known_signatures.insert(signature.to_string());
+
+        Ok(transaction)
+    }
+
+    /// Recalculate analysis for existing transaction without re-fetching raw data
+    /// This preserves all raw blockchain data and only updates calculated fields
+    pub async fn recalculate_transaction_analysis(&mut self, transaction: &mut Transaction) -> Result<(), String> {
+        if self.debug_enabled {
+            log(LogTag::Transactions, "RECALC", &format!(
+                "Recalculating analysis for transaction: {}", &transaction.signature[..8]
+            ));
+        }
+
+        // Update timestamp
+        transaction.last_updated = Utc::now();
+
+        // Reset all calculated fields to default values (preserve raw data)
+        transaction.transaction_type = TransactionType::Unknown;
+        transaction.direction = TransactionDirection::Internal;
+        transaction.sol_balance_change = 0.0;
+        transaction.token_transfers = Vec::new();
+        transaction.swap_analysis = None;
+        transaction.position_impact = None;
+        transaction.profit_calculation = None;
+        transaction.fee_breakdown = None;
+        transaction.token_info = None;
+        transaction.calculated_token_price_sol = None;
+        transaction.price_source = None;
+        transaction.token_symbol = None;
+        transaction.token_decimals = None;
+
+        // Recalculate all analysis using existing raw data
+        if transaction.raw_transaction_data.is_some() {
+            // Re-run the comprehensive analysis using cached raw data
+            self.analyze_transaction_comprehensive(transaction).await?;
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "RECALC", &format!(
+                    "✅ Analysis recalculated: {} -> {:?}", 
+                    &transaction.signature[..8], 
+                    transaction.transaction_type
+                ));
+            }
+        } else {
+            log(LogTag::Transactions, "WARNING", &format!(
+                "No raw transaction data available for {}, skipping recalculation", 
+                &transaction.signature[..8]
+            ));
         }
 
         Ok(())
@@ -695,17 +924,46 @@ async fn load_wallet_address_from_config() -> Result<Pubkey, String> {
 
 impl TransactionsManager {
 
-    /// Fetch full transaction data from RPC
-    async fn fetch_transaction_data(&self, transaction: &mut Transaction) -> Result<(), String> {
-        let rpc_client = get_rpc_client();
+    /// Get transaction data from cache first, fetch from blockchain only if needed
+    async fn get_or_fetch_transaction_data(&self, signature: &str) -> Result<serde_json::Value, String> {
+        // First, try to load from cache
+        let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
         
-        let tx_details = rpc_client.get_transaction_details(&transaction.signature).await
+        if Path::new(&cache_file).exists() {
+            if self.debug_enabled {
+                log(LogTag::Transactions, "CACHE_HIT", &format!("Using cached data for {}", &signature[..8]));
+            }
+            
+            let content = fs::read_to_string(&cache_file)
+                .map_err(|e| format!("Failed to read cache file: {}", e))?;
+            
+            let cached_transaction: Transaction = serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
+            
+            if let Some(raw_data) = cached_transaction.raw_transaction_data {
+                return Ok(raw_data);
+            }
+        }
+
+        // Cache miss or no raw data - fetch from blockchain
+        if self.debug_enabled {
+            log(LogTag::Transactions, "CACHE_MISS", &format!("Fetching from blockchain for {}", &signature[..8]));
+        }
+        
+        let rpc_client = get_rpc_client();
+        let tx_details = rpc_client.get_transaction_details(signature).await
             .map_err(|e| format!("RPC error: {}", e))?;
 
         // Convert TransactionDetails to JSON for storage
-        transaction.raw_transaction_data = Some(serde_json::to_value(tx_details)
-            .map_err(|e| format!("Failed to serialize transaction data: {}", e))?);
+        let raw_data = serde_json::to_value(tx_details)
+            .map_err(|e| format!("Failed to serialize transaction data: {}", e))?;
 
+        Ok(raw_data)
+    }
+
+    /// Fetch full transaction data from RPC (now uses cache-first strategy)
+    async fn fetch_transaction_data(&self, transaction: &mut Transaction) -> Result<(), String> {
+        transaction.raw_transaction_data = Some(self.get_or_fetch_transaction_data(&transaction.signature).await?);
         Ok(())
     }
 
@@ -1103,8 +1361,9 @@ impl TransactionsManager {
         let log_text = transaction.log_messages.join(" ");
         
         // Count ATA creations (each costs ~0.00203928 SOL)
-        let ata_creations = log_text.matches("CreateIdempotent").count() + 
-                           log_text.matches("Initialize the associated token account").count();
+        // Use only "Initialize the associated token account" to avoid double counting
+        // (CreateIdempotent and Initialize both happen for each ATA creation)
+        let ata_creations = log_text.matches("Initialize the associated token account").count();
         
         if ata_creations > 0 {
             fee_breakdown.ata_creation_cost = ata_creations as f64 * 0.00203928; // Standard ATA rent
@@ -1215,22 +1474,8 @@ impl TransactionsManager {
                     input_token.is_some(), output_token.is_some(), wsol_transfer.is_some(), transaction.sol_balance_change));
             }
             
-            // Pattern 1: Token-to-Token swap (2+ token transfers, minimal SOL change)
-            if let (Some(input), Some(output)) = (input_token, output_token) {
-                if self.debug_enabled {
-                    log(LogTag::Transactions, "JUPITER", &format!("Token-to-token swap detected: {} -> {}", 
-                        &input.mint[..8], &output.mint[..8]));
-                }
-                return Ok(TransactionType::SwapTokenToToken {
-                    from_mint: input.mint.clone(),
-                    to_mint: output.mint.clone(),
-                    from_amount: input.amount.abs(),
-                    to_amount: output.amount,
-                    router: "Jupiter".to_string(),
-                });
-            }
-            
-            // Pattern 2: Token-to-SOL swap (token sold, WSOL received, net SOL change)
+            // Pattern 1: Token-to-SOL swap (token sold, WSOL received)
+            // Check this pattern FIRST before token-to-token, since wSOL should be treated as SOL
             if let (Some(input), Some(wsol)) = (input_token, wsol_transfer) {
                 if wsol.amount > 0.0 { // WSOL received
                     if self.debug_enabled {
@@ -1246,7 +1491,8 @@ impl TransactionsManager {
                 }
             }
             
-            // Pattern 3: SOL-to-Token swap (WSOL sent, token received)
+            // Pattern 2: SOL-to-Token swap (WSOL sent, token received)
+            // Check this pattern SECOND before token-to-token
             if let (Some(output), Some(wsol)) = (output_token, wsol_transfer) {
                 if wsol.amount < 0.0 { // WSOL sent
                     if self.debug_enabled {
@@ -1257,6 +1503,25 @@ impl TransactionsManager {
                         token_mint: output.mint.clone(),
                         sol_amount: wsol.amount.abs(), // WSOL sent represents SOL spent
                         token_amount: output.amount,
+                        router: "Jupiter".to_string(),
+                    });
+                }
+            }
+
+            // Pattern 3: Token-to-Token swap (only if neither token involved is wSOL)
+            if let (Some(input), Some(output)) = (input_token, output_token) {
+                // Only classify as token-to-token if neither side is wSOL
+                if input.mint != "So11111111111111111111111111111111111111112" && 
+                   output.mint != "So11111111111111111111111111111111111111112" {
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "JUPITER", &format!("Token-to-token swap detected: {} -> {}", 
+                            &input.mint[..8], &output.mint[..8]));
+                    }
+                    return Ok(TransactionType::SwapTokenToToken {
+                        from_mint: input.mint.clone(),
+                        to_mint: output.mint.clone(),
+                        from_amount: input.amount.abs(),
+                        to_amount: output.amount,
                         router: "Jupiter".to_string(),
                     });
                 }
@@ -1461,8 +1726,10 @@ impl TransactionsManager {
                 let mut token_amount = 0.0;
                 
                 // Enhanced: Find the most significant token transfer
+                // Note: wSOL transfers are important for SOL-token swaps and should not be skipped
                 let mut largest_transfer: Option<&TokenTransfer> = None;
                 for transfer in &transaction.token_transfers {
+                    
                     if transfer.amount.abs() > 0.001 {
                         if largest_transfer.is_none() || transfer.amount.abs() > largest_transfer.unwrap().amount.abs() {
                             largest_transfer = Some(transfer);
@@ -1565,10 +1832,12 @@ impl TransactionsManager {
             
             let mut significant_token_transfers = Vec::new();
             
-            // Look for significant token transfers (not just tiny amounts)
+            // Look for significant token transfers 
+            // Note: wSOL transfers are important for SOL-token swaps and should not be skipped
             for transfer in &transaction.token_transfers {
+                
                 // Filter out very small amounts that are likely dust/spam
-                if transfer.amount > 0.001 || transfer.mint.contains("So111111") { // Always include wrapped SOL
+                if transfer.amount.abs() > 0.001 {
                     significant_token_transfers.push(transfer);
                 }
             }
@@ -1632,7 +1901,9 @@ impl TransactionsManager {
             let mut output_tokens = Vec::new();
             
             // Categorize token transfers by direction (negative = outgoing, positive = incoming)
+            // Note: wSOL transfers are important for SOL-token swaps and should not be skipped
             for transfer in &transaction.token_transfers {
+                
                 if transfer.amount < 0.0 {
                     input_tokens.push(transfer);
                 } else if transfer.amount > 0.0 {
@@ -1878,9 +2149,12 @@ impl TransactionsManager {
             ));
         }
 
-        // Step 1: Fetch full transaction data from RPC if not already present
+        // Step 1: Ensure we have transaction data (cache-first approach)
+        // For recalculations, we should already have cached data and avoid RPC calls
         if transaction.raw_transaction_data.is_none() {
             self.fetch_transaction_data(transaction).await?;
+        } else if self.debug_enabled {
+            log(LogTag::Transactions, "CACHE_USE", &format!("Using existing cached data for {}", &transaction.signature[..8]));
         }
 
         // Step 2: Extract basic transaction info
@@ -2074,6 +2348,82 @@ impl TransactionsManager {
         }
     }
 
+    /// Bulk recalculate all cached transactions (no RPC calls)
+    pub async fn recalculate_all_cached_transactions(&mut self, max_count: Option<usize>) -> Result<Vec<Transaction>, String> {
+        let cache_dir = get_transactions_cache_dir();
+        
+        if !cache_dir.exists() {
+            log(LogTag::Transactions, "WARN", "Transaction cache directory does not exist");
+            return Ok(Vec::new());
+        }
+
+        let entries = fs::read_dir(&cache_dir)
+            .map_err(|e| format!("Failed to read cache directory: {}", e))?;
+
+        let mut cache_files = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+            let path = entry.path();
+            
+            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+                cache_files.push(path);
+            }
+        }
+
+        // Sort by modification time (newest first) and limit if requested
+        cache_files.sort_by(|a, b| {
+            let a_meta = fs::metadata(a).ok();
+            let b_meta = fs::metadata(b).ok();
+            match (a_meta, b_meta) {
+                (Some(a_meta), Some(b_meta)) => {
+                    b_meta.modified().unwrap_or(std::time::UNIX_EPOCH)
+                        .cmp(&a_meta.modified().unwrap_or(std::time::UNIX_EPOCH))
+                }
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+
+        if let Some(max) = max_count {
+            cache_files.truncate(max);
+        }
+
+        let mut recalculated_transactions = Vec::new();
+        let total_files = cache_files.len();
+
+        log(LogTag::Transactions, "INFO", &format!(
+            "Recalculating {} cached transactions (no RPC calls)", total_files
+        ));
+
+        for (index, cache_file) in cache_files.iter().enumerate() {
+            if self.debug_enabled {
+                log(LogTag::Transactions, "PROGRESS", &format!(
+                    "Processing transaction {}/{}: {}...", 
+                    index + 1, total_files,
+                    cache_file.file_stem().unwrap_or_default().to_string_lossy().chars().take(8).collect::<String>()
+                ));
+            }
+
+            match self.recalculate_cached_transaction(cache_file).await {
+                Ok(transaction) => {
+                    recalculated_transactions.push(transaction);
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "WARN", &format!(
+                        "Failed to recalculate {}: {}", 
+                        cache_file.file_stem().unwrap_or_default().to_string_lossy(),
+                        e
+                    ));
+                }
+            }
+        }
+
+        log(LogTag::Transactions, "INFO", &format!(
+            "Recalculated {} transactions from cache", recalculated_transactions.len()
+        ));
+
+        Ok(recalculated_transactions)
+    }
+
     /// Get all swap transactions for comprehensive analysis
     pub async fn get_all_swap_transactions(&mut self) -> Result<Vec<SwapPnLInfo>, String> {
         let mut swap_transactions = Vec::new();
@@ -2146,6 +2496,46 @@ impl TransactionsManager {
         Ok(swap_transactions)
     }
 
+    /// Load transaction from cache file and recalculate with new analysis (no RPC calls)
+    pub async fn recalculate_cached_transaction(&mut self, cache_file_path: &Path) -> Result<Transaction, String> {
+        if self.debug_enabled {
+            log(LogTag::Transactions, "RECALC", &format!("Recalculating cached transaction: {}", 
+                cache_file_path.file_stem().unwrap_or_default().to_string_lossy()));
+        }
+
+        // Load existing cached transaction
+        let mut transaction = self.load_transaction_from_cache(cache_file_path).await?;
+        
+        // Update last_updated timestamp
+        transaction.last_updated = Utc::now();
+        
+        // Reset analysis fields that will be recalculated
+        transaction.sol_balance_change = 0.0;
+        transaction.token_transfers.clear();
+        transaction.transaction_type = TransactionType::Unknown;
+        transaction.swap_analysis = None;
+        transaction.fee_breakdown = None;
+        transaction.token_info = None;
+        transaction.calculated_token_price_sol = None;
+        transaction.price_source = None;
+        transaction.token_symbol = None;
+        transaction.token_decimals = None;
+        
+        // Recalculate using cached raw data (no RPC call)
+        // raw_transaction_data should already be present from cache
+        if transaction.raw_transaction_data.is_none() {
+            return Err("Cached transaction missing raw data".to_string());
+        }
+
+        // Run comprehensive analysis on cached data
+        self.analyze_transaction_comprehensive(&mut transaction).await?;
+
+        // Update cache with new analysis
+        self.cache_transaction(&transaction).await?;
+
+        Ok(transaction)
+    }
+
     /// Load transaction from cache file
     async fn load_transaction_from_cache(&self, path: &Path) -> Result<Transaction, String> {
         let content = fs::read_to_string(path)
@@ -2163,7 +2553,7 @@ impl TransactionsManager {
             return None;
         }
 
-        let (swap_type, sol_amount, token_amount, token_mint) = match &transaction.transaction_type {
+        let (swap_type, sol_amount_raw, token_amount, token_mint) = match &transaction.transaction_type {
             TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, .. } => {
                 ("Buy".to_string(), *sol_amount, *token_amount, token_mint.clone())
             }
@@ -2173,37 +2563,47 @@ impl TransactionsManager {
             _ => return None,
         };
 
-        let calculated_price_sol = if token_amount > 0.0 { sol_amount / token_amount } else { 0.0 };
-        
-        let market_price_sol = transaction.calculated_token_price_sol;
-        let price_difference_percent = if let Some(market_price) = market_price_sol {
-            if market_price > 0.0 {
-                Some(((calculated_price_sol - market_price) / market_price) * 100.0)
-            } else {
-                None
-            }
+        // Calculate ATA rents from fee breakdown
+        let ata_rents = if let Some(fee_breakdown) = &transaction.fee_breakdown {
+            fee_breakdown.ata_creation_cost + fee_breakdown.rent_costs
         } else {
-            None
+            0.0
         };
 
+        // Subtract ATA rents from sol_amount to get pure swap amount
+        // ATA rents should be excluded from the swap amount for accurate price calculations
+        let sol_amount_pure = sol_amount_raw - ata_rents;
+
+        let calculated_price_sol = if token_amount.abs() > 0.0 { 
+            sol_amount_pure / token_amount.abs() 
+        } else { 
+            0.0 
+        };
+        
         let token_symbol = transaction.token_symbol.clone()
             .unwrap_or_else(|| format!("TOKEN_{}", &token_mint[..8]));
         
         let router = self.extract_router_from_transaction(transaction);
 
+        // Use blockchain timestamp if available, otherwise fall back to transaction timestamp
+        let blockchain_timestamp = if let Some(block_time) = transaction.block_time {
+            DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or(transaction.timestamp)
+        } else {
+            transaction.timestamp
+        };
+
         Some(SwapPnLInfo {
             token_mint,
             token_symbol,
             swap_type,
-            sol_amount,
+            sol_amount: sol_amount_pure, // Use pure swap amount excluding ATA rents
             token_amount,
             calculated_price_sol,
-            market_price_sol,
-            price_difference_percent,
-            timestamp: transaction.timestamp,
+            timestamp: blockchain_timestamp,
             signature: transaction.signature.clone(),
             router,
             fee_sol: transaction.fee_sol,
+            ata_rents,
         })
     }
 
@@ -2216,10 +2616,10 @@ impl TransactionsManager {
 
         log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS ===");
         log(LogTag::Transactions, "TABLE", &format!(
-            "{:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<15} {:<8} {:<12} {:<8}",
-            "Timestamp", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "Market Price", "Diff %", "Router", "Fee SOL"
+            "{:<12} {:<8} {:<15} {:<12} {:<15} {:<15} {:<12} {:<12} {:<8}",
+            "Timestamp", "Type", "Token", "SOL Amount", "Token Amount", "Calc Price", "ATA Rents", "Router", "Fee SOL"
         ));
-        log(LogTag::Transactions, "TABLE", &"-".repeat(140));
+        log(LogTag::Transactions, "TABLE", &"-".repeat(120));
 
         let mut total_fees = 0.0;
         let mut buy_count = 0;
@@ -2229,25 +2629,16 @@ impl TransactionsManager {
 
         for swap in swaps {
             let timestamp_str = swap.timestamp.format("%m-%d %H:%M").to_string();
-            let diff_str = match swap.price_difference_percent {
-                Some(diff) => format!("{:+.1}%", diff),
-                None => "N/A".to_string(),
-            };
-            let market_price_str = match swap.market_price_sol {
-                Some(price) => format!("{:.2e}", price),
-                None => "N/A".to_string(),
-            };
 
             log(LogTag::Transactions, "TABLE", &format!(
-                "{:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.2e} {:<15} {:<8} {:<12} {:<8.6}",
+                "{:<12} {:<8} {:<15} {:<12.6} {:<15.2} {:<15.9} {:<12.6} {:<12} {:<8.6}",
                 timestamp_str,
                 swap.swap_type,
                 &swap.token_symbol[..15.min(swap.token_symbol.len())],
                 swap.sol_amount,
                 swap.token_amount,
                 swap.calculated_price_sol,
-                market_price_str,
-                diff_str,
+                swap.ata_rents,
                 &swap.router[..12.min(swap.router.len())],
                 swap.fee_sol
             ));
@@ -2262,7 +2653,7 @@ impl TransactionsManager {
             }
         }
 
-        log(LogTag::Transactions, "TABLE", &"-".repeat(140));
+        log(LogTag::Transactions, "TABLE", &"-".repeat(120));
         log(LogTag::Transactions, "TABLE", &format!(
             "SUMMARY: {} Buys ({:.3} SOL), {} Sells ({:.3} SOL), Total Fees: {:.6} SOL, Net SOL: {:.3}",
             buy_count, total_sol_spent, sell_count, total_sol_received, total_fees, 
@@ -2304,14 +2695,27 @@ pub async fn add_priority_transaction(signature: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Get transaction by signature (for positions.rs integration)
+/// Get transaction by signature (for positions.rs integration) - cache-first approach
 pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
     let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
     
     if !Path::new(&cache_file).exists() {
-        return Ok(None);
+        // Try to fetch and cache if not found
+        let wallet_address = match load_wallet_address_from_config().await {
+            Ok(addr) => addr,
+            Err(_) => return Ok(None), // Can't fetch without wallet
+        };
+        
+        let mut manager = TransactionsManager::new(wallet_address).await
+            .map_err(|e| format!("Failed to create manager: {}", e))?;
+        
+        match manager.process_transaction(signature).await {
+            Ok(transaction) => return Ok(Some(transaction)),
+            Err(_) => return Ok(None), // Transaction not found or error
+        }
     }
 
+    // Load from cache
     let content = fs::read_to_string(&cache_file)
         .map_err(|e| format!("Failed to read cache file: {}", e))?;
     

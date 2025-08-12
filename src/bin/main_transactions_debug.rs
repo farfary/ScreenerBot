@@ -18,8 +18,8 @@
 /// - Analyze specific transaction: cargo run --bin main_transactions_debug -- --signature <SIG>
 /// - Test analyzer on recent transactions: cargo run --bin main_transactions_debug -- --test-analyzer --count 10
 /// - Debug cache system: cargo run --bin main_transactions_debug -- --debug-cache
-/// - Clear transaction cache: cargo run --bin main_transactions_debug -- --clear-cache
-/// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50
+/// - Recalculate analysis: cargo run --bin main_transactions_debug -- --recalculate-cache
+/// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50 (preserves raw data)
 /// - Analyze all swaps with PnL: cargo run --bin main_transactions_debug -- --analyze-swaps
 /// - Performance test: cargo run --bin main_transactions_debug -- --benchmark --count 100
 
@@ -79,9 +79,9 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("clear-cache")
-                .long("clear-cache")
-                .help("Clear all transaction cache files")
+            Arg::new("recalculate-cache")
+                .long("recalculate-cache")
+                .help("Recalculate all analysis parameters without deleting raw transaction data")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -100,6 +100,12 @@ async fn main() {
             Arg::new("update-cache")
                 .long("update-cache")
                 .help("Re-analyze and update all cached transactions with new analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("fetch-all")
+                .long("fetch-all")
+                .help("Fetch and analyze ALL wallet transactions from blockchain (not cached)")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -164,8 +170,8 @@ async fn main() {
         test_transaction_analyzer(wallet_pubkey, count).await;
     } else if matches.get_flag("debug-cache") {
         debug_cache_system().await;
-    } else if matches.get_flag("clear-cache") {
-        clear_transaction_cache().await;
+    } else if matches.get_flag("recalculate-cache") {
+        recalculate_transaction_cache().await;
     } else if matches.get_flag("benchmark") {
         let count: usize = matches.get_one::<String>("count")
             .unwrap()
@@ -180,6 +186,12 @@ async fn main() {
             .parse()
             .unwrap_or(100);
         update_transaction_cache(wallet_pubkey, count).await;
+    } else if matches.get_flag("fetch-all") {
+        let count: usize = matches.get_one::<String>("count")
+            .unwrap()
+            .parse()
+            .unwrap_or(1000);
+        fetch_all_wallet_transactions(wallet_pubkey, count).await;
     } else {
         log(LogTag::System, "ERROR", "No command specified. Use --help for usage information.");
         std::process::exit(1);
@@ -247,15 +259,13 @@ fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions_manager::
         // Router statistics
         *router_stats.entry(swap.router.clone()).or_insert(0) += 1;
         
-        // PnL calculation (simplified)
-        if let Some(price_diff_percent) = swap.price_difference_percent {
-            if price_diff_percent > 0.0 {
-                profitable_swaps += 1;
-                total_profit_loss += swap.sol_amount * (price_diff_percent / 100.0);
-            } else {
-                loss_swaps += 1;
-                total_profit_loss += swap.sol_amount * (price_diff_percent / 100.0);
-            }
+        // Simplified PnL calculation (buy vs sell difference)
+        if swap.swap_type == "Sell" {
+            profitable_swaps += 1;
+            total_profit_loss += swap.sol_amount;
+        } else {
+            loss_swaps += 1;
+            total_profit_loss -= swap.sol_amount;
         }
     }
     
@@ -555,9 +565,9 @@ async fn debug_cache_system() {
     }
 }
 
-/// Clear all transaction cache files
-async fn clear_transaction_cache() {
-    log(LogTag::Transactions, "INFO", "Clearing transaction cache");
+/// Recalculate all analysis parameters without deleting raw transaction data
+async fn recalculate_transaction_cache() {
+    log(LogTag::Transactions, "INFO", "Recalculating transaction cache (preserving raw data)");
 
     let cache_dir = get_transactions_cache_dir();
     
@@ -566,26 +576,104 @@ async fn clear_transaction_cache() {
         return;
     }
 
+    // Get wallet pubkey for the transactions manager
+    let wallet_address = match get_wallet_address() {
+        Ok(address) => address,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to get wallet address: {}", e));
+            return;
+        }
+    };
+
+    let wallet_pubkey = match Pubkey::from_str(&wallet_address) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to parse wallet address: {}", e));
+            return;
+        }
+    };
+
+    // Create manager for re-analysis
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
     match fs::read_dir(&cache_dir) {
         Ok(entries) => {
-            let mut deleted_count = 0;
+            let mut updated_count = 0;
             let mut error_count = 0;
+            let mut total_files = 0;
 
             for entry in entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        match fs::remove_file(&path) {
-                            Ok(_) => {
-                                deleted_count += 1;
-                                log(LogTag::Transactions, "DEBUG", &format!(
-                                    "Deleted: {}", path.file_name().unwrap().to_string_lossy()
-                                ));
+                        total_files += 1;
+                        
+                        // Read existing transaction
+                        match fs::read_to_string(&path) {
+                            Ok(content) => {
+                                match serde_json::from_str::<Transaction>(&content) {
+                                    Ok(mut transaction) => {
+                                        let signature = transaction.signature.clone();
+                                        
+                                        log(LogTag::Transactions, "RECALC", &format!(
+                                            "Recalculating analysis for: {}...", &signature[..8]
+                                        ));
+
+                                        // Preserve raw blockchain data but recalculate all analysis
+                                        match manager.recalculate_transaction_analysis(&mut transaction).await {
+                                            Ok(_) => {
+                                                // Save updated transaction back to file
+                                                match serde_json::to_string_pretty(&transaction) {
+                                                    Ok(updated_json) => {
+                                                        match fs::write(&path, updated_json) {
+                                                            Ok(_) => {
+                                                                updated_count += 1;
+                                                                log(LogTag::Transactions, "SUCCESS", &format!(
+                                                                    "✅ Updated analysis: {}", &signature[..8]
+                                                                ));
+                                                            }
+                                                            Err(e) => {
+                                                                error_count += 1;
+                                                                log(LogTag::Transactions, "ERROR", &format!(
+                                                                    "Failed to save updated transaction {}: {}", &signature[..8], e
+                                                                ));
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        error_count += 1;
+                                                        log(LogTag::Transactions, "ERROR", &format!(
+                                                            "Failed to serialize updated transaction {}: {}", &signature[..8], e
+                                                        ));
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error_count += 1;
+                                                log(LogTag::Transactions, "ERROR", &format!(
+                                                    "Failed to recalculate analysis for {}: {}", &signature[..8], e
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error_count += 1;
+                                        log(LogTag::Transactions, "ERROR", &format!(
+                                            "Failed to parse transaction file {}: {}", path.display(), e
+                                        ));
+                                    }
+                                }
                             }
                             Err(e) => {
                                 error_count += 1;
                                 log(LogTag::Transactions, "ERROR", &format!(
-                                    "Failed to delete {}: {}", path.display(), e
+                                    "Failed to read transaction file {}: {}", path.display(), e
                                 ));
                             }
                         }
@@ -594,7 +682,8 @@ async fn clear_transaction_cache() {
             }
 
             log(LogTag::Transactions, "SUCCESS", &format!(
-                "Cache cleared: {} files deleted, {} errors", deleted_count, error_count
+                "Cache recalculation complete: {} of {} files updated, {} errors", 
+                updated_count, total_files, error_count
             ));
         }
         Err(e) => {
@@ -603,10 +692,10 @@ async fn clear_transaction_cache() {
     }
 }
 
-/// Update and re-analyze all cached transactions
+/// Update and re-analyze all cached transactions (preserving raw data)
 async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
     log(LogTag::Transactions, "INFO", &format!(
-        "Updating transaction cache with re-analysis (max {} transactions)", max_count
+        "Updating transaction cache with re-analysis (max {} transactions) - preserving raw data", max_count
     ));
 
     let cache_dir = get_transactions_cache_dir();
@@ -669,52 +758,96 @@ async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
             index + 1, total_signatures, &signature[..8]
         ));
 
-        match manager.process_transaction(signature).await {
-            Ok(transaction) => {
-                updated_count += 1;
-                
-                // Log transaction type for statistics
-                match &transaction.transaction_type {
-                    TransactionType::SwapSolToToken { router, .. } |
-                    TransactionType::SwapTokenToSol { router, .. } |
-                    TransactionType::SwapTokenToToken { router, .. } => {
-                        swap_count += 1;
-                        log(LogTag::Transactions, "SWAP", &format!(
-                            "✅ Updated swap via {}: {} ({})", 
-                            router, &signature[..8], 
-                            format!("{:?}", transaction.transaction_type).split('{').next().unwrap_or("Swap")
-                        ));
-                    }
-                    TransactionType::Unknown => {
-                        unknown_count += 1;
-                        log(LogTag::Transactions, "UNKNOWN", &format!(
-                            "❓ Updated unknown transaction: {}", &signature[..8]
-                        ));
-                    }
-                    _ => {
-                        log(LogTag::Transactions, "OTHER", &format!(
-                            "ℹ️  Updated {}: {}", 
-                            format!("{:?}", transaction.transaction_type).split('{').next().unwrap_or("Other"),
-                            &signature[..8]
-                        ));
-                    }
-                }
+        // Read existing cached transaction
+        let transaction_path = cache_dir.join(format!("{}.json", signature));
+        match fs::read_to_string(&transaction_path) {
+            Ok(content) => {
+                match serde_json::from_str::<Transaction>(&content) {
+                    Ok(mut transaction) => {
+                        // Recalculate analysis preserving raw data
+                        match manager.recalculate_transaction_analysis(&mut transaction).await {
+                            Ok(_) => {
+                                // Save updated transaction back to cache
+                                match serde_json::to_string_pretty(&transaction) {
+                                    Ok(updated_json) => {
+                                        match fs::write(&transaction_path, updated_json) {
+                                            Ok(_) => {
+                                                updated_count += 1;
+                                                
+                                                // Log transaction type for statistics
+                                                match &transaction.transaction_type {
+                                                    TransactionType::SwapSolToToken { router, .. } |
+                                                    TransactionType::SwapTokenToSol { router, .. } |
+                                                    TransactionType::SwapTokenToToken { router, .. } => {
+                                                        swap_count += 1;
+                                                        log(LogTag::Transactions, "SWAP", &format!(
+                                                            "✅ Updated swap via {}: {} ({})", 
+                                                            router, &signature[..8], 
+                                                            format!("{:?}", transaction.transaction_type).split('{').next().unwrap_or("Swap")
+                                                        ));
+                                                    }
+                                                    TransactionType::Unknown => {
+                                                        unknown_count += 1;
+                                                        log(LogTag::Transactions, "UNKNOWN", &format!(
+                                                            "❓ Updated unknown transaction: {}", &signature[..8]
+                                                        ));
+                                                    }
+                                                    _ => {
+                                                        log(LogTag::Transactions, "OTHER", &format!(
+                                                            "ℹ️  Updated {}: {}", 
+                                                            format!("{:?}", transaction.transaction_type).split('{').next().unwrap_or("Other"),
+                                                            &signature[..8]
+                                                        ));
+                                                    }
+                                                }
 
-                // Show comprehensive token info if it's a swap with token data
-                if let Some(ref token_info) = transaction.token_info {
-                    log(LogTag::Transactions, "TOKEN", &format!(
-                        "   Token: {} ({}) - Price: {:.2e} SOL (source: {:?})",
-                        token_info.symbol, 
-                        &token_info.mint[..8],
-                        token_info.current_price_sol.unwrap_or(0.0),
-                        token_info.price_source.as_ref().unwrap_or(&PriceSourceType::DexScreenerApi)
-                    ));
+                                                // Show comprehensive token info if it's a swap with token data
+                                                if let Some(ref token_info) = transaction.token_info {
+                                                    log(LogTag::Transactions, "TOKEN", &format!(
+                                                        "   Token: {} ({}) - Price: {:.9} SOL (source: {:?})",
+                                                        token_info.symbol, 
+                                                        &token_info.mint[..8],
+                                                        token_info.current_price_sol.unwrap_or(0.0),
+                                                        token_info.price_source.as_ref().unwrap_or(&PriceSourceType::DexScreenerApi)
+                                                    ));
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error_count += 1;
+                                                log(LogTag::Transactions, "ERROR", &format!(
+                                                    "Failed to save updated transaction {}: {}", &signature[..8], e
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error_count += 1;
+                                        log(LogTag::Transactions, "ERROR", &format!(
+                                            "Failed to serialize updated transaction {}: {}", &signature[..8], e
+                                        ));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error_count += 1;
+                                log(LogTag::Transactions, "ERROR", &format!(
+                                    "Failed to recalculate analysis for {}: {}", &signature[..8], e
+                                ));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error_count += 1;
+                        log(LogTag::Transactions, "ERROR", &format!(
+                            "Failed to parse cached transaction {}: {}", &signature[..8], e
+                        ));
+                    }
                 }
             }
             Err(e) => {
                 error_count += 1;
                 log(LogTag::Transactions, "ERROR", &format!(
-                    "Failed to update transaction {}: {}", &signature[..8], e
+                    "Failed to read cached transaction {}: {}", &signature[..8], e
                 ));
             }
         }
@@ -762,6 +895,79 @@ async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
             Err(e) => {
                 log(LogTag::Transactions, "ERROR", &format!("Failed to analyze updated swaps: {}", e));
             }
+        }
+    }
+}
+
+/// Fetch and analyze ALL wallet transactions from blockchain (comprehensive analysis)
+async fn fetch_all_wallet_transactions(wallet_pubkey: Pubkey, max_count: usize) {
+    log(LogTag::Transactions, "INFO", &format!(
+        "Fetching and analyzing ALL wallet transactions from blockchain (max {} transactions)", max_count
+    ));
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Use the comprehensive transaction fetching method
+    match manager.fetch_all_wallet_transactions(max_count).await {
+        Ok(transactions) => {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Successfully fetched and analyzed {} transactions", transactions.len()
+            ));
+
+            // Analyze and categorize transactions
+            let mut swap_count = 0;
+            let mut unknown_count = 0;
+            let mut transfer_count = 0;
+            let mut spam_count = 0;
+
+            for transaction in &transactions {
+                match &transaction.transaction_type {
+                    TransactionType::SwapSolToToken { .. } |
+                    TransactionType::SwapTokenToSol { .. } |
+                    TransactionType::SwapTokenToToken { .. } => swap_count += 1,
+                    TransactionType::SolTransfer { .. } |
+                    TransactionType::TokenTransfer { .. } => transfer_count += 1,
+                    TransactionType::Spam => spam_count += 1,
+                    TransactionType::Unknown => unknown_count += 1,
+                }
+            }
+
+            log(LogTag::Transactions, "ANALYSIS", "=== COMPREHENSIVE WALLET ANALYSIS ===");
+            log(LogTag::Transactions, "ANALYSIS", &format!("Total Transactions: {}", transactions.len()));
+            log(LogTag::Transactions, "ANALYSIS", &format!("Swap Transactions: {}", swap_count));
+            log(LogTag::Transactions, "ANALYSIS", &format!("Transfer Transactions: {}", transfer_count));
+            log(LogTag::Transactions, "ANALYSIS", &format!("Spam Transactions: {}", spam_count));
+            log(LogTag::Transactions, "ANALYSIS", &format!("Unknown Transactions: {}", unknown_count));
+            log(LogTag::Transactions, "ANALYSIS", "=== END ANALYSIS ===");
+
+            // Get comprehensive swap analysis if any swaps were found
+            if swap_count > 0 {
+                log(LogTag::Transactions, "INFO", "Performing comprehensive swap analysis...");
+                
+                match manager.get_all_swap_transactions().await {
+                    Ok(swaps) => {
+                        log(LogTag::Transactions, "SUCCESS", &format!("Found {} swap transactions for detailed analysis", swaps.len()));
+                        
+                        // Display comprehensive analysis table
+                        manager.display_swap_analysis_table(&swaps);
+                        
+                        // Additional statistics
+                        display_detailed_swap_statistics(&swaps);
+                    }
+                    Err(e) => {
+                        log(LogTag::Transactions, "ERROR", &format!("Failed to analyze swaps: {}", e));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch all wallet transactions: {}", e));
         }
     }
 }
@@ -866,7 +1072,14 @@ fn log_transaction_summary(transaction: &Transaction) {
 fn display_detailed_transaction_info(transaction: &Transaction) {
     log(LogTag::Transactions, "DETAIL", "=== TRANSACTION DETAILS ===");
     log(LogTag::Transactions, "DETAIL", &format!("Signature: {}", transaction.signature));
-    log(LogTag::Transactions, "DETAIL", &format!("Timestamp: {}", transaction.timestamp));
+    
+    // Use blockchain timestamp if available, otherwise fall back to transaction timestamp
+    let display_timestamp = if let Some(block_time) = transaction.block_time {
+        DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or(transaction.timestamp)
+    } else {
+        transaction.timestamp
+    };
+    log(LogTag::Transactions, "DETAIL", &format!("Timestamp: {}", display_timestamp));
     log(LogTag::Transactions, "DETAIL", &format!("Success: {}", transaction.success));
     log(LogTag::Transactions, "DETAIL", &format!("Finalized: {}", transaction.finalized));
     log(LogTag::Transactions, "DETAIL", &format!("Direction: {:?}", transaction.direction));
