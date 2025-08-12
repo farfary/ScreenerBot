@@ -1998,7 +1998,8 @@ impl TransactionsManager {
             // since token transfer directions can be misleading in complex DEX operations
             
             // Pattern 1: Token-to-SOL swap - SOL balance increased (received SOL)
-            if transaction.sol_balance_change > 0.00001 && wsol_transfer.is_some() {
+            // Enhanced: Don't require WSOL transfer if we have significant SOL change and input token
+            if transaction.sol_balance_change > 0.00001 && input_token.is_some() {
                 // Find the token being sold (prefer input_token, but use output_token if no input)
                 let token_transfer = input_token.or(output_token);
                 if let Some(token) = token_transfer {
@@ -2018,12 +2019,13 @@ impl TransactionsManager {
                     log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 1: no token transfer found"));
                 }
             } else if self.debug_enabled {
-                log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 1: sol_change={:.9} > 0.00001? {}, wsol_transfer.is_some()? {}", 
-                    transaction.sol_balance_change, transaction.sol_balance_change > 0.00001, wsol_transfer.is_some()));
+                log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 1: sol_change={:.9} > 0.00001? {}, input_token.is_some()? {}", 
+                    transaction.sol_balance_change, transaction.sol_balance_change > 0.00001, input_token.is_some()));
             }
             
             // Pattern 2: SOL-to-Token swap - SOL balance decreased (spent SOL)
-            if transaction.sol_balance_change < -0.00001 && wsol_transfer.is_some() {
+            // Enhanced: Don't require WSOL transfer if we have significant SOL change and output token
+            if transaction.sol_balance_change < -0.00001 && output_token.is_some() {
                 // Find the token being bought (prefer output_token, but use input_token if no output)
                 let token_transfer = output_token.or(input_token);
                 if let Some(token) = token_transfer {
@@ -2043,8 +2045,8 @@ impl TransactionsManager {
                     log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 2: no token transfer found"));
                 }
             } else if self.debug_enabled {
-                log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 2: sol_change={:.9} < -0.00001? {}, wsol_transfer.is_some()? {}", 
-                    transaction.sol_balance_change, transaction.sol_balance_change < -0.00001, wsol_transfer.is_some()));
+                log(LogTag::Transactions, "JUPITER", &format!("❌ Pattern 2: sol_change={:.9} < -0.00001? {}, output_token.is_some()? {}", 
+                    transaction.sol_balance_change, transaction.sol_balance_change < -0.00001, output_token.is_some()));
             }
             
             // Fallback Pattern 1: Traditional logic - Token-to-SOL swap (token sold, WSOL received)
@@ -3316,10 +3318,11 @@ impl TransactionsManager {
     }
 
     /// Extract token mint from transaction
-    fn extract_token_mint_from_transaction(&self, transaction: &Transaction) -> Option<String> {
+    pub fn extract_token_mint_from_transaction(&self, transaction: &Transaction) -> Option<String> {
         match &transaction.transaction_type {
             TransactionType::SwapSolToToken { token_mint, .. } => Some(token_mint.clone()),
             TransactionType::SwapTokenToSol { token_mint, .. } => Some(token_mint.clone()),
+            TransactionType::SwapTokenToToken { to_mint, .. } => Some(to_mint.clone()),
             _ => None,
         }
     }
@@ -3329,6 +3332,7 @@ impl TransactionsManager {
         match &transaction.transaction_type {
             TransactionType::SwapSolToToken { router, .. } => router.clone(),
             TransactionType::SwapTokenToSol { router, .. } => router.clone(),
+            TransactionType::SwapTokenToToken { router, .. } => router.clone(),
             _ => "Unknown".to_string(),
         }
     }
