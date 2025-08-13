@@ -120,6 +120,26 @@ pub struct UiTokenAmount {
     pub ui_amount_string: Option<String>,
 }
 
+/// Signature status response structure for getSignatureStatuses
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SignatureStatusResponse {
+    pub result: SignatureStatusResult,
+}
+
+/// Result wrapper for signature status response  
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SignatureStatusResult {
+    pub value: Vec<Option<SignatureStatusData>>,
+}
+
+/// Individual signature status data
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SignatureStatusData {
+    #[serde(rename = "confirmationStatus")]
+    pub confirmation_status: Option<String>,
+    pub err: Option<serde_json::Value>,
+}
+
 /// Cached ATA rent information
 #[derive(Debug, Clone)]
 pub struct AtaRentInfo {
@@ -3138,6 +3158,162 @@ impl RpcClient {
         }
 
         Ok(false) // Timeout
+    }
+
+    /// Smart transaction confirmation with fast failure detection
+    /// Uses getSignatureStatuses for faster detection of dropped transactions
+    pub async fn wait_for_transaction_confirmation_smart(
+        &self,
+        signature: &str,
+        max_attempts: u32,
+        retry_delay_ms: u64,
+    ) -> Result<bool, SwapError> {
+        use crate::swaps::config::FAST_FAILURE_THRESHOLD_ATTEMPTS;
+        
+        log(
+            LogTag::Rpc,
+            "SMART_CONFIRMATION_START",
+            &format!(
+                "🚀 Smart confirmation: {} (max {} attempts, {}ms delay, fast failure after {} attempts)",
+                &signature[..8], max_attempts, retry_delay_ms, FAST_FAILURE_THRESHOLD_ATTEMPTS
+            )
+        );
+
+        let mut current_delay = retry_delay_ms;
+        let mut consecutive_nulls = 0u32;
+        
+        for attempt in 1..=max_attempts {
+            // First try getSignatureStatuses for faster detection
+            match self.get_signature_status(signature).await {
+                Ok(Some(status)) => {
+                    // We have a status response
+                    if let Some(err) = &status.err {
+                        log(
+                            LogTag::Rpc,
+                            "TRANSACTION_FAILED_FAST",
+                            &format!(
+                                "❌ Transaction failed on-chain after {} attempts: {} - Error: {:?}",
+                                attempt, &signature[..8], err
+                            )
+                        );
+                        return Err(SwapError::TransactionError(
+                            format!("Transaction failed on-chain: {:?}", err)
+                        ));
+                    }
+                    
+                    // Transaction succeeded
+                    if status.confirmation_status.is_some() {
+                        log(
+                            LogTag::Rpc,
+                            "SMART_CONFIRMATION_SUCCESS",
+                            &format!(
+                                "✅ Transaction confirmed via signature status after {} attempts: {} (status: {:?})",
+                                attempt, &signature[..8], status.confirmation_status
+                            )
+                        );
+                        return Ok(true);
+                    }
+                }
+                Ok(None) => {
+                    // No status found (null response)
+                    consecutive_nulls += 1;
+                    
+                    // Fast failure detection: if we get null responses for several attempts early on,
+                    // the transaction was likely dropped from mempool
+                    if consecutive_nulls >= FAST_FAILURE_THRESHOLD_ATTEMPTS && attempt <= FAST_FAILURE_THRESHOLD_ATTEMPTS + 2 {
+                        log(
+                            LogTag::Rpc,
+                            "TRANSACTION_DROPPED_FAST",
+                            &format!(
+                                "⚡ Fast failure: Transaction likely dropped after {} consecutive null responses: {}",
+                                consecutive_nulls, &signature[..8]
+                            )
+                        );
+                        return Ok(false); // Fast failure - transaction was dropped
+                    }
+                    
+                    log(
+                        LogTag::Rpc,
+                        "SMART_CONFIRMATION_WAITING",
+                        &format!(
+                            "⏳ Transaction status null (attempt {}/{}, consecutive nulls: {}): {} - retrying in {}ms",
+                            attempt, max_attempts, consecutive_nulls, &signature[..8], current_delay
+                        )
+                    );
+                }
+                Err(e) => {
+                    // Fallback to original method if signature status fails
+                    log(
+                        LogTag::Rpc,
+                        "SMART_CONFIRMATION_FALLBACK",
+                        &format!(
+                            "⚠️ getSignatureStatuses failed, falling back to getTransaction: {} - Error: {}",
+                            &signature[..8], e
+                        )
+                    );
+                    
+                    // Use original confirmation method as fallback
+                    return self.wait_for_transaction_confirmation(signature, max_attempts - attempt + 1, current_delay).await;
+                }
+            }
+            
+            if attempt < max_attempts {
+                tokio::time::sleep(Duration::from_millis(current_delay)).await;
+                current_delay = (current_delay as f64 * 1.2).min(5000.0) as u64; // Modest backoff
+            }
+        }
+
+        log(
+            LogTag::Rpc,
+            "SMART_CONFIRMATION_TIMEOUT",
+            &format!(
+                "⏰ Smart confirmation timeout after {} attempts: {}",
+                max_attempts, &signature[..8]
+            )
+        );
+        Ok(false) // Timeout
+    }
+
+    /// Helper method to get signature status using getSignatureStatuses  
+    async fn get_signature_status(&self, signature: &str) -> Result<Option<SignatureStatusData>, SwapError> {
+        let rpc_payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSignatureStatuses",
+            "params": [
+                [signature],
+                {
+                    "searchTransactionHistory": true
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let rpc_url = if is_premium_rpc_only() {
+            &self.premium_url.as_ref().ok_or(SwapError::ConfigError("No premium RPC available".to_string()))?
+        } else {
+            &self.rpc_url
+        };
+
+        let response = client
+            .post(rpc_url)
+            .header("Content-Type", "application/json")
+            .json(&rpc_payload)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| SwapError::NetworkError(e))?;
+
+        if !response.status().is_success() {
+            return Err(SwapError::ApiError(format!("RPC error: {}", response.status())));
+        }
+
+        let rpc_response: SignatureStatusResponse = response
+            .json()
+            .await
+            .map_err(|e| SwapError::InvalidResponse(format!("Failed to parse signature status: {}", e)))?;
+
+        Ok(rpc_response.result.value.into_iter().next().flatten())
     }
 
     /// Priority transaction confirmation with faster timeouts and reduced retries

@@ -522,7 +522,7 @@ pub async fn sign_and_send_transaction(
         &format!("⏳ Waiting for transaction confirmation: {}", &signature[..8])
     );
     
-    match rpc_client.wait_for_transaction_confirmation(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
+    match rpc_client.wait_for_transaction_confirmation_smart(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
         Ok(true) => {
             log(
                 LogTag::Swap,
