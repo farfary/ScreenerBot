@@ -4666,3 +4666,32 @@ pub async fn get_transaction_stats() -> TransactionStats {
         known_signatures_count: 0,
     }
 }
+
+/// Get recent successful buy transactions for recovery purposes
+pub async fn get_recent_successful_buy_transactions(hours: u32) -> Result<Vec<Transaction>, String> {
+    let cutoff_time = Utc::now() - chrono::Duration::hours(hours as i64);
+    let mut successful_buys = Vec::new();
+    
+    // Get all cached transactions
+    let mut manager_lock = GLOBAL_TRANSACTION_MANAGER.lock().await;
+    if let Some(manager) = manager_lock.as_mut() {
+        let transactions = manager.fetch_all_wallet_transactions(1000).await.unwrap_or_default();
+        
+        for tx in transactions {
+            // Filter for successful buy transactions within time window
+            if tx.success 
+                && tx.timestamp >= cutoff_time 
+                && tx.swap_analysis.as_ref()
+                    .map(|s| s.input_token.starts_with("So11")) // SOL to token (buy)
+                    .unwrap_or(false) 
+            {
+                successful_buys.push(tx);
+            }
+        }
+    }
+    
+    // Sort by timestamp (newest first)
+    successful_buys.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    
+    Ok(successful_buys)
+}
