@@ -1107,10 +1107,116 @@ pub async fn close_position(
                 let verification_success = !transaction_signature.is_empty();
 
                 if verification_success {
-                    // CRITICAL: Calculate actual SOL received from swap result
-                    let sol_received_str = swap_result.output_amount.clone();
-                    let sol_received_lamports: u64 = sol_received_str.parse().unwrap_or(0);
-                    let sol_received = lamports_to_sol(sol_received_lamports);
+                    // ENHANCED: Use transaction manager's analyzed data for accurate exit information
+                    let (sol_received, effective_exit_price, exit_fee_lamports, tokens_sold) = match
+                        crate::transactions_manager::get_transaction(&transaction_signature).await
+                    {
+                        Ok(Some(tx)) => {
+                            log(
+                                LogTag::Trader,
+                                "DEBUG",
+                                &format!(
+                                    "📄 Exit transaction {} fetched successfully for {} analysis",
+                                    &transaction_signature[..16],
+                                    position.symbol
+                                )
+                            );
+
+                            // Extract from swap analysis (same pattern as open_position)
+                            if let Some(ref swap) = tx.swap_analysis {
+                                if swap.input_token == position.mint {
+                                    let sol_amount = swap.output_amount; // SOL received
+                                    let effective_price = swap.effective_price;
+                                    let tokens_sold = swap.input_amount; // Tokens sold (UI units)
+                                    
+                                    // Get fee information
+                                    let fee_lamports = if let Some(ref fee_breakdown) = tx.fee_breakdown {
+                                        Some((fee_breakdown.total_fees * 1_000_000_000.0) as u64)
+                                    } else {
+                                        None
+                                    };
+
+                                    log(
+                                        LogTag::Trader,
+                                        "SUCCESS",
+                                        &format!(
+                                            "✅ Exit data extracted from transaction analysis for {}: sold {} tokens, received {} SOL, effective price: {:.12}",
+                                            position.symbol,
+                                            tokens_sold,
+                                            sol_amount,
+                                            effective_price
+                                        )
+                                    );
+
+                                    (sol_amount, effective_price, fee_lamports, tokens_sold)
+                                } else {
+                                    log(
+                                        LogTag::Trader,
+                                        "WARNING",
+                                        &format!(
+                                            "⚠️ Swap analysis token mismatch for {}: expected {}, got {}",
+                                            position.symbol,
+                                            position.mint,
+                                            swap.input_token
+                                        )
+                                    );
+                                    // Fallback to swap_result data
+                                    let sol_received_str = swap_result.output_amount.clone();
+                                    let sol_received_lamports: u64 = sol_received_str.parse().unwrap_or(0);
+                                    let sol_received = lamports_to_sol(sol_received_lamports);
+                                    (sol_received, exit_price, None, 0.0)
+                                }
+                            } else {
+                                log(
+                                    LogTag::Trader,
+                                    "WARNING",
+                                    &format!(
+                                        "⚠️ No swap analysis found in exit transaction {} for {}",
+                                        &transaction_signature[..16],
+                                        position.symbol
+                                    )
+                                );
+                                // Fallback to swap_result data
+                                let sol_received_str = swap_result.output_amount.clone();
+                                let sol_received_lamports: u64 = sol_received_str.parse().unwrap_or(0);
+                                let sol_received = lamports_to_sol(sol_received_lamports);
+                                (sol_received, exit_price, None, 0.0)
+                            }
+                        }
+                        Ok(None) => {
+                            log(
+                                LogTag::Trader,
+                                "WARNING",
+                                &format!(
+                                    "⚠️ Exit transaction {} not found in cache for {} - using swap_result fallback",
+                                    &transaction_signature[..16],
+                                    position.symbol
+                                )
+                            );
+                            // Fallback to original swap_result data
+                            let sol_received_str = swap_result.output_amount.clone();
+                            let sol_received_lamports: u64 = sol_received_str.parse().unwrap_or(0);
+                            let sol_received = lamports_to_sol(sol_received_lamports);
+                            (sol_received, exit_price, None, 0.0)
+                        }
+                        Err(e) => {
+                            log(
+                                LogTag::Trader,
+                                "ERROR",
+                                &format!(
+                                    "❌ Failed to fetch exit transaction {} for {}: {} - using swap_result fallback",
+                                    &transaction_signature[..16],
+                                    position.symbol,
+                                    e
+                                )
+                            );
+                            // Fallback to original swap_result data
+                            let sol_received_str = swap_result.output_amount.clone();
+                            let sol_received_lamports: u64 = sol_received_str.parse().unwrap_or(0);
+                            let sol_received = lamports_to_sol(sol_received_lamports);
+                            (sol_received, exit_price, None, 0.0)
+                        }
+                    };
 
                     if sol_received == 0.0 {
                         log(
@@ -1125,41 +1231,13 @@ pub async fn close_position(
                         return false; // Failed to close properly
                     }
 
-                    // Calculate effective exit price and other metrics
-                    let token_amount_raw = position.token_amount.unwrap_or(0) as f64; // Raw units
-                    
-                    // Get token decimals to convert raw amount to UI units
-                    let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
-                    let effective_exit_price = if token_amount_raw > 0.0 {
-                        match token_decimals_opt {
-                            Some(decimals) => {
-                                // Convert raw units to UI units before calculating price
-                                let token_amount_ui = token_amount_raw / (10_f64).powi(decimals as i32);
-                                sol_received / token_amount_ui
-                            }
-                            None => {
-                                log(
-                                    LogTag::Trader,
-                                    "WARN",
-                                    &format!(
-                                        "⚠️ Cannot calculate effective exit price for {} - decimals not available",
-                                        position.symbol
-                                    )
-                                );
-                                0.0
-                            }
-                        }
-                    } else {
-                        0.0
-                    };
-
                     log(
                         LogTag::Trader,
                         "VERIFIED",
                         &format!(
-                            "✅ Exit verified: {} sold {:.6} tokens (UI), received {:.9} SOL, effective price: {:.12}",
+                            "✅ Exit verified: {} sold {:.6} tokens, received {:.9} SOL, effective price: {:.12}",
                             position.symbol,
-                            token_amount_raw / (10_f64).powi(token_decimals_opt.unwrap_or(6) as i32),
+                            tokens_sold,
                             sol_received,
                             effective_exit_price
                         )
@@ -1172,7 +1250,7 @@ pub async fn close_position(
                     position.sol_received = Some(sol_received);
                     position.exit_transaction_signature = Some(transaction_signature.clone());
                     position.transaction_exit_verified = true;
-                    position.exit_fee_lamports = None;
+                    position.exit_fee_lamports = exit_fee_lamports;
 
                     // Calculate actual P&L using unified function
                     let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None);
@@ -1186,7 +1264,7 @@ pub async fn close_position(
                             "LOSS"
                         },
                         &format!(
-                            "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {:.6} (UI verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
+                            "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {:.6} (analyzed) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
                             if is_profitable {
                                 "💰"
                             } else {
@@ -1194,7 +1272,7 @@ pub async fn close_position(
                             },
                             position.symbol,
                             transaction_signature,
-                            token_amount_raw / (10_f64).powi(token_decimals_opt.unwrap_or(6) as i32),
+                            tokens_sold,
                             sol_received,
                             net_pnl_percent,
                             net_pnl_sol
