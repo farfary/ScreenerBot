@@ -14,6 +14,7 @@ use chrono::{ Utc, DateTime };
 use serde::{ Serialize, Deserialize };
 use colored::Colorize;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// Static global: saved positions
 pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(|| {
@@ -1799,6 +1800,7 @@ async fn create_recovery_position(tx: &crate::transactions_manager::Transaction)
 
 /// Comprehensive wallet reconciliation system - runs at startup
 /// Compares actual wallet token balances with recorded positions to detect discrepancies
+/// Uses the same calculation methods as display_swap_analysis_table for accuracy
 /// This is the CRITICAL function that prevents double-purchases and position tracking errors
 pub async fn reconcile_wallet_positions_at_startup() -> Result<(), String> {
     log(
@@ -1807,114 +1809,270 @@ pub async fn reconcile_wallet_positions_at_startup() -> Result<(), String> {
         "🚀 Starting comprehensive wallet reconciliation at startup..."
     );
     
-    // Step 1: Run existing recovery for known missing positions
-    let recovered_from_transactions = recover_missing_positions().await;
-    
-    // Step 2: Get actual wallet token balances
-    let wallet_balances = get_wallet_token_balances().await?;
+    // Step 1: CRITICAL - Initialize and update transaction manager first
     log(
         LogTag::Position,
-        "STARTUP_RECONCILE", 
-        &format!("📊 Found {} tokens with non-zero balances in wallet", wallet_balances.len())
+        "STARTUP_RECONCILE",
+        "📡 Initializing transaction manager and updating transaction data..."
+    );
+
+    // DEADLOCK FIX: Use global transaction manager instead of creating new instance
+    // This prevents resource conflicts and potential deadlocks with the main application
+    let swap_transactions = match crate::transactions_manager::get_global_swap_transactions().await {
+        Ok(swaps) => swaps,
+        Err(e) => {
+            log(
+                LogTag::Position,
+                "ERROR",
+                &format!("Failed to get swap transactions: {}", e)
+            );
+            return Err(format!("Cannot reconcile without swap data: {}", e));
+        }
+    };
+
+    log(
+        LogTag::Position,
+        "STARTUP_RECONCILE",
+        &format!("📊 Loaded {} swap transactions for analysis", swap_transactions.len())
     );
     
-    // Step 3: Get current recorded positions
-    let open_positions = {
-        let positions = SAVED_POSITIONS.lock().map_err(|e| format!("Failed to lock positions: {}", e))?;
-        positions.iter()
-            .filter(|p| p.exit_time.is_none())
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    
-    // Create position map for quick lookup
-    let position_map: HashMap<String, Position> = open_positions.iter()
-        .map(|p| (p.mint.clone(), p.clone()))
-        .collect();
+    // Step 4: Calculate position analysis using exact same methods as transaction manager
+    let position_analysis = calculate_positions_from_swaps(&swap_transactions);
     
     log(
         LogTag::Position,
         "STARTUP_RECONCILE",
-        &format!("📋 Found {} recorded open positions", open_positions.len())
+        &format!("📋 Calculated {} positions from swap analysis", position_analysis.len())
     );
     
+    // Step 5: Get actual wallet token balances
+    let wallet_balances = get_wallet_token_balances().await?;
+    log(
+        LogTag::Position,
+        "STARTUP_RECONCILE", 
+        &format!("� Found {} tokens with non-zero balances in wallet", wallet_balances.len())
+    );
+    
+    // Step 6: Update existing positions with correct calculated values
+    let mut updated_positions = Vec::new();
     let mut fixes_applied = 0;
     let mut critical_issues = Vec::new();
     
-    // Step 4: Check each wallet balance against positions
-    for (mint, actual_balance) in &wallet_balances {
-        if *actual_balance == 0 {
-            continue; // Skip empty balances
-        }
+    {
+        let mut positions = SAVED_POSITIONS.lock().map_err(|e| format!("Failed to lock positions: {}", e))?;
         
-        match position_map.get(mint) {
-            Some(position) => {
-                // Position exists - verify amount matches
-                if let Some(recorded_amount) = position.token_amount {
-                    if recorded_amount != *actual_balance {
+        // Update each existing position with calculated values
+        for position in positions.iter_mut() {
+            if let Some(analysis) = position_analysis.iter().find(|a| a.token_mint == position.mint) {
+                let mut updated = false;
+                
+                // Update entry_size_sol with calculated buy amount
+                if let Some(buy_amount) = analysis.buy_amount {
+                    if (position.entry_size_sol - buy_amount).abs() > 0.000001 {
                         log(
                             LogTag::Position,
                             "STARTUP_RECONCILE",
                             &format!(
-                                "⚠️ AMOUNT MISMATCH for {}: recorded={}, actual={}",
-                                position.symbol, recorded_amount, actual_balance
+                                "� Updating {} entry_size_sol: {:.9} → {:.9}",
+                                position.symbol, position.entry_size_sol, buy_amount
                             )
                         );
-                        
-                        // Fix the position amount
-                        if let Err(e) = update_position_token_amount(mint, *actual_balance).await {
-                            critical_issues.push(format!("Failed to update {} amount: {}", position.symbol, e));
-                        } else {
-                            fixes_applied += 1;
-                            log(
-                                LogTag::Position,
-                                "STARTUP_RECONCILE",
-                                &format!("✅ Updated {} position amount: {} → {}", position.symbol, recorded_amount, actual_balance)
-                            );
-                        }
+                        position.entry_size_sol = buy_amount;
+                        updated = true;
                     }
-                } else {
-                    // Position exists but has no recorded amount
-                    if let Err(e) = update_position_token_amount(mint, *actual_balance).await {
-                        critical_issues.push(format!("Failed to set {} amount: {}", position.symbol, e));
-                    } else {
-                        fixes_applied += 1;
+                }
+                
+                // Update total_size_sol with calculated buy amount (same as entry for single buys)
+                if let Some(buy_amount) = analysis.buy_amount {
+                    if (position.total_size_sol - buy_amount).abs() > 0.000001 {
+                        position.total_size_sol = buy_amount;
+                        updated = true;
+                    }
+                }
+                
+                // Update token_amount with calculated token quantity
+                if let Some(token_qty) = analysis.token_quantity {
+                    let token_amount_units = (token_qty * (10_f64).powi(analysis.token_decimals.unwrap_or(6) as i32)) as u64;
+                    if position.token_amount != Some(token_amount_units) {
                         log(
                             LogTag::Position,
                             "STARTUP_RECONCILE",
-                            &format!("✅ Set missing amount for {} position: {}", position.symbol, actual_balance)
+                            &format!(
+                                "🔧 Updating {} token_amount: {:?} → {}",
+                                position.symbol, position.token_amount, token_amount_units
+                            )
                         );
+                        position.token_amount = Some(token_amount_units);
+                        updated = true;
                     }
                 }
-            }
-            None => {
-                // Critical: We have tokens but no position!
-                log(
-                    LogTag::Position,
-                    "STARTUP_RECONCILE",
-                    &format!(
-                        "🚨 CRITICAL: Found tokens without position! Mint: {}, Amount: {}",
-                        mint, actual_balance
-                    )
-                );
                 
-                if let Err(e) = create_position_from_wallet_balance(mint, *actual_balance).await {
-                    critical_issues.push(format!("Failed to create position for unknown tokens {}: {}", mint, e));
-                } else {
+                // Update effective_entry_price with calculated price
+                if let Some(entry_price) = analysis.entry_price {
+                    if position.effective_entry_price != Some(entry_price) {
+                        log(
+                            LogTag::Position,
+                            "STARTUP_RECONCILE",
+                            &format!(
+                                "🔧 Updating {} effective_entry_price: {:?} → {:.12}",
+                                position.symbol, position.effective_entry_price, entry_price
+                            )
+                        );
+                        position.effective_entry_price = Some(entry_price);
+                        updated = true;
+                    }
+                }
+                
+                // Update effective_exit_price for closed positions
+                if analysis.is_closed {
+                    if let Some(exit_price) = analysis.exit_price {
+                        if position.effective_exit_price != Some(exit_price) {
+                            log(
+                                LogTag::Position,
+                                "STARTUP_RECONCILE",
+                                &format!(
+                                    "🔧 Updating {} effective_exit_price: {:?} → {:.12}",
+                                    position.symbol, position.effective_exit_price, exit_price
+                                )
+                            );
+                            position.effective_exit_price = Some(exit_price);
+                            updated = true;
+                        }
+                    }
+                    
+                    // Update sol_received for closed positions
+                    if let Some(sell_amount) = analysis.sell_amount {
+                        if position.sol_received != Some(sell_amount) {
+                            log(
+                                LogTag::Position,
+                                "STARTUP_RECONCILE",
+                                &format!(
+                                    "🔧 Updating {} sol_received: {:?} → {:.9}",
+                                    position.symbol, position.sol_received, sell_amount
+                                )
+                            );
+                            position.sol_received = Some(sell_amount);
+                            updated = true;
+                        }
+                    }
+                    
+                    // Mark position as closed if not already
+                    if position.exit_price.is_none() {
+                        if let Some(exit_price) = analysis.exit_price {
+                            position.exit_price = Some(exit_price);
+                            position.exit_time = analysis.exit_time;
+                            updated = true;
+                        }
+                    }
+                }
+                
+                // Update entry_fee_lamports and exit_fee_lamports with calculated fees
+                if let Some(buy_fee) = analysis.buy_fee_sol {
+                    let fee_lamports = (buy_fee * 1_000_000_000.0) as u64;
+                    if position.entry_fee_lamports != Some(fee_lamports) {
+                        position.entry_fee_lamports = Some(fee_lamports);
+                        updated = true;
+                    }
+                }
+                
+                if let Some(sell_fee) = analysis.sell_fee_sol {
+                    let fee_lamports = (sell_fee * 1_000_000_000.0) as u64;
+                    if position.exit_fee_lamports != Some(fee_lamports) {
+                        position.exit_fee_lamports = Some(fee_lamports);
+                        updated = true;
+                    }
+                }
+                
+                if updated {
                     fixes_applied += 1;
                     log(
                         LogTag::Position,
                         "STARTUP_RECONCILE",
-                        &format!("✅ Created missing position for {} tokens", actual_balance)
+                        &format!("✅ Updated position calculations for {}", position.symbol)
                     );
+                }
+            }
+        }
+        
+        updated_positions = positions.clone();
+    }
+    
+    // Step 7: Check for missing positions (tokens in wallet but no position)
+    for (mint, actual_balance) in &wallet_balances {
+        if *actual_balance == 0 {
+            continue;
+        }
+        
+        let position_exists = updated_positions.iter().any(|p| p.mint == *mint && p.exit_time.is_none());
+        
+        if !position_exists {
+            // Check if we have swap data for this mint
+            if let Some(analysis) = position_analysis.iter().find(|a| a.token_mint == *mint && !a.is_closed) {
+                log(
+                    LogTag::Position,
+                    "STARTUP_RECONCILE",
+                    &format!(
+                        "� Found missing position for {} - creating from swap analysis",
+                        analysis.token_symbol
+                    )
+                );
+                
+                // Create position from swap analysis
+                if let Err(e) = create_position_from_analysis(analysis, &mut updated_positions).await {
+                    critical_issues.push(format!("Failed to create position for {}: {}", analysis.token_symbol, e));
+                } else {
+                    fixes_applied += 1;
+                }
+            } else {
+                // No swap analysis found - try to find transaction data directly
+                log(
+                    LogTag::Position,
+                    "STARTUP_RECONCILE",
+                    &format!(
+                        "� No swap analysis for mint {} - searching transaction cache directly",
+                        mint
+                    )
+                );
+                
+                match find_and_create_position_from_transactions(mint, *actual_balance, &mut updated_positions).await {
+                    Ok(created) => {
+                        if created {
+                            log(
+                                LogTag::Position,
+                                "STARTUP_RECONCILE",
+                                &format!("✅ Created position from transaction cache for mint {}", mint)
+                            );
+                            fixes_applied += 1;
+                        } else {
+                            log(
+                                LogTag::Position,
+                                "STARTUP_RECONCILE",
+                                &format!(
+                                    "�🚨 CRITICAL: Found wallet balance {} for mint {} but no transaction data found - creating placeholder position",
+                                    actual_balance, mint
+                                )
+                            );
+                            
+                            // Create placeholder position for manual review
+                            if let Err(e) = create_placeholder_position_for_unknown_balance(mint, *actual_balance, &mut updated_positions).await {
+                                critical_issues.push(format!("Failed to create placeholder position for unknown balance {}: {}", mint, e));
+                            } else {
+                                critical_issues.push(format!("Created placeholder position for unknown wallet balance: {} units of {} - manual review required", actual_balance, mint));
+                                fixes_applied += 1;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        critical_issues.push(format!("Failed to search transactions for unknown balance {}: {}", mint, e));
+                    }
                 }
             }
         }
     }
     
-    // Step 5: Check for positions without corresponding wallet balance (phantom positions)
-    for position in &open_positions {
-        if !wallet_balances.contains_key(&position.mint) {
+    // Step 8: Check for phantom positions (positions without wallet balance)
+    for position in &updated_positions {
+        if position.exit_time.is_none() && !wallet_balances.contains_key(&position.mint) {
             log(
                 LogTag::Position,
                 "STARTUP_RECONCILE",
@@ -1924,22 +2082,34 @@ pub async fn reconcile_wallet_positions_at_startup() -> Result<(), String> {
                 )
             );
             
-            // This could mean:
-            // 1. Tokens were sold outside the bot
-            // 2. Position tracking error
-            // 3. Wallet was compromised
-            critical_issues.push(format!("Phantom position detected: {} - manual review required", position.symbol));
+            // Check if this should be marked as closed based on swap analysis
+            if let Some(analysis) = position_analysis.iter().find(|a| a.token_mint == position.mint && a.is_closed) {
+                log(
+                    LogTag::Position,
+                    "STARTUP_RECONCILE",
+                    &format!("📋 Marking {} as closed based on swap analysis", position.symbol)
+                );
+                // Position should be marked as closed - this will be handled in the position update
+            } else {
+                critical_issues.push(format!("Phantom position detected: {} - no wallet balance and no exit transaction", position.symbol));
+            }
         }
     }
     
-    // Step 6: Report results
+    // Step 9: Save updated positions (single lock scope to avoid deadlock)
+    {
+        let mut positions = SAVED_POSITIONS.lock().map_err(|e| format!("Failed to lock positions for save: {}", e))?;
+        *positions = updated_positions;
+        // Save to file within the same lock scope
+        save_positions_to_file(&positions);
+    }    // Step 10: Report results
     if critical_issues.is_empty() {
         log(
             LogTag::Position,
             "STARTUP_RECONCILE",
             &format!(
-                "✅ Wallet reconciliation complete: {} fixes applied, {} critical issues resolved, {} transactions recovered",
-                fixes_applied, critical_issues.len(), recovered_from_transactions
+                "✅ Wallet reconciliation complete: {} positions updated with accurate swap-based calculations",
+                fixes_applied
             )
         );
     } else {
@@ -1947,8 +2117,8 @@ pub async fn reconcile_wallet_positions_at_startup() -> Result<(), String> {
             LogTag::Position,
             "STARTUP_RECONCILE",
             &format!(
-                "⚠️ Wallet reconciliation complete with issues: {} fixes applied, {} critical issues detected, {} transactions recovered",
-                fixes_applied, critical_issues.len(), recovered_from_transactions
+                "⚠️ Wallet reconciliation complete with issues: {} positions updated, {} critical issues detected",
+                fixes_applied, critical_issues.len()
             )
         );
         
@@ -1957,9 +2127,8 @@ pub async fn reconcile_wallet_positions_at_startup() -> Result<(), String> {
         }
     }
     
-    // Step 7: Double-check by running another quick scan
-    let post_reconcile_balance_count = get_wallet_token_balances().await?.len();
-    let post_reconcile_position_count = {
+    // Step 11: Final status report
+    let final_open_count = {
         let positions = SAVED_POSITIONS.lock().map_err(|e| format!("Failed to lock positions: {}", e))?;
         positions.iter().filter(|p| p.exit_time.is_none()).count()
     };
@@ -1968,14 +2137,392 @@ pub async fn reconcile_wallet_positions_at_startup() -> Result<(), String> {
         LogTag::Position,
         "STARTUP_RECONCILE",
         &format!(
-            "📊 Post-reconciliation status: {} wallet tokens, {} open positions",
-            post_reconcile_balance_count, post_reconcile_position_count
+            "📊 Final status: {} wallet tokens, {} open positions, {} total swap transactions processed",
+            wallet_balances.len(), final_open_count, swap_transactions.len()
         )
     );
     
     if !critical_issues.is_empty() {
         return Err(format!("Wallet reconciliation completed with {} critical issues - manual review required", critical_issues.len()));
     }
+    
+    Ok(())
+}
+
+/// Position analysis structure to hold calculated position data
+#[derive(Debug, Clone)]
+struct PositionAnalysis {
+    pub token_mint: String,
+    pub token_symbol: String,
+    pub token_decimals: Option<u8>,
+    pub token_quantity: Option<f64>,
+    pub buy_amount: Option<f64>,
+    pub sell_amount: Option<f64>,
+    pub entry_price: Option<f64>,
+    pub exit_price: Option<f64>,
+    pub entry_time: Option<DateTime<Utc>>,
+    pub exit_time: Option<DateTime<Utc>>,
+    pub is_closed: bool,
+    pub buy_fee_sol: Option<f64>,
+    pub sell_fee_sol: Option<f64>,
+}
+
+/// Calculate positions from swap transactions using the same logic as display_swap_analysis_table
+fn calculate_positions_from_swaps(swaps: &[crate::transactions_manager::SwapPnLInfo]) -> Vec<PositionAnalysis> {
+    use std::collections::HashMap;
+    
+    let mut positions: HashMap<String, PositionAnalysis> = HashMap::new();
+    
+    // Sort swaps by slot for proper chronological processing (same as transaction manager)
+    let mut sorted_swaps = swaps.to_vec();
+    sorted_swaps.sort_by(|a, b| {
+        match (a.slot, b.slot) {
+            (Some(a_slot), Some(b_slot)) => a_slot.cmp(&b_slot),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.timestamp.cmp(&b.timestamp),
+        }
+    });
+    
+    for swap in sorted_swaps {
+        let mint = &swap.token_mint;
+        
+        // Get or create position analysis for this mint
+        let position = positions.entry(mint.clone()).or_insert_with(|| PositionAnalysis {
+            token_mint: mint.clone(),
+            token_symbol: swap.token_symbol.clone(),
+            token_decimals: None,
+            token_quantity: None,
+            buy_amount: None,
+            sell_amount: None,
+            entry_price: None,
+            exit_price: None,
+            entry_time: None,
+            exit_time: None,
+            is_closed: false,
+            buy_fee_sol: None,
+            sell_fee_sol: None,
+        });
+        
+        // Get token decimals from cache
+        if position.token_decimals.is_none() {
+            position.token_decimals = crate::tokens::get_token_decimals_sync(mint);
+        }
+        
+        // Process swap based on type using exact same logic as display_swap_analysis_table
+        match swap.swap_type.as_str() {
+            "Buy" => {
+                // For buys: SOL amount is spent, token amount is received
+                position.buy_amount = Some(swap.sol_amount);
+                position.token_quantity = Some(swap.token_amount.abs());
+                position.entry_price = Some(swap.calculated_price_sol);
+                position.entry_time = Some(swap.timestamp);
+                position.buy_fee_sol = Some(swap.fee_sol);
+                
+                log(
+                    LogTag::Position,
+                    "SWAP_ANALYSIS",
+                    &format!(
+                        "📈 Buy processed: {} - {:.6} SOL for {:.2} tokens at {:.12} SOL/token",
+                        swap.token_symbol, swap.sol_amount, swap.token_amount, swap.calculated_price_sol
+                    )
+                );
+            },
+            "Sell" => {
+                // For sells: SOL amount is received, token amount is sold
+                position.sell_amount = Some(swap.sol_amount);
+                position.exit_price = Some(swap.calculated_price_sol);
+                position.exit_time = Some(swap.timestamp);
+                position.sell_fee_sol = Some(swap.fee_sol);
+                position.is_closed = true;
+                
+                log(
+                    LogTag::Position,
+                    "SWAP_ANALYSIS",
+                    &format!(
+                        "📉 Sell processed: {} - sold {:.2} tokens for {:.6} SOL at {:.12} SOL/token",
+                        swap.token_symbol, swap.token_amount.abs(), swap.sol_amount, swap.calculated_price_sol
+                    )
+                );
+            },
+            _ => {
+                log(
+                    LogTag::Position,
+                    "SWAP_ANALYSIS",
+                    &format!("⚠️ Unknown swap type: {} for {}", swap.swap_type, swap.token_symbol)
+                );
+            }
+        }
+    }
+    
+    positions.into_values().collect()
+}
+
+/// Create a position from swap analysis data
+async fn create_position_from_analysis(
+    analysis: &PositionAnalysis,
+    positions: &mut Vec<Position>
+) -> Result<(), String> {
+    // Calculate token amount in raw units
+    let token_amount_units = if let (Some(qty), Some(decimals)) = (analysis.token_quantity, analysis.token_decimals) {
+        Some((qty * (10_f64).powi(decimals as i32)) as u64)
+    } else {
+        None
+    };
+    
+    let new_position = Position {
+        mint: analysis.token_mint.clone(),
+        symbol: analysis.token_symbol.clone(),
+        name: analysis.token_symbol.clone(), // Use symbol as name if we don't have better info
+        entry_price: analysis.entry_price.unwrap_or(0.0),
+        entry_time: analysis.entry_time.unwrap_or(Utc::now()),
+        exit_price: if analysis.is_closed { analysis.exit_price } else { None },
+        exit_time: if analysis.is_closed { analysis.exit_time } else { None },
+        position_type: "buy".to_string(),
+        entry_size_sol: analysis.buy_amount.unwrap_or(0.0),
+        total_size_sol: analysis.buy_amount.unwrap_or(0.0),
+        price_highest: analysis.entry_price.unwrap_or(0.0),
+        price_lowest: analysis.entry_price.unwrap_or(0.0),
+        entry_transaction_signature: None, // Would need to match with actual transactions
+        exit_transaction_signature: None,
+        token_amount: token_amount_units,
+        effective_entry_price: analysis.entry_price,
+        effective_exit_price: if analysis.is_closed { analysis.exit_price } else { None },
+        sol_received: if analysis.is_closed { analysis.sell_amount } else { None },
+        profit_target_min: None,
+        profit_target_max: None,
+        liquidity_tier: None,
+        transaction_entry_verified: true, // Assume verified since from transaction analysis
+        transaction_exit_verified: analysis.is_closed,
+        entry_fee_lamports: analysis.buy_fee_sol.map(|fee| (fee * 1_000_000_000.0) as u64),
+        exit_fee_lamports: analysis.sell_fee_sol.map(|fee| (fee * 1_000_000_000.0) as u64),
+    };
+    
+    positions.push(new_position);
+    
+    log(
+        LogTag::Position,
+        "POSITION_CREATED",
+        &format!(
+            "✅ Created position from analysis: {} - {:.6} SOL → {:.2} tokens",
+            analysis.token_symbol,
+            analysis.buy_amount.unwrap_or(0.0),
+            analysis.token_quantity.unwrap_or(0.0)
+        )
+    );
+    
+    Ok(())
+}
+
+/// Find and create position from transaction cache when swap analysis doesn't find it
+async fn find_and_create_position_from_transactions(mint: &str, wallet_balance: u64, updated_positions: &mut Vec<Position>) -> Result<bool, String> {
+    use std::fs;
+    
+    // Search transaction cache directory for files containing this mint
+    let cache_dir = crate::global::get_transactions_cache_dir();
+    if !cache_dir.exists() {
+        return Ok(false);
+    }
+    
+    let entries = fs::read_dir(&cache_dir)
+        .map_err(|e| format!("Failed to read transactions cache directory: {}", e))?;
+    
+    let mut buy_transactions = Vec::new();
+    let mut sell_transactions = Vec::new();
+    
+    // Search all transaction files for this mint
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+        
+        if !path.is_file() || !path.extension().map_or(false, |ext| ext == "json") {
+            continue;
+        }
+        
+        // Read and check if file contains our mint
+        if let Ok(content) = fs::read_to_string(&path) {
+            if content.contains(mint) {
+                // Parse transaction and check if it's relevant
+                if let Ok(transaction) = serde_json::from_str::<crate::transactions_manager::Transaction>(&content) {
+                    if transaction.success {
+                        // Check if this is a swap transaction for our mint
+                        match &transaction.transaction_type {
+                            crate::transactions_manager::TransactionType::SwapSolToToken { .. } => {
+                                if let Some(ref swap) = transaction.swap_analysis {
+                                    if swap.output_token == mint {
+                                        buy_transactions.push(transaction);
+                                    }
+                                }
+                            }
+                            crate::transactions_manager::TransactionType::SwapTokenToSol { .. } => {
+                                if let Some(ref swap) = transaction.swap_analysis {
+                                    if swap.input_token == mint {
+                                        sell_transactions.push(transaction);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if buy_transactions.is_empty() {
+        log(
+            LogTag::Position,
+            "TX_SEARCH",
+            &format!("No buy transactions found for mint {}", mint)
+        );
+        return Ok(false);
+    }
+    
+    // Sort by timestamp
+    buy_transactions.sort_by_key(|tx| tx.timestamp);
+    sell_transactions.sort_by_key(|tx| tx.timestamp);
+    
+    // Get the first buy transaction for position creation
+    let first_buy = &buy_transactions[0];
+    
+    log(
+        LogTag::Position,
+        "TX_SEARCH",
+        &format!(
+            "Found {} buy and {} sell transactions for mint {}",
+            buy_transactions.len(),
+            sell_transactions.len(),
+            mint
+        )
+    );
+    
+    // Create position from transaction data
+    let position = create_position_from_transaction_data(first_buy, &sell_transactions, wallet_balance).await?;
+    
+    // Add to the provided positions vector instead of global lock
+    updated_positions.push(position);
+    
+    Ok(true)
+}
+
+/// Create position from transaction data
+async fn create_position_from_transaction_data(
+    buy_tx: &crate::transactions_manager::Transaction,
+    sell_txs: &[crate::transactions_manager::Transaction],
+    wallet_balance: u64,
+) -> Result<Position, String> {
+    let symbol = buy_tx.token_symbol.clone().unwrap_or_else(|| {
+        format!("TOKEN_{}", &buy_tx.swap_analysis.as_ref().map(|s| &s.output_token[..8]).unwrap_or("UNKNOWN"))
+    });
+    
+    let swap_analysis = buy_tx.swap_analysis.as_ref()
+        .ok_or_else(|| "No swap analysis in buy transaction".to_string())?;
+    
+    // Calculate position data from transaction
+    let entry_price = swap_analysis.effective_price;
+    let entry_size_sol = swap_analysis.input_amount;
+    let token_decimals = buy_tx.token_decimals.unwrap_or(6);
+    let token_amount_raw = (swap_analysis.output_amount * (10_f64).powi(token_decimals as i32)) as u64;
+    
+    // Check if position should be closed based on sells
+    let is_closed = !sell_txs.is_empty();
+    let (exit_price, exit_time, sol_received, exit_fee_lamports) = if let Some(sell_tx) = sell_txs.first() {
+        let sell_swap = sell_tx.swap_analysis.as_ref();
+        (
+            sell_swap.map(|s| s.effective_price),
+            Some(sell_tx.timestamp),
+            sell_swap.map(|s| s.output_amount),
+            sell_tx.fee_breakdown.as_ref().map(|f| (f.total_fees * 1_000_000_000.0) as u64),
+        )
+    } else {
+        (None, None, None, None)
+    };
+    
+    let position = Position {
+        mint: swap_analysis.output_token.clone(),
+        symbol: symbol.clone(),
+        name: buy_tx.token_symbol.clone().unwrap_or("Unknown Token".to_string()),
+        entry_price,
+        entry_time: buy_tx.timestamp,
+        exit_price,
+        exit_time,
+        position_type: "buy".to_string(),
+        entry_size_sol,
+        total_size_sol: entry_size_sol,
+        price_highest: entry_price,
+        price_lowest: entry_price,
+        entry_transaction_signature: Some(buy_tx.signature.clone()),
+        exit_transaction_signature: sell_txs.first().map(|tx| tx.signature.clone()),
+        token_amount: Some(token_amount_raw),
+        effective_entry_price: Some(entry_price),
+        effective_exit_price: exit_price,
+        sol_received,
+        profit_target_min: None,
+        profit_target_max: None,
+        liquidity_tier: None,
+        transaction_entry_verified: true,
+        transaction_exit_verified: is_closed,
+        entry_fee_lamports: buy_tx.fee_breakdown.as_ref().map(|f| (f.total_fees * 1_000_000_000.0) as u64),
+        exit_fee_lamports,
+    };
+    
+    log(
+        LogTag::Position,
+        "POSITION_CREATED",
+        &format!(
+            "✅ Created position from transaction data: {} - TX: {}",
+            symbol,
+            &buy_tx.signature[..8]
+        )
+    );
+    
+    Ok(position)
+}
+
+/// Create placeholder position for completely unknown wallet balance
+async fn create_placeholder_position_for_unknown_balance(mint: &str, wallet_balance: u64, updated_positions: &mut Vec<Position>) -> Result<(), String> {
+    // Try to get token info
+    let (symbol, name) = match crate::tokens::get_token_from_db(mint).await {
+        Some(token) => (token.symbol, token.name),
+        None => (format!("UNK_{}", &mint[..8]), "Unknown Token".to_string()),
+    };
+    
+    let position = Position {
+        mint: mint.to_string(),
+        symbol: symbol.clone(),
+        name,
+        entry_price: 0.0, // Unknown - needs manual correction
+        entry_time: Utc::now(),
+        exit_price: None,
+        exit_time: None,
+        position_type: "buy".to_string(),
+        entry_size_sol: 0.0, // Unknown - needs manual correction
+        total_size_sol: 0.0,
+        price_highest: 0.0,
+        price_lowest: f64::MAX,
+        entry_transaction_signature: None,
+        exit_transaction_signature: None,
+        token_amount: Some(wallet_balance),
+        effective_entry_price: None,
+        effective_exit_price: None,
+        sol_received: None,
+        profit_target_min: None,
+        profit_target_max: None,
+        liquidity_tier: None,
+        transaction_entry_verified: false, // Mark as unverified - needs manual review
+        transaction_exit_verified: false,
+        entry_fee_lamports: None,
+        exit_fee_lamports: None,
+    };
+    
+    // Add to the provided positions vector instead of global lock
+    updated_positions.push(position);
+    
+    log(
+        LogTag::Position,
+        "PLACEHOLDER_CREATED",
+        &format!("⚠️ Created placeholder position for unknown balance: {} {} - MANUAL REVIEW REQUIRED", symbol, wallet_balance)
+    );
     
     Ok(())
 }

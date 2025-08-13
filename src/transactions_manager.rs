@@ -4695,3 +4695,30 @@ pub async fn get_recent_successful_buy_transactions(hours: u32) -> Result<Vec<Tr
     
     Ok(successful_buys)
 }
+
+/// Get all swap transactions from global transaction manager (for positions reconciliation)
+/// DEADLOCK SAFE: Uses minimal lock duration with read-only operations
+pub async fn get_global_swap_transactions() -> Result<Vec<SwapPnLInfo>, String> {
+    // Try to use the global manager first
+    {
+        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        if let Some(manager) = manager_guard.as_mut() {
+            // Call get_all_swap_transactions while holding the lock
+            // This is safe because get_all_swap_transactions is read-only and doesn't create new locks
+            let result = manager.get_all_swap_transactions().await;
+            drop(manager_guard); // Explicitly release lock
+            return result;
+        }
+    } // Lock is released here
+    
+    // Fallback: No global manager available - create temporary one
+    log(LogTag::Transactions, "WARN", "No global transaction manager available, creating temporary instance");
+    
+    let wallet_address = load_wallet_address_from_config().await
+        .map_err(|e| format!("Failed to load wallet address: {}", e))?;
+    
+    let mut temp_manager = TransactionsManager::new(wallet_address).await
+        .map_err(|e| format!("Failed to create temporary transaction manager: {}", e))?;
+    
+    temp_manager.get_all_swap_transactions().await
+}
