@@ -1009,7 +1009,7 @@ async fn monitor_transactions(wallet_pubkey: Pubkey, duration_seconds: u64) {
 
     let start_time = Instant::now();
     let end_time = start_time + Duration::from_secs(duration_seconds);
-    let mut check_interval = interval(Duration::from_secs(5));
+    let mut check_interval = interval(Duration::from_secs(15)); // Reduced from 5 to 15 seconds
 
     let mut total_new_transactions = 0;
     let mut total_processed = 0;
@@ -3236,8 +3236,8 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
         manager.known_signatures.len()
     ));
 
-    // Monitor frequently for position tests (every 2 seconds)
-    let mut interval = tokio::time::interval(Duration::from_secs(2));
+    // Monitor less frequently for debug tools to reduce RPC load
+    let mut interval = tokio::time::interval(Duration::from_secs(10));
     
     loop {
         interval.tick().await;

@@ -462,6 +462,12 @@ pub struct TransactionsManager {
     pub total_transactions: u64,
     pub new_transactions_count: u64,
     
+    // RPC call optimization
+    pub last_signature_fetch: Option<DateTime<Utc>>,
+    pub cached_signatures: Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>,
+    pub cache_expiry_minutes: i64,
+    pub min_fetch_interval_seconds: i64, // Minimum time between RPC calls
+    
     // Token database integration
     pub token_database: Option<TokenDatabase>,
 }
@@ -491,6 +497,10 @@ impl TransactionsManager {
             last_signature_check: None,
             total_transactions: 0,
             new_transactions_count: 0,
+            last_signature_fetch: None,
+            cached_signatures: Vec::new(),
+            cache_expiry_minutes: 2, // Cache signatures for 2 minutes
+            min_fetch_interval_seconds: 30, // Minimum 30 seconds between RPC calls
             token_database,
         })
     }
@@ -530,15 +540,33 @@ impl TransactionsManager {
         Ok(())
     }
 
-    /// Check for new transactions from wallet
+    /// Check for new transactions from wallet with smart caching
     pub async fn check_new_transactions(&mut self) -> Result<Vec<String>, String> {
-        let rpc_client = get_rpc_client();
+        let now = Utc::now();
         
-        // Get recent signatures from wallet
-        let signatures = rpc_client
-            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, self.last_signature_check.as_deref())
-            .await
-            .map_err(|e| format!("Failed to fetch wallet signatures: {}", e))?;
+        // Check if we can use cached signatures to avoid RPC call
+        let signatures = if let Some(last_fetch) = self.last_signature_fetch {
+            let seconds_since_fetch = (now - last_fetch).num_seconds();
+            let minutes_since_fetch = (now - last_fetch).num_minutes();
+            
+            // Use cache if within expiry AND minimum interval hasn't passed
+            if (minutes_since_fetch < self.cache_expiry_minutes && !self.cached_signatures.is_empty()) ||
+               (seconds_since_fetch < self.min_fetch_interval_seconds) {
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "CACHE_HIT", &format!(
+                        "Using cached signatures ({} cached, fetched {} seconds ago)", 
+                        self.cached_signatures.len(), seconds_since_fetch
+                    ));
+                }
+                self.cached_signatures.clone()
+            } else {
+                // Cache expired and minimum interval passed, fetch new signatures
+                self.fetch_fresh_signatures(now).await?
+            }
+        } else {
+            // First time fetch
+            self.fetch_fresh_signatures(now).await?
+        };
 
         let mut new_signatures = Vec::new();
 
@@ -572,6 +600,58 @@ impl TransactionsManager {
         }
 
         Ok(new_signatures)
+    }
+
+    /// Fetch fresh signatures from RPC and update cache
+    async fn fetch_fresh_signatures(&mut self, now: DateTime<Utc>) -> Result<Vec<solana_client::rpc_response::RpcConfirmedTransactionStatusWithSignature>, String> {
+        let rpc_client = get_rpc_client();
+        
+        // Use smaller batch size to reduce RPC load and only fetch what we need
+        let batch_size = if self.last_signature_check.is_some() { 20 } else { 50 };
+        
+        if self.debug_enabled {
+            log(LogTag::Transactions, "RPC_FETCH", &format!(
+                "Fetching {} fresh signatures from RPC (cache expired or empty)", batch_size
+            ));
+        }
+        
+        // Get recent signatures from wallet
+        let signatures = rpc_client
+            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, batch_size, self.last_signature_check.as_deref())
+            .await
+            .map_err(|e| format!("Failed to fetch wallet signatures: {}", e))?;
+
+        // Update cache
+        self.cached_signatures = signatures.clone();
+        self.last_signature_fetch = Some(now);
+        
+        if self.debug_enabled {
+            log(LogTag::Transactions, "CACHE_UPDATE", &format!(
+                "Updated signature cache with {} signatures", signatures.len()
+            ));
+        }
+
+        Ok(signatures)
+    }
+
+    /// Clear signature cache to force fresh fetch (useful for testing)
+    pub fn clear_signature_cache(&mut self) {
+        self.cached_signatures.clear();
+        self.last_signature_fetch = None;
+        if self.debug_enabled {
+            log(LogTag::Transactions, "CACHE_CLEAR", "Signature cache cleared");
+        }
+    }
+
+    /// Get cache statistics for debugging
+    pub fn get_cache_stats(&self) -> (usize, Option<i64>) {
+        let cached_count = self.cached_signatures.len();
+        let minutes_since_fetch = if let Some(last_fetch) = self.last_signature_fetch {
+            Some((Utc::now() - last_fetch).num_minutes())
+        } else {
+            None
+        };
+        (cached_count, minutes_since_fetch)
     }
 
     /// Process a single transaction (cache-first approach)
@@ -1031,8 +1111,11 @@ pub async fn start_transactions_manager_service(shutdown: Arc<Notify>) {
         manager.known_signatures.len()
     ));
 
-    // Simple monitoring loop
-    let mut interval = interval(Duration::from_secs(10)); // Check every 10 seconds
+    // Simple monitoring loop - optimized frequency to minimize RPC calls
+    let mut main_interval = interval(Duration::from_secs(60)); // Check every 60 seconds for normal operation
+    let mut priority_interval = interval(Duration::from_secs(15)); // Check priority transactions more frequently
+    
+    log(LogTag::Transactions, "CONFIG", "Transaction monitoring: normal=60s, priority=15s");
     
     loop {
         tokio::select! {
@@ -1040,10 +1123,16 @@ pub async fn start_transactions_manager_service(shutdown: Arc<Notify>) {
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutting down");
                 break;
             }
-            _ = interval.tick() => {
-                // Monitor new transactions
-                if let Err(e) = do_monitoring_cycle(&mut manager).await {
-                    log(LogTag::Transactions, "ERROR", &format!("Monitoring cycle failed: {}", e));
+            _ = main_interval.tick() => {
+                // Full monitoring cycle (including new transaction discovery)
+                if let Err(e) = do_full_monitoring_cycle(&mut manager).await {
+                    log(LogTag::Transactions, "ERROR", &format!("Full monitoring cycle failed: {}", e));
+                }
+            }
+            _ = priority_interval.tick() => {
+                // Priority-only monitoring cycle (much lighter)
+                if let Err(e) = do_priority_monitoring_cycle(&mut manager).await {
+                    log(LogTag::Transactions, "ERROR", &format!("Priority monitoring cycle failed: {}", e));
                 }
             }
         }
@@ -1052,8 +1141,8 @@ pub async fn start_transactions_manager_service(shutdown: Arc<Notify>) {
     log(LogTag::Transactions, "INFO", "TransactionsManager service stopped");
 }
 
-/// Perform one monitoring cycle
-async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), String> {
+/// Perform full monitoring cycle (new transactions + priority)
+async fn do_full_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), String> {
     // Check for new transactions
     let new_signatures = manager.check_new_transactions().await?;
     
@@ -1074,19 +1163,39 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), St
         ));
     }
 
-    // Log stats periodically
+    // Log stats periodically (only in full cycles)
     if manager.debug_enabled {
         let stats = manager.get_stats();
+        let (cached_count, minutes_since_fetch) = manager.get_cache_stats();
         log(LogTag::Transactions, "STATS", &format!(
-            "Total: {}, New: {}, Priority: {}, Cached: {}", 
+            "Total: {}, New: {}, Priority: {}, Cached: {}, Cache: {} sigs ({} min ago)", 
             stats.total_transactions,
             stats.new_transactions_count,
             stats.priority_transactions_count,
-            stats.known_signatures_count
+            stats.known_signatures_count,
+            cached_count,
+            minutes_since_fetch.unwrap_or(-1)
         ));
     }
 
     Ok(())
+}
+
+/// Perform priority-only monitoring cycle (no new transaction discovery)
+async fn do_priority_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), String> {
+    // Only check priority transactions (no RPC call for new transactions)
+    if let Err(e) = manager.check_priority_transactions().await {
+        log(LogTag::Transactions, "WARN", &format!(
+            "Priority transaction check failed: {}", e
+        ));
+    }
+
+    Ok(())
+}
+
+/// Perform one monitoring cycle (DEPRECATED - use full or priority cycles)
+async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), String> {
+    do_full_monitoring_cycle(manager).await
 }
 
 /// Load wallet address from config
@@ -4682,7 +4791,7 @@ pub async fn get_recent_successful_buy_transactions(hours: u32) -> Result<Vec<Tr
             if tx.success 
                 && tx.timestamp >= cutoff_time 
                 && tx.swap_analysis.as_ref()
-                    .map(|s| s.input_token.starts_with("So11")) // SOL to token (buy)
+                    .map(|s| s.input_token == "SOL" || s.input_token.starts_with("So11")) // Handle both SOL formats
                     .unwrap_or(false) 
             {
                 successful_buys.push(tx);

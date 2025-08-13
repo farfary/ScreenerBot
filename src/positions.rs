@@ -1661,8 +1661,8 @@ pub async fn recover_missing_positions() -> usize {
     
     let mut recovered_count = 0;
     
-    // Get all recent successful buy transactions
-    let recent_transactions = match crate::transactions_manager::get_recent_successful_buy_transactions(24).await {
+    // Get all recent successful buy transactions (extended window for recovery)
+    let recent_transactions = match crate::transactions_manager::get_recent_successful_buy_transactions(168).await {
         Ok(transactions) => transactions,
         Err(e) => {
             log(
