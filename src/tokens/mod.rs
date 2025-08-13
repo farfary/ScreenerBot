@@ -90,7 +90,8 @@ pub use ohlcvs::{
     Timeframe,
     DataAvailability,
     init_ohlcv_service,
-    get_ohlcv_service,
+    get_ohlcv_service_ref,
+    get_ohlcv_service_clone,
     start_ohlcv_monitoring,
     sync_watch_list_with_trader,
     is_ohlcv_data_available,
@@ -279,7 +280,7 @@ pub async fn initialize_tokens_system() -> Result<TokensSystem, Box<dyn std::err
     initialize_price_service().await?;
 
     // Initialize OHLCV service
-    if let Err(e) = init_ohlcv_service() {
+    if let Err(e) = init_ohlcv_service().await {
         log(LogTag::System, "WARN", &format!("OHLCV service initialization failed: {}", e));
     } else {
         log(LogTag::System, "SUCCESS", "OHLCV service initialized successfully");

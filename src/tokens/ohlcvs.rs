@@ -57,6 +57,9 @@ const API_RATE_LIMIT_PER_MINUTE: u32 = 30;
 /// Rate limit delay between calls (2 seconds to be safe)
 const API_RATE_LIMIT_DELAY_MS: u64 = 2000;
 
+/// Maximum number of cached entries in memory to prevent unbounded growth
+const MAX_MEMORY_CACHE_ENTRIES: usize = 1000;
+
 /// Cache directory for OHLCV data
 const CACHE_DIR: &str = CACHE_OHLCVS_DIR;
 
@@ -263,6 +266,7 @@ struct GeckoTerminalTokenInfo {
 // =============================================================================
 
 /// OHLCV data collection and caching service
+#[derive(Clone)]
 pub struct OhlcvService {
     /// HTTP client for API requests
     client: Client,
@@ -786,9 +790,30 @@ impl OhlcvService {
                         .max(),
                 };
 
-                // Save to memory cache
+                // Save to memory cache with size limit protection
                 {
                     let mut cache = self.cache.write().await;
+                    
+                    // If cache is getting too large, remove oldest entries
+                    if cache.len() >= MAX_MEMORY_CACHE_ENTRIES {
+                        // Find oldest entry to remove
+                        let oldest_key = cache
+                            .iter()
+                            .min_by_key(|(_, data)| data.last_updated)
+                            .map(|(key, _)| key.clone());
+                            
+                        if let Some(key) = oldest_key {
+                            cache.remove(&key);
+                            if is_debug_ohlcv_enabled() {
+                                log(
+                                    LogTag::Ohlcv,
+                                    "CACHE_EVICT",
+                                    &format!("🗑️ Evicted oldest cache entry: {}", key)
+                                );
+                            }
+                        }
+                    }
+                    
                     cache.insert(cache_key, cached_data.clone());
                 }
 
@@ -894,6 +919,7 @@ impl OhlcvService {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
+            
             if is_debug_ohlcv_enabled() {
                 log(
                     LogTag::Ohlcv,
@@ -901,7 +927,30 @@ impl OhlcvService {
                     &format!("❌ API error response: {} - {}", status, error_text)
                 );
             }
-            return Err(format!("API error: {} - {}", status, error_text));
+            
+            // Handle specific status codes
+            match status.as_u16() {
+                429 => {
+                    // Rate limit exceeded - wait longer before next call
+                    if is_debug_ohlcv_enabled() {
+                        log(LogTag::Ohlcv, "RATE_LIMIT_EXCEEDED", "⚠️ API rate limit exceeded, backing off");
+                    }
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    return Err("Rate limit exceeded".to_string());
+                }
+                404 => {
+                    return Err(format!("Pool not found: {}", pool_address));
+                }
+                400 => {
+                    return Err(format!("Bad request - invalid parameters: {}", error_text));
+                }
+                500..=599 => {
+                    return Err(format!("Server error ({}): {}", status, error_text));
+                }
+                _ => {
+                    return Err(format!("API error: {} - {}", status, error_text));
+                }
+            }
         }
 
         let gecko_response: GeckoTerminalResponse = response
@@ -933,13 +982,45 @@ impl OhlcvService {
                     );
                 }
 
+                let timestamp = ohlcv[0] as i64;
+                let open = ohlcv[1];
+                let high = ohlcv[2];
+                let low = ohlcv[3];
+                let close = ohlcv[4];
+                let volume = ohlcv[5];
+
+                // Validate data integrity
+                if timestamp <= 0 {
+                    return Err(format!("Invalid timestamp: {}", timestamp));
+                }
+                
+                if open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0 {
+                    return Err(format!("Invalid price data: open={}, high={}, low={}, close={}", open, high, low, close));
+                }
+                
+                if volume < 0.0 {
+                    return Err(format!("Invalid volume: {}", volume));
+                }
+                
+                if high < low {
+                    return Err(format!("Invalid OHLC relationship: high ({}) < low ({})", high, low));
+                }
+                
+                if open > high || open < low || close > high || close < low {
+                    return Err(format!("OHLC values out of range: open={}, high={}, low={}, close={}", open, high, low, close));
+                }
+
+                if !open.is_finite() || !high.is_finite() || !low.is_finite() || !close.is_finite() || !volume.is_finite() {
+                    return Err("Non-finite values in OHLCV data".to_string());
+                }
+
                 Ok(OhlcvDataPoint {
-                    timestamp: ohlcv[0] as i64,
-                    open: ohlcv[1],
-                    high: ohlcv[2],
-                    low: ohlcv[3],
-                    close: ohlcv[4],
-                    volume: ohlcv[5],
+                    timestamp,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
                 })
             })
             .collect();
@@ -1064,7 +1145,16 @@ impl OhlcvService {
 
         let content_len = content.len();
 
-        fs::write(&cache_path, content).map_err(|e| format!("Failed to write cache file: {}", e))?;
+        // Atomic write: write to temporary file first, then rename
+        let temp_path = cache_path.with_extension("json.tmp");
+        
+        fs::write(&temp_path, &content).map_err(|e| format!("Failed to write temporary cache file: {}", e))?;
+        
+        fs::rename(&temp_path, &cache_path).map_err(|e| {
+            // Clean up temp file on failure
+            let _ = fs::remove_file(&temp_path);
+            format!("Failed to rename cache file: {}", e)
+        })?;
 
         if is_debug_ohlcv_enabled() {
             log(
@@ -1211,19 +1301,28 @@ impl OhlcvService {
                                         entry.mint,
                                         timeframe,
                                         data_points.len(),
-                                        &pool_address[..8]
+                                        if pool_address.len() >= 8 {
+                                            &pool_address[..8]
+                                        } else {
+                                            &pool_address
+                                        }
                                     )
                                 );
                             }
 
                             // Cache the data
+                            let last_timestamp = data_points
+                                .iter()
+                                .map(|p| p.timestamp)
+                                .max();
+
                             let cached_data = CachedOhlcvData {
                                 mint: entry.mint.clone(),
                                 timeframe: timeframe.clone(),
                                 pool_address: pool_address.clone(),
                                 data_points,
                                 last_updated: Utc::now(),
-                                last_timestamp: None,
+                                last_timestamp,
                             };
 
                             // Update memory cache
@@ -1404,40 +1503,53 @@ impl OhlcvService {
 // GLOBAL OHLCV SERVICE INSTANCE
 // =============================================================================
 
-use std::sync::{ Once };
+use tokio::sync::{ RwLock as TokioRwLock };
+use std::sync::{ LazyLock };
 
-static mut GLOBAL_OHLCV_SERVICE: Option<OhlcvService> = None;
-static OHLCV_INIT: Once = Once::new();
+// Use LazyLock for safe global state (Rust 1.70+)
+static GLOBAL_OHLCV_SERVICE: LazyLock<TokioRwLock<Option<OhlcvService>>> = 
+    LazyLock::new(|| TokioRwLock::new(None));
 
 /// Initialize global OHLCV service
-pub fn init_ohlcv_service() -> Result<&'static OhlcvService, Box<dyn std::error::Error>> {
-    unsafe {
-        OHLCV_INIT.call_once(|| {
-            match OhlcvService::new() {
-                Ok(service) => {
-                    GLOBAL_OHLCV_SERVICE = Some(service);
-                    log(LogTag::Ohlcv, "INIT", "✅ Global OHLCV service initialized");
-                }
-                Err(e) => {
-                    log(
-                        LogTag::Ohlcv,
-                        "ERROR",
-                        &format!("❌ Failed to initialize OHLCV service: {}", e)
-                    );
-                }
-            }
-        });
-
-        GLOBAL_OHLCV_SERVICE.as_ref().ok_or_else(|| "OHLCV service initialization failed".into())
+pub async fn init_ohlcv_service() -> Result<(), Box<dyn std::error::Error>> {
+    let mut service_guard = GLOBAL_OHLCV_SERVICE.write().await;
+    
+    if service_guard.is_some() {
+        // Already initialized
+        return Ok(());
+    }
+    
+    match OhlcvService::new() {
+        Ok(service) => {
+            *service_guard = Some(service);
+            log(LogTag::Ohlcv, "INIT", "✅ Global OHLCV service initialized");
+            Ok(())
+        }
+        Err(e) => {
+            log(
+                LogTag::Ohlcv,
+                "ERROR",
+                &format!("❌ Failed to initialize OHLCV service: {}", e)
+            );
+            Err(e)
+        }
     }
 }
 
-/// Get global OHLCV service
-pub fn get_ohlcv_service() -> &'static OhlcvService {
-    unsafe {
-        GLOBAL_OHLCV_SERVICE.as_ref().expect(
-            "OHLCV service not initialized - call init_ohlcv_service() first"
-        )
+/// Get direct access to OHLCV service for sync operations
+pub async fn get_ohlcv_service_ref() -> Result<impl std::ops::Deref<Target = Option<OhlcvService>>, String> {
+    Ok(GLOBAL_OHLCV_SERVICE.read().await)
+}
+
+/// Get a cloned OHLCV service for async operations (less efficient but works around lifetime issues)
+pub async fn get_ohlcv_service_clone() -> Result<OhlcvService, String> {
+    let service_guard = GLOBAL_OHLCV_SERVICE.read().await;
+    match service_guard.as_ref() {
+        Some(service) => {
+            // Since OhlcvService has Arc<> fields, cloning is relatively cheap
+            Ok(service.clone())
+        }
+        None => Err("OHLCV service not initialized - call init_ohlcv_service() first".to_string()),
     }
 }
 
@@ -1449,10 +1561,14 @@ pub fn get_ohlcv_service() -> &'static OhlcvService {
 pub async fn start_ohlcv_monitoring(
     shutdown: Arc<Notify>
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    let service = init_ohlcv_service().map_err(|e|
+    init_ohlcv_service().await.map_err(|e|
         format!("Failed to initialize OHLCV service: {}", e)
     )?;
 
+    // Get cloned service for async operations
+    let service = get_ohlcv_service_clone().await?;
+    
+    // Start monitoring
     service.start_monitoring(shutdown.clone()).await;
 
     let handle = tokio::spawn(async move {
@@ -1466,8 +1582,6 @@ pub async fn start_ohlcv_monitoring(
 
 /// Sync watch list with price service priority tokens (called from trader)
 pub async fn sync_watch_list_with_trader() -> Result<(), String> {
-    let service = get_ohlcv_service();
-
     // Get priority tokens from price service (these are the ones we're actively monitoring)
     let priority_tokens = get_priority_tokens_safe().await;
 
@@ -1479,10 +1593,12 @@ pub async fn sync_watch_list_with_trader() -> Result<(), String> {
         );
     }
 
-    for token_mint in priority_tokens {
+    let service = get_ohlcv_service_clone().await?;
+    
+    for token_mint in &priority_tokens {
         // Check if it's an open position (higher priority)
-        let is_open_position = crate::positions::is_open_position(&token_mint);
-        service.add_to_watch_list(&token_mint, is_open_position).await;
+        let is_open_position = crate::positions::is_open_position(token_mint);
+        service.add_to_watch_list(token_mint, is_open_position).await;
 
         if is_debug_ohlcv_enabled() {
             log(
@@ -1511,26 +1627,33 @@ pub async fn sync_watch_list_with_trader() -> Result<(), String> {
 
 /// Check if OHLCV data is available for trading decisions
 pub async fn is_ohlcv_data_available(mint: &str, timeframe: &Timeframe) -> bool {
-    let service = get_ohlcv_service();
+    let service = match get_ohlcv_service_clone().await {
+        Ok(service) => service,
+        Err(_) => {
+            if is_debug_ohlcv_enabled() {
+                log(LogTag::Ohlcv, "ERROR", "OHLCV service not available for availability check");
+            }
+            return false;
+        }
+    };
+    
     let availability = service.check_data_availability(mint, timeframe).await;
-    let result = availability.has_cached_data && availability.is_fresh;
+    let is_available = availability.has_cached_data && availability.is_fresh;
 
     if is_debug_ohlcv_enabled() {
         log(
             LogTag::Ohlcv,
             "AVAILABILITY_CHECK",
             &format!(
-                "📊 OHLCV availability check for {} {}: cached={}, fresh={}, result={}",
+                "📊 OHLCV availability check for {} {}: result={}",
                 mint,
                 timeframe,
-                availability.has_cached_data,
-                availability.is_fresh,
-                result
+                is_available
             )
         );
     }
 
-    result
+    is_available
 }
 
 /// Get latest OHLCV data for analysis (convenience function)
@@ -1547,7 +1670,7 @@ pub async fn get_latest_ohlcv(
         );
     }
 
-    let service = get_ohlcv_service();
+    let service = get_ohlcv_service_clone().await?;
     let result = service.get_ohlcv_data(mint, timeframe, Some(limit)).await;
 
     if is_debug_ohlcv_enabled() {
