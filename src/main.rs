@@ -9,6 +9,12 @@ async fn main() {
     // Initialize file logging system first
     init_file_logging();
 
+    // Check for dry-run mode and log it prominently
+    if screenerbot::arguments::is_dry_run_enabled() {
+        log(LogTag::System, "CRITICAL", "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR");
+        log(LogTag::System, "CRITICAL", "📊 All trading signals and analysis will be logged but not executed");
+    }
+
     // Initialize centralized blacklist system with system/stable tokens
     screenerbot::tokens::initialize_system_stable_blacklist();
 

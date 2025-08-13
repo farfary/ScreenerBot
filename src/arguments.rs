@@ -146,6 +146,16 @@ pub fn is_debug_transactions_enabled() -> bool {
     has_arg("--debug-transactions")
 }
 
+/// RPC operations debug mode
+pub fn is_debug_rpc_enabled() -> bool {
+    has_arg("--debug-rpc")
+}
+
+/// Dry-run mode - simulates trading without executing actual transactions
+pub fn is_dry_run_enabled() -> bool {
+    has_arg("--dry-run")
+}
+
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
@@ -168,7 +178,8 @@ pub fn is_any_debug_enabled() -> bool {
     is_debug_swap_enabled() ||
     is_debug_decimals_enabled() ||
     is_debug_summary_enabled() ||
-    is_debug_transactions_enabled()
+    is_debug_transactions_enabled() ||
+    is_debug_rpc_enabled()
 }
 
 /// Gets a list of all enabled debug modes
@@ -192,6 +203,8 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_debug_decimals_enabled() { modes.push("decimals"); }
     if is_debug_summary_enabled() { modes.push("summary"); }
     if is_debug_transactions_enabled() { modes.push("transactions"); }
+    if is_debug_rpc_enabled() { modes.push("rpc"); }
+    if is_dry_run_enabled() { modes.push("dry-run"); }
     
     modes
 }
@@ -302,16 +315,19 @@ mod tests {
             "screenerbot".to_string(),
             "--debug-trader".to_string(),
             "--debug-profit".to_string(),
+            "--dry-run".to_string(),
         ]);
         
         assert!(is_debug_trader_enabled());
         assert!(is_debug_profit_enabled());
         assert!(!is_debug_filtering_enabled());
+        assert!(is_dry_run_enabled());
         assert!(is_any_debug_enabled());
         
         let enabled_modes = get_enabled_debug_modes();
         assert!(enabled_modes.contains(&"trader"));
         assert!(enabled_modes.contains(&"profit"));
+        assert!(enabled_modes.contains(&"dry-run"));
         assert!(!enabled_modes.contains(&"filtering"));
     }
 

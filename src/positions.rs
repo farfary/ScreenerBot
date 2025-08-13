@@ -376,6 +376,27 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         return;
     }
 
+    // DRY-RUN MODE CHECK: Skip actual trading if dry-run is enabled
+    if crate::arguments::is_dry_run_enabled() {
+        let colored_percent = format!("\x1b[31m{:.2}%\x1b[0m", percent_change);
+        let current_open_count = get_open_positions_count();
+        log(
+            LogTag::Trader,
+            "DRY-RUN",
+            &format!(
+                "🚫 DRY-RUN: Would open position for {} ({}) at {:.6} SOL ({}) - Size: {:.6} SOL [{}/{}]",
+                token.symbol,
+                token.mint,
+                price,
+                colored_percent,
+                TRADE_SIZE_SOL,
+                current_open_count + 1,
+                MAX_OPEN_POSITIONS
+            )
+        );
+        return;
+    }
+
     // Check if we already have an open position for this token and count open positions
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         if
@@ -965,6 +986,22 @@ pub async fn close_position(
                 exit_price
             )
         );
+
+        // DRY-RUN MODE CHECK: Skip actual selling if dry-run is enabled
+        if crate::arguments::is_dry_run_enabled() {
+            log(
+                LogTag::Trader,
+                "DRY-RUN",
+                &format!(
+                    "🚫 DRY-RUN: Would close position for {} ({}) - Would sell {} tokens at {:.6} SOL",
+                    position.symbol,
+                    position.mint,
+                    token_amount,
+                    exit_price
+                )
+            );
+            return false; // Don't modify the position in dry-run mode
+        }
 
         // Execute real sell transaction with critical operation protection using instruction-based analysis
         let _guard = crate::trader::CriticalOperationGuard::new(

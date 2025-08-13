@@ -12,8 +12,8 @@ pub use crate::arguments::{
     is_debug_discovery_enabled, is_debug_price_service_enabled, is_debug_rugcheck_enabled,
     is_debug_entry_enabled, is_debug_rl_learn_enabled, is_debug_ohlcv_enabled,
     is_debug_wallet_enabled, is_debug_swap_enabled, is_debug_decimals_enabled,
-    is_debug_summary_enabled, is_debug_transactions_enabled,
-    is_any_debug_enabled, get_enabled_debug_modes, print_debug_info
+    is_debug_summary_enabled, is_debug_transactions_enabled, is_debug_rpc_enabled,
+    is_dry_run_enabled, is_any_debug_enabled, get_enabled_debug_modes, print_debug_info
 };
 
 // Re-export configuration handling from the configs module for backwards compatibility
