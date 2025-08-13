@@ -4,7 +4,7 @@ use crate::logger::{ log, LogTag };
 use crate::tokens::Token;
 use crate::utils::*;
 use crate::rpc::lamports_to_sol;
-use crate::swaps::{ buy_token, sell_token, wait_for_swap_verification };
+use crate::swaps::{ buy_token, sell_token, wait_for_swap_verification, wait_for_priority_swap_verification };
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
 
@@ -466,14 +466,14 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 LogTag::Trader,
                 "VERIFICATION_WAIT",
                 &format!(
-                    "⏳ Waiting for transaction verification before creating position for {}: {}",
+                    "⏳ Waiting for priority transaction verification before creating position for {}: {}",
                     token.symbol,
                     &transaction_signature[..8]
                 )
             );
 
-            // Wait for transaction verification with 60 second timeout
-            match wait_for_swap_verification(&transaction_signature, 60).await {
+            // Wait for priority transaction verification with 5 second timeout
+            match wait_for_priority_swap_verification(&transaction_signature).await {
                 Ok(true) => {
                     log(
                         LogTag::Trader,
@@ -488,9 +488,9 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 Ok(false) => {
                     log(
                         LogTag::Trader,
-                        "TIMEOUT",
+                        "PRIORITY_TIMEOUT",
                         &format!(
-                            "⏰ Transaction verification timeout for {}: {} - proceeding anyway",
+                            "⏰ Priority transaction verification timeout for {}: {} - proceeding anyway",
                             token.symbol,
                             &transaction_signature[..8]
                         )
@@ -1009,14 +1009,14 @@ pub async fn close_position(
                     LogTag::Trader,
                     "VERIFICATION_WAIT",
                     &format!(
-                        "⏳ Waiting for exit transaction verification before closing position for {}: {}",
+                        "⏳ Waiting for priority exit transaction verification before closing position for {}: {}",
                         position.symbol,
                         &transaction_signature[..8]
                     )
                 );
 
-                // Wait for transaction verification with 60 second timeout
-                match wait_for_swap_verification(&transaction_signature, 60).await {
+                // Wait for priority transaction verification with 5 second timeout
+                match wait_for_priority_swap_verification(&transaction_signature).await {
                     Ok(true) => {
                         log(
                             LogTag::Trader,
@@ -1031,9 +1031,9 @@ pub async fn close_position(
                     Ok(false) => {
                         log(
                             LogTag::Trader,
-                            "TIMEOUT",
+                            "PRIORITY_TIMEOUT",
                             &format!(
-                                "⏰ Exit transaction verification timeout for {}: {} - proceeding anyway",
+                                "⏰ Priority exit transaction verification timeout for {}: {} - proceeding anyway",
                                 position.symbol,
                                 &transaction_signature[..8]
                             )

@@ -263,11 +263,13 @@ impl DexScreenerApi {
                 )
             );
         } else if rejected_non_sol_pairs > 0 {
-            log(
-                LogTag::Api,
-                "SOL_FILTER",
-                &format!("Filtered out {} non-SOL pairs from batch", rejected_non_sol_pairs)
-            );
+            if is_debug_api_enabled() {
+                log(
+                    LogTag::Api,
+                    "SOL_FILTER",
+                    &format!("Filtered out {} non-SOL pairs from batch", rejected_non_sol_pairs)
+                );
+            }
         }
 
         Ok(tokens)

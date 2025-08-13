@@ -4533,6 +4533,7 @@ pub async fn add_priority_transaction(signature: String) -> Result<(), String> {
 }
 
 /// Wait for transaction verification with timeout
+/// Regular version with standard timeout
 pub async fn wait_for_transaction_verification(
     signature: &str, 
     timeout_seconds: u64
@@ -4562,6 +4563,44 @@ pub async fn wait_for_transaction_verification(
     
     log(LogTag::Transactions, "TIMEOUT", &format!(
         "Transaction verification timeout for {}", 
+        &signature[..8]
+    ));
+    
+    Ok(false)
+}
+
+/// Wait for priority transaction verification with faster timeout and checking
+/// Use this for time-sensitive position management operations
+pub async fn wait_for_priority_transaction_verification(
+    signature: &str
+) -> Result<bool, String> {
+    const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 5; // 5 seconds for priority transactions
+    
+    let start_time = std::time::Instant::now();
+    let timeout_duration = std::time::Duration::from_secs(PRIORITY_CONFIRMATION_TIMEOUT_SECS);
+    
+    log(LogTag::Transactions, "PRIORITY_VERIFY", &format!(
+        "Priority transaction verification: {} (timeout: {}s)", 
+        &signature[..8], 
+        PRIORITY_CONFIRMATION_TIMEOUT_SECS
+    ));
+    
+    while start_time.elapsed() < timeout_duration {
+        // Check if transaction is verified (more frequent checking for priority)
+        if is_transaction_verified(signature).await {
+            log(LogTag::Transactions, "PRIORITY_VERIFIED", &format!(
+                "Priority transaction {} verified successfully", 
+                &signature[..8]
+            ));
+            return Ok(true);
+        }
+        
+        // More frequent checking for priority transactions (500ms vs 2s)
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    
+    log(LogTag::Transactions, "PRIORITY_TIMEOUT", &format!(
+        "Priority transaction verification timeout for {}", 
         &signature[..8]
     ));
     

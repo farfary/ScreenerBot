@@ -30,8 +30,11 @@ pub const MAX_CONFIRMATION_DELAY_SECS: u64 = 8;
 /// Exponential backoff multiplier for confirmation delays
 pub const CONFIRMATION_BACKOFF_MULTIPLIER: f64 = 1.5;
 
-/// Total timeout for transaction confirmation (in seconds)
+/// Total timeout for transaction confirmation (in seconds) - Regular transactions
 pub const CONFIRMATION_TIMEOUT_SECS: u64 = 60;
+
+/// Total timeout for transaction confirmation (in seconds) - Priority transactions
+pub const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 5;
 
 /// Base delay for rate limit errors (in seconds)
 pub const RATE_LIMIT_BASE_DELAY_SECS: u64 = 5;
@@ -50,7 +53,7 @@ pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
 // =============================================================================
 
 // Main swap functions
-pub use interface::{buy_token, sell_token, wait_for_swap_verification, SwapResult};
+pub use interface::{buy_token, sell_token, wait_for_swap_verification, wait_for_priority_swap_verification, SwapResult};
 
 // Common types and structures
 pub use types::{

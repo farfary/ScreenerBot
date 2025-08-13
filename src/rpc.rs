@@ -2999,6 +2999,7 @@ impl RpcClient {
 
     /// Wait for transaction confirmation with polling
     /// Returns true if transaction is confirmed, false if timeout or failed
+    /// Now includes improved error classification and retry logic
     pub async fn wait_for_transaction_confirmation(
         &self,
         signature: &str,
@@ -3014,6 +3015,8 @@ impl RpcClient {
             )
         );
 
+        let mut current_delay = retry_delay_ms;
+        
         for attempt in 1..=max_attempts {
             // Check if transaction exists and is confirmed
             match self.get_transaction_details(signature).await {
@@ -3029,6 +3032,7 @@ impl RpcClient {
                                     attempt, &signature[..8], meta.err
                                 )
                             );
+                            // Transaction failed - this is a permanent error, don't retry
                             return Err(SwapError::TransactionError(
                                 format!("Transaction failed on-chain: {:?}", meta.err)
                             ));
@@ -3046,18 +3050,20 @@ impl RpcClient {
                     return Ok(true);
                 }
                 Err(SwapError::TransactionError(ref err)) if err.contains("not found or not confirmed yet") => {
+                    // This is a retryable error - transaction may still be propagating
                     if attempt < max_attempts {
                         log(
                             LogTag::Rpc,
                             "CONFIRMATION_WAITING",
                             &format!(
-                                "⏳ Transaction not confirmed yet (attempt {}/{}): {}",
-                                attempt, max_attempts, &signature[..8]
+                                "⏳ Transaction not confirmed yet (attempt {}/{}): {} - retrying in {}ms",
+                                attempt, max_attempts, &signature[..8], current_delay
                             )
                         );
                         
-                        // Wait before next attempt
-                        tokio::time::sleep(Duration::from_millis(retry_delay_ms)).await;
+                        // Wait before next attempt with exponential backoff for retryable errors
+                        tokio::time::sleep(Duration::from_millis(current_delay)).await;
+                        current_delay = (current_delay as f64 * 1.5).min(5000.0) as u64; // Cap at 5 seconds
                     } else {
                         log(
                             LogTag::Rpc,
@@ -3070,21 +3076,93 @@ impl RpcClient {
                         return Ok(false); // Timeout, but not an error
                     }
                 }
+                Err(SwapError::ApiError(ref err)) if err.contains("rate limit") || err.contains("429") => {
+                    // Rate limit error - retryable but with longer delay
+                    if attempt < max_attempts {
+                        let rate_limit_delay = current_delay * 2; // Double delay for rate limits
+                        log(
+                            LogTag::Rpc,
+                            "CONFIRMATION_RATE_LIMITED",
+                            &format!(
+                                "⚠️ Rate limited (attempt {}/{}): {} - waiting {}ms",
+                                attempt, max_attempts, &signature[..8], rate_limit_delay
+                            )
+                        );
+                        tokio::time::sleep(Duration::from_millis(rate_limit_delay)).await;
+                        current_delay = rate_limit_delay;
+                    } else {
+                        log(
+                            LogTag::Rpc,
+                            "CONFIRMATION_RATE_LIMIT_EXHAUSTED",
+                            &format!(
+                                "❌ Rate limit timeout after {} attempts: {}",
+                                max_attempts, &signature[..8]
+                            )
+                        );
+                        return Err(SwapError::ApiError(format!("Rate limit exhausted after {} attempts", max_attempts)));
+                    }
+                }
                 Err(e) => {
-                    log(
-                        LogTag::Rpc,
-                        "CONFIRMATION_ERROR",
-                        &format!(
-                            "❌ Error checking transaction confirmation: {} - {}",
-                            &signature[..8], e
-                        )
-                    );
-                    return Err(e); // Actual error
+                    // Determine if this is a retryable or permanent error
+                    let error_str = e.to_string().to_lowercase();
+                    let is_retryable = error_str.contains("network") || 
+                                      error_str.contains("timeout") || 
+                                      error_str.contains("connection") ||
+                                      error_str.contains("temporary");
+                    
+                    if is_retryable && attempt < max_attempts {
+                        log(
+                            LogTag::Rpc,
+                            "CONFIRMATION_RETRYABLE_ERROR",
+                            &format!(
+                                "⚠️ Retryable error (attempt {}/{}): {} - Error: {} - retrying in {}ms",
+                                attempt, max_attempts, &signature[..8], e, current_delay
+                            )
+                        );
+                        tokio::time::sleep(Duration::from_millis(current_delay)).await;
+                        current_delay = (current_delay as f64 * 1.2).min(3000.0) as u64; // Modest backoff
+                    } else {
+                        log(
+                            LogTag::Rpc,
+                            "CONFIRMATION_ERROR",
+                            &format!(
+                                "❌ {} error checking transaction confirmation: {} - {}",
+                                if is_retryable { "Retryable timeout" } else { "Permanent" },
+                                &signature[..8], e
+                            )
+                        );
+                        return Err(e); // Permanent error or retry exhausted
+                    }
                 }
             }
         }
 
         Ok(false) // Timeout
+    }
+
+    /// Priority transaction confirmation with faster timeouts and reduced retries
+    /// Use this for time-sensitive operations like position management
+    pub async fn wait_for_priority_transaction_confirmation(
+        &self,
+        signature: &str,
+    ) -> Result<bool, SwapError> {
+        // Use priority settings from config
+        use crate::swaps::config::{PRIORITY_CONFIRMATION_MAX_ATTEMPTS, PRIORITY_CONFIRMATION_RETRY_DELAY_MS};
+        
+        log(
+            LogTag::Rpc,
+            "PRIORITY_CONFIRMATION_START",
+            &format!(
+                "🚀 Priority transaction confirmation: {} (max {} attempts, {}ms delay)",
+                &signature[..8], PRIORITY_CONFIRMATION_MAX_ATTEMPTS, PRIORITY_CONFIRMATION_RETRY_DELAY_MS
+            )
+        );
+
+        self.wait_for_transaction_confirmation(
+            signature,
+            PRIORITY_CONFIRMATION_MAX_ATTEMPTS,
+            PRIORITY_CONFIRMATION_RETRY_DELAY_MS
+        ).await
     }
 
     /// Get wallet signatures using main RPC (lightweight operation)
