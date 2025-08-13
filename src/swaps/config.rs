@@ -45,8 +45,8 @@ pub const PRIORITY_CONFIRMATION_MAX_ATTEMPTS: u32 = 8;
 /// Transaction confirmation retry delay (milliseconds) - Regular transactions
 pub const TRANSACTION_CONFIRMATION_RETRY_DELAY_MS: u64 = 3000;
 
-// Fast failure for dropped transactions (increased to reduce false negatives)
-pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 8;
+/// Fast failure detection threshold - abort if transaction not found after this many attempts
+pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 5;
 
 /// Transaction confirmation retry delay (milliseconds) - Priority transactions
 pub const PRIORITY_CONFIRMATION_RETRY_DELAY_MS: u64 = 1000;
