@@ -250,7 +250,8 @@ fn should_cache_as_failed(error: &str) -> bool {
         error_lower.contains("invalid account") ||
         error_lower.contains("account does not exist") ||
         error_lower.contains("invalid mint") ||
-        error_lower.contains("empty")
+        error_lower.contains("empty") ||
+        error_lower.contains("account owner is not spl token program")
     {
         return true;
     }
@@ -260,6 +261,7 @@ fn should_cache_as_failed(error: &str) -> bool {
         error_lower.contains("429") ||
         error_lower.contains("too many requests") ||
         error_lower.contains("rate limit") ||
+        error_lower.contains("rate limited") ||
         error_lower.contains("timeout") ||
         error_lower.contains("connection") ||
         error_lower.contains("network") ||
@@ -271,7 +273,9 @@ fn should_cache_as_failed(error: &str) -> bool {
         error_lower.contains("timed out") ||
         error_lower.contains("dns") ||
         error_lower.contains("ssl") ||
-        error_lower.contains("tls")
+        error_lower.contains("tls") ||
+        error_lower.contains("failed to get multiple accounts") ||
+        error_lower.contains("batch fetch failed")
     {
         return false;
     }
@@ -294,7 +298,16 @@ async fn batch_fetch_decimals_with_fallback(
         // Get multiple accounts in one RPC call using centralized client
         let accounts = rpc_client
             .get_multiple_accounts(chunk).await
-            .map_err(|e| format!("Failed to get multiple accounts: {}", e))?;
+            .map_err(|e| {
+                // Improve error categorization
+                if e.contains("429") || e.contains("rate limit") || e.contains("Too Many Requests") {
+                    format!("Rate limited: {}", e)
+                } else if e.contains("error sending request") || e.contains("connection") {
+                    format!("Network error: {}", e)
+                } else {
+                    format!("Failed to get multiple accounts: {}", e)
+                }
+            })?;
 
         // Process each account result
         for (i, account_option) in accounts.iter().enumerate() {
@@ -327,9 +340,10 @@ async fn batch_fetch_decimals_with_fallback(
             all_results.push((mint_pubkey, decimals_result));
         }
 
-        // Small delay between batches to avoid rate limiting
+        // Progressive delay between batches to avoid rate limiting
         if mint_pubkeys.len() > MAX_ACCOUNTS_PER_CALL {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            let delay_ms = if all_results.len() > 200 { 300 } else { 150 }; // Longer delay for large batches
+            tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
         }
     }
 
@@ -569,19 +583,35 @@ pub async fn batch_fetch_token_decimals(mints: &[String]) -> Vec<(String, Result
             Err(e) => {
                 // If entire batch fails, mark all as failed with the batch error
                 let error_msg = format!("Batch fetch failed: {}", e);
-                for (mint_str, _) in &uncached_mints {
-                    if should_cache_as_failed(&error_msg) {
-                        cache_failed_token(mint_str, &error_msg);
-                    }
-                    fetch_results.push((mint_str.clone(), Err(error_msg.clone())));
-                }
-
+                let should_cache = should_cache_as_failed(&error_msg);
+                
                 if is_debug_decimals_enabled() {
                     log(
                         LogTag::Decimals,
                         "BATCH_ERROR",
-                        &format!("Batch fetch failed for {} tokens: {}", uncached_mints.len(), e)
+                        &format!(
+                            "Batch fetch failed for {} tokens: {} (caching: {})", 
+                            uncached_mints.len(), 
+                            e,
+                            should_cache
+                        )
                     );
+                }
+                
+                for (mint_str, _) in &uncached_mints {
+                    if should_cache {
+                        cache_failed_token(mint_str, &error_msg);
+                    } else {
+                        // For network errors, just log but don't cache permanently
+                        if is_debug_decimals_enabled() {
+                            log(
+                                LogTag::Decimals,
+                                "BATCH_RETRY_LATER",
+                                &format!("Network error for {}, will retry later: {}", mint_str, e)
+                            );
+                        }
+                    }
+                    fetch_results.push((mint_str.clone(), Err(error_msg.clone())));
                 }
             }
         }
@@ -789,6 +819,21 @@ pub fn cleanup_retryable_failed_cache() {
                 );
             }
         }
+    }
+}
+
+/// Get failed cache statistics for debugging
+pub fn get_failed_cache_stats() -> (usize, Vec<String>) {
+    if let Ok(failed_cache) = FAILED_DECIMALS_CACHE.lock() {
+        let size = failed_cache.len();
+        let sample_errors: Vec<String> = failed_cache
+            .iter()
+            .take(5)
+            .map(|(mint, error)| format!("{}: {}", &mint[..8], error))
+            .collect();
+        (size, sample_errors)
+    } else {
+        (0, Vec::new())
     }
 }
 
