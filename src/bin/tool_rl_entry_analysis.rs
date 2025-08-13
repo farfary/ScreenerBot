@@ -1,5 +1,6 @@
 use screenerbot::logger::{ log, LogTag };
-use screenerbot::global::{ read_configs, set_cmd_args };
+use screenerbot::configs::{ read_configs };
+use screenerbot::arguments::{ set_cmd_args, get_cmd_args };
 use screenerbot::tokens::api::init_dexscreener_api;
 use screenerbot::rpc::init_rpc_client;
 use screenerbot::tokens::price::initialize_price_service;
@@ -16,6 +17,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set command arguments for debug flags
     let args: Vec<String> = env::args().collect();
     set_cmd_args(args.clone());
+    
+    // Use the centralized argument system
+    let args = get_cmd_args();
 
     log(LogTag::RlLearn, "TOOL_START", "🔬 Starting RL Entry Analysis Tool");
 

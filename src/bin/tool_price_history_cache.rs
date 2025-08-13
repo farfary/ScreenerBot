@@ -1,5 +1,6 @@
 use screenerbot::{
-    global::{ read_configs, set_cmd_args, CACHE_PRICES_DIR },
+    global::{ read_configs, CACHE_PRICES_DIR },
+    arguments::{ set_cmd_args, get_cmd_args },
     tokens::{
         pool::{
             init_pool_service,
@@ -21,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔧 Price History Cache Tool");
     println!("===========================");
 
-    let args: Vec<String> = env::args().collect();
+    let args = get_cmd_args();
     if args.len() < 2 {
         print_help();
         return Ok(());

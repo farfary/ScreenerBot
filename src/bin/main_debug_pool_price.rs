@@ -16,7 +16,7 @@ use screenerbot::tokens::price::{ initialize_price_service };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
 use screenerbot::logger::{ log, LogTag, init_file_logging };
 use screenerbot::rpc::{ init_rpc_client, get_rpc_client };
-use screenerbot::global::set_cmd_args;
+use screenerbot::arguments::set_cmd_args;
 use clap::{ Arg, Command };
 use std::time::Duration;
 use std::str::FromStr;

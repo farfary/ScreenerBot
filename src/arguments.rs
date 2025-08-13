@@ -1,0 +1,331 @@
+/// Centralized argument handling system for ScreenerBot
+/// 
+/// This module consolidates all command-line argument parsing and debug flag checking
+/// functionality that was previously scattered across global.rs and binary files.
+/// 
+/// Features:
+/// - Centralized CMD_ARGS storage with thread-safe access
+/// - Debug flag checking functions for all modules
+/// - Unified argument parsing utilities
+/// - Support for both binary-specific and main application arguments
+
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
+use std::env;
+
+/// Global command-line arguments storage
+/// Thread-safe singleton that stores arguments for access throughout the application
+pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| { 
+    Mutex::new(env::args().collect()) 
+});
+
+/// Sets the global command-line arguments
+/// Used by binaries and tests to override the default env::args() collection
+pub fn set_cmd_args(args: Vec<String>) {
+    if let Ok(mut cmd_args) = CMD_ARGS.lock() {
+        *cmd_args = args;
+    }
+}
+
+/// Gets a copy of the current command-line arguments
+/// Returns a vector clone to avoid holding the mutex lock
+pub fn get_cmd_args() -> Vec<String> {
+    match CMD_ARGS.lock() {
+        Ok(args) => args.clone(),
+        Err(_) => {
+            // Fallback to env::args if mutex is poisoned
+            env::args().collect()
+        }
+    }
+}
+
+/// Checks if a specific argument is present in the command line
+pub fn has_arg(arg: &str) -> bool {
+    get_cmd_args().iter().any(|a| a == arg)
+}
+
+/// Gets the value of a command-line argument that follows a flag
+/// Returns None if the flag is not found or has no value
+pub fn get_arg_value(flag: &str) -> Option<String> {
+    let args = get_cmd_args();
+    for (i, arg) in args.iter().enumerate() {
+        if arg == flag && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+    }
+    None
+}
+
+// =============================================================================
+// DEBUG FLAG CHECKING FUNCTIONS
+// These functions check for specific debug flags in the command-line arguments
+// =============================================================================
+
+/// Filtering module debug mode
+pub fn is_debug_filtering_enabled() -> bool {
+    has_arg("--debug-filtering")
+}
+
+/// Profit calculation debug mode
+pub fn is_debug_profit_enabled() -> bool {
+    has_arg("--debug-profit")
+}
+
+/// Pool prices debug mode
+pub fn is_debug_pool_prices_enabled() -> bool {
+    has_arg("--debug-pool-prices")
+}
+
+/// Trader module debug mode
+pub fn is_debug_trader_enabled() -> bool {
+    has_arg("--debug-trader")
+}
+
+/// API calls debug mode
+pub fn is_debug_api_enabled() -> bool {
+    has_arg("--debug-api")
+}
+
+/// Monitor module debug mode
+pub fn is_debug_monitor_enabled() -> bool {
+    has_arg("--debug-monitor")
+}
+
+/// Discovery module debug mode
+pub fn is_debug_discovery_enabled() -> bool {
+    has_arg("--debug-discovery")
+}
+
+/// Price service debug mode
+pub fn is_debug_price_service_enabled() -> bool {
+    has_arg("--debug-price-service")
+}
+
+/// Rugcheck module debug mode
+pub fn is_debug_rugcheck_enabled() -> bool {
+    has_arg("--debug-rugcheck")
+}
+
+/// Entry module debug mode
+pub fn is_debug_entry_enabled() -> bool {
+    has_arg("--debug-entry")
+}
+
+/// Reinforcement learning debug mode
+pub fn is_debug_rl_learn_enabled() -> bool {
+    has_arg("--debug-rl-learn")
+}
+
+/// OHLCV analysis debug mode
+pub fn is_debug_ohlcv_enabled() -> bool {
+    has_arg("--debug-ohlcv")
+}
+
+/// Wallet operations debug mode
+pub fn is_debug_wallet_enabled() -> bool {
+    has_arg("--debug-wallet")
+}
+
+/// Swap operations debug mode
+pub fn is_debug_swap_enabled() -> bool {
+    has_arg("--debug-swap")
+}
+
+/// Decimals module debug mode
+pub fn is_debug_decimals_enabled() -> bool {
+    has_arg("--debug-decimals")
+}
+
+/// Summary module debug mode
+pub fn is_debug_summary_enabled() -> bool {
+    has_arg("--debug-summary")
+}
+
+/// Transactions module debug mode
+pub fn is_debug_transactions_enabled() -> bool {
+    has_arg("--debug-transactions")
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+/// Checks if any debug mode is enabled
+pub fn is_any_debug_enabled() -> bool {
+    is_debug_filtering_enabled() ||
+    is_debug_profit_enabled() ||
+    is_debug_pool_prices_enabled() ||
+    is_debug_trader_enabled() ||
+    is_debug_api_enabled() ||
+    is_debug_monitor_enabled() ||
+    is_debug_discovery_enabled() ||
+    is_debug_price_service_enabled() ||
+    is_debug_rugcheck_enabled() ||
+    is_debug_entry_enabled() ||
+    is_debug_rl_learn_enabled() ||
+    is_debug_ohlcv_enabled() ||
+    is_debug_wallet_enabled() ||
+    is_debug_swap_enabled() ||
+    is_debug_decimals_enabled() ||
+    is_debug_summary_enabled() ||
+    is_debug_transactions_enabled()
+}
+
+/// Gets a list of all enabled debug modes
+pub fn get_enabled_debug_modes() -> Vec<&'static str> {
+    let mut modes = Vec::new();
+    
+    if is_debug_filtering_enabled() { modes.push("filtering"); }
+    if is_debug_profit_enabled() { modes.push("profit"); }
+    if is_debug_pool_prices_enabled() { modes.push("pool-prices"); }
+    if is_debug_trader_enabled() { modes.push("trader"); }
+    if is_debug_api_enabled() { modes.push("api"); }
+    if is_debug_monitor_enabled() { modes.push("monitor"); }
+    if is_debug_discovery_enabled() { modes.push("discovery"); }
+    if is_debug_price_service_enabled() { modes.push("price-service"); }
+    if is_debug_rugcheck_enabled() { modes.push("rugcheck"); }
+    if is_debug_entry_enabled() { modes.push("entry"); }
+    if is_debug_rl_learn_enabled() { modes.push("rl-learn"); }
+    if is_debug_ohlcv_enabled() { modes.push("ohlcv"); }
+    if is_debug_wallet_enabled() { modes.push("wallet"); }
+    if is_debug_swap_enabled() { modes.push("swap"); }
+    if is_debug_decimals_enabled() { modes.push("decimals"); }
+    if is_debug_summary_enabled() { modes.push("summary"); }
+    if is_debug_transactions_enabled() { modes.push("transactions"); }
+    
+    modes
+}
+
+/// Prints debug information about current arguments and enabled debug modes
+pub fn print_debug_info() {
+    let args = get_cmd_args();
+    println!("Command-line arguments: {:?}", args);
+    
+    let enabled_modes = get_enabled_debug_modes();
+    if enabled_modes.is_empty() {
+        println!("No debug modes enabled");
+    } else {
+        println!("Enabled debug modes: {:?}", enabled_modes);
+    }
+}
+
+// =============================================================================
+// COMMON ARGUMENT PATTERNS
+// =============================================================================
+
+/// Common argument parsing patterns used across binaries
+pub mod patterns {
+    use super::*;
+    
+    /// Checks for help flags
+    pub fn is_help_requested() -> bool {
+        has_arg("--help") || has_arg("-h")
+    }
+    
+    /// Checks for version flags
+    pub fn is_version_requested() -> bool {
+        has_arg("--version") || has_arg("-V")
+    }
+    
+    /// Gets duration argument (commonly used in monitoring tools)
+    pub fn get_duration_seconds() -> Option<u64> {
+        get_arg_value("--duration")
+            .and_then(|s| s.parse().ok())
+    }
+    
+    /// Gets mint address argument (commonly used in token tools)
+    pub fn get_mint_address() -> Option<String> {
+        get_arg_value("--mint")
+    }
+    
+    /// Gets symbol argument (commonly used in token tools)
+    pub fn get_symbol() -> Option<String> {
+        get_arg_value("--symbol")
+    }
+    
+    /// Checks for quiet/silent mode
+    pub fn is_quiet_mode() -> bool {
+        has_arg("--quiet") || has_arg("-q")
+    }
+    
+    /// Checks for verbose mode
+    pub fn is_verbose_mode() -> bool {
+        has_arg("--verbose") || has_arg("-v")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_and_get_args() {
+        let test_args = vec![
+            "screenerbot".to_string(),
+            "--debug-trader".to_string(),
+            "--mint".to_string(),
+            "test_mint_address".to_string(),
+        ];
+        
+        set_cmd_args(test_args.clone());
+        let retrieved_args = get_cmd_args();
+        
+        assert_eq!(retrieved_args, test_args);
+    }
+
+    #[test]
+    fn test_has_arg() {
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--debug-trader".to_string(),
+        ]);
+        
+        assert!(has_arg("--debug-trader"));
+        assert!(!has_arg("--debug-profit"));
+    }
+
+    #[test]
+    fn test_get_arg_value() {
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--mint".to_string(),
+            "test_mint_address".to_string(),
+        ]);
+        
+        assert_eq!(get_arg_value("--mint"), Some("test_mint_address".to_string()));
+        assert_eq!(get_arg_value("--symbol"), None);
+    }
+
+    #[test]
+    fn test_debug_flags() {
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--debug-trader".to_string(),
+            "--debug-profit".to_string(),
+        ]);
+        
+        assert!(is_debug_trader_enabled());
+        assert!(is_debug_profit_enabled());
+        assert!(!is_debug_filtering_enabled());
+        assert!(is_any_debug_enabled());
+        
+        let enabled_modes = get_enabled_debug_modes();
+        assert!(enabled_modes.contains(&"trader"));
+        assert!(enabled_modes.contains(&"profit"));
+        assert!(!enabled_modes.contains(&"filtering"));
+    }
+
+    #[test]
+    fn test_patterns() {
+        set_cmd_args(vec![
+            "screenerbot".to_string(),
+            "--help".to_string(),
+            "--duration".to_string(),
+            "300".to_string(),
+        ]);
+        
+        assert!(patterns::is_help_requested());
+        assert_eq!(patterns::get_duration_seconds(), Some(300));
+        assert!(!patterns::is_version_requested());
+    }
+}
