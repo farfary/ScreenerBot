@@ -1077,9 +1077,29 @@ pub async fn close_position(
                     }
 
                     // Calculate effective exit price and other metrics
-                    let token_amount_sold = position.token_amount.unwrap_or(0) as f64; // Full position sold
-                    let effective_exit_price = if token_amount_sold > 0.0 {
-                        sol_received / token_amount_sold
+                    let token_amount_raw = position.token_amount.unwrap_or(0) as f64; // Raw units
+                    
+                    // Get token decimals to convert raw amount to UI units
+                    let token_decimals_opt = crate::tokens::get_token_decimals_sync(&position.mint);
+                    let effective_exit_price = if token_amount_raw > 0.0 {
+                        match token_decimals_opt {
+                            Some(decimals) => {
+                                // Convert raw units to UI units before calculating price
+                                let token_amount_ui = token_amount_raw / (10_f64).powi(decimals as i32);
+                                sol_received / token_amount_ui
+                            }
+                            None => {
+                                log(
+                                    LogTag::Trader,
+                                    "WARN",
+                                    &format!(
+                                        "⚠️ Cannot calculate effective exit price for {} - decimals not available",
+                                        position.symbol
+                                    )
+                                );
+                                0.0
+                            }
+                        }
                     } else {
                         0.0
                     };
@@ -1088,9 +1108,9 @@ pub async fn close_position(
                         LogTag::Trader,
                         "VERIFIED",
                         &format!(
-                            "✅ Exit verified: {} sold {} tokens, received {:.9} SOL, effective price: {:.12}",
+                            "✅ Exit verified: {} sold {:.6} tokens (UI), received {:.9} SOL, effective price: {:.12}",
                             position.symbol,
-                            token_amount_sold,
+                            token_amount_raw / (10_f64).powi(token_decimals_opt.unwrap_or(6) as i32),
                             sol_received,
                             effective_exit_price
                         )
@@ -1117,7 +1137,7 @@ pub async fn close_position(
                             "LOSS"
                         },
                         &format!(
-                            "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {} (verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
+                            "{} POSITION CLOSED: {} | Exit TX: {} | Tokens sold: {:.6} (UI verified) | SOL received: {:.9} | P&L: {:.1}% ({:+.9} SOL)",
                             if is_profitable {
                                 "💰"
                             } else {
@@ -1125,7 +1145,7 @@ pub async fn close_position(
                             },
                             position.symbol,
                             transaction_signature,
-                            token_amount_sold,
+                            token_amount_raw / (10_f64).powi(token_decimals_opt.unwrap_or(6) as i32),
                             sol_received,
                             net_pnl_percent,
                             net_pnl_sol
