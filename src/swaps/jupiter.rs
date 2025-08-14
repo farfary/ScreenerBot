@@ -79,32 +79,49 @@ pub async fn jupiter_sign_and_send_transaction(
     log(
         LogTag::Swap,
         "JUPITER_CONFIRMING",
-        &format!("⏳ Jupiter: Waiting for transaction confirmation: {}", &signature[..8])
+        &format!(
+            "⏳ Jupiter: Starting transaction confirmation for {} (max attempts: {}, retry delay: {}ms)",
+            &signature[..8], TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
+        )
     );
+    
+    let confirmation_start = std::time::Instant::now();
     
     match rpc_client.wait_for_transaction_confirmation_smart(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
         Ok(true) => {
+            let confirmation_duration = confirmation_start.elapsed();
             log(
                 LogTag::Swap,
                 "JUPITER_CONFIRMED",
-                &format!("✅ Jupiter: Transaction confirmed on-chain: {}", &signature[..8])
+                &format!(
+                    "✅ Jupiter: Transaction confirmed on-chain: {} (took {:.2}s)",
+                    &signature[..8], confirmation_duration.as_secs_f64()
+                )
             );
         }
         Ok(false) => {
+            let confirmation_duration = confirmation_start.elapsed();
             log(
                 LogTag::Swap,
                 "JUPITER_TIMEOUT",
-                &format!("⏰ Jupiter: Transaction confirmation timeout: {}", &signature[..8])
+                &format!(
+                    "⏰ Jupiter: Transaction confirmation timeout: {} (after {:.2}s, {} attempts)",
+                    &signature[..8], confirmation_duration.as_secs_f64(), TRANSACTION_CONFIRMATION_MAX_ATTEMPTS
+                )
             );
             return Err(SwapError::TransactionError(
-                format!("Transaction confirmation timeout: {}", signature)
+                format!("Transaction confirmation timeout after {:.2}s: {}", confirmation_duration.as_secs_f64(), signature)
             ));
         }
         Err(e) => {
+            let confirmation_duration = confirmation_start.elapsed();
             log(
                 LogTag::Swap,
                 "JUPITER_CONFIRMATION_ERROR",
-                &format!("❌ Jupiter: Transaction confirmation error: {} - {}", &signature[..8], e)
+                &format!(
+                    "❌ Jupiter: Transaction confirmation error: {} - {} (after {:.2}s)",
+                    &signature[..8], e, confirmation_duration.as_secs_f64()
+                )
             );
             return Err(e);
         }

@@ -14,14 +14,44 @@ use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
 use chrono::Utc;
 
-// DEEP DROP ENTRY CONFIGURATION
+// DYNAMIC DROP ENTRY CONFIGURATION - LIQUIDITY-BASED TARGETING
 const MAX_DATA_AGE_MINUTES: i64 = 2; // Reject any data older than 2 minutes
-const DEEP_DROP_MIN_PERCENT: f64 = 10.0; // Minimum drop % for entry
-const DEEP_DROP_MAX_PERCENT: f64 = 50.0; // Maximum drop % for entry  
-const DEEP_DROP_TIME_WINDOW_SEC: i64 = 60; // Must happen in last 60 seconds
-const TARGET_DROP_RATIO: f64 = 0.33; // Target 1/3 of recent high
 
-/// Deep drop entry decision with volatility-based scaling
+// LIQUIDITY TARGETING RANGES (Our focus: 10k$ to 500k$)
+const TARGET_LIQUIDITY_MIN: f64 = 10_000.0;   // Minimum liquidity we target
+const TARGET_LIQUIDITY_MAX: f64 = 500_000.0;  // Maximum liquidity we target
+
+// DYNAMIC DROP PERCENTAGE RANGES (not fixed - calculated by liquidity)
+const DROP_PERCENT_MIN: f64 = 5.0;   // Minimum drop % for high liquidity tokens
+const DROP_PERCENT_MAX: f64 = 50.0;  // Maximum drop % for low liquidity tokens
+const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Absolute maximum (safety limit)
+
+// TIME WINDOWS FOR ANALYSIS
+const DEEP_DROP_TIME_WINDOW_SEC: i64 = 60; // Standard time window for drop analysis
+const FAST_DROP_TIME_WINDOW_SEC: i64 = 10; // Fast drop detection window
+
+// DYNAMIC TARGET RATIOS
+const TARGET_DROP_RATIO_MIN: f64 = 0.15; // 15% drop for high liquidity (conservative)
+const TARGET_DROP_RATIO_MAX: f64 = 0.40; // 40% drop for low liquidity (aggressive)
+
+/// Calculate dynamic drop thresholds based on token liquidity
+/// Returns (min_drop_percent, max_drop_percent, target_ratio) based on liquidity
+fn get_liquidity_based_thresholds(liquidity_usd: f64) -> (f64, f64, f64) {
+    // Clamp liquidity to our target range
+    let clamped_liquidity = liquidity_usd.max(TARGET_LIQUIDITY_MIN).min(TARGET_LIQUIDITY_MAX);
+    
+    // Calculate liquidity ratio (0.0 = min liquidity, 1.0 = max liquidity)
+    let liquidity_ratio = (clamped_liquidity - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
+    
+    // INVERSE RELATIONSHIP: Higher liquidity = smaller drops needed, Lower liquidity = larger drops needed
+    let min_drop = DROP_PERCENT_MAX - (liquidity_ratio * (DROP_PERCENT_MAX - DROP_PERCENT_MIN));
+    let max_drop = DROP_PERCENT_ULTRA_MAX;
+    let target_ratio = TARGET_DROP_RATIO_MAX - (liquidity_ratio * (TARGET_DROP_RATIO_MAX - TARGET_DROP_RATIO_MIN));
+    
+    (min_drop, max_drop, target_ratio)
+}
+
+/// Deep drop entry decision with dynamic liquidity-based scaling
 /// Returns true if token shows deep drop pattern for immediate entry
 pub async fn should_buy(token: &Token) -> bool {
     // Check blacklist first
@@ -38,8 +68,8 @@ pub async fn should_buy(token: &Token) -> bool {
         return false;
     }
 
-    // Get current pool price with age validation
-    let (current_pool_price, pool_data_age) = match pool_service.get_pool_price(&token.mint, None).await {
+    // Get current pool price with age validation AND liquidity data
+    let (current_pool_price, pool_data_age, liquidity_usd) = match pool_service.get_pool_price(&token.mint, None).await {
         Some(pool_result) => {
             match pool_result.price_sol {
                 Some(price) if price > 0.0 && price.is_finite() => {
@@ -49,7 +79,12 @@ pub async fn should_buy(token: &Token) -> bool {
                         return false;
                     }
                     
-                    (price, data_age_minutes)
+                    // Get liquidity or fallback to token data
+                    let liquidity = pool_result.liquidity_usd.max(
+                        token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
+                    );
+                    
+                    (price, data_age_minutes, liquidity)
                 },
                 _ => return false,
             }
@@ -57,24 +92,39 @@ pub async fn should_buy(token: &Token) -> bool {
         None => return false,
     };
 
+    // Skip tokens outside our liquidity target range
+    if liquidity_usd < TARGET_LIQUIDITY_MIN || liquidity_usd > TARGET_LIQUIDITY_MAX {
+        if is_debug_entry_enabled() {
+            log(
+                LogTag::Entry, 
+                "LIQUIDITY_FILTER", 
+                &format!("❌ {} liquidity ${:.0} outside target range ${:.0}-${:.0}", 
+                    token.symbol, liquidity_usd, TARGET_LIQUIDITY_MIN, TARGET_LIQUIDITY_MAX
+                )
+            );
+        }
+        return false;
+    }
+
     // Get recent price history for deep drop analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
     
-    // CORE LOGIC: Deep drop detection
+    // CORE LOGIC: Dynamic drop detection based on liquidity
     let deep_drop_result = analyze_deep_drop_entry(
         current_pool_price,
         &price_history,
-        pool_data_age
+        pool_data_age,
+        liquidity_usd
     ).await;
 
     if let Some((drop_percent, entry_reason)) = deep_drop_result {
         if is_debug_entry_enabled() {
             log(
                 LogTag::Entry,
-                "DEEP_DROP_ENTRY",
+                "DYNAMIC_DROP_ENTRY",
                 &format!(
-                    "🎯 {} DEEP ENTRY: -{:.1}% {} (price: {:.12} SOL)",
-                    token.symbol, drop_percent, entry_reason, current_pool_price
+                    "🎯 {} DYNAMIC ENTRY: -{:.1}% {} (liquidity: ${:.0}, price: {:.12} SOL)",
+                    token.symbol, drop_percent, entry_reason, liquidity_usd, current_pool_price
                 )
             );
         }
@@ -84,30 +134,40 @@ pub async fn should_buy(token: &Token) -> bool {
     false
 }
 
-/// Get profit target range based on pool liquidity
+/// Get profit target range based on pool liquidity (DYNAMIC TARGETING)
 pub async fn get_profit_target(token: &Token) -> (f64, f64) {
     let pool_service = get_pool_service();
     
     let liquidity_usd = if let Some(pool_result) = pool_service.get_pool_price(&token.mint, None).await {
-        pool_result.liquidity_usd
+        pool_result.liquidity_usd.max(
+            token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
+        )
     } else {
         token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
     };
 
-    // Base targets adjusted by liquidity only
-    let (min_target, max_target) = match liquidity_usd {
-        x if x >= 1_000_000.0 => (5.0, 15.0),
-        x if x >= 100_000.0 => (10.0, 30.0), 
-        x if x >= 10_000.0 => (20.0, 50.0),
-        _ => (30.0, 100.0),
-    };
+    // DYNAMIC targets based on liquidity (INVERSE relationship like entry thresholds)
+    // Higher liquidity = lower targets (safer), Lower liquidity = higher targets (more risk/reward)
+    
+    // Clamp to our target range
+    let clamped_liquidity = liquidity_usd.max(TARGET_LIQUIDITY_MIN).min(TARGET_LIQUIDITY_MAX);
+    let liquidity_ratio = (clamped_liquidity - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
+    
+    // INVERSE: High liquidity = conservative targets, Low liquidity = aggressive targets  
+    let base_min = 50.0 - (liquidity_ratio * 40.0); // 50% down to 10%
+    let base_max = 150.0 - (liquidity_ratio * 100.0); // 150% down to 50%
+    
+    let min_target = base_min.max(8.0);  // Never below 8%
+    let max_target = base_max.max(min_target + 10.0); // Always at least 10% range
     
     (min_target, max_target)
 }
 
-/// Get dynamic entry threshold (simplified)
+/// Get dynamic entry threshold based on liquidity (not fixed)
 pub fn get_entry_threshold(token: &Token) -> f64 {
-    DEEP_DROP_MIN_PERCENT
+    let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(TARGET_LIQUIDITY_MIN);
+    let (min_drop, _max_drop, _target_ratio) = get_liquidity_based_thresholds(liquidity_usd);
+    min_drop
 }
 
 /// Helper function to get rugcheck score for a token (simplified)
@@ -142,18 +202,22 @@ fn calculate_price_volatility(price_history: &[(chrono::DateTime<chrono::Utc>, f
     }
 }
 
-/// Deep drop analysis for volatility-based entry decisions
-/// Returns Some((drop_percent, reason)) if deep drop detected, None otherwise
+/// Dynamic drop analysis with liquidity-based entry decisions
+/// Returns Some((drop_percent, reason)) if dynamic drop detected, None otherwise
 async fn analyze_deep_drop_entry(
     current_price: f64,
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
-    data_age_minutes: i64
+    data_age_minutes: i64,
+    liquidity_usd: f64
 ) -> Option<(f64, String)> {
     use chrono::Utc;
     
-    // Strategy 1: Immediate entry for ultra-fresh data
-    if data_age_minutes == 0 && price_history.is_empty() {
-        return Some((0.0, "ultra-fresh entry".to_string()));
+    // Get dynamic thresholds based on liquidity
+    let (min_drop_threshold, max_drop_threshold, target_drop_ratio) = get_liquidity_based_thresholds(liquidity_usd);
+    
+    // Strategy 1: Immediate entry for ultra-fresh data (only for good liquidity)
+    if data_age_minutes == 0 && price_history.is_empty() && liquidity_usd >= 50_000.0 {
+        return Some((0.0, format!("ultra-fresh entry (${:.0}k liquidity)", liquidity_usd / 1000.0)));
     }
     
     // Need at least 2 data points for drop analysis
@@ -186,28 +250,34 @@ async fn analyze_deep_drop_entry(
         return None;
     }
     
-    // Get base threshold without volatility adjustment
-    let base_threshold = DEEP_DROP_MIN_PERCENT;
-    
-    // Strategy 2: Deep drop detection (main entry condition)
-    if drop_percent >= base_threshold && drop_percent <= DEEP_DROP_MAX_PERCENT {
+    // Strategy 2: Dynamic drop detection (main entry condition) - LIQUIDITY ADJUSTED
+    if drop_percent >= min_drop_threshold && drop_percent <= max_drop_threshold {
         let time_span = recent_prices.len();
-        return Some((drop_percent, format!("deep drop in {}pts", time_span)));
+        return Some((
+            drop_percent, 
+            format!("dynamic drop in {}pts (${:.0}k: {:.1}%-{:.1}%)", 
+                time_span, liquidity_usd / 1000.0, min_drop_threshold, max_drop_threshold
+            )
+        ));
     }
     
-    // Strategy 3: Target 1/3 drop detection
-    let target_drop = recent_high * TARGET_DROP_RATIO;
+    // Strategy 3: Dynamic target ratio drop detection - LIQUIDITY ADJUSTED
+    let target_drop_absolute = recent_high * target_drop_ratio;
     let current_drop_absolute = recent_high - current_price;
     
-    if current_drop_absolute >= target_drop {
-        let drop_ratio = current_drop_absolute / recent_high;
-        return Some((drop_percent, format!("1/3 target hit ({:.1}%)", drop_ratio * 100.0)));
+    if current_drop_absolute >= target_drop_absolute {
+        return Some((
+            drop_percent, 
+            format!("dynamic target hit {:.1}% (${:.0}k ratio: {:.1}%)", 
+                drop_percent, liquidity_usd / 1000.0, target_drop_ratio * 100.0
+            )
+        ));
     }
     
-    // Strategy 4: Fast deep drop (higher threshold but faster timeframe)
+    // Strategy 4: Fast dynamic drop (higher threshold but faster timeframe) - LIQUIDITY ADJUSTED
     let ultra_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
         .iter()
-        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= 10) // Last 10 seconds
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= FAST_DROP_TIME_WINDOW_SEC)
         .cloned()
         .collect();
     
@@ -217,8 +287,16 @@ async fn analyze_deep_drop_entry(
         if ultra_high > 0.0 && ultra_high.is_finite() {
             let ultra_drop = ((ultra_high - current_price) / ultra_high) * 100.0;
             
-            if ultra_drop >= 15.0 && ultra_drop <= DEEP_DROP_MAX_PERCENT {
-                return Some((ultra_drop, "fast deep drop".to_string()));
+            // Fast drop threshold is 1.5x the minimum threshold for that liquidity level
+            let fast_threshold = min_drop_threshold * 1.5;
+            
+            if ultra_drop >= fast_threshold && ultra_drop <= max_drop_threshold {
+                return Some((
+                    ultra_drop, 
+                    format!("fast dynamic drop {:.1}% (${:.0}k: ≥{:.1}%)", 
+                        ultra_drop, liquidity_usd / 1000.0, fast_threshold
+                    )
+                ));
             }
         }
     }
@@ -226,7 +304,7 @@ async fn analyze_deep_drop_entry(
     None
 }
 
-/// Enhanced entry decision with confidence scoring 
+/// Enhanced entry decision with liquidity-based confidence scoring 
 /// Returns (should_enter, confidence_score, reason)
 pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
     // Check blacklist first
@@ -238,18 +316,26 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
     let should_enter = should_buy(token).await;
     
     if should_enter {
-        // Calculate confidence based on liquidity and basic factors
+        // Calculate confidence based on liquidity positioning within our target range
         let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
         
-        let confidence = match liquidity_usd {
-            x if x >= 1_000_000.0 => 85.0, // High liquidity = high confidence
-            x if x >= 100_000.0 => 75.0,   // Good liquidity
-            x if x >= 10_000.0 => 65.0,    // Moderate liquidity
-            _ => 55.0,                     // Low liquidity = lower confidence
+        let confidence = if liquidity_usd < TARGET_LIQUIDITY_MIN {
+            45.0 // Below our target range = lower confidence
+        } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
+            60.0 // Above our target range = moderate confidence  
+        } else {
+            // Within our target range - calculate position-based confidence
+            let position_in_range = (liquidity_usd - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
+            
+            // SWEET SPOT: Middle of our range gets highest confidence
+            let distance_from_center = (position_in_range - 0.5).abs() * 2.0; // 0.0 = center, 1.0 = edges
+            let base_confidence = 85.0 - (distance_from_center * 15.0); // 85% at center, 70% at edges
+            
+            base_confidence.max(70.0).min(85.0)
         };
         
-        (true, confidence, "Deep drop detected".to_string())
+        (true, confidence, format!("Dynamic drop detected (${:.0}k liquidity)", liquidity_usd / 1000.0))
     } else {
-        (false, 0.0, "No deep drop signal".to_string())
+        (false, 0.0, "No dynamic drop signal".to_string())
     }
 }

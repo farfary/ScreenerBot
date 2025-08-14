@@ -399,64 +399,84 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         return;
     }
 
-    // Check if we already have an open position for this token and count open positions
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        if
-            positions
+    // DEADLOCK FIX: Check positions first, release lock, then check pending transactions
+    let (already_has_position, open_positions_count) = {
+        if let Ok(positions) = SAVED_POSITIONS.lock() {
+            let has_position = positions
                 .iter()
-                .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-        {
-            return; // Already have an open position for this token
+                .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none());
+            
+            let count = positions
+                .iter()
+                .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
+                .count();
+                
+            (has_position, count)
+        } else {
+            (false, 0)
         }
+    }; // Lock is released here
 
-        // Check if we've reached the maximum open positions limit
-        let open_positions_count = positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-            .count();
+    if already_has_position {
+        return; // Already have an open position for this token
+    }
 
-        if open_positions_count >= MAX_OPEN_POSITIONS {
-            log(
-                LogTag::Trader,
-                "LIMIT",
-                &format!(
-                    "Maximum open positions reached ({}/{}). Skipping new position for {} ({})",
-                    open_positions_count,
-                    MAX_OPEN_POSITIONS,
-                    token.symbol,
-                    token.mint
-                )
-            );
-            return;
-        }
+    if open_positions_count >= MAX_OPEN_POSITIONS {
+        log(
+            LogTag::Trader,
+            "LIMIT",
+            &format!(
+                "Maximum open positions reached ({}/{}). Skipping new position for {} ({})",
+                open_positions_count,
+                MAX_OPEN_POSITIONS,
+                token.symbol,
+                token.mint
+            )
+        );
+        return;
     }
 
     // CRITICAL SAFETY CHECK: Check for pending transactions for this token
     // This prevents duplicate positions and transaction conflicts
+    log(
+        LogTag::Trader,
+        "PENDING_TX_CHECK_START",
+        &format!(
+            "🔍 SAFETY CHECK: Checking for pending transactions before opening position for {} ({})",
+            token.symbol, &token.mint[..8]
+        )
+    );
+
     match crate::transactions::has_pending_transactions_for_token(&token.mint).await {
         Ok(has_pending) => {
             if has_pending {
                 log(
                     LogTag::Trader,
-                    "PENDING_TX",
+                    "PENDING_TX_BLOCKED",
                     &format!(
-                        "🔄 PENDING TRANSACTION DETECTED: Skipping new position for {} ({}) - transaction already in progress",
-                        token.symbol,
-                        token.mint
+                        "� PENDING TRANSACTION DETECTED: Skipping new position for {} ({}) - transaction already in progress",
+                        token.symbol, &token.mint[..8]
                     )
                 );
                 return;
+            } else {
+                log(
+                    LogTag::Trader,
+                    "PENDING_TX_CLEAR",
+                    &format!(
+                        "✅ SAFETY CHECK PASSED: No pending transactions found for {} ({}) - proceeding with position",
+                        token.symbol, &token.mint[..8]
+                    )
+                );
             }
         }
         Err(e) => {
             log(
                 LogTag::Trader,
-                "ERROR",
+                "PENDING_TX_ERROR",
                 &format!(
-                    "Failed to check pending transactions for {} ({}): {}",
-                    token.symbol,
-                    token.mint,
-                    e
+                    "❌ SAFETY CHECK FAILED: Failed to check pending transactions for {} ({}): {} - BLOCKING position for safety",
+                    token.symbol, &token.mint[..8], e
                 )
             );
             return; // Err on the side of caution - don't open position if we can't verify pending state
@@ -585,20 +605,27 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
                 )
             );
 
-            // Add position to saved positions immediately to prevent money loss
-            if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+            // DEADLOCK FIX: Add position and get snapshot for saving, then save outside lock
+            let positions_snapshot = if let Ok(mut positions) = SAVED_POSITIONS.lock() {
                 positions.push(new_position);
-                save_positions_to_file(&positions);
+                let snapshot = positions.clone();
+                snapshot
+            } else {
+                log(LogTag::Trader, "ERROR", "Failed to lock positions for saving");
+                return;
+            }; // Lock is released here
+            
+            // Save to file outside of mutex lock to avoid blocking other threads
+            save_positions_to_file(&positions_snapshot);
 
-                log(
-                    LogTag::Trader,
-                    "SAVED",
-                    &format!(
-                        "💾 Position saved to disk: {} - pending background verification",
-                        token.symbol
-                    )
-                );
-            }
+            log(
+                LogTag::Trader,
+                "SAVED",
+                &format!(
+                    "💾 Position saved to disk: {} - pending background verification",
+                    token.symbol
+                )
+            );
 
             // Add transaction to transactions manager pending queue for background processing
             if let Err(e) = add_priority_transaction(transaction_signature.clone()).await {
@@ -677,7 +704,7 @@ pub async fn close_position(
             &format!(
                 "⚠️ Position for {} already has exit transaction signature: {}. Skipping close attempt.",
                 position.symbol,
-                position.exit_transaction_signature.as_ref().unwrap()
+                position.exit_transaction_signature.as_ref().unwrap_or(&"None".to_string())
             )
         );
         return true; // Position is already closed/being closed
@@ -805,18 +832,24 @@ pub async fn close_position(
                 )
             );
 
-            // Save the updated position
-            if let Ok(positions) = SAVED_POSITIONS.lock() {
-                save_positions_to_file(&positions);
-                log(
-                    LogTag::Trader,
-                    "SAVED",
-                    &format!(
-                        "💾 Position exit signature saved to disk: {} - pending background verification",
-                        position.symbol
-                    )
-                );
-            }
+            // DEADLOCK FIX: Get positions snapshot, then save outside lock
+            let positions_snapshot = if let Ok(positions) = SAVED_POSITIONS.lock() {
+                positions.clone()
+            } else {
+                log(LogTag::Trader, "ERROR", "Failed to lock positions for saving");
+                return false;
+            }; // Lock is released here
+            
+            // Save to file outside of mutex lock to avoid blocking other threads
+            save_positions_to_file(&positions_snapshot);
+            log(
+                LogTag::Trader,
+                "SAVED",
+                &format!(
+                    "💾 Position exit signature saved to disk: {} - pending background verification",
+                    position.symbol
+                )
+            );
 
             // Add transaction to transactions manager pending queue for background processing
             if let Err(e) = add_priority_transaction(transaction_signature.clone()).await {
@@ -913,10 +946,24 @@ async fn verify_and_resolve_position_state(
                     position.transaction_exit_verified = true;
                     position.sol_received = Some(0.0);
                     
-                    // Save the corrected position
-                    if let Ok(positions) = SAVED_POSITIONS.lock() {
-                        save_positions_to_file(&positions);
-                    }
+                    // RACE CONDITION FIX: Update position in-place within locked context
+                    // Save the corrected position - we need to find and update the position in the vector
+                    let positions_snapshot = if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                        // Find the position by mint and update it
+                        if let Some(pos) = positions.iter_mut().find(|p| p.mint == position.mint) {
+                            pos.exit_price = Some(0.0);
+                            pos.exit_time = Some(exit_time);
+                            pos.transaction_exit_verified = true;
+                            pos.sol_received = Some(0.0);
+                        }
+                        positions.clone()
+                    } else {
+                        log(LogTag::Trader, "ERROR", "Failed to lock positions for phantom resolution");
+                        return false;
+                    }; // Lock is released here
+                    
+                    // Save to file outside of mutex lock
+                    save_positions_to_file(&positions_snapshot);
                     
                     return true; // Position resolved as phantom
                 }
@@ -973,15 +1020,31 @@ async fn verify_and_resolve_position_state(
             position.transaction_exit_verified = true;
             position.exit_fee_lamports = Some((latest_sell.fee_sol * 1_000_000_000.0) as u64);
 
-            // Save the updated position
-            if let Ok(positions) = SAVED_POSITIONS.lock() {
-                save_positions_to_file(&positions);
-                log(
-                    LogTag::Trader,
-                    "POSITION_UPDATED",
-                    &format!("💾 Position {} updated with untracked sell data and saved", position.symbol)
-                );
-            }
+            // RACE CONDITION FIX: Update position in-place within locked context  
+            // Save the updated position - we need to find and update the position in the vector
+            let positions_snapshot = if let Ok(mut positions) = SAVED_POSITIONS.lock() {
+                // Find the position by mint and update it
+                if let Some(pos) = positions.iter_mut().find(|p| p.mint == position.mint) {
+                    pos.exit_price = Some(latest_sell.calculated_price_sol);
+                    pos.exit_time = Some(exit_time);
+                    pos.effective_exit_price = Some(latest_sell.calculated_price_sol);
+                    pos.sol_received = Some(latest_sell.sol_amount);
+                    pos.transaction_exit_verified = true;
+                    pos.exit_fee_lamports = Some((latest_sell.fee_sol * 1_000_000_000.0) as u64);
+                }
+                positions.clone()
+            } else {
+                log(LogTag::Trader, "ERROR", "Failed to lock positions for untracked sell update");
+                return false;
+            }; // Lock is released here
+            
+            // Save to file outside of mutex lock
+            save_positions_to_file(&positions_snapshot);
+            log(
+                LogTag::Trader,
+                "POSITION_UPDATED",
+                &format!("💾 Position {} updated with untracked sell data and saved", position.symbol)
+            );
 
             return true; // Position resolved with historical data
         }
@@ -1048,9 +1111,16 @@ async fn record_position_for_learning(position: &Position) -> Result<(), String>
     }
 
     let entry_price = position.entry_price;
-    let exit_price = position.exit_price.unwrap();
     let entry_time = position.entry_time;
-    let exit_time = position.exit_time.unwrap();
+    // PANIC PREVENTION: Safe unwrapping with early return on invalid data
+    let exit_price = match position.exit_price {
+        Some(price) => price,
+        None => return Err("Position has no exit price".to_string()),
+    };
+    let exit_time = match position.exit_time {
+        Some(time) => time,
+        None => return Err("Position has no exit time".to_string()),
+    };
 
     // Get additional data needed for RL learning
     // For now, use placeholder values - in a real implementation, we'd store these at entry time

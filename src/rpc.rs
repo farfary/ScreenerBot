@@ -3179,13 +3179,45 @@ impl RpcClient {
             )
         );
 
+        log(
+            LogTag::Rpc,
+            "CONFIRMATION_STRATEGY",
+            &format!(
+                "📋 Strategy: getSignatureStatuses → fast failure if {} consecutive nulls in first {} attempts → timeout after {} total attempts",
+                FAST_FAILURE_THRESHOLD_ATTEMPTS, FAST_FAILURE_THRESHOLD_ATTEMPTS + 2, max_attempts
+            )
+        );
+
         let mut current_delay = retry_delay_ms;
         let mut consecutive_nulls = 0u32;
+        let mut total_api_calls = 0u32;
         
         for attempt in 1..=max_attempts {
+            total_api_calls += 1;
+            
+            log(
+                LogTag::Rpc,
+                "CONFIRMATION_ATTEMPT",
+                &format!(
+                    "🔄 Attempt {}/{}: Checking signature status for {} (consecutive nulls: {}, total API calls: {})",
+                    attempt, max_attempts, &signature[..8], consecutive_nulls, total_api_calls
+                )
+            );
+
             // First try getSignatureStatuses for faster detection
             match self.get_signature_status(signature).await {
                 Ok(Some(status)) => {
+                    consecutive_nulls = 0; // Reset null counter
+                    
+                    log(
+                        LogTag::Rpc,
+                        "SIGNATURE_STATUS_RECEIVED",
+                        &format!(
+                            "✅ Received signature status for {}: confirmation_status={:?}, err={:?}",
+                            &signature[..8], status.confirmation_status, status.err
+                        )
+                    );
+
                     // We have a status response
                     if let Some(err) = &status.err {
                         log(
@@ -3207,16 +3239,34 @@ impl RpcClient {
                             LogTag::Rpc,
                             "SMART_CONFIRMATION_SUCCESS",
                             &format!(
-                                "✅ Transaction confirmed via signature status after {} attempts: {} (status: {:?})",
-                                attempt, &signature[..8], status.confirmation_status
+                                "✅ Transaction confirmed via signature status after {} attempts: {} (status: {:?}, total API calls: {})",
+                                attempt, &signature[..8], status.confirmation_status, total_api_calls
                             )
                         );
                         return Ok(true);
+                    } else {
+                        log(
+                            LogTag::Rpc,
+                            "STATUS_NO_CONFIRMATION",
+                            &format!(
+                                "⚠️ Status received but no confirmation_status field for {}: {:?}",
+                                &signature[..8], status
+                            )
+                        );
                     }
                 }
                 Ok(None) => {
                     // No status found (null response)
                     consecutive_nulls += 1;
+                    
+                    log(
+                        LogTag::Rpc,
+                        "STATUS_NULL_RESPONSE",
+                        &format!(
+                            "⚪ Null status response for {} (attempt {}/{}, consecutive nulls: {}, total API calls: {})",
+                            &signature[..8], attempt, max_attempts, consecutive_nulls, total_api_calls
+                        )
+                    );
                     
                     // Fast failure detection: if we get null responses for several attempts early on,
                     // the transaction was likely dropped from mempool
@@ -3225,41 +3275,59 @@ impl RpcClient {
                             LogTag::Rpc,
                             "TRANSACTION_DROPPED_FAST",
                             &format!(
-                                "⚡ Fast failure: Transaction likely dropped after {} consecutive null responses: {}",
-                                consecutive_nulls, &signature[..8]
+                                "⚡ Fast failure triggered: Transaction likely dropped after {} consecutive null responses in first {} attempts: {} (total API calls: {})",
+                                consecutive_nulls, FAST_FAILURE_THRESHOLD_ATTEMPTS + 2, &signature[..8], total_api_calls
                             )
                         );
                         return Ok(false); // Fast failure - transaction was dropped
                     }
                     
-                    log(
-                        LogTag::Rpc,
-                        "SMART_CONFIRMATION_WAITING",
-                        &format!(
-                            "⏳ Transaction status null (attempt {}/{}, consecutive nulls: {}): {} - retrying in {}ms",
-                            attempt, max_attempts, consecutive_nulls, &signature[..8], current_delay
-                        )
-                    );
+                    if consecutive_nulls % 5 == 0 {
+                        log(
+                            LogTag::Rpc,
+                            "NULL_STATUS_MILESTONE",
+                            &format!(
+                                "📊 Status milestone: {} consecutive null responses for {} (this is normal during network propagation)",
+                                consecutive_nulls, &signature[..8]
+                            )
+                        );
+                    }
                 }
                 Err(e) => {
-                    // Fallback to original method if signature status fails
                     log(
                         LogTag::Rpc,
-                        "SMART_CONFIRMATION_FALLBACK",
+                        "STATUS_CHECK_ERROR",
                         &format!(
-                            "⚠️ getSignatureStatuses failed, falling back to getTransaction: {} - Error: {}",
-                            &signature[..8], e
+                            "❌ Error checking signature status for {} (attempt {}): {} - continuing with retry",
+                            &signature[..8], attempt, e
                         )
                     );
-                    
-                    // Use original confirmation method as fallback
-                    return self.wait_for_transaction_confirmation(signature, max_attempts - attempt + 1, current_delay).await;
+                    // Continue with retry on API errors
                 }
             }
             
+            // Add delay between attempts
             if attempt < max_attempts {
+                log(
+                    LogTag::Rpc,
+                    "CONFIRMATION_WAIT",
+                    &format!(
+                        "⏱️ Waiting {}ms before next attempt for {} (attempt {}/{})",
+                        current_delay, &signature[..8], attempt, max_attempts
+                    )
+                );
+                
                 tokio::time::sleep(Duration::from_millis(current_delay)).await;
                 current_delay = (current_delay as f64 * 1.2).min(5000.0) as u64; // Modest backoff
+                
+                log(
+                    LogTag::Rpc,
+                    "CONFIRMATION_BACKOFF",
+                    &format!(
+                        "📈 Next delay adjusted to {}ms for {} (backoff applied)",
+                        current_delay, &signature[..8]
+                    )
+                );
             }
         }
 
@@ -3267,8 +3335,8 @@ impl RpcClient {
             LogTag::Rpc,
             "SMART_CONFIRMATION_TIMEOUT",
             &format!(
-                "⏰ Smart confirmation timeout after {} attempts: {}",
-                max_attempts, &signature[..8]
+                "⏰ Smart confirmation timeout after {} attempts and {} total API calls: {} (this may indicate network congestion or RPC lag)",
+                max_attempts, total_api_calls, &signature[..8]
             )
         );
         Ok(false) // Timeout
@@ -3276,6 +3344,12 @@ impl RpcClient {
 
     /// Helper method to get signature status using getSignatureStatuses  
     async fn get_signature_status(&self, signature: &str) -> Result<Option<SignatureStatusData>, SwapError> {
+        log(
+            LogTag::Rpc,
+            "STATUS_API_CALL_START",
+            &format!("🌐 Making getSignatureStatuses API call for {}", &signature[..8])
+        );
+
         let rpc_payload = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -3295,6 +3369,12 @@ impl RpcClient {
             &self.rpc_url
         };
 
+        log(
+            LogTag::Rpc,
+            "STATUS_API_URL",
+            &format!("📡 Using RPC endpoint: {} for signature {}", rpc_url, &signature[..8])
+        );
+
         let response = client
             .post(rpc_url)
             .header("Content-Type", "application/json")
@@ -3302,18 +3382,56 @@ impl RpcClient {
             .timeout(Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| SwapError::NetworkError(e))?;
+            .map_err(|e| {
+                log(
+                    LogTag::Rpc,
+                    "STATUS_API_NETWORK_ERROR",
+                    &format!("🔌 Network error in getSignatureStatuses for {}: {}", &signature[..8], e)
+                );
+                SwapError::NetworkError(e)
+            })?;
 
         if !response.status().is_success() {
+            log(
+                LogTag::Rpc,
+                "STATUS_API_HTTP_ERROR",
+                &format!("📉 HTTP error in getSignatureStatuses for {}: {}", &signature[..8], response.status())
+            );
             return Err(SwapError::ApiError(format!("RPC error: {}", response.status())));
         }
+
+        log(
+            LogTag::Rpc,
+            "STATUS_API_RESPONSE_OK",
+            &format!("✅ Received HTTP 200 response from getSignatureStatuses for {}", &signature[..8])
+        );
 
         let rpc_response: SignatureStatusResponse = response
             .json()
             .await
-            .map_err(|e| SwapError::InvalidResponse(format!("Failed to parse signature status: {}", e)))?;
+            .map_err(|e| {
+                log(
+                    LogTag::Rpc,
+                    "STATUS_API_PARSE_ERROR",
+                    &format!("🔍 Failed to parse getSignatureStatuses response for {}: {}", &signature[..8], e)
+                );
+                SwapError::InvalidResponse(format!("Failed to parse signature status: {}", e))
+            })?;
 
-        Ok(rpc_response.result.value.into_iter().next().flatten())
+        let result = rpc_response.result.value.into_iter().next().flatten();
+        
+        log(
+            LogTag::Rpc,
+            "STATUS_API_RESULT",
+            &format!(
+                "📊 getSignatureStatuses result for {}: {:?}",
+                &signature[..8], 
+                result.as_ref().map(|r| format!("confirmation_status={:?}, err={:?}", r.confirmation_status, r.err))
+                    .unwrap_or_else(|| "null".to_string())
+            )
+        );
+
+        Ok(result)
     }
 
     /// Priority transaction confirmation with faster timeouts and reduced retries
