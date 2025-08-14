@@ -46,19 +46,13 @@ use crate::tokens::price::get_token_price_blocking_safe;
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// Timing and timeout configuration for transaction manager
+/// Timing configuration for transaction manager - SIMPLIFIED
+/// This replaces the complex adaptive timing system with predictable intervals
 
-// Background service monitoring intervals
-const MONITORING_INTERVAL_DEFAULT_SECS: u64 = 10;        // Default monitoring interval
-const MONITORING_INTERVAL_FAST_SECS: u64 = 2;            // Fast monitoring when priority transactions pending
-const MONITORING_INTERVAL_SLOW_SECS: u64 = 60;          // Slow monitoring when inactive (2 minutes)
-const MONITORING_INTERVAL_ERROR_SECS: u64 = 6;          // Fast recovery after errors
-const EMPTY_CYCLES_THRESHOLD: u32 = 5;                   // Switch to slow mode after 3 empty cycles
-
-// Transaction verification timeouts and intervals
-const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 5;       // Priority transaction verification timeout
-const VERIFICATION_CHECK_INTERVAL_MILLIS: u64 = 10;      // Sleep between verification checks (fast)
-const VERIFICATION_SLOW_CHECK_INTERVAL_MILLIS: u64 = 100; // Sleep between batches (slower)
+// Main monitoring intervals
+const NORMAL_CHECK_INTERVAL_SECS: u64 = 15;      // Normal transaction checking every 15 seconds
+const PRIORITY_CHECK_INTERVAL_SECS: u64 = 3;     // Priority transaction checking every 3 seconds
+const MAX_PRIORITY_ATTEMPTS: u32 = 20;           // Max attempts before giving up (20 * 3s = 60s max)
 
 // RPC and batch processing limits
 const RPC_BATCH_SIZE: usize = 100;                       // Transaction signatures fetch batch size
@@ -125,6 +119,27 @@ pub struct Transaction {
     pub priority_added_at: Option<DateTime<Utc>>,
     pub last_updated: DateTime<Utc>,
     pub cache_file_path: String,
+}
+
+/// Enhanced priority transaction state management
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriorityTransaction {
+    pub signature: String,
+    pub added_at: DateTime<Utc>,
+    pub attempts: u32,
+    pub state: PriorityState,
+    pub last_check: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PriorityState {
+    Pending,
+    TransactionSuccess,
+    SwapSuccess,
+    TransactionFailed,
+    SwapFailed,
+    NotFound,
+    MaxAttemptsReached,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -485,7 +500,7 @@ pub struct TransactionsManager {
     pub wallet_pubkey: Pubkey,
     pub debug_enabled: bool,
     pub known_signatures: HashSet<String>,
-    pub priority_transactions: HashMap<String, DateTime<Utc>>,
+    pub priority_transactions: HashMap<String, PriorityTransaction>,
     pub last_signature_check: Option<String>,
     pub total_transactions: u64,
     pub new_transactions_count: u64,
@@ -686,7 +701,11 @@ impl TransactionsManager {
                 token_symbol: None,
                 token_decimals: None,
                 is_priority,
-                priority_added_at: if is_priority { self.priority_transactions.get(signature).copied() } else { None },
+                priority_added_at: if is_priority { 
+                    self.priority_transactions.get(signature).map(|pt| pt.added_at) 
+                } else { 
+                    None 
+                },
                 last_updated: Utc::now(),
                 cache_file_path: cache_file.clone(),
             };
@@ -758,7 +777,15 @@ impl TransactionsManager {
 
     /// Add priority transaction for monitoring
     pub fn add_priority_transaction(&mut self, signature: String) {
-        self.priority_transactions.insert(signature.clone(), Utc::now());
+        let priority_transaction = PriorityTransaction {
+            signature: signature.clone(),
+            added_at: Utc::now(),
+            last_check: Utc::now(),
+            attempts: 0,
+            state: PriorityState::Pending,
+        };
+        
+        self.priority_transactions.insert(signature.clone(), priority_transaction);
         
         if self.debug_enabled {
             log(LogTag::Transactions, "PRIORITY", &format!(
@@ -768,35 +795,82 @@ impl TransactionsManager {
         }
     }
 
-    /// Check priority transactions for completion
+    /// Check priority transactions for completion with enhanced state management
     pub async fn check_priority_transactions(&mut self) -> Result<(), String> {
         let signatures_to_check: Vec<String> = self.priority_transactions.keys().cloned().collect();
         
         for signature in signatures_to_check {
-            // If we already processed this signature, remove from priority
+            // If we already processed this signature, mark as completed and remove
             if self.known_signatures.contains(&signature) {
+                if let Some(mut priority_tx) = self.priority_transactions.get(&signature).cloned() {
+                    priority_tx.state = PriorityState::TransactionSuccess;
+                    priority_tx.last_check = Utc::now();
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "PRIORITY", &format!(
+                            "Priority transaction {} completed after {} attempts", 
+                            &signature[..8], priority_tx.attempts
+                        ));
+                    }
+                }
                 self.priority_transactions.remove(&signature);
                 continue;
             }
 
+            // Get current priority transaction state
+            let mut priority_tx = match self.priority_transactions.get(&signature).cloned() {
+                Some(tx) => tx,
+                None => continue, // Should not happen
+            };
+
+            // Check if we've exceeded max attempts
+            if priority_tx.attempts >= MAX_PRIORITY_ATTEMPTS {
+                priority_tx.state = PriorityState::MaxAttemptsReached;
+                priority_tx.last_check = Utc::now();
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "PRIORITY", &format!(
+                        "Priority transaction {} reached max attempts ({})", 
+                        &signature[..8], MAX_PRIORITY_ATTEMPTS
+                    ));
+                }
+                
+                self.priority_transactions.remove(&signature);
+                continue;
+            }
+
+            // Update attempt count and last check time
+            priority_tx.attempts += 1;
+            priority_tx.last_check = Utc::now();
+
             // Check if transaction is now available/finalized
             match self.process_transaction(&signature).await {
                 Ok(_) => {
+                    priority_tx.state = PriorityState::TransactionSuccess;
+                    
                     if self.debug_enabled {
                         log(LogTag::Transactions, "PRIORITY", &format!(
-                            "Priority transaction {} now available and processed", 
-                            &signature[..8]
+                            "Priority transaction {} now available and processed after {} attempts", 
+                            &signature[..8], priority_tx.attempts
                         ));
                     }
+                    
+                    // Remove from priority since it's now processed
+                    self.priority_transactions.remove(&signature);
                 }
                 Err(e) => {
-                    // Still not available or failed - keep monitoring
+                    // Still not available - update state and keep monitoring
+                    priority_tx.state = PriorityState::Pending;
+                    
                     if self.debug_enabled {
                         log(LogTag::Transactions, "PRIORITY", &format!(
-                            "Priority transaction {} still pending: {}", 
-                            &signature[..8], e
+                            "Priority transaction {} still pending (attempt {}): {}", 
+                            &signature[..8], priority_tx.attempts, e
                         ));
                     }
+                    
+                    // Update the priority transaction state
+                    self.priority_transactions.insert(signature, priority_tx);
                 }
             }
         }
@@ -881,7 +955,7 @@ impl TransactionsManager {
 
                 // Small delay to avoid overwhelming RPC
                 if index % 5 == 0 {
-                    tokio::time::sleep(Duration::from_millis(VERIFICATION_CHECK_INTERVAL_MILLIS)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await; // Small delay for RPC
                 }
             }
 
@@ -889,7 +963,7 @@ impl TransactionsManager {
             before_signature = Some(signatures.last().unwrap().signature.clone());
 
             // Batch processing delay
-            tokio::time::sleep(Duration::from_millis(VERIFICATION_SLOW_CHECK_INTERVAL_MILLIS)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await; // Batch processing delay
         }
 
         log(LogTag::Transactions, "SUCCESS", &format!(
@@ -1020,7 +1094,7 @@ impl TransactionsManager {
     }
 
     /// Get priority transactions (for testing)
-    pub fn priority_transactions(&self) -> &HashMap<String, DateTime<Utc>> {
+    pub fn priority_transactions(&self) -> &HashMap<String, PriorityTransaction> {
         &self.priority_transactions
     }
 
@@ -1345,10 +1419,9 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     crate::global::POSITION_RECALCULATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
     log(LogTag::Transactions, "STARTUP", "🟢 Position recalculation complete - traders can now operate");
 
-    // Priority-aware adaptive monitoring loop
-    let mut consecutive_empty_cycles = 0;
-    let mut current_interval_secs = MONITORING_INTERVAL_DEFAULT_SECS;
-    let mut next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
+    // Simplified dual-loop monitoring system (Phase 1 implementation)
+    let mut next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
+    let mut next_priority_check = tokio::time::Instant::now() + Duration::from_secs(PRIORITY_CHECK_INTERVAL_SECS);
     
     loop {
         tokio::select! {
@@ -1356,61 +1429,36 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutting down");
                 break;
             }
-            _ = tokio::time::sleep_until(next_check) => {
-                // Monitor new transactions
+            _ = tokio::time::sleep_until(next_normal_check) => {
+                // Normal transaction monitoring every 15 seconds
                 match do_monitoring_cycle(&mut manager).await {
-                    Ok((new_transaction_count, has_pending_transactions)) => {
-                        // Priority-aware adaptive polling
-                        if has_pending_transactions {
-                            // Fast polling when we have pending transactions to verify
-                            current_interval_secs = MONITORING_INTERVAL_FAST_SECS;
-                            consecutive_empty_cycles = 0; // Reset counter when we have pending work
-                            
-                            if manager.debug_enabled {
-                                log(LogTag::Transactions, "PRIORITY", &format!(
-                                    "🚀 Fast polling (5s) - {} pending priority transactions",
-                                    manager.priority_transactions.len()
-                                ));
-                            }
-                        } else {
-                            // Adaptive polling based on activity when no pending transactions
-                            if new_transaction_count == 0 {
-                                consecutive_empty_cycles += 1;
-                            } else {
-                                consecutive_empty_cycles = 0;
-                            }
-                            
-                            // Adjust monitoring frequency based on activity
-                            let new_interval_secs = if consecutive_empty_cycles >= EMPTY_CYCLES_THRESHOLD {
-                                MONITORING_INTERVAL_SLOW_SECS // No activity for 3 cycles: check every 2 minutes
-                            } else if consecutive_empty_cycles >= 1 {
-                                60  // Some inactivity: check every minute
-                            } else {
-                                MONITORING_INTERVAL_DEFAULT_SECS  // Active period: check every 30 seconds
-                            };
-                            
-                            if new_interval_secs != current_interval_secs {
-                                current_interval_secs = new_interval_secs;
-                                
-                                if manager.debug_enabled {
-                                    log(LogTag::Transactions, "ADAPTIVE", &format!(
-                                        "📊 Adjusted monitoring interval to {} seconds (empty cycles: {})",
-                                        current_interval_secs, consecutive_empty_cycles
-                                    ));
-                                }
-                            }
+                    Ok((new_transaction_count, _)) => {
+                        if manager.debug_enabled {
+                            log(LogTag::Transactions, "NORMAL", &format!(
+                                "� Normal check complete - {} new transactions",
+                                new_transaction_count
+                            ));
                         }
-                        
-                        // Set next check time
-                        next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
                     }
                     Err(e) => {
-                        log(LogTag::Transactions, "ERROR", &format!("Monitoring cycle failed: {}", e));
-                        // On error, use fast interval to recover quickly
-                        current_interval_secs = MONITORING_INTERVAL_ERROR_SECS;
-                        next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
+                        log(LogTag::Transactions, "ERROR", &format!("Normal monitoring error: {}", e));
                     }
                 }
+                next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
+            }
+            _ = tokio::time::sleep_until(next_priority_check) => {
+                // Priority transaction checking every 3 seconds
+                if !manager.priority_transactions.is_empty() {
+                    if let Err(e) = manager.check_priority_transactions().await {
+                        log(LogTag::Transactions, "ERROR", &format!("Priority transaction check error: {}", e));
+                    } else if manager.debug_enabled {
+                        log(LogTag::Transactions, "PRIORITY", &format!(
+                            "� Priority check complete - {} pending transactions",
+                            manager.priority_transactions.len()
+                        ));
+                    }
+                }
+                next_priority_check = tokio::time::Instant::now() + Duration::from_secs(PRIORITY_CHECK_INTERVAL_SECS);
             }
         }
     }
@@ -1418,7 +1466,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     log(LogTag::Transactions, "INFO", "TransactionsManager service stopped");
 }
 
-/// Perform one monitoring cycle and return number of new transactions found
+/// Perform one normal monitoring cycle and return number of new transactions found
 async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize, bool), String> {
     // Check for new transactions
     let new_signatures = manager.check_new_transactions().await?;
@@ -1434,13 +1482,6 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize
         }
     }
 
-    // Check priority transactions
-    if let Err(e) = manager.check_priority_transactions().await {
-        log(LogTag::Transactions, "WARN", &format!(
-            "Priority transaction check failed: {}", e
-        ));
-    }
-
     // Check and verify position transactions
     if let Err(e) = manager.check_and_verify_position_transactions().await {
         log(LogTag::Transactions, "WARN", &format!(
@@ -1452,6 +1493,7 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize
     let has_pending_transactions = !manager.priority_transactions.is_empty();
 
     // Log stats periodically
+    // Update statistics
     if manager.debug_enabled {
         let stats = manager.get_stats();
         log(LogTag::Transactions, "STATS", &format!(
@@ -1463,7 +1505,7 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize
         ));
     }
 
-    Ok((new_transaction_count, has_pending_transactions))
+    Ok((new_transaction_count, false)) // Second value no longer used in simplified system
 }
 
 /// Load wallet address from config
@@ -5132,12 +5174,12 @@ pub async fn wait_for_priority_transaction_verification(
     signature: &str
 ) -> Result<bool, String> {
     let start_time = std::time::Instant::now();
-    let timeout_duration = std::time::Duration::from_secs(PRIORITY_CONFIRMATION_TIMEOUT_SECS);
+    let timeout_duration = std::time::Duration::from_secs(MAX_PRIORITY_ATTEMPTS as u64 * PRIORITY_CHECK_INTERVAL_SECS);
     
     log(LogTag::Transactions, "PRIORITY_VERIFY", &format!(
         "Priority transaction verification: {} (timeout: {}s)", 
         &signature[..8], 
-        PRIORITY_CONFIRMATION_TIMEOUT_SECS
+        MAX_PRIORITY_ATTEMPTS as u64 * PRIORITY_CHECK_INTERVAL_SECS
     ));
     
     while start_time.elapsed() < timeout_duration {
