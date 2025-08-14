@@ -13,7 +13,7 @@ pub mod profit;
 pub mod filtering;
 pub mod rpc;
 pub mod ata_cleanup;
-pub mod transactions_manager;
+pub mod transactions;
 pub mod entry;
 pub mod ohlcv_analysis;
 pub mod rl_learning;

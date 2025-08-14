@@ -205,7 +205,7 @@ async fn main() {
             match screenerbot::global::load_wallet_from_config(&configs) {
                 Ok(keypair) => {
                     let wallet_pubkey = keypair.pubkey();
-                    if let Err(e) = screenerbot::transactions_manager::initialize_global_transaction_manager(wallet_pubkey).await {
+                    if let Err(e) = screenerbot::transactions::initialize_global_transaction_manager(wallet_pubkey).await {
                         log(LogTag::System, "ERROR", &format!("Failed to initialize global transaction manager: {}", e));
                         std::process::exit(1);
                     }
@@ -250,7 +250,7 @@ async fn main() {
     let shutdown_transactions = shutdown.clone();
     let transaction_manager_handle = tokio::spawn(async move {
         log(LogTag::System, "INFO", "Transaction manager service task started");
-        screenerbot::transactions_manager::start_transactions_manager_service(shutdown_transactions).await;
+        screenerbot::transactions::start_transactions_service(shutdown_transactions).await;
         log(LogTag::System, "INFO", "Transaction manager service task ended");
     });
 

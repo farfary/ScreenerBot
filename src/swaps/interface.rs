@@ -6,7 +6,7 @@ use crate::logger::{log, LogTag};
 use crate::global::{is_debug_swap_enabled};
 use crate::utils::get_token_balance;
 use crate::utils::get_wallet_address;
-use crate::transactions_manager::{add_priority_transaction, wait_for_transaction_verification, wait_for_priority_transaction_verification};
+use crate::transactions::{add_priority_transaction, wait_for_transaction_verification, wait_for_priority_transaction_verification};
 use super::{get_best_quote, execute_best_swap, RouterType};
 use super::types::{SwapData};
 use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};

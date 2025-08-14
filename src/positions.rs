@@ -7,7 +7,7 @@ use crate::rpc::lamports_to_sol;
 use crate::swaps::{ buy_token, sell_token, wait_for_swap_verification, wait_for_priority_swap_verification };
 use crate::rl_learning::{ get_trading_learner, record_completed_trade };
 use crate::entry::get_rugcheck_score_for_token;
-use crate::transactions_manager::add_priority_transaction;
+use crate::transactions::add_priority_transaction;
 
 use once_cell::sync::Lazy;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };

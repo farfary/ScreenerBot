@@ -39,7 +39,7 @@
 /// - Test real swaps: cargo run --bin main_transactions_debug -- --test-swap --swap-type round-trip --token-mint <MINT> --sol-amount 0.002
 /// - Test real position management: cargo run --bin main_transactions_debug -- --test-position --token-mint <MINT> --sol-amount 0.002
 
-use screenerbot::transactions_manager::{
+use screenerbot::transactions::{
     TransactionsManager, Transaction, TransactionType, TransactionDirection,
     get_transaction, initialize_global_transaction_manager, wait_for_transaction_verification
 };
@@ -447,7 +447,7 @@ async fn analyze_all_swaps(wallet_pubkey: Pubkey) {
 }
 
 /// Display detailed swap statistics
-fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions_manager::SwapPnLInfo]) {
+fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions::SwapPnLInfo]) {
     if swaps.is_empty() {
         return;
     }
@@ -595,7 +595,7 @@ async fn analyze_all_transactions(wallet_pubkey: Pubkey, max_count: usize) {
 }
 
 /// Display comprehensive table of ALL transaction types
-fn display_all_transactions_table(transactions: &[screenerbot::transactions_manager::Transaction]) {
+fn display_all_transactions_table(transactions: &[screenerbot::transactions::Transaction]) {
     log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE TRANSACTION ANALYSIS ===");
     log(LogTag::Transactions, "TABLE", "Sig      Slot         Type                    Details                          SOL Change   Fee SOL      Success");
     log(LogTag::Transactions, "TABLE", "-----------------------------------------------------------------------------------------------------------------------");
@@ -609,62 +609,62 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
         let _timestamp = transaction.timestamp.format("%H:%M:%S").to_string();
         
         let (tx_type, details) = match &transaction.transaction_type {
-            screenerbot::transactions_manager::TransactionType::SwapSolToToken { token_mint: _, sol_amount, token_amount, router } => {
+            screenerbot::transactions::TransactionType::SwapSolToToken { token_mint: _, sol_amount, token_amount, router } => {
                 ("SOL->Token", format!("{:.4} SOL -> {:.0} tokens via {}", sol_amount, token_amount, router))
             }
-            screenerbot::transactions_manager::TransactionType::SwapTokenToSol { token_mint: _, token_amount, sol_amount, router } => {
+            screenerbot::transactions::TransactionType::SwapTokenToSol { token_mint: _, token_amount, sol_amount, router } => {
                 ("Token->SOL", format!("{:.0} tokens -> {:.4} SOL via {}", token_amount, sol_amount, router))
             }
-            screenerbot::transactions_manager::TransactionType::SwapTokenToToken { from_mint: _, to_mint: _, from_amount, to_amount, router } => {
+            screenerbot::transactions::TransactionType::SwapTokenToToken { from_mint: _, to_mint: _, from_amount, to_amount, router } => {
                 ("Token->Token", format!("{:.0} -> {:.0} via {}", from_amount, to_amount, router))
             }
-            screenerbot::transactions_manager::TransactionType::SolTransfer { from, to, amount } => {
+            screenerbot::transactions::TransactionType::SolTransfer { from, to, amount } => {
                 let from_short = if from.len() >= 8 { &from[..8] } else { from };
                 let to_short = if to.len() >= 8 { &to[..8] } else { to };
                 ("SOL Transfer", format!("{:.4} SOL: {}...->{}...", amount, from_short, to_short))
             }
-            screenerbot::transactions_manager::TransactionType::TokenTransfer { mint: _, from, to, amount } => {
+            screenerbot::transactions::TransactionType::TokenTransfer { mint: _, from, to, amount } => {
                 let from_short = if from.len() >= 8 { &from[..8] } else { from };
                 let to_short = if to.len() >= 8 { &to[..8] } else { to };
                 ("Token Transfer", format!("{:.0} tokens: {}...->{}...", amount, from_short, to_short))
             }
-            screenerbot::transactions_manager::TransactionType::AtaCreate { mint, owner: _, ata_address: _, cost } => {
+            screenerbot::transactions::TransactionType::AtaCreate { mint, owner: _, ata_address: _, cost } => {
                 let mint_short = if mint.len() >= 8 { &mint[..8] } else { mint };
                 ("ATA Create", format!("Token: {}..., Cost: {:.6} SOL", mint_short, cost))
             }
-            screenerbot::transactions_manager::TransactionType::AtaClose { mint, owner: _, ata_address: _, rent_reclaimed } => {
+            screenerbot::transactions::TransactionType::AtaClose { mint, owner: _, ata_address: _, rent_reclaimed } => {
                 let mint_short = if mint.len() >= 8 { &mint[..8] } else { mint };
                 ("ATA Close", format!("Token: {}..., Reclaimed: {:.6} SOL", mint_short, rent_reclaimed))
             }
-            screenerbot::transactions_manager::TransactionType::StakingDelegate { stake_account: _, validator, amount } => {
+            screenerbot::transactions::TransactionType::StakingDelegate { stake_account: _, validator, amount } => {
                 let validator_short = if validator.len() >= 8 { &validator[..8] } else { validator };
                 ("Staking", format!("Delegate {:.4} SOL to {}...", amount, validator_short))
             }
-            screenerbot::transactions_manager::TransactionType::StakingWithdraw { stake_account: _, amount } => {
+            screenerbot::transactions::TransactionType::StakingWithdraw { stake_account: _, amount } => {
                 ("Staking", format!("Withdraw {:.4} SOL", amount))
             }
-            screenerbot::transactions_manager::TransactionType::ProgramDeploy { program_id, deployer: _ } => {
+            screenerbot::transactions::TransactionType::ProgramDeploy { program_id, deployer: _ } => {
                 let program_short = if program_id.len() >= 8 { &program_id[..8] } else { program_id };
                 ("Program Deploy", format!("Program: {}...", program_short))
             }
-            screenerbot::transactions_manager::TransactionType::ProgramUpgrade { program_id, authority: _ } => {
+            screenerbot::transactions::TransactionType::ProgramUpgrade { program_id, authority: _ } => {
                 let program_short = if program_id.len() >= 8 { &program_id[..8] } else { program_id };
                 ("Program Upgrade", format!("Program: {}...", program_short))
             }
-            screenerbot::transactions_manager::TransactionType::ComputeBudget { compute_units, compute_unit_price } => {
+            screenerbot::transactions::TransactionType::ComputeBudget { compute_units, compute_unit_price } => {
                 ("Compute Budget", format!("Units: {}, Price: {}", compute_units, compute_unit_price))
             }
-            screenerbot::transactions_manager::TransactionType::SpamBulk { transaction_count, suspected_spam_type } => {
+            screenerbot::transactions::TransactionType::SpamBulk { transaction_count, suspected_spam_type } => {
                 ("Spam Bulk", format!("{} txs, Type: {}", transaction_count, suspected_spam_type))
             }
-            screenerbot::transactions_manager::TransactionType::NftMint { collection_id: _, leaf_asset_id, nft_type } => {
+            screenerbot::transactions::TransactionType::NftMint { collection_id: _, leaf_asset_id, nft_type } => {
                 let leaf_short = if leaf_asset_id.len() >= 8 { &leaf_asset_id[..8] } else { leaf_asset_id };
                 ("NFT Mint", format!("{}: {}...", nft_type, leaf_short))
             }
-            screenerbot::transactions_manager::TransactionType::Spam => {
+            screenerbot::transactions::TransactionType::Spam => {
                 ("Spam", "Spam transaction".to_string())
             }
-            screenerbot::transactions_manager::TransactionType::Unknown => {
+            screenerbot::transactions::TransactionType::Unknown => {
                 ("Unknown", "Unidentified transaction type".to_string())
             }
         };
@@ -688,7 +688,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions_mana
 }
 
 /// Display comprehensive statistics for all transaction types
-fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::transactions_manager::Transaction]) {
+fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::transactions::Transaction]) {
     log(LogTag::Transactions, "STATS", "=== COMPREHENSIVE TRANSACTION STATISTICS ===");
     
     let mut type_counts = HashMap::new();
@@ -703,22 +703,22 @@ fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::tra
     // Count transaction types and calculate statistics
     for transaction in transactions {
         let tx_type = match &transaction.transaction_type {
-            screenerbot::transactions_manager::TransactionType::SwapSolToToken { .. } => "Swap: SOL->Token",
-            screenerbot::transactions_manager::TransactionType::SwapTokenToSol { .. } => "Swap: Token->SOL", 
-            screenerbot::transactions_manager::TransactionType::SwapTokenToToken { .. } => "Swap: Token->Token",
-            screenerbot::transactions_manager::TransactionType::SolTransfer { .. } => "SOL Transfer",
-            screenerbot::transactions_manager::TransactionType::TokenTransfer { .. } => "Token Transfer",
-            screenerbot::transactions_manager::TransactionType::AtaCreate { .. } => "ATA Create",
-            screenerbot::transactions_manager::TransactionType::AtaClose { .. } => "ATA Close",
-            screenerbot::transactions_manager::TransactionType::StakingDelegate { .. } => "Staking Delegate",
-            screenerbot::transactions_manager::TransactionType::StakingWithdraw { .. } => "Staking Withdraw",
-            screenerbot::transactions_manager::TransactionType::ProgramDeploy { .. } => "Program Deploy",
-            screenerbot::transactions_manager::TransactionType::ProgramUpgrade { .. } => "Program Upgrade", 
-            screenerbot::transactions_manager::TransactionType::ComputeBudget { .. } => "Compute Budget",
-            screenerbot::transactions_manager::TransactionType::SpamBulk { .. } => "Spam Bulk",
-            screenerbot::transactions_manager::TransactionType::NftMint { .. } => "NFT Mint",
-            screenerbot::transactions_manager::TransactionType::Spam => "Spam",
-            screenerbot::transactions_manager::TransactionType::Unknown => "Unknown",
+            screenerbot::transactions::TransactionType::SwapSolToToken { .. } => "Swap: SOL->Token",
+            screenerbot::transactions::TransactionType::SwapTokenToSol { .. } => "Swap: Token->SOL", 
+            screenerbot::transactions::TransactionType::SwapTokenToToken { .. } => "Swap: Token->Token",
+            screenerbot::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer",
+            screenerbot::transactions::TransactionType::TokenTransfer { .. } => "Token Transfer",
+            screenerbot::transactions::TransactionType::AtaCreate { .. } => "ATA Create",
+            screenerbot::transactions::TransactionType::AtaClose { .. } => "ATA Close",
+            screenerbot::transactions::TransactionType::StakingDelegate { .. } => "Staking Delegate",
+            screenerbot::transactions::TransactionType::StakingWithdraw { .. } => "Staking Withdraw",
+            screenerbot::transactions::TransactionType::ProgramDeploy { .. } => "Program Deploy",
+            screenerbot::transactions::TransactionType::ProgramUpgrade { .. } => "Program Upgrade", 
+            screenerbot::transactions::TransactionType::ComputeBudget { .. } => "Compute Budget",
+            screenerbot::transactions::TransactionType::SpamBulk { .. } => "Spam Bulk",
+            screenerbot::transactions::TransactionType::NftMint { .. } => "NFT Mint",
+            screenerbot::transactions::TransactionType::Spam => "Spam",
+            screenerbot::transactions::TransactionType::Unknown => "Unknown",
         };
         
         *type_counts.entry(tx_type.to_string()).or_insert(0) += 1;
@@ -3217,7 +3217,7 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
     log(LogTag::Transactions, "MONITOR", "Starting lightweight transaction monitoring...");
     
     // Create a monitoring manager
-    let mut manager = match screenerbot::transactions_manager::TransactionsManager::new(wallet_pubkey).await {
+    let mut manager = match screenerbot::transactions::TransactionsManager::new(wallet_pubkey).await {
         Ok(manager) => manager,
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("Failed to create monitoring manager: {}", e));
