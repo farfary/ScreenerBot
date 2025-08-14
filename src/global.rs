@@ -1,6 +1,7 @@
 use serde::{ Deserialize, Serialize };
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use once_cell::sync::Lazy;
 use chrono::{ DateTime, Utc };
 
@@ -24,6 +25,9 @@ pub use crate::configs::{
 
 // Startup timestamp to track when the bot started for trading logic
 pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
+
+// Position recalculation completion flag - prevents trading until startup recalculation is done
+pub static POSITION_RECALCULATION_COMPLETE: AtomicBool = AtomicBool::new(false);
 
 // ================================================================================================
 // 📁 CENTRALIZED DATA PATHS - ALL FILE AND FOLDER PATHS IN ONE PLACE

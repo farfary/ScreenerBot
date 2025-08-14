@@ -473,6 +473,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     log(LogTag::Trader, "STARTUP", "🚀 Starting monitor_new_entries task");
 
     'outer: loop {
+        // CRITICAL: Wait for position recalculation to complete before starting any trading operations
+        if !crate::global::POSITION_RECALCULATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst) {
+            log(LogTag::Trader, "STARTUP", "⏳ Waiting for position recalculation to complete...");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
@@ -1776,6 +1783,13 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
     let shutdown = shutdown.clone();
 
     loop {
+        // CRITICAL: Wait for position recalculation to complete before starting any position monitoring
+        if !crate::global::POSITION_RECALCULATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst) {
+            log(LogTag::Trader, "STARTUP", "⏳ Position monitor waiting for recalculation to complete...");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
         // First, collect all open position mints to fetch pool prices in parallel
         let open_position_mints: Vec<String> = {
             if let Ok(positions) = SAVED_POSITIONS.lock() {

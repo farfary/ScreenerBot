@@ -1174,19 +1174,28 @@ impl TransactionsManager {
                     let fee_lamports = transaction.fee_breakdown.as_ref()
                         .map(|f| (f.total_fees * 1_000_000_000.0) as u64);
 
+                    // CRITICAL FIX: Calculate price exactly as analyze swaps display does
+                    // Use the same logic as in convert_to_swap_pnl_info()
+                    let calculated_price_sol = if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
+                        swap_pnl_info.calculated_price_sol
+                    } else {
+                        // Fallback to original effective_price if swap PnL info creation fails
+                        swap_analysis.effective_price
+                    };
+
                     log(LogTag::Transactions, "VERIFY_SUCCESS", &format!(
-                        "✅ Entry verification successful for {}: {} tokens, {:.9} SOL, price {:.12}",
+                        "✅ Entry verification successful for {}: {} tokens, {:.9} SOL, price {:.12} (analyze-swaps-exact)",
                         position.symbol,
                         swap_analysis.output_amount,
                         swap_analysis.input_amount,
-                        swap_analysis.effective_price
+                        calculated_price_sol
                     ));
 
                     return Some(PositionVerificationData {
                         verified: true,
                         success: true,
                         token_amount: Some(token_amount_units),
-                        effective_price: Some(swap_analysis.effective_price),
+                        effective_price: Some(calculated_price_sol),
                         sol_amount: Some(swap_analysis.input_amount),
                         fee_lamports,
                     });
@@ -1231,19 +1240,28 @@ impl TransactionsManager {
                 let fee_lamports = transaction.fee_breakdown.as_ref()
                     .map(|f| (f.total_fees * 1_000_000_000.0) as u64);
 
+                // CRITICAL FIX: Calculate price exactly as analyze swaps display does
+                // Use the same logic as in convert_to_swap_pnl_info()
+                let calculated_price_sol = if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
+                    swap_pnl_info.calculated_price_sol
+                } else {
+                    // Fallback to original effective_price if swap PnL info creation fails
+                    swap_analysis.effective_price
+                };
+
                 log(LogTag::Transactions, "VERIFY_SUCCESS", &format!(
-                    "✅ Exit verification successful for {}: sold {} tokens, received {:.9} SOL, price {:.12}",
+                    "✅ Exit verification successful for {}: sold {} tokens, received {:.9} SOL, price {:.12} (analyze-swaps-exact)",
                     position.symbol,
                     swap_analysis.input_amount,
                     swap_analysis.output_amount,
-                    swap_analysis.effective_price
+                    calculated_price_sol
                 ));
 
                 return Some(PositionVerificationData {
                     verified: true,
                     success: true,
                     token_amount: None, // Not needed for exit
-                    effective_price: Some(swap_analysis.effective_price),
+                    effective_price: Some(calculated_price_sol),
                     sol_amount: Some(swap_analysis.output_amount),
                     fee_lamports,
                 });
@@ -1378,6 +1396,19 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         wallet_address,
         manager.known_signatures.len()
     ));
+
+    // STARTUP: Verify and recalculate all positions using cached transaction data
+    log(LogTag::Transactions, "STARTUP", "🔄 Starting position verification and recalculation...");
+    if let Err(e) = manager.verify_and_recalculate_all_positions().await {
+        log(LogTag::Transactions, "ERROR", &format!("Position recalculation failed: {}", e));
+        // Continue anyway - don't stop the service
+    } else {
+        log(LogTag::Transactions, "STARTUP", "✅ Position verification and recalculation completed");
+    }
+    
+    // Signal that position recalculation is complete - traders can now start
+    crate::global::POSITION_RECALCULATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
+    log(LogTag::Transactions, "STARTUP", "🟢 Position recalculation complete - traders can now operate");
 
     // Priority-aware adaptive monitoring loop
     let mut consecutive_empty_cycles = 0;
@@ -4432,6 +4463,186 @@ impl TransactionsManager {
             total_sol_received - total_sol_spent - total_fees
         ));
         log(LogTag::Transactions, "TABLE", "=== END ANALYSIS ===");
+    }
+
+    /// Verify and recalculate all positions using cached transaction data
+    /// This ensures position entry/exit prices match the analyze swaps calculations exactly
+    pub async fn verify_and_recalculate_all_positions(&mut self) -> Result<(), String> {
+        use crate::positions::SAVED_POSITIONS;
+        use crate::utils::save_positions_to_file;
+
+        log(LogTag::Transactions, "RECALC", "🔄 Loading all positions for verification...");
+
+        // Get all positions (both open and closed)
+        let mut positions_to_recalculate = {
+            match SAVED_POSITIONS.lock() {
+                Ok(positions) => positions.clone(),
+                Err(e) => {
+                    return Err(format!("Failed to access positions: {}", e));
+                }
+            }
+        };
+
+        if positions_to_recalculate.is_empty() {
+            log(LogTag::Transactions, "RECALC", "📭 No positions found to recalculate");
+            return Ok(());
+        }
+
+        log(LogTag::Transactions, "RECALC", &format!(
+            "🔍 Found {} positions to recalculate", 
+            positions_to_recalculate.len()
+        ));
+
+        let mut updated_count = 0;
+        let mut verified_count = 0;
+
+        // Process each position
+        for position in &mut positions_to_recalculate {
+            let mut position_updated = false;
+
+            // Recalculate entry transaction data using analyze-swaps-exact logic
+            if let Some(ref entry_sig) = position.entry_transaction_signature {
+                match get_transaction(entry_sig).await {
+                    Ok(Some(transaction)) => {
+                        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
+                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction) {
+                            if swap_pnl_info.swap_type == "Buy" && swap_pnl_info.token_mint == position.mint {
+                                let old_price = position.effective_entry_price;
+                                
+                                // Update position with analyze-swaps-exact calculations
+                                position.effective_entry_price = Some(swap_pnl_info.calculated_price_sol);
+                                position.transaction_entry_verified = true;
+                                position.total_size_sol = swap_pnl_info.sol_amount;
+                                
+                                // Convert token amount from float to units (with decimals)
+                                if let Some(token_decimals) = get_token_decimals(&position.mint).await {
+                                    let token_amount_units = (swap_pnl_info.token_amount.abs() * 
+                                        (10_f64).powi(token_decimals as i32)) as u64;
+                                    position.token_amount = Some(token_amount_units);
+                                }
+                                
+                                // Convert fee from SOL to lamports
+                                position.entry_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
+                                
+                                position_updated = true;
+                                verified_count += 1;
+                                
+                                log(LogTag::Transactions, "RECALC_ENTRY", &format!(
+                                    "📈 {} entry price: {:.9} → {:.9} SOL (analyze-swaps-exact)", 
+                                    position.symbol,
+                                    old_price.unwrap_or(0.0),
+                                    swap_pnl_info.calculated_price_sol
+                                ));
+                            }
+                        } else {
+                            log(LogTag::Transactions, "RECALC_WARN", &format!(
+                                "⚠️ Could not generate SwapPnLInfo for entry transaction {} of {}",
+                                &entry_sig[..8], position.symbol
+                            ));
+                        }
+                    }
+                    Ok(None) => {
+                        log(LogTag::Transactions, "RECALC_WARN", &format!(
+                            "⚠️ Entry transaction {} not found for {}",
+                            &entry_sig[..8], position.symbol
+                        ));
+                    }
+                    Err(e) => {
+                        log(LogTag::Transactions, "RECALC_ERROR", &format!(
+                            "❌ Failed to get entry transaction {} for {}: {}",
+                            &entry_sig[..8], position.symbol, e
+                        ));
+                    }
+                }
+            }
+
+            // Recalculate exit transaction data using analyze-swaps-exact logic
+            if let Some(ref exit_sig) = position.exit_transaction_signature {
+                match get_transaction(exit_sig).await {
+                    Ok(Some(transaction)) => {
+                        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
+                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction) {
+                            if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
+                                let old_price = position.effective_exit_price;
+                                
+                                // Update position with analyze-swaps-exact calculations
+                                position.effective_exit_price = Some(swap_pnl_info.calculated_price_sol);
+                                position.transaction_exit_verified = true;
+                                position.sol_received = Some(swap_pnl_info.sol_amount);
+                                
+                                // Update exit price if not set
+                                if position.exit_price.is_none() {
+                                    position.exit_price = Some(swap_pnl_info.calculated_price_sol);
+                                }
+                                
+                                // Convert fee from SOL to lamports
+                                position.exit_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
+                                
+                                // Set exit time if not set
+                                if position.exit_time.is_none() {
+                                    position.exit_time = Some(swap_pnl_info.timestamp);
+                                }
+                                
+                                position_updated = true;
+                                verified_count += 1;
+                                
+                                log(LogTag::Transactions, "RECALC_EXIT", &format!(
+                                    "📉 {} exit price: {:.9} → {:.9} SOL (analyze-swaps-exact)", 
+                                    position.symbol,
+                                    old_price.unwrap_or(0.0),
+                                    swap_pnl_info.calculated_price_sol
+                                ));
+                            }
+                        } else {
+                            log(LogTag::Transactions, "RECALC_WARN", &format!(
+                                "⚠️ Could not generate SwapPnLInfo for exit transaction {} of {}",
+                                &exit_sig[..8], position.symbol
+                            ));
+                        }
+                    }
+                    Ok(None) => {
+                        log(LogTag::Transactions, "RECALC_WARN", &format!(
+                            "⚠️ Exit transaction {} not found for {}",
+                            &exit_sig[..8], position.symbol
+                        ));
+                    }
+                    Err(e) => {
+                        log(LogTag::Transactions, "RECALC_ERROR", &format!(
+                            "❌ Failed to get exit transaction {} for {}: {}",
+                            &exit_sig[..8], position.symbol, e
+                        ));
+                    }
+                }
+            }
+
+            if position_updated {
+                updated_count += 1;
+            }
+        }
+
+        // Save updated positions back to file
+        if updated_count > 0 {
+            match SAVED_POSITIONS.lock() {
+                Ok(mut positions) => {
+                    *positions = positions_to_recalculate.clone();
+                    save_positions_to_file(&positions);
+                    
+                    log(LogTag::Transactions, "RECALC", &format!(
+                        "💾 Saved {} updated positions to file", updated_count
+                    ));
+                }
+                Err(e) => {
+                    return Err(format!("Failed to save updated positions: {}", e));
+                }
+            }
+        }
+
+        log(LogTag::Transactions, "RECALC", &format!(
+            "✅ Position recalculation complete: {} positions processed, {} updated, {} verified (analyze-swaps-exact)", 
+            positions_to_recalculate.len(), updated_count, verified_count
+        ));
+
+        Ok(())
     }
 
     /// Analyze and display position lifecycle with PnL calculations
