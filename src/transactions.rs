@@ -448,16 +448,7 @@ pub struct PositionDisplayRow {
     pub duration: String,
 }
 
-/// Position verification data extracted from transaction analysis
-#[derive(Debug, Clone)]
-pub struct PositionVerificationData {
-    pub verified: bool,
-    pub success: bool,
-    pub token_amount: Option<u64>,
-    pub effective_price: Option<f64>,
-    pub sol_amount: Option<f64>,
-    pub fee_lamports: Option<u64>,
-}
+
 
 // =============================================================================
 // TRANSACTIONS MANAGER
@@ -1074,10 +1065,8 @@ impl TransactionsManager {
                 if !position.transaction_entry_verified {
                     if let Ok(entry_tx) = crate::transactions::get_transaction(entry_sig).await {
                         if let Some(tx) = entry_tx {
-                            // Verify transaction success and extract data
-                            if let Some(verification_data) = self.verify_and_extract_entry_data(&tx, &position).await {
-                                verification_updates.push((position.mint.clone(), "entry".to_string(), verification_data));
-                            }
+                            // Store transaction for apply_entry_verification_data
+                            verification_updates.push((position.mint.clone(), "entry".to_string(), tx));
                         }
                     }
                 }
@@ -1088,10 +1077,8 @@ impl TransactionsManager {
                 if !position.transaction_exit_verified {
                     if let Ok(exit_tx) = crate::transactions::get_transaction(exit_sig).await {
                         if let Some(tx) = exit_tx {
-                            // Verify transaction success and extract data
-                            if let Some(verification_data) = self.verify_and_extract_exit_data(&tx, &position).await {
-                                verification_updates.push((position.mint.clone(), "exit".to_string(), verification_data));
-                            }
+                            // Store transaction for apply_exit_verification_data
+                            verification_updates.push((position.mint.clone(), "exit".to_string(), tx));
                         }
                     }
                 }
@@ -1104,15 +1091,15 @@ impl TransactionsManager {
                 Ok(mut positions) => {
                     let mut updated_count = 0;
                     
-                    for (mint, transaction_type, verification_data) in verification_updates {
+                    for (mint, transaction_type, transaction) in verification_updates {
                         if let Some(position) = positions.iter_mut().find(|p| p.mint == mint) {
                             match transaction_type.as_str() {
                                 "entry" => {
-                                    self.apply_entry_verification_data(position, verification_data);
+                                    self.apply_entry_verification_data(position, &transaction);
                                     updated_count += 1;
                                 }
                                 "exit" => {
-                                    self.apply_exit_verification_data(position, verification_data);
+                                    self.apply_exit_verification_data(position, &transaction);
                                     updated_count += 1;
                                 }
                                 _ => {}
@@ -1140,211 +1127,117 @@ impl TransactionsManager {
         Ok(())
     }
 
-    /// Verify and extract entry transaction data
-    async fn verify_and_extract_entry_data(
-        &self, 
-        transaction: &Transaction, 
-        position: &crate::positions::Position
-    ) -> Option<PositionVerificationData> {
-        // Check if transaction was successful
-        if !transaction.success {
-            log(LogTag::Transactions, "VERIFY_FAIL", &format!(
-                "Entry transaction {} failed for position {}", 
-                &transaction.signature[..8], position.symbol
-            ));
-            return Some(PositionVerificationData {
-                verified: false,
-                success: false,
-                token_amount: None,
-                effective_price: None,
-                sol_amount: None,
-                fee_lamports: None,
-            });
-        }
 
-        // Check if it's a swap transaction
-        if let Some(ref swap_analysis) = transaction.swap_analysis {
-            // Verify this is the correct token
-            if swap_analysis.output_token == position.mint {
-                // Extract token amount with decimals
-                if let Some(token_decimals) = get_token_decimals(&position.mint).await {
-                    let token_amount_units = (swap_analysis.output_amount * 
-                        (10_f64).powi(token_decimals as i32)) as u64;
 
-                    let fee_lamports = transaction.fee_breakdown.as_ref()
-                        .map(|f| (f.total_fees * 1_000_000_000.0) as u64);
-
-                    // CRITICAL FIX: Calculate price exactly as analyze swaps display does
-                    // Use the same logic as in convert_to_swap_pnl_info()
-                    let calculated_price_sol = if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
-                        swap_pnl_info.calculated_price_sol
-                    } else {
-                        // Fallback to original effective_price if swap PnL info creation fails
-                        swap_analysis.effective_price
-                    };
-
-                    log(LogTag::Transactions, "VERIFY_SUCCESS", &format!(
-                        "✅ Entry verification successful for {}: {} tokens, {:.9} SOL, price {:.12} (analyze-swaps-exact)",
-                        position.symbol,
-                        swap_analysis.output_amount,
-                        swap_analysis.input_amount,
-                        calculated_price_sol
-                    ));
-
-                    return Some(PositionVerificationData {
-                        verified: true,
-                        success: true,
-                        token_amount: Some(token_amount_units),
-                        effective_price: Some(calculated_price_sol),
-                        sol_amount: Some(swap_analysis.input_amount),
-                        fee_lamports,
-                    });
-                }
-            }
-        }
-
-        log(LogTag::Transactions, "VERIFY_INCOMPLETE", &format!(
-            "⚠️ Entry transaction {} exists but no valid swap analysis for {}",
-            &transaction.signature[..8], position.symbol
-        ));
-
-        None
-    }
-
-    /// Verify and extract exit transaction data
-    async fn verify_and_extract_exit_data(
-        &self, 
-        transaction: &Transaction, 
-        position: &crate::positions::Position
-    ) -> Option<PositionVerificationData> {
-        // Check if transaction was successful
-        if !transaction.success {
-            log(LogTag::Transactions, "VERIFY_FAIL", &format!(
-                "Exit transaction {} failed for position {}", 
-                &transaction.signature[..8], position.symbol
-            ));
-            return Some(PositionVerificationData {
-                verified: false,
-                success: false,
-                token_amount: None,
-                effective_price: None,
-                sol_amount: None,
-                fee_lamports: None,
-            });
-        }
-
-        // Check if it's a swap transaction
-        if let Some(ref swap_analysis) = transaction.swap_analysis {
-            // Verify this is the correct token (input for sell)
-            if swap_analysis.input_token == position.mint {
-                let fee_lamports = transaction.fee_breakdown.as_ref()
-                    .map(|f| (f.total_fees * 1_000_000_000.0) as u64);
-
-                // CRITICAL FIX: Calculate price exactly as analyze swaps display does
-                // Use the same logic as in convert_to_swap_pnl_info()
-                let calculated_price_sol = if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
-                    swap_pnl_info.calculated_price_sol
-                } else {
-                    // Fallback to original effective_price if swap PnL info creation fails
-                    swap_analysis.effective_price
-                };
-
-                log(LogTag::Transactions, "VERIFY_SUCCESS", &format!(
-                    "✅ Exit verification successful for {}: sold {} tokens, received {:.9} SOL, price {:.12} (analyze-swaps-exact)",
-                    position.symbol,
-                    swap_analysis.input_amount,
-                    swap_analysis.output_amount,
-                    calculated_price_sol
-                ));
-
-                return Some(PositionVerificationData {
-                    verified: true,
-                    success: true,
-                    token_amount: None, // Not needed for exit
-                    effective_price: Some(calculated_price_sol),
-                    sol_amount: Some(swap_analysis.output_amount),
-                    fee_lamports,
-                });
-            }
-        }
-
-        log(LogTag::Transactions, "VERIFY_INCOMPLETE", &format!(
-            "⚠️ Exit transaction {} exists but no valid swap analysis for {}",
-            &transaction.signature[..8], position.symbol
-        ));
-
-        None
-    }
-
-    /// Apply entry verification data to position
+    /// Apply entry verification data to position using analyze-swaps-exact logic
     fn apply_entry_verification_data(
         &self, 
         position: &mut crate::positions::Position, 
-        data: PositionVerificationData
+        transaction: &Transaction
     ) {
-        position.transaction_entry_verified = data.verified;
-        
-        if data.success && data.verified {
-            if let Some(token_amount) = data.token_amount {
-                position.token_amount = Some(token_amount);
-            }
-            if let Some(effective_price) = data.effective_price {
-                position.effective_entry_price = Some(effective_price);
-            }
-            if let Some(sol_amount) = data.sol_amount {
-                position.total_size_sol = sol_amount;
-            }
-            if let Some(fee_lamports) = data.fee_lamports {
-                position.entry_fee_lamports = Some(fee_lamports);
-            }
-            
-            log(LogTag::Transactions, "POSITION_ENTRY_UPDATED", &format!(
-                "📝 Updated entry data for position {}: verified={}, tokens={:?}, price={:?}",
-                position.symbol, data.verified, data.token_amount, data.effective_price
-            ));
-        } else {
+        // Check if transaction was successful
+        if !transaction.success {
+            position.transaction_entry_verified = false;
             log(LogTag::Transactions, "POSITION_ENTRY_FAILED", &format!(
-                "❌ Entry transaction failed for position {}: marking as failed verification",
-                position.symbol
+                "❌ Entry transaction {} failed for position {}: marking as failed verification",
+                &transaction.signature[..8], position.symbol
+            ));
+            return;
+        }
+
+        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
+            if swap_pnl_info.swap_type == "Buy" && swap_pnl_info.token_mint == position.mint {
+                // Update position with analyze-swaps-exact calculations
+                position.transaction_entry_verified = true;
+                position.effective_entry_price = Some(swap_pnl_info.calculated_price_sol);
+                position.total_size_sol = swap_pnl_info.sol_amount;
+                
+                // Convert token amount from float to units (with decimals)
+                if let Some(token_decimals) = crate::tokens::get_token_decimals_sync(&position.mint) {
+                    let token_amount_units = (swap_pnl_info.token_amount.abs() * 
+                        (10_f64).powi(token_decimals as i32)) as u64;
+                    position.token_amount = Some(token_amount_units);
+                }
+                
+                // Convert fee from SOL to lamports
+                position.entry_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
+                
+                log(LogTag::Transactions, "POSITION_ENTRY_UPDATED", &format!(
+                    "📝 Updated entry data for position {}: verified=true, price={:.9} SOL (analyze-swaps-exact)",
+                    position.symbol, swap_pnl_info.calculated_price_sol
+                ));
+            } else {
+                position.transaction_entry_verified = false;
+                log(LogTag::Transactions, "POSITION_ENTRY_MISMATCH", &format!(
+                    "⚠️ Entry transaction {} type/token mismatch for position {}: expected Buy {}, got {} {}",
+                    &transaction.signature[..8], position.symbol, position.mint, 
+                    swap_pnl_info.swap_type, swap_pnl_info.token_mint
+                ));
+            }
+        } else {
+            position.transaction_entry_verified = false;
+            log(LogTag::Transactions, "POSITION_ENTRY_NO_SWAP", &format!(
+                "⚠️ Entry transaction {} has no valid swap analysis for position {}",
+                &transaction.signature[..8], position.symbol
             ));
         }
     }
 
-    /// Apply exit verification data to position
+    /// Apply exit verification data to position using analyze-swaps-exact logic
     fn apply_exit_verification_data(
         &self, 
         position: &mut crate::positions::Position, 
-        data: PositionVerificationData
+        transaction: &Transaction
     ) {
-        position.transaction_exit_verified = data.verified;
-        
-        if data.success && data.verified {
-            if let Some(effective_price) = data.effective_price {
-                position.effective_exit_price = Some(effective_price);
-                // Also set exit_price if not already set
-                if position.exit_price.is_none() {
-                    position.exit_price = Some(effective_price);
-                }
-            }
-            if let Some(sol_amount) = data.sol_amount {
-                position.sol_received = Some(sol_amount);
-            }
-            if let Some(fee_lamports) = data.fee_lamports {
-                position.exit_fee_lamports = Some(fee_lamports);
-            }
-            // Set exit time if not already set
-            if position.exit_time.is_none() {
-                position.exit_time = Some(chrono::Utc::now());
-            }
-            
-            log(LogTag::Transactions, "POSITION_EXIT_UPDATED", &format!(
-                "📝 Updated exit data for position {}: verified={}, price={:?}, sol_received={:?}",
-                position.symbol, data.verified, data.effective_price, data.sol_amount
-            ));
-        } else {
+        // Check if transaction was successful
+        if !transaction.success {
+            position.transaction_exit_verified = false;
             log(LogTag::Transactions, "POSITION_EXIT_FAILED", &format!(
-                "❌ Exit transaction failed for position {}: marking as failed verification",
-                position.symbol
+                "❌ Exit transaction {} failed for position {}: marking as failed verification",
+                &transaction.signature[..8], position.symbol
+            ));
+            return;
+        }
+
+        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
+            if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
+                // Update position with analyze-swaps-exact calculations
+                position.transaction_exit_verified = true;
+                position.effective_exit_price = Some(swap_pnl_info.calculated_price_sol);
+                position.sol_received = Some(swap_pnl_info.sol_amount);
+                
+                // Update exit price if not set
+                if position.exit_price.is_none() {
+                    position.exit_price = Some(swap_pnl_info.calculated_price_sol);
+                }
+                
+                // Convert fee from SOL to lamports
+                position.exit_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
+                
+                // Set exit time if not set
+                if position.exit_time.is_none() {
+                    position.exit_time = Some(swap_pnl_info.timestamp);
+                }
+                
+                log(LogTag::Transactions, "POSITION_EXIT_UPDATED", &format!(
+                    "📝 Updated exit data for position {}: verified=true, price={:.9} SOL (analyze-swaps-exact)",
+                    position.symbol, swap_pnl_info.calculated_price_sol
+                ));
+            } else {
+                position.transaction_exit_verified = false;
+                log(LogTag::Transactions, "POSITION_EXIT_MISMATCH", &format!(
+                    "⚠️ Exit transaction {} type/token mismatch for position {}: expected Sell {}, got {} {}",
+                    &transaction.signature[..8], position.symbol, position.mint, 
+                    swap_pnl_info.swap_type, swap_pnl_info.token_mint
+                ));
+            }
+        } else {
+            position.transaction_exit_verified = false;
+            log(LogTag::Transactions, "POSITION_EXIT_NO_SWAP", &format!(
+                "⚠️ Exit transaction {} has no valid swap analysis for position {}",
+                &transaction.signature[..8], position.symbol
             ));
         }
     }
