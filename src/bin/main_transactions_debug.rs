@@ -25,6 +25,7 @@
 /// - Fetch all cached: cargo run --bin main_transactions_debug -- --fetch-all --count 100
 /// - Fetch from blockchain: cargo run --bin main_transactions_debug -- --fetch-all-blockchain --count 1000
 /// - Analyze specific transaction: cargo run --bin main_transactions_debug -- --signature <SIG>
+/// - Force recalculate transaction: cargo run --bin main_transactions_debug -- --signature <SIG> --force-recalculate
 /// - Test analyzer on recent transactions: cargo run --bin main_transactions_debug -- --test-analyzer --count 10
 /// - Debug cache system: cargo run --bin main_transactions_debug -- --debug-cache
 /// - Recalculate analysis: cargo run --bin main_transactions_debug -- --recalculate-cache
@@ -47,6 +48,7 @@ use screenerbot::logger::{log, LogTag, init_file_logging};
 use screenerbot::global::{
     set_cmd_args, get_transactions_cache_dir
 };
+use screenerbot::arguments::{get_cmd_args, set_cmd_args as args_set_cmd_args};
 use screenerbot::rpc::{get_rpc_client, SwapError, sol_to_lamports};
 use screenerbot::utils::get_wallet_address;
 use screenerbot::tokens::types::PriceSourceType;
@@ -89,6 +91,12 @@ async fn main() {
                 .long("signature")
                 .help("Analyze specific transaction by signature")
                 .value_name("SIGNATURE")
+        )
+        .arg(
+            Arg::new("force-recalculate")
+                .long("force-recalculate")
+                .help("Force recalculation of analysis even if cached data exists")
+                .action(clap::ArgAction::SetTrue)
         )
         .arg(
             Arg::new("test-analyzer")
@@ -277,7 +285,8 @@ async fn main() {
             analyze_all_swaps(wallet_pubkey).await;
         }
     } else if let Some(signature) = matches.get_one::<String>("signature") {
-        analyze_specific_transaction(signature).await;
+        let force_recalculate = matches.get_flag("force-recalculate");
+        analyze_specific_transaction(signature, force_recalculate).await;
     } else if matches.get_flag("fetch-new") {
         let count: usize = matches.get_one::<String>("count")
             .unwrap()
@@ -1067,29 +1076,49 @@ async fn monitor_transactions(wallet_pubkey: Pubkey, duration_seconds: u64) {
 }
 
 /// Analyze a specific transaction by signature
-async fn analyze_specific_transaction(signature: &str) {
-    log(LogTag::Transactions, "INFO", &format!("Analyzing transaction: {}", signature));
+async fn analyze_specific_transaction(signature: &str, force_recalculate: bool) {
+    log(LogTag::Transactions, "INFO", &format!(
+        "Analyzing transaction: {} (force_recalculate: {})", 
+        signature, force_recalculate
+    ));
 
-    // First check if it's already cached
-    match get_transaction(signature).await {
-        Ok(Some(transaction)) => {
-            log(LogTag::Transactions, "CACHE", "Transaction found in cache");
-            
-            // Check if we have comprehensive analysis data (fee_breakdown)
-            if transaction.fee_breakdown.is_some() {
-                log(LogTag::Transactions, "INFO", "Comprehensive analysis data found in cache");
-                display_detailed_transaction_info(&transaction);
-                return;
-            } else {
-                log(LogTag::Transactions, "INFO", "No comprehensive analysis in cache, forcing re-analysis");
-                // Continue to re-analysis below
+    // First check if it's already cached (skip if force_recalculate is true)
+    if !force_recalculate {
+        match get_transaction(signature).await {
+            Ok(Some(transaction)) => {
+                log(LogTag::Transactions, "CACHE", "Transaction found in cache");
+                
+                // Check if we have comprehensive analysis data (fee_breakdown)
+                if transaction.fee_breakdown.is_some() {
+                    log(LogTag::Transactions, "INFO", "Comprehensive analysis data found in cache");
+                    display_detailed_transaction_info(&transaction);
+                    return;
+                } else {
+                    log(LogTag::Transactions, "INFO", "No comprehensive analysis in cache, forcing re-analysis");
+                    // Continue to re-analysis below
+                }
+            }
+            Ok(None) => {
+                log(LogTag::Transactions, "INFO", "Transaction not in cache, fetching from RPC");
+            }
+            Err(e) => {
+                log(LogTag::Transactions, "WARN", &format!("Error checking cache: {}", e));
             }
         }
-        Ok(None) => {
-            log(LogTag::Transactions, "INFO", "Transaction not in cache, fetching from RPC");
-        }
-        Err(e) => {
-            log(LogTag::Transactions, "WARN", &format!("Error checking cache: {}", e));
+    } else {
+        log(LogTag::Transactions, "INFO", "Force recalculation enabled - bypassing cache");
+        
+        // Delete cached transaction file to force complete recalculation
+        let cache_dir = get_transactions_cache_dir();
+        let cache_file = cache_dir.join(format!("{}.json", signature));
+        if cache_file.exists() {
+            if let Err(e) = fs::remove_file(&cache_file) {
+                log(LogTag::Transactions, "WARN", &format!(
+                    "Failed to delete cached transaction file: {}", e
+                ));
+            } else {
+                log(LogTag::Transactions, "INFO", "Deleted cached transaction file for complete recalculation");
+            }
         }
     }
 
@@ -1103,7 +1132,19 @@ async fn analyze_specific_transaction(signature: &str) {
     };
 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
-        Ok(manager) => manager,
+        Ok(mut manager) => {
+            // Force enable debug mode for enhanced ATA analysis when force_recalculate is true
+            if force_recalculate {
+                manager.debug_enabled = true;
+                log(LogTag::Transactions, "INFO", "Debug mode enabled for enhanced ATA analysis");
+                
+                // Add debug-transactions flag to enable enhanced ATA analysis logging
+                let mut current_args = get_cmd_args();
+                current_args.push("--debug-transactions".to_string());
+                args_set_cmd_args(current_args);
+            }
+            manager
+        }
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
             return;
