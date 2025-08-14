@@ -8,8 +8,10 @@ use crate::tokens::{
     TokenDatabase,
     pool::get_pool_service,
 };
+use crate::entry::{load_performance_cache, PerformanceCache};
 use chrono::Utc;
 use serde::{ Serialize, Deserialize };
+use std::collections::HashMap;
 
 // ================================================================================================
 // 🎯 NEXT-GENERATION INTELLIGENT PROFIT SYSTEM
@@ -65,14 +67,22 @@ const TIME_DECAY_FACTOR: f64 = 0.25; // Aggressive time decay (25% vs 15%) for f
 const INSTANT_SELL_PROFIT: f64 = 2000.0; // 2000%+ = instant sell
 const MEGA_PROFIT_THRESHOLD: f64 = 1000.0; // 1000%+ = very urgent
 
-// ⚡ ULTRA-FAST PROFIT-TAKING THRESHOLDS - AGGRESSIVE SUB-MINUTE EXITS
-// OPTIMIZED: Enable sub-15-second exits for strong momentum
-const LIGHTNING_PROFIT_THRESHOLD: f64 = 10.0; // 10%+ profit in 15+ seconds = instant exit
-const LIGHTNING_PROFIT_TIME_LIMIT: f64 = 0.25; // 15 seconds minimum
-const FAST_PROFIT_THRESHOLD: f64 = 5.0; // 5%+ profit at 30+ seconds = fast exit  
-const FAST_PROFIT_TIME_LIMIT: f64 = 0.5; // 30 seconds minimum (reduced from 1.0)
-const SPEED_PROFIT_THRESHOLD: f64 = 3.0; // 3%+ profit at 1+ minute = speed exit (reduced from 5%)
-const SPEED_PROFIT_TIME_LIMIT: f64 = 1.0; // 1 minute
+// 🎯 PUMP DETECTION CONFIGURATION
+const PUMP_MIN_PERCENT: f64 = 15.0; // Minimum % gain to be considered a pump
+const PUMP_VELOCITY_THRESHOLD: f64 = 0.5; // % per second for pump detection
+const MEGA_PUMP_PERCENT: f64 = 50.0; // 50%+ = mega pump
+const MICRO_PUMP_PERCENT: f64 = 8.0; // 8%+ = micro pump (for volatile tokens)
+const PUMP_TIME_WINDOW: f64 = 5.0; // Minutes to analyze for pump detection
+const CONSERVATIVE_PROFIT_MIN: f64 = 5.0; // Don't sell below 5% profit easily
+const TREND_PROFIT_MIN: f64 = 12.0; // Minimum for trend-based exits
+
+// ⚡ ULTRA-FAST PROFIT-TAKING THRESHOLDS - ADJUSTED FOR PUMP DETECTION
+const LIGHTNING_PROFIT_THRESHOLD: f64 = 20.0; // Increased from 10% - only real pumps
+const LIGHTNING_PROFIT_TIME_LIMIT: f64 = 0.5; // 30 seconds minimum (was 15s)
+const FAST_PROFIT_THRESHOLD: f64 = 15.0; // Increased from 5% - avoid false exits
+const FAST_PROFIT_TIME_LIMIT: f64 = 1.0; // 1 minute minimum
+const SPEED_PROFIT_THRESHOLD: f64 = 8.0; // Increased from 3% - be more selective
+const SPEED_PROFIT_TIME_LIMIT: f64 = 2.0; // 2 minutes minimum (was 1 minute)
 const MOMENTUM_MIN_TIME_SECONDS: f64 = 5.0; // Minimum 5 seconds before momentum calculation
 
 // 📊 LIQUIDITY THRESHOLDS FOR PROFIT CALCULATIONS AND SAFETY CLASSIFICATION
@@ -87,6 +97,405 @@ const ATH_DANGER_THRESHOLD: f64 = 85.0; // >85% of ATH = dangerous (was 75%)
 // ================================================================================================
 // 📊 COMPREHENSIVE TOKEN ANALYSIS DATA
 // ================================================================================================
+
+/// Pump detection result
+#[derive(Debug, Clone)]
+pub struct PumpAnalysis {
+    pub is_pump: bool,
+    pub pump_type: PumpType,
+    pub velocity_percent_per_second: f64,
+    pub magnitude_percent: f64,
+    pub time_to_peak_seconds: f64,
+    pub confidence: f64, // 0.0-1.0
+    pub recommended_action: PumpAction,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PumpType {
+    MegaPump,    // 50%+ gains
+    MainPump,    // 15-50% gains  
+    MicroPump,   // 8-15% gains (for volatile tokens)
+    TrendMove,   // 5-8% sustained move
+    NoMove,      // < 5% movement
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PumpAction {
+    ExitImmediately,    // Mega pump detected
+    ExitSoon,          // Main pump detected  
+    WatchClosely,      // Micro pump or good trend
+    Hold,              // Normal movement
+    HoldForMore,       // Too small to exit
+}
+
+/// Detect pumps using price history and velocity analysis
+pub async fn detect_pump(
+    position: &Position,
+    current_price: f64,
+    minutes_held: f64
+) -> PumpAnalysis {
+    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    let current_profit_percent = ((current_price - entry_price) / entry_price) * 100.0;
+    
+    // Get price history for pump analysis
+    let pool_service = get_pool_service();
+    let price_history = pool_service.get_recent_price_history(&position.mint).await;
+    
+    if price_history.is_empty() || minutes_held < 0.5 {
+        return PumpAnalysis {
+            is_pump: false,
+            pump_type: PumpType::NoMove,
+            velocity_percent_per_second: 0.0,
+            magnitude_percent: current_profit_percent,
+            time_to_peak_seconds: minutes_held * 60.0,
+            confidence: 0.0,
+            recommended_action: PumpAction::Hold,
+        };
+    }
+    
+    // Analyze price velocity and patterns
+    let velocity_analysis = analyze_price_velocity(&price_history, entry_price, current_price, minutes_held);
+    let pattern_analysis = analyze_pump_pattern(&price_history, entry_price, minutes_held);
+    let volatility_context = get_token_volatility_context(&position.mint).await;
+    
+    // Determine pump type based on magnitude and velocity
+    let pump_type = classify_pump_type(current_profit_percent, velocity_analysis.max_velocity, volatility_context);
+    
+    // Calculate confidence based on multiple factors
+    let confidence = calculate_pump_confidence(
+        &velocity_analysis,
+        &pattern_analysis,
+        current_profit_percent,
+        volatility_context
+    );
+    
+    // Determine recommended action
+    let recommended_action = determine_pump_action(&pump_type, confidence, current_profit_percent, minutes_held);
+    
+    PumpAnalysis {
+        is_pump: matches!(pump_type, PumpType::MicroPump | PumpType::MainPump | PumpType::MegaPump),
+        pump_type,
+        velocity_percent_per_second: velocity_analysis.max_velocity,
+        magnitude_percent: current_profit_percent,
+        time_to_peak_seconds: velocity_analysis.time_to_peak,
+        confidence,
+        recommended_action,
+    }
+}
+
+#[derive(Debug)]
+struct VelocityAnalysis {
+    max_velocity: f64,              // Max % per second
+    avg_velocity: f64,              // Average % per second
+    acceleration: f64,              // Change in velocity
+    time_to_peak: f64,              // Seconds to reach peak
+    is_accelerating: bool,          // Still gaining speed
+}
+
+#[derive(Debug)]
+struct PatternAnalysis {
+    is_parabolic: bool,             // Parabolic price curve
+    has_sharp_spike: bool,          // Sudden price spike
+    volume_spike: bool,             // Volume confirmation
+    consistency_score: f64,         // 0-1, how consistent the move is
+}
+
+/// Analyze price velocity over time
+fn analyze_price_velocity(
+    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+    entry_price: f64,
+    current_price: f64,
+    minutes_held: f64
+) -> VelocityAnalysis {
+    if price_history.len() < 2 {
+        return VelocityAnalysis {
+            max_velocity: 0.0,
+            avg_velocity: 0.0,
+            acceleration: 0.0,
+            time_to_peak: minutes_held * 60.0,
+            is_accelerating: false,
+        };
+    }
+    
+    let mut velocities = Vec::new();
+    let mut max_velocity = 0.0;
+    let mut time_to_peak = 0.0;
+    let mut peak_price = entry_price;
+    
+    // Calculate velocities between consecutive points
+    for i in 1..price_history.len() {
+        let (time1, price1) = &price_history[i-1];
+        let (time2, price2) = &price_history[i];
+        
+        let time_diff_seconds = (*time2 - *time1).num_seconds() as f64;
+        
+        if time_diff_seconds > 0.0 && price1 > &0.0 {
+            let price_change_percent = ((price2 - price1) / price1) * 100.0;
+            let velocity = price_change_percent / time_diff_seconds;
+            
+            velocities.push(velocity);
+            
+            if velocity > max_velocity {
+                max_velocity = velocity;
+                time_to_peak = time_diff_seconds;
+            }
+            
+            if *price2 > peak_price {
+                peak_price = *price2;
+            }
+        }
+    }
+    
+    // Include movement from entry to current
+    let total_time_seconds = minutes_held * 60.0;
+    if total_time_seconds > 0.0 {
+        let entry_to_current_velocity = ((current_price - entry_price) / entry_price * 100.0) / total_time_seconds;
+        velocities.push(entry_to_current_velocity);
+        
+        if entry_to_current_velocity > max_velocity {
+            max_velocity = entry_to_current_velocity;
+            time_to_peak = total_time_seconds;
+        }
+    }
+    
+    let avg_velocity = if !velocities.is_empty() {
+        velocities.iter().sum::<f64>() / velocities.len() as f64
+    } else {
+        0.0
+    };
+    
+    // Calculate acceleration (change in velocity)
+    let acceleration = if velocities.len() >= 2 {
+        let recent_avg = velocities.iter().rev().take(3).sum::<f64>() / (3.0_f64).min(velocities.len() as f64);
+        let early_avg = velocities.iter().take(3).sum::<f64>() / (3.0_f64).min(velocities.len() as f64);
+        recent_avg - early_avg
+    } else {
+        0.0
+    };
+    
+    VelocityAnalysis {
+        max_velocity,
+        avg_velocity,
+        acceleration,
+        time_to_peak,
+        is_accelerating: acceleration > 0.1, // Accelerating if velocity increased by >0.1%/sec
+    }
+}
+
+/// Analyze pump patterns
+fn analyze_pump_pattern(
+    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+    entry_price: f64,
+    _minutes_held: f64
+) -> PatternAnalysis {
+    if price_history.len() < 3 {
+        return PatternAnalysis {
+            is_parabolic: false,
+            has_sharp_spike: false,
+            volume_spike: false,
+            consistency_score: 0.0,
+        };
+    }
+    
+    let prices: Vec<f64> = price_history.iter().map(|(_, price)| *price).collect();
+    
+    // Check for parabolic curve (exponential growth)
+    let is_parabolic = check_parabolic_pattern(&prices, entry_price);
+    
+    // Check for sharp spike (sudden large move)
+    let has_sharp_spike = check_sharp_spike(&prices, entry_price);
+    
+    // Calculate consistency (how smooth the upward movement is)
+    let consistency_score = calculate_consistency_score(&prices);
+    
+    PatternAnalysis {
+        is_parabolic,
+        has_sharp_spike,
+        volume_spike: false, // Would need volume data integration
+        consistency_score,
+    }
+}
+
+/// Check if price pattern is parabolic
+fn check_parabolic_pattern(prices: &[f64], entry_price: f64) -> bool {
+    if prices.len() < 4 {
+        return false;
+    }
+    
+    // Look for accelerating gains (each move larger than the last)
+    let mut acceleration_count = 0;
+    let total_checks = prices.len() - 1;
+    
+    for i in 1..prices.len() {
+        if i >= 2 {
+            let prev_gain = (prices[i-1] - prices[i-2]) / prices[i-2];
+            let curr_gain = (prices[i] - prices[i-1]) / prices[i-1];
+            
+            if curr_gain > prev_gain * 1.1 { // 10% acceleration
+                acceleration_count += 1;
+            }
+        }
+    }
+    
+    // Parabolic if >60% of moves are accelerating and total gain > 10%
+    let acceleration_ratio = acceleration_count as f64 / total_checks as f64;
+    let total_gain = (prices.last().unwrap() - entry_price) / entry_price * 100.0;
+    
+    acceleration_ratio > 0.6 && total_gain > 10.0
+}
+
+/// Check for sharp price spike
+fn check_sharp_spike(prices: &[f64], _entry_price: f64) -> bool {
+    if prices.len() < 3 {
+        return false;
+    }
+    
+    // Look for sudden large moves
+    for i in 1..prices.len() {
+        let gain = (prices[i] - prices[i-1]) / prices[i-1] * 100.0;
+        if gain > 8.0 { // Single move > 8%
+            return true;
+        }
+    }
+    
+    false
+}
+
+/// Calculate how consistent the upward movement is
+fn calculate_consistency_score(prices: &[f64]) -> f64 {
+    if prices.len() < 3 {
+        return 0.0;
+    }
+    
+    let mut positive_moves = 0;
+    let total_moves = prices.len() - 1;
+    
+    for i in 1..prices.len() {
+        if prices[i] > prices[i-1] {
+            positive_moves += 1;
+        }
+    }
+    
+    positive_moves as f64 / total_moves as f64
+}
+
+/// Get token volatility context from performance cache
+async fn get_token_volatility_context(mint: &str) -> f64 {
+    let cache = load_performance_cache();
+    
+    if let Some(performance) = cache.tokens.get(mint) {
+        performance.volatility_24h / 100.0 // Convert to decimal
+    } else {
+        0.1 // Default 10% volatility
+    }
+}
+
+/// Classify pump type based on magnitude and velocity  
+fn classify_pump_type(profit_percent: f64, max_velocity: f64, volatility_context: f64) -> PumpType {
+    // Adjust thresholds based on token's volatility
+    let volatility_multiplier = (1.0 + volatility_context).min(2.0);
+    
+    let mega_threshold = MEGA_PUMP_PERCENT / volatility_multiplier;
+    let main_threshold = PUMP_MIN_PERCENT / volatility_multiplier;
+    let micro_threshold = MICRO_PUMP_PERCENT / volatility_multiplier;
+    let trend_threshold = 5.0 / volatility_multiplier;
+    
+    // High velocity indicates pump regardless of total gain
+    let velocity_factor = max_velocity > PUMP_VELOCITY_THRESHOLD;
+    
+    match profit_percent {
+        p if p >= mega_threshold || (velocity_factor && p >= 25.0) => PumpType::MegaPump,
+        p if p >= main_threshold || (velocity_factor && p >= 10.0) => PumpType::MainPump,
+        p if p >= micro_threshold || (velocity_factor && p >= 5.0) => PumpType::MicroPump,
+        p if p >= trend_threshold => PumpType::TrendMove,
+        _ => PumpType::NoMove,
+    }
+}
+
+/// Calculate pump confidence score
+fn calculate_pump_confidence(
+    velocity: &VelocityAnalysis,
+    pattern: &PatternAnalysis,
+    profit_percent: f64,
+    volatility_context: f64
+) -> f64 {
+    let mut confidence = 0.0;
+    
+    // Velocity confidence (40% weight)
+    if velocity.max_velocity > PUMP_VELOCITY_THRESHOLD {
+        confidence += 0.4 * (velocity.max_velocity / (PUMP_VELOCITY_THRESHOLD * 2.0)).min(1.0);
+    }
+    
+    // Pattern confidence (30% weight)
+    if pattern.is_parabolic {
+        confidence += 0.15;
+    }
+    if pattern.has_sharp_spike {
+        confidence += 0.15;
+    }
+    
+    // Consistency confidence (20% weight)
+    confidence += pattern.consistency_score * 0.2;
+    
+    // Magnitude confidence (10% weight)
+    let magnitude_factor = (profit_percent / (PUMP_MIN_PERCENT * 2.0)).min(1.0);
+    confidence += magnitude_factor * 0.1;
+    
+    // Adjust for token volatility context
+    let volatility_adjustment = if volatility_context > 0.2 {
+        0.8 // Reduce confidence for highly volatile tokens
+    } else {
+        1.0
+    };
+    
+    (confidence * volatility_adjustment).min(1.0).max(0.0)
+}
+
+/// Determine recommended action based on pump analysis
+fn determine_pump_action(
+    pump_type: &PumpType,
+    confidence: f64,
+    profit_percent: f64,
+    minutes_held: f64
+) -> PumpAction {
+    match pump_type {
+        PumpType::MegaPump => {
+            if confidence > 0.7 {
+                PumpAction::ExitImmediately
+            } else {
+                PumpAction::ExitSoon
+            }
+        },
+        PumpType::MainPump => {
+            if confidence > 0.6 && minutes_held > 1.0 {
+                PumpAction::ExitSoon
+            } else {
+                PumpAction::WatchClosely
+            }
+        },
+        PumpType::MicroPump => {
+            if confidence > 0.5 && minutes_held > 2.0 && profit_percent > 8.0 {
+                PumpAction::WatchClosely
+            } else {
+                PumpAction::Hold
+            }
+        },
+        PumpType::TrendMove => {
+            if profit_percent > TREND_PROFIT_MIN && minutes_held > 5.0 {
+                PumpAction::WatchClosely
+            } else {
+                PumpAction::Hold
+            }
+        },
+        PumpType::NoMove => {
+            if profit_percent < CONSERVATIVE_PROFIT_MIN {
+                PumpAction::HoldForMore
+            } else {
+                PumpAction::Hold
+            }
+        }
+    }
+}
 
 /// Complete token analysis combining all available data sources
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -666,6 +1075,106 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 pnl_percent
             )
         );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // 🚀 PUMP DETECTION SYSTEM - HIGHEST PRIORITY
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    
+    // Analyze pump patterns BEFORE other logic
+    let pump_analysis = detect_pump(position, current_price, minutes_held).await;
+    
+    if is_debug_profit_enabled() {
+        log(
+            LogTag::Profit,
+            "PUMP_ANALYSIS",
+            &format!(
+                "🚀 {} pump analysis: type={:?}, velocity={:.3}%/sec, confidence={:.2}, action={:?}",
+                position.symbol,
+                pump_analysis.pump_type,
+                pump_analysis.velocity_percent_per_second,
+                pump_analysis.confidence,
+                pump_analysis.recommended_action
+            )
+        );
+    }
+    
+    // PUMP-BASED EXIT DECISIONS
+    match pump_analysis.recommended_action {
+        PumpAction::ExitImmediately => {
+            log(
+                LogTag::Profit,
+                "PUMP_EXIT_IMMEDIATE",
+                &format!(
+                    "🚀 MEGA PUMP DETECTED: {} - {:.2}% in {:.1}min, velocity: {:.3}%/sec - IMMEDIATE EXIT!",
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held,
+                    pump_analysis.velocity_percent_per_second
+                )
+            );
+            return (1.0, format!(
+                "🚀 MEGA PUMP: {:.2}% @ {:.3}%/sec - IMMEDIATE EXIT!",
+                pnl_percent,
+                pump_analysis.velocity_percent_per_second
+            ));
+        },
+        PumpAction::ExitSoon => {
+            log(
+                LogTag::Profit,
+                "PUMP_EXIT_SOON",
+                &format!(
+                    "🎯 PUMP DETECTED: {} - {:.2}% in {:.1}min, confidence: {:.2} - EXIT SOON!",
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held,
+                    pump_analysis.confidence
+                )
+            );
+            return (0.9, format!(
+                "🎯 PUMP: {:.2}% (conf: {:.2}) - EXIT SOON!",
+                pnl_percent,
+                pump_analysis.confidence
+            ));
+        },
+        PumpAction::WatchClosely => {
+            // Continue to normal logic but with higher urgency baseline
+            if is_debug_profit_enabled() {
+                log(
+                    LogTag::Profit,
+                    "PUMP_WATCH",
+                    &format!(
+                        "👀 {} potential pump developing - watching closely",
+                        position.symbol
+                    )
+                );
+            }
+        },
+        PumpAction::HoldForMore => {
+            // Conservative mode - don't exit on small gains
+            if pnl_percent > 0.0 && pnl_percent < CONSERVATIVE_PROFIT_MIN {
+                if is_debug_profit_enabled() {
+                    log(
+                        LogTag::Profit,
+                        "HOLD_SMALL_PROFIT",
+                        &format!(
+                            "💎 {} holding small profit: {:.2}% < {:.1}% threshold",
+                            position.symbol,
+                            pnl_percent,
+                            CONSERVATIVE_PROFIT_MIN
+                        )
+                    );
+                }
+                return (0.0, format!(
+                    "💎 HOLD: {:.2}% profit too small (need >{:.1}%)",
+                    pnl_percent,
+                    CONSERVATIVE_PROFIT_MIN
+                ));
+            }
+        },
+        PumpAction::Hold => {
+            // Normal logic continues
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════

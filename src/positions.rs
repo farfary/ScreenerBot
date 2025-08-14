@@ -499,23 +499,33 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
     // Execute the token purchase using instruction-based analysis
     match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
         Ok(swap_result) => {
-            // CRITICAL FIX: Check if the transaction was actually successful on-chain
-            if !swap_result.success {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!(
-                        "❌ Transaction failed on-chain for {}: {}",
-                        token.symbol,
-                        swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
-                    )
-                );
-                return;
-            }
-
             let transaction_signature = swap_result.transaction_signature
                 .clone()
                 .unwrap_or_default();
+
+            // NEW APPROACH: Create position optimistically even if initial confirmation failed
+            // The background verification system will validate and update the position
+            if !swap_result.success {
+                log(
+                    LogTag::Trader,
+                    "WARNING",
+                    &format!(
+                        "⚠️ Initial transaction confirmation timed out for {}: {} - Creating position optimistically for background verification",
+                        token.symbol,
+                        &transaction_signature[..8]
+                    )
+                );
+            } else {
+                log(
+                    LogTag::Trader,
+                    "SUCCESS",
+                    &format!(
+                        "✅ Transaction confirmed for {}: {} - Creating verified position",
+                        token.symbol,
+                        &transaction_signature[..8]
+                    )
+                );
+            }
 
             log(
                 LogTag::Trader,

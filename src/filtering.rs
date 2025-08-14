@@ -45,7 +45,7 @@ pub const MAX_TOKEN_AGE_SECONDS: i64 = 24 * 30 * 24 * 60 * 60; // 2 years for bi
 
 // ===== POSITION MANAGEMENT PARAMETERS =====
 /// Cooldown period after closing position before re-entering same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 2 * 60; // 24 hours
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 30;
 
 
 // ===== PRICE ACTION FILTERING PARAMETERS =====

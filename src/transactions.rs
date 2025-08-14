@@ -1108,6 +1108,44 @@ impl TransactionsManager {
         self.priority_transactions.clear();
     }
 
+    /// Get recent transactions from cache (for orphaned position recovery)
+    pub async fn get_recent_transactions(&self, limit: usize) -> Result<Vec<Transaction>, String> {
+        let cache_dir = get_transactions_cache_dir();
+        
+        // Get all cached transaction files
+        let mut transaction_files = Vec::new();
+        let entries = std::fs::read_dir(&cache_dir)
+            .map_err(|e| format!("Failed to read transactions cache directory: {}", e))?;
+            
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+                    if let Some(metadata) = std::fs::metadata(&path).ok() {
+                        if let Ok(modified) = metadata.modified() {
+                            transaction_files.push((path, modified));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Sort by modification time (newest first)
+        transaction_files.sort_by(|a, b| b.1.cmp(&a.1));
+        
+        // Load up to 'limit' transactions
+        let mut transactions = Vec::new();
+        for (file_path, _) in transaction_files.into_iter().take(limit) {
+            if let Ok(content) = std::fs::read_to_string(&file_path) {
+                if let Ok(transaction) = serde_json::from_str::<Transaction>(&content) {
+                    transactions.push(transaction);
+                }
+            }
+        }
+        
+        Ok(transactions)
+    }
+
     /// Check and verify unverified position transactions
     /// This function checks all positions with unverified entry or exit transactions
     /// and updates position data based on transaction analysis

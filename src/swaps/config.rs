@@ -36,17 +36,17 @@ pub const TRANSACTION_CONFIRMATION_TIMEOUT_SECS: u64 = 300;
 /// Transaction confirmation timeout (seconds) - Priority transactions
 pub const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 30;
 
-/// Transaction confirmation maximum attempts - Regular transactions (reduced for faster failure detection)
-pub const TRANSACTION_CONFIRMATION_MAX_ATTEMPTS: u32 = 10;
+/// Transaction confirmation maximum attempts - Regular transactions (increased for better reliability)
+pub const TRANSACTION_CONFIRMATION_MAX_ATTEMPTS: u32 = 20;
 
 /// Transaction confirmation maximum attempts - Priority transactions  
-pub const PRIORITY_CONFIRMATION_MAX_ATTEMPTS: u32 = 8;
+pub const PRIORITY_CONFIRMATION_MAX_ATTEMPTS: u32 = 15;
 
 /// Transaction confirmation retry delay (milliseconds) - Regular transactions
 pub const TRANSACTION_CONFIRMATION_RETRY_DELAY_MS: u64 = 3000;
 
 /// Fast failure detection threshold - abort if transaction not found after this many attempts
-pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 5;
+pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 10;
 
 /// Transaction confirmation retry delay (milliseconds) - Priority transactions
 pub const PRIORITY_CONFIRMATION_RETRY_DELAY_MS: u64 = 1000;
