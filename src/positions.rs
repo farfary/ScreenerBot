@@ -404,7 +404,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         if
             positions
                 .iter()
-                .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none())
+                .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
         {
             return; // Already have an open position for this token
         }
@@ -412,7 +412,7 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         // Check if we've reached the maximum open positions limit
         let open_positions_count = positions
             .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
             .count();
 
         if open_positions_count >= MAX_OPEN_POSITIONS {
@@ -627,6 +627,20 @@ pub async fn close_position(
     exit_price: f64,
     exit_time: DateTime<Utc>
 ) -> bool {
+    // CRITICAL CHECK: Don't close position if it already has an exit transaction
+    if position.exit_transaction_signature.is_some() {
+        log(
+            LogTag::Trader,
+            "ALREADY_CLOSED",
+            &format!(
+                "⚠️ Position for {} already has exit transaction signature: {}. Skipping close attempt.",
+                position.symbol,
+                position.exit_transaction_signature.as_ref().unwrap()
+            )
+        );
+        return true; // Position is already closed/being closed
+    }
+
     // DRY-RUN MODE CHECK: Skip actual selling if dry-run is enabled
     if crate::arguments::is_dry_run_enabled() {
         log(
@@ -745,7 +759,7 @@ pub fn get_open_positions_count() -> usize {
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         positions
             .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
             .count()
     } else {
         0
@@ -820,7 +834,7 @@ pub fn get_open_positions_mints() -> Vec<String> {
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         positions
             .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
             .map(|p| p.mint.clone())
             .collect()
     } else {
@@ -833,7 +847,7 @@ pub fn get_open_positions() -> Vec<Position> {
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         positions
             .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
+            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
             .cloned()
             .collect()
     } else {
@@ -846,7 +860,7 @@ pub fn get_closed_positions() -> Vec<Position> {
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         positions
             .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_some())
+            .filter(|p| p.position_type == "buy" && (p.exit_price.is_some() || p.exit_transaction_signature.is_some()))
             .cloned()
             .collect()
     } else {
@@ -859,8 +873,40 @@ pub fn is_open_position(mint: &str) -> bool {
     if let Ok(positions) = SAVED_POSITIONS.lock() {
         positions
             .iter()
-            .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_none())
+            .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
     } else {
         false
+    }
+}
+
+/// Helper enum to categorize position states
+#[derive(Debug, Clone, PartialEq)]
+pub enum PositionState {
+    Open,          // No exit transaction, actively trading
+    Closing,       // Exit transaction submitted but not yet verified
+    Closed,        // Exit transaction verified and exit_price set
+}
+
+/// Get the current state of a position
+pub fn get_position_state(position: &Position) -> PositionState {
+    if position.exit_price.is_some() {
+        PositionState::Closed
+    } else if position.exit_transaction_signature.is_some() {
+        PositionState::Closing
+    } else {
+        PositionState::Open
+    }
+}
+
+/// Gets positions by state
+pub fn get_positions_by_state(state: PositionState) -> Vec<Position> {
+    if let Ok(positions) = SAVED_POSITIONS.lock() {
+        positions
+            .iter()
+            .filter(|p| p.position_type == "buy" && get_position_state(p) == state)
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
     }
 }
