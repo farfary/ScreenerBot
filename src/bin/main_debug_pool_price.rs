@@ -11,7 +11,7 @@
 /// - Compare prices: cargo run --bin tool_pool_price -- --token <TOKEN_MINT> --compare-api
 
 use screenerbot::tokens::pool::{ get_pool_service, init_pool_service };
-use screenerbot::tokens::api::{ get_token_pairs_from_api, init_dexscreener_api };
+use screenerbot::tokens::dexscreener::{ get_token_pairs_from_api, init_dexscreener_api };
 use screenerbot::tokens::price::{ initialize_price_service };
 use screenerbot::tokens::decimals::{ get_cached_decimals, get_token_decimals_from_chain };
 use screenerbot::logger::{ log, LogTag, init_file_logging };
@@ -1071,7 +1071,7 @@ async fn test_token_availability_and_price(
                     // Get pairs for this token
                     if
                         let Ok(pairs) =
-                            screenerbot::tokens::api::get_token_pairs_from_api(token_address).await
+                            screenerbot::tokens::dexscreener::get_token_pairs_from_api(token_address).await
                     {
                         for pair in pairs {
                             if pair.dex_id == "pumpswap" {

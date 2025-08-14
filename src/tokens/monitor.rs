@@ -7,7 +7,7 @@
 
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_monitor_enabled;
-use crate::tokens::api::{
+use crate::tokens::dexscreener::{
     get_global_dexscreener_api,
     MAX_TOKENS_PER_API_CALL,
     API_CALLS_PER_MONITORING_CYCLE,

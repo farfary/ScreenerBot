@@ -1,7 +1,7 @@
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::configs::{ read_configs };
 use screenerbot::arguments::{ set_cmd_args, get_cmd_args };
-use screenerbot::tokens::api::init_dexscreener_api;
+use screenerbot::tokens::dexscreener::init_dexscreener_api;
 use screenerbot::rpc::init_rpc_client;
 use screenerbot::tokens::price::initialize_price_service;
 use screenerbot::tokens::pool::get_pool_service;

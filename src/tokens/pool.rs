@@ -6,7 +6,7 @@
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_pool_prices_enabled, is_debug_rl_learn_enabled, CACHE_PRICES_DIR };
-use crate::tokens::api::{ get_token_pairs_from_api, TokenPair };
+use crate::tokens::dexscreener::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;

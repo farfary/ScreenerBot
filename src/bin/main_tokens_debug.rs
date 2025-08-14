@@ -47,7 +47,7 @@ use screenerbot::tokens::decimals::{
     lamports_to_sol,
     sol_to_lamports,
 };
-use screenerbot::tokens::api::{
+use screenerbot::tokens::dexscreener::{
     get_token_price_from_global_api,
     get_token_from_mint_global_api,
     get_token_pairs_from_api,

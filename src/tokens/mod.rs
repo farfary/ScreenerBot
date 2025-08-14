@@ -26,7 +26,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use std::sync::Mutex;
 
-pub mod api;
+pub mod dexscreener;
 pub mod pool;
 pub mod discovery;
 pub mod monitor;
@@ -40,7 +40,7 @@ pub mod ohlcvs;
 
 // Re-export main types and functions
 pub use types::*;
-pub use api::{
+pub use dexscreener::{
     DexScreenerApi,
     get_token_prices_from_api,
     get_token_pairs_from_api,

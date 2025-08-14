@@ -1,7 +1,7 @@
 /// Base token discovery system structure
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_discovery_enabled;
-use crate::tokens::api::get_global_dexscreener_api;
+use crate::tokens::dexscreener::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::is_token_excluded_from_trading;
 use tokio::time::{ sleep, Duration };
