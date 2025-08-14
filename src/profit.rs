@@ -30,48 +30,49 @@ use serde::{ Serialize, Deserialize };
 pub const STOP_LOSS_PERCENT: f64 = -55.0; // Intelligent stop loss at -55%
 
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
-// EXTENDED FOR BETTER PROFITS: 1 minute to 2 hours based on liquidity
-const ULTRA_SAFE_MAX_TIME: f64 = 120.0; // Ultra safe tokens - 2 hours max
-const SAFE_MAX_TIME: f64 = 90.0; // Safe tokens - 1.5 hours
-const MEDIUM_MAX_TIME: f64 = 60.0; // Medium risk tokens - 1 hour
-const RISKY_MAX_TIME: f64 = 45.0; // Risky tokens - 45 minutes
-const DANGEROUS_MAX_TIME: f64 = 30.0; // Dangerous tokens - 30 minutes
-const MIN_HOLD_TIME: f64 = 0.5; // Minimum hold time for all positions
+// AGGRESSIVE FOR FAST PROFITS: 0.25 minutes to 45 minutes based on volatility
+const ULTRA_SAFE_MAX_TIME: f64 = 45.0; // Ultra safe tokens - 45 minutes max (reduced from 120)
+const SAFE_MAX_TIME: f64 = 30.0; // Safe tokens - 30 minutes (reduced from 90)
+const MEDIUM_MAX_TIME: f64 = 20.0; // Medium risk tokens - 20 minutes (reduced from 60)
+const RISKY_MAX_TIME: f64 = 15.0; // Risky tokens - 15 minutes (reduced from 45)
+const DANGEROUS_MAX_TIME: f64 = 10.0; // Dangerous tokens - 10 minutes (reduced from 30)
+const MIN_HOLD_TIME: f64 = 0.25; // ULTRA-FAST: 15 seconds minimum (reduced from 0.5)
 
-// 🎯 OPTIMIZED PROFIT TARGETS - CORRECTED RISK-BASED STRATEGY
-// LOWER RISK = HIGHER TARGETS + LONGER TIME (more patience for safer tokens)
-// HIGHER RISK = LOWER TARGETS + SHORTER TIME (quick exits for dangerous tokens)
-const ULTRA_SAFE_PROFIT_MIN: f64 = 8.0; // 8-500% for ultra safe tokens (can afford to wait)
-const ULTRA_SAFE_PROFIT_MAX: f64 = 500.0;
-const SAFE_PROFIT_MIN: f64 = 6.0; // 6-300% for safe tokens
-const SAFE_PROFIT_MAX: f64 = 300.0;
-const MEDIUM_PROFIT_MIN: f64 = 5.0; // 5-200% for medium risk tokens
+// 🎯 AGGRESSIVE PROFIT TARGETS FOR VOLATILE TRADING
+// INCREASED TARGETS TO MATCH VOLATILITY POTENTIAL
+const ULTRA_SAFE_PROFIT_MIN: f64 = 10.0; // 10-300% for ultra safe tokens (increased from 8-500%)
+const ULTRA_SAFE_PROFIT_MAX: f64 = 300.0;
+const SAFE_PROFIT_MIN: f64 = 8.0; // 8-250% for safe tokens (increased from 6-300%)
+const SAFE_PROFIT_MAX: f64 = 250.0;
+const MEDIUM_PROFIT_MIN: f64 = 6.0; // 6-200% for medium risk tokens (increased from 5-200%)
 const MEDIUM_PROFIT_MAX: f64 = 200.0;
-const RISKY_PROFIT_MIN: f64 = 3.0; // 3-100% for risky tokens (faster exits)
-const RISKY_PROFIT_MAX: f64 = 100.0;
-const DANGEROUS_PROFIT_MIN: f64 = 2.0; // 2-50% for dangerous tokens (very fast exits)
-const DANGEROUS_PROFIT_MAX: f64 = 50.0;
+const RISKY_PROFIT_MIN: f64 = 5.0; // 5-150% for risky tokens (INCREASED from 3-100%)
+const RISKY_PROFIT_MAX: f64 = 150.0;
+const DANGEROUS_PROFIT_MIN: f64 = 3.0; // 3-100% for dangerous tokens (INCREASED from 2-50%)
+const DANGEROUS_PROFIT_MAX: f64 = 100.0;
 
-// 📈 TRAILING STOP CONFIGURATION - RISK-ADJUSTED
+// 📈 AGGRESSIVE TRAILING STOP CONFIGURATION - OPTIMIZED FOR VOLATILITY
 const USE_TRAILING_STOP: bool = true;
-// Different trailing stops based on safety level
-const TRAILING_STOP_ULTRA_SAFE: f64 = 12.0; // 12% for ultra safe (more tolerance)
-const TRAILING_STOP_SAFE: f64 = 10.0; // 10% for safe
-const TRAILING_STOP_MEDIUM: f64 = 8.0; // 8% for medium
-const TRAILING_STOP_RISKY: f64 = 6.0; // 6% for risky (tighter stops)
-const TRAILING_STOP_DANGEROUS: f64 = 4.0; // 4% for dangerous (very tight)
-const TIME_DECAY_FACTOR: f64 = 0.15; // More aggressive time decay (15% vs 5%)
+// Tighter trailing stops for faster, more volatile trading
+const TRAILING_STOP_ULTRA_SAFE: f64 = 8.0; // 8% for ultra safe (reduced from 12%)
+const TRAILING_STOP_SAFE: f64 = 6.0; // 6% for safe (reduced from 10%)
+const TRAILING_STOP_MEDIUM: f64 = 5.0; // 5% for medium (reduced from 8%)
+const TRAILING_STOP_RISKY: f64 = 4.0; // 4% for risky (reduced from 6%)
+const TRAILING_STOP_DANGEROUS: f64 = 3.0; // 3% for dangerous (reduced from 4%)
+const TIME_DECAY_FACTOR: f64 = 0.25; // Aggressive time decay (25% vs 15%) for faster exits
 
 // 🚀 INSTANT SELL THRESHOLDS - CAPTURE MOONSHOTS
 const INSTANT_SELL_PROFIT: f64 = 2000.0; // 2000%+ = instant sell
 const MEGA_PROFIT_THRESHOLD: f64 = 1000.0; // 1000%+ = very urgent
 
-// ⚡ FAST PROFIT-TAKING THRESHOLDS - RESPECTS MINIMUM HOLD TIME
-// FIXED: No override of MIN_HOLD_TIME - fast profits only apply AFTER minimum hold
-const FAST_PROFIT_THRESHOLD: f64 = 3.0; // 3%+ profit at 1+ minute = fast exit
-const FAST_PROFIT_TIME_LIMIT: f64 = 1.0; // Must be held for 1+ minute minimum
-const SPEED_PROFIT_THRESHOLD: f64 = 5.0; // 5%+ profit at 1+ minute = speed exit
-const SPEED_PROFIT_TIME_LIMIT: f64 = 1.0; // Changed from 0.5 to respect MIN_HOLD_TIME
+// ⚡ ULTRA-FAST PROFIT-TAKING THRESHOLDS - AGGRESSIVE SUB-MINUTE EXITS
+// OPTIMIZED: Enable sub-15-second exits for strong momentum
+const LIGHTNING_PROFIT_THRESHOLD: f64 = 10.0; // 10%+ profit in 15+ seconds = instant exit
+const LIGHTNING_PROFIT_TIME_LIMIT: f64 = 0.25; // 15 seconds minimum
+const FAST_PROFIT_THRESHOLD: f64 = 5.0; // 5%+ profit at 30+ seconds = fast exit  
+const FAST_PROFIT_TIME_LIMIT: f64 = 0.5; // 30 seconds minimum (reduced from 1.0)
+const SPEED_PROFIT_THRESHOLD: f64 = 3.0; // 3%+ profit at 1+ minute = speed exit (reduced from 5%)
+const SPEED_PROFIT_TIME_LIMIT: f64 = 1.0; // 1 minute
 const MOMENTUM_MIN_TIME_SECONDS: f64 = 5.0; // Minimum 5 seconds before momentum calculation
 
 // 📊 LIQUIDITY THRESHOLDS FOR PROFIT CALCULATIONS AND SAFETY CLASSIFICATION
@@ -1068,13 +1069,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         );
     }
 
-    // � SPEED PROFIT EXIT: >5% profit in <30 seconds = mega urgent (MOST SPECIFIC CHECK FIRST)
-    if minutes_held >= MIN_HOLD_TIME && pnl_percent >= SPEED_PROFIT_THRESHOLD {
+    // ⚡ LIGHTNING PROFIT EXIT: >10% profit in 15+ seconds = ultra-instant sell (HIGHEST PRIORITY)
+    if minutes_held >= LIGHTNING_PROFIT_TIME_LIMIT && pnl_percent >= LIGHTNING_PROFIT_THRESHOLD {
         log(
             LogTag::Profit,
-            "SPEED_PROFIT_EXIT",
+            "LIGHTNING_PROFIT_EXIT",
             &format!(
-                "Speed profit exit triggered: {:.2}% profit in {:.1} seconds - exceptional momentum",
+                "⚡ LIGHTNING profit exit triggered: {:.2}% profit in {:.1} seconds - capture moonshot momentum!",
                 pnl_percent,
                 minutes_held * 60.0
             )
@@ -1082,20 +1083,20 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         return (
             1.0,
             format!(
-                "SPEED PROFIT: {:.2}% in {:.0}s - ultra-fast momentum!",
+                "⚡ LIGHTNING: {:.2}% in {:.0}s - moonshot captured!",
                 pnl_percent,
                 minutes_held * 60.0
             ),
         );
     }
 
-    // � ULTRA-FAST PROFIT EXIT: >3% profit in <1 minute = immediate sell (BROADER CHECK SECOND)
-    if minutes_held >= MIN_HOLD_TIME && pnl_percent >= FAST_PROFIT_THRESHOLD {
+    // 🚀 SPEED PROFIT EXIT: >5% profit in 30+ seconds = mega urgent (SECOND PRIORITY)
+    if minutes_held >= FAST_PROFIT_TIME_LIMIT && pnl_percent >= FAST_PROFIT_THRESHOLD {
         log(
             LogTag::Profit,
-            "FAST_PROFIT_EXIT",
+            "SPEED_PROFIT_EXIT",
             &format!(
-                "Fast profit exit triggered: {:.2}% profit in {:.1} seconds - capturing quick momentum",
+                "🚀 Speed profit exit triggered: {:.2}% profit in {:.1} seconds - exceptional momentum",
                 pnl_percent,
                 minutes_held * 60.0
             )
@@ -1103,7 +1104,28 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         return (
             1.0,
             format!(
-                "FAST PROFIT: {:.2}% in {:.0}s - immediate exit!",
+                "🚀 SPEED: {:.2}% in {:.0}s - ultra-fast momentum!",
+                pnl_percent,
+                minutes_held * 60.0
+            ),
+        );
+    }
+
+    // ⚡ FAST PROFIT EXIT: >3% profit in 1+ minute = immediate sell (THIRD PRIORITY)
+    if minutes_held >= SPEED_PROFIT_TIME_LIMIT && pnl_percent >= SPEED_PROFIT_THRESHOLD {
+        log(
+            LogTag::Profit,
+            "FAST_PROFIT_EXIT",
+            &format!(
+                "⚡ Fast profit exit triggered: {:.2}% profit in {:.1} seconds - capturing quick momentum",
+                pnl_percent,
+                minutes_held * 60.0
+            )
+        );
+        return (
+            1.0,
+            format!(
+                "⚡ FAST: {:.2}% in {:.0}s - immediate exit!",
                 pnl_percent,
                 minutes_held * 60.0
             ),

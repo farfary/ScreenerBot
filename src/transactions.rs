@@ -5319,3 +5319,51 @@ pub async fn get_global_swap_transactions() -> Result<Vec<SwapPnLInfo>, String> 
     
     temp_manager.get_all_swap_transactions().await
 }
+
+/// Check if there are pending transactions for a specific token mint
+/// This prevents duplicate buy transactions for the same token
+pub async fn has_pending_transactions_for_token(token_mint: &str) -> Result<bool, String> {
+    let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+    
+    if let Some(manager) = manager_guard.as_ref() {
+        // Check for unverified entry transactions in positions for this token
+        // This catches cases where a position was created but transaction verification is still pending
+        let positions = crate::positions::SAVED_POSITIONS.lock().map_err(|e| format!("Failed to lock positions: {}", e))?;
+        for position in positions.iter() {
+            if position.mint == token_mint && 
+               position.position_type == "buy" && 
+               !position.transaction_entry_verified &&
+               position.entry_transaction_signature.is_some() {
+                log(LogTag::Transactions, "UNVERIFIED_ENTRY", &format!(
+                    "Found unverified entry transaction for token {}: position {} with signature {}",
+                    &token_mint[..8],
+                    position.symbol,
+                    position.entry_transaction_signature.as_ref().unwrap_or(&"unknown".to_string())[..8].to_string()
+                ));
+                return Ok(true);
+            }
+        }
+        
+        // Check priority transactions that are still pending
+        // Any pending priority transaction could potentially conflict with new positions
+        let pending_count = manager.priority_transactions()
+            .values()
+            .filter(|tx| tx.state == PriorityState::Pending)
+            .count();
+            
+        if pending_count > 0 {
+            log(LogTag::Transactions, "PENDING_DETECTED", &format!(
+                "Found {} pending priority transactions - avoiding new position for token {} to prevent conflicts",
+                pending_count,
+                &token_mint[..8]
+            ));
+            return Ok(true);
+        }
+        
+        return Ok(false);
+    }
+    
+    // No global manager available - assume no pending transactions
+    log(LogTag::Transactions, "WARN", "No global transaction manager available to check pending transactions");
+    Ok(false)
+}

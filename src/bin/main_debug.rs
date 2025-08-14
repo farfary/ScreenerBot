@@ -1,43 +1,43 @@
-/// Enhanced Token Database Debug Tool with Comprehensive Wallet & Transaction Analysis
+/// Enhanced ScreenerBot Debug Tool - Comprehensive Token & Wallet Analysis
 /// 
-/// Comprehensive command-line tool for token analysis, wallet inspection, and trading history.
-/// Integrates database queries, decimals cache, API operations, pool monitoring, transaction
-/// analysis, position tracking, and wallet balance management.
-/// Essential for debugging token-related issues, validating trading performance, and 
-/// monitoring wallet health.
+/// Master debugging tool for the ScreenerBot trading system. Provides comprehensive 
+/// analysis of tokens, wallets, transactions, positions, and trading performance.
+/// Integrates database queries, real-time balances, transaction history, and P&L analysis.
+/// Essential for debugging trading issues, investigating positions, and monitoring system health.
 /// 
 /// Core Features:
-/// - Database Operations: Search, analyze, and debug token data from local database
+/// - Token Database: Search, analyze, and debug token data from local database
 /// - Wallet Analysis: Real-time SOL and token balance checking with ATA inspection
 /// - Transaction History: Complete transaction analysis from the transaction manager
 /// - Position Analysis: P&L calculations and position lifecycle tracking from actual swaps
+/// - Trading Performance: ROI analysis, fee tracking, and profit/loss calculations
 /// - Decimals Integration: Fetch, cache, and convert token decimal information
 /// - API Testing: Test DexScreener API endpoints and validate token data retrieval
 /// - Pool Analysis: Monitor pool prices, analyze liquidity, and validate price calculations
 /// - Price Validation: Compare prices across different sources and validate accuracy
 /// 
 /// Usage Examples:
-/// - Search by mint: cargo run --bin main_tokens_debug -- --mint PSAbMyzQqPu9dZpRNdtSxpnHY5CBwYwk7iVzZrNFg1D
-/// - Wallet analysis: cargo run --bin main_tokens_debug -- --wallet-analysis TOKEN_MINT
-/// - Balance check: cargo run --bin main_tokens_debug -- --balance-check TOKEN_MINT
-/// - Transaction history: cargo run --bin main_tokens_debug -- --transaction-history TOKEN_MINT
-/// - Position analysis: cargo run --bin main_tokens_debug -- --position-analysis TOKEN_MINT
-/// - Wallet summary: cargo run --bin main_tokens_debug -- --wallet-summary
-/// - Search by symbol: cargo run --bin main_tokens_debug -- --symbol PSAF
-/// - Search by name: cargo run --bin main_tokens_debug -- --name "Alpha Fund"
-/// - List all tokens: cargo run --bin main_tokens_debug -- --list
-/// - Count tokens: cargo run --bin main_tokens_debug -- --count
-/// - Recent tokens: cargo run --bin main_tokens_debug -- --recent 10
-/// - Get decimals: cargo run --bin main_tokens_debug -- --decimals TOKEN_MINT
-/// - Batch decimals: cargo run --bin main_tokens_debug -- --batch-decimals MINT1,MINT2,MINT3
-/// - Cache stats: cargo run --bin main_tokens_debug -- --cache-stats
-/// - Convert amounts: cargo run --bin main_tokens_debug -- --convert-raw 1000000 --decimals-for MINT
-/// - API price test: cargo run --bin main_tokens_debug -- --api-price TOKEN_MINT
-/// - Pool price test: cargo run --bin main_tokens_debug -- --pool-price TOKEN_MINT
-/// - Price comparison: cargo run --bin main_tokens_debug -- --compare-prices TOKEN_MINT
-/// - API stats: cargo run --bin main_tokens_debug -- --api-stats
-/// - Pool monitoring: cargo run --bin main_tokens_debug -- --monitor-pools --duration 300
-/// - Debug decimals: cargo run --bin main_tokens_debug -- --debug-decimals
+/// - Search by mint: cargo run --bin main_debug -- --mint PSAbMyzQqPu9dZpRNdtSxpnHY5CBwYwk7iVzZrNFg1D
+/// - Comprehensive analysis: cargo run --bin main_debug -- --wallet-analysis TOKEN_MINT
+/// - Balance check: cargo run --bin main_debug -- --balance-check TOKEN_MINT
+/// - Transaction history: cargo run --bin main_debug -- --transaction-history TOKEN_MINT
+/// - Position analysis: cargo run --bin main_debug -- --position-analysis TOKEN_MINT
+/// - Wallet summary: cargo run --bin main_debug -- --wallet-summary
+/// - Search by symbol: cargo run --bin main_debug -- --symbol PSAF
+/// - Search by name: cargo run --bin main_debug -- --name "Alpha Fund"
+/// - List all tokens: cargo run --bin main_debug -- --list
+/// - Count tokens: cargo run --bin main_debug -- --count
+/// - Recent tokens: cargo run --bin main_debug -- --recent 10
+/// - Get decimals: cargo run --bin main_debug -- --decimals TOKEN_MINT
+/// - Batch decimals: cargo run --bin main_debug -- --batch-decimals MINT1,MINT2,MINT3
+/// - Cache stats: cargo run --bin main_debug -- --cache-stats
+/// - Convert amounts: cargo run --bin main_debug -- --convert-raw 1000000 --decimals-for MINT
+/// - API price test: cargo run --bin main_debug -- --api-price TOKEN_MINT
+/// - Pool price test: cargo run --bin main_debug -- --pool-price TOKEN_MINT
+/// - Price comparison: cargo run --bin main_debug -- --compare-prices TOKEN_MINT
+/// - API stats: cargo run --bin main_debug -- --api-stats
+/// - Pool monitoring: cargo run --bin main_debug -- --monitor-pools --duration 300
+/// - Debug decimals: cargo run --bin main_debug -- --debug-decimals
 
 use clap::{Arg, Command};
 use std::path::Path;
@@ -94,9 +94,9 @@ struct TokenInfo {
 
 #[tokio::main]
 async fn main() {
-    let matches = Command::new("Token Database Debug Tool")
+    let matches = Command::new("ScreenerBot Master Debug Tool")
         .version("1.0")
-        .about("Query tokens database for debugging")
+        .about("Comprehensive token, wallet, and trading analysis for ScreenerBot")
         .arg(Arg::new("mint")
             .long("mint")
             .value_name("MINT")
@@ -562,52 +562,52 @@ fn display_token_compact(token: &TokenInfo) {
 }
 
 fn show_help() {
-    println!("🔧 Enhanced Token Database Debug Tool with Comprehensive Wallet & Transaction Analysis");
+    println!("🔧 ScreenerBot Master Debug Tool - Comprehensive Token, Wallet & Trading Analysis");
     println!();
     println!("Database Operations:");
-    println!("  cargo run --bin main_tokens_debug -- --mint PSAbMyzQqPu9dZpRNdtSxpnHY5CBwYwk7iVzZrNFg1D");
-    println!("  cargo run --bin main_tokens_debug -- --symbol PSAF");
-    println!("  cargo run --bin main_tokens_debug -- --name 'Alpha Fund'");
-    println!("  cargo run --bin main_tokens_debug -- --list");
-    println!("  cargo run --bin main_tokens_debug -- --count");
-    println!("  cargo run --bin main_tokens_debug -- --recent 10");
+    println!("  cargo run --bin main_debug -- --mint PSAbMyzQqPu9dZpRNdtSxpnHY5CBwYwk7iVzZrNFg1D");
+    println!("  cargo run --bin main_debug -- --symbol PSAF");
+    println!("  cargo run --bin main_debug -- --name 'Alpha Fund'");
+    println!("  cargo run --bin main_debug -- --list");
+    println!("  cargo run --bin main_debug -- --count");
+    println!("  cargo run --bin main_debug -- --recent 10");
     println!();
     println!("Wallet & Balance Analysis:");
-    println!("  cargo run --bin main_tokens_debug -- --balance-check TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --wallet-summary");
+    println!("  cargo run --bin main_debug -- --balance-check TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --wallet-summary");
     println!();
     println!("Transaction & Position Analysis:");
-    println!("  cargo run --bin main_tokens_debug -- --transaction-history TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --position-analysis TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --wallet-analysis TOKEN_MINT  # Comprehensive analysis");
+    println!("  cargo run --bin main_debug -- --transaction-history TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --position-analysis TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --wallet-analysis TOKEN_MINT  # Comprehensive analysis");
     println!();
     println!("Decimals Operations:");
-    println!("  cargo run --bin main_tokens_debug -- --decimals TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --batch-decimals MINT1,MINT2,MINT3");
-    println!("  cargo run --bin main_tokens_debug -- --cache-stats");
-    println!("  cargo run --bin main_tokens_debug -- --save-cache");
+    println!("  cargo run --bin main_debug -- --decimals TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --batch-decimals MINT1,MINT2,MINT3");
+    println!("  cargo run --bin main_debug -- --cache-stats");
+    println!("  cargo run --bin main_debug -- --save-cache");
     println!();
     println!("API Operations:");
-    println!("  cargo run --bin main_tokens_debug -- --api-price TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --test-api TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --api-stats");
+    println!("  cargo run --bin main_debug -- --api-price TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --test-api TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --api-stats");
     println!();
     println!("Pool Operations:");
-    println!("  cargo run --bin main_tokens_debug -- --pool-price TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --pool-info TOKEN_MINT");
-    println!("  cargo run --bin main_tokens_debug -- --monitor-pools --duration 300");
+    println!("  cargo run --bin main_debug -- --pool-price TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --pool-info TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --monitor-pools --duration 300");
     println!();
     println!("Price Analysis:");
-    println!("  cargo run --bin main_tokens_debug -- --compare-prices TOKEN_MINT");
+    println!("  cargo run --bin main_debug -- --compare-prices TOKEN_MINT");
     println!();
     println!("Conversion Utilities:");
-    println!("  cargo run --bin main_tokens_debug -- --convert-raw 1000000 --decimals-for MINT");
-    println!("  cargo run --bin main_tokens_debug -- --convert-ui 1.5 --decimals-for MINT");
+    println!("  cargo run --bin main_debug -- --convert-raw 1000000 --decimals-for MINT");
+    println!("  cargo run --bin main_debug -- --convert-ui 1.5 --decimals-for MINT");
     println!();
     println!("Debug Options:");
-    println!("  cargo run --bin main_tokens_debug -- --debug-decimals");
+    println!("  cargo run --bin main_debug -- --debug-decimals");
     println!();
-    println!("🆕 NEW FEATURES:");
+    println!("🆕 ENHANCED FEATURES:");
     println!("• Comprehensive wallet analysis with balances, transactions, and positions");
     println!("• Real-time balance checking for SOL and specific tokens");
     println!("• Transaction history analysis from the transactions manager");

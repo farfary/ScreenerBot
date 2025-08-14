@@ -431,6 +431,38 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         }
     }
 
+    // CRITICAL SAFETY CHECK: Check for pending transactions for this token
+    // This prevents duplicate positions and transaction conflicts
+    match crate::transactions::has_pending_transactions_for_token(&token.mint).await {
+        Ok(has_pending) => {
+            if has_pending {
+                log(
+                    LogTag::Trader,
+                    "PENDING_TX",
+                    &format!(
+                        "🔄 PENDING TRANSACTION DETECTED: Skipping new position for {} ({}) - transaction already in progress",
+                        token.symbol,
+                        token.mint
+                    )
+                );
+                return;
+            }
+        }
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!(
+                    "Failed to check pending transactions for {} ({}): {}",
+                    token.symbol,
+                    token.mint,
+                    e
+                )
+            );
+            return; // Err on the side of caution - don't open position if we can't verify pending state
+        }
+    }
+
     let colored_percent = format!("\x1b[31m{:.2}%\x1b[0m", percent_change);
     let current_open_count = get_open_positions_count();
     log(
@@ -656,6 +688,62 @@ pub async fn close_position(
         return false; // Don't modify the position in dry-run mode
     }
 
+    // PHANTOM POSITION PREVENTION: Verify wallet balance before attempting sell
+    let wallet_address = match crate::utils::get_wallet_address() {
+        Ok(addr) => addr,
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Failed to get wallet address for {}: {}", position.symbol, e)
+            );
+            return false;
+        }
+    };
+
+    let wallet_balance = match crate::utils::get_token_balance(&wallet_address, &position.mint).await {
+        Ok(balance) => balance,
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Failed to get wallet balance for {}: {}", position.symbol, e)
+            );
+            return false;
+        }
+    };
+
+    // CRITICAL: Handle zero balance position (phantom position detection)
+    if wallet_balance == 0 {
+        log(
+            LogTag::Trader,
+            "PHANTOM_DETECTED",
+            &format!(
+                "🚨 PHANTOM POSITION DETECTED: {} - Expected {} tokens, wallet has 0. Investigating transaction history...",
+                position.symbol,
+                position.token_amount.unwrap_or(0)
+            )
+        );
+
+        // Use transactions manager to investigate and resolve position state
+        return verify_and_resolve_position_state(position, token, exit_price, exit_time).await;
+    }
+
+    // Log wallet balance vs position expectation for debugging
+    let expected_amount = position.token_amount.unwrap_or(0);
+    if wallet_balance != expected_amount {
+        log(
+            LogTag::Trader,
+            "BALANCE_MISMATCH",
+            &format!(
+                "⚠️ Wallet balance mismatch for {}: Expected {} tokens, wallet has {} tokens",
+                position.symbol,
+                expected_amount,
+                wallet_balance
+            )
+        );
+    }
+
     // Execute real sell transaction with critical operation protection
     let _guard = crate::trader::CriticalOperationGuard::new(
         &format!("SELL {}", position.symbol)
@@ -665,10 +753,11 @@ pub async fn close_position(
         LogTag::Trader,
         "SELL",
         &format!(
-            "Closing position for {} ({}) at {:.6} SOL",
+            "Closing position for {} ({}) at {:.6} SOL - Wallet balance: {} tokens",
             position.symbol,
             position.mint,
-            exit_price
+            exit_price,
+            wallet_balance
         )
     );
 
@@ -752,6 +841,154 @@ pub async fn close_position(
             return false;
         }
     }
+}
+
+/// Verify and resolve position state using transactions manager
+/// This function investigates phantom positions and resolves their state based on blockchain data
+async fn verify_and_resolve_position_state(
+    position: &mut Position,
+    token: &Token,
+    exit_price: f64,
+    exit_time: DateTime<Utc>
+) -> bool {
+    log(
+        LogTag::Trader,
+        "VERIFICATION",
+        &format!("🔍 Verifying position state for {} using transactions manager", position.symbol)
+    );
+
+    // Get all swap transactions from transactions manager
+    let swap_transactions = match crate::transactions::get_global_swap_transactions().await {
+        Ok(transactions) => transactions,
+        Err(e) => {
+            log(
+                LogTag::Trader,
+                "ERROR",
+                &format!("Failed to get swap transactions from manager: {}", e)
+            );
+            return false;
+        }
+    };
+
+    // Filter transactions for this token mint
+    let token_transactions: Vec<_> = swap_transactions
+        .iter()
+        .filter(|tx| tx.token_mint == position.mint)
+        .collect();
+
+    log(
+        LogTag::Trader,
+        "VERIFICATION",
+        &format!("Found {} transactions for token {}", token_transactions.len(), position.symbol)
+    );
+
+    // Check for entry transaction verification if we have entry signature
+    if let Some(ref entry_sig) = position.entry_transaction_signature {
+        match crate::transactions::get_transaction(entry_sig).await {
+            Ok(Some(tx)) => {
+                if !tx.success {
+                    log(
+                        LogTag::Trader,
+                        "PHANTOM_RESOLVED",
+                        &format!(
+                            "🚨 ENTRY TRANSACTION FAILED: {} - Entry transaction {} failed on blockchain. Marking position as closed.",
+                            position.symbol,
+                            &entry_sig[..8]
+                        )
+                    );
+                    
+                    // Mark phantom position as closed with zero values
+                    position.exit_price = Some(0.0);
+                    position.exit_time = Some(exit_time);
+                    position.transaction_exit_verified = true;
+                    position.sol_received = Some(0.0);
+                    
+                    // Save the corrected position
+                    if let Ok(positions) = SAVED_POSITIONS.lock() {
+                        save_positions_to_file(&positions);
+                    }
+                    
+                    return true; // Position resolved as phantom
+                }
+            }
+            Ok(None) => {
+                log(
+                    LogTag::Trader,
+                    "WARN",
+                    &format!("Entry transaction {} not found in transactions manager", &entry_sig[..8])
+                );
+            }
+            Err(e) => {
+                log(
+                    LogTag::Trader,
+                    "ERROR",
+                    &format!("Failed to verify entry transaction {}: {}", &entry_sig[..8], e)
+                );
+            }
+        }
+    }
+
+    // Look for any untracked sell transactions that match this position
+    let sell_transactions: Vec<_> = token_transactions
+        .iter()
+        .filter(|tx| tx.swap_type == "Sell")
+        .collect();
+
+    if !sell_transactions.is_empty() {
+        log(
+            LogTag::Trader,
+            "UNTRACKED_SELL",
+            &format!("Found {} untracked sell transactions for {}", sell_transactions.len(), position.symbol)
+        );
+        
+        // Find the most recent sell transaction that could match this position
+        if let Some(latest_sell) = sell_transactions.iter().max_by_key(|tx| tx.slot.unwrap_or(0)) {
+            log(
+                LogTag::Trader,
+                "POSITION_RESOLVED",
+                &format!(
+                    "🔍 UNTRACKED SELL DETECTED: {} - Found sell transaction: {:.6} SOL received for {:.0} tokens at {:.9} SOL/token",
+                    position.symbol,
+                    latest_sell.sol_amount,
+                    latest_sell.token_amount,
+                    latest_sell.calculated_price_sol
+                )
+            );
+
+            // Update position with the untracked sell data
+            position.exit_price = Some(latest_sell.calculated_price_sol);
+            position.exit_time = Some(exit_time);
+            position.effective_exit_price = Some(latest_sell.calculated_price_sol);
+            position.sol_received = Some(latest_sell.sol_amount);
+            position.transaction_exit_verified = true;
+            position.exit_fee_lamports = Some((latest_sell.fee_sol * 1_000_000_000.0) as u64);
+
+            // Save the updated position
+            if let Ok(positions) = SAVED_POSITIONS.lock() {
+                save_positions_to_file(&positions);
+                log(
+                    LogTag::Trader,
+                    "POSITION_UPDATED",
+                    &format!("💾 Position {} updated with untracked sell data and saved", position.symbol)
+                );
+            }
+
+            return true; // Position resolved with historical data
+        }
+    }
+
+    // If we reach here, position might be genuinely phantom or have other issues
+    log(
+        LogTag::Trader,
+        "PHANTOM_UNRESOLVED",
+        &format!(
+            "❌ PHANTOM POSITION UNRESOLVED: {} - No matching sell transactions found. Position may be invalid. Consider manual review.",
+            position.symbol
+        )
+    );
+
+    // Don't attempt to sell - position is in an invalid state
+    return false;
 }
 
 /// Gets the current count of open positions

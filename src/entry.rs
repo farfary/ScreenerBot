@@ -2,7 +2,8 @@
 ///
 /// This module provides pool price-based entry decisions with -10% drop detection.
 /// Uses real-time blockchain pool data for trading decisions while API data is used only for validation.
-/// Now enhanced with reinforcement learning predictions for improved entry timing.
+/// Enhanced with 2-minute data age filtering and RL learning advisory (non-blocking).
+/// OPTIMIZED FOR FAST TRADING: Sub-minute decisions with pool price priority.
 
 use crate::tokens::Token;
 use crate::tokens::pool::get_pool_service;
@@ -12,6 +13,10 @@ use crate::global::{ is_debug_entry_enabled };
 use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
 use chrono::Utc;
+
+// FAST TRADING CONFIGURATION
+const MAX_DATA_AGE_MINUTES: i64 = 2; // Reject any data older than 2 minutes
+const FAST_ENTRY_MODE: bool = true; // Enable simplified scoring for speed
 
 /// Helper function to get rugcheck score for a token
 pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
@@ -56,11 +61,29 @@ pub async fn should_buy(token: &Token) -> bool {
         return false;
     }
 
-    // Get current pool price
-    let current_pool_price = match pool_service.get_pool_price(&token.mint, None).await {
+    // Get current pool price with data age validation
+    let (current_pool_price, pool_data_age) = match pool_service.get_pool_price(&token.mint, None).await {
         Some(pool_result) => {
             match pool_result.price_sol {
-                Some(price) if price > 0.0 && price.is_finite() => price,
+                Some(price) if price > 0.0 && price.is_finite() => {
+                    // Check data freshness - pool data should be recent
+                    let data_age_minutes = (Utc::now() - pool_result.calculated_at).num_minutes();
+                    
+                    // PRIORITY: Pool price data freshness validation
+                    if data_age_minutes > MAX_DATA_AGE_MINUTES {
+                        if is_debug_entry_enabled() {
+                            log(
+                                LogTag::Entry,
+                                "STALE_POOL_DATA",
+                                &format!("❌ {} rejected: Pool data too old ({} min > {} min limit)", 
+                                    token.symbol, data_age_minutes, MAX_DATA_AGE_MINUTES)
+                            );
+                        }
+                        return false;
+                    }
+                    
+                    (price, data_age_minutes)
+                },
                 _ => {
                     if is_debug_entry_enabled() {
                         log(
@@ -85,62 +108,116 @@ pub async fn should_buy(token: &Token) -> bool {
         }
     };
 
-    // RL Learning Integration - Get RL entry analysis
-    let rl_score = {
-        use crate::rl_learning::get_simple_entry_score;
-
-        get_simple_entry_score(
-            &token.mint,
-            current_pool_price,
-            token.liquidity
-                .as_ref()
-                .and_then(|l| l.usd)
-                .unwrap_or(1000.0),
-            token.volume
-                .as_ref()
-                .and_then(|v| v.h24)
-                .unwrap_or(50000.0),
-            token.market_cap,
-            get_rugcheck_score_for_token(&token.mint).await
-        ).await
-    };
-
-    // RL Entry Threshold (60% confidence needed)
-    const RL_ENTRY_THRESHOLD: f64 = 0.6;
-
-    if rl_score < RL_ENTRY_THRESHOLD {
-        if is_debug_entry_enabled() {
-            log(
-                LogTag::Entry,
-                "RL_REJECT",
-                &format!(
-                    "❌ {} rejected by RL: Score {:.1}% < {:.1}% threshold",
-                    token.symbol,
-                    rl_score * 100.0,
-                    RL_ENTRY_THRESHOLD * 100.0
-                )
-            );
-        }
-        return false;
-    }
-
+    // Log pool price priority success
     if is_debug_entry_enabled() {
         log(
             LogTag::Entry,
-            "RL_ACCEPT",
-            &format!(
-                "✅ {} RL approved: Score {:.1}% >= {:.1}% threshold",
-                token.symbol,
-                rl_score * 100.0,
-                RL_ENTRY_THRESHOLD * 100.0
-            )
+            "POOL_PRICE_OK",
+            &format!("✅ {} pool price: {:.12} SOL (age: {}min)", 
+                token.symbol, current_pool_price, pool_data_age)
         );
+    }
+
+    // RL Learning Integration - OPTIONAL for fast trading (not blocking)
+    // Only use RL as advisory when model is ready, never block entries
+    let rl_advisory_score = {
+        use crate::rl_learning::get_trading_learner;
+        let rl_learner = get_trading_learner();
+        
+        // Only use RL if model is ready AND we have 100+ trades
+        if rl_learner.is_model_ready() && rl_learner.get_record_count() >= 100 {
+            use crate::rl_learning::get_simple_entry_score;
+            get_simple_entry_score(
+                &token.mint,
+                current_pool_price,
+                token.liquidity
+                    .as_ref()
+                    .and_then(|l| l.usd)
+                    .unwrap_or(1000.0),
+                token.volume
+                    .as_ref()
+                    .and_then(|v| v.h24)
+                    .unwrap_or(50000.0),
+                token.market_cap,
+                get_rugcheck_score_for_token(&token.mint).await
+            ).await
+        } else {
+            // No RL blocking - use neutral score for fast trading
+            0.5  // Neutral advisory score
+        }
+    };
+
+    // RL is ADVISORY ONLY - log but don't block entries for fast trading
+    if is_debug_entry_enabled() {
+        let rl_learner = get_trading_learner();
+        if rl_learner.is_model_ready() && rl_learner.get_record_count() >= 100 {
+            log(
+                LogTag::Entry,
+                "RL_ADVISORY",
+                &format!(
+                    "🤖 {} RL advisory: {:.1}% (not blocking - fast trading mode)",
+                    token.symbol,
+                    rl_advisory_score * 100.0
+                )
+            );
+        } else {
+            log(
+                LogTag::Entry,
+                "RL_LEARNING",
+                &format!(
+                    "📚 {} RL learning mode: {}/100 trades (not blocking entries)",
+                    token.symbol,
+                    rl_learner.get_record_count()
+                )
+            );
+        }
     }
 
     // Get recent price history for advanced entry analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
 
-    // Enhanced entry decision with multiple strategies
+    // FAST TRADING MODE: Simplified entry decision for speed
+    if FAST_ENTRY_MODE {
+        let fast_entry_decision = analyze_fast_entry_signals(
+            current_pool_price,
+            &price_history,
+            &token,
+            pool_data_age
+        ).await;
+
+        if let Some(reason) = fast_entry_decision {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "FAST_ENTRY_ACCEPT",
+                    &format!(
+                        "⚡ {} FAST ENTRY: {} (price: {:.12} SOL, history: {} points)",
+                        token.symbol,
+                        reason,
+                        current_pool_price,
+                        price_history.len()
+                    )
+                );
+            }
+            return true;
+        } else {
+            if is_debug_entry_enabled() {
+                log(
+                    LogTag::Entry,
+                    "FAST_NO_SIGNAL",
+                    &format!(
+                        "❌ {} fast entry rejected: No valid signal (price: {:.12} SOL, history: {} points)",
+                        token.symbol,
+                        current_pool_price,
+                        price_history.len()
+                    )
+                );
+            }
+            return false;
+        }
+    }
+
+    // Standard entry decision (fallback for detailed analysis)
     let entry_decision = analyze_entry_signals(
         current_pool_price,
         &price_history,
@@ -205,6 +282,114 @@ pub async fn get_profit_target(token: &Token) -> (f64, f64) {
         x if x >= 10_000.0 => (20.0, 50.0), // Small tokens: 20-50%
         _ => (30.0, 100.0), // Micro tokens: 30-100%
     }
+}
+
+/// Fast entry signal analysis optimized for sub-minute trading
+/// Returns Some(reason) if entry is recommended, None if rejected
+async fn analyze_fast_entry_signals(
+    current_price: f64,
+    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+    token: &Token,
+    data_age_minutes: i64
+) -> Option<String> {
+    use chrono::Utc;
+
+    // ULTRA-FAST: Immediate entry for strong signals (no complex analysis)
+    
+    // Strategy 1: Ultra-fresh data with momentum
+    if data_age_minutes == 0 && price_history.is_empty() {
+        let liquidity_usd = token.liquidity
+            .as_ref()
+            .and_then(|l| l.usd)
+            .unwrap_or(0.0);
+
+        // Fast entry for tokens with decent liquidity
+        if liquidity_usd >= 5_000.0 {
+            return Some(format!("Ultra-fresh token with liquidity (${:.0})", liquidity_usd));
+        }
+        
+        // Even micro-caps if volume indicates activity
+        if let Some(volume) = &token.volume {
+            if let Some(h24) = volume.h24 {
+                if h24 >= liquidity_usd * 0.5 {  // Volume >= 50% of liquidity
+                    return Some(format!("Micro-cap with high volume ratio ({:.0}%)", 
+                        (h24 / liquidity_usd) * 100.0));
+                }
+            }
+        }
+    }
+
+    // Strategy 2: Simple drop detection (faster calculation)
+    if price_history.len() >= 2 {
+        let recent_prices: Vec<f64> = price_history
+            .iter()
+            .rev()
+            .take(3)  // Only look at last 3 points for speed
+            .map(|(_, price)| *price)
+            .collect();
+
+        if !recent_prices.is_empty() {
+            let recent_high = recent_prices.iter().fold(0.0f64, |a, &b| a.max(b));
+            
+            if recent_high > 0.0 && recent_high.is_finite() {
+                let drop_from_high = ((recent_high - current_price) / recent_high) * 100.0;
+                
+                // Fast drop detection with lower thresholds for speed
+                if drop_from_high >= 8.0 {  // 8% drop (was 10%)
+                    return Some(format!("Fast drop: -{:.1}%", drop_from_high));
+                }
+                
+                // Volume-supported smaller drops
+                if drop_from_high >= 4.0 {
+                    if let Some(volume) = &token.volume {
+                        if let Some(h24) = volume.h24 {
+                            if h24 >= 20_000.0 {  // Volume threshold
+                                return Some(format!("Volume-supported drop: -{:.1}% (vol: ${:.0})", 
+                                    drop_from_high, h24));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Strategy 3: New token with momentum indicators
+    if price_history.len() == 1 {
+        let age_minutes = (Utc::now() - price_history[0].0).num_minutes();
+        
+        // Very recent price action
+        if age_minutes <= 2 {
+            return Some("Fresh momentum entry".to_string());
+        }
+    }
+
+    // Strategy 4: Volatility breakout (simplified)
+    if price_history.len() >= 3 {
+        let recent_prices: Vec<f64> = price_history
+            .iter()
+            .rev()
+            .take(3)
+            .map(|(_, price)| *price)
+            .collect();
+
+        if recent_prices.len() >= 3 {
+            let price_range = recent_prices.iter().fold(0.0f64, |a, &b| a.max(b)) - 
+                             recent_prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+            
+            if price_range > 0.0 && price_range.is_finite() {
+                let volatility = (price_range / current_price) * 100.0;
+                
+                // High volatility = opportunity
+                if volatility >= 5.0 {
+                    return Some(format!("Volatility breakout: {:.1}%", volatility));
+                }
+            }
+        }
+    }
+
+    // No fast signal found
+    None
 }
 
 /// Advanced entry signal analysis with multiple strategies
