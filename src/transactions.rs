@@ -1340,7 +1340,11 @@ impl TransactionsManager {
 
                 // Clean up any pending transaction tracking for this signature
                 if let Some(ref entry_sig) = position.entry_transaction_signature {
-                    let _ = cleanup_verified_transaction(entry_sig);
+                    // Spawn cleanup task to avoid blocking and prevent runtime conflicts
+                    let entry_sig_clone = entry_sig.clone();
+                    tokio::task::spawn(async move {
+                        let _ = cleanup_verified_transaction(&entry_sig_clone).await;
+                    });
                 }
             } else {
                 position.transaction_entry_verified = false;
@@ -4573,7 +4577,7 @@ impl TransactionsManager {
                                 ));
 
                                 // Clean up any pending transaction tracking for this signature
-                                let _ = cleanup_verified_transaction(entry_sig);
+                                let _ = cleanup_verified_transaction(entry_sig).await;
                                 
                                 // Convert token amount from float to units (with decimals)
                                 if let Some(token_decimals) = get_token_decimals(&position.mint).await {
@@ -5667,40 +5671,35 @@ pub async fn cleanup_completed_transactions() -> Result<(), String> {
 
 /// Check and clean up specific transaction signature from pending state
 /// Called when a transaction is verified to ensure it's removed from pending tracking
-pub fn cleanup_verified_transaction(signature: &str) -> Result<(), String> {
+pub async fn cleanup_verified_transaction(signature: &str) -> Result<(), String> {
     log(
         LogTag::Transactions,
         "CLEANUP_VERIFIED_START",
         &format!("🔍 Checking cleanup for verified transaction: {}", &signature[..8])
     );
 
-    let manager_guard = match GLOBAL_TRANSACTION_MANAGER.try_lock() {
-        Ok(guard) => guard,
-        Err(_) => {
-            log(
-                LogTag::Transactions,
-                "CLEANUP_VERIFIED_LOCK_FAILED",
-                &format!("⚠️ Could not acquire lock for cleanup of transaction: {}", &signature[..8])
-            );
-            return Ok(());
-        }
-    };
-    
-    if let Some(manager) = manager_guard.as_ref() {
-        let priority_txs = manager.priority_transactions();
+    // Direct async execution - no runtime creation needed
+        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
         
-        if let Some(tx) = priority_txs.get(signature) {
-            log(
-                LogTag::Transactions,
-                "CLEANUP_VERIFIED_FOUND",
-                &format!(
-                    "✅ Found transaction {} in priority tracking: state={:?}, age={:?} - should be cleaned up",
-                    &signature[..8], tx.state, (Utc::now() - tx.added_at)  // changed from created_at
-                )
-            );
-            
-            // Note: Would need to add removal method to manager
-            // For now, just log that it was found
+        if let Some(manager) = manager_guard.as_mut() {
+            if let Some(tx) = manager.priority_transactions.get(signature) {
+                log(
+                    LogTag::Transactions,
+                    "CLEANUP_VERIFIED_FOUND",
+                    &format!(
+                        "✅ Found transaction {} in priority tracking: state={:?}, age={:?} - removing from priority tracking",
+                        &signature[..8], tx.state, (Utc::now() - tx.added_at)
+                    )
+                );
+                
+                // CRITICAL FIX: Actually remove the transaction from priority tracking
+                manager.priority_transactions.remove(signature);
+                
+                log(
+                    LogTag::Transactions,
+                    "CLEANUP_VERIFIED_REMOVED",
+                    &format!("🗑️ Successfully removed transaction {} from priority tracking", &signature[..8])
+                );
         } else {
             log(
                 LogTag::Transactions,
