@@ -43,6 +43,32 @@ use crate::tokens::{
 use crate::tokens::price::get_token_price_blocking_safe;
 
 // =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
+
+/// Timing and timeout configuration for transaction manager
+
+// Background service monitoring intervals
+const MONITORING_INTERVAL_DEFAULT_SECS: u64 = 30;        // Default monitoring interval
+const MONITORING_INTERVAL_FAST_SECS: u64 = 5;            // Fast monitoring when priority transactions pending
+const MONITORING_INTERVAL_SLOW_SECS: u64 = 120;          // Slow monitoring when inactive (2 minutes)
+const MONITORING_INTERVAL_ERROR_SECS: u64 = 10;          // Fast recovery after errors
+const EMPTY_CYCLES_THRESHOLD: u32 = 3;                   // Switch to slow mode after 3 empty cycles
+
+// Transaction verification timeouts and intervals
+const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 5;       // Priority transaction verification timeout
+const VERIFICATION_CHECK_INTERVAL_MILLIS: u64 = 10;      // Sleep between verification checks (fast)
+const VERIFICATION_SLOW_CHECK_INTERVAL_MILLIS: u64 = 100; // Sleep between batches (slower)
+
+// RPC and batch processing limits
+const RPC_BATCH_SIZE: usize = 100;                       // Transaction signatures fetch batch size
+
+// Solana network constants  
+const ATA_RENT_COST_SOL: f64 = 0.00203928;              // Standard ATA creation/closure cost
+const ATA_RENT_TOLERANCE_LAMPORTS: i64 = 10000;         // Tolerance for ATA rent variations (lamports)
+const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000;           // Default compute unit price (micro-lamports)
+
+// =============================================================================
 // CORE DATA STRUCTURES
 // =============================================================================
 
@@ -790,7 +816,7 @@ impl TransactionsManager {
         let rpc_client = get_rpc_client();
         let mut all_transactions = Vec::new();
         let mut before_signature = None;
-        let batch_size = 100; // Fetch in batches to avoid rate limits
+        let batch_size = RPC_BATCH_SIZE; // Fetch in batches to avoid rate limits
         let mut total_fetched = 0;
 
         log(LogTag::Transactions, "FETCH", "Fetching transaction signatures from blockchain...");
@@ -855,7 +881,7 @@ impl TransactionsManager {
 
                 // Small delay to avoid overwhelming RPC
                 if index % 5 == 0 {
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    tokio::time::sleep(Duration::from_millis(VERIFICATION_CHECK_INTERVAL_MILLIS)).await;
                 }
             }
 
@@ -863,7 +889,7 @@ impl TransactionsManager {
             before_signature = Some(signatures.last().unwrap().signature.clone());
 
             // Batch processing delay
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(VERIFICATION_SLOW_CHECK_INTERVAL_MILLIS)).await;
         }
 
         log(LogTag::Transactions, "SUCCESS", &format!(
@@ -1305,7 +1331,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
 
     // Priority-aware adaptive monitoring loop
     let mut consecutive_empty_cycles = 0;
-    let mut current_interval_secs = 30;
+    let mut current_interval_secs = MONITORING_INTERVAL_DEFAULT_SECS;
     let mut next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
     
     loop {
@@ -1321,7 +1347,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                         // Priority-aware adaptive polling
                         if has_pending_transactions {
                             // Fast polling when we have pending transactions to verify
-                            current_interval_secs = 5;
+                            current_interval_secs = MONITORING_INTERVAL_FAST_SECS;
                             consecutive_empty_cycles = 0; // Reset counter when we have pending work
                             
                             if manager.debug_enabled {
@@ -1339,12 +1365,12 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                             }
                             
                             // Adjust monitoring frequency based on activity
-                            let new_interval_secs = if consecutive_empty_cycles >= 3 {
-                                120 // No activity for 3 cycles: check every 2 minutes
+                            let new_interval_secs = if consecutive_empty_cycles >= EMPTY_CYCLES_THRESHOLD {
+                                MONITORING_INTERVAL_SLOW_SECS // No activity for 3 cycles: check every 2 minutes
                             } else if consecutive_empty_cycles >= 1 {
                                 60  // Some inactivity: check every minute
                             } else {
-                                30  // Active period: check every 30 seconds
+                                MONITORING_INTERVAL_DEFAULT_SECS  // Active period: check every 30 seconds
                             };
                             
                             if new_interval_secs != current_interval_secs {
@@ -1365,7 +1391,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                     Err(e) => {
                         log(LogTag::Transactions, "ERROR", &format!("Monitoring cycle failed: {}", e));
                         // On error, use fast interval to recover quickly
-                        current_interval_secs = 10;
+                        current_interval_secs = MONITORING_INTERVAL_ERROR_SECS;
                         next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
                     }
                 }
@@ -2019,14 +2045,14 @@ impl TransactionsManager {
         fee_breakdown.ata_creations_count = ata_creations;
         fee_breakdown.ata_closures_count = ata_closures;
         fee_breakdown.net_ata_rent_flow = net_ata_rent_flow;
-        fee_breakdown.ata_creation_cost = ata_creations as f64 * 0.00203928;
+        fee_breakdown.ata_creation_cost = ata_creations as f64 * ATA_RENT_COST_SOL;
         fee_breakdown.rent_costs = net_ata_rent_flow.abs(); // Absolute value for display
         
         if self.debug_enabled {
             log(LogTag::Transactions, "ATA_DETAILED", &format!(
                 "ATA Details - Created: {} (cost: {:.9} SOL), Closed: {} (recovered: {:.9} SOL), Net: {:.9} SOL",
-                ata_creations, ata_creations as f64 * 0.00203928,
-                ata_closures, ata_closures as f64 * 0.00203928,
+                ata_creations, ata_creations as f64 * ATA_RENT_COST_SOL,
+                ata_closures, ata_closures as f64 * ATA_RENT_COST_SOL,
                 net_ata_rent_flow
             ));
         }
@@ -2050,7 +2076,7 @@ impl TransactionsManager {
         // Method 3: Calculate net rent flow
         // ATA creation costs ≈0.00203928 SOL each
         // ATA closure recovers ≈0.00203928 SOL each
-        let estimated_net_flow = (ata_closures as f64 * 0.00203928) - (ata_creations as f64 * 0.00203928);
+        let estimated_net_flow = (ata_closures as f64 * ATA_RENT_COST_SOL) - (ata_creations as f64 * ATA_RENT_COST_SOL);
         
         // Use balance verification if there's a significant discrepancy
         let final_net_flow = if balance_verification.is_some() && 
@@ -2094,7 +2120,7 @@ impl TransactionsManager {
                     
                     // Standard ATA rent in lamports (≈2039280 lamports = 0.00203928 SOL)
                     let ata_rent_lamports = 2039280i64;
-                    let tolerance = 10000i64; // Small tolerance for rent variations
+                    let tolerance = ATA_RENT_TOLERANCE_LAMPORTS; // Small tolerance for rent variations
                     
                     for (i, (pre, post)) in pre_balances.iter().zip(post_balances.iter()).enumerate() {
                         if let (Some(pre_val), Some(post_val)) = (pre.as_i64(), post.as_i64()) {
@@ -2855,7 +2881,7 @@ impl TransactionsManager {
            log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") {
             
             // Look for rent amounts and account addresses in logs
-            let rent_cost = 0.00203928; // Standard ATA creation cost
+            let rent_cost = ATA_RENT_COST_SOL; // Standard ATA creation cost
             
             // Try to extract mint and owner from instruction data
             let mut mint = "Unknown".to_string();
@@ -2889,7 +2915,7 @@ impl TransactionsManager {
         if log_text.contains("Close account") || 
            log_text.contains("CloseAccount") {
             
-            let rent_reclaimed = 0.00203928; // Standard ATA rent reclaimed
+            let rent_reclaimed = ATA_RENT_COST_SOL; // Standard ATA rent reclaimed
             
             let mut mint = "Unknown".to_string();
             let mut owner = self.wallet_pubkey.to_string();
@@ -3022,7 +3048,7 @@ impl TransactionsManager {
             // Look for priority fee information
             if let Some(start) = log_text.find("priority fee") {
                 // Extract priority fee amount
-                compute_unit_price = 1000; // Default value
+                compute_unit_price = DEFAULT_COMPUTE_UNIT_PRICE; // Default value
             }
             
             return Ok(TransactionType::ComputeBudget {
@@ -3207,7 +3233,7 @@ impl TransactionsManager {
             "ComputeBudget111111111111111111111111111111" => {
                 return Ok(TransactionType::ComputeBudget {
                     compute_units: 200000, // Default
-                    compute_unit_price: 1000, // Default
+                    compute_unit_price: DEFAULT_COMPUTE_UNIT_PRICE, // Default
                 });
             }
             
@@ -3217,7 +3243,7 @@ impl TransactionsManager {
                     mint: "Unknown".to_string(),
                     owner: self.wallet_pubkey.to_string(),
                     ata_address: "Unknown".to_string(),
-                    cost: 0.00203928,
+                    cost: ATA_RENT_COST_SOL,
                 });
             }
             
@@ -5089,8 +5115,6 @@ pub async fn wait_for_transaction_verification(
 pub async fn wait_for_priority_transaction_verification(
     signature: &str
 ) -> Result<bool, String> {
-    const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 5; // 5 seconds for priority transactions
-    
     let start_time = std::time::Instant::now();
     let timeout_duration = std::time::Duration::from_secs(PRIORITY_CONFIRMATION_TIMEOUT_SECS);
     
