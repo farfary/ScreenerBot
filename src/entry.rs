@@ -23,7 +23,7 @@ const TARGET_LIQUIDITY_MAX: f64 = 500_000.0;  // Maximum liquidity we target
 
 // DYNAMIC DROP PERCENTAGE RANGES (not fixed - calculated by liquidity)
 const DROP_PERCENT_MIN: f64 = 5.0;   // Minimum drop % for high liquidity tokens
-const DROP_PERCENT_MAX: f64 = 50.0;  // Maximum drop % for low liquidity tokens
+const DROP_PERCENT_MAX: f64 = 30.0;  // Maximum drop % for low liquidity tokens
 const DROP_PERCENT_ULTRA_MAX: f64 = 50.0; // Absolute maximum (safety limit)
 
 // TIME WINDOWS FOR ANALYSIS
@@ -31,8 +31,8 @@ const DEEP_DROP_TIME_WINDOW_SEC: i64 = 60; // Standard time window for drop anal
 const FAST_DROP_TIME_WINDOW_SEC: i64 = 10; // Fast drop detection window
 
 // DYNAMIC TARGET RATIOS
-const TARGET_DROP_RATIO_MIN: f64 = 0.15; // 15% drop for high liquidity (conservative)
-const TARGET_DROP_RATIO_MAX: f64 = 0.40; // 40% drop for low liquidity (aggressive)
+const TARGET_DROP_RATIO_MIN: f64 = 0.10; // 15% drop for high liquidity (conservative)
+const TARGET_DROP_RATIO_MAX: f64 = 0.20; // 40% drop for low liquidity (aggressive)
 
 /// Calculate dynamic drop thresholds based on token liquidity
 /// Returns (min_drop_percent, max_drop_percent, target_ratio) based on liquidity
