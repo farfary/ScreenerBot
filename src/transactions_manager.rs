@@ -448,6 +448,17 @@ pub struct PositionDisplayRow {
     pub duration: String,
 }
 
+/// Position verification data extracted from transaction analysis
+#[derive(Debug, Clone)]
+pub struct PositionVerificationData {
+    pub verified: bool,
+    pub success: bool,
+    pub token_amount: Option<u64>,
+    pub effective_price: Option<f64>,
+    pub sol_amount: Option<f64>,
+    pub fee_lamports: Option<u64>,
+}
+
 // =============================================================================
 // TRANSACTIONS MANAGER
 // =============================================================================
@@ -982,6 +993,320 @@ impl TransactionsManager {
             known_signatures_count: self.known_signatures.len() as u64,
         }
     }
+
+    /// Check and verify unverified position transactions
+    /// This function checks all positions with unverified entry or exit transactions
+    /// and updates position data based on transaction analysis
+    pub async fn check_and_verify_position_transactions(&mut self) -> Result<(), String> {
+        use crate::positions::SAVED_POSITIONS;
+        use crate::utils::save_positions_to_file;
+        use crate::tokens::get_token_decimals;
+        use crate::rpc::lamports_to_sol;
+
+        // Get all positions without holding the lock during async operations
+        let positions_to_check = {
+            match SAVED_POSITIONS.lock() {
+                Ok(positions) => {
+                    // Find positions with unverified transactions
+                    positions
+                        .iter()
+                        .filter(|p| {
+                            // Check for unverified entry transaction
+                            let has_unverified_entry = p.entry_transaction_signature.is_some() 
+                                && !p.transaction_entry_verified;
+                            
+                            // Check for unverified exit transaction
+                            let has_unverified_exit = p.exit_transaction_signature.is_some() 
+                                && !p.transaction_exit_verified;
+                            
+                            has_unverified_entry || has_unverified_exit
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>()
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "ERROR", &format!(
+                        "Failed to lock positions for verification check: {}", e
+                    ));
+                    return Err(format!("Failed to lock positions: {}", e));
+                }
+            }
+        }; // Mutex guard is dropped here
+
+        if positions_to_check.is_empty() {
+            return Ok(());
+        }
+
+        log(LogTag::Transactions, "POSITION_VERIFY", &format!(
+            "🔍 Checking {} positions with unverified transactions", 
+            positions_to_check.len()
+        ));
+
+        let mut verification_updates = Vec::new();
+
+        // Process each position without holding the positions lock
+        for position in positions_to_check {
+            // Check entry transaction verification
+            if let Some(ref entry_sig) = position.entry_transaction_signature {
+                if !position.transaction_entry_verified {
+                    if let Ok(entry_tx) = crate::transactions_manager::get_transaction(entry_sig).await {
+                        if let Some(tx) = entry_tx {
+                            // Verify transaction success and extract data
+                            if let Some(verification_data) = self.verify_and_extract_entry_data(&tx, &position).await {
+                                verification_updates.push((position.mint.clone(), "entry".to_string(), verification_data));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check exit transaction verification
+            if let Some(ref exit_sig) = position.exit_transaction_signature {
+                if !position.transaction_exit_verified {
+                    if let Ok(exit_tx) = crate::transactions_manager::get_transaction(exit_sig).await {
+                        if let Some(tx) = exit_tx {
+                            // Verify transaction success and extract data
+                            if let Some(verification_data) = self.verify_and_extract_exit_data(&tx, &position).await {
+                                verification_updates.push((position.mint.clone(), "exit".to_string(), verification_data));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply all updates in a single lock operation to avoid deadlocks
+        if !verification_updates.is_empty() {
+            match SAVED_POSITIONS.lock() {
+                Ok(mut positions) => {
+                    let mut updated_count = 0;
+                    
+                    for (mint, transaction_type, verification_data) in verification_updates {
+                        if let Some(position) = positions.iter_mut().find(|p| p.mint == mint) {
+                            match transaction_type.as_str() {
+                                "entry" => {
+                                    self.apply_entry_verification_data(position, verification_data);
+                                    updated_count += 1;
+                                }
+                                "exit" => {
+                                    self.apply_exit_verification_data(position, verification_data);
+                                    updated_count += 1;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    if updated_count > 0 {
+                        // Save positions to file
+                        save_positions_to_file(&positions);
+                        log(LogTag::Transactions, "POSITION_UPDATED", &format!(
+                            "✅ Updated {} position verification records", updated_count
+                        ));
+                    }
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "ERROR", &format!(
+                        "Failed to apply position verification updates: {}", e
+                    ));
+                    return Err(format!("Failed to apply updates: {}", e));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Verify and extract entry transaction data
+    async fn verify_and_extract_entry_data(
+        &self, 
+        transaction: &Transaction, 
+        position: &crate::positions::Position
+    ) -> Option<PositionVerificationData> {
+        // Check if transaction was successful
+        if !transaction.success {
+            log(LogTag::Transactions, "VERIFY_FAIL", &format!(
+                "Entry transaction {} failed for position {}", 
+                &transaction.signature[..8], position.symbol
+            ));
+            return Some(PositionVerificationData {
+                verified: false,
+                success: false,
+                token_amount: None,
+                effective_price: None,
+                sol_amount: None,
+                fee_lamports: None,
+            });
+        }
+
+        // Check if it's a swap transaction
+        if let Some(ref swap_analysis) = transaction.swap_analysis {
+            // Verify this is the correct token
+            if swap_analysis.output_token == position.mint {
+                // Extract token amount with decimals
+                if let Some(token_decimals) = get_token_decimals(&position.mint).await {
+                    let token_amount_units = (swap_analysis.output_amount * 
+                        (10_f64).powi(token_decimals as i32)) as u64;
+
+                    let fee_lamports = transaction.fee_breakdown.as_ref()
+                        .map(|f| (f.total_fees * 1_000_000_000.0) as u64);
+
+                    log(LogTag::Transactions, "VERIFY_SUCCESS", &format!(
+                        "✅ Entry verification successful for {}: {} tokens, {:.9} SOL, price {:.12}",
+                        position.symbol,
+                        swap_analysis.output_amount,
+                        swap_analysis.input_amount,
+                        swap_analysis.effective_price
+                    ));
+
+                    return Some(PositionVerificationData {
+                        verified: true,
+                        success: true,
+                        token_amount: Some(token_amount_units),
+                        effective_price: Some(swap_analysis.effective_price),
+                        sol_amount: Some(swap_analysis.input_amount),
+                        fee_lamports,
+                    });
+                }
+            }
+        }
+
+        log(LogTag::Transactions, "VERIFY_INCOMPLETE", &format!(
+            "⚠️ Entry transaction {} exists but no valid swap analysis for {}",
+            &transaction.signature[..8], position.symbol
+        ));
+
+        None
+    }
+
+    /// Verify and extract exit transaction data
+    async fn verify_and_extract_exit_data(
+        &self, 
+        transaction: &Transaction, 
+        position: &crate::positions::Position
+    ) -> Option<PositionVerificationData> {
+        // Check if transaction was successful
+        if !transaction.success {
+            log(LogTag::Transactions, "VERIFY_FAIL", &format!(
+                "Exit transaction {} failed for position {}", 
+                &transaction.signature[..8], position.symbol
+            ));
+            return Some(PositionVerificationData {
+                verified: false,
+                success: false,
+                token_amount: None,
+                effective_price: None,
+                sol_amount: None,
+                fee_lamports: None,
+            });
+        }
+
+        // Check if it's a swap transaction
+        if let Some(ref swap_analysis) = transaction.swap_analysis {
+            // Verify this is the correct token (input for sell)
+            if swap_analysis.input_token == position.mint {
+                let fee_lamports = transaction.fee_breakdown.as_ref()
+                    .map(|f| (f.total_fees * 1_000_000_000.0) as u64);
+
+                log(LogTag::Transactions, "VERIFY_SUCCESS", &format!(
+                    "✅ Exit verification successful for {}: sold {} tokens, received {:.9} SOL, price {:.12}",
+                    position.symbol,
+                    swap_analysis.input_amount,
+                    swap_analysis.output_amount,
+                    swap_analysis.effective_price
+                ));
+
+                return Some(PositionVerificationData {
+                    verified: true,
+                    success: true,
+                    token_amount: None, // Not needed for exit
+                    effective_price: Some(swap_analysis.effective_price),
+                    sol_amount: Some(swap_analysis.output_amount),
+                    fee_lamports,
+                });
+            }
+        }
+
+        log(LogTag::Transactions, "VERIFY_INCOMPLETE", &format!(
+            "⚠️ Exit transaction {} exists but no valid swap analysis for {}",
+            &transaction.signature[..8], position.symbol
+        ));
+
+        None
+    }
+
+    /// Apply entry verification data to position
+    fn apply_entry_verification_data(
+        &self, 
+        position: &mut crate::positions::Position, 
+        data: PositionVerificationData
+    ) {
+        position.transaction_entry_verified = data.verified;
+        
+        if data.success && data.verified {
+            if let Some(token_amount) = data.token_amount {
+                position.token_amount = Some(token_amount);
+            }
+            if let Some(effective_price) = data.effective_price {
+                position.effective_entry_price = Some(effective_price);
+            }
+            if let Some(sol_amount) = data.sol_amount {
+                position.total_size_sol = sol_amount;
+            }
+            if let Some(fee_lamports) = data.fee_lamports {
+                position.entry_fee_lamports = Some(fee_lamports);
+            }
+            
+            log(LogTag::Transactions, "POSITION_ENTRY_UPDATED", &format!(
+                "📝 Updated entry data for position {}: verified={}, tokens={:?}, price={:?}",
+                position.symbol, data.verified, data.token_amount, data.effective_price
+            ));
+        } else {
+            log(LogTag::Transactions, "POSITION_ENTRY_FAILED", &format!(
+                "❌ Entry transaction failed for position {}: marking as failed verification",
+                position.symbol
+            ));
+        }
+    }
+
+    /// Apply exit verification data to position
+    fn apply_exit_verification_data(
+        &self, 
+        position: &mut crate::positions::Position, 
+        data: PositionVerificationData
+    ) {
+        position.transaction_exit_verified = data.verified;
+        
+        if data.success && data.verified {
+            if let Some(effective_price) = data.effective_price {
+                position.effective_exit_price = Some(effective_price);
+                // Also set exit_price if not already set
+                if position.exit_price.is_none() {
+                    position.exit_price = Some(effective_price);
+                }
+            }
+            if let Some(sol_amount) = data.sol_amount {
+                position.sol_received = Some(sol_amount);
+            }
+            if let Some(fee_lamports) = data.fee_lamports {
+                position.exit_fee_lamports = Some(fee_lamports);
+            }
+            // Set exit time if not already set
+            if position.exit_time.is_none() {
+                position.exit_time = Some(chrono::Utc::now());
+            }
+            
+            log(LogTag::Transactions, "POSITION_EXIT_UPDATED", &format!(
+                "📝 Updated exit data for position {}: verified={}, price={:?}, sol_received={:?}",
+                position.symbol, data.verified, data.effective_price, data.sol_amount
+            ));
+        } else {
+            log(LogTag::Transactions, "POSITION_EXIT_FAILED", &format!(
+                "❌ Exit transaction failed for position {}: marking as failed verification",
+                position.symbol
+            ));
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1071,6 +1396,13 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), St
     if let Err(e) = manager.check_priority_transactions().await {
         log(LogTag::Transactions, "WARN", &format!(
             "Priority transaction check failed: {}", e
+        ));
+    }
+
+    // Check and verify position transactions
+    if let Err(e) = manager.check_and_verify_position_transactions().await {
+        log(LogTag::Transactions, "WARN", &format!(
+            "Position verification check failed: {}", e
         ));
     }
 

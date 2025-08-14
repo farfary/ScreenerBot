@@ -223,25 +223,6 @@ async fn main() {
         }
     }
 
-    // CRITICAL: Run comprehensive wallet reconciliation to detect and fix all position tracking issues
-    log(LogTag::System, "INFO", "🚀 Running comprehensive wallet reconciliation at startup...");
-    match screenerbot::positions::reconcile_wallet_positions_at_startup().await {
-        Ok(()) => {
-            log(LogTag::System, "INFO", "✅ Wallet reconciliation completed successfully - all positions verified");
-        }
-        Err(e) => {
-            log(LogTag::System, "ERROR", &format!("❌ Wallet reconciliation failed: {}", e));
-            log(LogTag::System, "ERROR", "🛑 CRITICAL: Position tracking errors detected - manual review required");
-            log(LogTag::System, "ERROR", "💡 Check positions.json and wallet balances manually before continuing");
-            
-            // In production, you might want to exit here to prevent double-purchases
-            // std::process::exit(1);
-            
-            // For now, continue with warning
-            log(LogTag::System, "WARN", "⚠️ Continuing with position tracking errors - exercise extreme caution");
-        }
-    }
-    
     let shutdown_entries = shutdown.clone();
     let entries_handle = tokio::spawn(async move {
         log(LogTag::Trader, "INFO", "New entries monitor task started");
