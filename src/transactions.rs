@@ -1002,6 +1002,21 @@ impl TransactionsManager {
         }
     }
 
+    /// Get priority transactions (for testing)
+    pub fn priority_transactions(&self) -> &HashMap<String, DateTime<Utc>> {
+        &self.priority_transactions
+    }
+
+    /// Get known signatures count (for testing)  
+    pub fn known_signatures(&self) -> &HashSet<String> {
+        &self.known_signatures
+    }
+
+    /// Clear priority transactions (for testing only)
+    pub fn clear_priority_transactions_for_testing(&mut self) {
+        self.priority_transactions.clear();
+    }
+
     /// Check and verify unverified position transactions
     /// This function checks all positions with unverified entry or exit transactions
     /// and updates position data based on transaction analysis
@@ -1364,7 +1379,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         manager.known_signatures.len()
     ));
 
-    // Adaptive monitoring loop with reduced frequency during idle periods  
+    // Priority-aware adaptive monitoring loop
     let mut consecutive_empty_cycles = 0;
     let mut current_interval_secs = 30;
     let mut next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
@@ -1378,31 +1393,45 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
             _ = tokio::time::sleep_until(next_check) => {
                 // Monitor new transactions
                 match do_monitoring_cycle(&mut manager).await {
-                    Ok(new_transaction_count) => {
-                        // Adaptive polling based on activity
-                        if new_transaction_count == 0 {
-                            consecutive_empty_cycles += 1;
-                        } else {
-                            consecutive_empty_cycles = 0;
-                        }
-                        
-                        // Adjust monitoring frequency based on activity
-                        let new_interval_secs = if consecutive_empty_cycles >= 3 {
-                            120 // No activity for 3 cycles: check every 2 minutes
-                        } else if consecutive_empty_cycles >= 1 {
-                            60  // Some inactivity: check every minute
-                        } else {
-                            30  // Active period: check every 30 seconds
-                        };
-                        
-                        if new_interval_secs != current_interval_secs {
-                            current_interval_secs = new_interval_secs;
+                    Ok((new_transaction_count, has_pending_transactions)) => {
+                        // Priority-aware adaptive polling
+                        if has_pending_transactions {
+                            // Fast polling when we have pending transactions to verify
+                            current_interval_secs = 5;
+                            consecutive_empty_cycles = 0; // Reset counter when we have pending work
                             
                             if manager.debug_enabled {
-                                log(LogTag::Transactions, "ADAPTIVE", &format!(
-                                    "Adjusted monitoring interval to {} seconds (empty cycles: {})",
-                                    current_interval_secs, consecutive_empty_cycles
+                                log(LogTag::Transactions, "PRIORITY", &format!(
+                                    "🚀 Fast polling (5s) - {} pending priority transactions",
+                                    manager.priority_transactions.len()
                                 ));
+                            }
+                        } else {
+                            // Adaptive polling based on activity when no pending transactions
+                            if new_transaction_count == 0 {
+                                consecutive_empty_cycles += 1;
+                            } else {
+                                consecutive_empty_cycles = 0;
+                            }
+                            
+                            // Adjust monitoring frequency based on activity
+                            let new_interval_secs = if consecutive_empty_cycles >= 3 {
+                                120 // No activity for 3 cycles: check every 2 minutes
+                            } else if consecutive_empty_cycles >= 1 {
+                                60  // Some inactivity: check every minute
+                            } else {
+                                30  // Active period: check every 30 seconds
+                            };
+                            
+                            if new_interval_secs != current_interval_secs {
+                                current_interval_secs = new_interval_secs;
+                                
+                                if manager.debug_enabled {
+                                    log(LogTag::Transactions, "ADAPTIVE", &format!(
+                                        "📊 Adjusted monitoring interval to {} seconds (empty cycles: {})",
+                                        current_interval_secs, consecutive_empty_cycles
+                                    ));
+                                }
                             }
                         }
                         
@@ -1411,7 +1440,8 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                     }
                     Err(e) => {
                         log(LogTag::Transactions, "ERROR", &format!("Monitoring cycle failed: {}", e));
-                        // On error, use default interval
+                        // On error, use fast interval to recover quickly
+                        current_interval_secs = 10;
                         next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
                     }
                 }
@@ -1423,7 +1453,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
 }
 
 /// Perform one monitoring cycle and return number of new transactions found
-async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<usize, String> {
+async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize, bool), String> {
     // Check for new transactions
     let new_signatures = manager.check_new_transactions().await?;
     let new_transaction_count = new_signatures.len();
@@ -1452,6 +1482,9 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<usize,
         ));
     }
 
+    // Check if we have pending priority transactions
+    let has_pending_transactions = !manager.priority_transactions.is_empty();
+
     // Log stats periodically
     if manager.debug_enabled {
         let stats = manager.get_stats();
@@ -1464,7 +1497,7 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<usize,
         ));
     }
 
-    Ok(new_transaction_count)
+    Ok((new_transaction_count, has_pending_transactions))
 }
 
 /// Load wallet address from config
