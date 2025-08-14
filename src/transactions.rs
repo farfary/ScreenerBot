@@ -49,11 +49,11 @@ use crate::tokens::price::get_token_price_blocking_safe;
 /// Timing and timeout configuration for transaction manager
 
 // Background service monitoring intervals
-const MONITORING_INTERVAL_DEFAULT_SECS: u64 = 30;        // Default monitoring interval
-const MONITORING_INTERVAL_FAST_SECS: u64 = 5;            // Fast monitoring when priority transactions pending
-const MONITORING_INTERVAL_SLOW_SECS: u64 = 120;          // Slow monitoring when inactive (2 minutes)
-const MONITORING_INTERVAL_ERROR_SECS: u64 = 10;          // Fast recovery after errors
-const EMPTY_CYCLES_THRESHOLD: u32 = 3;                   // Switch to slow mode after 3 empty cycles
+const MONITORING_INTERVAL_DEFAULT_SECS: u64 = 10;        // Default monitoring interval
+const MONITORING_INTERVAL_FAST_SECS: u64 = 2;            // Fast monitoring when priority transactions pending
+const MONITORING_INTERVAL_SLOW_SECS: u64 = 60;          // Slow monitoring when inactive (2 minutes)
+const MONITORING_INTERVAL_ERROR_SECS: u64 = 6;          // Fast recovery after errors
+const EMPTY_CYCLES_THRESHOLD: u32 = 5;                   // Switch to slow mode after 3 empty cycles
 
 // Transaction verification timeouts and intervals
 const PRIORITY_CONFIRMATION_TIMEOUT_SECS: u64 = 5;       // Priority transaction verification timeout
@@ -1091,8 +1091,8 @@ impl TransactionsManager {
                 if !position.transaction_entry_verified {
                     if let Ok(entry_tx) = crate::transactions::get_transaction(entry_sig).await {
                         if let Some(tx) = entry_tx {
-                            // Store transaction for apply_entry_verification_data
-                            verification_updates.push((position.mint.clone(), "entry".to_string(), tx));
+                            // Store transaction signature and type for precise position matching
+                            verification_updates.push((tx.signature.clone(), "entry".to_string(), tx));
                         }
                     }
                 }
@@ -1103,8 +1103,8 @@ impl TransactionsManager {
                 if !position.transaction_exit_verified {
                     if let Ok(exit_tx) = crate::transactions::get_transaction(exit_sig).await {
                         if let Some(tx) = exit_tx {
-                            // Store transaction for apply_exit_verification_data
-                            verification_updates.push((position.mint.clone(), "exit".to_string(), tx));
+                            // Store transaction signature and type for precise position matching
+                            verification_updates.push((tx.signature.clone(), "exit".to_string(), tx));
                         }
                     }
                 }
@@ -1117,8 +1117,19 @@ impl TransactionsManager {
                 Ok(mut positions) => {
                     let mut updated_count = 0;
                     
-                    for (mint, transaction_type, transaction) in verification_updates {
-                        if let Some(position) = positions.iter_mut().find(|p| p.mint == mint) {
+                    for (transaction_signature, transaction_type, transaction) in verification_updates {
+                        // Find position by matching the exact transaction signature
+                        let position = match transaction_type.as_str() {
+                            "entry" => positions.iter_mut().find(|p| 
+                                p.entry_transaction_signature.as_ref() == Some(&transaction_signature)
+                            ),
+                            "exit" => positions.iter_mut().find(|p| 
+                                p.exit_transaction_signature.as_ref() == Some(&transaction_signature)
+                            ),
+                            _ => None
+                        };
+
+                        if let Some(position) = position {
                             match transaction_type.as_str() {
                                 "entry" => {
                                     self.apply_entry_verification_data(position, &transaction);
@@ -1130,6 +1141,11 @@ impl TransactionsManager {
                                 }
                                 _ => {}
                             }
+                        } else {
+                            log(LogTag::Transactions, "POSITION_NOT_FOUND", &format!(
+                                "⚠️ Could not find position with {} transaction signature: {}",
+                                transaction_type, &transaction_signature[..8]
+                            ));
                         }
                     }
 
