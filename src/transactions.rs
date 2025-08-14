@@ -545,6 +545,14 @@ impl TransactionsManager {
     pub async fn check_new_transactions(&mut self) -> Result<Vec<String>, String> {
         let rpc_client = get_rpc_client();
         
+        if self.debug_enabled {
+            log(LogTag::Transactions, "RPC_CALL", &format!(
+                "Checking for new transactions (known: {}, last_sig: {})", 
+                self.known_signatures.len(),
+                self.last_signature_check.as_deref().unwrap_or("none")
+            ));
+        }
+        
         // Get recent signatures from wallet
         let signatures = rpc_client
             .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, self.last_signature_check.as_deref())
@@ -1356,8 +1364,10 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         manager.known_signatures.len()
     ));
 
-    // Simple monitoring loop
-    let mut interval = interval(Duration::from_secs(10)); // Check every 10 seconds
+    // Adaptive monitoring loop with reduced frequency during idle periods  
+    let mut consecutive_empty_cycles = 0;
+    let mut current_interval_secs = 30;
+    let mut next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
     
     loop {
         tokio::select! {
@@ -1365,10 +1375,45 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                 log(LogTag::Transactions, "INFO", "TransactionsManager service shutting down");
                 break;
             }
-            _ = interval.tick() => {
+            _ = tokio::time::sleep_until(next_check) => {
                 // Monitor new transactions
-                if let Err(e) = do_monitoring_cycle(&mut manager).await {
-                    log(LogTag::Transactions, "ERROR", &format!("Monitoring cycle failed: {}", e));
+                match do_monitoring_cycle(&mut manager).await {
+                    Ok(new_transaction_count) => {
+                        // Adaptive polling based on activity
+                        if new_transaction_count == 0 {
+                            consecutive_empty_cycles += 1;
+                        } else {
+                            consecutive_empty_cycles = 0;
+                        }
+                        
+                        // Adjust monitoring frequency based on activity
+                        let new_interval_secs = if consecutive_empty_cycles >= 3 {
+                            120 // No activity for 3 cycles: check every 2 minutes
+                        } else if consecutive_empty_cycles >= 1 {
+                            60  // Some inactivity: check every minute
+                        } else {
+                            30  // Active period: check every 30 seconds
+                        };
+                        
+                        if new_interval_secs != current_interval_secs {
+                            current_interval_secs = new_interval_secs;
+                            
+                            if manager.debug_enabled {
+                                log(LogTag::Transactions, "ADAPTIVE", &format!(
+                                    "Adjusted monitoring interval to {} seconds (empty cycles: {})",
+                                    current_interval_secs, consecutive_empty_cycles
+                                ));
+                            }
+                        }
+                        
+                        // Set next check time
+                        next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
+                    }
+                    Err(e) => {
+                        log(LogTag::Transactions, "ERROR", &format!("Monitoring cycle failed: {}", e));
+                        // On error, use default interval
+                        next_check = tokio::time::Instant::now() + Duration::from_secs(current_interval_secs);
+                    }
                 }
             }
         }
@@ -1377,10 +1422,11 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
     log(LogTag::Transactions, "INFO", "TransactionsManager service stopped");
 }
 
-/// Perform one monitoring cycle
-async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), String> {
+/// Perform one monitoring cycle and return number of new transactions found
+async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<usize, String> {
     // Check for new transactions
     let new_signatures = manager.check_new_transactions().await?;
+    let new_transaction_count = new_signatures.len();
     
     // Process new transactions
     for signature in new_signatures {
@@ -1418,7 +1464,7 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(), St
         ));
     }
 
-    Ok(())
+    Ok(new_transaction_count)
 }
 
 /// Load wallet address from config
