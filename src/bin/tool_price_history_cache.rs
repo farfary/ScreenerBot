@@ -7,7 +7,7 @@ use screenerbot::{
             get_price_history_for_rl_learning,
             cleanup_old_price_history_caches,
         },
-        api::init_dexscreener_api,
+        dexscreener::init_dexscreener_api,
     },
     rpc::init_rpc_client,
 };
