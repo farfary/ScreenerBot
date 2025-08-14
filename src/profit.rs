@@ -8,7 +8,6 @@ use crate::tokens::{
     TokenDatabase,
     pool::get_pool_service,
 };
-use crate::entry::{load_performance_cache, PerformanceCache};
 use chrono::Utc;
 use serde::{ Serialize, Deserialize };
 use std::collections::HashMap;
@@ -63,14 +62,20 @@ const TRAILING_STOP_RISKY: f64 = 4.0; // 4% for risky (reduced from 6%)
 const TRAILING_STOP_DANGEROUS: f64 = 3.0; // 3% for dangerous (reduced from 4%)
 const TIME_DECAY_FACTOR: f64 = 0.25; // Aggressive time decay (25% vs 15%) for faster exits
 
-// 🚀 INSTANT SELL THRESHOLDS - CAPTURE MOONSHOTS
+// 🚀 INSTANT SELL THRESHOLDS - CAPTURE MOONSHOTS UP TO 100%+
 const INSTANT_SELL_PROFIT: f64 = 2000.0; // 2000%+ = instant sell
 const MEGA_PROFIT_THRESHOLD: f64 = 1000.0; // 1000%+ = very urgent
+const ULTRA_MEGA_THRESHOLD: f64 = 100.0; // 100%+ = ultra mega pump
+const SUPER_MEGA_THRESHOLD: f64 = 75.0; // 75%+ = super mega pump
 
-// 🎯 PUMP DETECTION CONFIGURATION
+// 🎯 ENHANCED PUMP DETECTION CONFIGURATION - MULTI-TIER THRESHOLDS
 const PUMP_MIN_PERCENT: f64 = 15.0; // Minimum % gain to be considered a pump
 const PUMP_VELOCITY_THRESHOLD: f64 = 0.5; // % per second for pump detection
+const ULTRA_VELOCITY_THRESHOLD: f64 = 2.0; // Ultra high velocity for extreme gains
+const SUPER_VELOCITY_THRESHOLD: f64 = 1.5; // Super high velocity
+const HIGH_VELOCITY_THRESHOLD: f64 = 1.0; // High velocity
 const MEGA_PUMP_PERCENT: f64 = 50.0; // 50%+ = mega pump
+const STRONG_MEGA_PERCENT: f64 = 30.0; // 30%+ = strong mega pump
 const MICRO_PUMP_PERCENT: f64 = 8.0; // 8%+ = micro pump (for volatile tokens)
 const PUMP_TIME_WINDOW: f64 = 5.0; // Minutes to analyze for pump detection
 const CONSERVATIVE_PROFIT_MIN: f64 = 5.0; // Don't sell below 5% profit easily
@@ -379,40 +384,66 @@ fn calculate_consistency_score(prices: &[f64]) -> f64 {
     positive_moves as f64 / total_moves as f64
 }
 
-/// Get token volatility context from performance cache
+/// Get token volatility context (simplified without performance cache)
 async fn get_token_volatility_context(mint: &str) -> f64 {
-    let cache = load_performance_cache();
-    
-    if let Some(performance) = cache.tokens.get(mint) {
-        performance.volatility_24h / 100.0 // Convert to decimal
-    } else {
-        0.1 // Default 10% volatility
-    }
+    // Return default volatility since we removed performance tracking
+    0.1 // Default 10% volatility for all tokens
 }
 
-/// Classify pump type based on magnitude and velocity  
+/// Classify pump type based on magnitude and velocity - ULTRA-DYNAMIC for up to 100%+
 fn classify_pump_type(profit_percent: f64, max_velocity: f64, volatility_context: f64) -> PumpType {
-    // Adjust thresholds based on token's volatility
-    let volatility_multiplier = (1.0 + volatility_context).min(2.0);
+    // Multi-tier volatility adjustment for extreme gains
+    let volatility_multiplier = if profit_percent >= 75.0 {
+        (1.0 + volatility_context * 0.5).min(1.5) // Less strict for ultra-high gains
+    } else if profit_percent >= 50.0 {
+        (1.0 + volatility_context * 0.7).min(1.7)
+    } else {
+        (1.0 + volatility_context).min(2.0)
+    };
     
-    let mega_threshold = MEGA_PUMP_PERCENT / volatility_multiplier;
+    // Dynamic thresholds with progressive scaling
+    let ultra_mega_threshold = 100.0 / volatility_multiplier; // 100%+ ultra mega
+    let super_mega_threshold = 75.0 / volatility_multiplier;  // 75%+ super mega
+    let mega_threshold = 50.0 / volatility_multiplier;        // 50%+ mega
+    let strong_mega_threshold = 30.0 / volatility_multiplier; // 30%+ strong mega
     let main_threshold = PUMP_MIN_PERCENT / volatility_multiplier;
     let micro_threshold = MICRO_PUMP_PERCENT / volatility_multiplier;
     let trend_threshold = 5.0 / volatility_multiplier;
     
-    // High velocity indicates pump regardless of total gain
-    let velocity_factor = max_velocity > PUMP_VELOCITY_THRESHOLD;
+    // Ultra-sensitive velocity detection for extreme gains
+    let ultra_velocity_factor = max_velocity > 2.0;  // Ultra high velocity
+    let super_velocity_factor = max_velocity > 1.5;  // Super high velocity
+    let high_velocity_factor = max_velocity > 1.0;   // High velocity
+    let pump_velocity_factor = max_velocity > PUMP_VELOCITY_THRESHOLD;
     
+    // Progressive pump classification with velocity boosting
     match profit_percent {
-        p if p >= mega_threshold || (velocity_factor && p >= 25.0) => PumpType::MegaPump,
-        p if p >= main_threshold || (velocity_factor && p >= 10.0) => PumpType::MainPump,
-        p if p >= micro_threshold || (velocity_factor && p >= 5.0) => PumpType::MicroPump,
-        p if p >= trend_threshold => PumpType::TrendMove,
+        // ULTRA TIER - 100%+ gains (immediate exit regardless)
+        p if p >= ultra_mega_threshold => PumpType::MegaPump,
+        
+        // SUPER TIER - 75%+ gains 
+        p if p >= super_mega_threshold || (ultra_velocity_factor && p >= 60.0) => PumpType::MegaPump,
+        
+        // MEGA TIER - 50%+ gains
+        p if p >= mega_threshold || (super_velocity_factor && p >= 40.0) => PumpType::MegaPump,
+        
+        // STRONG MEGA TIER - 30%+ gains
+        p if p >= strong_mega_threshold || (high_velocity_factor && p >= 25.0) => PumpType::MegaPump,
+        
+        // MAIN PUMP TIER - 15%+ gains with various velocity combinations
+        p if p >= main_threshold || (pump_velocity_factor && p >= 12.0) || (high_velocity_factor && p >= 10.0) => PumpType::MainPump,
+        
+        // MICRO PUMP TIER - 8%+ gains with velocity assistance
+        p if p >= micro_threshold || (pump_velocity_factor && p >= 6.0) || (high_velocity_factor && p >= 5.0) => PumpType::MicroPump,
+        
+        // TREND TIER - 5%+ gains with some velocity
+        p if p >= trend_threshold || (pump_velocity_factor && p >= 3.0) => PumpType::TrendMove,
+        
         _ => PumpType::NoMove,
     }
 }
 
-/// Calculate pump confidence score
+/// Calculate pump confidence score - ULTRA-DYNAMIC for extreme gains
 fn calculate_pump_confidence(
     velocity: &VelocityAnalysis,
     pattern: &PatternAnalysis,
@@ -421,21 +452,44 @@ fn calculate_pump_confidence(
 ) -> f64 {
     let mut confidence = 0.0;
     
-    // Velocity confidence (40% weight)
-    if velocity.max_velocity > PUMP_VELOCITY_THRESHOLD {
-        confidence += 0.4 * (velocity.max_velocity / (PUMP_VELOCITY_THRESHOLD * 2.0)).min(1.0);
+    // Ultra-high gain confidence boost (extreme gains = max confidence)
+    if profit_percent >= 100.0 {
+        confidence += 0.9; // 100%+ gains = nearly max confidence
+    } else if profit_percent >= 75.0 {
+        confidence += 0.8; // 75%+ gains = very high confidence
+    } else if profit_percent >= 50.0 {
+        confidence += 0.7; // 50%+ gains = high confidence
+    } else if profit_percent >= 30.0 {
+        confidence += 0.5; // 30%+ gains = moderate confidence boost
     }
     
-    // Pattern confidence (30% weight)
-    if pattern.is_parabolic {
-        confidence += 0.15;
-    }
-    if pattern.has_sharp_spike {
-        confidence += 0.15;
+    // Enhanced velocity confidence with progressive scaling
+    if velocity.max_velocity > 2.0 {
+        confidence += 0.3; // Ultra velocity
+    } else if velocity.max_velocity > 1.5 {
+        confidence += 0.25; // Super velocity  
+    } else if velocity.max_velocity > 1.0 {
+        confidence += 0.2; // High velocity
+    } else if velocity.max_velocity > PUMP_VELOCITY_THRESHOLD {
+        confidence += 0.15 * (velocity.max_velocity / (PUMP_VELOCITY_THRESHOLD * 2.0)).min(1.0);
     }
     
-    // Consistency confidence (20% weight)
-    confidence += pattern.consistency_score * 0.2;
+    // Pattern confidence with extreme gain awareness
+    if pattern.is_parabolic && profit_percent >= 30.0 {
+        confidence += 0.15; // Parabolic + high gains = very confident
+    } else if pattern.is_parabolic {
+        confidence += 0.1;
+    }
+    
+    if pattern.has_sharp_spike && profit_percent >= 20.0 {
+        confidence += 0.15; // Sharp spike + good gains = confident
+    } else if pattern.has_sharp_spike {
+        confidence += 0.1;
+    }
+    
+    // Consistency confidence with gain scaling
+    let consistency_weight = if profit_percent >= 50.0 { 0.15 } else { 0.1 };
+    confidence += pattern.consistency_score * consistency_weight;
     
     // Magnitude confidence (10% weight)
     let magnitude_factor = (profit_percent / (PUMP_MIN_PERCENT * 2.0)).min(1.0);
@@ -451,7 +505,7 @@ fn calculate_pump_confidence(
     (confidence * volatility_adjustment).min(1.0).max(0.0)
 }
 
-/// Determine recommended action based on pump analysis
+/// Determine recommended action based on pump analysis - ULTRA-AGGRESSIVE for extreme gains
 fn determine_pump_action(
     pump_type: &PumpType,
     confidence: f64,
@@ -460,36 +514,67 @@ fn determine_pump_action(
 ) -> PumpAction {
     match pump_type {
         PumpType::MegaPump => {
-            if confidence > 0.7 {
-                PumpAction::ExitImmediately
+            // Ultra-aggressive for extreme gains
+            if profit_percent >= 100.0 {
+                PumpAction::ExitImmediately // 100%+ = always immediate exit
+            } else if profit_percent >= 75.0 {
+                PumpAction::ExitImmediately // 75%+ = immediate exit
+            } else if profit_percent >= 50.0 && confidence > 0.5 {
+                PumpAction::ExitImmediately // 50%+ with decent confidence
+            } else if profit_percent >= 30.0 && confidence > 0.6 {
+                PumpAction::ExitImmediately // 30%+ with good confidence
+            } else if confidence > 0.7 {
+                PumpAction::ExitImmediately // High confidence override
             } else {
                 PumpAction::ExitSoon
             }
         },
         PumpType::MainPump => {
-            if confidence > 0.6 && minutes_held > 1.0 {
-                PumpAction::ExitSoon
+            // More aggressive for strong gains
+            if profit_percent >= 50.0 {
+                PumpAction::ExitSoon // 50%+ main pump = exit soon
+            } else if profit_percent >= 25.0 && confidence > 0.5 {
+                PumpAction::ExitSoon // 25%+ with confidence
+            } else if confidence > 0.6 && minutes_held > 0.5 {
+                PumpAction::ExitSoon // High confidence + minimal time
+            } else if profit_percent >= 15.0 && minutes_held > 1.0 {
+                PumpAction::WatchClosely // Standard main pump logic
             } else {
                 PumpAction::WatchClosely
             }
         },
         PumpType::MicroPump => {
-            if confidence > 0.5 && minutes_held > 2.0 && profit_percent > 8.0 {
-                PumpAction::WatchClosely
+            // Enhanced micro pump sensitivity
+            if profit_percent >= 30.0 {
+                PumpAction::ExitSoon // 30%+ micro pump = upgrade to exit soon
+            } else if profit_percent >= 20.0 && confidence > 0.6 {
+                PumpAction::WatchClosely // 20%+ with confidence
+            } else if confidence > 0.7 && minutes_held > 1.0 && profit_percent > 8.0 {
+                PumpAction::WatchClosely // Very high confidence micro
+            } else if profit_percent >= 12.0 && minutes_held > 2.0 {
+                PumpAction::WatchClosely // Enhanced threshold
             } else {
                 PumpAction::Hold
             }
         },
         PumpType::TrendMove => {
-            if profit_percent > TREND_PROFIT_MIN && minutes_held > 5.0 {
-                PumpAction::WatchClosely
+            // More sensitive trend detection
+            if profit_percent >= 20.0 && confidence > 0.5 {
+                PumpAction::WatchClosely // 20%+ trend = watch closely
+            } else if profit_percent > TREND_PROFIT_MIN && minutes_held > 3.0 {
+                PumpAction::WatchClosely // Standard trend logic
+            } else if profit_percent >= 8.0 && confidence > 0.6 {
+                PumpAction::Hold // Good trend developing
             } else {
                 PumpAction::Hold
             }
         },
         PumpType::NoMove => {
-            if profit_percent < CONSERVATIVE_PROFIT_MIN {
-                PumpAction::HoldForMore
+            // Enhanced conservative logic
+            if profit_percent < CONSERVATIVE_PROFIT_MIN && minutes_held < 10.0 {
+                PumpAction::HoldForMore // Hold small profits longer
+            } else if profit_percent < 2.0 {
+                PumpAction::HoldForMore // Very small profits = definitely hold
             } else {
                 PumpAction::Hold
             }
@@ -1102,40 +1187,83 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     // PUMP-BASED EXIT DECISIONS
     match pump_analysis.recommended_action {
         PumpAction::ExitImmediately => {
-            log(
-                LogTag::Profit,
-                "PUMP_EXIT_IMMEDIATE",
-                &format!(
-                    "🚀 MEGA PUMP DETECTED: {} - {:.2}% in {:.1}min, velocity: {:.3}%/sec - IMMEDIATE EXIT!",
-                    position.symbol,
-                    pnl_percent,
-                    minutes_held,
-                    pump_analysis.velocity_percent_per_second
+            // Enhanced messaging for extreme gains
+            let exit_message = if pnl_percent >= 100.0 {
+                format!(
+                    "🚀💎 ULTRA MEGA PUMP: {} - {:.1}% in {:.1}min - LEGENDARY MOONSHOT!",
+                    position.symbol, pnl_percent, minutes_held
                 )
-            );
-            return (1.0, format!(
-                "🚀 MEGA PUMP: {:.2}% @ {:.3}%/sec - IMMEDIATE EXIT!",
-                pnl_percent,
-                pump_analysis.velocity_percent_per_second
-            ));
+            } else if pnl_percent >= 75.0 {
+                format!(
+                    "🚀🔥 SUPER MEGA PUMP: {} - {:.1}% in {:.1}min - MASSIVE GAIN!",
+                    position.symbol, pnl_percent, minutes_held
+                )
+            } else if pnl_percent >= 50.0 {
+                format!(
+                    "🚀⚡ MEGA PUMP: {} - {:.1}% in {:.1}min - HUGE GAIN!",
+                    position.symbol, pnl_percent, minutes_held
+                )
+            } else {
+                format!(
+                    "🚀 MEGA PUMP DETECTED: {} - {:.2}% in {:.1}min, velocity: {:.3}%/sec - IMMEDIATE EXIT!",
+                    position.symbol, pnl_percent, minutes_held, pump_analysis.velocity_percent_per_second
+                )
+            };
+            
+            log(LogTag::Profit, "PUMP_EXIT_IMMEDIATE", &exit_message);
+            
+            let reason = if pnl_percent >= 100.0 {
+                format!("🚀💎 ULTRA MEGA: {:.1}% - LEGENDARY!", pnl_percent)
+            } else if pnl_percent >= 75.0 {
+                format!("🚀🔥 SUPER MEGA: {:.1}% - MASSIVE!", pnl_percent)
+            } else if pnl_percent >= 50.0 {
+                format!("🚀⚡ MEGA: {:.1}% - HUGE!", pnl_percent)
+            } else {
+                format!("🚀 MEGA PUMP: {:.2}% @ {:.3}%/sec", pnl_percent, pump_analysis.velocity_percent_per_second)
+            };
+            
+            return (1.0, reason);
         },
         PumpAction::ExitSoon => {
-            log(
-                LogTag::Profit,
-                "PUMP_EXIT_SOON",
-                &format!(
-                    "🎯 PUMP DETECTED: {} - {:.2}% in {:.1}min, confidence: {:.2} - EXIT SOON!",
-                    position.symbol,
-                    pnl_percent,
-                    minutes_held,
-                    pump_analysis.confidence
+            // Enhanced exit soon messaging for strong gains
+            let urgency = if pnl_percent >= 50.0 {
+                0.95 // Very high urgency for 50%+ gains
+            } else if pnl_percent >= 30.0 {
+                0.92 // High urgency for 30%+ gains
+            } else if pnl_percent >= 20.0 {
+                0.9  // Standard high urgency for 20%+ gains
+            } else {
+                0.85 // Moderate urgency for smaller gains
+            };
+            
+            let exit_message = if pnl_percent >= 50.0 {
+                format!(
+                    "🎯🔥 MAJOR PUMP: {} - {:.1}% in {:.1}min - EXIT VERY SOON!",
+                    position.symbol, pnl_percent, minutes_held
                 )
-            );
-            return (0.9, format!(
-                "🎯 PUMP: {:.2}% (conf: {:.2}) - EXIT SOON!",
-                pnl_percent,
-                pump_analysis.confidence
-            ));
+            } else if pnl_percent >= 30.0 {
+                format!(
+                    "🎯⚡ STRONG PUMP: {} - {:.1}% in {:.1}min - EXIT SOON!",
+                    position.symbol, pnl_percent, minutes_held
+                )
+            } else {
+                format!(
+                    "🎯 PUMP DETECTED: {} - {:.2}% in {:.1}min, confidence: {:.2} - EXIT SOON!",
+                    position.symbol, pnl_percent, minutes_held, pump_analysis.confidence
+                )
+            };
+            
+            log(LogTag::Profit, "PUMP_EXIT_SOON", &exit_message);
+            
+            let reason = if pnl_percent >= 50.0 {
+                format!("🎯🔥 MAJOR PUMP: {:.1}% - EXIT VERY SOON!", pnl_percent)
+            } else if pnl_percent >= 30.0 {
+                format!("🎯⚡ STRONG: {:.1}% - EXIT SOON!", pnl_percent)
+            } else {
+                format!("🎯 PUMP: {:.2}% (conf: {:.2}) - EXIT SOON!", pnl_percent, pump_analysis.confidence)
+            };
+            
+            return (urgency, reason);
         },
         PumpAction::WatchClosely => {
             // Continue to normal logic but with higher urgency baseline
