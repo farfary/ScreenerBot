@@ -165,6 +165,18 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("from")
+                .long("from")
+                .help("Filter swaps from this date/time (inclusive). Accepts RFC3339 (e.g., 2025-08-16T00:00:00Z), YYYY-MM-DD, or UNIX seconds.")
+                .value_name("DATETIME")
+        )
+        .arg(
+            Arg::new("to")
+                .long("to")
+                .help("Filter swaps up to this date/time (inclusive). Accepts RFC3339 (e.g., 2025-08-17T23:59:59Z), YYYY-MM-DD, or UNIX seconds.")
+                .value_name("DATETIME")
+        )
+        .arg(
             Arg::new("analyze-positions")
                 .long("analyze-positions")
                 .help("Analyze position lifecycle with entry/exit tracking and PnL")
@@ -425,6 +437,29 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
     // Optional token mint filter for analyses
     let filter_mint_for_analysis = matches.get_one::<String>("filter-mint").cloned();
     
+    // Helper: parse datetime argument
+    fn parse_datetime_arg(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+        // Try UNIX seconds
+        if let Ok(secs) = value.parse::<i64>() {
+            return Some(chrono::DateTime::<Utc>::from_timestamp(secs, 0)?);
+        }
+        // Try RFC3339
+        if let Ok(dt) = value.parse::<DateTime<Utc>>() {
+            return Some(dt);
+        }
+        // Try YYYY-MM-DD
+        if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+            let dt = date.and_hms_opt(0, 0, 0)?;
+            return Some(Utc.from_utc_datetime(&dt));
+        }
+        None
+    }
+
+    // Extract optional date filters up-front
+    let from_dt = matches.get_one::<String>("from").and_then(|s| parse_datetime_arg(s));
+    let to_dt = matches.get_one::<String>("to").and_then(|s| parse_datetime_arg(s));
+
     // Execute based on command line arguments
     if matches.get_flag("monitor") {
         let duration = *matches.get_one::<u64>("duration")
@@ -433,7 +468,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after monitoring...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if let Some(signature) = matches.get_one::<String>("signature") {
         let analyze_ata = matches.get_flag("analyze-ata");
@@ -445,7 +480,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching new transactions...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if let Some(count) = matches.get_one::<usize>("fetch") {
         // Validate fetch count range
@@ -458,14 +493,14 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching limited transactions...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if matches.get_flag("fetch-all") {
         fetch_all_wallet_transactions(wallet_pubkey).await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching all transactions...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if matches.get_flag("test-analyzer") {
         let count = *matches.get_one::<usize>("count")
@@ -474,7 +509,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after testing analyzer...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if matches.get_flag("debug-cache") {
         debug_cache_system().await;
@@ -483,7 +518,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after cleaning cache...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if matches.get_flag("clean") {
         clean_all_transaction_files().await;
@@ -532,7 +567,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
             }
         }
         
-    analyze_swaps(wallet_pubkey, count, min_sol, max_sol, filter_mint_for_analysis.clone()).await;
+    analyze_swaps(wallet_pubkey, count, min_sol, max_sol, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
     } else if matches.get_flag("analyze-positions") {
         analyze_all_positions(wallet_pubkey).await;
     } else if matches.get_flag("analyze-all") {
@@ -577,7 +612,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after swap test...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if matches.get_flag("test-position") {
         // Validate and extract position test arguments with proper error handling
@@ -620,12 +655,12 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after updating cache...");
-            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
         }
     } else if should_analyze {
         // If only --analyze is specified, run comprehensive analysis
         log(LogTag::System, "INFO", "Running comprehensive transaction analysis...");
-    analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
+    analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone(), from_dt, to_dt).await;
     } else {
         log(LogTag::System, "ERROR", "No command specified. Use --help for usage information.");
         std::process::exit(1);
@@ -734,7 +769,15 @@ impl SwapTestConfig {
 }
 
 /// Analyze swap transactions with comprehensive PnL and filtering
-async fn analyze_swaps(wallet_pubkey: Pubkey, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>, filter_mint: Option<String>) {
+async fn analyze_swaps(
+    wallet_pubkey: Pubkey,
+    count: Option<usize>,
+    min_sol: Option<f64>,
+    max_sol: Option<f64>,
+    filter_mint: Option<String>,
+    from_dt: Option<chrono::DateTime<chrono::Utc>>,
+    to_dt: Option<chrono::DateTime<chrono::Utc>>,
+) {
     log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis (includes automatic recalculation)");
 
     if let Some(count_limit) = count {
@@ -750,6 +793,14 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, count: Option<usize>, min_sol: Opt
         let short = if mint.len() > 8 { &mint[..8] } else { mint };
         log(LogTag::Transactions, "FILTER", &format!("Filtering swaps by token mint: {}...", short));
     }
+    if let Some(dt) = from_dt {
+        use chrono::SecondsFormat;
+        log(LogTag::Transactions, "FILTER", &format!("From: {}", dt.to_rfc3339_opts(SecondsFormat::Secs, true)));
+    }
+    if let Some(dt) = to_dt {
+        use chrono::SecondsFormat;
+        log(LogTag::Transactions, "FILTER", &format!("To:   {}", dt.to_rfc3339_opts(SecondsFormat::Secs, true)));
+    }
 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
         Ok(manager) => manager,
@@ -762,9 +813,16 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, count: Option<usize>, min_sol: Opt
     // Get all swap transactions (now includes automatic recalculation and count limiting)
     match manager.get_all_swap_transactions_limited(count).await {
         Ok(all_swaps) => {
-            // Apply SOL amount filtering
+            // Apply date/time and SOL amount filtering
             let filtered_swaps: Vec<_> = all_swaps.iter().filter(|swap| {
                 let sol_amount = swap.sol_amount;
+                // Timestamp window filtering
+                if let Some(from) = from_dt {
+                    if swap.timestamp < from { return false; }
+                }
+                if let Some(to) = to_dt {
+                    if swap.timestamp > to { return false; }
+                }
                 
                 // Check minimum filter
                 if let Some(min) = min_sol {
@@ -4951,14 +5009,13 @@ fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnL
     log(LogTag::Transactions, "ATA_ANALYSIS", "🏦 === ATA OPERATIONS & SOL FLOW ANALYSIS ===");
     
     // Initialize tracking variables
-    let mut total_sol_spent = 0.0;
-    let mut total_sol_received = 0.0;
+    // Use EFFECTIVE amounts which already exclude ATA rent effects (but include fees in fee field)
+    let mut total_effective_sol_spent = 0.0;    // sum of effective_sol_spent for buys
+    let mut total_effective_sol_received = 0.0; // sum of effective_sol_received for sells
     let mut total_fees = 0.0;
-    let mut wsol_ata_created = 0;
-    let mut wsol_ata_closed = 0;
-    let mut token_ata_created = 0;
-    let mut token_ata_closed = 0;
-    let mut total_ata_rent_cost = 0.0;
+    // Informational only: ATA rent flows captured during transaction analysis
+    let mut total_ata_rent_net = 0.0;   // net across all swaps (can be +/-)
+    let mut total_ata_rent_gross = 0.0; // sum of absolute rent flows (magnitude only)
     
     // Track per-token ATA operations
     let mut token_ata_ops: std::collections::HashMap<String, TokenATAOperations> = std::collections::HashMap::new();
@@ -4967,68 +5024,42 @@ fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnL
     for (i, swap) in swaps.iter().enumerate() {
         let token_ops = token_ata_ops.entry(swap.token_symbol.clone()).or_insert(TokenATAOperations::new());
         
-        // Track SOL flow
+        // Track SOL flow using EFFECTIVE amounts
         total_fees += swap.fee_sol;
-        
         if swap.swap_type == "Buy" || swap.swap_type.starts_with("Failed Buy") {
-            total_sol_spent += swap.sol_amount;
+            total_effective_sol_spent += swap.effective_sol_spent.max(0.0);
             token_ops.buys += 1;
-            token_ops.sol_spent += swap.sol_amount;
+            token_ops.sol_spent += swap.effective_sol_spent.max(0.0);
         } else if swap.swap_type == "Sell" || swap.swap_type.starts_with("Failed Sell") {
-            total_sol_received += swap.sol_amount;
+            total_effective_sol_received += swap.effective_sol_received.max(0.0);
             token_ops.sells += 1;
-            token_ops.sol_received += swap.sol_amount;
+            token_ops.sol_received += swap.effective_sol_received.max(0.0);
         }
-        
         token_ops.fees += swap.fee_sol;
-        
-        // Estimate ATA operations (this is an approximation since we don't have detailed breakdown)
-        // For buys: typically create token ATA if first time, might create/close WSOL ATA
-        // For sells: typically close token ATA if last position, might create/close WSOL ATA
-        
-        if swap.swap_type == "Buy" {
-            // First buy of a token likely creates token ATA
-            if token_ops.buys == 1 {
-                token_ata_created += 1;
-                token_ops.ata_created += 1;
-                total_ata_rent_cost += 0.00203928; // Standard ATA rent cost
-            }
-            // WSOL ATA operations (often created and closed in same transaction for Jupiter)
-            if swap.router == "Jupiter" {
-                wsol_ata_created += 1;
-                wsol_ata_closed += 1; // Jupiter often creates and closes WSOL ATA in same tx
-            }
-        } else if swap.swap_type == "Sell" {
-            // Complete sell might close token ATA (approximation)
-            if swap.token_amount == 0.0 { // If we sold all tokens
-                token_ata_closed += 1;
-                token_ops.ata_closed += 1;
-                total_ata_rent_cost -= 0.00203928; // Rent recovered
-            }
-            // WSOL ATA operations
-            if swap.router == "Jupiter" {
-                wsol_ata_created += 1;
-                wsol_ata_closed += 1;
-            }
-        }
+    // Track token-specific ATA create/close counts
+    token_ops.ata_created += swap.ata_created_count;
+    token_ops.ata_closed += swap.ata_closed_count;
+        // Track ATA rent flows (informational only; NOT used in P&L to avoid double counting)
+        total_ata_rent_net += swap.ata_rents;
+        total_ata_rent_gross += swap.ata_rents.abs();
     }
     
-    // Calculate net SOL flow
-    let net_sol_flow = total_sol_received - total_sol_spent - total_fees - total_ata_rent_cost;
-    let gross_sol_flow = total_sol_received - total_sol_spent;
+    // Calculate net SOL flow using effective amounts only
+    let net_sol_flow = total_effective_sol_received - total_effective_sol_spent - total_fees;
+    let gross_sol_flow = total_effective_sol_received - total_effective_sol_spent;
     
     // Display overall SOL flow summary
     log(LogTag::Transactions, "ATA_ANALYSIS", "💰 === OVERALL SOL FLOW (Begin to End) ===");
     log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "Total SOL Spent:     -{:.9} SOL (buying tokens)",
-        total_sol_spent
+    "Total SOL Spent:     -{:.9} SOL (buying tokens)",
+    total_effective_sol_spent
     ));
     log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "Total SOL Received:  +{:.9} SOL (selling tokens)",
-        total_sol_received
+    "Total SOL Received:  +{:.9} SOL (selling tokens)",
+    total_effective_sol_received
     ));
     log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "Gross SOL Flow:      {:+.9} SOL (before fees and ATA costs)",
+    "Gross SOL Flow:      {:+.9} SOL (before fees)",
         gross_sol_flow
     ));
     log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
@@ -5036,8 +5067,8 @@ fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnL
         total_fees
     ));
     log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "ATA Rent Costs:      {:+.9} SOL (net rent cost/recovery)",
-        -total_ata_rent_cost
+        "ATA Rent Flow (info): {:+.9} SOL net, {:.9} SOL gross (infra; excluded from P&L)",
+        total_ata_rent_net, total_ata_rent_gross
     ));
     log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
         "NET SOL FLOW:        {:+.9} SOL (total profit/loss)",
@@ -5045,36 +5076,15 @@ fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnL
     ));
     
     // Display ATA operations summary
-    log(LogTag::Transactions, "ATA_ANALYSIS", "");
-    log(LogTag::Transactions, "ATA_ANALYSIS", "🏪 === ATA OPERATIONS SUMMARY ===");
-    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "WSOL ATA Created:    {} operations",
-        wsol_ata_created
-    ));
-    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "WSOL ATA Closed:     {} operations",
-        wsol_ata_closed
-    ));
-    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "Token ATA Created:   {} operations (+{:.8} SOL rent)",
-        token_ata_created, token_ata_created as f64 * 0.00203928
-    ));
-    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "Token ATA Closed:    {} operations (+{:.8} SOL rent recovered)",
-        token_ata_closed, token_ata_closed as f64 * 0.00203928
-    ));
-    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-        "Net ATA Accounts:    {} token ATAs (still open)",
-        token_ata_created - token_ata_closed
-    ));
+    // Optional: ATA operations summary omitted (heuristics were misleading); rely on per-transaction analysis logs.
     
     // Display per-token breakdown
     log(LogTag::Transactions, "ATA_ANALYSIS", "");
     log(LogTag::Transactions, "ATA_ANALYSIS", "📊 === PER-TOKEN ATA & SOL ANALYSIS ===");
     for (token, ops) in &token_ata_ops {
-        let net_sol_per_token = ops.sol_received - ops.sol_spent - ops.fees;
-        let ata_rent_impact = (ops.ata_created as f64 - ops.ata_closed as f64) * 0.00203928;
-        let final_net = net_sol_per_token - ata_rent_impact;
+    let net_sol_per_token = ops.sol_received - ops.sol_spent - ops.fees;
+    // Do not adjust by heuristic ATA numbers; effective amounts already exclude ATA rent
+    let final_net = net_sol_per_token;
         
         log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
             "{}: {} buys ({:.6} SOL) | {} sells ({:.6} SOL) | {} ATA created | {} ATA closed | Net: {:+.6} SOL",
@@ -5086,29 +5096,29 @@ fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnL
     // Display cost breakdown analysis
     log(LogTag::Transactions, "ATA_ANALYSIS", "");
     log(LogTag::Transactions, "ATA_ANALYSIS", "💸 === COST BREAKDOWN ANALYSIS ===");
-    let total_costs = total_fees + total_ata_rent_cost.abs();
+    let total_costs = total_fees; // Only trading fees count toward costs here; ATA rent is infra and excluded
     if total_costs > 0.0 {
         let fee_percentage = (total_fees / total_costs) * 100.0;
-        let ata_percentage = (total_ata_rent_cost.abs() / total_costs) * 100.0;
         
         log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
             "Transaction Fees:    {:.9} SOL ({:.1}% of total costs)",
             total_fees, fee_percentage
         ));
         log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
-            "ATA Rent Costs:      {:.9} SOL ({:.1}% of total costs)",
-            total_ata_rent_cost.abs(), ata_percentage
-        ));
-        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
             "Total Trading Costs: {:.9} SOL",
             total_costs
+        ));
+        // Provide ATA rent separately as an informational line
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "ATA Rent (info):     net {:+.9} SOL, gross {:.9} SOL",
+            total_ata_rent_net, total_ata_rent_gross
         ));
     }
     
     // Display efficiency metrics
     log(LogTag::Transactions, "ATA_ANALYSIS", "");
     log(LogTag::Transactions, "ATA_ANALYSIS", "📈 === EFFICIENCY METRICS ===");
-    let total_volume = total_sol_spent + total_sol_received;
+    let total_volume = total_effective_sol_spent + total_effective_sol_received;
     if total_volume > 0.0 {
         let cost_ratio = (total_costs / total_volume) * 100.0;
         log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
@@ -5132,6 +5142,95 @@ fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnL
             net_sol_flow
         ));
     }
+
+    // Realized P&L (FIFO) — excludes open inventory to match user expectation
+    // Compute across tokens using FIFO lots and per-swap effective amounts (fees handled per swap)
+    #[derive(Clone, Debug)]
+    struct BuyLot { qty: f64, remaining: f64, cost_sol: f64, fee_sol: f64 }
+
+    // Sort swaps chronologically by slot, then timestamp as fallback
+    let mut sorted = swaps.to_vec();
+    sorted.sort_by(|a, b| {
+        let sa = a.slot.unwrap_or(0);
+        let sb = b.slot.unwrap_or(0);
+        sa.cmp(&sb).then(a.timestamp.cmp(&b.timestamp))
+    });
+
+    use std::collections::{HashMap, VecDeque};
+    let mut books: HashMap<String, VecDeque<BuyLot>> = HashMap::new(); // mint -> FIFO buy lots
+    let mut realized_spent = 0.0f64;
+    let mut realized_received = 0.0f64;
+    let mut realized_fees = 0.0f64;
+
+    for s in &sorted {
+        let mint = &s.token_mint;
+        if s.swap_type == "Buy" {
+            if s.token_amount > 0.0 && s.effective_sol_spent > 0.0 {
+                books.entry(mint.clone()).or_default().push_back(BuyLot {
+                    qty: s.token_amount,
+                    remaining: s.token_amount,
+                    cost_sol: s.effective_sol_spent,
+                    fee_sol: s.fee_sol,
+                });
+            }
+        } else if s.swap_type == "Sell" {
+            let sell_qty = s.token_amount.abs();
+            if sell_qty <= 0.0 || s.effective_sol_received <= 0.0 { continue; }
+            realized_received += s.effective_sol_received;
+            realized_fees += s.fee_sol; // full sell fee
+
+            let mut qty_to_match = sell_qty;
+            let lots = books.entry(mint.clone()).or_default();
+            while qty_to_match > 0.0 {
+                if let Some(front) = lots.front_mut() {
+                    if front.remaining <= 0.0 { lots.pop_front(); continue; }
+                    let take = front.remaining.min(qty_to_match);
+                    let cost_per_token = if front.qty > 0.0 { front.cost_sol / front.qty } else { 0.0 };
+                    realized_spent += cost_per_token * take;
+                    // allocate proportional buy fee to realized
+                    let fee_alloc = if front.qty > 0.0 { front.fee_sol * (take / front.qty) } else { 0.0 };
+                    realized_fees += fee_alloc;
+                    front.remaining -= take;
+                    qty_to_match -= take;
+                    if front.remaining <= 0.0 { lots.pop_front(); }
+                } else {
+                    // No inventory to match; treat as oversold (no cost basis available)
+                    break;
+                }
+            }
+        }
+    }
+
+    let realized_net = realized_received - realized_spent - realized_fees;
+    // Compute open inventory cost basis (unrealized) from remaining lots
+    let mut open_inventory_cost = 0.0f64;
+    for (_mint, lots) in &books {
+        for lot in lots {
+            if lot.remaining > 0.0 && lot.qty > 0.0 {
+                let cost_per_token = lot.cost_sol / lot.qty;
+                open_inventory_cost += cost_per_token * lot.remaining;
+            }
+        }
+    }
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "🧮 === REALIZED P&L (FIFO, excludes open inventory) ===");
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Realized SOL Spent:    -{:.9} SOL", realized_spent
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Realized SOL Received: +{:.9} SOL", realized_received
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Realized Fees:         -{:.9} SOL", realized_fees
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "REALIZED NET P&L:      {:+.9} SOL", realized_net
+    ));
+    // Reconcile realized P&L with net SOL flow: net_sol_flow ≈ realized_net - open_inventory_cost
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Inventory Reconciliation: open inventory cost ≈ {:.9} SOL; realized + open ≈ {:+.9} SOL",
+        open_inventory_cost, realized_net - open_inventory_cost
+    ));
     
     log(LogTag::Transactions, "ATA_ANALYSIS", "=== END ATA & SOL FLOW ANALYSIS ===");
 }

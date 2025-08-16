@@ -413,6 +413,10 @@ pub struct SwapPnLInfo {
     pub effective_sol_spent: f64,    // For BUY: SOL spent for tokens (includes fees, excludes ATA rent)
     pub effective_sol_received: f64, // For SELL: SOL received for tokens (includes fees, excludes ATA rent)
     
+    // Token-specific ATA operations for this swap (counts)
+    pub ata_created_count: u32,
+    pub ata_closed_count: u32,
+    
     pub slot: Option<u64>,  // Solana slot number for reliable chronological sorting
     pub status: String,     // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
 }
@@ -3829,6 +3833,8 @@ impl TransactionsManager {
                 transaction.timestamp
             };
 
+            // IMPORTANT: For failed transactions, there is no executed trade.
+            // Effective trade amounts must be zero, and fees are accounted separately.
             return Some(SwapPnLInfo {
                 token_mint,
                 token_symbol,
@@ -3841,8 +3847,10 @@ impl TransactionsManager {
                 router,
                 fee_sol: transaction.fee_sol,
                 ata_rents: ata_rents_display,
-                effective_sol_spent: if swap_type == "Buy" { failed_costs + transaction.fee_sol } else { 0.0 },
-                effective_sol_received: if swap_type == "Sell" { 0.0 } else { 0.0 }, // Failed sells don't receive SOL
+                effective_sol_spent: 0.0,
+                effective_sol_received: 0.0, // No SOL received/spent in effective terms for failed trades
+                ata_created_count: 0,
+                ata_closed_count: 0,
                 slot: transaction.slot,
                 status: self.determine_transaction_status(transaction, &swap_type, failed_costs),
             });
@@ -4133,6 +4141,8 @@ impl TransactionsManager {
             ata_rents: ata_rents_display,
             effective_sol_spent,
             effective_sol_received,
+            ata_created_count: token_ata_creations as u32,
+            ata_closed_count: token_ata_closures as u32,
             slot: transaction.slot,
             status: self.determine_transaction_status(transaction, &swap_type, final_sol_amount),
         })
