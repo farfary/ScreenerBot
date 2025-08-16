@@ -62,6 +62,24 @@ fn is_direction_internal(direction: &TransactionDirection) -> bool {
     matches!(direction, TransactionDirection::Internal)
 }
 
+/// Helper function to safely get signature prefix for logging
+fn get_signature_prefix(signature: &str) -> &str {
+    if signature.len() >= 8 {
+        &signature[..8]
+    } else {
+        signature
+    }
+}
+
+/// Helper function to safely get mint address prefix for logging
+fn get_mint_prefix(mint: &str) -> &str {
+    if mint.len() >= 8 {
+        &mint[..8]
+    } else {
+        mint
+    }
+}
+
 // =============================================================================
 // CONFIGURATION CONSTANTS
 // =============================================================================
@@ -221,6 +239,10 @@ pub enum TransactionType {
         amount: f64,
         from: String,
         to: String,
+    },
+    AtaClose {
+        recovered_sol: f64,
+        token_mint: String,
     },
     Other {
         description: String,
@@ -792,7 +814,11 @@ impl TransactionsManager {
             ));
         }
 
-        // Analyze transaction type from raw data
+        // CRITICAL: Extract basic transaction info from raw data FIRST
+        // This populates slot, block_time, log_messages, success, fee, etc.
+        self.extract_basic_transaction_info(transaction).await?;
+
+        // Analyze transaction type from raw data (now has log messages)
         self.analyze_transaction_type(transaction).await?;
         
         // Additional analysis based on transaction type
@@ -1438,6 +1464,16 @@ impl TransactionsManager {
         transaction.last_updated = Utc::now();
 
         // Reset all calculated fields to default values (preserve raw data)
+        // Reset basic extracted fields
+        transaction.slot = None;
+        transaction.block_time = None;
+        transaction.success = false;
+        transaction.error_message = None;
+        transaction.fee_sol = 0.0;
+        transaction.log_messages = Vec::new();
+        transaction.instructions = Vec::new();
+        
+        // Reset analysis fields
         transaction.transaction_type = TransactionType::Unknown;
         transaction.direction = TransactionDirection::Internal;
         transaction.sol_balance_change = 0.0;
@@ -1648,7 +1684,7 @@ impl TransactionsManager {
                         } else {
                             log(LogTag::Transactions, "POSITION_NOT_FOUND", &format!(
                                 "⚠️ Could not find position with {} transaction signature: {}",
-                                transaction_type, &transaction_signature[..8]
+                                transaction_type, get_signature_prefix(&transaction_signature)
                             ));
                         }
                     }
@@ -1697,7 +1733,8 @@ impl TransactionsManager {
         ));
 
         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
+        let empty_cache = std::collections::HashMap::new();
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache) {
             log(LogTag::Transactions, "POSITION_ENTRY_SWAP_INFO", &format!(
                 "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
                 position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
@@ -1742,8 +1779,8 @@ impl TransactionsManager {
                 position.transaction_entry_verified = false;
                 log(LogTag::Transactions, "POSITION_ENTRY_MISMATCH", &format!(
                     "⚠️ Entry transaction {} type/token mismatch for position {}: expected Buy {}, got {} {} - PENDING TRANSACTION SHOULD BE REMOVED",
-                    &transaction.signature[..8], position.symbol, &position.mint[..8], 
-                    swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8]
+                    get_signature_prefix(&transaction.signature), position.symbol, get_mint_prefix(&position.mint), 
+                    swap_pnl_info.swap_type, get_mint_prefix(&swap_pnl_info.token_mint)
                 ));
             }
         } else {
@@ -1772,7 +1809,8 @@ impl TransactionsManager {
         }
 
         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction) {
+        let empty_cache = std::collections::HashMap::new();
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache) {
             if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
                 // Update position with analyze-swaps-exact calculations
                 position.transaction_exit_verified = true;
@@ -1878,6 +1916,31 @@ impl TransactionsManager {
                 // Extract fee
                 if let Some(fee) = meta.get("fee").and_then(|v| v.as_u64()) {
                     transaction.fee_sol = fee as f64 / 1_000_000_000.0; // Convert lamports to SOL
+                }
+
+                // Calculate SOL balance change from pre/post balances
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preBalances").and_then(|v| v.as_array()),
+                    meta.get("postBalances").and_then(|v| v.as_array())
+                ) {
+                    if !pre_balances.is_empty() && !post_balances.is_empty() {
+                        // First account is always the main wallet account
+                        let pre_balance = pre_balances[0].as_u64().unwrap_or(0) as f64;
+                        let post_balance = post_balances[0].as_u64().unwrap_or(0) as f64;
+                        
+                        // Calculate change in lamports and convert to SOL
+                        let balance_change_lamports = post_balance - pre_balance;
+                        transaction.sol_balance_change = balance_change_lamports / 1_000_000_000.0;
+                        
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "BALANCE", &format!(
+                                "SOL balance change for {}: {} lamports ({:.9} SOL)",
+                                &transaction.signature[..8],
+                                balance_change_lamports,
+                                transaction.sol_balance_change
+                            ));
+                        }
+                    }
                 }
 
                 // Check if transaction succeeded (err field is None or null)
@@ -2045,8 +2108,10 @@ impl TransactionsManager {
 
         // 1. Check for Pump.fun swaps (most common for meme coins)
         if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
+           log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") ||
            log_text.contains("Pump.fun") ||
-           transaction.instructions.iter().any(|i| i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
+           transaction.instructions.iter().any(|i| i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
+           transaction.instructions.iter().any(|i| i.program_id == "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") {
             
             if self.debug_enabled {
                 log(LogTag::Transactions, "STEP_1", &format!("{} - Pump.fun swap detected", 
@@ -2075,10 +2140,12 @@ impl TransactionsManager {
             }
         }
 
-        // 3. Check for Raydium swaps
+        // 3. Check for Raydium swaps (both AMM and CPMM)
         if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") ||
+           log_text.contains("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg") ||
            log_text.contains("Raydium") ||
-           transaction.instructions.iter().any(|i| i.program_id == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+           transaction.instructions.iter().any(|i| i.program_id == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" || 
+                                                    i.program_id.starts_with("CPMMoo8L")) {
             
             if self.debug_enabled {
                 log(LogTag::Transactions, "STEP_3", &format!("{} - Raydium swap detected", 
@@ -2123,31 +2190,41 @@ impl TransactionsManager {
             }
         }
 
-        // 6. Check for SOL transfers
+        // 6. Check for standalone ATA close operations
+        if let Ok(ata_close_data) = self.extract_ata_close_data(transaction).await {
+            transaction.transaction_type = ata_close_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "STEP_6", &format!("{} - ATA close detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 7. Check for SOL transfers
         if let Ok(transfer_data) = self.extract_sol_transfer_data(transaction).await {
             transaction.transaction_type = transfer_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_6", &format!("{} - SOL transfer detected", 
+                log(LogTag::Transactions, "STEP_7", &format!("{} - SOL transfer detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 7. Check for token transfers
+        // 8. Check for token transfers
         if let Ok(transfer_data) = self.extract_token_transfer_data(transaction).await {
             transaction.transaction_type = transfer_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_7", &format!("{} - Token transfer detected", 
+                log(LogTag::Transactions, "STEP_8", &format!("{} - Token transfer detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
         }
 
-        // 8. Check for token-to-token swaps (multi-hop transactions)
+        // 9. Check for token-to-token swaps (multi-hop transactions)
         if let Ok(swap_data) = self.extract_token_to_token_swap_data(transaction).await {
             transaction.transaction_type = swap_data;
             if self.debug_enabled {
-                log(LogTag::Transactions, "STEP_8", &format!("{} - Token-to-token swap detected", 
+                log(LogTag::Transactions, "STEP_9", &format!("{} - Token-to-token swap detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
@@ -2158,6 +2235,16 @@ impl TransactionsManager {
             transaction.transaction_type = other_data;
             if self.debug_enabled {
                 log(LogTag::Transactions, "STEP_9", &format!("{} - Other pattern detected", 
+                    &transaction.signature[..8]));
+            }
+            return Ok(());
+        }
+
+        // 10. Fallback: Check for failed DEX transactions based on program IDs
+        if let Ok(failed_swap_data) = self.detect_failed_dex_transactions(transaction).await {
+            transaction.transaction_type = failed_swap_data;
+            if self.debug_enabled {
+                log(LogTag::Transactions, "STEP_10", &format!("{} - Failed DEX transaction detected", 
                     &transaction.signature[..8]));
             }
             return Ok(());
@@ -2553,7 +2640,7 @@ impl TransactionsManager {
         // 1. Detect bulk SOL transfers to many addresses (spam/airdrop pattern)
         let system_transfers = self.count_system_sol_transfers(transaction);
         
-        if system_transfers >= 5 {
+        if system_transfers >= 3 {
             let total_amount: f64 = transaction.sol_balance_changes.iter()
                 .filter(|change| change.change < 0.0) // Only outgoing transfers
                 .map(|change| change.change.abs())
@@ -2593,7 +2680,29 @@ impl TransactionsManager {
             });
         }
 
-        // 3. Detect transactions with many small token transfers (dust/spam)
+        // 3. Detect NFT minting operations (Bubblegum compressed NFTs)
+        let log_text = transaction.log_messages.join(" ");
+        if log_text.contains("MintToCollectionV1") || 
+           log_text.contains("Leaf asset ID:") ||
+           transaction.instructions.iter().any(|i| i.program_id == "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY") {
+            
+            let description = "NFT Mint".to_string();
+            let details = "Bubblegum compressed NFT minting".to_string();
+            
+            if self.debug_enabled {
+                log(LogTag::Transactions, "NFT_MINT", &format!(
+                    "{} - Bubblegum NFT minting detected", 
+                    &transaction.signature[..8]
+                ));
+            }
+            
+            return Ok(TransactionType::Other {
+                description,
+                details,
+            });
+        }
+
+        // 4. Detect transactions with many small token transfers (dust/spam)
         if transaction.token_transfers.len() >= 10 {
             let small_transfers = transaction.token_transfers.iter()
                 .filter(|t| t.amount.abs() < 0.001)
@@ -2618,6 +2727,130 @@ impl TransactionsManager {
         }
 
         Err("No other patterns detected".to_string())
+    }
+
+    /// Detect failed DEX transactions based on program IDs alone
+    /// This is a fallback to catch transactions that failed but still involved DEX programs
+    async fn detect_failed_dex_transactions(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Known DEX program IDs
+        let dex_programs = [
+            ("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", "Jupiter"),
+            ("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P", "Pump.fun"),
+            ("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA", "Pump.fun"),
+            ("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", "Raydium"),
+            ("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg", "Raydium"),
+            ("9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP", "Orca"),
+            ("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", "Serum"),
+        ];
+        
+        // Check program IDs in instructions
+        for instruction in &transaction.instructions {
+            for (program_id, router_name) in &dex_programs {
+                if instruction.program_id == *program_id {
+                    // Found a DEX program - classify as failed swap
+                    let has_wsol = log_text.contains("So11111111111111111111111111111111111111112");
+                    let has_token_ops = log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") || 
+                                        log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+                    
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "FAILED_DEX", &format!(
+                            "{} - Failed {} transaction detected (program ID: {})", 
+                            &transaction.signature[..8], router_name, &program_id[..8]
+                        ));
+                    }
+                    
+                    // Extract token mint if possible
+                    let token_mint = self.extract_token_mint_from_failed_tx(transaction).await
+                        .unwrap_or_else(|| "Unknown".to_string());
+                    
+                    // Default to SOL->Token swap for failed DEX transactions
+                    return Ok(TransactionType::SwapSolToToken {
+                        router: router_name.to_string(),
+                        token_mint: token_mint,
+                        sol_amount: transaction.sol_balance_change.abs().max(0.000001),
+                        token_amount: 0.0, // Failed transactions typically don't move tokens
+                    });
+                }
+            }
+        }
+        
+        // Also check log messages for program IDs
+        for (program_id, router_name) in &dex_programs {
+            if log_text.contains(program_id) {
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "FAILED_DEX_LOGS", &format!(
+                        "{} - Failed {} transaction detected in logs", 
+                        &transaction.signature[..8], router_name
+                    ));
+                }
+                
+                let token_mint = self.extract_token_mint_from_failed_tx(transaction).await
+                    .unwrap_or_else(|| "Unknown".to_string());
+                
+                return Ok(TransactionType::SwapSolToToken {
+                    router: router_name.to_string(),
+                    token_mint: token_mint,
+                    sol_amount: transaction.sol_balance_change.abs().max(0.000001),
+                    token_amount: 0.0,
+                });
+            }
+        }
+        
+        Err("No DEX programs detected".to_string())
+    }
+    
+    /// Extract token mint from failed transaction using various fallback methods
+    async fn extract_token_mint_from_failed_tx(&self, transaction: &Transaction) -> Option<String> {
+        // Method 1: Check ATA creation instructions for non-WSOL mints
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for inner_group in inner_instructions {
+                        if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
+                            for instruction in instructions {
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if let Some(info) = parsed.get("info") {
+                                        if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
+                                            if mint != "So11111111111111111111111111111111111111112" {
+                                                return Some(mint.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Method 2: Check instruction accounts for token mints (common in Jupiter transactions)
+        for instruction in &transaction.instructions {
+            for account in &instruction.accounts {
+                // Token mints are typically 44 characters long and not WSOL
+                if account.len() == 44 && account != "So11111111111111111111111111111111111111112" && 
+                   account != "11111111111111111111111111111111" {
+                    return Some(account.clone());
+                }
+            }
+        }
+        
+        // Method 3: Look for mint addresses in log messages
+        let log_text = transaction.log_messages.join(" ");
+        let words: Vec<&str> = log_text.split_whitespace().collect();
+        for word in words {
+            if word.len() == 44 && word != "So11111111111111111111111111111111111111112" && 
+               word != "11111111111111111111111111111111" {
+                // Basic validation - check if it looks like a Solana address
+                if word.chars().all(|c| c.is_alphanumeric()) {
+                    return Some(word.to_string());
+                }
+            }
+        }
+        
+        None
     }
 
     /// Count system SOL transfers in a transaction
@@ -2817,6 +3050,9 @@ impl TransactionsManager {
             TransactionType::TokenTransfer { mint, .. } => {
                 mint == token_mint
             }
+            TransactionType::AtaClose { token_mint: mint, .. } => {
+                mint == token_mint
+            }
             _ => false
         }
     }
@@ -2848,6 +3084,9 @@ impl TransactionsManager {
             }
             TransactionType::TokenTransfer { mint, amount, .. } => {
                 format!("Token Transfer: {} of {}", amount, &mint[..8])
+            }
+            TransactionType::AtaClose { recovered_sol, token_mint } => {
+                format!("ATA Close: Recovered {} SOL from {}", recovered_sol, &token_mint[..8])
             }
             TransactionType::Other { description, .. } => {
                 format!("Other: {}", description)
@@ -2922,6 +3161,7 @@ impl TransactionsManager {
             TransactionType::SwapSolToToken { token_mint, .. } => Some(token_mint.clone()),
             TransactionType::SwapTokenToSol { token_mint, .. } => Some(token_mint.clone()),
             TransactionType::SwapTokenToToken { to_mint, .. } => Some(to_mint.clone()),
+            TransactionType::AtaClose { token_mint, .. } => Some(token_mint.clone()),
             _ => None,
         }
     }
@@ -3038,90 +3278,13 @@ impl TransactionsManager {
         Ok(recalculated_transactions)
     }
 
-    /// Get all swap transactions for comprehensive analysis
+    /// Get all swap transactions for comprehensive analysis with automatic calculation
     pub async fn get_all_swap_transactions(&mut self) -> Result<Vec<SwapPnLInfo>, String> {
-        let mut swap_transactions = Vec::new();
-        
-        // Load all cached transactions
-        let cache_dir = get_transactions_cache_dir();
-        
-        if !cache_dir.exists() {
-            log(LogTag::Transactions, "WARN", "Transaction cache directory does not exist");
-            return Ok(swap_transactions);
-        }
-
-        let entries = fs::read_dir(&cache_dir)
-            .map_err(|e| format!("Failed to read cache directory: {}", e))?;
-
-        let mut processed_count = 0;
-        let mut swap_count = 0;
-
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-            let path = entry.path();
-            
-            if !path.is_file() || !path.extension().map_or(false, |ext| ext == "json") {
-                continue;
-            }
-
-            // Read and parse transaction
-            match self.load_transaction_from_cache(&path).await {
-                Ok(mut transaction) => {
-                    processed_count += 1;
-                    
-                    // Re-analyze if needed to ensure we have complete information
-                    if transaction.token_info.is_none() && self.is_swap_transaction(&transaction) {
-                        if let Err(e) = self.analyze_transaction(&mut transaction).await {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "Failed to re-analyze transaction {}: {}", &transaction.signature[..8], e
-                            ));
-                            continue;
-                        }
-                        
-                        // Re-cache with updated information
-                        if let Err(e) = self.cache_transaction(&transaction).await {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "Failed to re-cache transaction {}: {}", &transaction.signature[..8], e
-                            ));
-                        }
-                    }
-                    
-                    // Convert to SwapPnLInfo if it's a swap
-                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction) {
-                        swap_transactions.push(swap_info);
-                        swap_count += 1;
-                    }
-                }
-                Err(e) => {
-                    log(LogTag::Transactions, "WARN", &format!(
-                        "Failed to load transaction from {}: {}", path.display(), e
-                    ));
-                }
-            }
-        }
-
-        log(LogTag::Transactions, "INFO", &format!(
-            "Processed {} transactions, found {} swaps", processed_count, swap_count
-        ));
-
-        // Sort by slot (newest first for proper chronological order)
-        // Handle Option<u64> slots properly - None slots go to end
-        swap_transactions.sort_by(|a, b| {
-            match (b.slot, a.slot) {
-                (Some(b_slot), Some(a_slot)) => b_slot.cmp(&a_slot),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
-        });
-
-        Ok(swap_transactions)
+        self.get_all_swap_transactions_limited(None).await
     }
-
-    /// Get all swap transactions with optional force recalculation
-    /// When force_recalculate is true, all transactions are reanalyzed and cache is updated
-    /// The count parameter can limit the number of transactions to process (newest first)
-    pub async fn get_all_swap_transactions_with_recalc(&mut self, force_recalculate: bool, count: Option<usize>) -> Result<Vec<SwapPnLInfo>, String> {
+    
+    /// Get swap transactions with optional count limit and automatic calculation
+    pub async fn get_all_swap_transactions_limited(&mut self, count: Option<usize>) -> Result<Vec<SwapPnLInfo>, String> {
         let mut swap_transactions = Vec::new();
         
         // Load all cached transactions
@@ -3133,7 +3296,7 @@ impl TransactionsManager {
         }
 
         // Read all entries first 
-        let mut entries: Vec<_> = fs::read_dir(&cache_dir)
+        let entries: Vec<_> = fs::read_dir(&cache_dir)
             .map_err(|e| format!("Failed to read cache directory: {}", e))?
             .filter_map(Result::ok)
             .filter(|entry| {
@@ -3151,10 +3314,16 @@ impl TransactionsManager {
             // Quick load to get slot and block_time for sorting
             match fs::read_to_string(&path) {
                 Ok(content) => {
-                    if let Ok(transaction) = serde_json::from_str::<Transaction>(&content) {
-                        let slot = transaction.slot.unwrap_or(0);
-                        let block_time = transaction.block_time.unwrap_or(0);
-                        transactions_with_metadata.push((entry, transaction.slot, block_time));
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(transaction_data) => {
+                            let slot = transaction_data.get("slot").and_then(|s| s.as_u64());
+                            let block_time = transaction_data.get("block_time").and_then(|bt| bt.as_i64()).unwrap_or(0);
+                            transactions_with_metadata.push((entry, slot, block_time));
+                        }
+                        Err(_) => {
+                            // If we can't parse, add with default values (will sort to end)
+                            transactions_with_metadata.push((entry, None, 0));
+                        }
                     }
                 }
                 Err(_) => {
@@ -3179,6 +3348,81 @@ impl TransactionsManager {
             transactions_with_metadata.truncate(limit);
         }
 
+        // Pre-load token symbols for better display - collect all unique token mints first
+        let mut token_mint_set = std::collections::HashSet::new();
+        let mut token_symbol_cache = std::collections::HashMap::new();
+        
+        // First pass: collect unique token mints from all transactions
+        for (entry, _, _) in &transactions_with_metadata {
+            let path = entry.path();
+            if let Ok(transaction) = self.load_transaction_from_cache(&path).await {
+                // Extract token mints from raw transaction data (available before analysis)
+                if let Some(ref raw_data) = transaction.raw_transaction_data {
+                    if let Some(ref meta) = raw_data.get("meta") {
+                        // Extract from postTokenBalances
+                        if let Some(post_balances) = meta.get("postTokenBalances") {
+                            if let Some(balances_array) = post_balances.as_array() {
+                                for balance in balances_array {
+                                    if let Some(mint) = balance.get("mint").and_then(|m| m.as_str()) {
+                                        if mint != "So11111111111111111111111111111111111111112" {
+                                            token_mint_set.insert(mint.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Extract from preTokenBalances
+                        if let Some(pre_balances) = meta.get("preTokenBalances") {
+                            if let Some(balances_array) = pre_balances.as_array() {
+                                for balance in balances_array {
+                                    if let Some(mint) = balance.get("mint").and_then(|m| m.as_str()) {
+                                        if mint != "So11111111111111111111111111111111111111112" {
+                                            token_mint_set.insert(mint.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Secondary: Extract from analyzed transaction_type (only if already analyzed)
+                match &transaction.transaction_type {
+                    TransactionType::SwapSolToToken { token_mint, .. } => {
+                        token_mint_set.insert(token_mint.clone());
+                    }
+                    TransactionType::SwapTokenToSol { token_mint, .. } => {
+                        token_mint_set.insert(token_mint.clone());
+                    }
+                    _ => {
+                        // For unanalyzed transactions, also try token_info if it exists
+                        if let Some(ref token_info) = transaction.token_info {
+                            token_mint_set.insert(token_info.mint.clone());
+                        }
+                        
+                        // And token_balance_changes if they exist
+                        for balance_change in &transaction.token_balance_changes {
+                            if balance_change.mint != "So11111111111111111111111111111111111111112" {
+                                token_mint_set.insert(balance_change.mint.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Pre-load token symbols from database
+        for token_mint in token_mint_set {
+            if let Some(token) = crate::tokens::get_token_from_db(&token_mint).await {
+                token_symbol_cache.insert(token_mint.clone(), token.symbol);
+            }
+        }
+        
+        log(LogTag::Transactions, "INFO", &format!(
+            "Pre-loaded symbols for {} unique tokens", token_symbol_cache.len()
+        ));
+
         let mut processed_count = 0;
         let mut swap_count = 0;
         let mut recalculated_count = 0;
@@ -3195,64 +3439,45 @@ impl TransactionsManager {
                 Ok(mut transaction) => {
                     processed_count += 1;
                     
-                    // Force recalculation if requested
-                    if force_recalculate {
-                        // Reset analysis fields to force fresh calculation
-                        self.recalculate_transaction_analysis(&mut transaction).await?;
-                        
-                        // Re-run comprehensive analysis
-                        if let Err(e) = self.analyze_transaction(&mut transaction).await {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "Failed to recalculate transaction {}: {}", &transaction.signature[..8], e
-                            ));
-                            continue;
-                        }
-                        
-                        // Save updated transaction back to cache
-                        if let Err(e) = self.cache_transaction(&transaction).await {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "Failed to save recalculated transaction {}: {}", &transaction.signature[..8], e
-                            ));
-                        } else {
-                            recalculated_count += 1;
-                        }
-                    } else {
-                        // Re-analyze if needed to ensure we have complete information
-                        if transaction.token_info.is_none() && self.is_swap_transaction(&transaction) {
-                            if let Err(e) = self.analyze_transaction(&mut transaction).await {
-                                log(LogTag::Transactions, "WARN", &format!(
-                                    "Failed to re-analyze transaction {}: {}", &transaction.signature[..8], e
-                                ));
-                                continue;
-                            }
-                        }
+                    // ALWAYS force recalculation to ensure we have complete analysis
+                    // Reset analysis fields to force fresh calculation
+                    self.recalculate_transaction_analysis(&mut transaction).await?;
+                    
+                    // Re-run comprehensive analysis
+                    if let Err(e) = self.analyze_transaction(&mut transaction).await {
+                        log(LogTag::Transactions, "WARN", &format!(
+                            "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                        ));
+                        continue;
                     }
-
-                    // Check if this is a swap transaction and convert to SwapPnLInfo
-                    if self.is_swap_transaction(&transaction) {
-                        if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction) {
-                            swap_transactions.push(swap_info);
-                            swap_count += 1;
-                        }
+                    
+                    // Save updated transaction back to cache
+                    if let Err(e) = self.cache_transaction(&transaction).await {
+                        log(LogTag::Transactions, "WARN", &format!(
+                            "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                        ));
+                    }
+                    
+                    recalculated_count += 1;
+                    
+                    // Convert to SwapPnLInfo if it's a swap transaction
+                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction, &token_symbol_cache) {
+                        swap_transactions.push(swap_info);
+                        swap_count += 1;
                     }
                 }
                 Err(e) => {
-                    log(LogTag::Transactions, "WARN", &format!("Failed to load transaction from {}: {}", path.display(), e));
-                    continue;
+                    log(LogTag::Transactions, "WARN", &format!(
+                        "Failed to load transaction from {}: {}", path.display(), e
+                    ));
                 }
             }
         }
 
-        if force_recalculate {
-            log(LogTag::Transactions, "SUCCESS", &format!(
-                "Processed {} transactions, found {} swaps, recalculated {} transactions", 
-                processed_count, swap_count, recalculated_count
-            ));
-        } else {
-            log(LogTag::Transactions, "INFO", &format!(
-                "Processed {} transactions, found {} swaps", processed_count, swap_count
-            ));
-        }
+        log(LogTag::Transactions, "SUCCESS", &format!(
+            "Processed {} transactions, found {} swaps, recalculated {} transactions", 
+            processed_count, swap_count, recalculated_count
+        ));
 
         // Sort by slot (newest first for proper chronological order)
         // Handle Option<u64> slots properly - None slots go to end
@@ -3321,55 +3546,69 @@ impl TransactionsManager {
     }
 
     /// Convert transaction to SwapPnLInfo using precise ATA rent detection
-    fn convert_to_swap_pnl_info(&self, transaction: &Transaction) -> Option<SwapPnLInfo> {
+    fn convert_to_swap_pnl_info(&self, transaction: &Transaction, token_symbol_cache: &std::collections::HashMap<String, String>) -> Option<SwapPnLInfo> {
         if !self.is_swap_transaction(transaction) {
             return None;
         }
 
-        let (swap_type, sol_amount_raw, token_amount, token_mint) = match &transaction.transaction_type {
-            TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, .. } => {
-                ("Buy".to_string(), *sol_amount, *token_amount, token_mint.clone())
-            }
-            TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, .. } => {
-                ("Sell".to_string(), *sol_amount, *token_amount, token_mint.clone())
-            }
-            TransactionType::SwapTokenToToken { from_mint, to_mint, from_amount, to_amount, .. } => {
-                // For SwapTokenToToken, we need to determine if this involves SOL by checking:
-                // 1. SOL balance change direction (gained SOL = sell, spent SOL = buy)
-                // 2. Token transfer amounts to get the actual token amounts traded
+        // Extract swap data from transaction balance changes and token transfers
+        // rather than from enum fields (which may not have complete data)
+        let (swap_type, sol_amount_raw, token_amount, token_mint, router) = match &transaction.transaction_type {
+            TransactionType::SwapSolToToken { router, .. } => {
+                // Extract token mint from token transfers or transaction type
+                let token_mint = if let Some(mint) = self.extract_token_mint_from_transaction(transaction) {
+                    mint
+                } else {
+                    return None;
+                };
                 
-                // Get the token amount from token transfers for more accurate data
-                let (token_transfer_amount, transfer_mint) = if !transaction.token_transfers.is_empty() {
+                // For buy: SOL balance went down (spent), token balance went up
+                let sol_spent = transaction.sol_balance_change.abs();
+                let token_received = transaction.token_transfers.iter()
+                    .filter(|t| t.mint == token_mint && t.amount > 0.0)
+                    .map(|t| t.amount)
+                    .sum::<f64>();
+                
+                ("Buy".to_string(), sol_spent, token_received, token_mint, router.clone())
+            }
+            TransactionType::SwapTokenToSol { router, .. } => {
+                // Extract token mint from token transfers or transaction type
+                let token_mint = if let Some(mint) = self.extract_token_mint_from_transaction(transaction) {
+                    mint
+                } else {
+                    return None;
+                };
+                
+                // For sell: SOL balance went up (received), token balance went down
+                let sol_received = transaction.sol_balance_change.max(0.0);
+                let token_spent = transaction.token_transfers.iter()
+                    .filter(|t| t.mint == token_mint && t.amount < 0.0)
+                    .map(|t| t.amount.abs())
+                    .sum::<f64>();
+                
+                ("Sell".to_string(), sol_received, token_spent, token_mint, router.clone())
+            }
+            TransactionType::SwapTokenToToken { router, .. } => {
+                // For token-to-token swaps, determine if this involves SOL
+                if !transaction.token_transfers.is_empty() {
                     // Find the largest absolute token transfer (this is usually the main trade)
                     let largest_transfer = transaction.token_transfers.iter()
-                        .max_by(|a, b| a.amount.abs().partial_cmp(&b.amount.abs()).unwrap_or(std::cmp::Ordering::Equal))
-                        .unwrap();
-                    (largest_transfer.amount, largest_transfer.mint.clone())
-                } else {
-                    // Fallback to from_amount/to_amount if no token transfers
-                    if *from_amount != 0.0 {
-                        (*from_amount, from_mint.clone())
-                    } else {
-                        (*to_amount, to_mint.clone())
+                        .max_by(|a, b| a.amount.abs().partial_cmp(&b.amount.abs()).unwrap_or(std::cmp::Ordering::Equal))?;
+                    
+                    let token_mint = largest_transfer.mint.clone();
+                    
+                    // If we gained SOL and have token outflow (negative), it's a sell
+                    if transaction.sol_balance_change > 0.0 && largest_transfer.amount < 0.0 {
+                        ("Sell".to_string(), transaction.sol_balance_change, largest_transfer.amount.abs(), token_mint, router.clone())
                     }
-                };
-
-                // If we gained SOL and have token outflow (negative), it's a sell
-                if transaction.sol_balance_change > 0.0 && token_transfer_amount < 0.0 {
-                    ("Sell".to_string(), transaction.sol_balance_change, token_transfer_amount.abs(), transfer_mint)
-                }
-                // If we spent SOL and have token inflow (positive), it's a buy
-                else if transaction.sol_balance_change < 0.0 && token_transfer_amount > 0.0 {
-                    ("Buy".to_string(), transaction.sol_balance_change.abs(), token_transfer_amount, transfer_mint)
-                }
-                // Fallback: use the original logic if token transfers don't help
-                else if transaction.sol_balance_change > 0.0 && *from_amount != 0.0 {
-                    ("Sell".to_string(), transaction.sol_balance_change, *from_amount, from_mint.clone())
-                }
-                else if transaction.sol_balance_change < 0.0 && *to_amount != 0.0 {
-                    ("Buy".to_string(), transaction.sol_balance_change.abs(), *to_amount, to_mint.clone())
-                }
-                else {
+                    // If we spent SOL and have token inflow (positive), it's a buy
+                    else if transaction.sol_balance_change < 0.0 && largest_transfer.amount > 0.0 {
+                        ("Buy".to_string(), transaction.sol_balance_change.abs(), largest_transfer.amount, token_mint, router.clone())
+                    }
+                    else {
+                        return None;
+                    }
+                } else {
                     return None;
                 }
             }
@@ -3395,7 +3634,7 @@ impl TransactionsManager {
             let failed_costs = transaction.sol_balance_change.abs();
             
             let token_symbol = transaction.token_symbol.clone()
-                .unwrap_or_else(|| format!("TOKEN_{}", &token_mint[..8]));
+                .unwrap_or_else(|| format!("TOKEN_{}", get_mint_prefix(&token_mint)));
             
             let router = self.extract_router_from_transaction(transaction);
             let blockchain_timestamp = if let Some(block_time) = transaction.block_time {
@@ -3625,10 +3864,21 @@ impl TransactionsManager {
             0.0 
         };
         
-        let token_symbol = transaction.token_symbol.clone()
-            .unwrap_or_else(|| format!("TOKEN_{}", &token_mint[..8]));
+        let token_symbol = if let Some(existing_symbol) = &transaction.token_symbol {
+            // Use existing symbol if available
+            existing_symbol.clone()
+        } else if let Some(cached_symbol) = token_symbol_cache.get(&token_mint) {
+            // Use cached symbol from database lookup
+            cached_symbol.clone()
+        } else {
+            // Fallback to mint-based name
+            if token_mint.len() >= 8 {
+                format!("TOKEN_{}", &token_mint[..8])
+            } else {
+                format!("TOKEN_{}", token_mint)
+            }
+        };
         
-        let router = self.extract_router_from_transaction(transaction);
         let blockchain_timestamp = if let Some(block_time) = transaction.block_time {
             DateTime::<Utc>::from_timestamp(block_time, 0).unwrap_or(transaction.timestamp)
         } else {
@@ -3651,7 +3901,7 @@ impl TransactionsManager {
             calculated_price_sol,
             timestamp: blockchain_timestamp,
             signature: transaction.signature.clone(),
-            router,
+            router, // Use the router we extracted from the transaction type
             fee_sol: transaction.fee_sol,
             ata_rents: ata_rents_display,
             slot: transaction.slot,
@@ -3921,7 +4171,8 @@ impl TransactionsManager {
                         ));
 
                         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction) {
+                        let empty_cache = std::collections::HashMap::new();
+                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache) {
                             log(LogTag::Transactions, "RECALC_ENTRY_SWAP_INFO", &format!(
                                 "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
                                 position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
@@ -3992,7 +4243,8 @@ impl TransactionsManager {
                 match get_transaction(exit_sig).await {
                     Ok(Some(transaction)) => {
                         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction) {
+                        let empty_cache = std::collections::HashMap::new();
+                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache) {
                             if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
                                 let old_price = position.effective_exit_price;
                                 
@@ -5337,69 +5589,184 @@ impl TransactionsManager {
     async fn analyze_jupiter_swap(&self, transaction: &Transaction) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
         
-        // Check for SOL to Token swap patterns
-        if log_text.contains("swap") || log_text.contains("Swap") {
-            // Look for wrapped SOL (WSOL) operations indicating SOL->Token
-            let has_wsol_wrap = log_text.contains("So11111111111111111111111111111111111111112");
+        // Jupiter swaps are identified by:
+        // 1. Jupiter program ID presence (already checked in caller)
+        // 2. ATA creation for tokens (indicating swap setup)
+        // 3. Token transfer instructions
+        // 4. Router instruction patterns
+        
+        if self.debug_enabled {
+            log(LogTag::Transactions, "PUMP_ANALYSIS", &format!("{} - Analyzing Jupiter swap", 
+                &transaction.signature[..8]));
+        }
+        
+        // Extract token mint from the transaction data
+        let target_token_mint = self.extract_target_token_mint_from_jupiter(transaction).await;
+        
+        let has_wsol_operations = log_text.contains("So11111111111111111111111111111111111111112");
+        let has_token_operations = log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") || 
+                                   log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        let has_jupiter_route = log_text.contains("Instruction: Route") || 
+                               log_text.contains("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
+        
+        // Extract actual SOL amount from transfer instructions or balance changes
+        let sol_amount = self.extract_sol_amount_from_jupiter(transaction).await;
+        let token_amount = self.extract_token_amount_from_jupiter(transaction).await;
+        
+        // Jupiter swaps can be detected even if they fail, based on intent and instruction patterns
+        if has_jupiter_route && has_token_operations {
             
-            if has_wsol_wrap && transaction.sol_balance_change < 0.0 {
+            // Determine swap direction based on SOL balance change and token operations
+            if transaction.sol_balance_change < -0.000001 || sol_amount > 0.000001 {
+                // SOL to Token swap (including failed attempts)
                 return Ok(TransactionType::SwapSolToToken {
-                    token_mint: "Unknown".to_string(),
-                    sol_amount: transaction.sol_balance_change.abs(),
-                    token_amount: 0.0, // Would need to extract from token transfers
                     router: "Jupiter".to_string(),
+                    token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
+                    sol_amount: sol_amount.max(transaction.sol_balance_change.abs()),
+                    token_amount: token_amount,
                 });
-            } else if has_wsol_wrap && transaction.sol_balance_change > 0.0 {
+            } 
+            else if transaction.sol_balance_change > 0.000001 {
+                // Token to SOL swap
                 return Ok(TransactionType::SwapTokenToSol {
-                    token_mint: "Unknown".to_string(),
-                    token_amount: 0.0, // Would need to extract from token transfers
+                    router: "Jupiter".to_string(),
+                    token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
+                    token_amount: token_amount,
                     sol_amount: transaction.sol_balance_change.abs(),
-                    router: "Jupiter".to_string(),
                 });
-            } else if !transaction.token_transfers.is_empty() {
+            }
+            else if has_token_operations && !transaction.token_transfers.is_empty() {
+                // Token to Token swap
                 return Ok(TransactionType::SwapTokenToToken {
-                    from_mint: "Unknown".to_string(),
-                    to_mint: "Unknown".to_string(),
-                    from_amount: 0.0,
-                    to_amount: 0.0,
                     router: "Jupiter".to_string(),
+                    from_mint: "Unknown".to_string(),
+                    to_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
+                    from_amount: 0.0,
+                    to_amount: token_amount,
+                });
+            }
+            else {
+                // Generic Jupiter swap when we can't determine exact type
+                return Ok(TransactionType::SwapSolToToken {
+                    router: "Jupiter".to_string(),
+                    token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
+                    sol_amount: sol_amount.max(0.000001),
+                    token_amount: token_amount,
                 });
             }
         }
         
         Err("Not a Jupiter swap".to_string())
     }
+    
+    /// Extract target token mint from Jupiter transaction
+    async fn extract_target_token_mint_from_jupiter(&self, transaction: &Transaction) -> Option<String> {
+        // Look for ATA creation instructions for non-WSOL tokens
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for inner_group in inner_instructions {
+                        if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
+                            for instruction in instructions {
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if let Some(info) = parsed.get("info") {
+                                        if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
+                                            if mint != "So11111111111111111111111111111111111111112" {
+                                                return Some(mint.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    /// Extract SOL amount from Jupiter transaction
+    async fn extract_sol_amount_from_jupiter(&self, transaction: &Transaction) -> f64 {
+        // Look for SOL transfer instructions in the transaction
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(transaction_data) = raw_data.get("transaction") {
+                if let Some(message) = transaction_data.get("message") {
+                    if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
+                        for instruction in instructions {
+                            if let Some(parsed) = instruction.get("parsed") {
+                                if let Some(info) = parsed.get("info") {
+                                    if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
+                                        return lamports as f64 / 1_000_000_000.0; // Convert to SOL
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        transaction.sol_balance_change.abs()
+    }
+    
+    /// Extract token amount from Jupiter transaction
+    async fn extract_token_amount_from_jupiter(&self, transaction: &Transaction) -> f64 {
+        // Look for token transfer instructions
+        if !transaction.token_transfers.is_empty() {
+            return transaction.token_transfers[0].amount;
+        }
+        0.0
+    }
 
-    /// Analyze Raydium swap transactions
+    /// Analyze Raydium swap transactions (both AMM and CPMM)
     async fn analyze_raydium_swap(&self, transaction: &Transaction) -> Result<TransactionType, String> {
         let log_text = transaction.log_messages.join(" ");
         
-        if log_text.contains("swap") || log_text.contains("Swap") {
-            let has_wsol = log_text.contains("So11111111111111111111111111111111111111112");
-            
-            if has_wsol && transaction.sol_balance_change < 0.0 {
-                return Ok(TransactionType::SwapSolToToken {
-                    token_mint: "Unknown".to_string(),
-                    sol_amount: transaction.sol_balance_change.abs(),
-                    token_amount: 0.0,
-                    router: "Raydium".to_string(),
-                });
-            } else if has_wsol && transaction.sol_balance_change > 0.0 {
-                return Ok(TransactionType::SwapTokenToSol {
-                    token_mint: "Unknown".to_string(),
-                    token_amount: 0.0,
-                    sol_amount: transaction.sol_balance_change.abs(),
-                    router: "Raydium".to_string(),
-                });
-            } else if !transaction.token_transfers.is_empty() {
-                return Ok(TransactionType::SwapTokenToToken {
-                    from_mint: "Unknown".to_string(),
-                    to_mint: "Unknown".to_string(),
-                    from_amount: 0.0,
-                    to_amount: 0.0,
-                    router: "Raydium".to_string(),
-                });
-            }
+        // Raydium swaps are identified by:
+        // 1. Raydium program ID presence (already checked in caller)  
+        // 2. Token operations (Token program, ATA operations)
+        // 3. SOL balance changes indicating SOL involvement
+        // 4. CPMM or AMM program instructions
+        
+        let has_token_operations = log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
+                                   log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+        
+        // Check for SOL to Token swap (SOL spent) - lower threshold for failed transactions
+        if transaction.sol_balance_change < -0.000001 {  // Spent more than 0.000001 SOL
+            return Ok(TransactionType::SwapSolToToken {
+                token_mint: "Unknown".to_string(),
+                sol_amount: transaction.sol_balance_change.abs(),
+                token_amount: 0.0,
+                router: "Raydium".to_string(),
+            });
+        } 
+        // Check for Token to SOL swap (SOL received)
+        else if transaction.sol_balance_change > 0.000001 {  // Received more than 0.000001 SOL
+            return Ok(TransactionType::SwapTokenToSol {
+                token_mint: "Unknown".to_string(),
+                token_amount: 0.0,
+                sol_amount: transaction.sol_balance_change.abs(),
+                router: "Raydium".to_string(),
+            });
+        }
+        // Check for Token to Token swap (minimal SOL change but has token operations)
+        else if has_token_operations && !transaction.token_transfers.is_empty() {
+            return Ok(TransactionType::SwapTokenToToken {
+                from_mint: "Unknown".to_string(),
+                to_mint: "Unknown".to_string(),
+                from_amount: 0.0,
+                to_amount: 0.0,
+                router: "Raydium".to_string(),
+            });
+        }
+        // Detect based on program presence even if no clear balance change
+        else if has_token_operations {
+            return Ok(TransactionType::SwapSolToToken {
+                token_mint: "Unknown".to_string(),
+                sol_amount: transaction.sol_balance_change.abs(),
+                token_amount: 0.0,
+                router: "Raydium".to_string(),
+            });
         }
         
         Err("Not a Raydium swap".to_string())
@@ -5541,29 +5908,137 @@ impl TransactionsManager {
                 &transaction.signature[..8]));
         }
 
-        // Check for Pump.fun specific patterns
-        if log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") {
-            // Determine direction based on SOL balance change
-            if transaction.sol_balance_change < -0.001 {
-                // SOL to Token (Buy)
+        // Extract token mint from Pump.fun transaction
+        let target_token_mint = self.extract_target_token_mint_from_pumpfun(transaction).await;
+        
+        // Check for Pump.fun specific patterns - both program IDs and logs
+        let has_pumpfun_program = log_text.contains("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P") ||
+                                  log_text.contains("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA") ||
+                                  transaction.instructions.iter().any(|i| 
+                                      i.program_id == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" ||
+                                      i.program_id == "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
+        
+        let has_buy_instruction = log_text.contains("Instruction: Buy");
+        let has_sell_instruction = log_text.contains("Instruction: Sell");
+        
+        if has_pumpfun_program {
+            // Extract actual amounts from transaction data
+            let sol_amount = self.extract_sol_amount_from_pumpfun(transaction).await;
+            let token_amount = self.extract_token_amount_from_pumpfun(transaction).await;
+            
+            // Determine direction based on instruction patterns and balance changes
+            if has_buy_instruction || transaction.sol_balance_change < -0.000001 || sol_amount > 0.000001 {
+                // SOL to Token (Buy) - including failed attempts
                 return Ok(TransactionType::SwapSolToToken {
-                    token_mint: "Pump.fun_Token".to_string(),
-                    sol_amount: transaction.sol_balance_change.abs(),
-                    token_amount: 0.0,
+                    token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                    sol_amount: sol_amount.max(transaction.sol_balance_change.abs()),
+                    token_amount: token_amount,
                     router: "Pump.fun".to_string(),
                 });
-            } else if transaction.sol_balance_change > 0.001 {
+            } else if has_sell_instruction || transaction.sol_balance_change > 0.000001 {
                 // Token to SOL (Sell)
                 return Ok(TransactionType::SwapTokenToSol {
-                    token_mint: "Pump.fun_Token".to_string(),
-                    token_amount: 0.0,
-                    sol_amount: transaction.sol_balance_change,
+                    token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                    token_amount: token_amount,
+                    sol_amount: transaction.sol_balance_change.abs(),
+                    router: "Pump.fun".to_string(),
+                });
+            } else {
+                // Default to buy for pump.fun transactions
+                return Ok(TransactionType::SwapSolToToken {
+                    token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                    sol_amount: sol_amount.max(0.000001),
+                    token_amount: token_amount,
                     router: "Pump.fun".to_string(),
                 });
             }
         }
         
         Err("No Pump.fun swap pattern found".to_string())
+    }
+    
+    /// Extract target token mint from Pump.fun transaction
+    async fn extract_target_token_mint_from_pumpfun(&self, transaction: &Transaction) -> Option<String> {
+        // Look for token account creation or transfer instructions for non-WSOL tokens
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for inner_group in inner_instructions {
+                        if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
+                            for instruction in instructions {
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if let Some(info) = parsed.get("info") {
+                                        if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
+                                            if mint != "So11111111111111111111111111111111111111112" {
+                                                return Some(mint.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    /// Extract SOL amount from Pump.fun transaction
+    async fn extract_sol_amount_from_pumpfun(&self, transaction: &Transaction) -> f64 {
+        // Look for SOL transfer instructions
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(transaction_data) = raw_data.get("transaction") {
+                if let Some(message) = transaction_data.get("message") {
+                    if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
+                        for instruction in instructions {
+                            if let Some(parsed) = instruction.get("parsed") {
+                                if let Some(info) = parsed.get("info") {
+                                    if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
+                                        return lamports as f64 / 1_000_000_000.0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        transaction.sol_balance_change.abs()
+    }
+    
+    /// Extract token amount from Pump.fun transaction
+    async fn extract_token_amount_from_pumpfun(&self, transaction: &Transaction) -> f64 {
+        // Look for token transfer amounts in inner instructions
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for inner_group in inner_instructions {
+                        if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
+                            for instruction in instructions {
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if let Some(info) = parsed.get("info") {
+                                        if let Some(token_amount) = info.get("tokenAmount") {
+                                            if let Some(ui_amount) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
+                                                if ui_amount > 0.0 {
+                                                    return ui_amount;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fallback to token_transfers if available
+        if !transaction.token_transfers.is_empty() {
+            return transaction.token_transfers[0].amount;
+        }
+        0.0
     }
 
     /// Analyze Serum/OpenBook swap operations
@@ -5602,19 +6077,83 @@ impl TransactionsManager {
 
     /// Extract SOL transfer data
     async fn extract_sol_transfer_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
-        // Look for simple SOL transfers (system program transfers)
-        if transaction.instructions.iter().any(|i| 
-            i.program_id == "11111111111111111111111111111111" && 
-            i.instruction_type == "transfer"
-        ) {
-            return Ok(TransactionType::SolTransfer {
-                amount: transaction.sol_balance_change.abs(),
-                from: "wallet".to_string(),
-                to: "destination".to_string(),
-            });
+        // Only detect simple SOL transfers with very specific criteria:
+        // 1. Must be 1-3 instructions maximum (simple transfers)
+        // 2. Must have meaningful SOL amount change (not just fees)
+        // 3. Must be primarily system program transfers
+        
+        if transaction.instructions.len() > 3 {
+            return Err("Too many instructions for simple SOL transfer".to_string());
         }
         
-        Err("No SOL transfer pattern found".to_string())
+        // Check if SOL amount change is meaningful (more than just transaction fees)
+        if transaction.sol_balance_change.abs() < 0.0001 {
+            return Err("SOL amount too small for meaningful transfer".to_string());
+        }
+        
+        // Check if it's primarily system program transfers
+        let system_transfer_count = transaction.instructions.iter()
+            .filter(|i| i.program_id == "11111111111111111111111111111111" && i.instruction_type == "transfer")
+            .count();
+            
+        // Must have at least one system transfer and it should be the majority of instructions
+        if system_transfer_count == 0 || system_transfer_count < transaction.instructions.len() / 2 {
+            return Err("Not primarily system program transfers".to_string());
+        }
+        
+        Ok(TransactionType::SolTransfer {
+            amount: transaction.sol_balance_change.abs(),
+            from: "wallet".to_string(),
+            to: "destination".to_string(),
+        })
+    }
+
+    /// Extract ATA close operation data (standalone ATA closures)
+    async fn extract_ata_close_data(&self, transaction: &Transaction) -> Result<TransactionType, String> {
+        // Check for single closeAccount instruction
+        if transaction.instructions.len() != 1 {
+            return Err("Not a single instruction transaction".to_string());
+        }
+        
+        let instruction = &transaction.instructions[0];
+        
+        // Check if it's a Token Program (original or Token-2022) closeAccount instruction
+        if (instruction.program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" || 
+            instruction.program_id == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") && 
+           instruction.instruction_type == "closeAccount" {
+            
+            // Check if SOL balance increased (ATA rent recovery)
+            if transaction.sol_balance_change > 0.0 {
+                // Try to extract token mint from ATA closure
+                let token_mint = self.extract_token_mint_from_ata_close(transaction).unwrap_or_else(|| "Unknown".to_string());
+                
+                return Ok(TransactionType::AtaClose {
+                    recovered_sol: transaction.sol_balance_change,
+                    token_mint,
+                });
+            }
+        }
+        
+        Err("No ATA close pattern found".to_string())
+    }
+
+    /// Extract token mint from ATA close operation
+    fn extract_token_mint_from_ata_close(&self, transaction: &Transaction) -> Option<String> {
+        // Look for token balance changes to identify the mint
+        if !transaction.token_balance_changes.is_empty() {
+            return Some(transaction.token_balance_changes[0].mint.clone());
+        }
+        
+        // If no token balance changes, check log messages for mint information
+        let log_text = transaction.log_messages.join(" ");
+        if let Some(start) = log_text.find("mint: ") {
+            let mint_start = start + 6;
+            if let Some(end) = log_text[mint_start..].find(' ') {
+                return Some(log_text[mint_start..mint_start + end].to_string());
+            }
+        }
+        
+        None
     }
 
     /// Extract bulk operation data (spam detection) - DISABLED

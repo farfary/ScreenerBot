@@ -25,16 +25,16 @@
 /// - Fetch limited transactions for testing: cargo run --bin main_transactions_debug -- --fetch 50
 /// - Fetch ALL wallet transactions: cargo run --bin main_transactions_debug -- --fetch-all
 /// - Analyze specific transaction: cargo run --bin main_transactions_debug -- --signature <SIG>
-/// - Force recalculate transaction: cargo run --bin main_transactions_debug -- --signature <SIG> --force-recalculate
+/// - Enhanced recalculate transaction: cargo run --bin main_transactions_debug -- --signature <SIG> --force-recalculate
 /// - Test analyzer on recent transactions: cargo run --bin main_transactions_debug -- --test-analyzer --count 10
 /// - Debug cache system: cargo run --bin main_transactions_debug -- --debug-cache
 /// - Recalculate analysis: cargo run --bin main_transactions_debug -- --recalculate-cache
 /// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50 (preserves raw data)
 /// - Clean cache files: cargo run --bin main_transactions_debug -- --clean-cache (removes calculated fields)
 /// - Remove all cache files: cargo run --bin main_transactions_debug -- --clean (removes all JSON files)
-/// - Analyze all swaps with PnL: cargo run --bin main_transactions_debug -- --analyze-swaps
+/// - Analyze all swaps with PnL (auto-recalculates): cargo run --bin main_transactions_debug -- --analyze-swaps
 /// - Filter swaps by SOL amount: cargo run --bin main_transactions_debug -- --analyze-swaps --min-sol 0.003 --max-sol 0.006
-/// - Force recalculate and analyze: cargo run --bin main_transactions_debug -- --analyze-swaps --force-recalculate
+/// - Enhanced recalculate and analyze: cargo run --bin main_transactions_debug -- --analyze-swaps --force-recalculate
 /// - Analyze position lifecycle: cargo run --bin main_transactions_debug -- --analyze-positions
 /// - Analyze ALL transaction types: cargo run --bin main_transactions_debug -- --analyze-all --count 500
 /// - Analyze ATA operations: cargo run --bin main_transactions_debug -- --analyze-ata --count 100
@@ -101,7 +101,7 @@ async fn main() {
         .arg(
             Arg::new("force-recalculate")
                 .long("force-recalculate")
-                .help("Force recalculation of analysis even if cached data exists")
+                .help("Force comprehensive recalculation of all cached transactions (more thorough)")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -162,6 +162,12 @@ async fn main() {
             Arg::new("analyze-ata")
                 .long("analyze-ata")
                 .help("Analyze ATA operations across transactions or show detailed ATA analysis (use with --signature)")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("show-unknown")
+                .long("show-unknown")
+                .help("Show only transactions with Unknown type for debugging classification issues")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -407,6 +413,12 @@ async fn main() {
             .parse()
             .unwrap_or(100);
         analyze_ata_operations(wallet_pubkey, count).await;
+    } else if matches.get_flag("show-unknown") {
+        let count: usize = matches.get_one::<String>("count")
+            .unwrap()
+            .parse()
+            .unwrap_or(1000);
+        show_unknown_transactions(wallet_pubkey, count).await;
     } else if matches.get_flag("test-swap") {
         let swap_type = matches.get_one::<String>("swap-type").unwrap();
         let token_mint = matches.get_one::<String>("token-mint").unwrap();
@@ -480,9 +492,9 @@ async fn main() {
 /// Analyze swap transactions with comprehensive PnL and filtering
 async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>) {
     if force_recalculate {
-        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis with FORCE RECALCULATION for all transactions");
+        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis with ENHANCED RECALCULATION for all transactions");
     } else {
-        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis for all transactions");
+        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis (includes automatic recalculation)");
     }
 
     if let Some(count_limit) = count {
@@ -503,8 +515,8 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Op
         }
     };
 
-    // Get all swap transactions with force recalculation if requested
-    match manager.get_all_swap_transactions_with_recalc(force_recalculate, count).await {
+    // Get all swap transactions (now includes automatic recalculation and count limiting)
+    match manager.get_all_swap_transactions().await {
         Ok(all_swaps) => {
             // Apply SOL amount filtering
             let filtered_swaps: Vec<_> = all_swaps.iter().filter(|swap| {
@@ -701,7 +713,7 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
     log(LogTag::Transactions, "TABLE", "Sig      Slot         Type                    Details                          SOL Change   Fee SOL      Success");
     log(LogTag::Transactions, "TABLE", "-----------------------------------------------------------------------------------------------------------------------");
     
-    for transaction in transactions.iter().take(50) { // Show first 50 transactions
+    for transaction in transactions.iter() { // Show all transactions
         let slot = transaction.slot.unwrap_or(0);
         let sol_change_str = format!("{:+.6}", transaction.sol_balance_change);
         let fee_str = format!("{:.6}", transaction.fee_sol);
@@ -729,6 +741,10 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                 let to_short = if to.len() >= 8 { &to[..8] } else { to };
                 ("Token Transfer", format!("{:.0} tokens: {}...->{}...", amount, from_short, to_short))
             }
+            screenerbot::transactions::TransactionType::AtaClose { token_mint, recovered_sol } => {
+                let mint_short = if token_mint.len() >= 8 { &token_mint[..8] } else { token_mint };
+                ("ATA Close", format!("Recovered {:.6} SOL from {}...", recovered_sol, mint_short))
+            }
             screenerbot::transactions::TransactionType::Other { description, details } => {
                 ("Other", format!("{}: {}", description, details))
             }
@@ -742,12 +758,6 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
             sig_short, slot, tx_type, 
             if details.len() > 30 { format!("{}...", &details[..27]) } else { details },
             sol_change_str, fee_str, success_icon
-        ));
-    }
-    
-    if transactions.len() > 50 {
-        log(LogTag::Transactions, "TABLE", &format!(
-            "... and {} more transactions (showing first 50)", transactions.len() - 50
         ));
     }
     
@@ -776,6 +786,7 @@ fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::tra
             screenerbot::transactions::TransactionType::SwapTokenToToken { .. } => "Swap: Token->Token",
             screenerbot::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer",
             screenerbot::transactions::TransactionType::TokenTransfer { .. } => "Token Transfer",
+            screenerbot::transactions::TransactionType::AtaClose { .. } => "ATA Close",
             screenerbot::transactions::TransactionType::Other { .. } => "Other",
             screenerbot::transactions::TransactionType::Unknown => "Unknown",
         };
@@ -1020,6 +1031,171 @@ fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions:
     }
     
     log(LogTag::Transactions, "ATA_ANALYSIS", "=== END ATA OPERATIONS ANALYSIS ===");
+}
+
+/// Show only transactions with Unknown type for debugging classification issues
+async fn show_unknown_transactions(wallet_pubkey: Pubkey, max_count: usize) {
+    log(LogTag::Transactions, "INFO", &format!(
+        "Analyzing transactions with Unknown type (max {} transactions)", max_count
+    ));
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Get all cached transactions
+    match manager.recalculate_all_cached_transactions(Some(max_count)).await {
+        Ok(transactions) => {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Loaded {} total transactions for Unknown type analysis", transactions.len()
+            ));
+            
+            if transactions.is_empty() {
+                log(LogTag::Transactions, "WARN", "No transactions found. Try fetching from wallet first with --fetch-new");
+                return;
+            }
+
+            // Filter only Unknown transactions
+            let unknown_transactions: Vec<_> = transactions.iter()
+                .filter(|tx| matches!(tx.transaction_type, screenerbot::transactions::TransactionType::Unknown))
+                .collect();
+
+            if unknown_transactions.is_empty() {
+                log(LogTag::Transactions, "SUCCESS", "🎉 Great! No Unknown transactions found - all transactions are properly classified!");
+                return;
+            }
+
+            log(LogTag::Transactions, "INFO", &format!(
+                "Found {} Unknown transactions out of {} total ({:.1}%)", 
+                unknown_transactions.len(), 
+                transactions.len(),
+                (unknown_transactions.len() as f64 / transactions.len() as f64) * 100.0
+            ));
+
+            // Display table header
+            log(LogTag::Transactions, "TABLE", "=== UNKNOWN TRANSACTIONS ANALYSIS ===");
+            log(LogTag::Transactions, "TABLE", "Sig      Slot         Timestamp        SOL Change   Fee SOL      Success   Programs");
+            log(LogTag::Transactions, "TABLE", "-----------------------------------------------------------------------------------------------------------------------");
+            
+            for transaction in unknown_transactions.iter() {
+                let slot = transaction.slot.unwrap_or(0);
+                let sol_change_str = format!("{:+.6}", transaction.sol_balance_change);
+                let fee_str = format!("{:.6}", transaction.fee_sol);
+                let success_icon = if transaction.success { "✅" } else { "❌" };
+                let sig_short = &transaction.signature[..8.min(transaction.signature.len())];
+                let timestamp = transaction.timestamp.format("%H:%M:%S").to_string();
+                
+                // Extract program IDs from raw transaction data if available
+                let programs = if let Some(raw_data) = &transaction.raw_transaction_data {
+                    if let Some(transaction_obj) = raw_data.get("transaction") {
+                        if let Some(message) = transaction_obj.get("message") {
+                            if let Some(account_keys) = message.get("accountKeys") {
+                                if let Some(keys_array) = account_keys.as_array() {
+                                    let program_ids: Vec<String> = keys_array.iter()
+                                        .take(5) // Show first 5 program IDs
+                                        .filter_map(|key| key.as_str())
+                                        .map(|pk_str| {
+                                            if pk_str.len() >= 8 { 
+                                                format!("{}...", &pk_str[..8]) 
+                                            } else { 
+                                                pk_str.to_string() 
+                                            }
+                                        })
+                                        .collect();
+                                    program_ids.join(",")
+                                } else {
+                                    "Keys not array".to_string()
+                                }
+                            } else {
+                                "No account keys".to_string()
+                            }
+                        } else {
+                            "No message".to_string()
+                        }
+                    } else {
+                        "No transaction obj".to_string()
+                    }
+                } else {
+                    "No raw data".to_string()
+                };
+
+                log(LogTag::Transactions, "TABLE", &format!(
+                    "{:<8} {:<12} {:<16} {:<12} {:<12} {:<9} {}",
+                    sig_short, slot, timestamp, sol_change_str, fee_str, success_icon,
+                    if programs.len() > 30 { format!("{}...", &programs[..27]) } else { programs }
+                ));
+            }
+            
+            log(LogTag::Transactions, "TABLE", "-----------------------------------------------------------------------------------------------------------------------");
+            
+            // Display detailed analysis for first few unknown transactions
+            log(LogTag::Transactions, "DETAIL", "=== DETAILED ANALYSIS OF FIRST 3 UNKNOWN TRANSACTIONS ===");
+            
+            for (i, transaction) in unknown_transactions.iter().take(3).enumerate() {
+                log(LogTag::Transactions, "DETAIL", &format!("--- Unknown Transaction #{} ---", i + 1));
+                log(LogTag::Transactions, "DETAIL", &format!("Signature: {}", transaction.signature));
+                log(LogTag::Transactions, "DETAIL", &format!("Slot: {:?}", transaction.slot));
+                log(LogTag::Transactions, "DETAIL", &format!("Success: {}", transaction.success));
+                log(LogTag::Transactions, "DETAIL", &format!("SOL Change: {:+.6}", transaction.sol_balance_change));
+                log(LogTag::Transactions, "DETAIL", &format!("Fee: {:.6} SOL", transaction.fee_sol));
+                
+                if let Some(raw_data) = &transaction.raw_transaction_data {
+                    if let Some(transaction_obj) = raw_data.get("transaction") {
+                        if let Some(message) = transaction_obj.get("message") {
+                            if let Some(account_keys) = message.get("accountKeys") {
+                                if let Some(keys_array) = account_keys.as_array() {
+                                    log(LogTag::Transactions, "DETAIL", "Program IDs involved:");
+                                    for (j, key) in keys_array.iter().take(10).enumerate() {
+                                        if let Some(key_str) = key.as_str() {
+                                            log(LogTag::Transactions, "DETAIL", &format!("  [{}] {}", j, key_str));
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if let Some(instructions) = message.get("instructions") {
+                                if let Some(instr_array) = instructions.as_array() {
+                                    log(LogTag::Transactions, "DETAIL", &format!("Instructions count: {}", instr_array.len()));
+                                    for (j, instruction) in instr_array.iter().take(3).enumerate() {
+                                        if let Some(program_id_index) = instruction.get("programIdIndex") {
+                                            if let Some(accounts) = instruction.get("accounts") {
+                                                if let Some(accounts_array) = accounts.as_array() {
+                                                    log(LogTag::Transactions, "DETAIL", &format!(
+                                                        "  Instruction {}: Program {} with {} accounts", 
+                                                        j, program_id_index, accounts_array.len()
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    log(LogTag::Transactions, "DETAIL", "No raw transaction data available");
+                }
+                
+                log(LogTag::Transactions, "DETAIL", "");
+            }
+            
+            // Provide debugging tips
+            log(LogTag::Transactions, "INFO", "=== DEBUGGING TIPS ===");
+            log(LogTag::Transactions, "INFO", "To debug specific unknown transactions:");
+            log(LogTag::Transactions, "INFO", "1. Use --signature <sig> to analyze individual transactions in detail");
+            log(LogTag::Transactions, "INFO", "2. Check if the program IDs above match any known DEX routers or protocols");
+            log(LogTag::Transactions, "INFO", "3. Look for patterns in SOL balance changes that might indicate specific operation types");
+            log(LogTag::Transactions, "INFO", "4. Failed transactions (❌) might have different instruction patterns");
+            
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to load transactions: {}", e));
+        }
+    }
 }
 
 /// Fetch new transactions from the wallet that are not yet in cache
@@ -1989,6 +2165,10 @@ fn log_transaction_summary(transaction: &Transaction) {
         }
         TransactionType::TokenTransfer { amount, .. } => {
             format!("Token Transfer: {:.2} tokens", amount)
+        }
+        TransactionType::AtaClose { token_mint, recovered_sol } => {
+            let mint_short = if token_mint.len() >= 8 { &token_mint[..8] } else { token_mint };
+            format!("ATA Close: {:.6} SOL from {}...", recovered_sol, mint_short)
         }
         TransactionType::Other { description, .. } => {
             format!("Other: {}", description)
