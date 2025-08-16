@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 /// Enhanced ScreenerBot Debug Tool - Comprehensive Token & Wallet Analysis
 /// 
 /// Master debugging tool for the ScreenerBot trading system. Provides comprehensive 
@@ -1291,8 +1293,6 @@ fn is_transaction_for_token(transaction: &Transaction, mint: &str) -> bool {
             from_mint == mint || to_mint == mint
         }
         TransactionType::TokenTransfer { mint: tx_mint, .. } => tx_mint == mint,
-        TransactionType::AtaCreate { mint: tx_mint, .. } => tx_mint == mint,
-        TransactionType::AtaClose { mint: tx_mint, .. } => tx_mint == mint,
         _ => false,
     };
     

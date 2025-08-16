@@ -1,3 +1,4 @@
+#![allow(warnings)]
 
 /// Transaction Manager & Analyzer Debug Tool
 ///
@@ -9,7 +10,6 @@
 /// - Monitor wallet transactions in real-time
 /// - Fetch new transactions from wallet (not in cache)
 /// - Fetch all cached transactions (fast operation)
-/// - Fetch all transactions from blockchain (comprehensive)
 /// - Analyze specific transactions by signature
 /// - Test transaction type detection
 /// - Debug transaction caching system
@@ -21,20 +21,26 @@
 ///
 /// Usage Examples:
 /// - Monitor wallet transactions: cargo run --bin main_transactions_debug -- --monitor
-/// - Fetch new transactions: cargo run --bin main_transactions_debug -- --fetch-new --count 50
-/// - Fetch all cached: cargo run --bin main_transactions_debug -- --fetch-all --count 100
-/// - Fetch from blockchain: cargo run --bin main_transactions_debug -- --fetch-all-blockchain --count 1000
+/// - Fetch new transactions: cargo run --bin main_transactions_debug -- --fetch-new
+/// - Fetch limited transactions for testing: cargo run --bin main_transactions_debug -- --fetch 50
+/// - Fetch ALL wallet transactions: cargo run --bin main_transactions_debug -- --fetch-all
 /// - Analyze specific transaction: cargo run --bin main_transactions_debug -- --signature <SIG>
 /// - Force recalculate transaction: cargo run --bin main_transactions_debug -- --signature <SIG> --force-recalculate
 /// - Test analyzer on recent transactions: cargo run --bin main_transactions_debug -- --test-analyzer --count 10
 /// - Debug cache system: cargo run --bin main_transactions_debug -- --debug-cache
 /// - Recalculate analysis: cargo run --bin main_transactions_debug -- --recalculate-cache
 /// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50 (preserves raw data)
+/// - Clean cache files: cargo run --bin main_transactions_debug -- --clean-cache (removes calculated fields)
+/// - Remove all cache files: cargo run --bin main_transactions_debug -- --clean (removes all JSON files)
 /// - Analyze all swaps with PnL: cargo run --bin main_transactions_debug -- --analyze-swaps
+/// - Filter swaps by SOL amount: cargo run --bin main_transactions_debug -- --analyze-swaps --min-sol 0.003 --max-sol 0.006
+/// - Force recalculate and analyze: cargo run --bin main_transactions_debug -- --analyze-swaps --force-recalculate
 /// - Analyze position lifecycle: cargo run --bin main_transactions_debug -- --analyze-positions
 /// - Analyze ALL transaction types: cargo run --bin main_transactions_debug -- --analyze-all --count 500
+/// - Analyze ATA operations: cargo run --bin main_transactions_debug -- --analyze-ata --count 100
+/// - Analyze specific transaction ATA: cargo run --bin main_transactions_debug -- --signature <SIG> --analyze-ata
 /// - Performance test: cargo run --bin main_transactions_debug -- --benchmark --count 100
-/// - Fetch and analyze: cargo run --bin main_transactions_debug -- --fetch-new --analyze --count 50
+/// - Fetch and analyze: cargo run --bin main_transactions_debug -- --fetch-new --analyze
 /// - Monitor and analyze: cargo run --bin main_transactions_debug -- --monitor --analyze --duration 300
 /// - Just analyze: cargo run --bin main_transactions_debug -- --analyze
 /// - Test real swaps: cargo run --bin main_transactions_debug -- --test-swap --swap-type round-trip --token-mint <MINT> --sol-amount 0.002
@@ -42,7 +48,7 @@
 
 use screenerbot::transactions::{
     TransactionsManager, Transaction, TransactionType, TransactionDirection,
-    get_transaction, initialize_global_transaction_manager, wait_for_transaction_verification
+    get_transaction, initialize_global_transaction_manager,
 };
 use screenerbot::logger::{log, LogTag, init_file_logging};
 use screenerbot::global::{
@@ -55,7 +61,7 @@ use screenerbot::tokens::types::PriceSourceType;
 use screenerbot::tokens::{Token, get_token_decimals_sync};
 use screenerbot::swaps::{
     get_jupiter_quote, execute_jupiter_swap, get_gmgn_quote,
-    JupiterSwapResult, buy_token, sell_token, wait_for_swap_verification
+    JupiterSwapResult
 };
 use screenerbot::positions;
 
@@ -97,6 +103,18 @@ async fn main() {
                 .long("force-recalculate")
                 .help("Force recalculation of analysis even if cached data exists")
                 .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("min-sol")
+                .long("min-sol")
+                .help("Minimum SOL amount to include in swap analysis")
+                .value_name("SOL_AMOUNT")
+        )
+        .arg(
+            Arg::new("max-sol")
+                .long("max-sol")
+                .help("Maximum SOL amount to include in swap analysis")
+                .value_name("SOL_AMOUNT")
         )
         .arg(
             Arg::new("test-analyzer")
@@ -141,27 +159,45 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("analyze-ata")
+                .long("analyze-ata")
+                .help("Analyze ATA operations across transactions or show detailed ATA analysis (use with --signature)")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("update-cache")
                 .long("update-cache")
                 .help("Re-analyze and update all cached transactions with new analysis")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("clean-cache")
+                .long("clean-cache")
+                .help("Clean all cached transactions by removing calculated fields (keeps only raw blockchain data)")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("clean")
+                .long("clean")
+                .help("Remove all transaction JSON files from data/transactions/ directory")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("fetch-new")
                 .long("fetch-new")
-                .help("Fetch new transactions from the wallet (not in cache)")
+                .help("Fetch ALL new transactions from wallet (only uncached, no count limit)")
                 .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("fetch")
+                .long("fetch")
+                .help("Fetch specified number of uncached transactions for testing")
+                .value_name("COUNT")
         )
         .arg(
             Arg::new("fetch-all")
                 .long("fetch-all")
-                .help("Fetch all transactions from cache or blockchain")
-                .action(clap::ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("fetch-all-blockchain")
-                .long("fetch-all-blockchain")
-                .help("Fetch and analyze ALL wallet transactions from blockchain (comprehensive)")
+                .help("Fetch ALL wallet transactions from blockchain (only uncached, no count limit)")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -282,43 +318,36 @@ async fn main() {
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after monitoring...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if let Some(signature) = matches.get_one::<String>("signature") {
         let force_recalculate = matches.get_flag("force-recalculate");
-        analyze_specific_transaction(signature, force_recalculate).await;
+        let analyze_ata = matches.get_flag("analyze-ata");
+        analyze_specific_transaction(signature, force_recalculate, analyze_ata).await;
     } else if matches.get_flag("fetch-new") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(100);
-        fetch_new_transactions(wallet_pubkey, count).await;
+        fetch_new_transactions(wallet_pubkey).await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching new transactions...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+        }
+    } else if let Some(count_str) = matches.get_one::<String>("fetch") {
+        let count: usize = count_str.parse().unwrap_or_else(|_| {
+            log(LogTag::System, "ERROR", "Invalid count value for --fetch");
+            std::process::exit(1);
+        });
+        fetch_limited_transactions(wallet_pubkey, count).await;
+        
+        if should_analyze {
+            log(LogTag::System, "INFO", "Running analysis after fetching limited transactions...");
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if matches.get_flag("fetch-all") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(1000);
-        fetch_all_cached_transactions(wallet_pubkey, count).await;
+        fetch_all_wallet_transactions(wallet_pubkey).await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching all transactions...");
-            analyze_all_swaps(wallet_pubkey).await;
-        }
-    } else if matches.get_flag("fetch-all-blockchain") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(1000);
-        fetch_all_wallet_transactions(wallet_pubkey, count).await;
-        
-        if should_analyze {
-            log(LogTag::System, "INFO", "Running analysis after fetching from blockchain...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if matches.get_flag("test-analyzer") {
         let count: usize = matches.get_one::<String>("count")
@@ -329,7 +358,7 @@ async fn main() {
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after testing analyzer...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if matches.get_flag("debug-cache") {
         debug_cache_system().await;
@@ -338,8 +367,17 @@ async fn main() {
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after recalculating cache...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, true, None, None, None).await;
         }
+    } else if matches.get_flag("clean-cache") {
+        clean_transaction_cache().await;
+        
+        if should_analyze {
+            log(LogTag::System, "INFO", "Running analysis after cleaning cache...");
+            analyze_swaps(wallet_pubkey, true, None, None, None).await;
+        }
+    } else if matches.get_flag("clean") {
+        clean_all_transaction_files().await;
     } else if matches.get_flag("benchmark") {
         let count: usize = matches.get_one::<String>("count")
             .unwrap()
@@ -347,7 +385,14 @@ async fn main() {
             .unwrap_or(100);
         run_benchmark_tests(wallet_pubkey, count).await;
     } else if matches.get_flag("analyze-swaps") {
-        analyze_all_swaps(wallet_pubkey).await;
+        let force_recalculate = matches.get_flag("force-recalculate");
+        let count: Option<usize> = matches.get_one::<String>("count")
+            .and_then(|s| s.parse::<usize>().ok());
+        let min_sol = matches.get_one::<String>("min-sol")
+            .and_then(|s| s.parse::<f64>().ok());
+        let max_sol = matches.get_one::<String>("max-sol")
+            .and_then(|s| s.parse::<f64>().ok());
+        analyze_swaps(wallet_pubkey, force_recalculate, count, min_sol, max_sol).await;
     } else if matches.get_flag("analyze-positions") {
         analyze_all_positions(wallet_pubkey).await;
     } else if matches.get_flag("analyze-all") {
@@ -356,6 +401,12 @@ async fn main() {
             .parse()
             .unwrap_or(1000);
         analyze_all_transactions(wallet_pubkey, count).await;
+    } else if matches.get_flag("analyze-ata") {
+        let count: usize = matches.get_one::<String>("count")
+            .unwrap()
+            .parse()
+            .unwrap_or(100);
+        analyze_ata_operations(wallet_pubkey, count).await;
     } else if matches.get_flag("test-swap") {
         let swap_type = matches.get_one::<String>("swap-type").unwrap();
         let token_mint = matches.get_one::<String>("token-mint").unwrap();
@@ -382,7 +433,7 @@ async fn main() {
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after swap test...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if matches.get_flag("test-position") {
         let token_mint = matches.get_one::<String>("token-mint").unwrap();
@@ -412,12 +463,12 @@ async fn main() {
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after updating cache...");
-            analyze_all_swaps(wallet_pubkey).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if should_analyze {
         // If only --analyze is specified, run comprehensive analysis
         log(LogTag::System, "INFO", "Running comprehensive transaction analysis...");
-        analyze_all_swaps(wallet_pubkey).await;
+        analyze_swaps(wallet_pubkey, false, None, None, None).await;
     } else {
         log(LogTag::System, "ERROR", "No command specified. Use --help for usage information.");
         std::process::exit(1);
@@ -426,9 +477,23 @@ async fn main() {
     log(LogTag::System, "INFO", "Transaction Manager & Analyzer Debug Tool completed");
 }
 
-/// Analyze all swap transactions with comprehensive PnL
-async fn analyze_all_swaps(wallet_pubkey: Pubkey) {
-    log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis for all transactions");
+/// Analyze swap transactions with comprehensive PnL and filtering
+async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>) {
+    if force_recalculate {
+        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis with FORCE RECALCULATION for all transactions");
+    } else {
+        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis for all transactions");
+    }
+
+    if let Some(count_limit) = count {
+        log(LogTag::Transactions, "FILTER", &format!("Limiting analysis to {} most recent transactions", count_limit));
+    }
+    if let Some(min) = min_sol {
+        log(LogTag::Transactions, "FILTER", &format!("Filtering swaps with SOL amount >= {:.6}", min));
+    }
+    if let Some(max) = max_sol {
+        log(LogTag::Transactions, "FILTER", &format!("Filtering swaps with SOL amount <= {:.6}", max));
+    }
 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
         Ok(manager) => manager,
@@ -438,19 +503,46 @@ async fn analyze_all_swaps(wallet_pubkey: Pubkey) {
         }
     };
 
-    // Get all swap transactions
-    match manager.get_all_swap_transactions().await {
-        Ok(swaps) => {
-            log(LogTag::Transactions, "SUCCESS", &format!("Found {} swap transactions", swaps.len()));
+    // Get all swap transactions with force recalculation if requested
+    match manager.get_all_swap_transactions_with_recalc(force_recalculate, count).await {
+        Ok(all_swaps) => {
+            // Apply SOL amount filtering
+            let filtered_swaps: Vec<_> = all_swaps.iter().filter(|swap| {
+                let sol_amount = swap.sol_amount;
+                
+                // Check minimum filter
+                if let Some(min) = min_sol {
+                    if sol_amount < min {
+                        return false;
+                    }
+                }
+                
+                // Check maximum filter
+                if let Some(max) = max_sol {
+                    if sol_amount > max {
+                        return false;
+                    }
+                }
+                
+                true
+            }).cloned().collect();
+
+            if let Some(count_limit) = count {
+                log(LogTag::Transactions, "SUCCESS", &format!("Found {} swap transactions (limited from {} total, filtered from {} count-limited)", 
+                                                          filtered_swaps.len(), all_swaps.len(), count_limit));
+            } else {
+                log(LogTag::Transactions, "SUCCESS", &format!("Found {} swap transactions (filtered from {} total)", 
+                                                          filtered_swaps.len(), all_swaps.len()));
+            }
             
-            // Display comprehensive analysis table
-            manager.display_swap_analysis_table(&swaps);
+            // Display comprehensive analysis table with full signatures
+            manager.display_swap_analysis_table_full_signatures(&filtered_swaps);
             
             // Additional statistics
-            display_detailed_swap_statistics(&swaps);
+            display_detailed_swap_statistics(&filtered_swaps);
         }
         Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to analyze swaps: {}", e));
+            log(LogTag::Transactions, "ERROR", &format!("Failed to get swap transactions: {}", e));
         }
     }
 }
@@ -587,7 +679,7 @@ async fn analyze_all_transactions(wallet_pubkey: Pubkey, max_count: usize) {
             ));
             
             if transactions.is_empty() {
-                log(LogTag::Transactions, "WARN", "No transactions found. Try fetching from blockchain first with --fetch-all-blockchain");
+                log(LogTag::Transactions, "WARN", "No transactions found. Try fetching from wallet first with --fetch-new");
                 return;
             }
 
@@ -637,41 +729,8 @@ fn display_all_transactions_table(transactions: &[screenerbot::transactions::Tra
                 let to_short = if to.len() >= 8 { &to[..8] } else { to };
                 ("Token Transfer", format!("{:.0} tokens: {}...->{}...", amount, from_short, to_short))
             }
-            screenerbot::transactions::TransactionType::AtaCreate { mint, owner: _, ata_address: _, cost } => {
-                let mint_short = if mint.len() >= 8 { &mint[..8] } else { mint };
-                ("ATA Create", format!("Token: {}..., Cost: {:.6} SOL", mint_short, cost))
-            }
-            screenerbot::transactions::TransactionType::AtaClose { mint, owner: _, ata_address: _, rent_reclaimed } => {
-                let mint_short = if mint.len() >= 8 { &mint[..8] } else { mint };
-                ("ATA Close", format!("Token: {}..., Reclaimed: {:.6} SOL", mint_short, rent_reclaimed))
-            }
-            screenerbot::transactions::TransactionType::StakingDelegate { stake_account: _, validator, amount } => {
-                let validator_short = if validator.len() >= 8 { &validator[..8] } else { validator };
-                ("Staking", format!("Delegate {:.4} SOL to {}...", amount, validator_short))
-            }
-            screenerbot::transactions::TransactionType::StakingWithdraw { stake_account: _, amount } => {
-                ("Staking", format!("Withdraw {:.4} SOL", amount))
-            }
-            screenerbot::transactions::TransactionType::ProgramDeploy { program_id, deployer: _ } => {
-                let program_short = if program_id.len() >= 8 { &program_id[..8] } else { program_id };
-                ("Program Deploy", format!("Program: {}...", program_short))
-            }
-            screenerbot::transactions::TransactionType::ProgramUpgrade { program_id, authority: _ } => {
-                let program_short = if program_id.len() >= 8 { &program_id[..8] } else { program_id };
-                ("Program Upgrade", format!("Program: {}...", program_short))
-            }
-            screenerbot::transactions::TransactionType::ComputeBudget { compute_units, compute_unit_price } => {
-                ("Compute Budget", format!("Units: {}, Price: {}", compute_units, compute_unit_price))
-            }
-            screenerbot::transactions::TransactionType::SpamBulk { transaction_count, suspected_spam_type } => {
-                ("Spam Bulk", format!("{} txs, Type: {}", transaction_count, suspected_spam_type))
-            }
-            screenerbot::transactions::TransactionType::NftMint { collection_id: _, leaf_asset_id, nft_type } => {
-                let leaf_short = if leaf_asset_id.len() >= 8 { &leaf_asset_id[..8] } else { leaf_asset_id };
-                ("NFT Mint", format!("{}: {}...", nft_type, leaf_short))
-            }
-            screenerbot::transactions::TransactionType::Spam => {
-                ("Spam", "Spam transaction".to_string())
+            screenerbot::transactions::TransactionType::Other { description, details } => {
+                ("Other", format!("{}: {}", description, details))
             }
             screenerbot::transactions::TransactionType::Unknown => {
                 ("Unknown", "Unidentified transaction type".to_string())
@@ -717,16 +776,7 @@ fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::tra
             screenerbot::transactions::TransactionType::SwapTokenToToken { .. } => "Swap: Token->Token",
             screenerbot::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer",
             screenerbot::transactions::TransactionType::TokenTransfer { .. } => "Token Transfer",
-            screenerbot::transactions::TransactionType::AtaCreate { .. } => "ATA Create",
-            screenerbot::transactions::TransactionType::AtaClose { .. } => "ATA Close",
-            screenerbot::transactions::TransactionType::StakingDelegate { .. } => "Staking Delegate",
-            screenerbot::transactions::TransactionType::StakingWithdraw { .. } => "Staking Withdraw",
-            screenerbot::transactions::TransactionType::ProgramDeploy { .. } => "Program Deploy",
-            screenerbot::transactions::TransactionType::ProgramUpgrade { .. } => "Program Upgrade", 
-            screenerbot::transactions::TransactionType::ComputeBudget { .. } => "Compute Budget",
-            screenerbot::transactions::TransactionType::SpamBulk { .. } => "Spam Bulk",
-            screenerbot::transactions::TransactionType::NftMint { .. } => "NFT Mint",
-            screenerbot::transactions::TransactionType::Spam => "Spam",
+            screenerbot::transactions::TransactionType::Other { .. } => "Other",
             screenerbot::transactions::TransactionType::Unknown => "Unknown",
         };
         
@@ -785,11 +835,196 @@ fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::tra
     log(LogTag::Transactions, "STATS", "=== END COMPREHENSIVE STATISTICS ===");
 }
 
-/// Fetch new transactions from the wallet that are not yet in cache
-async fn fetch_new_transactions(wallet_pubkey: Pubkey, max_count: usize) {
+/// Analyze ATA operations across multiple transactions
+async fn analyze_ata_operations(wallet_pubkey: Pubkey, max_count: usize) {
     log(LogTag::Transactions, "INFO", &format!(
-        "Fetching new transactions from wallet (max {} transactions)", max_count
+        "Starting comprehensive ATA operations analysis (max {} transactions)", max_count
     ));
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Get all cached transactions and analyze ATA operations
+    match manager.recalculate_all_cached_transactions(Some(max_count)).await {
+        Ok(transactions) => {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Loaded {} transactions for ATA analysis", transactions.len()
+            ));
+            
+            if transactions.is_empty() {
+                log(LogTag::Transactions, "WARN", "No transactions found. Try fetching from wallet first with --fetch-new");
+                return;
+            }
+
+            analyze_and_display_ata_operations(&transactions);
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to load transactions: {}", e));
+        }
+    }
+}
+
+/// Analyze and display detailed ATA operations from transactions
+fn analyze_and_display_ata_operations(transactions: &[screenerbot::transactions::Transaction]) {
+    log(LogTag::Transactions, "ATA_ANALYSIS", "=== COMPREHENSIVE ATA OPERATIONS ANALYSIS ===");
+    
+    let mut total_transactions_with_ata = 0;
+    let mut total_ata_creations = 0;
+    let mut total_ata_closures = 0;
+    let mut total_rent_spent = 0.0;
+    let mut total_rent_recovered = 0.0;
+    let mut swap_transactions_with_ata = 0;
+    let mut non_swap_transactions_with_ata = 0;
+    
+    // Track ATA operations by transaction type
+    let mut ata_by_tx_type: std::collections::HashMap<String, (u32, u32, f64, f64)> = std::collections::HashMap::new();
+    
+    // Track problematic ATA calculations
+    let mut problematic_calculations = Vec::new();
+    
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "DETAILED ATA OPERATIONS BY TRANSACTION:");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "Signature  Type        SOL Change  ATA Creates  ATA Closes  Rent Spent  Rent Recovered  Net Impact  Raw Sol Change");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "----------------------------------------------------------------------------------------------------------------------");
+    
+    for transaction in transactions {
+        if let Some(ata_analysis) = &transaction.ata_analysis {
+            if ata_analysis.total_ata_creations > 0 || ata_analysis.total_ata_closures > 0 {
+                total_transactions_with_ata += 1;
+                total_ata_creations += ata_analysis.total_ata_creations;
+                total_ata_closures += ata_analysis.total_ata_closures;
+                total_rent_spent += ata_analysis.total_rent_spent;
+                total_rent_recovered += ata_analysis.total_rent_recovered;
+                
+                let tx_type = match &transaction.transaction_type {
+                    screenerbot::transactions::TransactionType::SwapSolToToken { router, .. } => {
+                        swap_transactions_with_ata += 1;
+                        format!("Buy ({})", if router.len() > 12 { &router[..12] } else { router })
+                    }
+                    screenerbot::transactions::TransactionType::SwapTokenToSol { router, .. } => {
+                        swap_transactions_with_ata += 1;
+                        format!("Sell ({})", if router.len() > 12 { &router[..12] } else { router })
+                    }
+                    screenerbot::transactions::TransactionType::SwapTokenToToken { router, .. } => {
+                        swap_transactions_with_ata += 1;
+                        format!("Swap ({})", if router.len() > 12 { &router[..12] } else { router })
+                    }
+                    _ => {
+                        non_swap_transactions_with_ata += 1;
+                        format!("{:?}", transaction.transaction_type).split('(').next().unwrap_or("Unknown").to_string()
+                    }
+                };
+                
+                // Track stats by transaction type
+                let stats = ata_by_tx_type.entry(tx_type.clone()).or_insert((0, 0, 0.0, 0.0));
+                stats.0 += ata_analysis.total_ata_creations;
+                stats.1 += ata_analysis.total_ata_closures;
+                stats.2 += ata_analysis.total_rent_spent;
+                stats.3 += ata_analysis.total_rent_recovered;
+                
+                let sig_short = &transaction.signature[..8.min(transaction.signature.len())];
+                let net_impact = ata_analysis.total_rent_recovered - ata_analysis.total_rent_spent;
+                
+                // Check for problematic calculations
+                let expected_sol_change_from_ata = net_impact;
+                let actual_sol_change = transaction.sol_balance_change;
+                let difference = (actual_sol_change - expected_sol_change_from_ata).abs();
+                
+                if difference > 0.001 && (tx_type.contains("Buy") || tx_type.contains("Sell")) {
+                    problematic_calculations.push((
+                        transaction.signature.clone(),
+                        tx_type.clone(),
+                        actual_sol_change,
+                        expected_sol_change_from_ata,
+                        difference
+                    ));
+                }
+                
+                log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                    "{:<10} {:<11} {:>10.6} {:>11} {:>10} {:>10.6} {:>14.6} {:>10.6} {:>14.6}",
+                    sig_short,
+                    if tx_type.len() > 11 { &tx_type[..11] } else { &tx_type },
+                    transaction.sol_balance_change,
+                    ata_analysis.total_ata_creations,
+                    ata_analysis.total_ata_closures,
+                    ata_analysis.total_rent_spent,
+                    ata_analysis.total_rent_recovered,
+                    net_impact,
+                    actual_sol_change
+                ));
+                
+                // Show detailed ATA operations if there are any
+                if !ata_analysis.detected_operations.is_empty() {
+                    for operation in &ata_analysis.detected_operations {
+                        let op_type = if operation.operation_type == screenerbot::transactions::AtaOperationType::Creation { "CREATE" } else { "CLOSE" };
+                        let mint_short = if operation.token_mint.len() >= 8 { &operation.token_mint[..8] } else { &operation.token_mint };
+                        let wsol_flag = if operation.is_wsol { " (WSOL)" } else { "" };
+                        
+                        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                            "           └─ {} {} for {}...{} ({:.6} SOL)",
+                            op_type,
+                            &operation.account_address[..8],
+                            mint_short,
+                            wsol_flag,
+                            operation.rent_amount
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    
+    log(LogTag::Transactions, "ATA_ANALYSIS", "----------------------------------------------------------------------------------------------------------------------");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    
+    // Display summary statistics
+    log(LogTag::Transactions, "ATA_ANALYSIS", "=== ATA OPERATIONS SUMMARY ===");
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total Transactions Analyzed: {}", transactions.len()));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Transactions with ATA Operations: {}", total_transactions_with_ata));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("  - Swap Transactions: {}", swap_transactions_with_ata));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("  - Non-Swap Transactions: {}", non_swap_transactions_with_ata));
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total ATA Creations: {}", total_ata_creations));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total ATA Closures: {}", total_ata_closures));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total Rent Spent: {:.6} SOL", total_rent_spent));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total Rent Recovered: {:.6} SOL", total_rent_recovered));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Net ATA Impact: {:.6} SOL", total_rent_recovered - total_rent_spent));
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    
+    // Display breakdown by transaction type
+    log(LogTag::Transactions, "ATA_ANALYSIS", "ATA Operations by Transaction Type:");
+    for (tx_type, (creates, closes, spent, recovered)) in &ata_by_tx_type {
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "  {}: {} creates, {} closes, {:.6} SOL spent, {:.6} SOL recovered, net {:.6} SOL",
+            tx_type, creates, closes, spent, recovered, recovered - spent
+        ));
+    }
+    
+    // Display problematic calculations
+    if !problematic_calculations.is_empty() {
+        log(LogTag::Transactions, "ATA_ANALYSIS", "");
+        log(LogTag::Transactions, "ATA_ANALYSIS", "⚠️  PROBLEMATIC ATA CALCULATIONS (difference > 0.001 SOL):");
+        for (signature, tx_type, actual_sol, expected_sol, difference) in &problematic_calculations {
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                "  {}: {} - Actual: {:.6} SOL, Expected from ATA: {:.6} SOL, Difference: {:.6} SOL",
+                &signature[..8], tx_type, actual_sol, expected_sol, difference
+            ));
+        }
+        log(LogTag::Transactions, "ATA_ANALYSIS", "");
+        log(LogTag::Transactions, "ATA_ANALYSIS", "💡 These transactions may need manual verification of SOL balance changes vs ATA operations");
+    }
+    
+    log(LogTag::Transactions, "ATA_ANALYSIS", "=== END ATA OPERATIONS ANALYSIS ===");
+}
+
+/// Fetch new transactions from the wallet that are not yet in cache
+async fn fetch_new_transactions(wallet_pubkey: Pubkey) {
+    log(LogTag::Transactions, "INFO", "Fetching ALL new transactions from wallet (no limit, skipping cached)");
 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
         Ok(manager) => manager,
@@ -812,13 +1047,11 @@ async fn fetch_new_transactions(wallet_pubkey: Pubkey, max_count: usize) {
     // Get new transactions
     match manager.check_new_transactions().await {
         Ok(new_signatures) => {
-            let limited_signatures: Vec<_> = new_signatures.into_iter().take(max_count).collect();
-            
             log(LogTag::Transactions, "SUCCESS", &format!(
-                "Found {} new transactions", limited_signatures.len()
+                "Found {} new transactions", new_signatures.len()
             ));
 
-            if limited_signatures.is_empty() {
+            if new_signatures.is_empty() {
                 log(LogTag::Transactions, "INFO", "No new transactions found");
                 return;
             }
@@ -827,10 +1060,10 @@ async fn fetch_new_transactions(wallet_pubkey: Pubkey, max_count: usize) {
             let mut error_count = 0;
             let start_time = Instant::now();
 
-            for (index, signature) in limited_signatures.iter().enumerate() {
+            for (index, signature) in new_signatures.iter().enumerate() {
                 log(LogTag::Transactions, "PROGRESS", &format!(
                     "Processing new transaction {}/{}: {}...", 
-                    index + 1, limited_signatures.len(), &signature[..8]
+                    index + 1, new_signatures.len(), &signature[..8]
                 ));
 
                 match manager.process_transaction(signature).await {
@@ -852,11 +1085,11 @@ async fn fetch_new_transactions(wallet_pubkey: Pubkey, max_count: usize) {
 
             let total_time = start_time.elapsed();
             log(LogTag::Transactions, "RESULTS", "=== FETCH NEW TRANSACTIONS RESULTS ===");
-            log(LogTag::Transactions, "RESULTS", &format!("New Transactions Found: {}", limited_signatures.len()));
+            log(LogTag::Transactions, "RESULTS", &format!("New Transactions Found: {}", new_signatures.len()));
             log(LogTag::Transactions, "RESULTS", &format!("Successfully Processed: {}", processed_count));
             log(LogTag::Transactions, "RESULTS", &format!("Errors: {}", error_count));
             log(LogTag::Transactions, "RESULTS", &format!("Success Rate: {:.1}%", 
-                (processed_count as f64 / limited_signatures.len() as f64) * 100.0));
+                (processed_count as f64 / new_signatures.len() as f64) * 100.0));
             log(LogTag::Transactions, "RESULTS", &format!("Processing Time: {:.2}s", total_time.as_secs_f64()));
             log(LogTag::Transactions, "RESULTS", "=== END RESULTS ===");
         }
@@ -866,63 +1099,58 @@ async fn fetch_new_transactions(wallet_pubkey: Pubkey, max_count: usize) {
     }
 }
 
-/// Fetch all transactions from cache (fast operation)
-async fn fetch_all_cached_transactions(_wallet_pubkey: Pubkey, max_count: usize) {
-    log(LogTag::Transactions, "INFO", &format!(
-        "Fetching all cached transactions (max {} transactions)", max_count
-    ));
+/// Fetch ALL wallet transactions from blockchain (no limit, replaces cache)
+async fn fetch_all_wallet_transactions(wallet_pubkey: Pubkey) {
+    log(LogTag::Transactions, "INFO", "Fetching ALL wallet transactions from blockchain (no limit, skipping already-cached)");
 
-    let cache_dir = get_transactions_cache_dir();
-    
-    if !cache_dir.exists() {
-        log(LogTag::Transactions, "WARN", "Cache directory does not exist");
-        return;
-    }
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create transaction manager: {}", e));
+            return;
+        }
+    };
 
-    let mut cached_transactions = Vec::new();
-    let mut error_count = 0;
-
-    match fs::read_dir(&cache_dir) {
-        Ok(entries) => {
-            for entry in entries {
-                if cached_transactions.len() >= max_count {
-                    break;
-                }
-
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-                        match analyze_cache_file(&path).await {
-                            Ok(transaction) => {
-                                cached_transactions.push(transaction);
-                            }
-                            Err(e) => {
-                                error_count += 1;
-                                log(LogTag::Transactions, "WARN", &format!(
-                                    "Failed to parse cached transaction {}: {}", 
-                                    path.file_name().unwrap_or_default().to_string_lossy(), e
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-
+    // Fetch ALL transactions from blockchain (no count limit)
+    match manager.fetch_all_wallet_transactions().await {
+        Ok(transactions) => {
             log(LogTag::Transactions, "SUCCESS", &format!(
-                "Loaded {} cached transactions from disk", cached_transactions.len()
+                "Successfully fetched {} transactions from blockchain", transactions.len()
             ));
 
-            if error_count > 0 {
-                log(LogTag::Transactions, "WARN", &format!(
-                    "Failed to load {} cached transactions due to parse errors", error_count
-                ));
-            }
-
             // Display summary statistics
-            display_transaction_summary(&cached_transactions);
+            display_transaction_summary(&transactions);
         }
         Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to read cache directory: {}", e));
+            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch wallet transactions: {}", e));
+        }
+    }
+}
+
+/// Fetch limited number of transactions from blockchain (for testing)
+async fn fetch_limited_transactions(wallet_pubkey: Pubkey, count: usize) {
+    log(LogTag::Transactions, "INFO", &format!("Fetching up to {} uncached transactions from blockchain for testing", count));
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create transaction manager: {}", e));
+            return;
+        }
+    };
+
+    // Fetch limited transactions from blockchain
+    match manager.fetch_limited_wallet_transactions(count).await {
+        Ok(transactions) => {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Successfully fetched {} transactions from blockchain", transactions.len()
+            ));
+
+            // Display summary statistics
+            display_transaction_summary(&transactions);
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch wallet transactions: {}", e));
         }
     }
 }
@@ -1076,7 +1304,7 @@ async fn monitor_transactions(wallet_pubkey: Pubkey, duration_seconds: u64) {
 }
 
 /// Analyze a specific transaction by signature
-async fn analyze_specific_transaction(signature: &str, force_recalculate: bool) {
+async fn analyze_specific_transaction(signature: &str, force_recalculate: bool, analyze_ata: bool) {
     log(LogTag::Transactions, "INFO", &format!(
         "Analyzing transaction: {} (force_recalculate: {})", 
         signature, force_recalculate
@@ -1134,7 +1362,7 @@ async fn analyze_specific_transaction(signature: &str, force_recalculate: bool) 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
         Ok(mut manager) => {
             // Force enable debug mode for enhanced ATA analysis when force_recalculate is true
-            if force_recalculate {
+            if force_recalculate || analyze_ata {
                 manager.debug_enabled = true;
                 log(LogTag::Transactions, "INFO", "Debug mode enabled for enhanced ATA analysis");
                 
@@ -1163,6 +1391,11 @@ async fn analyze_specific_transaction(signature: &str, force_recalculate: bool) 
             }
             
             display_detailed_transaction_info(&transaction);
+            
+            // If ATA analysis was requested, provide detailed breakdown
+            if analyze_ata {
+                display_detailed_ata_analysis(&transaction);
+            }
         }
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("Failed to analyze transaction: {}", e));
@@ -1406,6 +1639,74 @@ async fn recalculate_transaction_cache() {
     }
 }
 
+/// Clean all cached transactions by removing calculated fields
+/// This keeps only raw blockchain data and is useful during development
+async fn clean_transaction_cache() {
+    log(LogTag::Transactions, "INFO", "Cleaning transaction cache (removing calculated fields)");
+
+    match screenerbot::transactions::clean_all_transaction_cache_files().await {
+        Ok((cleaned_count, failed_count)) => {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Cache cleanup completed: {} files cleaned, {} failed", 
+                cleaned_count, failed_count
+            ));
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to clean cache: {}", e));
+        }
+    }
+}
+
+/// Remove all transaction JSON files from data/transactions/ directory
+async fn clean_all_transaction_files() {
+    log(LogTag::Transactions, "INFO", "Removing ALL transaction JSON files from data/transactions/");
+
+    let cache_dir = get_transactions_cache_dir();
+    
+    if !cache_dir.exists() {
+        log(LogTag::Transactions, "WARN", "Transaction cache directory does not exist");
+        return;
+    }
+
+    let mut removed_count = 0;
+    let mut failed_count = 0;
+
+    match fs::read_dir(&cache_dir) {
+        Ok(entries) => {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+                        match fs::remove_file(&path) {
+                            Ok(_) => {
+                                removed_count += 1;
+                                if removed_count % 100 == 0 {
+                                    log(LogTag::Transactions, "INFO", &format!("Removed {} files...", removed_count));
+                                }
+                            }
+                            Err(e) => {
+                                failed_count += 1;
+                                log(LogTag::Transactions, "WARN", &format!(
+                                    "Failed to remove {}: {}", 
+                                    path.file_name().unwrap_or_default().to_string_lossy(), e
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Cleanup completed: {} files removed, {} failed", 
+                removed_count, failed_count
+            ));
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to read cache directory: {}", e));
+        }
+    }
+}
+
 /// Update and re-analyze all cached transactions (preserving raw data)
 async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
     log(LogTag::Transactions, "INFO", &format!(
@@ -1613,96 +1914,6 @@ async fn update_transaction_cache(wallet_pubkey: Pubkey, max_count: usize) {
     }
 }
 
-/// Fetch and analyze ALL wallet transactions from blockchain (comprehensive analysis)
-async fn fetch_all_wallet_transactions(wallet_pubkey: Pubkey, max_count: usize) {
-    log(LogTag::Transactions, "INFO", &format!(
-        "Fetching and analyzing ALL wallet transactions from blockchain (max {} transactions)", max_count
-    ));
-
-    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
-        Ok(manager) => manager,
-        Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
-            return;
-        }
-    };
-
-    // Use the comprehensive transaction fetching method
-    match manager.fetch_all_wallet_transactions(max_count).await {
-        Ok(transactions) => {
-            log(LogTag::Transactions, "SUCCESS", &format!(
-                "Successfully fetched and analyzed {} transactions", transactions.len()
-            ));
-
-            // Analyze and categorize transactions
-            let mut swap_count = 0;
-            let mut unknown_count = 0;
-            let mut transfer_count = 0;
-            let mut spam_count = 0;
-            let mut ata_count = 0;
-            let mut staking_count = 0;
-            let mut program_count = 0;
-            let mut other_count = 0;
-
-            for transaction in &transactions {
-                match &transaction.transaction_type {
-                    TransactionType::SwapSolToToken { .. } |
-                    TransactionType::SwapTokenToSol { .. } |
-                    TransactionType::SwapTokenToToken { .. } => swap_count += 1,
-                    TransactionType::SolTransfer { .. } |
-                    TransactionType::TokenTransfer { .. } => transfer_count += 1,
-                    TransactionType::Spam => spam_count += 1,
-                    TransactionType::SpamBulk { .. } => spam_count += 1,
-                    TransactionType::AtaCreate { .. } |
-                    TransactionType::AtaClose { .. } => ata_count += 1,
-                    TransactionType::StakingDelegate { .. } |
-                    TransactionType::StakingWithdraw { .. } => staking_count += 1,
-                    TransactionType::ProgramDeploy { .. } |
-                    TransactionType::ProgramUpgrade { .. } => program_count += 1,
-                    TransactionType::ComputeBudget { .. } => other_count += 1,
-                    TransactionType::NftMint { .. } => other_count += 1,
-                    TransactionType::Unknown => unknown_count += 1,
-                }
-            }
-
-            log(LogTag::Transactions, "ANALYSIS", "=== COMPREHENSIVE WALLET ANALYSIS ===");
-            log(LogTag::Transactions, "ANALYSIS", &format!("Total Transactions: {}", transactions.len()));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Swap Transactions: {}", swap_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Transfer Transactions: {}", transfer_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("ATA Operations: {}", ata_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Staking Operations: {}", staking_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Program Operations: {}", program_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Other Operations: {}", other_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Spam Transactions: {}", spam_count));
-            log(LogTag::Transactions, "ANALYSIS", &format!("Unknown Transactions: {}", unknown_count));
-            log(LogTag::Transactions, "ANALYSIS", "=== END ANALYSIS ===");
-
-            // Get comprehensive swap analysis if any swaps were found
-            if swap_count > 0 {
-                log(LogTag::Transactions, "INFO", "Performing comprehensive swap analysis...");
-                
-                match manager.get_all_swap_transactions().await {
-                    Ok(swaps) => {
-                        log(LogTag::Transactions, "SUCCESS", &format!("Found {} swap transactions for detailed analysis", swaps.len()));
-                        
-                        // Display comprehensive analysis table
-                        manager.display_swap_analysis_table(&swaps);
-                        
-                        // Additional statistics
-                        display_detailed_swap_statistics(&swaps);
-                    }
-                    Err(e) => {
-                        log(LogTag::Transactions, "ERROR", &format!("Failed to analyze swaps: {}", e));
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch all wallet transactions: {}", e));
-        }
-    }
-}
-
 /// Run performance benchmark tests
 async fn run_benchmark_tests(wallet_pubkey: Pubkey, count: usize) {
     log(LogTag::Transactions, "INFO", &format!(
@@ -1779,34 +1990,9 @@ fn log_transaction_summary(transaction: &Transaction) {
         TransactionType::TokenTransfer { amount, .. } => {
             format!("Token Transfer: {:.2} tokens", amount)
         }
-        TransactionType::AtaCreate { mint, cost, .. } => {
-            format!("ATA Create: {} (cost: {:.6} SOL)", mint, cost)
+        TransactionType::Other { description, .. } => {
+            format!("Other: {}", description)
         }
-        TransactionType::AtaClose { mint, rent_reclaimed, .. } => {
-            format!("ATA Close: {} (reclaimed: {:.6} SOL)", mint, rent_reclaimed)
-        }
-        TransactionType::StakingDelegate { stake_account, validator, amount } => {
-            format!("Stake Delegate: {:.4} SOL to {} (account: {})", amount, validator, stake_account)
-        }
-        TransactionType::StakingWithdraw { stake_account, amount } => {
-            format!("Stake Withdraw: {:.4} SOL (account: {})", amount, stake_account)
-        }
-        TransactionType::ProgramDeploy { program_id, deployer } => {
-            format!("Program Deploy: {} by {}", program_id, deployer)
-        }
-        TransactionType::ProgramUpgrade { program_id, authority } => {
-            format!("Program Upgrade: {} by {}", program_id, authority)
-        }
-        TransactionType::SpamBulk { transaction_count, suspected_spam_type } => {
-            format!("Spam Bulk: {} transactions ({})", transaction_count, suspected_spam_type)
-        }
-        TransactionType::ComputeBudget { compute_units, compute_unit_price } => {
-            format!("Compute Budget: {} units @ {} μSOL/unit", compute_units, compute_unit_price)
-        }
-        TransactionType::NftMint { collection_id: _, leaf_asset_id, nft_type } => {
-            format!("NFT Mint: {} ({})", leaf_asset_id, nft_type)
-        }
-        TransactionType::Spam => "Spam".to_string(),
         TransactionType::Unknown => "Unknown".to_string(),
     };
 
@@ -1826,6 +2012,98 @@ fn log_transaction_summary(transaction: &Transaction) {
     ));
 }
 
+/// Display detailed ATA analysis information for a transaction
+fn display_detailed_ata_analysis(transaction: &Transaction) {
+    log(LogTag::Transactions, "ATA_ANALYSIS", "=== DETAILED ATA OPERATIONS ANALYSIS ===");
+    
+    // Check if we have ATA analysis data
+    if let Some(ata_analysis) = &transaction.ata_analysis {
+        // Summary information
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total ATA Creations: {}", ata_analysis.total_ata_creations));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total ATA Closures: {}", ata_analysis.total_ata_closures));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total Rent Spent: {:.9} SOL", ata_analysis.total_rent_spent));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total Rent Recovered: {:.9} SOL", ata_analysis.total_rent_recovered));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Net Rent Impact: {:.9} SOL", ata_analysis.net_rent_impact));
+        
+        // WSOL specific operations
+        if ata_analysis.wsol_ata_creations > 0 || ata_analysis.wsol_ata_closures > 0 {
+            log(LogTag::Transactions, "ATA_ANALYSIS", "--- WSOL ATA Operations ---");
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("WSOL ATA Creations: {}", ata_analysis.wsol_ata_creations));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("WSOL ATA Closures: {}", ata_analysis.wsol_ata_closures));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("WSOL Rent Spent: {:.9} SOL", ata_analysis.wsol_rent_spent));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("WSOL Rent Recovered: {:.9} SOL", ata_analysis.wsol_rent_recovered));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("WSOL Net Impact: {:.9} SOL", ata_analysis.wsol_net_rent_impact));
+        }
+        
+        // Token specific operations
+        if ata_analysis.token_ata_creations > 0 || ata_analysis.token_ata_closures > 0 {
+            log(LogTag::Transactions, "ATA_ANALYSIS", "--- Token ATA Operations ---");
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Token ATA Creations: {}", ata_analysis.token_ata_creations));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Token ATA Closures: {}", ata_analysis.token_ata_closures));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Token Rent Spent: {:.9} SOL", ata_analysis.token_rent_spent));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Token Rent Recovered: {:.9} SOL", ata_analysis.token_rent_recovered));
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Token Net Impact: {:.9} SOL", ata_analysis.token_net_rent_impact));
+        }
+        
+        // Detailed operation list
+        if !ata_analysis.detected_operations.is_empty() {
+            log(LogTag::Transactions, "ATA_ANALYSIS", "--- Detailed ATA Operations ---");
+            for (i, operation) in ata_analysis.detected_operations.iter().enumerate() {
+                let op_type = match operation.operation_type {
+                    screenerbot::transactions::AtaOperationType::Creation => "Creation",
+                    screenerbot::transactions::AtaOperationType::Closure => "Closure",
+                };
+                
+                let token_type = if operation.is_wsol { "WSOL" } else { "Token" };
+                
+                log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                    "Operation #{}: {} - {} ATA for mint {} - {:.9} SOL",
+                    i + 1,
+                    op_type,
+                    token_type,
+                    operation.token_mint,
+                    operation.rent_amount
+                ));
+            }
+        }
+        
+        // SOL calculations
+        log(LogTag::Transactions, "ATA_ANALYSIS", "--- SOL Amount Calculation ---");
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Total SOL Change: {:.9} SOL", transaction.sol_balance_change));
+        
+        // Calculate pure trading amount
+        let pure_sol_amount = transaction.sol_balance_change - ata_analysis.net_rent_impact;
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!("Pure Trading Amount: {:.9} SOL (SOL Change - Net ATA Impact)", pure_sol_amount));
+        
+        // Check for WSOL operations and provide additional insights
+        if ata_analysis.wsol_ata_creations > 0 || ata_analysis.wsol_ata_closures > 0 {
+            let wsol_adjusted = transaction.sol_balance_change - ata_analysis.token_net_rent_impact;
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                "WSOL-Adjusted Trading: {:.9} SOL (excludes WSOL ATA operations)", 
+                wsol_adjusted
+            ));
+        }
+        
+        // Recommendations
+        log(LogTag::Transactions, "ATA_ANALYSIS", "--- Analysis & Recommendations ---");
+        if ata_analysis.total_ata_creations > 0 || ata_analysis.total_ata_closures > 0 {
+            log(LogTag::Transactions, "ATA_ANALYSIS", "• This transaction includes ATA operations that affect the SOL calculation");
+            log(LogTag::Transactions, "ATA_ANALYSIS", "• When calculating trade amounts, consider adjusting for ATA rent costs");
+            
+            if ata_analysis.wsol_ata_creations > 0 || ata_analysis.wsol_ata_closures > 0 {
+                log(LogTag::Transactions, "ATA_ANALYSIS", "• WSOL operations detected - these are typically temporary and shouldn't be counted as costs");
+            }
+        } else {
+            log(LogTag::Transactions, "ATA_ANALYSIS", "• No ATA operations detected in this transaction");
+        }
+    } else {
+        log(LogTag::Transactions, "ATA_ANALYSIS", "No ATA analysis data available for this transaction");
+        log(LogTag::Transactions, "ATA_ANALYSIS", "Try re-analyzing with --force-recalculate flag to generate detailed ATA data");
+    }
+    
+    log(LogTag::Transactions, "ATA_ANALYSIS", "=== END ATA OPERATIONS ANALYSIS ===");
+}
+
 /// Display detailed transaction information
 fn display_detailed_transaction_info(transaction: &Transaction) {
     log(LogTag::Transactions, "DETAIL", "=== TRANSACTION DETAILS ===");
@@ -1839,7 +2117,7 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
     };
     log(LogTag::Transactions, "DETAIL", &format!("Timestamp: {}", display_timestamp));
     log(LogTag::Transactions, "DETAIL", &format!("Success: {}", transaction.success));
-    log(LogTag::Transactions, "DETAIL", &format!("Finalized: {}", transaction.finalized));
+    log(LogTag::Transactions, "DETAIL", &format!("Status: {:?}", transaction.status));
     log(LogTag::Transactions, "DETAIL", &format!("Direction: {:?}", transaction.direction));
     log(LogTag::Transactions, "DETAIL", &format!("Fee (SOL): {:.9}", transaction.fee_sol));
     log(LogTag::Transactions, "DETAIL", &format!("SOL Balance Change: {:.9}", transaction.sol_balance_change));
@@ -1851,10 +2129,16 @@ fn display_detailed_transaction_info(transaction: &Transaction) {
         log(LogTag::Transactions, "DETAIL", &format!("Router Fee: {:.9} SOL", fee_breakdown.router_fee));
         log(LogTag::Transactions, "DETAIL", &format!("Platform Fee: {:.9} SOL", fee_breakdown.platform_fee));
         log(LogTag::Transactions, "DETAIL", &format!("Priority Fee: {:.9} SOL", fee_breakdown.priority_fee));
-        log(LogTag::Transactions, "DETAIL", &format!("ATA Creation Cost: {:.9} SOL", fee_breakdown.ata_creation_cost));
-        log(LogTag::Transactions, "DETAIL", &format!("Rent Costs: {:.9} SOL", fee_breakdown.rent_costs));
+        
+        // Get ATA costs from the new ATA analysis instead of removed fee breakdown fields
+        if let Some(ata_analysis) = &transaction.ata_analysis {
+            log(LogTag::Transactions, "DETAIL", &format!("ATA Creation Cost: {:.9} SOL", ata_analysis.total_rent_spent));
+            log(LogTag::Transactions, "DETAIL", &format!("ATA Rent Recovery: {:.9} SOL", ata_analysis.total_rent_recovered));
+            log(LogTag::Transactions, "DETAIL", &format!("Net ATA Impact: {:.9} SOL", ata_analysis.net_rent_impact));
+            log(LogTag::Transactions, "DETAIL", &format!("Infrastructure Costs: {:.9} SOL (one-time setup)", ata_analysis.total_rent_spent));
+        }
+        
         log(LogTag::Transactions, "DETAIL", &format!("Trading Fees Total: {:.9} SOL ({:.2}%)", fee_breakdown.total_fees, fee_breakdown.fee_percentage));
-        log(LogTag::Transactions, "DETAIL", &format!("Infrastructure Costs: {:.9} SOL (one-time setup)", fee_breakdown.rent_costs));
         log(LogTag::Transactions, "DETAIL", &format!("Compute Units: {} consumed / {} price = Priority: {}", 
             fee_breakdown.compute_units_consumed, 
             fee_breakdown.compute_unit_price,

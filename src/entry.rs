@@ -37,6 +37,7 @@ const DEEP_DROP_TIME_WINDOW_SEC: i64 = 60;     // Standard time window
 const MEDIUM_DROP_TIME_WINDOW_SEC: i64 = 120;  // Medium-term analysis (2 minutes)
 const LONG_DROP_TIME_WINDOW_SEC: i64 = 300;    // Long-term analysis (5 minutes)
 const EXTENDED_DROP_TIME_WINDOW_SEC: i64 = 600; // NEW: Extended analysis (10 minutes)
+const NEAR_TOP_ANALYSIS_WINDOW_SEC: i64 = 900; // Near-top analysis (15 minutes)
 
 // DYNAMIC TARGET RATIOS (Ultra-aggressive)
 const TARGET_DROP_RATIO_MIN: f64 = 0.05; // Reduced from 0.08 (5% instead of 8%) 
@@ -52,6 +53,9 @@ const VOLUME_MULTIPLIER_LARGE: f64 = 0.3;        // Reduced from 0.5x to 0.3x - 
 const MIN_VOLUME_DROP: f64 = 0.2;                // Reduced from 0.5% to 0.2% - catch micro volume moves
 const MICRO_DROP_THRESHOLD: f64 = 0.5;           // NEW: Micro drops for mega liquidity tokens
 const VOLUME_SPIKE_MULTIPLIER: f64 = 3.0;        // NEW: Volume spike detection (3x normal volume)
+
+// NEAR-TOP FILTER PARAMETERS (Prevent buying at recent peaks)
+const NEAR_TOP_THRESHOLD_PERCENT: f64 = 10.0;    // Must be MORE than 10% below 15-min high to enter
 
 // PROFIT TARGET CALCULATION PARAMETERS
 const PROFIT_BASE_MIN: f64 = 50.0;               // Base minimum profit target %
@@ -94,6 +98,56 @@ fn get_liquidity_based_thresholds(liquidity_usd: f64) -> (f64, f64, f64) {
     let target_ratio = TARGET_DROP_RATIO_MAX - (liquidity_ratio * (TARGET_DROP_RATIO_MAX - TARGET_DROP_RATIO_MIN));
     
     (min_drop, max_drop, target_ratio)
+}
+
+/// Check if current price is near recent top (15-minute high)
+/// Returns true if price is too close to recent peak (should NOT enter)
+fn is_near_recent_top(
+    current_price: f64,
+    price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
+    _liquidity_usd: f64  // Not used anymore, kept for compatibility
+) -> bool {
+    use chrono::Utc;
+    
+    if price_history.is_empty() {
+        // No history = can't determine if near top, allow entry
+        return false;
+    }
+    
+    // Get prices from last 15 minutes
+    let now = Utc::now();
+    let recent_prices: Vec<f64> = price_history
+        .iter()
+        .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= NEAR_TOP_ANALYSIS_WINDOW_SEC)
+        .map(|(_, price)| *price)
+        .collect();
+    
+    if recent_prices.len() < 3 {
+        // Not enough data points, allow entry
+        return false;
+    }
+    
+    // Find the highest price in the 15-minute window
+    let recent_high = recent_prices.iter().fold(0.0f64, |a, &b| a.max(b));
+    
+    if recent_high <= 0.0 || !recent_high.is_finite() || current_price <= 0.0 || !current_price.is_finite() {
+        return false;
+    }
+    
+    // Calculate how much BELOW the recent high we are
+    let drop_from_high_percent = ((recent_high - current_price) / recent_high) * PERCENTAGE_MULTIPLIER;
+    
+    // STRICT RULE: Must be MORE than 10% below 15-min high to allow entry
+    let is_too_close_to_top = drop_from_high_percent < NEAR_TOP_THRESHOLD_PERCENT;
+    
+    if is_debug_entry_enabled() {
+        log(LogTag::Entry, "NEAR_TOP_CHECK", &format!(
+            "🔝 15-min high analysis: current={:.12}, high={:.12}, drop={:.2}%, required=>{:.1}%, too_close={}",
+            current_price, recent_high, drop_from_high_percent, NEAR_TOP_THRESHOLD_PERCENT, is_too_close_to_top
+        ));
+    }
+    
+    is_too_close_to_top
 }
 
 /// Deep drop entry decision with dynamic liquidity-based scaling
@@ -192,6 +246,14 @@ pub async fn should_buy(token: &Token) -> bool {
     if is_debug_entry_enabled() {
         log(LogTag::Entry, "PRICE_HISTORY", &format!("📈 {} has {} price points for analysis", 
             token.symbol, price_history.len()));
+    }
+    
+    // CRITICAL SAFETY CHECK: Reject entries if price is near recent top (15-min high)
+    if is_near_recent_top(current_pool_price, &price_history, liquidity_usd) {
+        if is_debug_entry_enabled() {
+            log(LogTag::Entry, "NEAR_TOP_REJECT", &format!("🚫 {} rejected: price too close to 15-min high (safety filter)", token.symbol));
+        }
+        return false;
     }
     
     // CORE LOGIC: Dynamic drop detection based on liquidity
@@ -652,6 +714,22 @@ pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
     // Check blacklist first
     if is_token_excluded_from_trading(&token.mint) {
         return (false, 0.0, "Token blacklisted or excluded".to_string());
+    }
+
+    // Additional near-top safety check for confidence-based entries
+    let pool_service = get_pool_service();
+    
+    if let Some(pool_result) = pool_service.get_pool_price(&token.mint, None).await {
+        if let Some(current_price) = pool_result.price_sol {
+            let liquidity_usd = pool_result.liquidity_usd.max(
+                token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
+            );
+            let price_history = pool_service.get_recent_price_history(&token.mint).await;
+            
+            if is_near_recent_top(current_price, &price_history, liquidity_usd) {
+                return (false, 0.0, "Price too close to recent 15-min high (safety filter)".to_string());
+            }
+        }
     }
 
     // Use the main should_buy logic for entry decision
