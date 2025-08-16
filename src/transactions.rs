@@ -1964,20 +1964,20 @@ impl TransactionsManager {
                     transaction.fee_sol = lamports_to_sol(fee); // Convert lamports to SOL
                 }
 
-                // Calculate SOL balance change from pre/post balances
+                // Calculate SOL balance change from pre/post balances (signed!)
                 if let (Some(pre_balances), Some(post_balances)) = (
                     meta.get("preBalances").and_then(|v| v.as_array()),
                     meta.get("postBalances").and_then(|v| v.as_array())
                 ) {
                     if !pre_balances.is_empty() && !post_balances.is_empty() {
                         // First account is always the main wallet account
-                        let pre_balance = pre_balances[0].as_u64().unwrap_or(0) as f64;
-                        let post_balance = post_balances[0].as_u64().unwrap_or(0) as f64;
-                        
-                        // Calculate change in lamports and convert to SOL
-                        let balance_change_lamports = post_balance - pre_balance;
-                        transaction.sol_balance_change = lamports_to_sol(balance_change_lamports as u64);
-                        
+                        let pre_balance_lamports = pre_balances[0].as_i64().unwrap_or(0);
+                        let post_balance_lamports = post_balances[0].as_i64().unwrap_or(0);
+
+                        // Signed change in lamports and convert to SOL
+                        let balance_change_lamports: i64 = post_balance_lamports - pre_balance_lamports;
+                        transaction.sol_balance_change = (balance_change_lamports as f64) / 1_000_000_000.0;
+
                         if self.debug_enabled {
                             log(LogTag::Transactions, "BALANCE", &format!(
                                 "SOL balance change for {}: {} lamports ({:.9} SOL)",
@@ -6198,7 +6198,37 @@ impl TransactionsManager {
                                    log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
         
         // Extract actual token information from Raydium swap
-        let (token_mint, token_symbol, token_amount, sol_amount) = self.extract_raydium_swap_info(transaction).await;
+        let (token_mint, token_symbol, token_amount, mut sol_amount) = self.extract_raydium_swap_info(transaction).await;
+
+        // Try to extract SOL (WSOL) amount from inner instructions transferChecked, like Pump.fun
+        if sol_amount.is_none() {
+            if let Some(raw_data) = &transaction.raw_transaction_data {
+                if let Some(meta) = raw_data.get("meta") {
+                    if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                        'outer: for group in inner {
+                            if let Some(instructions) = group.get("instructions").and_then(|v| v.as_array()) {
+                                for instr in instructions {
+                                    if let Some(parsed) = instr.get("parsed") {
+                                        if let Some(info) = parsed.get("info") {
+                                            if let (Some(mint), Some(token_amount)) = (
+                                                info.get("mint").and_then(|v| v.as_str()),
+                                                info.get("tokenAmount")
+                                            ) {
+                                                if mint == "So11111111111111111111111111111111111111112" {
+                                                    if let Some(ui) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
+                                                        if ui > 0.000001 { sol_amount = Some(ui); break 'outer; }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         // Check for SOL to Token swap (SOL spent) - lower threshold for failed transactions
         if transaction.sol_balance_change < -0.000001 {  // Spent more than 0.000001 SOL
