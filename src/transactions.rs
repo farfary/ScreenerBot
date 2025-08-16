@@ -2195,6 +2195,16 @@ impl TransactionsManager {
             
             if let Ok(swap_type) = self.analyze_raydium_swap(transaction).await {
                 transaction.transaction_type = swap_type;
+                
+                // Set token symbol for Raydium transactions
+                if let Some(ref db) = self.token_database {
+                    if let Some(token_mint) = self.extract_token_mint_from_transaction(transaction) {
+                        if let Ok(Some(token_info)) = db.get_token_by_mint(&token_mint) {
+                            transaction.token_symbol = Some(token_info.symbol);
+                        }
+                    }
+                }
+                
                 return Ok(());
             }
         }
@@ -6035,45 +6045,153 @@ impl TransactionsManager {
         let has_token_operations = log_text.contains("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") ||
                                    log_text.contains("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
         
+        // Extract actual token information from Raydium swap
+        let (token_mint, token_symbol, token_amount, sol_amount) = self.extract_raydium_swap_info(transaction).await;
+        
         // Check for SOL to Token swap (SOL spent) - lower threshold for failed transactions
         if transaction.sol_balance_change < -0.000001 {  // Spent more than 0.000001 SOL
             return Ok(TransactionType::SwapSolToToken {
-                token_mint: "Unknown".to_string(),
-                sol_amount: transaction.sol_balance_change.abs(),
-                token_amount: 0.0,
-                router: "Raydium".to_string(),
+                token_mint: token_mint.clone(),
+                sol_amount: sol_amount.unwrap_or_else(|| transaction.sol_balance_change.abs()),
+                token_amount,
+                router: self.determine_raydium_router(transaction),
             });
         } 
         // Check for Token to SOL swap (SOL received)
         else if transaction.sol_balance_change > 0.000001 {  // Received more than 0.000001 SOL
             return Ok(TransactionType::SwapTokenToSol {
-                token_mint: "Unknown".to_string(),
-                token_amount: 0.0,
-                sol_amount: transaction.sol_balance_change.abs(),
-                router: "Raydium".to_string(),
+                token_mint: token_mint.clone(),
+                token_amount,
+                sol_amount: sol_amount.unwrap_or_else(|| transaction.sol_balance_change.abs()),
+                router: self.determine_raydium_router(transaction),
             });
         }
         // Check for Token to Token swap (minimal SOL change but has token operations)
         else if has_token_operations && !transaction.token_transfers.is_empty() {
             return Ok(TransactionType::SwapTokenToToken {
-                from_mint: "Unknown".to_string(),
-                to_mint: "Unknown".to_string(),
-                from_amount: 0.0,
+                from_mint: token_mint.clone(),
+                to_mint: "Unknown".to_string(), // For now, handle as single token
+                from_amount: token_amount,
                 to_amount: 0.0,
-                router: "Raydium".to_string(),
+                router: self.determine_raydium_router(transaction),
             });
         }
         // Detect based on program presence even if no clear balance change
         else if has_token_operations {
             return Ok(TransactionType::SwapSolToToken {
-                token_mint: "Unknown".to_string(),
-                sol_amount: transaction.sol_balance_change.abs(),
-                token_amount: 0.0,
-                router: "Raydium".to_string(),
+                token_mint: token_mint.clone(),
+                sol_amount: sol_amount.unwrap_or_else(|| transaction.sol_balance_change.abs()),
+                token_amount,
+                router: self.determine_raydium_router(transaction),
             });
         }
         
         Err("Not a Raydium swap".to_string())
+    }
+
+    /// Extract token information from Raydium swap transaction
+    async fn extract_raydium_swap_info(&self, transaction: &Transaction) -> (String, String, f64, Option<f64>) {
+        // Method 1: Check pre/post token balance changes (most reliable for Raydium)
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array())
+                ) {
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    log(LogTag::Transactions, "RAYDIUM_TOKEN", &format!(
+                        "🔍 Analyzing Raydium token balance changes for wallet: {}", wallet_str
+                    ));
+                    
+                    for (post_idx, post_balance) in post_balances.iter().enumerate() {
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
+                            if post_owner == wallet_str {
+                                let account_index = post_balance.get("accountIndex").and_then(|v| v.as_u64()).unwrap_or(999);
+                                
+                                // Get pre-balance for same account
+                                let pre_amount = pre_balances.iter()
+                                    .find(|pre| pre.get("accountIndex").and_then(|v| v.as_u64()) == Some(account_index))
+                                    .and_then(|pre| pre.get("uiTokenAmount"))
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                
+                                // Get post-balance
+                                let post_amount = post_balance.get("uiTokenAmount")
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                
+                                let token_change = post_amount - pre_amount;
+                                
+                                if let Some(mint) = post_balance.get("mint").and_then(|v| v.as_str()) {
+                                    // Skip SOL/WSOL 
+                                    if mint == "So11111111111111111111111111111111111111112" {
+                                        continue;
+                                    }
+                                    
+                                    // Check for significant token balance change
+                                    if token_change.abs() > 0.1 { // More than 0.1 token changed
+                                        log(LogTag::Transactions, "RAYDIUM_TOKEN", &format!(
+                                            "💰 Raydium token balance change: {} -> {} = {} (mint: {})",
+                                            pre_amount, post_amount, token_change, mint
+                                        ));
+                                        
+                                        // Get token symbol from database
+                                        let token_symbol = if let Some(ref db) = self.token_database {
+                                            match db.get_token_by_mint(mint) {
+                                                Ok(Some(token_info)) => token_info.symbol,
+                                                _ => format!("TOKEN_{}", get_mint_prefix(mint))
+                                            }
+                                        } else {
+                                            format!("TOKEN_{}", get_mint_prefix(mint))
+                                        };
+                                        
+                                        return (mint.to_string(), token_symbol, token_change.abs(), None);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Method 2: Fallback to existing token_transfers if available
+        if !transaction.token_transfers.is_empty() {
+            let transfer = &transaction.token_transfers[0];
+            let token_symbol = if let Some(ref db) = self.token_database {
+                match db.get_token_by_mint(&transfer.mint) {
+                    Ok(Some(token_info)) => token_info.symbol,
+                    _ => format!("TOKEN_{}", get_mint_prefix(&transfer.mint))
+                }
+            } else {
+                format!("TOKEN_{}", get_mint_prefix(&transfer.mint))
+            };
+            
+            return (transfer.mint.clone(), token_symbol, transfer.amount, None);
+        }
+        
+        // Method 3: Final fallback
+        ("Unknown".to_string(), "TOKEN_Unknown".to_string(), 0.0, None)
+    }
+
+    /// Determine the specific Raydium router being used
+    fn determine_raydium_router(&self, transaction: &Transaction) -> String {
+        let log_text = transaction.log_messages.join(" ");
+        
+        // Check for specific Raydium program IDs
+        if log_text.contains("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C") {
+            "Raydium".to_string()
+        } else if log_text.contains("CPMMoo8L3wrBtphwOYMpCX4LtjRWB3gjCMFdukgp6EEh") {
+            "Raydium CPMM".to_string()
+        } else if log_text.contains("CPMMoo8L3VgkEru3h4j8mu4baRUeJBmK7nfD5fC2pXg") {
+            "Raydium CAMM".to_string()
+        } else if log_text.contains("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8") {
+            "Raydium AMM".to_string()
+        } else {
+            "Raydium".to_string()
+        }
     }
 
     /// Analyze Orca swap transactions
