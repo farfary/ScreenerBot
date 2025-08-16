@@ -853,27 +853,12 @@ impl TransactionsManager {
         // Additional analysis based on transaction type
         match &transaction.transaction_type {
             TransactionType::SwapSolToToken { .. } | TransactionType::SwapTokenToSol { .. } => {
-                // For swaps, analyze ATA operations to get accurate trading amounts
-                match self.analyze_ata_operations(transaction).await {
-                    Ok(ata_rent_amount) => {
-                        // Store ATA rent amount in transaction for accurate PnL calculation
-                        if ata_rent_amount > 0.0 {
-                            // Set the ata_rents field (need to add this to transaction analysis)
-                            if self.debug_enabled {
-                                log(LogTag::Transactions, "ATA_RENT", &format!(
-                                    "Transaction {}: ATA rent detected: {:.9} SOL", 
-                                    &transaction.signature[..8], ata_rent_amount
-                                ));
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // ATA analysis failure for swaps is not fatal, just log it
-                        if self.debug_enabled {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "ATA analysis failed for swap {}: {}", &transaction.signature[..8], e
-                            ));
-                        }
+                // For swaps, build precise ATA analysis so PnL can exclude ATA rent correctly
+                if let Err(e) = self.compute_and_set_ata_analysis(transaction).await {
+                    if self.debug_enabled {
+                        log(LogTag::Transactions, "WARN", &format!(
+                            "ATA analysis failed for swap {}: {}", &transaction.signature[..8], e
+                        ));
                     }
                 }
             }
@@ -2332,6 +2317,162 @@ impl TransactionsManager {
         Ok(())
     }
 
+    /// Compute comprehensive ATA analysis and attach it to the transaction
+    /// - Counts total and token-specific ATA creations/closures
+    /// - Estimates rent spent/recovered and net impact
+    async fn compute_and_set_ata_analysis(&self, transaction: &mut Transaction) -> Result<(), String> {
+        // Determine token mint context if available
+        let token_mint_ctx = self.extract_token_mint_from_transaction(transaction);
+
+        // Scan raw data
+        let mut total_creations: u32 = 0;
+        let mut total_closures: u32 = 0;
+        let mut token_creations: u32 = 0;
+        let mut token_closures: u32 = 0;
+        let mut wsol_creations: u32 = 0;
+        let mut wsol_closures: u32 = 0;
+        let mut detected_ops: Vec<AtaOperation> = Vec::new();
+
+        let mut total_rent_spent = 0.0_f64;
+        let mut total_rent_recovered = 0.0_f64;
+        let mut token_rent_spent = 0.0_f64;
+        let mut token_rent_recovered = 0.0_f64;
+        let mut wsol_rent_spent = 0.0_f64;
+        let mut wsol_rent_recovered = 0.0_f64;
+
+        let wsol_mint = "So11111111111111111111111111111111111111112";
+
+        if let Some(raw) = &transaction.raw_transaction_data {
+            let meta = raw.get("meta");
+            // Detect closeAccount occurrences from logs
+            let has_close = transaction.log_messages.iter().any(|l| l.contains("Instruction: CloseAccount") || l.contains("closeAccount"));
+
+            // Inner instructions for create idempotent / close account with mint context
+            let mut creation_accounts: HashMap<String, String> = HashMap::new(); // ata -> mint
+            let mut closure_accounts: HashMap<String, String> = HashMap::new();  // ata -> mint
+
+            if let Some(m) = meta {
+                if let Some(inner) = m.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for group in inner {
+                        if let Some(instrs) = group.get("instructions").and_then(|v| v.as_array()) {
+                            for instr in instrs {
+                                if let Some(parsed) = instr.get("parsed") {
+                                    let itype = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                    let info = parsed.get("info");
+                                    // CreateIdempotent often indicates ATA creation
+                                    if itype.eq_ignore_ascii_case("createIdempotent") || itype.eq_ignore_ascii_case("create") {
+                                        if let Some(i) = info {
+                                            let ata = i.get("account").and_then(|v| v.as_str()).unwrap_or("");
+                                            let mint = i.get("mint").and_then(|v| v.as_str()).unwrap_or("");
+                                            if !ata.is_empty() && !mint.is_empty() {
+                                                creation_accounts.insert(ata.to_string(), mint.to_string());
+                                            }
+                                        }
+                                    }
+                                    if itype.eq_ignore_ascii_case("closeAccount") {
+                                        if let Some(i) = info {
+                                            let ata = i.get("account").and_then(|v| v.as_str()).unwrap_or("");
+                                            let mint = i.get("mint").and_then(|v| v.as_str()).unwrap_or("");
+                                            if !ata.is_empty() {
+                                                // If mint missing, leave empty; we'll try infer later
+                                                if !mint.is_empty() {
+                                                    closure_accounts.insert(ata.to_string(), mint.to_string());
+                                                } else {
+                                                    closure_accounts.insert(ata.to_string(), String::new());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Use pre/post balances to identify rent-sized deltas
+                if let (Some(pre), Some(post)) = (
+                    m.get("preBalances").and_then(|v| v.as_array()),
+                    m.get("postBalances").and_then(|v| v.as_array())
+                ) {
+                    for (idx, (pre_v, post_v)) in pre.iter().zip(post.iter()).enumerate() {
+                        if let (Some(pre_l), Some(post_l)) = (pre_v.as_u64(), post_v.as_u64()) {
+                            let delta = post_l as i64 - pre_l as i64;
+                            // Heuristic band for ATA rent amounts
+                            if delta.abs() >= 1_500_000 && delta.abs() <= 3_000_000 {
+                                // Use the actual lamport delta instead of a fixed constant
+                                let rent_amount_sol = (delta.unsigned_abs() as f64) / 1_000_000_000.0;
+                                // Try infer the account pubkey from message accountKeys
+                                let account_pubkey = raw.get("transaction")
+                                    .and_then(|t| t.get("message"))
+                                    .and_then(|msg| msg.get("accountKeys"))
+                                    .and_then(|aks| aks.as_array())
+                                    .and_then(|aks| aks.get(idx))
+                                    .and_then(|ak| ak.get("pubkey"))
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+
+                                // Determine mint via earlier maps if available
+                                let mut assoc_mint = creation_accounts.get(&account_pubkey).cloned()
+                                    .or_else(|| closure_accounts.get(&account_pubkey).cloned())
+                                    .unwrap_or_default();
+
+                                // Classify as creation (SOL out) or closure (SOL in)
+                                if delta < 0 {
+                                    total_creations += 1;
+                                    total_rent_spent += rent_amount_sol;
+                                    if assoc_mint.is_empty() && token_mint_ctx.is_some() { assoc_mint = token_mint_ctx.clone().unwrap(); }
+                                    let is_wsol = assoc_mint == wsol_mint;
+                                    if let Some(tm) = &token_mint_ctx { if assoc_mint == *tm { token_creations += 1; token_rent_spent += rent_amount_sol; } }
+                                    if is_wsol { wsol_creations += 1; wsol_rent_spent += rent_amount_sol; }
+                                    detected_ops.push(AtaOperation{ operation_type: AtaOperationType::Creation, account_address: account_pubkey.clone(), token_mint: assoc_mint.clone(), rent_amount: rent_amount_sol, is_wsol });
+                                } else if delta > 0 {
+                                    total_closures += 1;
+                                    total_rent_recovered += rent_amount_sol;
+                                    if assoc_mint.is_empty() && token_mint_ctx.is_some() { assoc_mint = token_mint_ctx.clone().unwrap(); }
+                                    let is_wsol = assoc_mint == wsol_mint;
+                                    if let Some(tm) = &token_mint_ctx { if assoc_mint == *tm { token_closures += 1; token_rent_recovered += rent_amount_sol; } }
+                                    if is_wsol { wsol_closures += 1; wsol_rent_recovered += rent_amount_sol; }
+                                    detected_ops.push(AtaOperation{ operation_type: AtaOperationType::Closure, account_address: account_pubkey.clone(), token_mint: assoc_mint.clone(), rent_amount: rent_amount_sol, is_wsol });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let ata_analysis = AtaAnalysis {
+            total_ata_creations: total_creations,
+            total_ata_closures: total_closures,
+            token_ata_creations: token_creations,
+            token_ata_closures: token_closures,
+            wsol_ata_creations: wsol_creations,
+            wsol_ata_closures: wsol_closures,
+            total_rent_spent,
+            total_rent_recovered,
+            net_rent_impact: total_rent_recovered - total_rent_spent,
+            token_rent_spent,
+            token_rent_recovered,
+            token_net_rent_impact: token_rent_recovered - token_rent_spent,
+            wsol_rent_spent,
+            wsol_rent_recovered,
+            wsol_net_rent_impact: wsol_rent_recovered - wsol_rent_spent,
+            detected_operations: detected_ops,
+        };
+
+        if self.debug_enabled {
+            log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+                "{} ATA totals: create={} close={}, token c/d={}:{}, net_token={:.9} SOL",
+                &transaction.signature[..8], total_creations, total_closures, token_creations, token_closures, ata_analysis.token_net_rent_impact
+            ));
+        }
+
+        // Attach to transaction
+        transaction.ata_analysis = Some(ata_analysis);
+        Ok(())
+    }
+
     /// Comprehensive fee analysis to extract all fee types
     async fn analyze_fees(&self, transaction: &mut Transaction) -> Result<FeeBreakdown, String> {
         let mut fee_breakdown = FeeBreakdown {
@@ -3661,10 +3802,10 @@ impl TransactionsManager {
         };
 
         // Get precise ATA rent information from the new ATA analysis
-        let (net_ata_rent_flow, ata_rents_display) = if let Some(ata_analysis) = &transaction.ata_analysis {
-            (ata_analysis.net_rent_impact, ata_analysis.net_rent_impact)
+        let (net_ata_rent_flow, ata_rents_display, token_rent_recovered_exact) = if let Some(ata_analysis) = &transaction.ata_analysis {
+            (ata_analysis.net_rent_impact, ata_analysis.net_rent_impact, ata_analysis.token_rent_recovered)
         } else {
-            (0.0, 0.0)
+            (0.0, 0.0, 0.0)
         };
 
         if self.debug_enabled {
@@ -3739,7 +3880,7 @@ impl TransactionsManager {
         }
         
         // Calculate actual ATA rent impact based on RELEVANT operations only
-        let actual_ata_rent_impact = match swap_type.as_str() {
+    let actual_ata_rent_impact = match swap_type.as_str() {
             "Buy" => {
                 // For BUY: ALWAYS exclude ATA creation costs from trading amount
                 // ATA creation cost should NOT be considered part of token trading value
@@ -3755,13 +3896,12 @@ impl TransactionsManager {
                 }
             }
             "Sell" => {
-                // For SELL: Only exclude rent if RELEVANT ATAs are actually closed
+                // For SELL: Only exclude recovered rent for the specific token when closures occurred
                 if token_ata_closures > 0 {
-                    // Relevant ATAs closed - exclude recovered rent from trading profit
-                    let relevant_rent_recovered = token_ata_closures as f64 * ATA_RENT_COST_SOL;
-                    relevant_rent_recovered.min(net_ata_rent_flow.max(0.0)) // Cap at actual recovered amount
+                    // Cap by overall positive net ATA flow (funds returned)
+                    let recovered = token_rent_recovered_exact;
+                    recovered.min(net_ata_rent_flow.max(0.0))
                 } else {
-                    // No relevant ATAs closed - include all SOL in trading profit
                     0.0
                 }
             }
@@ -3771,6 +3911,7 @@ impl TransactionsManager {
         let pure_trade_amount = match swap_type.as_str() {
             "Buy" => {
                 // For BUY transactions: Handle different scenarios
+                // If router provided amount, we'll use it below in the normal-case branch
                 
                 // 1. Normal case: Amount is reasonable (around 0.005 SOL)
                 if sol_amount_raw.abs() > 0.004 && sol_amount_raw.abs() < 0.006 {
@@ -3822,28 +3963,35 @@ impl TransactionsManager {
                 }
             }
             "Sell" => {
-                // For SELL transactions:
-                // sol_balance_change is POSITIVE (SOL received)  
-                // Only exclude ATA rent if ATAs were actually closed
+                // For SELL transactions: Prefer router-provided amount when available; otherwise fallback
+                if sol_amount_raw.abs() > 0.0 {
+                    let pure_trade = sol_amount_raw.abs();
+                    log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
+                        "SELL tx {}: router SOL amount used as pure trade = {:.9}",
+                        transaction.signature.chars().take(8).collect::<String>(), pure_trade
+                    ));
+                    pure_trade
+                } else {
+                // Fallback: derive from balance changes and token-specific ATA rent recovery
                 let total_sol_received = transaction.sol_balance_change;
                 let pure_trade = total_sol_received - actual_ata_rent_impact;
                 
                 // Always log critical ATA calculations for verification
                 log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
-                    "SELL tx {}: ata_closures={}, actual_impact={:.9}, was_excluded={}",
+                    "SELL tx {}: ata_closures={}, token_rent_recovered={:.9}, pure_trade_adjusted={}",
                     transaction.signature.chars().take(8).collect::<String>(),
-                    ata_closures_count, actual_ata_rent_impact,
-                    ata_closures_count > 0
+                    ata_closures_count, actual_ata_rent_impact, ata_closures_count > 0
                 ));
                 
                 if self.debug_enabled {
                     log(LogTag::Transactions, "SELL_CALC", &format!(
-                        "Sell calculation: total_received={:.9}, ata_flow={:.9}, actual_impact={:.9}, pure_trade={:.9}, ata_ops={}c/{}d",
-                        total_sol_received, net_ata_rent_flow, actual_ata_rent_impact, pure_trade, ata_creations_count, ata_closures_count
+                        "Sell calculation: total_received={:.9}, token_rent_recovered={:.9}, pure_trade={:.9}, ata_ops={}c/{}d",
+                        total_sol_received, actual_ata_rent_impact, pure_trade, ata_creations_count, ata_closures_count
                     ));
                 }
                 
                 pure_trade.max(0.0)
+                }
             }
             _ => {
                 // Fallback for unknown swap types
