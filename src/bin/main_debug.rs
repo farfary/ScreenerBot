@@ -96,6 +96,7 @@ COMMON USAGE EXAMPLES:
   Basic Analysis:
     cargo run --bin main_debug -- --analyze-swaps
     cargo run --bin main_debug -- --analyze-swaps --count 50 --min-sol 0.003
+    cargo run --bin main_debug -- --analyze-swaps --filter-mint <MINT>
 
   Live Trading Tests:
     cargo run --bin main_debug -- --test-swap --dry-run
@@ -109,6 +110,7 @@ COMMON USAGE EXAMPLES:
   Deep Investigation:
     cargo run --bin main_debug -- --signature TRANSACTION_SIGNATURE
     cargo run --bin main_debug -- --show-unknown --count 100
+    cargo run --bin main_debug -- --analyze-all --filter-mint <MINT>
 
   Token Database Lookup:
     cargo run --bin main_debug -- --token-info DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
@@ -290,6 +292,13 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .value_parser(clap::value_parser!(f64))
         )
         .arg(
+            Arg::new("filter-mint")
+                .long("filter-mint")
+                .help("Filter analysis to a specific token mint (applies to --analyze-swaps and --analyze-all)")
+                .value_name("MINT")
+                .value_parser(clap::value_parser!(String))
+        )
+        .arg(
             Arg::new("count")
                 .long("count")
                 .help("Number of transactions to process (min: 1, max: 10000)")
@@ -399,6 +408,8 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
 
     // Check for combinable analyze flag
     let should_analyze = matches.get_flag("analyze");
+    // Optional token mint filter for analyses
+    let filter_mint_for_analysis = matches.get_one::<String>("filter-mint").cloned();
     
     // Execute based on command line arguments
     if matches.get_flag("monitor") {
@@ -408,7 +419,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after monitoring...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if let Some(signature) = matches.get_one::<String>("signature") {
         let force_recalculate = matches.get_flag("force-recalculate");
@@ -419,7 +430,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching new transactions...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if let Some(count) = matches.get_one::<usize>("fetch") {
         // Validate fetch count range
@@ -432,14 +443,14 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching limited transactions...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("fetch-all") {
         fetch_all_wallet_transactions(wallet_pubkey).await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching all transactions...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("test-analyzer") {
         let count = *matches.get_one::<usize>("count")
@@ -448,7 +459,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after testing analyzer...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("debug-cache") {
         debug_cache_system().await;
@@ -457,14 +468,14 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after recalculating cache...");
-            analyze_swaps(wallet_pubkey, true, None, None, None).await;
+            analyze_swaps(wallet_pubkey, true, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("clean-cache") {
         clean_transaction_cache().await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after cleaning cache...");
-            analyze_swaps(wallet_pubkey, true, None, None, None).await;
+            analyze_swaps(wallet_pubkey, true, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("clean") {
         clean_all_transaction_files().await;
@@ -512,13 +523,13 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
             }
         }
         
-        analyze_swaps(wallet_pubkey, force_recalculate, count, min_sol, max_sol).await;
+    analyze_swaps(wallet_pubkey, force_recalculate, count, min_sol, max_sol, filter_mint_for_analysis.clone()).await;
     } else if matches.get_flag("analyze-positions") {
         analyze_all_positions(wallet_pubkey).await;
     } else if matches.get_flag("analyze-all") {
         let count = *matches.get_one::<usize>("count")
             .expect("count should have default value");
-        analyze_all_transactions(wallet_pubkey, count).await;
+    analyze_all_transactions(wallet_pubkey, count, filter_mint_for_analysis.clone()).await;
     } else if matches.get_flag("analyze-ata") {
         let count = *matches.get_one::<usize>("count")
             .expect("count should have default value");
@@ -553,7 +564,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after swap test...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("test-position") {
         // Validate and extract position test arguments with proper error handling
@@ -596,12 +607,12 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after updating cache...");
-            analyze_swaps(wallet_pubkey, false, None, None, None).await;
+            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if should_analyze {
         // If only --analyze is specified, run comprehensive analysis
         log(LogTag::System, "INFO", "Running comprehensive transaction analysis...");
-        analyze_swaps(wallet_pubkey, false, None, None, None).await;
+    analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
     } else {
         log(LogTag::System, "ERROR", "No command specified. Use --help for usage information.");
         std::process::exit(1);
@@ -710,7 +721,7 @@ impl SwapTestConfig {
 }
 
 /// Analyze swap transactions with comprehensive PnL and filtering
-async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>) {
+async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>, filter_mint: Option<String>) {
     if force_recalculate {
         log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis with ENHANCED RECALCULATION for all transactions");
     } else {
@@ -725,6 +736,10 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Op
     }
     if let Some(max) = max_sol {
         log(LogTag::Transactions, "FILTER", &format!("Filtering swaps with SOL amount <= {:.6}", max));
+    }
+    if let Some(ref mint) = filter_mint {
+        let short = if mint.len() > 8 { &mint[..8] } else { mint };
+        log(LogTag::Transactions, "FILTER", &format!("Filtering swaps by token mint: {}...", short));
     }
 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
@@ -752,6 +767,12 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Op
                 // Check maximum filter
                 if let Some(max) = max_sol {
                     if sol_amount > max {
+                        return false;
+                    }
+                }
+                // Check mint filter
+                if let Some(ref m) = filter_mint {
+                    if swap.token_mint != *m {
                         return false;
                     }
                 }
@@ -890,7 +911,7 @@ impl TokenSwapStats {
 }
 
 /// Analyze ALL transaction types (not just swaps) with comprehensive breakdown
-async fn analyze_all_transactions(wallet_pubkey: Pubkey, max_count: usize) {
+async fn analyze_all_transactions(wallet_pubkey: Pubkey, max_count: usize, filter_mint: Option<String>) {
     log(LogTag::Transactions, "INFO", &format!(
         "Starting comprehensive analysis of ALL transaction types (max {} transactions)", max_count
     ));
@@ -915,11 +936,20 @@ async fn analyze_all_transactions(wallet_pubkey: Pubkey, max_count: usize) {
                 return;
             }
 
+            // Optional filter by token mint (match any involvement in tx)
+            let filtered: Vec<_> = if let Some(ref mint) = filter_mint {
+                let short = if mint.len() > 8 { &mint[..8] } else { mint };
+                log(LogTag::Transactions, "FILTER", &format!("Filtering all transactions by mint: {}...", short));
+                transactions.into_iter().filter(|tx| transaction_involves_mint(tx, mint)).collect()
+            } else {
+                transactions
+            };
+
             // Display comprehensive transaction analysis table
-            display_all_transactions_table(&transactions);
+            display_all_transactions_table(&filtered);
             
             // Display detailed statistics breakdown
-            display_comprehensive_transaction_statistics(&transactions);
+            display_comprehensive_transaction_statistics(&filtered);
         }
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("Failed to load transactions: {}", e));
@@ -1064,6 +1094,27 @@ fn display_comprehensive_transaction_statistics(transactions: &[screenerbot::tra
     }
     
     log(LogTag::Transactions, "STATS", "=== END COMPREHENSIVE STATISTICS ===");
+}
+
+/// Determine if a transaction involves a given token mint in any capacity
+fn transaction_involves_mint(tx: &screenerbot::transactions::Transaction, mint: &str) -> bool {
+    // Check token transfers first
+    if tx.token_transfers.iter().any(|t| t.mint == mint) {
+        return true;
+    }
+    // Check token balance changes
+    if tx.token_balance_changes.iter().any(|b| b.mint == mint) {
+        return true;
+    }
+    // Check analyzed transaction type fields
+    match &tx.transaction_type {
+        screenerbot::transactions::TransactionType::SwapSolToToken { token_mint, .. } => token_mint == mint,
+        screenerbot::transactions::TransactionType::SwapTokenToSol { token_mint, .. } => token_mint == mint,
+        screenerbot::transactions::TransactionType::SwapTokenToToken { from_mint, to_mint, .. } => from_mint == mint || to_mint == mint,
+        screenerbot::transactions::TransactionType::TokenTransfer { mint: m, .. } => m == mint,
+        screenerbot::transactions::TransactionType::AtaClose { token_mint, .. } => token_mint == mint,
+        _ => false,
+    }
 }
 
 /// Analyze ATA operations across multiple transactions
