@@ -5927,8 +5927,9 @@ impl TransactionsManager {
             let token_amount = self.extract_token_amount_from_pumpfun(transaction).await;
             
             // Determine direction based on instruction patterns and balance changes
-            if has_buy_instruction || transaction.sol_balance_change < -0.000001 || sol_amount > 0.000001 {
-                // SOL to Token (Buy) - including failed attempts
+            // Note: sol_amount is always positive (abs value), so we use sol_balance_change for direction
+            if has_buy_instruction || transaction.sol_balance_change < -0.000001 {
+                // SOL to Token (Buy) - SOL was spent (negative balance change)
                 return Ok(TransactionType::SwapSolToToken {
                     token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
                     sol_amount: sol_amount.max(transaction.sol_balance_change.abs()),
@@ -5936,7 +5937,7 @@ impl TransactionsManager {
                     router: "Pump.fun".to_string(),
                 });
             } else if has_sell_instruction || transaction.sol_balance_change > 0.000001 {
-                // Token to SOL (Sell)
+                // Token to SOL (Sell) - SOL was received (positive balance change)
                 return Ok(TransactionType::SwapTokenToSol {
                     token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
                     token_amount: token_amount,
@@ -5944,13 +5945,28 @@ impl TransactionsManager {
                     router: "Pump.fun".to_string(),
                 });
             } else {
-                // Default to buy for pump.fun transactions
-                return Ok(TransactionType::SwapSolToToken {
-                    token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
-                    sol_amount: sol_amount.max(0.000001),
-                    token_amount: token_amount,
-                    router: "Pump.fun".to_string(),
-                });
+                // Fallback: if we have Pump.fun program but unclear direction, use balance change
+                if transaction.sol_balance_change.abs() > 0.000001 {
+                    if transaction.sol_balance_change < 0.0 {
+                        // SOL spent = Buy
+                        return Ok(TransactionType::SwapSolToToken {
+                            token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                            sol_amount: transaction.sol_balance_change.abs(),
+                            token_amount: token_amount,
+                            router: "Pump.fun".to_string(),
+                        });
+                    } else {
+                        // SOL received = Sell
+                        return Ok(TransactionType::SwapTokenToSol {
+                            token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
+                            token_amount: token_amount,
+                            sol_amount: transaction.sol_balance_change.abs(),
+                            router: "Pump.fun".to_string(),
+                        });
+                    }
+                }
+                // Final fallback - unclear transaction, return error instead of defaulting to buy
+                return Err("Cannot determine Pump.fun swap direction".to_string());
             }
         }
         
