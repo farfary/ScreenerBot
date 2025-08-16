@@ -22,7 +22,7 @@ use chrono::Utc;
 const MAX_DATA_AGE_MINUTES: i64 = 10; // Extended from 5 to 10 minutes for maximum opportunities
 
 // LIQUIDITY TARGETING RANGES (Expanded: $5k to $1M)
-const TARGET_LIQUIDITY_MIN: f64 = 500.0;    // Reduced from 10k to 5k - catch smaller tokens
+const TARGET_LIQUIDITY_MIN: f64 = 5000.0;    // Reduced from 10k to 5k - catch smaller tokens
 const TARGET_LIQUIDITY_MAX: f64 = 1_000_000.0; // Increased from 500k to 1M - catch bigger opportunities
 
 // DROP PERCENTAGE RANGES (Ultra-aggressive - catch micro drops)

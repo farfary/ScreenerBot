@@ -23,7 +23,7 @@
 /// 
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = true;
+const FORCE_PREMIUM_RPC_ONLY: bool = false;
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_rpc_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled, read_configs, RPC_STATS };

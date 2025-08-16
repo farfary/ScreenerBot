@@ -6050,13 +6050,14 @@ impl TransactionsManager {
     }
     
     /// Extract token amount from Jupiter transaction
+    /// Returns absolute token amount moved to/from the wallet for the non-WSOL mint.
     async fn extract_token_amount_from_jupiter(&self, transaction: &Transaction) -> f64 {
         // First check existing token_transfers
         if !transaction.token_transfers.is_empty() {
             return transaction.token_transfers[0].amount;
         }
         
-        // Method 1: Check pre/post token balance changes (more reliable)
+        // Method 1: Check pre/post token balance changes (most reliable)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 // Look for token balance changes
@@ -6073,6 +6074,8 @@ impl TransactionsManager {
                     for (post_idx, post_balance) in post_balances.iter().enumerate() {
                         if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
                             let mint_str = post_balance.get("mint").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            // Skip WSOL
+                            if mint_str == "So11111111111111111111111111111111111111112" { continue; }
                             
                             log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
                                 "📋 Post balance #{}: owner={}, mint={}", 
@@ -6108,8 +6111,8 @@ impl TransactionsManager {
                                     account_index, pre_amount, post_amount, token_change, mint_str
                                 ));
                                 
-                                // Check for both positive and negative significant changes
-                                if token_change.abs() > 1.0 { // More than 1 token gained or lost
+                                // Check for both positive and negative changes (use tiny epsilon to avoid float noise)
+                                if token_change.abs() > 1e-12 { 
                                     if let Some(mint) = post_balance.get("mint").and_then(|v| v.as_str()) {
                                         log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
                                             "🔢 Jupiter token amount from balance change: {} -> {} = {} (mint: {})",
@@ -6126,57 +6129,51 @@ impl TransactionsManager {
                 
                 // Method 2: Parse token transfers from inner instructions (fallback)
                 if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    let mut sum_ui = 0.0f64;
                     for inner_group in inner_instructions {
                         if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
                             for instruction in instructions {
                                 // Look for parsed token transfer instructions
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
-                                        // Check for transfer instructions
-                                        if let Some(transfer_type) = parsed.get("type").and_then(|v| v.as_str()) {
-                                            if transfer_type == "transfer" {
-                                                // Get the amount and mint
+                                        // Support both transfer and transferChecked
+                                        if let Some(itype) = parsed.get("type").and_then(|v| v.as_str()) {
+                                            // Extract mint and token amount (ui if available)
+                                            let mint_opt = info.get("mint").and_then(|v| v.as_str());
+                                            if let Some(mint_str) = mint_opt {
+                                                if mint_str == "So11111111111111111111111111111111111111112" { continue; }
+                                                let involves_wallet = info.get("destination").and_then(|v| v.as_str()) == Some(wallet_str.as_str())
+                                                    || info.get("source").and_then(|v| v.as_str()) == Some(wallet_str.as_str())
+                                                    || info.get("owner").and_then(|v| v.as_str()) == Some(wallet_str.as_str())
+                                                    || info.get("authority").and_then(|v| v.as_str()) == Some(wallet_str.as_str());
+                                                if !involves_wallet { continue; }
+
+                                                // Prefer tokenAmount.uiAmount if present (transferChecked), else raw amount + decimals
+                                                if let Some(token_amount) = info.get("tokenAmount") {
+                                                    if let Some(ui) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
+                                                        if ui > 0.0 { sum_ui += ui; }
+                                                        continue;
+                                                    }
+                                                    if let Some(raw_str) = token_amount.get("amount").and_then(|v| v.as_str()) {
+                                                        if let Ok(raw) = raw_str.parse::<u64>() {
+                                                            if let Ok(dec) = get_token_decimals_safe(mint_str).await {
+                                                                sum_ui += raw_to_ui_amount(raw, dec);
+                                                                continue;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                // Legacy transfer path with plain amount
                                                 if let Some(amount_str) = info.get("amount").and_then(|v| v.as_str()) {
                                                     if let Ok(raw_amount) = amount_str.parse::<u64>() {
-                                                        // Check if this looks like our target transfer (large amount)
-                                                        if raw_amount > 100000000 { // More than 1M tokens (raw amount)
-                                                            // Get the token mint to determine decimals
-                                                            if let Some(mint_str) = info.get("mint").and_then(|v| v.as_str()) {
-                                                                // Get token decimals from the decimals system
-                                                                if let Ok(decimals) = get_token_decimals_safe(mint_str).await {
-                                                                    // Convert raw amount to UI amount using proper decimals
-                                                                    let ui_amount = raw_to_ui_amount(raw_amount, decimals);
-                                                                    
-                                                                    log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
-                                                                        "🔢 Jupiter token amount detected: {} raw -> {} UI (decimals: {}, mint: {})",
-                                                                        raw_amount, ui_amount, decimals, mint_str
-                                                                    ));
-                                                                    
-                                                                    return ui_amount;
-                                                                } else {
-                                                                    log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
-                                                                        "⚠️ Could not get decimals for mint: {}, using fallback",
-                                                                        mint_str
-                                                                    ));
-                                                                    
-                                                                    // Fallback: try common decimal values
-                                                                    // Most tokens use 6 or 9 decimals
-                                                                    if raw_amount > 1_000_000_000 { // > 1B raw, likely 9 decimals
-                                                                        return raw_to_ui_amount(raw_amount, 9);
-                                                                    } else if raw_amount > 1_000_000 { // > 1M raw, likely 6 decimals  
-                                                                        return raw_to_ui_amount(raw_amount, 6);
-                                                                    } else { // < 1M raw, likely fewer decimals
-                                                                        return raw_to_ui_amount(raw_amount, 5);
-                                                                    }
-                                                                }
-                                                            }
-                                                            
-                                                            // If no mint found, use the old hardcoded approach as absolute fallback
-                                                            log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
-                                                                "⚠️ No mint found in transfer, using hardcoded BONK decimals fallback for amount: {}",
-                                                                raw_amount
-                                                            ));
-                                                            return raw_amount as f64 / 100000.0;
+                                                        if let Ok(decimals) = get_token_decimals_safe(mint_str).await {
+                                                            sum_ui += raw_to_ui_amount(raw_amount, decimals);
+                                                        } else {
+                                                            // Rough fallback if decimals unknown
+                                                            sum_ui += if raw_amount > 1_000_000_000 { raw_to_ui_amount(raw_amount, 9) }
+                                                                      else if raw_amount > 1_000_000 { raw_to_ui_amount(raw_amount, 6) }
+                                                                      else { raw_to_ui_amount(raw_amount, 5) };
                                                         }
                                                     }
                                                 }
@@ -6187,6 +6184,7 @@ impl TransactionsManager {
                             }
                         }
                     }
+                    if sum_ui > 0.0 { return sum_ui; }
                 }
             }
         }
