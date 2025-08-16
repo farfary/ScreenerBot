@@ -6200,12 +6200,13 @@ impl TransactionsManager {
         // Extract actual token information from Raydium swap
         let (token_mint, token_symbol, token_amount, mut sol_amount) = self.extract_raydium_swap_info(transaction).await;
 
-        // Try to extract SOL (WSOL) amount from inner instructions transferChecked, like Pump.fun
+        // Try to extract SOL (WSOL) amount from inner instructions by summing transferChecked amounts (handles fee/referral splits)
         if sol_amount.is_none() {
             if let Some(raw_data) = &transaction.raw_transaction_data {
                 if let Some(meta) = raw_data.get("meta") {
                     if let Some(inner) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
-                        'outer: for group in inner {
+                        let mut wsol_sum = 0.0f64;
+                        for group in inner {
                             if let Some(instructions) = group.get("instructions").and_then(|v| v.as_array()) {
                                 for instr in instructions {
                                     if let Some(parsed) = instr.get("parsed") {
@@ -6216,7 +6217,7 @@ impl TransactionsManager {
                                             ) {
                                                 if mint == "So11111111111111111111111111111111111111112" {
                                                     if let Some(ui) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
-                                                        if ui > 0.000001 { sol_amount = Some(ui); break 'outer; }
+                                                        if ui > 0.0 { wsol_sum += ui; }
                                                     }
                                                 }
                                             }
@@ -6225,6 +6226,7 @@ impl TransactionsManager {
                                 }
                             }
                         }
+                        if wsol_sum > 0.0 { sol_amount = Some(wsol_sum); }
                     }
                 }
             }
@@ -6661,24 +6663,24 @@ impl TransactionsManager {
     
     /// Extract SOL amount from Pump.fun transaction
     async fn extract_sol_amount_from_pumpfun(&self, transaction: &Transaction) -> f64 {
-        // First try to get actual SOL transfer amounts from transfer instructions
+        // Sum all WSOL transferChecked uiAmounts found in inner instructions (covers splits to fees/referrals)
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    let mut wsol_sum = 0.0f64;
                     for inner_group in inner_instructions {
                         if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
                             for instruction in instructions {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
-                                        // Look for transferChecked instructions with SOL (WSOL)
-                                        if let Some(token_amount) = info.get("tokenAmount") {
-                                            if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
-                                                if mint == "So11111111111111111111111111111111111111112" {
-                                                    if let Some(ui_amount) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
-                                                        if ui_amount > 0.001 { // Ignore tiny amounts that might be fees
-                                                            return ui_amount;
-                                                        }
-                                                    }
+                                        if let (Some(mint), Some(token_amount)) = (
+                                            info.get("mint").and_then(|v| v.as_str()),
+                                            info.get("tokenAmount")
+                                        ) {
+                                            if mint == "So11111111111111111111111111111111111111112" {
+                                                if let Some(ui_amount) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
+                                                    // Include even micro amounts; they'll round correctly in display
+                                                    if ui_amount > 0.0 { wsol_sum += ui_amount; }
                                                 }
                                             }
                                         }
@@ -6687,22 +6689,25 @@ impl TransactionsManager {
                             }
                         }
                     }
+                    if wsol_sum > 0.0 {
+                        return wsol_sum;
+                    }
                 }
             }
         }
-        
-        // Calculate ATA rent to exclude from balance change
+
+        // Calculate ATA rent to exclude from balance change as a fallback
         let ata_rent = self.analyze_ata_operations(transaction).await.unwrap_or(0.0);
-        
+
         // Use balance change minus ATA rent as fallback
         let adjusted_balance_change = transaction.sol_balance_change.abs() - ata_rent;
-        
+
         if self.debug_enabled && ata_rent > 0.0 {
-            log(LogTag::Transactions, "SOL_EXTRACT", 
-                &format!("Excluding ATA rent: {:.9} SOL from balance change {:.9} SOL", 
+            log(LogTag::Transactions, "SOL_EXTRACT",
+                &format!("Excluding ATA rent: {:.9} SOL from balance change {:.9} SOL",
                          ata_rent, transaction.sol_balance_change.abs()));
         }
-        
+
         // Return the adjusted amount, ensuring it's not negative
         adjusted_balance_change.max(0.0)
     }
