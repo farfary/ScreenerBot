@@ -1,10 +1,10 @@
 #![allow(warnings)]
 
-/// Transaction Manager & Analyzer Debug Tool
+/// ScreenerBot Debug Tool
 ///
-/// Comprehensive debugging and testing tool for the transactions management system.
+/// Comprehensive debugging and testing tool for the ScreenerBot trading system.
 /// This tool provides detailed analysis, monitoring, and debugging capabilities
-/// for transaction processing, caching, and analysis.
+/// for transactions, tokens, wallet balance, and system performance.
 ///
 /// Features:
 /// - Monitor wallet transactions in real-time
@@ -17,34 +17,38 @@
 /// - Performance benchmarking
 /// - Cache management and stats
 /// - Execute real swap tests with transaction analysis
+/// - Check wallet balance for SOL, tokens, and ATA accounts
+/// - Get token information from database
 /// - Combinable analysis flag for comprehensive insights
 ///
 /// Usage Examples:
-/// - Monitor wallet transactions: cargo run --bin main_transactions_debug -- --monitor
-/// - Fetch new transactions: cargo run --bin main_transactions_debug -- --fetch-new
-/// - Fetch limited transactions for testing: cargo run --bin main_transactions_debug -- --fetch 50
-/// - Fetch ALL wallet transactions: cargo run --bin main_transactions_debug -- --fetch-all
-/// - Analyze specific transaction: cargo run --bin main_transactions_debug -- --signature <SIG>
-/// - Enhanced recalculate transaction: cargo run --bin main_transactions_debug -- --signature <SIG> --force-recalculate
-/// - Test analyzer on recent transactions: cargo run --bin main_transactions_debug -- --test-analyzer --count 10
-/// - Debug cache system: cargo run --bin main_transactions_debug -- --debug-cache
-/// - Recalculate analysis: cargo run --bin main_transactions_debug -- --recalculate-cache
-/// - Update and re-analyze cache: cargo run --bin main_transactions_debug -- --update-cache --count 50 (preserves raw data)
-/// - Clean cache files: cargo run --bin main_transactions_debug -- --clean-cache (removes calculated fields)
-/// - Remove all cache files: cargo run --bin main_transactions_debug -- --clean (removes all JSON files)
-/// - Analyze all swaps with PnL (auto-recalculates): cargo run --bin main_transactions_debug -- --analyze-swaps
-/// - Filter swaps by SOL amount: cargo run --bin main_transactions_debug -- --analyze-swaps --min-sol 0.003 --max-sol 0.006
-/// - Enhanced recalculate and analyze: cargo run --bin main_transactions_debug -- --analyze-swaps --force-recalculate
-/// - Analyze position lifecycle: cargo run --bin main_transactions_debug -- --analyze-positions
-/// - Analyze ALL transaction types: cargo run --bin main_transactions_debug -- --analyze-all --count 500
-/// - Analyze ATA operations: cargo run --bin main_transactions_debug -- --analyze-ata --count 100
-/// - Analyze specific transaction ATA: cargo run --bin main_transactions_debug -- --signature <SIG> --analyze-ata
-/// - Performance test: cargo run --bin main_transactions_debug -- --benchmark --count 100
-/// - Fetch and analyze: cargo run --bin main_transactions_debug -- --fetch-new --analyze
-/// - Monitor and analyze: cargo run --bin main_transactions_debug -- --monitor --analyze --duration 300
-/// - Just analyze: cargo run --bin main_transactions_debug -- --analyze
-/// - Test real swaps: cargo run --bin main_transactions_debug -- --test-swap --swap-type round-trip --token-mint <MINT> --sol-amount 0.002
-/// - Test real position management: cargo run --bin main_transactions_debug -- --test-position --token-mint <MINT> --sol-amount 0.002
+/// - Monitor wallet transactions: cargo run --bin main_debug -- --monitor
+/// - Fetch new transactions: cargo run --bin main_debug -- --fetch-new
+/// - Fetch limited transactions for testing: cargo run --bin main_debug -- --fetch 50
+/// - Fetch ALL wallet transactions: cargo run --bin main_debug -- --fetch-all
+/// - Analyze specific transaction: cargo run --bin main_debug -- --signature <SIG>
+/// - Enhanced recalculate transaction: cargo run --bin main_debug -- --signature <SIG> --force-recalculate
+/// - Test analyzer on recent transactions: cargo run --bin main_debug -- --test-analyzer --count 10
+/// - Debug cache system: cargo run --bin main_debug -- --debug-cache
+/// - Recalculate analysis: cargo run --bin main_debug -- --recalculate-cache
+/// - Update and re-analyze cache: cargo run --bin main_debug -- --update-cache --count 50 (preserves raw data)
+/// - Clean cache files: cargo run --bin main_debug -- --clean-cache (removes calculated fields)
+/// - Remove all cache files: cargo run --bin main_debug -- --clean (removes all JSON files)
+/// - Analyze all swaps with PnL (auto-recalculates): cargo run --bin main_debug -- --analyze-swaps
+/// - Filter swaps by SOL amount: cargo run --bin main_debug -- --analyze-swaps --min-sol 0.003 --max-sol 0.006
+/// - Enhanced recalculate and analyze: cargo run --bin main_debug -- --analyze-swaps --force-recalculate
+/// - Analyze position lifecycle: cargo run --bin main_debug -- --analyze-positions
+/// - Analyze ALL transaction types: cargo run --bin main_debug -- --analyze-all --count 500
+/// - Analyze ATA operations: cargo run --bin main_debug -- --analyze-ata --count 100
+/// - Analyze specific transaction ATA: cargo run --bin main_debug -- --signature <SIG> --analyze-ata
+/// - Performance test: cargo run --bin main_debug -- --benchmark --count 100
+/// - Fetch and analyze: cargo run --bin main_debug -- --fetch-new --analyze
+/// - Monitor and analyze: cargo run --bin main_debug -- --monitor --analyze --duration 300
+/// - Just analyze: cargo run --bin main_debug -- --analyze
+/// - Test real swaps: cargo run --bin main_debug -- --test-swap --swap-type round-trip --token-mint <MINT> --sol-amount 0.002
+/// - Test real position management: cargo run --bin main_debug -- --test-position --token-mint <MINT> --sol-amount 0.002
+/// - Check wallet balance: cargo run --bin main_debug -- --check-balance
+/// - Get token info: cargo run --bin main_debug -- --token-info <MINT_ADDRESS>
 
 use screenerbot::transactions::{
     TransactionsManager, Transaction, TransactionType, TransactionDirection,
@@ -83,34 +87,34 @@ async fn main() {
     // Initialize logger first
     init_file_logging();
 
-        let matches = Command::new("Transaction Manager & Analyzer Debug Tool")
+        let matches = Command::new("ScreenerBot Debug Tool")
         .version("1.0")
-        .about("Comprehensive debugging tool for transactions management system")
+        .about("Comprehensive debugging tool for ScreenerBot trading system")
         .after_help("
 COMMON USAGE EXAMPLES:
 
   Basic Analysis:
-    cargo run --bin main_transactions_debug -- --analyze-swaps
-    cargo run --bin main_transactions_debug -- --analyze-swaps --count 50 --min-sol 0.003
+    cargo run --bin main_debug -- --analyze-swaps
+    cargo run --bin main_debug -- --analyze-swaps --count 50 --min-sol 0.003
 
   Live Trading Tests:
-    cargo run --bin main_transactions_debug -- --test-swap --dry-run
-    cargo run --bin main_transactions_debug -- --test-swap --swap-type sol-to-token --sol-amount 0.001 --dry-run
-    cargo run --bin main_transactions_debug -- --test-swap --token-mint CUSTOM_MINT --router jupiter
+    cargo run --bin main_debug -- --test-swap --dry-run
+    cargo run --bin main_debug -- --test-swap --swap-type sol-to-token --sol-amount 0.001 --dry-run
+    cargo run --bin main_debug -- --test-swap --token-mint CUSTOM_MINT --router jupiter
 
   Data Management:
-    cargo run --bin main_transactions_debug -- --fetch-new --analyze
-    cargo run --bin main_transactions_debug -- --monitor --duration 300 --analyze
+    cargo run --bin main_debug -- --fetch-new --analyze
+    cargo run --bin main_debug -- --monitor --duration 300 --analyze
 
   Deep Investigation:
-    cargo run --bin main_transactions_debug -- --signature TRANSACTION_SIGNATURE
-    cargo run --bin main_transactions_debug -- --show-unknown --count 100
+    cargo run --bin main_debug -- --signature TRANSACTION_SIGNATURE
+    cargo run --bin main_debug -- --show-unknown --count 100
 
   Token Database Lookup:
-    cargo run --bin main_transactions_debug -- --token-info DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
+    cargo run --bin main_debug -- --token-info DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
 
   Wallet Inspection:
-    cargo run --bin main_transactions_debug -- --check-balance
+    cargo run --bin main_debug -- --check-balance
 
 IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         ")
@@ -371,13 +375,13 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         .get_matches();
 
     // Set command args for debug flags
-    let mut args = vec!["main_transactions_debug".to_string()];
+    let mut args = vec!["main_debug".to_string()];
     if matches.get_flag("verbose") || matches.get_one::<String>("signature").is_some() {
         args.push("--debug-transactions".to_string());
     }
     set_cmd_args(args);
 
-    log(LogTag::System, "INFO", "Starting Transaction Manager & Analyzer Debug Tool");
+    log(LogTag::System, "INFO", "Starting ScreenerBot Debug Tool");
 
     // Initialize RPC client (it's automatically initialized when first used)
     let _rpc_client = get_rpc_client();
@@ -603,7 +607,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         std::process::exit(1);
     }
 
-    log(LogTag::System, "INFO", "Transaction Manager & Analyzer Debug Tool completed");
+    log(LogTag::System, "INFO", "ScreenerBot Debug Tool completed");
 }
 
 /// Swap test configuration with validation

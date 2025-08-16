@@ -4,7 +4,7 @@
 /// **All transaction analysis functionality is integrated directly into this module.**
 /// This includes DEX detection, swap analysis, balance calculations, and type classification.
 /// 
-/// Debug Tool: Use `cargo run --bin main_transactions_debug` for comprehensive debugging,
+/// Debug Tool: Use `cargo run --bin main_debug` for comprehensive debugging,
 /// monitoring, analysis, and performance testing of the transaction management system.
 
 use std::collections::{HashMap, HashSet};
