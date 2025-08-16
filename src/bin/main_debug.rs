@@ -40,7 +40,9 @@
 /// - Analyze position lifecycle: cargo run --bin main_debug -- --analyze-positions
 /// - Analyze ALL transaction types: cargo run --bin main_debug -- --analyze-all --count 500
 /// - Analyze ATA operations: cargo run --bin main_debug -- --analyze-ata --count 100
+/// - Analyze transaction fees: cargo run --bin main_debug -- --analyze-fees --count 200
 /// - Analyze specific transaction ATA: cargo run --bin main_debug -- --signature <SIG> --analyze-ata
+/// - Deep analyze transaction: cargo run --bin main_debug -- --deep-analyze <SIGNATURE>
 /// - Performance test: cargo run --bin main_debug -- --benchmark --count 100
 /// - Fetch and analyze: cargo run --bin main_debug -- --fetch-new --analyze
 /// - Monitor and analyze: cargo run --bin main_debug -- --monitor --analyze --duration 300
@@ -49,6 +51,7 @@
 /// - Test real position management: cargo run --bin main_debug -- --test-position --token-mint <MINT> --sol-amount 0.002
 /// - Check wallet balance: cargo run --bin main_debug -- --check-balance
 /// - Get token info: cargo run --bin main_debug -- --token-info <MINT_ADDRESS>
+/// - Find mint by symbol: cargo run --bin main_debug -- --find-mint <SYMBOL>
 
 use screenerbot::transactions::{
     TransactionsManager, Transaction, TransactionType, TransactionDirection,
@@ -59,8 +62,10 @@ use screenerbot::global::{
     set_cmd_args, get_transactions_cache_dir
 };
 use screenerbot::arguments::{get_cmd_args, set_cmd_args as args_set_cmd_args};
-use screenerbot::rpc::{get_rpc_client, SwapError, sol_to_lamports};
+use screenerbot::rpc::{get_rpc_client, SwapError, sol_to_lamports, TokenBalance};
 use screenerbot::utils::get_wallet_address;
+use solana_transaction_status::{UiInstruction, UiParsedInstruction, UiTransactionEncoding, EncodedConfirmedTransactionWithStatusMeta};
+use solana_client::rpc_config::RpcTransactionConfig;
 use screenerbot::tokens::types::PriceSourceType;
 use screenerbot::tokens::{Token, get_token_decimals_sync};
 use screenerbot::swaps::{
@@ -96,6 +101,7 @@ COMMON USAGE EXAMPLES:
   Basic Analysis:
     cargo run --bin main_debug -- --analyze-swaps
     cargo run --bin main_debug -- --analyze-swaps --count 50 --min-sol 0.003
+    cargo run --bin main_debug -- --analyze-fees --count 200
     cargo run --bin main_debug -- --analyze-swaps --filter-mint <MINT>
 
   Live Trading Tests:
@@ -109,11 +115,15 @@ COMMON USAGE EXAMPLES:
 
   Deep Investigation:
     cargo run --bin main_debug -- --signature TRANSACTION_SIGNATURE
+    cargo run --bin main_debug -- --deep-analyze TRANSACTION_SIGNATURE
     cargo run --bin main_debug -- --show-unknown --count 100
     cargo run --bin main_debug -- --analyze-all --filter-mint <MINT>
 
+  Note: --deep-analyze provides comprehensive instruction-level transaction analysis
+
   Token Database Lookup:
     cargo run --bin main_debug -- --token-info DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
+    cargo run --bin main_debug -- --find-mint BONK
 
   Wallet Inspection:
     cargo run --bin main_debug -- --check-balance
@@ -176,6 +186,12 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("analyze-fees")
+                .long("analyze-fees")
+                .help("Analyze transaction fees with comprehensive breakdown by type and statistics")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("show-unknown")
                 .long("show-unknown")
                 .help("Show only transactions with Unknown type for debugging classification issues")
@@ -194,6 +210,12 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
             Arg::new("signature")
                 .long("signature")
                 .help("Analyze specific transaction by signature")
+                .value_name("SIGNATURE")
+        )
+        .arg(
+            Arg::new("deep-analyze")
+                .long("deep-analyze")
+                .help("Deep analyze specific transaction with comprehensive instruction-level details")
                 .value_name("SIGNATURE")
         )
         .arg(
@@ -370,6 +392,13 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .value_parser(clap::value_parser!(String))
         )
         .arg(
+            Arg::new("find-mint")
+                .long("find-mint")
+                .help("Find token mint address(es) by symbol")
+                .value_name("SYMBOL")
+                .value_parser(clap::value_parser!(String))
+        )
+        .arg(
             Arg::new("check-balance")
                 .long("check-balance")
                 .help("Check wallet balance for SOL, tokens, and ATA accounts")
@@ -425,6 +454,8 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         let force_recalculate = matches.get_flag("force-recalculate");
         let analyze_ata = matches.get_flag("analyze-ata");
         analyze_specific_transaction(signature, force_recalculate, analyze_ata).await;
+    } else if let Some(signature) = matches.get_one::<String>("deep-analyze") {
+        deep_analyze_transaction(signature).await;
     } else if matches.get_flag("fetch-new") {
         fetch_new_transactions(wallet_pubkey).await;
         
@@ -485,6 +516,8 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         run_benchmark_tests(wallet_pubkey, count).await;
     } else if let Some(mint_address) = matches.get_one::<String>("token-info") {
         get_token_info_from_database(mint_address).await;
+    } else if let Some(symbol) = matches.get_one::<String>("find-mint") {
+        find_mint_by_symbol(symbol).await;
     } else if matches.get_flag("check-balance") {
         check_wallet_balance_comprehensive(wallet_pubkey).await;
     } else if matches.get_flag("analyze-swaps") {
@@ -534,6 +567,10 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         let count = *matches.get_one::<usize>("count")
             .expect("count should have default value");
         analyze_ata_operations(wallet_pubkey, count).await;
+    } else if matches.get_flag("analyze-fees") {
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
+        analyze_transaction_fees(wallet_pubkey, count, filter_mint_for_analysis.clone()).await;
     } else if matches.get_flag("show-unknown") {
         let count = *matches.get_one::<usize>("count")
             .expect("count should have default value");
@@ -751,7 +788,7 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Op
     };
 
     // Get all swap transactions (now includes automatic recalculation and count limiting)
-    match manager.get_all_swap_transactions().await {
+    match manager.get_all_swap_transactions_limited(count).await {
         Ok(all_swaps) => {
             // Apply SOL amount filtering
             let filtered_swaps: Vec<_> = all_swaps.iter().filter(|swap| {
@@ -793,6 +830,9 @@ async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Op
             
             // Additional statistics
             display_detailed_swap_statistics(&filtered_swaps);
+            
+            // ATA and SOL Flow Analysis
+            display_ata_and_sol_flow_analysis(&filtered_swaps);
         }
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("Failed to get swap transactions: {}", e));
@@ -818,23 +858,35 @@ fn display_detailed_swap_statistics(swaps: &[screenerbot::transactions::SwapPnLI
     for swap in swaps {
         // Token statistics
         let token_stat = token_stats.entry(swap.token_symbol.clone()).or_insert(TokenSwapStats::new());
+        
+        // Handle failed transactions separately - don't count them as buys or sells
+        if swap.swap_type.starts_with("Failed") {
+            // Failed transactions only contribute to fees, not to buy/sell counts or amounts
+            token_stat.total_fees += swap.fee_sol;
+            continue;
+        }
+        
         if swap.swap_type == "Buy" {
             token_stat.buy_count += 1;
             token_stat.total_sol_spent += swap.sol_amount;
-        } else {
+        } else if swap.swap_type == "Sell" {
             token_stat.sell_count += 1;
             token_stat.total_sol_received += swap.sol_amount;
         }
         token_stat.total_fees += swap.fee_sol;
         
-        // Router statistics
+        // Router statistics (count all transactions including failed ones)
         *router_stats.entry(swap.router.clone()).or_insert(0) += 1;
         
-        // Simplified PnL calculation (buy vs sell difference)
-        if swap.swap_type == "Sell" {
+        // Simplified PnL calculation (buy vs sell difference) - exclude failed transactions
+        if swap.swap_type.starts_with("Failed") {
+            // Failed transactions are just losses (fees paid for nothing)
+            loss_swaps += 1;
+            total_profit_loss -= swap.fee_sol; // Only count the fee as a loss
+        } else if swap.swap_type == "Sell" {
             profitable_swaps += 1;
             total_profit_loss += swap.sol_amount;
-        } else {
+        } else if swap.swap_type == "Buy" {
             loss_swaps += 1;
             total_profit_loss -= swap.sol_amount;
         }
@@ -1846,6 +1898,95 @@ async fn analyze_specific_transaction(signature: &str, force_recalculate: bool, 
         }
         Err(e) => {
             log(LogTag::Transactions, "ERROR", &format!("Failed to analyze transaction: {}", e));
+        }
+    }
+}
+
+/// Deep analyze a specific transaction with comprehensive instruction-level details
+async fn deep_analyze_transaction(signature: &str) {
+    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+        "🔍 Starting DEEP ANALYSIS for transaction: {}", signature
+    ));
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "This will detect ALL operations, instructions, and account changes");
+    
+    // Load wallet and create manager with debug mode enabled
+    let wallet_pubkey = match load_wallet_pubkey().await {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to load wallet: {}", e));
+            return;
+        }
+    };
+
+    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
+        Ok(mut manager) => {
+            manager.debug_enabled = true; // Enable maximum debugging
+            manager
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
+            return;
+        }
+    };
+
+    // Get RPC client for raw transaction data
+    let rpc_client = get_rpc_client();
+
+    // Parse signature
+    let sig = match signature.parse::<solana_sdk::signature::Signature>() {
+        Ok(sig) => sig,
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Invalid signature format: {}", e));
+            return;
+        }
+    };
+
+    // Fetch raw transaction with maximum details
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "📡 Fetching raw transaction data from Solana RPC...");
+    
+    // Use our internal transaction details method instead
+    match rpc_client.get_transaction_details(signature).await {
+        Ok(tx_details) => {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "✅ Transaction fetched successfully");
+            display_simple_transaction_analysis(&tx_details, signature).await;
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "ERROR", &format!("Failed to fetch transaction details: {}", e));
+            
+            // Fallback to our internal analysis only
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "🤖 === SCREENERBOT INTERNAL ANALYSIS (FALLBACK) ===");
+            
+            match get_transaction(signature).await {
+                Ok(Some(internal_tx)) => {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", "✅ Found in ScreenerBot database");
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Type: {:?}", internal_tx.transaction_type));
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Status: {}", 
+                        if internal_tx.success { "✅ SUCCESS" } else { "❌ FAILED" }
+                    ));
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Direction: {:?}", internal_tx.direction));
+                    
+                    if internal_tx.sol_balance_change != 0.0 {
+                        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("SOL Balance Change: {:.9} SOL", internal_tx.sol_balance_change));
+                    }
+                    
+                    if let Some(ref fee_breakdown) = internal_tx.fee_breakdown {
+                        log(LogTag::Transactions, "DEEP_ANALYSIS", "Fee Breakdown Available:");
+                        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                            "  Transaction Fee: {:.9} SOL", fee_breakdown.transaction_fee
+                        ));
+                        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                            "  Compute Units: {}", fee_breakdown.compute_units_consumed
+                        ));
+                    }
+                }
+                Ok(None) => {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", "❌ Not found in ScreenerBot database");
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("⚠️ Error checking internal database: {}", e));
+                }
+            }
         }
     }
 }
@@ -4343,6 +4484,93 @@ fn display_token_database_info(token: &screenerbot::tokens::Token) {
     log(LogTag::System, "TOKEN_INFO", "=== END TOKEN INFORMATION ===");
 }
 
+/// Find token mint address(es) by symbol
+async fn find_mint_by_symbol(symbol: &str) {
+    log(LogTag::System, "SYMBOL_SEARCH", &format!("Searching for tokens with symbol: {}", symbol));
+
+    // Initialize the tokens system
+    log(LogTag::System, "INIT", "Initializing tokens system for database lookup...");
+    
+    match screenerbot::tokens::initialize_tokens_system().await {
+        Ok(_) => {
+            log(LogTag::System, "SUCCESS", "Tokens system initialized successfully");
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to initialize tokens system: {}", e));
+            return;
+        }
+    }
+
+    // Get all tokens from database and filter by symbol
+    match screenerbot::tokens::get_all_tokens_by_liquidity().await {
+        Ok(tokens) => {
+            let matching_tokens: Vec<_> = tokens.iter()
+                .filter(|token| token.symbol.to_lowercase() == symbol.to_lowercase())
+                .collect();
+
+            if matching_tokens.is_empty() {
+                log(LogTag::System, "WARN", &format!("No tokens found with symbol: {}", symbol));
+                log(LogTag::System, "INFO", "Try fetching recent transactions to update the token database");
+                
+                // Show similar symbols as suggestions
+                let similar_tokens: Vec<_> = tokens.iter()
+                    .filter(|token| token.symbol.to_lowercase().contains(&symbol.to_lowercase()) || 
+                                   symbol.to_lowercase().contains(&token.symbol.to_lowercase()))
+                    .take(5)
+                    .collect();
+                
+                if !similar_tokens.is_empty() {
+                    log(LogTag::System, "SUGGESTION", "Similar symbols found:");
+                    for token in similar_tokens {
+                        log(LogTag::System, "SUGGESTION", &format!(
+                            "  {} ({}): {}",
+                            token.symbol,
+                            &token.mint,
+                            &token.name
+                        ));
+                    }
+                }
+            } else {
+                log(LogTag::System, "SUCCESS", &format!("Found {} token(s) with symbol '{}':", matching_tokens.len(), symbol));
+                
+                for (index, token) in matching_tokens.iter().enumerate() {
+                    log(LogTag::System, "RESULT", &format!("=== MATCH {} ===", index + 1));
+                    log(LogTag::System, "RESULT", &format!("Symbol: {}", token.symbol));
+                    log(LogTag::System, "RESULT", &format!("Mint: {}", token.mint));
+                    log(LogTag::System, "RESULT", &format!("Name: {}", &token.name));
+                    
+                    if let Some(liquidity) = &token.liquidity {
+                        if let Some(usd) = liquidity.usd {
+                            log(LogTag::System, "RESULT", &format!("Liquidity: ${:.2}", usd));
+                        }
+                    }
+                    
+                    log(LogTag::System, "RESULT", &format!("Price USD: ${:.9}", token.price_usd));
+                    
+                    if let Some(price_sol) = token.price_sol {
+                        log(LogTag::System, "RESULT", &format!("Price SOL: {:.12}", price_sol));
+                    }
+                    
+                    log(LogTag::System, "RESULT", &format!("Pair Address: {}", &token.pair_address));
+                    
+                    log(LogTag::System, "RESULT", "");
+                }
+                
+                // If multiple matches, show a summary
+                if matching_tokens.len() > 1 {
+                    log(LogTag::System, "SUMMARY", "Quick mint reference:");
+                    for (index, token) in matching_tokens.iter().enumerate() {
+                        log(LogTag::System, "SUMMARY", &format!("  {}: {}", index + 1, token.mint));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to search token database: {}", e));
+        }
+    }
+}
+
 /// Check comprehensive wallet balance including SOL, tokens, and ATA accounts
 async fn check_wallet_balance_comprehensive(wallet_pubkey: Pubkey) {
     const ATA_RENT_COST_SOL: f64 = 0.00203928; // Standard ATA creation/closure cost
@@ -4556,4 +4784,886 @@ fn format_large_number(num: u64) -> String {
     } else {
         num.to_string()
     }
+}
+
+/// Helper function to safely get signature prefix for logging
+fn get_signature_prefix(signature: &str) -> &str {
+    if signature.len() >= 8 {
+        &signature[..8]
+    } else {
+        signature
+    }
+}
+
+/// Helper function to safely get mint address prefix for logging  
+fn get_mint_prefix(mint: &str) -> &str {
+    if mint.len() >= 8 {
+        &mint[..8]
+    } else {
+        mint
+    }
+}
+
+/// Analyze transaction fees with comprehensive breakdown and statistics
+async fn analyze_transaction_fees(wallet_pubkey: Pubkey, max_count: usize, filter_mint: Option<String>) {
+    log(LogTag::System, "FEE_ANALYSIS", "=== STARTING FEE ANALYSIS ===");
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Analyzing fees for up to {} transactions", max_count));
+    
+    if let Some(ref mint) = filter_mint {
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Filtering to mint: {}", get_mint_prefix(mint)));
+    }
+
+    // Initialize transaction manager
+    let manager_result = TransactionsManager::new(wallet_pubkey).await;
+    let mut manager = match manager_result {
+        Ok(m) => m,
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to create transaction manager: {}", e));
+            return;
+        }
+    };
+
+    // Get all transactions
+    let all_transactions_result = manager.get_recent_transactions(max_count).await;
+    let all_transactions = match all_transactions_result {
+        Ok(txns) => txns,
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to get transactions: {}", e));
+            return;
+        }
+    };
+
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Retrieved {} transactions for analysis", all_transactions.len()));
+
+    // Filter transactions by mint if specified
+    let filtered_transactions: Vec<&Transaction> = if let Some(ref mint) = filter_mint {
+        all_transactions.iter()
+            .filter(|tx| transaction_involves_mint(tx, mint))
+            .collect()
+    } else {
+        all_transactions.iter().collect()
+    };
+
+    if filtered_transactions.is_empty() {
+        log(LogTag::System, "FEE_ANALYSIS", "No transactions found for analysis");
+        return;
+    }
+
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Analyzing fees for {} transactions", filtered_transactions.len()));
+
+    // Initialize fee statistics
+    let mut fee_stats = FeeStatistics::new();
+    let mut transaction_type_fees: HashMap<String, FeeTypeStats> = HashMap::new();
+    let mut monthly_fees: HashMap<String, f64> = HashMap::new();
+    let mut expensive_transactions: Vec<(&Transaction, f64)> = Vec::new();
+
+    // Process each transaction for fee analysis
+    for transaction in filtered_transactions.iter() {
+        let fee_amount = transaction.fee_sol;
+        fee_stats.total_fees += fee_amount;
+        fee_stats.transaction_count += 1;
+
+        // Track by transaction type
+        let tx_type = format!("{:?}", transaction.transaction_type);
+        let type_stat = transaction_type_fees.entry(tx_type.clone()).or_insert_with(|| FeeTypeStats::new(tx_type));
+        type_stat.total_fees += fee_amount;
+        type_stat.transaction_count += 1;
+        if fee_amount > type_stat.max_fee {
+            type_stat.max_fee = fee_amount;
+        }
+        if type_stat.min_fee == 0.0 || fee_amount < type_stat.min_fee {
+            type_stat.min_fee = fee_amount;
+        }
+
+        // Track monthly fees
+        let month_key = transaction.timestamp.format("%Y-%m").to_string();
+        *monthly_fees.entry(month_key).or_insert(0.0) += fee_amount;
+
+        // Track expensive transactions (top 10)
+        expensive_transactions.push((transaction, fee_amount));
+        if expensive_transactions.len() > 50 {
+            expensive_transactions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            expensive_transactions.truncate(10);
+        }
+
+        // Update min/max
+        if fee_amount > fee_stats.max_fee {
+            fee_stats.max_fee = fee_amount;
+        }
+        if fee_stats.min_fee == 0.0 || fee_amount < fee_stats.min_fee {
+            fee_stats.min_fee = fee_amount;
+        }
+    }
+
+    // Sort expensive transactions
+    expensive_transactions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    expensive_transactions.truncate(10);
+
+    // Calculate averages
+    if fee_stats.transaction_count > 0 {
+        fee_stats.average_fee = fee_stats.total_fees / fee_stats.transaction_count as f64;
+    }
+
+    for type_stat in transaction_type_fees.values_mut() {
+        if type_stat.transaction_count > 0 {
+            type_stat.average_fee = type_stat.total_fees / type_stat.transaction_count as f64;
+        }
+    }
+
+    // Display comprehensive fee analysis
+    display_fee_analysis_summary(&fee_stats);
+    display_fee_by_transaction_type(&transaction_type_fees);
+    display_monthly_fee_trends(&monthly_fees);
+    display_expensive_transactions(&expensive_transactions);
+    display_fee_breakdown_analysis(&filtered_transactions);
+
+    log(LogTag::System, "FEE_ANALYSIS", "=== FEE ANALYSIS COMPLETE ===");
+}
+
+/// Statistics structure for fee analysis
+#[derive(Debug)]
+struct FeeStatistics {
+    total_fees: f64,
+    transaction_count: usize,
+    average_fee: f64,
+    min_fee: f64,
+    max_fee: f64,
+}
+
+impl FeeStatistics {
+    fn new() -> Self {
+        Self {
+            total_fees: 0.0,
+            transaction_count: 0,
+            average_fee: 0.0,
+            min_fee: 0.0,
+            max_fee: 0.0,
+        }
+    }
+}
+
+/// Fee statistics by transaction type
+#[derive(Debug)]
+struct FeeTypeStats {
+    transaction_type: String,
+    total_fees: f64,
+    transaction_count: usize,
+    average_fee: f64,
+    min_fee: f64,
+    max_fee: f64,
+}
+
+impl FeeTypeStats {
+    fn new(transaction_type: String) -> Self {
+        Self {
+            transaction_type,
+            total_fees: 0.0,
+            transaction_count: 0,
+            average_fee: 0.0,
+            min_fee: 0.0,
+            max_fee: 0.0,
+        }
+    }
+}
+
+/// Display fee analysis summary
+fn display_fee_analysis_summary(stats: &FeeStatistics) {
+    log(LogTag::System, "FEE_ANALYSIS", "");
+    log(LogTag::System, "FEE_ANALYSIS", "📊 === FEE ANALYSIS SUMMARY ===");
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Total Transactions: {}", stats.transaction_count));
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Total Fees Paid: {:.9} SOL", stats.total_fees));
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Average Fee: {:.9} SOL", stats.average_fee));
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Minimum Fee: {:.9} SOL", stats.min_fee));
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Maximum Fee: {:.9} SOL", stats.max_fee));
+    
+    // Convert to USD estimate (assuming $200 SOL for context)
+    let total_usd = stats.total_fees * 200.0;
+    let avg_usd = stats.average_fee * 200.0;
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Estimated Total Cost: ${:.2} USD (at $200/SOL)", total_usd));
+    log(LogTag::System, "FEE_ANALYSIS", &format!("Estimated Avg Cost: ${:.4} USD per transaction", avg_usd));
+}
+
+/// Display fees broken down by transaction type
+fn display_fee_by_transaction_type(type_fees: &HashMap<String, FeeTypeStats>) {
+    log(LogTag::System, "FEE_ANALYSIS", "");
+    log(LogTag::System, "FEE_ANALYSIS", "💰 === FEES BY TRANSACTION TYPE ===");
+    
+    // Sort by total fees (highest first)
+    let mut sorted_types: Vec<&FeeTypeStats> = type_fees.values().collect();
+    sorted_types.sort_by(|a, b| b.total_fees.partial_cmp(&a.total_fees).unwrap());
+    
+    for type_stat in sorted_types {
+        let percentage = if !type_fees.is_empty() {
+            let total_all_fees: f64 = type_fees.values().map(|s| s.total_fees).sum();
+            (type_stat.total_fees / total_all_fees) * 100.0
+        } else {
+            0.0
+        };
+        
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "  {} ({} txns): {:.9} SOL ({:.1}% of total) | Avg: {:.9} | Range: {:.9}-{:.9}",
+            type_stat.transaction_type,
+            type_stat.transaction_count,
+            type_stat.total_fees,
+            percentage,
+            type_stat.average_fee,
+            type_stat.min_fee,
+            type_stat.max_fee
+        ));
+    }
+}
+
+/// Display monthly fee trends
+fn display_monthly_fee_trends(monthly_fees: &HashMap<String, f64>) {
+    log(LogTag::System, "FEE_ANALYSIS", "");
+    log(LogTag::System, "FEE_ANALYSIS", "📅 === MONTHLY FEE TRENDS ===");
+    
+    // Sort by month
+    let mut sorted_months: Vec<(&String, &f64)> = monthly_fees.iter().collect();
+    sorted_months.sort_by(|a, b| a.0.cmp(b.0));
+    
+    for (month, total_fee) in sorted_months {
+        let usd_estimate = total_fee * 200.0;
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "  {}: {:.9} SOL (≈${:.2} USD)",
+            month, total_fee, usd_estimate
+        ));
+    }
+}
+
+/// Display most expensive transactions by fees
+fn display_expensive_transactions(expensive_txns: &[(&Transaction, f64)]) {
+    log(LogTag::System, "FEE_ANALYSIS", "");
+    log(LogTag::System, "FEE_ANALYSIS", "💸 === TOP 10 MOST EXPENSIVE TRANSACTIONS ===");
+    
+    for (i, (transaction, fee)) in expensive_txns.iter().enumerate() {
+        let usd_estimate = fee * 200.0;
+        let signature_prefix = get_signature_prefix(&transaction.signature);
+        let tx_type = format!("{:?}", transaction.transaction_type);
+        let success_indicator = if transaction.success { "✅" } else { "❌" };
+        
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "  {}. {} {}...{} ({}) - {:.9} SOL (≈${:.4} USD) {}",
+            i + 1,
+            transaction.timestamp.format("%Y-%m-%d %H:%M"),
+            signature_prefix,
+            &transaction.signature[transaction.signature.len()-4..],
+            tx_type,
+            fee,
+            usd_estimate,
+            success_indicator
+        ));
+    }
+}
+
+/// Display detailed fee breakdown analysis  
+fn display_fee_breakdown_analysis(transactions: &[&Transaction]) {
+    log(LogTag::System, "FEE_ANALYSIS", "");
+    log(LogTag::System, "FEE_ANALYSIS", "🔍 === DETAILED FEE BREAKDOWN ANALYSIS ===");
+    
+    let mut total_with_breakdown = 0;
+    let mut total_compute_fees = 0.0;
+    let mut total_priority_fees = 0.0;
+    let mut total_base_fees = 0.0;
+    
+    for transaction in transactions {
+        if let Some(ref fee_breakdown) = transaction.fee_breakdown {
+            total_with_breakdown += 1;
+            // Compute unit fees (compute units * price in micro-lamports converted to SOL)
+            let compute_fee_sol = (fee_breakdown.compute_units_consumed as f64 * fee_breakdown.compute_unit_price as f64) / 1_000_000_000.0;
+            total_compute_fees += compute_fee_sol;
+            total_priority_fees += fee_breakdown.priority_fee;
+            total_base_fees += fee_breakdown.transaction_fee;
+        }
+    }
+    
+    if total_with_breakdown > 0 {
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "Transactions with detailed breakdown: {} out of {}",
+            total_with_breakdown, transactions.len()
+        ));
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Total Compute Unit Fees: {:.9} SOL", total_compute_fees));
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Total Priority Fees: {:.9} SOL", total_priority_fees));
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Total Base Fees: {:.9} SOL", total_base_fees));
+        
+        let avg_compute = total_compute_fees / total_with_breakdown as f64;
+        let avg_priority = total_priority_fees / total_with_breakdown as f64;
+        let avg_base = total_base_fees / total_with_breakdown as f64;
+        
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Average Compute Fee: {:.9} SOL", avg_compute));
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Average Priority Fee: {:.9} SOL", avg_priority));
+        log(LogTag::System, "FEE_ANALYSIS", &format!("Average Base Fee: {:.9} SOL", avg_base));
+    } else {
+        log(LogTag::System, "FEE_ANALYSIS", "No transactions with detailed fee breakdown found");
+        log(LogTag::System, "FEE_ANALYSIS", "Note: Detailed fee breakdowns require fee_breakdown analysis to be enabled");
+    }
+    
+    // Analyze failed vs successful transaction fees
+    let mut successful_fees = 0.0;
+    let mut failed_fees = 0.0;
+    let mut successful_count = 0;
+    let mut failed_count = 0;
+    
+    for transaction in transactions {
+        if transaction.success {
+            successful_fees += transaction.fee_sol;
+            successful_count += 1;
+        } else {
+            failed_fees += transaction.fee_sol;
+            failed_count += 1;
+        }
+    }
+    
+    log(LogTag::System, "FEE_ANALYSIS", "");
+    log(LogTag::System, "FEE_ANALYSIS", "✅❌ === SUCCESS vs FAILED TRANSACTION FEES ===");
+    if successful_count > 0 {
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "Successful: {} transactions, {:.9} SOL total, {:.9} SOL average",
+            successful_count, successful_fees, successful_fees / successful_count as f64
+        ));
+    }
+    if failed_count > 0 {
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "Failed: {} transactions, {:.9} SOL total, {:.9} SOL average",
+            failed_count, failed_fees, failed_fees / failed_count as f64
+        ));
+        log(LogTag::System, "FEE_ANALYSIS", &format!(
+            "Note: Failed transactions still consume fees for compute units used"
+        ));
+    }
+    
+    log(LogTag::System, "FEE_ANALYSIS", "=== FEE ANALYSIS COMPLETE ===");
+}
+
+/// Display comprehensive ATA operations and SOL flow analysis
+fn display_ata_and_sol_flow_analysis(swaps: &[screenerbot::transactions::SwapPnLInfo]) {
+    if swaps.is_empty() {
+        return;
+    }
+
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "🏦 === ATA OPERATIONS & SOL FLOW ANALYSIS ===");
+    
+    // Initialize tracking variables
+    let mut total_sol_spent = 0.0;
+    let mut total_sol_received = 0.0;
+    let mut total_fees = 0.0;
+    let mut wsol_ata_created = 0;
+    let mut wsol_ata_closed = 0;
+    let mut token_ata_created = 0;
+    let mut token_ata_closed = 0;
+    let mut total_ata_rent_cost = 0.0;
+    
+    // Track per-token ATA operations
+    let mut token_ata_ops: std::collections::HashMap<String, TokenATAOperations> = std::collections::HashMap::new();
+    
+    // Analyze each swap
+    for (i, swap) in swaps.iter().enumerate() {
+        let token_ops = token_ata_ops.entry(swap.token_symbol.clone()).or_insert(TokenATAOperations::new());
+        
+        // Track SOL flow
+        total_fees += swap.fee_sol;
+        
+        if swap.swap_type == "Buy" || swap.swap_type.starts_with("Failed Buy") {
+            total_sol_spent += swap.sol_amount;
+            token_ops.buys += 1;
+            token_ops.sol_spent += swap.sol_amount;
+        } else if swap.swap_type == "Sell" || swap.swap_type.starts_with("Failed Sell") {
+            total_sol_received += swap.sol_amount;
+            token_ops.sells += 1;
+            token_ops.sol_received += swap.sol_amount;
+        }
+        
+        token_ops.fees += swap.fee_sol;
+        
+        // Estimate ATA operations (this is an approximation since we don't have detailed breakdown)
+        // For buys: typically create token ATA if first time, might create/close WSOL ATA
+        // For sells: typically close token ATA if last position, might create/close WSOL ATA
+        
+        if swap.swap_type == "Buy" {
+            // First buy of a token likely creates token ATA
+            if token_ops.buys == 1 {
+                token_ata_created += 1;
+                token_ops.ata_created += 1;
+                total_ata_rent_cost += 0.00203928; // Standard ATA rent cost
+            }
+            // WSOL ATA operations (often created and closed in same transaction for Jupiter)
+            if swap.router == "Jupiter" {
+                wsol_ata_created += 1;
+                wsol_ata_closed += 1; // Jupiter often creates and closes WSOL ATA in same tx
+            }
+        } else if swap.swap_type == "Sell" {
+            // Complete sell might close token ATA (approximation)
+            if swap.token_amount == 0.0 { // If we sold all tokens
+                token_ata_closed += 1;
+                token_ops.ata_closed += 1;
+                total_ata_rent_cost -= 0.00203928; // Rent recovered
+            }
+            // WSOL ATA operations
+            if swap.router == "Jupiter" {
+                wsol_ata_created += 1;
+                wsol_ata_closed += 1;
+            }
+        }
+    }
+    
+    // Calculate net SOL flow
+    let net_sol_flow = total_sol_received - total_sol_spent - total_fees - total_ata_rent_cost;
+    let gross_sol_flow = total_sol_received - total_sol_spent;
+    
+    // Display overall SOL flow summary
+    log(LogTag::Transactions, "ATA_ANALYSIS", "💰 === OVERALL SOL FLOW (Begin to End) ===");
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Total SOL Spent:     -{:.9} SOL (buying tokens)",
+        total_sol_spent
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Total SOL Received:  +{:.9} SOL (selling tokens)",
+        total_sol_received
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Gross SOL Flow:      {:+.9} SOL (before fees and ATA costs)",
+        gross_sol_flow
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Transaction Fees:    -{:.9} SOL",
+        total_fees
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "ATA Rent Costs:      {:+.9} SOL (net rent cost/recovery)",
+        -total_ata_rent_cost
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "NET SOL FLOW:        {:+.9} SOL (total profit/loss)",
+        net_sol_flow
+    ));
+    
+    // Display ATA operations summary
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "🏪 === ATA OPERATIONS SUMMARY ===");
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "WSOL ATA Created:    {} operations",
+        wsol_ata_created
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "WSOL ATA Closed:     {} operations",
+        wsol_ata_closed
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Token ATA Created:   {} operations (+{:.8} SOL rent)",
+        token_ata_created, token_ata_created as f64 * 0.00203928
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Token ATA Closed:    {} operations (+{:.8} SOL rent recovered)",
+        token_ata_closed, token_ata_closed as f64 * 0.00203928
+    ));
+    log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+        "Net ATA Accounts:    {} token ATAs (still open)",
+        token_ata_created - token_ata_closed
+    ));
+    
+    // Display per-token breakdown
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "📊 === PER-TOKEN ATA & SOL ANALYSIS ===");
+    for (token, ops) in &token_ata_ops {
+        let net_sol_per_token = ops.sol_received - ops.sol_spent - ops.fees;
+        let ata_rent_impact = (ops.ata_created as f64 - ops.ata_closed as f64) * 0.00203928;
+        let final_net = net_sol_per_token - ata_rent_impact;
+        
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "{}: {} buys ({:.6} SOL) | {} sells ({:.6} SOL) | {} ATA created | {} ATA closed | Net: {:+.6} SOL",
+            token, ops.buys, ops.sol_spent, ops.sells, ops.sol_received, 
+            ops.ata_created, ops.ata_closed, final_net
+        ));
+    }
+    
+    // Display cost breakdown analysis
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "💸 === COST BREAKDOWN ANALYSIS ===");
+    let total_costs = total_fees + total_ata_rent_cost.abs();
+    if total_costs > 0.0 {
+        let fee_percentage = (total_fees / total_costs) * 100.0;
+        let ata_percentage = (total_ata_rent_cost.abs() / total_costs) * 100.0;
+        
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "Transaction Fees:    {:.9} SOL ({:.1}% of total costs)",
+            total_fees, fee_percentage
+        ));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "ATA Rent Costs:      {:.9} SOL ({:.1}% of total costs)",
+            total_ata_rent_cost.abs(), ata_percentage
+        ));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "Total Trading Costs: {:.9} SOL",
+            total_costs
+        ));
+    }
+    
+    // Display efficiency metrics
+    log(LogTag::Transactions, "ATA_ANALYSIS", "");
+    log(LogTag::Transactions, "ATA_ANALYSIS", "📈 === EFFICIENCY METRICS ===");
+    let total_volume = total_sol_spent + total_sol_received;
+    if total_volume > 0.0 {
+        let cost_ratio = (total_costs / total_volume) * 100.0;
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "Total Volume:        {:.6} SOL (spent + received)",
+            total_volume
+        ));
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "Cost Efficiency:     {:.3}% (costs as % of volume)",
+            cost_ratio
+        ));
+    }
+    
+    if net_sol_flow > 0.0 {
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "🟢 PROFIT: +{:.6} SOL overall gain",
+            net_sol_flow
+        ));
+    } else {
+        log(LogTag::Transactions, "ATA_ANALYSIS", &format!(
+            "🔴 LOSS: {:.6} SOL overall loss",
+            net_sol_flow
+        ));
+    }
+    
+    log(LogTag::Transactions, "ATA_ANALYSIS", "=== END ATA & SOL FLOW ANALYSIS ===");
+}
+
+// Helper struct for tracking token ATA operations
+#[derive(Debug, Clone)]
+struct TokenATAOperations {
+    buys: u32,
+    sells: u32,
+    sol_spent: f64,
+    sol_received: f64,
+    fees: f64,
+    ata_created: u32,
+    ata_closed: u32,
+}
+
+impl TokenATAOperations {
+    fn new() -> Self {
+        Self {
+            buys: 0,
+            sells: 0,
+            sol_spent: 0.0,
+            sol_received: 0.0,
+            fees: 0.0,
+            ata_created: 0,
+            ata_closed: 0,
+        }
+    }
+}
+
+/// Display comprehensive deep analysis of a transaction with instruction-level details
+/// Display comprehensive deep analysis of a transaction with instruction-level details
+async fn display_simple_transaction_analysis(
+    tx_details: &screenerbot::rpc::TransactionDetails,
+    signature: &str
+) {
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "🔍 === DEEP TRANSACTION ANALYSIS ===");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Signature: {}", signature));
+    
+    // Basic transaction info
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "📋 === BASIC TRANSACTION INFO ===");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Slot: {}", tx_details.slot));
+    
+    if let Some(ref meta) = tx_details.meta {
+        let success = meta.err.is_none();
+        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Status: {}", 
+            if success { "✅ SUCCESS" } else { "❌ FAILED" }
+        ));
+        
+        if let Some(ref error) = meta.err {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Error: {:?}", error));
+        }
+        
+        // Fee analysis
+        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Fee: {} lamports ({:.9} SOL)", 
+            meta.fee, meta.fee as f64 / 1_000_000_000.0
+        ));
+        
+        // Account changes analysis
+        log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+        log(LogTag::Transactions, "DEEP_ANALYSIS", "💰 === ACCOUNT CHANGES ANALYSIS ===");
+        
+        let pre_balances = &meta.pre_balances;
+        let post_balances = &meta.post_balances;
+        
+        if pre_balances.len() == post_balances.len() {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Total Accounts: {}", pre_balances.len()));
+            
+            let mut total_net_change = 0i64;
+            let mut meaningful_changes = 0;
+            
+            for i in 0..pre_balances.len() {
+                let pre_balance = pre_balances[i];
+                let post_balance = post_balances[i];
+                let net_change = post_balance as i64 - pre_balance as i64;
+                
+                if net_change != 0 {
+                    meaningful_changes += 1;
+                    total_net_change += net_change;
+                    
+                    let change_str = if net_change > 0 {
+                        format!("+{} lamports (+{:.9} SOL)", net_change, net_change as f64 / 1_000_000_000.0)
+                    } else {
+                        format!("{} lamports ({:.9} SOL)", net_change, net_change as f64 / 1_000_000_000.0)
+                    };
+                    
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                        "  Account[{}] {} → {} | {}",
+                        i, pre_balance, post_balance, change_str
+                    ));
+                }
+            }
+            
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Accounts with balance changes: {}", meaningful_changes));
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                "Total Net SOL Change: {} lamports ({:.9} SOL)",
+                total_net_change, total_net_change as f64 / 1_000_000_000.0
+            ));
+        }
+        
+        // Token changes analysis (Enhanced with pre/post comparison)
+        if let Some(ref pre_token_balances) = meta.pre_token_balances {
+            if let Some(ref post_token_balances) = meta.post_token_balances {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "🪙 === TOKEN BALANCE CHANGES (COMPREHENSIVE) ===");
+                
+                // Create a map of account_index -> pre_balance for easy lookup
+                use std::collections::HashMap;
+                let mut pre_balance_map: HashMap<u32, &TokenBalance> = HashMap::new();
+                for pre_balance in pre_token_balances {
+                    pre_balance_map.insert(pre_balance.account_index, pre_balance);
+                }
+                
+                let mut meaningful_changes = 0;
+                
+                // Analyze all post-transaction token balances
+                for post_balance in post_token_balances {
+                    let account_index = post_balance.account_index;
+                    let mint_short = if post_balance.mint.len() > 8 { &post_balance.mint[..8] } else { &post_balance.mint };
+                    
+                    if let Some(pre_balance) = pre_balance_map.get(&account_index) {
+                        // Compare pre and post balances
+                        let pre_amount = pre_balance.ui_token_amount.ui_amount.unwrap_or(0.0);
+                        let post_amount = post_balance.ui_token_amount.ui_amount.unwrap_or(0.0);
+                        let change = post_amount - pre_amount;
+                        
+                        if change.abs() > 0.000001 {
+                            meaningful_changes += 1;
+                            let change_str = if change > 0.0 {
+                                format!("+{:.6}", change)
+                            } else {
+                                format!("{:.6}", change)
+                            };
+                            
+                            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                                "  Account[{}] | {}... | {:.6} → {:.6} | Change: {} tokens (decimals: {})",
+                                account_index, mint_short, pre_amount, post_amount, change_str, 
+                                post_balance.ui_token_amount.decimals
+                            ));
+                            
+                            // Show owner if available
+                            if let Some(ref owner) = post_balance.owner {
+                                let owner_short = if owner.len() > 8 { &owner[..8] } else { owner };
+                                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("    Owner: {}...", owner_short));
+                            }
+                        }
+                    } else {
+                        // New token account (no pre-balance)
+                        if let Some(post_amount) = post_balance.ui_token_amount.ui_amount {
+                            if post_amount.abs() > 0.000001 {
+                                meaningful_changes += 1;
+                                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                                    "  Account[{}] | {}... | NEW ACCOUNT → {:.6} tokens (decimals: {})",
+                                    account_index, mint_short, post_amount, post_balance.ui_token_amount.decimals
+                                ));
+                            }
+                        }
+                    }
+                }
+                
+                // Check for closed token accounts (in pre but not in post)
+                for pre_balance in pre_token_balances {
+                    let account_found_in_post = post_token_balances.iter()
+                        .any(|post| post.account_index == pre_balance.account_index);
+                    
+                    if !account_found_in_post {
+                        if let Some(pre_amount) = pre_balance.ui_token_amount.ui_amount {
+                            if pre_amount.abs() > 0.000001 {
+                                meaningful_changes += 1;
+                                let mint_short = if pre_balance.mint.len() > 8 { &pre_balance.mint[..8] } else { &pre_balance.mint };
+                                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                                    "  Account[{}] | {}... | {:.6} → CLOSED (-{:.6} tokens)",
+                                    pre_balance.account_index, mint_short, pre_amount, pre_amount
+                                ));
+                            }
+                        }
+                    }
+                }
+                
+                if meaningful_changes == 0 {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", "  No significant token balance changes found");
+                } else {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("  Total meaningful token changes: {}", meaningful_changes));
+                }
+            } else {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "🪙 === TOKEN BALANCE CHANGES ===");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "  No post-token balances available");
+            }
+        } else {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "🪙 === TOKEN BALANCE CHANGES ===");
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "  No token balance changes detected");
+        }
+        
+        // Program logs analysis (ALL logs, not just first 10)
+        if let Some(ref log_messages) = meta.log_messages {
+            if !log_messages.is_empty() {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "📝 === PROGRAM LOGS ANALYSIS (ALL LOGS) ===");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Total Log Messages: {}", log_messages.len()));
+                
+                for (i, log_msg) in log_messages.iter().enumerate() {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("  Log #{}: {}", i + 1, log_msg));
+                }
+            }
+        }
+        
+        // Inner instructions analysis
+        if let Some(ref inner_instructions) = meta.inner_instructions {
+            if !inner_instructions.is_empty() {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "🔧 === INNER INSTRUCTIONS ANALYSIS ===");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Total Inner Instruction Groups: {}", inner_instructions.len()));
+                
+                for (group_idx, inner_group) in inner_instructions.iter().enumerate() {
+                    if let Some(index) = inner_group.get("index") {
+                        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("  Group #{} (Instruction Index: {})", group_idx + 1, index));
+                    }
+                    
+                    if let Some(instructions) = inner_group.get("instructions") {
+                        if let Some(instructions_array) = instructions.as_array() {
+                            for (inner_idx, instruction) in instructions_array.iter().enumerate() {
+                                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("    Inner #{}: {}", inner_idx + 1, instruction));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        log(LogTag::Transactions, "DEEP_ANALYSIS", "❌ No transaction metadata available");
+    }
+    
+    // Main transaction instructions analysis
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "⚙️ === MAIN TRANSACTION INSTRUCTIONS ===");
+    
+    // Parse instructions from transaction message
+    if let Some(message) = tx_details.transaction.message.as_object() {
+        if let Some(instructions) = message.get("instructions") {
+            if let Some(instructions_array) = instructions.as_array() {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Total Instructions: {}", instructions_array.len()));
+                
+                for (i, instruction) in instructions_array.iter().enumerate() {
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("  Instruction #{}: {}", i + 1, instruction));
+                }
+            } else {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "  Instructions field is not an array");
+            }
+        } else {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "  No instructions field found in message");
+        }
+        
+        // Account keys analysis
+        if let Some(account_keys) = message.get("accountKeys") {
+            if let Some(keys_array) = account_keys.as_array() {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "🔑 === ACCOUNT KEYS ===");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Total Account Keys: {}", keys_array.len()));
+                
+                for (i, key) in keys_array.iter().enumerate() {
+                    if let Some(key_str) = key.as_str() {
+                        let key_short = if key_str.len() > 8 { &key_str[..8] } else { key_str };
+                        log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("  Account[{}]: {}...", i, key_short));
+                    }
+                }
+            }
+        }
+        
+        // Recent block hash
+        if let Some(recent_blockhash) = message.get("recentBlockhash") {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Recent Blockhash: {}", recent_blockhash));
+        }
+    } else {
+        log(LogTag::Transactions, "DEEP_ANALYSIS", "  Transaction message is not a valid JSON object");
+    }
+    
+    // Our internal analysis
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "🤖 === SCREENERBOT INTERNAL ANALYSIS ===");
+    
+    // Try to get our internal transaction analysis
+    match get_transaction(signature).await {
+        Ok(Some(internal_tx)) => {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "✅ Found in ScreenerBot database");
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Type: {:?}", internal_tx.transaction_type));
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Status: {}", 
+                if internal_tx.success { "✅ SUCCESS" } else { "❌ FAILED" }
+            ));
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("Direction: {:?}", internal_tx.direction));
+            
+            if internal_tx.sol_balance_change != 0.0 {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("SOL Balance Change: {:.9} SOL", internal_tx.sol_balance_change));
+            }
+            
+            if !internal_tx.token_transfers.is_empty() {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "Token Transfers Detected:");
+                for transfer in &internal_tx.token_transfers {
+                    let mint_short = if transfer.mint.len() > 8 { &transfer.mint[..8] } else { &transfer.mint };
+                    log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                        "  {}...: {} tokens", mint_short, transfer.amount
+                    ));
+                }
+            }
+            
+            if let Some(ref fee_breakdown) = internal_tx.fee_breakdown {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "Fee Breakdown Available:");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                    "  Transaction Fee: {:.9} SOL", fee_breakdown.transaction_fee
+                ));
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                    "  Compute Units: {}", fee_breakdown.compute_units_consumed
+                ));
+            }
+            
+            if let Some(ref ata_analysis) = internal_tx.ata_analysis {
+                log(LogTag::Transactions, "DEEP_ANALYSIS", "ATA Operations Detected:");
+                log(LogTag::Transactions, "DEEP_ANALYSIS", &format!(
+                    "  Created: {}, Closed: {}, Net Cost: {:.9} SOL", 
+                    ata_analysis.total_ata_creations, 
+                    ata_analysis.total_ata_closures,
+                    ata_analysis.net_rent_impact
+                ));
+            }
+        }
+        Ok(None) => {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "❌ Not found in ScreenerBot database");
+            log(LogTag::Transactions, "DEEP_ANALYSIS", "   This transaction may not involve our wallet or hasn't been processed yet");
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "DEEP_ANALYSIS", &format!("⚠️ Error checking internal database: {}", e));
+        }
+    }
+    
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "");
+    log(LogTag::Transactions, "DEEP_ANALYSIS", "=== END DEEP TRANSACTION ANALYSIS ===");
 }

@@ -95,6 +95,8 @@ pub struct TransactionMeta {
     pub fee: u64,
     #[serde(rename = "logMessages")]
     pub log_messages: Option<Vec<String>>,
+    #[serde(rename = "innerInstructions")]
+    pub inner_instructions: Option<Vec<serde_json::Value>>,
 }
 
 /// Token balance information in transaction metadata

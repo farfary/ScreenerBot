@@ -41,6 +41,7 @@ use crate::tokens::{
     TokenDatabase,
     types::PriceSourceType,
 };
+use crate::tokens::decimals::{raw_to_ui_amount, lamports_to_sol, sol_to_lamports};
 use crate::tokens::price::get_token_price_blocking_safe;
 
 // =============================================================================
@@ -403,6 +404,11 @@ pub struct SwapPnLInfo {
     pub router: String,
     pub fee_sol: f64,
     pub ata_rents: f64,     // ATA creation and rent costs (in SOL)
+    
+    // New fields for effective price calculation (excluding ATA rent but including fees)
+    pub effective_sol_spent: f64,    // For BUY: SOL spent for tokens (includes fees, excludes ATA rent)
+    pub effective_sol_received: f64, // For SELL: SOL received for tokens (includes fees, excludes ATA rent)
+    
     pub slot: Option<u64>,  // Solana slot number for reliable chronological sorting
     pub status: String,     // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
 }
@@ -522,6 +528,10 @@ pub struct SwapDisplayRow {
     pub token_amount: String,
     #[tabled(rename = "Price (SOL)")]
     pub price: String,
+    #[tabled(rename = "Effective SOL")]
+    pub effective_sol: String,  // Shows effective_sol_spent for buys, effective_sol_received for sells
+    #[tabled(rename = "Effective Price")]
+    pub effective_price: String,  // Price calculated using effective SOL amounts
     #[tabled(rename = "ATA Rents")]
     pub ata_rents: String,
     #[tabled(rename = "Router")]
@@ -564,6 +574,18 @@ pub struct PositionDisplayRow {
 }
 
 
+
+/// Helper function to shorten transaction signatures for display
+/// Shows first 8 characters + "..." + last 4 characters
+/// Example: "2iPhXfdKg4VsyPoLpsstHTmXb7VuoetfGSu9s1Ajrk7Xqmt8qEScRFjpynqUUPSKZ4ySrGUajEQnudL3AWPFoGiM"
+/// becomes: "2iPhXfdK...oGiM"
+fn shorten_signature(signature: &str) -> String {
+    if signature.len() <= 16 {
+        signature.to_string()
+    } else {
+        format!("{}...{}", &signature[..8], &signature[signature.len()-4..])
+    }
+}
 
 // =============================================================================
 // TRANSACTIONS MANAGER
@@ -750,7 +772,7 @@ impl TransactionsManager {
                 error_message: tx_data.transaction.meta.as_ref()
                     .and_then(|meta| meta.err.as_ref())
                     .map(|err| format!("{:?}", err)),
-                fee_sol: tx_data.transaction.meta.as_ref().map_or(0.0, |meta| meta.fee as f64 / 1_000_000_000.0),
+                fee_sol: tx_data.transaction.meta.as_ref().map_or(0.0, |meta| lamports_to_sol(meta.fee)),
                 sol_balance_change: 0.0,
                 token_transfers: Vec::new(),
                 raw_transaction_data: Some(serde_json::to_value(&tx_data).unwrap_or_default()),
@@ -1745,9 +1767,17 @@ impl TransactionsManager {
             ));
 
             if swap_pnl_info.swap_type == "Buy" && swap_pnl_info.token_mint == position.mint {
-                // Update position with analyze-swaps-exact calculations
+                // Update position with analyze-swaps-exact calculations using effective pricing
                 position.transaction_entry_verified = true;
-                position.effective_entry_price = Some(swap_pnl_info.calculated_price_sol);
+                
+                // Calculate effective entry price using effective SOL spent (excludes ATA rent)
+                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_spent > 0.0 {
+                    swap_pnl_info.effective_sol_spent / swap_pnl_info.token_amount.abs()
+                } else {
+                    swap_pnl_info.calculated_price_sol // Fallback to regular price
+                };
+                
+                position.effective_entry_price = Some(effective_price);
                 position.total_size_sol = swap_pnl_info.sol_amount;
                 
                 // Convert token amount from float to units (with decimals)
@@ -1763,7 +1793,7 @@ impl TransactionsManager {
                 }
                 
                 // Convert fee from SOL to lamports
-                position.entry_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
+                position.entry_fee_lamports = Some(sol_to_lamports(swap_pnl_info.fee_sol));
                 
                 log(LogTag::Transactions, "POSITION_ENTRY_VERIFIED", &format!(
                     "✅ ENTRY TRANSACTION VERIFIED: Position {} marked as verified, price={:.9} SOL, PENDING TRANSACTION CLEARED",
@@ -1815,9 +1845,17 @@ impl TransactionsManager {
         let empty_cache = std::collections::HashMap::new();
         if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache) {
             if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
-                // Update position with analyze-swaps-exact calculations
+                // Update position with analyze-swaps-exact calculations using effective pricing
                 position.transaction_exit_verified = true;
-                position.effective_exit_price = Some(swap_pnl_info.calculated_price_sol);
+                
+                // Calculate effective exit price using effective SOL received (excludes ATA rent)
+                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_received > 0.0 {
+                    swap_pnl_info.effective_sol_received / swap_pnl_info.token_amount.abs()
+                } else {
+                    swap_pnl_info.calculated_price_sol // Fallback to regular price
+                };
+                
+                position.effective_exit_price = Some(effective_price);
                 position.sol_received = Some(swap_pnl_info.sol_amount);
                 
                 // Update exit price if not set
@@ -1826,7 +1864,7 @@ impl TransactionsManager {
                 }
                 
                 // Convert fee from SOL to lamports
-                position.exit_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
+                position.exit_fee_lamports = Some(sol_to_lamports(swap_pnl_info.fee_sol));
                 
                 // Set exit time if not set
                 if position.exit_time.is_none() {
@@ -1918,7 +1956,7 @@ impl TransactionsManager {
             if let Some(meta) = raw_data.get("meta") {
                 // Extract fee
                 if let Some(fee) = meta.get("fee").and_then(|v| v.as_u64()) {
-                    transaction.fee_sol = fee as f64 / 1_000_000_000.0; // Convert lamports to SOL
+                    transaction.fee_sol = lamports_to_sol(fee); // Convert lamports to SOL
                 }
 
                 // Calculate SOL balance change from pre/post balances
@@ -1933,7 +1971,7 @@ impl TransactionsManager {
                         
                         // Calculate change in lamports and convert to SOL
                         let balance_change_lamports = post_balance - pre_balance;
-                        transaction.sol_balance_change = balance_change_lamports / 1_000_000_000.0;
+                        transaction.sol_balance_change = lamports_to_sol(balance_change_lamports as u64);
                         
                         if self.debug_enabled {
                             log(LogTag::Transactions, "BALANCE", &format!(
@@ -3557,41 +3595,15 @@ impl TransactionsManager {
         // Extract swap data from transaction balance changes and token transfers
         // rather than from enum fields (which may not have complete data)
         let (swap_type, sol_amount_raw, token_amount, token_mint, router) = match &transaction.transaction_type {
-            TransactionType::SwapSolToToken { router, .. } => {
-                // Extract token mint from token transfers or transaction type
-                let token_mint = if let Some(mint) = self.extract_token_mint_from_transaction(transaction) {
-                    mint
-                } else {
-                    return None;
-                };
-                
-                // For buy: SOL balance went down (spent), token balance went up
-                let sol_spent = transaction.sol_balance_change.abs();
-                let token_received = transaction.token_transfers.iter()
-                    .filter(|t| t.mint == token_mint && t.amount > 0.0)
-                    .map(|t| t.amount)
-                    .sum::<f64>();
-                
-                ("Buy".to_string(), sol_spent, token_received, token_mint, router.clone())
+            TransactionType::SwapSolToToken { router, token_mint, sol_amount, token_amount } => {
+                // For buy: use the data from the transaction type which now has corrected amounts
+                ("Buy".to_string(), *sol_amount, *token_amount, token_mint.clone(), router.clone())
             }
-            TransactionType::SwapTokenToSol { router, .. } => {
-                // Extract token mint from token transfers or transaction type
-                let token_mint = if let Some(mint) = self.extract_token_mint_from_transaction(transaction) {
-                    mint
-                } else {
-                    return None;
-                };
-                
-                // For sell: SOL balance went up (received), token balance went down
-                let sol_received = transaction.sol_balance_change.max(0.0);
-                let token_spent = transaction.token_transfers.iter()
-                    .filter(|t| t.mint == token_mint && t.amount < 0.0)
-                    .map(|t| t.amount.abs())
-                    .sum::<f64>();
-                
-                ("Sell".to_string(), sol_received, token_spent, token_mint, router.clone())
+            TransactionType::SwapTokenToSol { router, token_mint, token_amount, sol_amount } => {
+                // For sell: use the data from the transaction type
+                ("Sell".to_string(), *sol_amount, *token_amount, token_mint.clone(), router.clone())
             }
-            TransactionType::SwapTokenToToken { router, .. } => {
+            TransactionType::SwapTokenToToken { router, from_mint, to_mint, from_amount, to_amount } => {
                 // For token-to-token swaps, determine if this involves SOL
                 if !transaction.token_transfers.is_empty() {
                     // Find the largest absolute token transfer (this is usually the main trade)
@@ -3658,6 +3670,8 @@ impl TransactionsManager {
                 router,
                 fee_sol: transaction.fee_sol,
                 ata_rents: ata_rents_display,
+                effective_sol_spent: if swap_type == "Buy" { failed_costs + transaction.fee_sol } else { 0.0 },
+                effective_sol_received: if swap_type == "Sell" { 0.0 } else { 0.0 }, // Failed sells don't receive SOL
                 slot: transaction.slot,
                 status: self.determine_transaction_status(transaction, &swap_type, failed_costs),
             });
@@ -3896,6 +3910,51 @@ impl TransactionsManager {
             ));
         }
 
+        // Calculate effective amounts (excluding ATA rent but including fees)
+        let (effective_sol_spent, effective_sol_received) = match swap_type.as_str() {
+            "Buy" => {
+                // For BUY: effective_sol_spent = balance change (negative) + fees - any ATA rent recovered
+                let base_amount = transaction.sol_balance_change.abs(); // Amount spent (positive)
+                let effective_spent = if let Some(ata_analysis) = &transaction.ata_analysis {
+                    // Include transaction fees but exclude ATA rent
+                    base_amount + transaction.fee_sol - ata_analysis.total_rent_spent.abs()
+                } else {
+                    // Include transaction fees (ATA rent already excluded in balance change)
+                    base_amount + transaction.fee_sol
+                };
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "EFFECTIVE_BUY", &format!(
+                        "Buy {}: base_amount={:.9}, fee={:.9}, effective_spent={:.9}",
+                        &transaction.signature[..8], base_amount, transaction.fee_sol, effective_spent
+                    ));
+                }
+                
+                (effective_spent.max(0.0), 0.0)
+            }
+            "Sell" => {
+                // For SELL: effective_sol_received = balance change (positive) - fees + any ATA rent recovered
+                let base_amount = transaction.sol_balance_change.max(0.0); // Amount received (positive)
+                let effective_received = if let Some(ata_analysis) = &transaction.ata_analysis {
+                    // Subtract transaction fees but add back any ATA rent recovered
+                    base_amount - transaction.fee_sol + ata_analysis.total_rent_recovered.abs()
+                } else {
+                    // Subtract transaction fees (ATA rent already accounted for in balance change)
+                    base_amount - transaction.fee_sol
+                };
+                
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "EFFECTIVE_SELL", &format!(
+                        "Sell {}: base_amount={:.9}, fee={:.9}, effective_received={:.9}",
+                        &transaction.signature[..8], base_amount, transaction.fee_sol, effective_received
+                    ));
+                }
+                
+                (0.0, effective_received.max(0.0))
+            }
+            _ => (0.0, 0.0)
+        };
+
         Some(SwapPnLInfo {
             token_mint,
             token_symbol,
@@ -3908,6 +3967,8 @@ impl TransactionsManager {
             router, // Use the router we extracted from the transaction type
             fee_sol: transaction.fee_sol,
             ata_rents: ata_rents_display,
+            effective_sol_spent,
+            effective_sol_received,
             slot: transaction.slot,
             status: self.determine_transaction_status(transaction, &swap_type, final_sol_amount),
         })
@@ -3962,7 +4023,7 @@ impl TransactionsManager {
                 None => "Unknown".to_string(),
             };
 
-            let sig_short = &swap.signature[..8.min(swap.signature.len())];
+            let shortened_signature = shorten_signature(&swap.signature);
 
             // Apply intuitive sign conventions for final display:
             // SOL: negative for outflow (spent), positive for inflow (received)
@@ -3996,16 +4057,31 @@ impl TransactionsManager {
                 format!("{:.2}", display_token_amount)
             };
 
+            let effective_sol = if swap.swap_type == "Buy" { 
+                swap.effective_sol_spent 
+            } else { 
+                swap.effective_sol_received 
+            };
+            
+            let effective_price_str = if swap.token_amount.abs() > 0.0 && effective_sol > 0.0 {
+                let price = effective_sol / swap.token_amount.abs();
+                format!("{:.9}", price)
+            } else {
+                "N/A".to_string()
+            };
+
             display_rows.push(SwapDisplayRow {
                 date: swap.timestamp.format("%m-%d").to_string(),
                 time: swap.timestamp.format("%H:%M").to_string(),
-                signature: sig_short.to_string(),
+                signature: shortened_signature,
                 slot: slot_str,
                 swap_type: type_display,
                 token: swap.token_symbol[..15.min(swap.token_symbol.len())].to_string(),
                 sol_amount: sol_formatted,
                 token_amount: token_formatted,
                 price: format!("{:.9}", swap.calculated_price_sol),
+                effective_sol: format!("{:.6}", effective_sol),
+                effective_price: effective_price_str,
                 ata_rents: format!("{:.6}", swap.ata_rents),
                 router: swap.router[..12.min(swap.router.len())].to_string(),
                 fee: format!("{:.6}", swap.fee_sol),
@@ -4046,14 +4122,16 @@ impl TransactionsManager {
         log(LogTag::Transactions, "TABLE", "=== END ANALYSIS ===");
     }
 
-    /// Display comprehensive swap analysis table with FULL signatures for detailed analysis
+    /// Display comprehensive swap analysis table with shortened signatures for better readability
+    /// Signatures are displayed as first8...last4 format (e.g., "2iPhXfdK...oGiM")
+    /// Full signatures are still logged and searchable in transaction data
     pub fn display_swap_analysis_table_full_signatures(&self, swaps: &[SwapPnLInfo]) {
         if swaps.is_empty() {
             log(LogTag::Transactions, "INFO", "No swap transactions found");
             return;
         }
 
-        log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS WITH FULL SIGNATURES ===");
+        log(LogTag::Transactions, "TABLE", "=== COMPREHENSIVE SWAP ANALYSIS WITH SHORTENED SIGNATURES ===");
 
         // Convert swaps to display rows with full signatures
         let mut display_rows: Vec<SwapDisplayRow> = Vec::new();
@@ -4069,8 +4147,9 @@ impl TransactionsManager {
                 None => "Unknown".to_string(),
             };
 
-            // Use FULL signature instead of truncated
-            let full_signature = swap.signature.clone();
+            // Use shortened signature for better table readability
+            // Full signature is still available in logs and for searching
+            let shortened_signature = shorten_signature(&swap.signature);
 
             // Apply intuitive sign conventions for final display:
             // SOL: negative for outflow (spent), positive for inflow (received)
@@ -4104,16 +4183,31 @@ impl TransactionsManager {
                 format!("{:.2}", display_token_amount)
             };
 
+            let effective_sol = if swap.swap_type == "Buy" { 
+                swap.effective_sol_spent 
+            } else { 
+                swap.effective_sol_received 
+            };
+            
+            let effective_price_str = if swap.token_amount.abs() > 0.0 && effective_sol > 0.0 {
+                let price = effective_sol / swap.token_amount.abs();
+                format!("{:.9}", price)
+            } else {
+                "N/A".to_string()
+            };
+
             display_rows.push(SwapDisplayRow {
                 date: swap.timestamp.format("%m-%d").to_string(),
                 time: swap.timestamp.format("%H:%M").to_string(),
-                signature: full_signature,
+                signature: shortened_signature,
                 slot: slot_str,
                 swap_type: type_display,
                 token: swap.token_symbol[..15.min(swap.token_symbol.len())].to_string(),
                 sol_amount: sol_formatted,
                 token_amount: token_formatted,
                 price: format!("{:.9}", swap.calculated_price_sol),
+                effective_sol: format!("{:.6}", effective_sol),
+                effective_price: effective_price_str,
                 ata_rents: format!("{:.6}", swap.ata_rents),
                 router: swap.router[..12.min(swap.router.len())].to_string(),
                 fee: format!("{:.6}", swap.fee_sol),
@@ -4216,14 +4310,21 @@ impl TransactionsManager {
                                 let old_price = position.effective_entry_price;
                                 let was_verified = position.transaction_entry_verified;
                                 
+                                // Calculate effective entry price using effective SOL spent (excludes ATA rent)
+                                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_spent > 0.0 {
+                                    swap_pnl_info.effective_sol_spent / swap_pnl_info.token_amount.abs()
+                                } else {
+                                    swap_pnl_info.calculated_price_sol // Fallback to regular price
+                                };
+                                
                                 // Update position with analyze-swaps-exact calculations
-                                position.effective_entry_price = Some(swap_pnl_info.calculated_price_sol);
+                                position.effective_entry_price = Some(effective_price);
                                 position.transaction_entry_verified = true;
                                 position.total_size_sol = swap_pnl_info.sol_amount;
                                 
                                 log(LogTag::Transactions, "RECALC_ENTRY_VERIFIED", &format!(
-                                    "✅ ENTRY RECALC VERIFIED: Position {} - was_verified={}, now_verified=true, old_price={:?}, new_price={:.9}",
-                                    position.symbol, was_verified, old_price, swap_pnl_info.calculated_price_sol
+                                    "✅ ENTRY RECALC VERIFIED: Position {} - was_verified={}, now_verified=true, old_price={:?}, new_price={:.9} (effective={:.9})",
+                                    position.symbol, was_verified, old_price, swap_pnl_info.calculated_price_sol, effective_price
                                 ));
 
                                 // Clean up any pending transaction tracking for this signature
@@ -4281,14 +4382,21 @@ impl TransactionsManager {
                             if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
                                 let old_price = position.effective_exit_price;
                                 
+                                // Calculate effective exit price using effective SOL received (excludes ATA rent)
+                                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_received > 0.0 {
+                                    swap_pnl_info.effective_sol_received / swap_pnl_info.token_amount.abs()
+                                } else {
+                                    swap_pnl_info.calculated_price_sol // Fallback to regular price
+                                };
+                                
                                 // Update position with analyze-swaps-exact calculations
-                                position.effective_exit_price = Some(swap_pnl_info.calculated_price_sol);
+                                position.effective_exit_price = Some(effective_price);
                                 position.transaction_exit_verified = true;
                                 position.sol_received = Some(swap_pnl_info.sol_amount);
                                 
-                                // Update exit price if not set
+                                // Update exit price if not set (use effective price)
                                 if position.exit_price.is_none() {
-                                    position.exit_price = Some(swap_pnl_info.calculated_price_sol);
+                                    position.exit_price = Some(effective_price);
                                 }
                                 
                                 // Convert fee from SOL to lamports
@@ -5649,18 +5757,43 @@ impl TransactionsManager {
         // Jupiter swaps can be detected even if they fail, based on intent and instruction patterns
         if has_jupiter_route && has_token_operations {
             
-            // Determine swap direction based on SOL balance change and token operations
-            if transaction.sol_balance_change < -0.000001 || sol_amount > 0.000001 {
-                // SOL to Token swap (including failed attempts)
+            // Determine swap direction based on both SOL and token balance changes
+            // Priority: 1) Token balance direction, 2) SOL balance direction
+            
+            // Check if we have significant token amounts to determine direction
+            if token_amount > 1.0 {
+                // We have token amounts, determine direction from balance changes
+                if transaction.sol_balance_change > 0.000001 {
+                    // User gained SOL and we detected token amounts = Token to SOL swap (SELL)
+                    return Ok(TransactionType::SwapTokenToSol {
+                        router: "Jupiter".to_string(),
+                        token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
+                        token_amount: token_amount,
+                        sol_amount: transaction.sol_balance_change.abs(),
+                    });
+                } else if transaction.sol_balance_change < -0.000001 {
+                    // User lost SOL and we detected token amounts = SOL to Token swap (BUY)
+                    return Ok(TransactionType::SwapSolToToken {
+                        router: "Jupiter".to_string(),
+                        token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
+                        sol_amount: transaction.sol_balance_change.abs(),
+                        token_amount: token_amount,
+                    });
+                }
+            }
+            
+            // Fallback to original SOL-based logic if token direction is unclear
+            if transaction.sol_balance_change < -0.000001 {
+                // SOL to Token swap (BUY) - user spent SOL
                 return Ok(TransactionType::SwapSolToToken {
                     router: "Jupiter".to_string(),
                     token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
-                    sol_amount: sol_amount.max(transaction.sol_balance_change.abs()),
+                    sol_amount: transaction.sol_balance_change.abs(),
                     token_amount: token_amount,
                 });
             } 
             else if transaction.sol_balance_change > 0.000001 {
-                // Token to SOL swap
+                // Token to SOL swap (SELL) - user received SOL
                 return Ok(TransactionType::SwapTokenToSol {
                     router: "Jupiter".to_string(),
                     token_mint: target_token_mint.unwrap_or_else(|| "Unknown".to_string()),
@@ -5744,10 +5877,148 @@ impl TransactionsManager {
     
     /// Extract token amount from Jupiter transaction
     async fn extract_token_amount_from_jupiter(&self, transaction: &Transaction) -> f64 {
-        // Look for token transfer instructions
+        // First check existing token_transfers
         if !transaction.token_transfers.is_empty() {
             return transaction.token_transfers[0].amount;
         }
+        
+        // Method 1: Check pre/post token balance changes (more reliable)
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                // Look for token balance changes
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array())
+                ) {
+                    // Find the token balance change for our wallet
+                    let wallet_str = self.wallet_pubkey.to_string();
+                    log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                        "🔍 Looking for token balance changes for wallet: {}", wallet_str
+                    ));
+                    
+                    for (post_idx, post_balance) in post_balances.iter().enumerate() {
+                        if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
+                            let mint_str = post_balance.get("mint").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            let mint_short = if mint_str.len() > 8 { &mint_str[..8] } else { mint_str };
+                            
+                            log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                                "📋 Post balance #{}: owner={}, mint={}...", 
+                                post_idx,
+                                &post_owner[..8.min(post_owner.len())],
+                                mint_short
+                            ));
+                            
+                            if post_owner == wallet_str {
+                                // Find the corresponding pre-balance
+                                let account_index = post_balance.get("accountIndex").and_then(|v| v.as_u64()).unwrap_or(999);
+                                
+                                // Get pre-balance for same account
+                                let pre_amount = pre_balances.iter()
+                                    .find(|pre| pre.get("accountIndex").and_then(|v| v.as_u64()) == Some(account_index))
+                                    .and_then(|pre| pre.get("uiTokenAmount"))
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                
+                                // Get post-balance
+                                let post_amount = post_balance.get("uiTokenAmount")
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                
+                                let token_change = post_amount - pre_amount;
+                                
+                                let mint_str = post_balance.get("mint").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let mint_short = if mint_str.len() > 8 { &mint_str[..8] } else { mint_str };
+                                
+                                log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                                    "💰 Token balance change for account[{}]: {} -> {} = {} (mint: {}...)",
+                                    account_index, pre_amount, post_amount, token_change, mint_short
+                                ));
+                                
+                                // Check for both positive and negative significant changes
+                                if token_change.abs() > 1.0 { // More than 1 token gained or lost
+                                    if let Some(mint) = post_balance.get("mint").and_then(|v| v.as_str()) {
+                                        log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                                            "🔢 Jupiter token amount from balance change: {} -> {} = {} (mint: {})",
+                                            pre_amount, post_amount, token_change, mint
+                                        ));
+                                        
+                                        return token_change.abs(); // Return absolute value since we track direction elsewhere
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Method 2: Parse token transfers from inner instructions (fallback)
+                if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for inner_group in inner_instructions {
+                        if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
+                            for instruction in instructions {
+                                // Look for parsed token transfer instructions
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if let Some(info) = parsed.get("info") {
+                                        // Check for transfer instructions
+                                        if let Some(transfer_type) = parsed.get("type").and_then(|v| v.as_str()) {
+                                            if transfer_type == "transfer" {
+                                                // Get the amount and mint
+                                                if let Some(amount_str) = info.get("amount").and_then(|v| v.as_str()) {
+                                                    if let Ok(raw_amount) = amount_str.parse::<u64>() {
+                                                        // Check if this looks like our target transfer (large amount)
+                                                        if raw_amount > 100000000 { // More than 1M tokens (raw amount)
+                                                            // Get the token mint to determine decimals
+                                                            if let Some(mint_str) = info.get("mint").and_then(|v| v.as_str()) {
+                                                                // Get token decimals from the decimals system
+                                                                if let Ok(decimals) = get_token_decimals_safe(mint_str).await {
+                                                                    // Convert raw amount to UI amount using proper decimals
+                                                                    let ui_amount = raw_to_ui_amount(raw_amount, decimals);
+                                                                    
+                                                                    log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                                                                        "🔢 Jupiter token amount detected: {} raw -> {} UI (decimals: {}, mint: {})",
+                                                                        raw_amount, ui_amount, decimals, mint_str
+                                                                    ));
+                                                                    
+                                                                    return ui_amount;
+                                                                } else {
+                                                                    log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                                                                        "⚠️ Could not get decimals for mint: {}, using fallback",
+                                                                        mint_str
+                                                                    ));
+                                                                    
+                                                                    // Fallback: try common decimal values
+                                                                    // Most tokens use 6 or 9 decimals
+                                                                    if raw_amount > 1_000_000_000 { // > 1B raw, likely 9 decimals
+                                                                        return raw_to_ui_amount(raw_amount, 9);
+                                                                    } else if raw_amount > 1_000_000 { // > 1M raw, likely 6 decimals  
+                                                                        return raw_to_ui_amount(raw_amount, 6);
+                                                                    } else { // < 1M raw, likely fewer decimals
+                                                                        return raw_to_ui_amount(raw_amount, 5);
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            // If no mint found, use the old hardcoded approach as absolute fallback
+                                                            log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
+                                                                "⚠️ No mint found in transfer, using hardcoded BONK decimals fallback for amount: {}",
+                                                                raw_amount
+                                                            ));
+                                                            return raw_amount as f64 / 100000.0;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         0.0
     }
 
