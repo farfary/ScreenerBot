@@ -120,57 +120,57 @@ pub struct Transaction {
     // Transaction status (consolidated from commitment_state, confirmation_status, finalized)
     pub status: TransactionStatus,
     
-    // Transaction type and analysis
-    #[serde(skip_serializing_if = "is_transaction_type_unknown", default)]
+    // Transaction type and analysis - NEVER CACHED - always calculated fresh  
+    #[serde(skip_serializing, default)]
     pub transaction_type: TransactionType,
-    #[serde(skip_serializing_if = "is_direction_internal", default)]
+    #[serde(skip_serializing, default)]
     pub direction: TransactionDirection,
     pub success: bool,
     pub error_message: Option<String>,
     
-    // Financial data - cleaned fields use skip_serializing to avoid cache pollution
-    #[serde(skip_serializing_if = "is_zero_f64", default)]
+    // Financial data - NEVER CACHED - always calculated fresh
+    #[serde(skip_serializing, default)]
     pub fee_sol: f64,
-    #[serde(skip_serializing_if = "is_zero_f64", default)]
+    #[serde(skip_serializing, default)]
     pub sol_balance_change: f64,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(skip_serializing, default)]
     pub token_transfers: Vec<TokenTransfer>,
     
-    // Raw Solana data (cached)
+    // Raw Solana data (cached - only raw blockchain data)
     pub raw_transaction_data: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(skip_serializing, default)]
     pub log_messages: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(skip_serializing, default)]
     pub instructions: Vec<InstructionInfo>,
     
-    // Balance changes - skip when empty (calculated fields)
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    // Balance changes - NEVER CACHED - always calculated fresh
+    #[serde(skip_serializing, default)]
     pub sol_balance_changes: Vec<SolBalanceChange>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(skip_serializing, default)]
     pub token_balance_changes: Vec<TokenBalanceChange>,
     
-    // Our analysis and calculations - skip when None (calculated fields)
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    // Our analysis and calculations - NEVER CACHED - always calculated fresh
+    #[serde(skip_serializing, default)]
     pub swap_analysis: Option<SwapAnalysis>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub position_impact: Option<PositionImpact>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub profit_calculation: Option<ProfitCalculation>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub fee_breakdown: Option<FeeBreakdown>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub ata_analysis: Option<AtaAnalysis>,        // SINGLE source of truth for ATA operations
     
-    // Token information integration - skip when None (calculated fields)
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    // Token information integration - NEVER CACHED - always calculated fresh
+    #[serde(skip_serializing, default)]
     pub token_info: Option<TokenSwapInfo>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub calculated_token_price_sol: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub price_source: Option<PriceSourceType>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub token_symbol: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing, default)]
     pub token_decimals: Option<u8>,
     
     // Priority and tracking
@@ -391,6 +391,10 @@ pub struct TokenSwapInfo {
     pub is_verified: bool,
 }
 
+/// SwapPnLInfo - Swap analysis data structure
+/// CRITICAL: This struct should NEVER be cached to disk
+/// All SwapPnLInfo instances must be calculated fresh on every request
+/// This ensures calculations are always current and accurate
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapPnLInfo {
     pub token_mint: String,
@@ -882,10 +886,12 @@ impl TransactionsManager {
     }
     
     /// Clean transaction for cache storage by removing all calculated fields
-    /// Keeps only raw blockchain data and basic metadata for development
+    /// Clean transaction for caching - keeps ONLY raw blockchain data
+    /// CRITICAL: All calculated fields are removed and set to defaults
+    /// This ensures no calculated values are ever cached to disk
     fn clean_transaction_for_cache(&self, transaction: &Transaction) -> Transaction {
         Transaction {
-            // Keep raw blockchain data and basic metadata
+            // Keep ONLY essential metadata and raw blockchain data
             signature: transaction.signature.clone(),
             slot: transaction.slot,
             block_time: transaction.block_time,
@@ -899,7 +905,7 @@ impl TransactionsManager {
             last_updated: transaction.last_updated,
             cache_file_path: transaction.cache_file_path.clone(),
             
-            // Remove all calculated/derived fields - set to defaults
+            // ALL calculated/derived fields are set to defaults - NEVER CACHED
             transaction_type: TransactionType::Unknown,
             direction: TransactionDirection::Internal,
             fee_sol: 0.0,
@@ -3937,40 +3943,26 @@ impl TransactionsManager {
         // Calculate effective amounts (excluding ATA rent but including fees)
         let (effective_sol_spent, effective_sol_received) = match swap_type.as_str() {
             "Buy" => {
-                // For BUY: effective_sol_spent = balance change (negative) + fees - any ATA rent recovered
-                let base_amount = transaction.sol_balance_change.abs(); // Amount spent (positive)
-                let effective_spent = if let Some(ata_analysis) = &transaction.ata_analysis {
-                    // Include transaction fees but exclude ATA rent
-                    base_amount + transaction.fee_sol - ata_analysis.total_rent_spent.abs()
-                } else {
-                    // Include transaction fees (ATA rent already excluded in balance change)
-                    base_amount + transaction.fee_sol
-                };
+                // For BUY: effective_sol_spent = pure trading amount (final_sol_amount already excludes ATA rent)
+                let effective_spent = final_sol_amount;
                 
                 if self.debug_enabled {
                     log(LogTag::Transactions, "EFFECTIVE_BUY", &format!(
-                        "Buy {}: base_amount={:.9}, fee={:.9}, effective_spent={:.9}",
-                        &transaction.signature[..8], base_amount, transaction.fee_sol, effective_spent
+                        "Buy {}: effective_spent={:.9} (pure trade amount)",
+                        &transaction.signature[..8], effective_spent
                     ));
                 }
                 
                 (effective_spent.max(0.0), 0.0)
             }
             "Sell" => {
-                // For SELL: effective_sol_received = balance change (positive) - fees + any ATA rent recovered
-                let base_amount = transaction.sol_balance_change.max(0.0); // Amount received (positive)
-                let effective_received = if let Some(ata_analysis) = &transaction.ata_analysis {
-                    // Subtract transaction fees but add back any ATA rent recovered
-                    base_amount - transaction.fee_sol + ata_analysis.total_rent_recovered.abs()
-                } else {
-                    // Subtract transaction fees (ATA rent already accounted for in balance change)
-                    base_amount - transaction.fee_sol
-                };
+                // For SELL: effective_sol_received = pure trading amount (final_sol_amount already excludes ATA rent)
+                let effective_received = final_sol_amount;
                 
                 if self.debug_enabled {
                     log(LogTag::Transactions, "EFFECTIVE_SELL", &format!(
-                        "Sell {}: base_amount={:.9}, fee={:.9}, effective_received={:.9}",
-                        &transaction.signature[..8], base_amount, transaction.fee_sol, effective_received
+                        "Sell {}: effective_received={:.9} (pure trade amount)",
+                        &transaction.signature[..8], effective_received
                     ));
                 }
                 
@@ -5923,13 +5915,12 @@ impl TransactionsManager {
                     for (post_idx, post_balance) in post_balances.iter().enumerate() {
                         if let Some(post_owner) = post_balance.get("owner").and_then(|v| v.as_str()) {
                             let mint_str = post_balance.get("mint").and_then(|v| v.as_str()).unwrap_or("unknown");
-                            let mint_short = if mint_str.len() > 8 { &mint_str[..8] } else { mint_str };
                             
                             log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
-                                "📋 Post balance #{}: owner={}, mint={}...", 
+                                "📋 Post balance #{}: owner={}, mint={}", 
                                 post_idx,
                                 &post_owner[..8.min(post_owner.len())],
-                                mint_short
+                                mint_str
                             ));
                             
                             if post_owner == wallet_str {
@@ -5953,11 +5944,10 @@ impl TransactionsManager {
                                 let token_change = post_amount - pre_amount;
                                 
                                 let mint_str = post_balance.get("mint").and_then(|v| v.as_str()).unwrap_or("unknown");
-                                let mint_short = if mint_str.len() > 8 { &mint_str[..8] } else { mint_str };
                                 
                                 log(LogTag::Transactions, "JUPITER_TOKEN", &format!(
-                                    "💰 Token balance change for account[{}]: {} -> {} = {} (mint: {}...)",
-                                    account_index, pre_amount, post_amount, token_change, mint_short
+                                    "💰 Token balance change for account[{}]: {} -> {} = {} (mint: {})",
+                                    account_index, pre_amount, post_amount, token_change, mint_str
                                 ));
                                 
                                 // Check for both positive and negative significant changes

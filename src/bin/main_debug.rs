@@ -27,16 +27,13 @@
 /// - Fetch limited transactions for testing: cargo run --bin main_debug -- --fetch 50
 /// - Fetch ALL wallet transactions: cargo run --bin main_debug -- --fetch-all
 /// - Analyze specific transaction: cargo run --bin main_debug -- --signature <SIG>
-/// - Enhanced recalculate transaction: cargo run --bin main_debug -- --signature <SIG> --force-recalculate
 /// - Test analyzer on recent transactions: cargo run --bin main_debug -- --test-analyzer --count 10
 /// - Debug cache system: cargo run --bin main_debug -- --debug-cache
-/// - Recalculate analysis: cargo run --bin main_debug -- --recalculate-cache
 /// - Update and re-analyze cache: cargo run --bin main_debug -- --update-cache --count 50 (preserves raw data)
 /// - Clean cache files: cargo run --bin main_debug -- --clean-cache (removes calculated fields)
 /// - Remove all cache files: cargo run --bin main_debug -- --clean (removes all JSON files)
-/// - Analyze all swaps with PnL (auto-recalculates): cargo run --bin main_debug -- --analyze-swaps
+/// - Analyze all swaps with PnL: cargo run --bin main_debug -- --analyze-swaps
 /// - Filter swaps by SOL amount: cargo run --bin main_debug -- --analyze-swaps --min-sol 0.003 --max-sol 0.006
-/// - Enhanced recalculate and analyze: cargo run --bin main_debug -- --analyze-swaps --force-recalculate
 /// - Analyze position lifecycle: cargo run --bin main_debug -- --analyze-positions
 /// - Analyze ALL transaction types: cargo run --bin main_debug -- --analyze-all --count 500
 /// - Analyze ATA operations: cargo run --bin main_debug -- --analyze-ata --count 100
@@ -218,12 +215,6 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .help("Deep analyze specific transaction with comprehensive instruction-level details")
                 .value_name("SIGNATURE")
         )
-        .arg(
-            Arg::new("force-recalculate")
-                .long("force-recalculate")
-                .help("Force comprehensive recalculation of all cached transactions (more thorough)")
-                .action(clap::ArgAction::SetTrue)
-        )
         
         // === LIVE TRADING TESTS ===
         .next_help_heading("Live Trading Tests")
@@ -346,12 +337,6 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("recalculate-cache")
-                .long("recalculate-cache")
-                .help("Recalculate all analysis parameters without deleting raw transaction data")
-                .action(clap::ArgAction::SetTrue)
-        )
-        .arg(
             Arg::new("clean-cache")
                 .long("clean-cache")
                 .help("Clean all cached transactions by removing calculated fields (keeps only raw blockchain data)")
@@ -448,12 +433,11 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after monitoring...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if let Some(signature) = matches.get_one::<String>("signature") {
-        let force_recalculate = matches.get_flag("force-recalculate");
         let analyze_ata = matches.get_flag("analyze-ata");
-        analyze_specific_transaction(signature, force_recalculate, analyze_ata).await;
+        analyze_specific_transaction(signature, analyze_ata).await;
     } else if let Some(signature) = matches.get_one::<String>("deep-analyze") {
         deep_analyze_transaction(signature).await;
     } else if matches.get_flag("fetch-new") {
@@ -461,7 +445,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching new transactions...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if let Some(count) = matches.get_one::<usize>("fetch") {
         // Validate fetch count range
@@ -474,14 +458,14 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching limited transactions...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("fetch-all") {
         fetch_all_wallet_transactions(wallet_pubkey).await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching all transactions...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("test-analyzer") {
         let count = *matches.get_one::<usize>("count")
@@ -490,23 +474,16 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after testing analyzer...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("debug-cache") {
         debug_cache_system().await;
-    } else if matches.get_flag("recalculate-cache") {
-        recalculate_transaction_cache().await;
-        
-        if should_analyze {
-            log(LogTag::System, "INFO", "Running analysis after recalculating cache...");
-            analyze_swaps(wallet_pubkey, true, None, None, None, filter_mint_for_analysis.clone()).await;
-        }
     } else if matches.get_flag("clean-cache") {
         clean_transaction_cache().await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after cleaning cache...");
-            analyze_swaps(wallet_pubkey, true, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("clean") {
         clean_all_transaction_files().await;
@@ -521,7 +498,6 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
     } else if matches.get_flag("check-balance") {
         check_wallet_balance_comprehensive(wallet_pubkey).await;
     } else if matches.get_flag("analyze-swaps") {
-        let force_recalculate = matches.get_flag("force-recalculate");
         let count = matches.get_one::<usize>("count").copied();
         let min_sol = matches.get_one::<f64>("min-sol").copied();
         let max_sol = matches.get_one::<f64>("max-sol").copied();
@@ -556,7 +532,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
             }
         }
         
-    analyze_swaps(wallet_pubkey, force_recalculate, count, min_sol, max_sol, filter_mint_for_analysis.clone()).await;
+    analyze_swaps(wallet_pubkey, count, min_sol, max_sol, filter_mint_for_analysis.clone()).await;
     } else if matches.get_flag("analyze-positions") {
         analyze_all_positions(wallet_pubkey).await;
     } else if matches.get_flag("analyze-all") {
@@ -601,7 +577,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after swap test...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if matches.get_flag("test-position") {
         // Validate and extract position test arguments with proper error handling
@@ -644,12 +620,12 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after updating cache...");
-            analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+            analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
         }
     } else if should_analyze {
         // If only --analyze is specified, run comprehensive analysis
         log(LogTag::System, "INFO", "Running comprehensive transaction analysis...");
-    analyze_swaps(wallet_pubkey, false, None, None, None, filter_mint_for_analysis.clone()).await;
+    analyze_swaps(wallet_pubkey, None, None, None, filter_mint_for_analysis.clone()).await;
     } else {
         log(LogTag::System, "ERROR", "No command specified. Use --help for usage information.");
         std::process::exit(1);
@@ -758,12 +734,8 @@ impl SwapTestConfig {
 }
 
 /// Analyze swap transactions with comprehensive PnL and filtering
-async fn analyze_swaps(wallet_pubkey: Pubkey, force_recalculate: bool, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>, filter_mint: Option<String>) {
-    if force_recalculate {
-        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis with ENHANCED RECALCULATION for all transactions");
-    } else {
-        log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis (includes automatic recalculation)");
-    }
+async fn analyze_swaps(wallet_pubkey: Pubkey, count: Option<usize>, min_sol: Option<f64>, max_sol: Option<f64>, filter_mint: Option<String>) {
+    log(LogTag::Transactions, "INFO", "Starting comprehensive swap analysis (includes automatic recalculation)");
 
     if let Some(count_limit) = count {
         log(LogTag::Transactions, "FILTER", &format!("Limiting analysis to {} most recent transactions", count_limit));
@@ -1803,52 +1775,14 @@ async fn monitor_transactions(wallet_pubkey: Pubkey, duration_seconds: u64) {
 }
 
 /// Analyze a specific transaction by signature
-async fn analyze_specific_transaction(signature: &str, force_recalculate: bool, analyze_ata: bool) {
+async fn analyze_specific_transaction(signature: &str, analyze_ata: bool) {
     log(LogTag::Transactions, "INFO", &format!(
-        "Analyzing transaction: {} (force_recalculate: {})", 
-        signature, force_recalculate
+        "Analyzing transaction: {}", 
+        signature
     ));
 
-    // First check if it's already cached (skip if force_recalculate is true)
-    if !force_recalculate {
-        match get_transaction(signature).await {
-            Ok(Some(transaction)) => {
-                log(LogTag::Transactions, "CACHE", "Transaction found in cache");
-                
-                // Check if we have comprehensive analysis data (fee_breakdown)
-                if transaction.fee_breakdown.is_some() {
-                    log(LogTag::Transactions, "INFO", "Comprehensive analysis data found in cache");
-                    display_detailed_transaction_info(&transaction);
-                    return;
-                } else {
-                    log(LogTag::Transactions, "INFO", "No comprehensive analysis in cache, forcing re-analysis");
-                    // Continue to re-analysis below
-                }
-            }
-            Ok(None) => {
-                log(LogTag::Transactions, "INFO", "Transaction not in cache, fetching from RPC");
-            }
-            Err(e) => {
-                log(LogTag::Transactions, "WARN", &format!("Error checking cache: {}", e));
-            }
-        }
-    } else {
-        log(LogTag::Transactions, "INFO", "Force recalculation enabled - bypassing cache");
-        
-        // Delete cached transaction file to force complete recalculation
-        let cache_dir = get_transactions_cache_dir();
-        let cache_file = cache_dir.join(format!("{}.json", signature));
-        if cache_file.exists() {
-            if let Err(e) = fs::remove_file(&cache_file) {
-                log(LogTag::Transactions, "WARN", &format!(
-                    "Failed to delete cached transaction file: {}", e
-                ));
-            } else {
-                log(LogTag::Transactions, "INFO", "Deleted cached transaction file for complete recalculation");
-            }
-        }
-    }
-
+    // Always perform fresh analysis since we calculate on each call
+    
     // Load wallet and create manager
     let wallet_pubkey = match load_wallet_pubkey().await {
         Ok(pubkey) => pubkey,
@@ -1860,8 +1794,8 @@ async fn analyze_specific_transaction(signature: &str, force_recalculate: bool, 
 
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
         Ok(mut manager) => {
-            // Force enable debug mode for enhanced ATA analysis when force_recalculate is true
-            if force_recalculate || analyze_ata {
+            // Enable debug mode for enhanced ATA analysis when requested
+            if analyze_ata {
                 manager.debug_enabled = true;
                 log(LogTag::Transactions, "INFO", "Debug mode enabled for enhanced ATA analysis");
                 
@@ -1883,11 +1817,8 @@ async fn analyze_specific_transaction(signature: &str, force_recalculate: bool, 
         Ok(transaction) => {
             log(LogTag::Transactions, "SUCCESS", "Transaction analyzed successfully");
             
-            // Force comprehensive analysis if not already done (check if fee_breakdown is None)
-            if transaction.fee_breakdown.is_none() {
-                log(LogTag::Transactions, "INFO", "Running additional comprehensive analysis for complete fee breakdown");
-                // Comprehensive analysis is already called in process_transaction, but let's ensure debug mode is enabled
-            }
+            // Always run comprehensive analysis for complete fee breakdown
+            log(LogTag::Transactions, "INFO", "Running additional comprehensive analysis for complete fee breakdown");
             
             display_detailed_transaction_info(&transaction);
             
@@ -2100,132 +2031,7 @@ async fn debug_cache_system() {
     }
 }
 
-/// Recalculate all analysis parameters without deleting raw transaction data
-async fn recalculate_transaction_cache() {
-    log(LogTag::Transactions, "INFO", "Recalculating transaction cache (preserving raw data)");
 
-    let cache_dir = get_transactions_cache_dir();
-    
-    if !cache_dir.exists() {
-        log(LogTag::Transactions, "INFO", "Cache directory does not exist");
-        return;
-    }
-
-    // Get wallet pubkey for the transactions manager
-    let wallet_address = match get_wallet_address() {
-        Ok(address) => address,
-        Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to get wallet address: {}", e));
-            return;
-        }
-    };
-
-    let wallet_pubkey = match Pubkey::from_str(&wallet_address) {
-        Ok(pubkey) => pubkey,
-        Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to parse wallet address: {}", e));
-            return;
-        }
-    };
-
-    // Create manager for re-analysis
-    let mut manager = match TransactionsManager::new(wallet_pubkey).await {
-        Ok(manager) => manager,
-        Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to create TransactionsManager: {}", e));
-            return;
-        }
-    };
-
-    match fs::read_dir(&cache_dir) {
-        Ok(entries) => {
-            let mut updated_count = 0;
-            let mut error_count = 0;
-            let mut total_files = 0;
-
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        total_files += 1;
-                        
-                        // Read existing transaction
-                        match fs::read_to_string(&path) {
-                            Ok(content) => {
-                                match serde_json::from_str::<Transaction>(&content) {
-                                    Ok(mut transaction) => {
-                                        let signature = transaction.signature.clone();
-                                        
-                                        log(LogTag::Transactions, "RECALC", &format!(
-                                            "Recalculating analysis for: {}...", &signature[..8]
-                                        ));
-
-                                        // Preserve raw blockchain data but recalculate all analysis
-                                        match manager.recalculate_transaction_analysis(&mut transaction).await {
-                                            Ok(_) => {
-                                                // Save updated transaction back to file
-                                                match serde_json::to_string_pretty(&transaction) {
-                                                    Ok(updated_json) => {
-                                                        match fs::write(&path, updated_json) {
-                                                            Ok(_) => {
-                                                                updated_count += 1;
-                                                                log(LogTag::Transactions, "SUCCESS", &format!(
-                                                                    "✅ Updated analysis: {}", &signature[..8]
-                                                                ));
-                                                            }
-                                                            Err(e) => {
-                                                                error_count += 1;
-                                                                log(LogTag::Transactions, "ERROR", &format!(
-                                                                    "Failed to save updated transaction {}: {}", &signature[..8], e
-                                                                ));
-                                                            }
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        error_count += 1;
-                                                        log(LogTag::Transactions, "ERROR", &format!(
-                                                            "Failed to serialize updated transaction {}: {}", &signature[..8], e
-                                                        ));
-                                                    }
-                                                }
-                                            }
-                                            Err(e) => {
-                                                error_count += 1;
-                                                log(LogTag::Transactions, "ERROR", &format!(
-                                                    "Failed to recalculate analysis for {}: {}", &signature[..8], e
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        error_count += 1;
-                                        log(LogTag::Transactions, "ERROR", &format!(
-                                            "Failed to parse transaction file {}: {}", path.display(), e
-                                        ));
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error_count += 1;
-                                log(LogTag::Transactions, "ERROR", &format!(
-                                    "Failed to read transaction file {}: {}", path.display(), e
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-
-            log(LogTag::Transactions, "SUCCESS", &format!(
-                "Cache recalculation complete: {} of {} files updated, {} errors", 
-                updated_count, total_files, error_count
-            ));
-        }
-        Err(e) => {
-            log(LogTag::Transactions, "ERROR", &format!("Failed to read cache directory: {}", e));
-        }
-    }
-}
 
 /// Clean all cached transactions by removing calculated fields
 /// This keeps only raw blockchain data and is useful during development
@@ -2690,7 +2496,7 @@ fn display_detailed_ata_analysis(transaction: &Transaction) {
         }
     } else {
         log(LogTag::Transactions, "ATA_ANALYSIS", "No ATA analysis data available for this transaction");
-        log(LogTag::Transactions, "ATA_ANALYSIS", "Try re-analyzing with --force-recalculate flag to generate detailed ATA data");
+        log(LogTag::Transactions, "ATA_ANALYSIS", "Transaction analysis will automatically include ATA data when available");
     }
     
     log(LogTag::Transactions, "ATA_ANALYSIS", "=== END ATA OPERATIONS ANALYSIS ===");
