@@ -404,6 +404,7 @@ pub struct SwapPnLInfo {
     pub fee_sol: f64,
     pub ata_rents: f64,     // ATA creation and rent costs (in SOL)
     pub slot: Option<u64>,  // Solana slot number for reliable chronological sorting
+    pub status: String,     // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -527,6 +528,8 @@ pub struct SwapDisplayRow {
     pub router: String,
     #[tabled(rename = "Fee")]
     pub fee: String,
+    #[tabled(rename = "Status")]
+    pub status: String,
 }
 
 /// Tabled structure for position analysis display
@@ -3656,6 +3659,7 @@ impl TransactionsManager {
                 fee_sol: transaction.fee_sol,
                 ata_rents: ata_rents_display,
                 slot: transaction.slot,
+                status: self.determine_transaction_status(transaction, &swap_type, failed_costs),
             });
         }
 
@@ -3895,7 +3899,7 @@ impl TransactionsManager {
         Some(SwapPnLInfo {
             token_mint,
             token_symbol,
-            swap_type,
+            swap_type: swap_type.clone(),
             sol_amount: final_sol_amount,
             token_amount,
             calculated_price_sol,
@@ -3905,7 +3909,34 @@ impl TransactionsManager {
             fee_sol: transaction.fee_sol,
             ata_rents: ata_rents_display,
             slot: transaction.slot,
+            status: self.determine_transaction_status(transaction, &swap_type, final_sol_amount),
         })
+    }
+
+    /// Determine transaction status based on success, error, and swap characteristics
+    fn determine_transaction_status(&self, transaction: &Transaction, swap_type: &str, sol_amount: f64) -> String {
+        if !transaction.success {
+            if let Some(ref error_msg) = transaction.error_message {
+                if error_msg.contains("6001") {
+                    "❌ Failed (6001)".to_string()
+                } else if error_msg.contains("InstructionError") {
+                    "❌ Failed (Instr)".to_string()
+                } else {
+                    "❌ Failed".to_string()
+                }
+            } else {
+                "❌ Failed".to_string()
+            }
+        } else {
+            // Transaction succeeded, check for abnormal characteristics
+            if sol_amount < 0.000010 {  // Very small amount, likely mostly fees
+                "⚠️ Minimal".to_string()
+            } else if sol_amount > 1.0 {  // Very large swap
+                "✅ Large".to_string()
+            } else {
+                "✅ Success".to_string()
+            }
+        }
     }
 
     /// Display comprehensive swap analysis table with proper sign conventions
@@ -3978,6 +4009,7 @@ impl TransactionsManager {
                 ata_rents: format!("{:.6}", swap.ata_rents),
                 router: swap.router[..12.min(swap.router.len())].to_string(),
                 fee: format!("{:.6}", swap.fee_sol),
+                status: swap.status.clone(),
             });
 
             total_fees += swap.fee_sol;
@@ -4085,6 +4117,7 @@ impl TransactionsManager {
                 ata_rents: format!("{:.6}", swap.ata_rents),
                 router: swap.router[..12.min(swap.router.len())].to_string(),
                 fee: format!("{:.6}", swap.fee_sol),
+                status: swap.status.clone(),
             });
 
             total_fees += swap.fee_sol;

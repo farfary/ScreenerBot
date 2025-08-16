@@ -86,6 +86,34 @@ async fn main() {
         let matches = Command::new("Transaction Manager & Analyzer Debug Tool")
         .version("1.0")
         .about("Comprehensive debugging tool for transactions management system")
+        .after_help("
+COMMON USAGE EXAMPLES:
+
+  Basic Analysis:
+    cargo run --bin main_transactions_debug -- --analyze-swaps
+    cargo run --bin main_transactions_debug -- --analyze-swaps --count 50 --min-sol 0.003
+
+  Live Trading Tests:
+    cargo run --bin main_transactions_debug -- --test-swap --dry-run
+    cargo run --bin main_transactions_debug -- --test-swap --swap-type sol-to-token --sol-amount 0.001 --dry-run
+    cargo run --bin main_transactions_debug -- --test-swap --token-mint CUSTOM_MINT --router jupiter
+
+  Data Management:
+    cargo run --bin main_transactions_debug -- --fetch-new --analyze
+    cargo run --bin main_transactions_debug -- --monitor --duration 300 --analyze
+
+  Deep Investigation:
+    cargo run --bin main_transactions_debug -- --signature TRANSACTION_SIGNATURE
+    cargo run --bin main_transactions_debug -- --show-unknown --count 100
+
+  Token Database Lookup:
+    cargo run --bin main_transactions_debug -- --token-info DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
+
+IMPORTANT: Use --dry-run flag for safe testing without real transactions!
+        ")
+        
+        // === DATA FETCHING & MONITORING ===
+        .next_help_heading("Data Fetching & Monitoring")
         .arg(
             Arg::new("monitor")
                 .long("monitor")
@@ -93,53 +121,27 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("signature")
-                .long("signature")
-                .help("Analyze specific transaction by signature")
-                .value_name("SIGNATURE")
-        )
-        .arg(
-            Arg::new("force-recalculate")
-                .long("force-recalculate")
-                .help("Force comprehensive recalculation of all cached transactions (more thorough)")
+            Arg::new("fetch-new")
+                .long("fetch-new")
+                .help("Fetch ALL new transactions from wallet (only uncached, no count limit)")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("min-sol")
-                .long("min-sol")
-                .help("Minimum SOL amount to include in swap analysis")
-                .value_name("SOL_AMOUNT")
+            Arg::new("fetch")
+                .long("fetch")
+                .help("Fetch specified number of uncached transactions for testing")
+                .value_name("COUNT")
+                .value_parser(clap::value_parser!(usize))
         )
         .arg(
-            Arg::new("max-sol")
-                .long("max-sol")
-                .help("Maximum SOL amount to include in swap analysis")
-                .value_name("SOL_AMOUNT")
-        )
-        .arg(
-            Arg::new("test-analyzer")
-                .long("test-analyzer")
-                .help("Test transaction analyzer on recent transactions")
+            Arg::new("fetch-all")
+                .long("fetch-all")
+                .help("Fetch ALL wallet transactions from blockchain (only uncached, no count limit)")
                 .action(clap::ArgAction::SetTrue)
         )
-        .arg(
-            Arg::new("debug-cache")
-                .long("debug-cache")
-                .help("Debug the transaction cache system")
-                .action(clap::ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("recalculate-cache")
-                .long("recalculate-cache")
-                .help("Recalculate all analysis parameters without deleting raw transaction data")
-                .action(clap::ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("benchmark")
-                .long("benchmark")
-                .help("Run performance benchmark tests")
-                .action(clap::ArgAction::SetTrue)
-        )
+        
+        // === TRANSACTION ANALYSIS ===
+        .next_help_heading("Transaction Analysis")
         .arg(
             Arg::new("analyze-swaps")
                 .long("analyze-swaps")
@@ -171,9 +173,144 @@ async fn main() {
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("analyze")
+                .long("analyze")
+                .help("Perform comprehensive analysis (can be combined with other commands)")
+                .action(clap::ArgAction::SetTrue)
+        )
+        
+        // === INDIVIDUAL TRANSACTION DEBUGGING ===
+        .next_help_heading("Individual Transaction Debugging")
+        .arg(
+            Arg::new("signature")
+                .long("signature")
+                .help("Analyze specific transaction by signature")
+                .value_name("SIGNATURE")
+        )
+        .arg(
+            Arg::new("force-recalculate")
+                .long("force-recalculate")
+                .help("Force comprehensive recalculation of all cached transactions (more thorough)")
+                .action(clap::ArgAction::SetTrue)
+        )
+        
+        // === LIVE TRADING TESTS ===
+        .next_help_heading("Live Trading Tests")
+        .arg(
+            Arg::new("test-swap")
+                .long("test-swap")
+                .help("Execute real swap test with transaction analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("test-position")
+                .long("test-position")
+                .help("Test real position management with transaction verification")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("dry-run")
+                .long("dry-run")
+                .help("Perform dry-run simulation without executing real transactions")
+                .action(clap::ArgAction::SetTrue)
+        )
+        
+        // === SWAP TEST CONFIGURATION ===
+        .next_help_heading("Swap Test Configuration")
+        .arg(
+            Arg::new("swap-type")
+                .long("swap-type")
+                .help("Swap type: sol-to-token, token-to-sol, or round-trip")
+                .value_name("TYPE")
+                .default_value("round-trip")
+                .value_parser(["sol-to-token", "token-to-sol", "round-trip"])
+        )
+        .arg(
+            Arg::new("token-mint")
+                .long("token-mint")
+                .help("Token mint address for swap test")
+                .value_name("MINT")
+                .default_value("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263") // BONK
+                .value_parser(clap::value_parser!(String))
+        )
+        .arg(
+            Arg::new("token-symbol")
+                .long("token-symbol")
+                .help("Token symbol for display purposes")
+                .value_name("SYMBOL")
+                .default_value("BONK")
+                .value_parser(clap::value_parser!(String))
+        )
+        .arg(
+            Arg::new("sol-amount")
+                .long("sol-amount")
+                .help("SOL amount to trade (min: 0.001, max: 1.0)")
+                .value_name("AMOUNT")
+                .default_value("0.002")
+                .value_parser(clap::value_parser!(f64))
+        )
+        .arg(
+            Arg::new("slippage")
+                .long("slippage")
+                .help("Slippage tolerance percentage (min: 1.0, max: 50.0)")
+                .value_name("PERCENT")
+                .default_value("15.0")
+                .value_parser(clap::value_parser!(f64))
+        )
+        .arg(
+            Arg::new("router")
+                .long("router")
+                .help("Swap router: jupiter (recommended) or gmgn")
+                .value_name("ROUTER")
+                .default_value("jupiter")
+                .value_parser(["jupiter", "gmgn"])
+        )
+        
+        // === ANALYSIS FILTERS ===
+        .next_help_heading("Analysis Filters")
+        .arg(
+            Arg::new("min-sol")
+                .long("min-sol")
+                .help("Minimum SOL amount to include in swap analysis")
+                .value_name("SOL_AMOUNT")
+                .value_parser(clap::value_parser!(f64))
+        )
+        .arg(
+            Arg::new("max-sol")
+                .long("max-sol")
+                .help("Maximum SOL amount to include in swap analysis")
+                .value_name("SOL_AMOUNT")
+                .value_parser(clap::value_parser!(f64))
+        )
+        .arg(
+            Arg::new("count")
+                .long("count")
+                .help("Number of transactions to process (min: 1, max: 10000)")
+                .value_name("COUNT")
+                .default_value("10")
+                .value_parser(clap::value_parser!(usize))
+        )
+        .arg(
+            Arg::new("duration")
+                .long("duration")
+                .help("Duration in seconds for monitoring (min: 10, max: 3600)")
+                .value_name("SECONDS")
+                .default_value("60")
+                .value_parser(clap::value_parser!(u64))
+        )
+        
+        // === CACHE & SYSTEM MANAGEMENT ===
+        .next_help_heading("Cache & System Management")
+        .arg(
             Arg::new("update-cache")
                 .long("update-cache")
                 .help("Re-analyze and update all cached transactions with new analysis")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("recalculate-cache")
+                .long("recalculate-cache")
+                .help("Recalculate all analysis parameters without deleting raw transaction data")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -188,97 +325,33 @@ async fn main() {
                 .help("Remove all transaction JSON files from data/transactions/ directory")
                 .action(clap::ArgAction::SetTrue)
         )
+        
+        // === TESTING & DEBUGGING ===
+        .next_help_heading("Testing & Debugging")
         .arg(
-            Arg::new("fetch-new")
-                .long("fetch-new")
-                .help("Fetch ALL new transactions from wallet (only uncached, no count limit)")
+            Arg::new("test-analyzer")
+                .long("test-analyzer")
+                .help("Test transaction analyzer on recent transactions")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("fetch")
-                .long("fetch")
-                .help("Fetch specified number of uncached transactions for testing")
-                .value_name("COUNT")
-        )
-        .arg(
-            Arg::new("fetch-all")
-                .long("fetch-all")
-                .help("Fetch ALL wallet transactions from blockchain (only uncached, no count limit)")
+            Arg::new("debug-cache")
+                .long("debug-cache")
+                .help("Debug the transaction cache system")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("analyze")
-                .long("analyze")
-                .help("Perform comprehensive analysis (can be combined with other commands)")
+            Arg::new("benchmark")
+                .long("benchmark")
+                .help("Run performance benchmark tests")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
-            Arg::new("test-swap")
-                .long("test-swap")
-                .help("Execute real swap test with transaction analysis")
-                .action(clap::ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("test-position")
-                .long("test-position")
-                .help("Test real position management with transaction verification")
-                .action(clap::ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("swap-type")
-                .long("swap-type")
-                .help("Swap type: 'sol-to-token', 'token-to-sol', or 'round-trip' (default: round-trip)")
-                .value_name("TYPE")
-                .default_value("round-trip")
-        )
-        .arg(
-            Arg::new("token-mint")
-                .long("token-mint")
-                .help("Token mint address for swap test")
-                .value_name("MINT")
-                .default_value("DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263") // BONK
-        )
-        .arg(
-            Arg::new("token-symbol")
-                .long("token-symbol")
-                .help("Token symbol for display purposes")
-                .value_name("SYMBOL")
-                .default_value("BONK")
-        )
-        .arg(
-            Arg::new("sol-amount")
-                .long("sol-amount")
-                .help("SOL amount to trade (default: 0.002 SOL)")
-                .value_name("AMOUNT")
-                .default_value("0.002")
-        )
-        .arg(
-            Arg::new("slippage")
-                .long("slippage")
-                .help("Slippage tolerance percentage (default: 15%)")
-                .value_name("PERCENT")
-                .default_value("15.0")
-        )
-        .arg(
-            Arg::new("router")
-                .long("router")
-                .help("Swap router: 'jupiter' or 'gmgn' (default: jupiter)")
-                .value_name("ROUTER")
-                .default_value("jupiter")
-        )
-        .arg(
-            Arg::new("count")
-                .long("count")
-                .help("Number of transactions to process")
-                .value_name("COUNT")
-                .default_value("10")
-        )
-        .arg(
-            Arg::new("duration")
-                .long("duration")
-                .help("Duration in seconds for monitoring")
-                .value_name("SECONDS")
-                .default_value("60")
+            Arg::new("token-info")
+                .long("token-info")
+                .help("Get token information from database by mint address")
+                .value_name("MINT_ADDRESS")
+                .value_parser(clap::value_parser!(String))
         )
         .arg(
             Arg::new("verbose")
@@ -316,10 +389,8 @@ async fn main() {
     
     // Execute based on command line arguments
     if matches.get_flag("monitor") {
-        let duration: u64 = matches.get_one::<String>("duration")
-            .unwrap()
-            .parse()
-            .unwrap_or(60);
+        let duration = *matches.get_one::<u64>("duration")
+            .expect("duration should have default value");
         monitor_transactions(wallet_pubkey, duration).await;
         
         if should_analyze {
@@ -337,12 +408,14 @@ async fn main() {
             log(LogTag::System, "INFO", "Running analysis after fetching new transactions...");
             analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
-    } else if let Some(count_str) = matches.get_one::<String>("fetch") {
-        let count: usize = count_str.parse().unwrap_or_else(|_| {
-            log(LogTag::System, "ERROR", "Invalid count value for --fetch");
+    } else if let Some(count) = matches.get_one::<usize>("fetch") {
+        // Validate fetch count range
+        if *count < 1 || *count > 10000 {
+            log(LogTag::System, "ERROR", &format!("Fetch count {} is out of range (min: 1, max: 10000)", count));
             std::process::exit(1);
-        });
-        fetch_limited_transactions(wallet_pubkey, count).await;
+        }
+        
+        fetch_limited_transactions(wallet_pubkey, *count).await;
         
         if should_analyze {
             log(LogTag::System, "INFO", "Running analysis after fetching limited transactions...");
@@ -356,10 +429,8 @@ async fn main() {
             analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if matches.get_flag("test-analyzer") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(10);
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
         test_transaction_analyzer(wallet_pubkey, count).await;
         
         if should_analyze {
@@ -385,62 +456,84 @@ async fn main() {
     } else if matches.get_flag("clean") {
         clean_all_transaction_files().await;
     } else if matches.get_flag("benchmark") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(100);
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
         run_benchmark_tests(wallet_pubkey, count).await;
+    } else if let Some(mint_address) = matches.get_one::<String>("token-info") {
+        get_token_info_from_database(mint_address).await;
     } else if matches.get_flag("analyze-swaps") {
         let force_recalculate = matches.get_flag("force-recalculate");
-        let count: Option<usize> = matches.get_one::<String>("count")
-            .and_then(|s| s.parse::<usize>().ok());
-        let min_sol = matches.get_one::<String>("min-sol")
-            .and_then(|s| s.parse::<f64>().ok());
-        let max_sol = matches.get_one::<String>("max-sol")
-            .and_then(|s| s.parse::<f64>().ok());
+        let count = matches.get_one::<usize>("count").copied();
+        let min_sol = matches.get_one::<f64>("min-sol").copied();
+        let max_sol = matches.get_one::<f64>("max-sol").copied();
+        
+        // Validate SOL amount ranges
+        if let Some(min) = min_sol {
+            if min < 0.000001 || min > 10.0 {
+                log(LogTag::System, "ERROR", &format!("min-sol {:.6} is out of range (min: 0.000001, max: 10.0)", min));
+                std::process::exit(1);
+            }
+        }
+        if let Some(max) = max_sol {
+            if max < 0.000001 || max > 10.0 {
+                log(LogTag::System, "ERROR", &format!("max-sol {:.6} is out of range (min: 0.000001, max: 10.0)", max));
+                std::process::exit(1);
+            }
+        }
+        
+        // Validate that min_sol <= max_sol if both are provided
+        if let (Some(min), Some(max)) = (min_sol, max_sol) {
+            if min > max {
+                log(LogTag::System, "ERROR", &format!("min-sol ({:.6}) cannot be greater than max-sol ({:.6})", min, max));
+                std::process::exit(1);
+            }
+        }
+        
+        // Validate count range
+        if let Some(count_val) = count {
+            if count_val < 1 || count_val > 10000 {
+                log(LogTag::System, "ERROR", &format!("count {} is out of range (min: 1, max: 10000)", count_val));
+                std::process::exit(1);
+            }
+        }
+        
         analyze_swaps(wallet_pubkey, force_recalculate, count, min_sol, max_sol).await;
     } else if matches.get_flag("analyze-positions") {
         analyze_all_positions(wallet_pubkey).await;
     } else if matches.get_flag("analyze-all") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(1000);
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
         analyze_all_transactions(wallet_pubkey, count).await;
     } else if matches.get_flag("analyze-ata") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(100);
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
         analyze_ata_operations(wallet_pubkey, count).await;
     } else if matches.get_flag("show-unknown") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(1000);
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
         show_unknown_transactions(wallet_pubkey, count).await;
     } else if matches.get_flag("test-swap") {
-        let swap_type = matches.get_one::<String>("swap-type").unwrap();
-        let token_mint = matches.get_one::<String>("token-mint").unwrap();
-        let token_symbol = matches.get_one::<String>("token-symbol").unwrap();
-        let sol_amount: f64 = matches.get_one::<String>("sol-amount")
-            .unwrap()
-            .parse()
-            .unwrap_or(0.002);
-        let slippage: f64 = matches.get_one::<String>("slippage")
-            .unwrap()
-            .parse()
-            .unwrap_or(15.0);
-        let router = matches.get_one::<String>("router").unwrap();
+        // Create and validate swap test configuration
+        let config = match SwapTestConfig::from_matches(&matches) {
+            Ok(config) => config,
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("Invalid swap test configuration: {}", e));
+                std::process::exit(1);
+            }
+        };
+        
+        // Log the validated configuration
+        config.log_config();
         
         test_real_swap(
             wallet_pubkey,
-            swap_type,
-            token_mint,
-            token_symbol,
-            sol_amount,
-            slippage,
-            router
+            &config.swap_type,
+            &config.token_mint,
+            &config.token_symbol,
+            config.sol_amount,
+            config.slippage,
+            &config.router,
+            config.dry_run
         ).await;
         
         if should_analyze {
@@ -448,12 +541,27 @@ async fn main() {
             analyze_swaps(wallet_pubkey, false, None, None, None).await;
         }
     } else if matches.get_flag("test-position") {
-        let token_mint = matches.get_one::<String>("token-mint").unwrap();
-        let token_symbol = matches.get_one::<String>("token-symbol").unwrap();
-        let sol_amount: f64 = matches.get_one::<String>("sol-amount")
-            .unwrap()
-            .parse()
-            .unwrap_or(0.002);
+        // Validate and extract position test arguments with proper error handling
+        let token_mint = matches.get_one::<String>("token-mint")
+            .expect("token-mint should have default value");
+        
+        let token_symbol = matches.get_one::<String>("token-symbol")
+            .expect("token-symbol should have default value");
+        
+        let sol_amount = *matches.get_one::<f64>("sol-amount")
+            .expect("sol-amount should have default value");
+        
+        // Validate token mint format (basic validation)
+        if token_mint.len() < 32 || token_mint.len() > 44 {
+            log(LogTag::System, "ERROR", &format!("Invalid token mint format: {} (should be 32-44 characters)", token_mint));
+            std::process::exit(1);
+        }
+        
+        // Log position test configuration
+        log(LogTag::System, "POSITION_CONFIG", &format!(
+            "Position test configuration validated:\n  • Token: {} ({})\n  • SOL Amount: {:.6}",
+            token_symbol, &token_mint[..8], sol_amount
+        ));
         
         test_real_position_management(
             wallet_pubkey,
@@ -467,10 +575,8 @@ async fn main() {
             analyze_all_positions(wallet_pubkey).await;
         }
     } else if matches.get_flag("update-cache") {
-        let count: usize = matches.get_one::<String>("count")
-            .unwrap()
-            .parse()
-            .unwrap_or(100);
+        let count = *matches.get_one::<usize>("count")
+            .expect("count should have default value");
         update_transaction_cache(wallet_pubkey, count).await;
         
         if should_analyze {
@@ -487,6 +593,105 @@ async fn main() {
     }
 
     log(LogTag::System, "INFO", "Transaction Manager & Analyzer Debug Tool completed");
+}
+
+/// Swap test configuration with validation
+#[derive(Debug, Clone)]
+struct SwapTestConfig {
+    pub swap_type: String,
+    pub token_mint: String,
+    pub token_symbol: String,
+    pub sol_amount: f64,
+    pub slippage: f64,
+    pub router: String,
+    pub dry_run: bool,
+}
+
+impl SwapTestConfig {
+    /// Create and validate swap test configuration from command line arguments
+    fn from_matches(matches: &clap::ArgMatches) -> Result<Self, String> {
+        let swap_type = matches.get_one::<String>("swap-type")
+            .expect("swap-type should have default value")
+            .clone();
+        
+        let token_mint = matches.get_one::<String>("token-mint")
+            .expect("token-mint should have default value")
+            .clone();
+        
+        let token_symbol = matches.get_one::<String>("token-symbol")
+            .expect("token-symbol should have default value")
+            .clone();
+        
+        let sol_amount = *matches.get_one::<f64>("sol-amount")
+            .expect("sol-amount should have default value");
+        
+        let slippage = *matches.get_one::<f64>("slippage")
+            .expect("slippage should have default value");
+        
+        let router = matches.get_one::<String>("router")
+            .expect("router should have default value")
+            .clone();
+        
+        let dry_run = matches.get_flag("dry-run");
+        
+        let config = SwapTestConfig {
+            swap_type,
+            token_mint,
+            token_symbol,
+            sol_amount,
+            slippage,
+            router,
+            dry_run,
+        };
+        
+        config.validate()?;
+        Ok(config)
+    }
+    
+    /// Validate the configuration
+    fn validate(&self) -> Result<(), String> {
+        // Validate token mint format
+        if self.token_mint.len() < 32 || self.token_mint.len() > 44 {
+            return Err(format!("Invalid token mint format: {} (should be 32-44 characters)", self.token_mint));
+        }
+        
+        // Validate SOL amount range
+        if self.sol_amount < 0.001 || self.sol_amount > 1.0 {
+            return Err(format!("SOL amount {:.6} is out of range (min: 0.001, max: 1.0)", self.sol_amount));
+        }
+        
+        // Validate slippage range
+        if self.slippage < 1.0 || self.slippage > 50.0 {
+            return Err(format!("Slippage {:.1}% is out of range (min: 1.0%, max: 50.0%)", self.slippage));
+        }
+        
+        // Validate swap type (this should already be validated by clap, but double-check)
+        match self.swap_type.as_str() {
+            "sol-to-token" | "token-to-sol" | "round-trip" => {},
+            _ => return Err(format!("Invalid swap type: {}", self.swap_type)),
+        }
+        
+        // Validate router (this should already be validated by clap, but double-check)
+        match self.router.as_str() {
+            "jupiter" | "gmgn" => {},
+            _ => return Err(format!("Invalid router: {}", self.router)),
+        }
+        
+        // Additional logic validation
+        if self.swap_type == "token-to-sol" && !self.dry_run {
+            log(LogTag::System, "WARNING", "token-to-sol swap requires existing token balance!");
+        }
+        
+        Ok(())
+    }
+    
+    /// Log the configuration for debugging
+    fn log_config(&self) {
+        log(LogTag::System, "SWAP_CONFIG", &format!(
+            "Swap test configuration validated:\n  • Type: {}\n  • Token: {} ({})\n  • SOL Amount: {:.6}\n  • Slippage: {:.1}%\n  • Router: {}\n  • Dry Run: {}",
+            self.swap_type, self.token_symbol, &self.token_mint[..8], self.sol_amount, self.slippage, self.router, self.dry_run
+        ));
+    }
 }
 
 /// Analyze swap transactions with comprehensive PnL and filtering
@@ -2548,18 +2753,24 @@ async fn test_real_swap(
     sol_amount: f64,
     slippage: f64,
     router: &str,
+    dry_run: bool,
 ) {
     log(LogTag::Transactions, "SWAP_TEST", "=== REAL SWAP TEST STARTING ===");
     log(LogTag::Transactions, "SWAP_TEST", &format!(
-        "📋 Test Configuration:\n  • Swap Type: {}\n  • Token: {} ({})\n  • SOL Amount: {:.6} SOL\n  • Slippage: {:.1}%\n  • Router: {}",
-        swap_type, token_symbol, &token_mint[..8], sol_amount, slippage, router
+        "Test Configuration:\n  • Swap Type: {}\n  • Token: {} ({})\n  • SOL Amount: {:.6} SOL\n  • Slippage: {:.1}%\n  • Router: {}\n  • Dry Run: {}",
+        swap_type, token_symbol, &token_mint[..8], sol_amount, slippage, router, dry_run
     ));
 
-    // Safety warning
-    log(LogTag::Transactions, "WARNING", "⚠️ This test performs REAL blockchain transactions with REAL SOL!");
-    log(LogTag::Transactions, "WARNING", "⚠️ Starting in 5 seconds... Press Ctrl+C to cancel!");
-    
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    if dry_run {
+        log(LogTag::Transactions, "DRY_RUN", "DRY RUN MODE: Simulating swap without real transactions");
+        log(LogTag::Transactions, "DRY_RUN", "All operations will be simulated only - no real SOL will be spent");
+    } else {
+        // Safety warning
+        log(LogTag::Transactions, "WARNING", "This test performs REAL blockchain transactions with REAL SOL!");
+        log(LogTag::Transactions, "WARNING", "Starting in 5 seconds... Press Ctrl+C to cancel!");
+        
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 
     // Create transactions manager for monitoring
     let mut manager = match TransactionsManager::new(wallet_pubkey).await {
@@ -2590,13 +2801,13 @@ async fn test_real_swap(
 
     match swap_type {
         "sol-to-token" => {
-            execute_sol_to_token_test(&mut manager, &test_token, sol_amount, slippage, router).await;
+            execute_sol_to_token_test(&mut manager, &test_token, sol_amount, slippage, router, dry_run).await;
         }
         "token-to-sol" => {
-            execute_token_to_sol_test(&mut manager, &test_token, slippage, router).await;
+            execute_token_to_sol_test(&mut manager, &test_token, slippage, router, dry_run).await;
         }
         "round-trip" => {
-            execute_round_trip_test(&mut manager, &test_token, sol_amount, slippage, router).await;
+            execute_round_trip_test(&mut manager, &test_token, sol_amount, slippage, router, dry_run).await;
         }
         _ => {
             log(LogTag::Transactions, "ERROR", &format!("Unknown swap type: {}", swap_type));
@@ -2692,13 +2903,29 @@ async fn execute_sol_to_token_test(
     sol_amount: f64,
     slippage: f64,
     router: &str,
+    dry_run: bool,
 ) {
     log(LogTag::Transactions, "BUY_TEST", &format!(
-        "🔵 Starting {} BUY test (SOL -> {})",
-        router.to_uppercase(), token.symbol
+        "Starting {} BUY test (SOL -> {}) - Dry Run: {}",
+        router.to_uppercase(), token.symbol, dry_run
     ));
 
     let start_time = Instant::now();
+    
+    if dry_run {
+        log(LogTag::Transactions, "DRY_RUN", "DRY RUN: Simulating swap execution...");
+        log(LogTag::Transactions, "DRY_RUN", &format!(
+            "Would execute {} swap: {:.6} SOL -> {} tokens",
+            router.to_uppercase(), sol_amount, token.symbol
+        ));
+        
+        let execution_time = start_time.elapsed();
+        log(LogTag::Transactions, "SUCCESS", &format!(
+            "DRY RUN: {} BUY simulation completed in {:.2}s!",
+            router.to_uppercase(), execution_time.as_secs_f64()
+        ));
+        return;
+    }
     
     let swap_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, sol_amount, slippage, true).await,
@@ -2741,10 +2968,11 @@ async fn execute_token_to_sol_test(
     token: &Token,
     slippage: f64,
     router: &str,
+    dry_run: bool,
 ) {
     log(LogTag::Transactions, "SELL_TEST", &format!(
-        "🟠 Starting {} SELL test ({} -> SOL)",
-        router.to_uppercase(), token.symbol
+        "Starting {} SELL test ({} -> SOL) - Dry Run: {}",
+        router.to_uppercase(), token.symbol, dry_run
     ));
 
     // Get wallet address for balance check
@@ -2794,6 +3022,21 @@ async fn execute_token_to_sol_test(
 
     let start_time = Instant::now();
     
+    if dry_run {
+        log(LogTag::Transactions, "DRY_RUN", "DRY RUN: Simulating sell execution...");
+        log(LogTag::Transactions, "DRY_RUN", &format!(
+            "Would execute {} swap: {:.6} {} tokens -> SOL",
+            router.to_uppercase(), tokens_to_sell, token.symbol
+        ));
+        
+        let execution_time = start_time.elapsed();
+        log(LogTag::Transactions, "SUCCESS", &format!(
+            "DRY RUN: {} SELL simulation completed in {:.2}s!",
+            router.to_uppercase(), execution_time.as_secs_f64()
+        ));
+        return;
+    }
+    
     let swap_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, tokens_to_sell, slippage, false).await,
         "gmgn" => execute_gmgn_swap_test(token, tokens_to_sell, slippage, false).await,
@@ -2836,20 +3079,41 @@ async fn execute_round_trip_test(
     sol_amount: f64,
     slippage: f64,
     router: &str,
+    dry_run: bool,
 ) {
     log(LogTag::Transactions, "ROUND_TRIP", &format!(
-        "🔄 Starting {} ROUND-TRIP test (SOL -> {} -> SOL)",
-        router.to_uppercase(), token.symbol
+        "Starting {} ROUND-TRIP test (SOL -> {} -> SOL) - Dry Run: {}",
+        router.to_uppercase(), token.symbol, dry_run
     ));
 
     let mut test_results = SwapTestResults::new();
 
     // Phase 1: SOL -> Token (BUY)
     log(LogTag::Transactions, "BUY_PHASE", &format!(
-        "🔵 Phase 1: {} BUY (SOL -> {})", router.to_uppercase(), token.symbol
+        "Phase 1: {} BUY (SOL -> {})", router.to_uppercase(), token.symbol
     ));
 
     let buy_start = Instant::now();
+    
+    if dry_run {
+        log(LogTag::Transactions, "DRY_RUN", "DRY RUN: Simulating round-trip test...");
+        log(LogTag::Transactions, "DRY_RUN", &format!(
+            "Phase 1 simulation: {:.6} SOL -> {} tokens",
+            sol_amount, token.symbol
+        ));
+        log(LogTag::Transactions, "DRY_RUN", &format!(
+            "Phase 2 simulation: {} tokens -> SOL",
+            token.symbol
+        ));
+        
+        let execution_time = buy_start.elapsed();
+        log(LogTag::Transactions, "SUCCESS", &format!(
+            "DRY RUN: {} ROUND-TRIP simulation completed in {:.2}s!",
+            router.to_uppercase(), execution_time.as_secs_f64()
+        ));
+        return;
+    }
+    
     let buy_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, sol_amount, slippage, true).await,
         "gmgn" => execute_gmgn_swap_test(token, sol_amount, slippage, true).await,
@@ -3782,4 +4046,233 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
             log(LogTag::Transactions, "WARN", &format!("Priority check failed: {}", e));
         }
     }
+}
+
+/// Get token information from the database by mint address
+async fn get_token_info_from_database(mint_address: &str) {
+    log(LogTag::System, "TOKEN_INFO", &format!("Looking up token information for mint: {}", mint_address));
+    
+    // Validate mint address format
+    if mint_address.len() < 32 || mint_address.len() > 44 {
+        log(LogTag::System, "ERROR", &format!("Invalid mint address format: {} (should be 32-44 characters)", mint_address));
+        return;
+    }
+    
+    // Try to parse as Pubkey to validate format
+    match Pubkey::from_str(mint_address) {
+        Ok(mint_pubkey) => {
+            log(LogTag::System, "INFO", &format!("Valid mint address: {}", mint_pubkey));
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Invalid mint address format: {}", e));
+            return;
+        }
+    }
+    
+    // Initialize the tokens system
+    log(LogTag::System, "INIT", "Initializing tokens system for database lookup...");
+    
+    // Initialize tokens database
+    match screenerbot::tokens::initialize_tokens_system().await {
+        Ok(_) => {
+            log(LogTag::System, "SUCCESS", "Tokens system initialized successfully");
+        }
+        Err(e) => {
+            log(LogTag::System, "ERROR", &format!("Failed to initialize tokens system: {}", e));
+            return;
+        }
+    }
+    
+    // Get token from database
+    match screenerbot::tokens::get_token_from_db(mint_address).await {
+        Some(token) => {
+            log(LogTag::System, "SUCCESS", "Token found in database!");
+            display_token_database_info(&token);
+        }
+        None => {
+            log(LogTag::System, "INFO", "Token not found in database");
+            
+            // Try to get token decimals from cache
+            if let Some(decimals) = get_token_decimals_sync(mint_address) {
+                log(LogTag::System, "INFO", &format!("Found token decimals in cache: {}", decimals));
+            } else {
+                log(LogTag::System, "INFO", "Token decimals not found in cache either");
+            }
+            
+            // Suggest fetching from external sources
+            log(LogTag::System, "INFO", "To add this token to the database, you can:");
+            log(LogTag::System, "INFO", "1. Run a swap test with this token");
+            log(LogTag::System, "INFO", "2. Use the main bot to discover this token");
+            log(LogTag::System, "INFO", "3. Wait for the token discovery service to find it");
+        }
+    }
+}
+
+/// Display comprehensive token information from database
+fn display_token_database_info(token: &screenerbot::tokens::Token) {
+    log(LogTag::System, "TOKEN_INFO", "=== TOKEN DATABASE INFORMATION ===");
+    log(LogTag::System, "TOKEN_INFO", &format!("Symbol: {}", token.symbol));
+    log(LogTag::System, "TOKEN_INFO", &format!("Name: {}", token.name));
+    log(LogTag::System, "TOKEN_INFO", &format!("Mint: {}", token.mint));
+    log(LogTag::System, "TOKEN_INFO", &format!("Chain: {}", token.chain));
+    
+    // Try to get decimals from cache
+    if let Some(decimals) = get_token_decimals_sync(&token.mint) {
+        log(LogTag::System, "TOKEN_INFO", &format!("Decimals: {}", decimals));
+    } else {
+        log(LogTag::System, "TOKEN_INFO", "Decimals: Not available in cache");
+    }
+    
+    // Display price information
+    if let Some(price_sol) = token.price_dexscreener_sol {
+        log(LogTag::System, "TOKEN_INFO", &format!("DexScreener Price (SOL): {:.12}", price_sol));
+    }
+    if let Some(price_usd) = token.price_dexscreener_usd {
+        log(LogTag::System, "TOKEN_INFO", &format!("DexScreener Price (USD): ${:.6}", price_usd));
+    }
+    if let Some(price_sol) = token.price_pool_sol {
+        log(LogTag::System, "TOKEN_INFO", &format!("Pool Price (SOL): {:.12}", price_sol));
+    }
+    if let Some(price_usd) = token.price_pool_usd {
+        log(LogTag::System, "TOKEN_INFO", &format!("Pool Price (USD): ${:.6}", price_usd));
+    }
+    
+    // Display market data
+    if let Some(market_cap) = token.market_cap {
+        log(LogTag::System, "TOKEN_INFO", &format!("Market Cap: ${:.2}", market_cap));
+    }
+    
+    if let Some(fdv) = token.fdv {
+        log(LogTag::System, "TOKEN_INFO", &format!("Fully Diluted Valuation: ${:.2}", fdv));
+    }
+    
+    // Display volume statistics
+    if let Some(ref volume) = token.volume {
+        log(LogTag::System, "TOKEN_INFO", "Volume Statistics:");
+        if let Some(h24) = volume.h24 {
+            log(LogTag::System, "TOKEN_INFO", &format!("  24h Volume: ${:.2}", h24));
+        }
+        if let Some(h6) = volume.h6 {
+            log(LogTag::System, "TOKEN_INFO", &format!("  6h Volume: ${:.2}", h6));
+        }
+        if let Some(h1) = volume.h1 {
+            log(LogTag::System, "TOKEN_INFO", &format!("  1h Volume: ${:.2}", h1));
+        }
+    }
+    
+    // Display transaction statistics
+    if let Some(ref txns) = token.txns {
+        log(LogTag::System, "TOKEN_INFO", "Transaction Statistics:");
+        if let Some(ref h24) = txns.h24 {
+            if let (Some(buys), Some(sells)) = (h24.buys, h24.sells) {
+                log(LogTag::System, "TOKEN_INFO", &format!("  24h: {} buys, {} sells", buys, sells));
+            }
+        }
+        if let Some(ref h6) = txns.h6 {
+            if let (Some(buys), Some(sells)) = (h6.buys, h6.sells) {
+                log(LogTag::System, "TOKEN_INFO", &format!("  6h: {} buys, {} sells", buys, sells));
+            }
+        }
+    }
+    
+    // Display price change statistics
+    if let Some(ref price_change) = token.price_change {
+        log(LogTag::System, "TOKEN_INFO", "Price Changes:");
+        if let Some(h24) = price_change.h24 {
+            log(LogTag::System, "TOKEN_INFO", &format!("  24h: {:.2}%", h24));
+        }
+        if let Some(h6) = price_change.h6 {
+            log(LogTag::System, "TOKEN_INFO", &format!("  6h: {:.2}%", h6));
+        }
+        if let Some(h1) = price_change.h1 {
+            log(LogTag::System, "TOKEN_INFO", &format!("  1h: {:.2}%", h1));
+        }
+    }
+    
+    // Display liquidity information
+    if let Some(ref liquidity) = token.liquidity {
+        log(LogTag::System, "TOKEN_INFO", "Liquidity:");
+        if let Some(usd) = liquidity.usd {
+            log(LogTag::System, "TOKEN_INFO", &format!("  USD: ${:.2}", usd));
+        }
+        if let Some(base) = liquidity.base {
+            log(LogTag::System, "TOKEN_INFO", &format!("  Base: {:.6}", base));
+        }
+        if let Some(quote) = liquidity.quote {
+            log(LogTag::System, "TOKEN_INFO", &format!("  Quote: {:.6}", quote));
+        }
+    }
+    
+    // Display timestamps
+    if let Some(created_at) = token.created_at {
+        log(LogTag::System, "TOKEN_INFO", &format!("Created At: {}", created_at));
+    }
+    
+    // Display DEX information
+    if let Some(ref dex_id) = token.dex_id {
+        log(LogTag::System, "TOKEN_INFO", &format!("DEX: {}", dex_id));
+    }
+    
+    if let Some(ref pair_address) = token.pair_address {
+        log(LogTag::System, "TOKEN_INFO", &format!("Pair Address: {}", pair_address));
+    }
+    
+    if let Some(ref pair_url) = token.pair_url {
+        log(LogTag::System, "TOKEN_INFO", &format!("Pair URL: {}", pair_url));
+    }
+    
+    // Display flags and metadata
+    log(LogTag::System, "TOKEN_INFO", &format!("Is Verified: {}", token.is_verified));
+    
+    if !token.labels.is_empty() {
+        log(LogTag::System, "TOKEN_INFO", &format!("Labels: {}", token.labels.join(", ")));
+    }
+    
+    if !token.tags.is_empty() {
+        log(LogTag::System, "TOKEN_INFO", &format!("Tags: {}", token.tags.join(", ")));
+    }
+    
+    // Display additional metadata if available
+    if let Some(ref description) = token.description {
+        if !description.is_empty() {
+            log(LogTag::System, "TOKEN_INFO", &format!("Description: {}", description));
+        }
+    }
+    
+    if let Some(ref website) = token.website {
+        if !website.is_empty() {
+            log(LogTag::System, "TOKEN_INFO", &format!("Website: {}", website));
+        }
+    }
+    
+    if let Some(ref logo_url) = token.logo_url {
+        if !logo_url.is_empty() {
+            log(LogTag::System, "TOKEN_INFO", &format!("Logo URL: {}", logo_url));
+        }
+    }
+    
+    if let Some(ref coingecko_id) = token.coingecko_id {
+        if !coingecko_id.is_empty() {
+            log(LogTag::System, "TOKEN_INFO", &format!("CoinGecko ID: {}", coingecko_id));
+        }
+    }
+    
+    // Display social information if available
+    if let Some(ref info) = token.info {
+        if !info.socials.is_empty() {
+            log(LogTag::System, "TOKEN_INFO", "Social Links:");
+            for social in &info.socials {
+                log(LogTag::System, "TOKEN_INFO", &format!("  {}: {}", social.link_type, social.url));
+            }
+        }
+        if !info.websites.is_empty() {
+            log(LogTag::System, "TOKEN_INFO", "Websites:");
+            for website in &info.websites {
+                let label = website.label.as_deref().unwrap_or("Website");
+                log(LogTag::System, "TOKEN_INFO", &format!("  {}: {}", label, website.url));
+            }
+        }
+    }
+    
+    log(LogTag::System, "TOKEN_INFO", "=== END TOKEN INFORMATION ===");
 }
