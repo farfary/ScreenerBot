@@ -850,12 +850,26 @@ impl TransactionsManager {
         match &transaction.transaction_type {
             TransactionType::SwapSolToToken { .. } | TransactionType::SwapTokenToSol { .. } => {
                 // For swaps, analyze ATA operations to get accurate trading amounts
-                if let Err(e) = self.analyze_ata_operations(transaction).await {
-                    // ATA analysis failure for swaps is not fatal, just log it
-                    if self.debug_enabled {
-                        log(LogTag::Transactions, "WARN", &format!(
-                            "ATA analysis failed for swap {}: {}", &transaction.signature[..8], e
-                        ));
+                match self.analyze_ata_operations(transaction).await {
+                    Ok(ata_rent_amount) => {
+                        // Store ATA rent amount in transaction for accurate PnL calculation
+                        if ata_rent_amount > 0.0 {
+                            // Set the ata_rents field (need to add this to transaction analysis)
+                            if self.debug_enabled {
+                                log(LogTag::Transactions, "ATA_RENT", &format!(
+                                    "Transaction {}: ATA rent detected: {:.9} SOL", 
+                                    &transaction.signature[..8], ata_rent_amount
+                                ));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // ATA analysis failure for swaps is not fatal, just log it
+                        if self.debug_enabled {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "ATA analysis failed for swap {}: {}", &transaction.signature[..8], e
+                            ));
+                        }
                     }
                 }
             }
@@ -6278,9 +6292,64 @@ impl TransactionsManager {
         Err("Not a generic DEX swap".to_string())
     }
 
-    /// Analyze ATA operations
-    async fn analyze_ata_operations(&self, _transaction: &Transaction) -> Result<TransactionType, String> {
-        Err("ATA operations no longer detected as transaction types".to_string())
+    /// Analyze ATA operations and calculate rent amounts
+    async fn analyze_ata_operations(&self, transaction: &Transaction) -> Result<f64, String> {
+        let mut total_ata_rent = 0.0;
+        
+        // Look for ATA account closures and creations in pre/post balances
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(pre_balances) = meta.get("preBalances").and_then(|v| v.as_array()) {
+                    if let Some(post_balances) = meta.get("postBalances").and_then(|v| v.as_array()) {
+                        // Compare pre and post balances to detect ATA rent flows
+                        for (index, (pre, post)) in pre_balances.iter().zip(post_balances.iter()).enumerate() {
+                            if let (Some(pre_val), Some(post_val)) = (pre.as_u64(), post.as_u64()) {
+                                let change = post_val as i64 - pre_val as i64;
+                                
+                                // Check if this is an ATA account by looking at the change amount
+                                // Standard ATA rent is 2039280 lamports (0.00203928 SOL)
+                                // Also check for partial ATA rent amounts
+                                if change.abs() >= 1000000 && change.abs() <= 3000000 {
+                                    // Check if this involves CloseAccount instructions
+                                    let has_close_account = transaction.log_messages.iter()
+                                        .any(|log| log.contains("Instruction: CloseAccount"));
+                                    
+                                    if has_close_account {
+                                        // If an account went from having balance to 0, it's likely ATA closure
+                                        if pre_val > 1000000 && post_val == 0 {
+                                            total_ata_rent += lamports_to_sol(pre_val);
+                                            if self.debug_enabled {
+                                                log(LogTag::Transactions, "ATA_RENT", 
+                                                    &format!("Detected ATA closure rent refund: {} lamports ({:.9} SOL)", 
+                                                             pre_val, lamports_to_sol(pre_val)));
+                                            }
+                                        }
+                                        // If account went from 0 to some amount and then back, it's temporary ATA
+                                        else if pre_val == 0 && post_val == 0 {
+                                            // Check if this account was created and closed in the same transaction
+                                            // by looking for both CreateAccount and CloseAccount patterns
+                                            let has_create_account = transaction.log_messages.iter()
+                                                .any(|log| log.contains("createAccount") || log.contains("CreateIdempotent"));
+                                                
+                                            if has_create_account {
+                                                // Estimate typical ATA rent for temporary accounts
+                                                total_ata_rent += 0.00203928; // Standard ATA rent
+                                                if self.debug_enabled {
+                                                    log(LogTag::Transactions, "ATA_RENT", 
+                                                        "Detected temporary ATA creation/closure: 0.00203928 SOL");
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(total_ata_rent)
     }
 
     /// Analyze NFT operations (DISABLED - no longer detected)
@@ -6354,7 +6423,7 @@ impl TransactionsManager {
                 // SOL to Token (Buy) - SOL was spent (negative balance change)
                 return Ok(TransactionType::SwapSolToToken {
                     token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
-                    sol_amount: sol_amount.max(transaction.sol_balance_change.abs()),
+                    sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                     token_amount: token_amount,
                     router: "Pump.fun".to_string(),
                 });
@@ -6363,7 +6432,7 @@ impl TransactionsManager {
                 return Ok(TransactionType::SwapTokenToSol {
                     token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
                     token_amount: token_amount,
-                    sol_amount: transaction.sol_balance_change.abs(),
+                    sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                     router: "Pump.fun".to_string(),
                 });
             } else {
@@ -6373,7 +6442,7 @@ impl TransactionsManager {
                         // SOL spent = Buy
                         return Ok(TransactionType::SwapSolToToken {
                             token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
-                            sol_amount: transaction.sol_balance_change.abs(),
+                            sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                             token_amount: token_amount,
                             router: "Pump.fun".to_string(),
                         });
@@ -6382,7 +6451,7 @@ impl TransactionsManager {
                         return Ok(TransactionType::SwapTokenToSol {
                             token_mint: target_token_mint.unwrap_or_else(|| "Pump.fun_Token".to_string()),
                             token_amount: token_amount,
-                            sol_amount: transaction.sol_balance_change.abs(),
+                            sol_amount: sol_amount, // Use extracted amount (excludes ATA rent)
                             router: "Pump.fun".to_string(),
                         });
                     }
@@ -6424,16 +6493,27 @@ impl TransactionsManager {
     
     /// Extract SOL amount from Pump.fun transaction
     async fn extract_sol_amount_from_pumpfun(&self, transaction: &Transaction) -> f64 {
-        // Look for SOL transfer instructions
+        // First try to get actual SOL transfer amounts from transfer instructions
         if let Some(raw_data) = &transaction.raw_transaction_data {
-            if let Some(transaction_data) = raw_data.get("transaction") {
-                if let Some(message) = transaction_data.get("message") {
-                    if let Some(instructions) = message.get("instructions").and_then(|v| v.as_array()) {
-                        for instruction in instructions {
-                            if let Some(parsed) = instruction.get("parsed") {
-                                if let Some(info) = parsed.get("info") {
-                                    if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
-                                        return lamports as f64 / 1_000_000_000.0;
+            if let Some(meta) = raw_data.get("meta") {
+                if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
+                    for inner_group in inner_instructions {
+                        if let Some(instructions) = inner_group.get("instructions").and_then(|v| v.as_array()) {
+                            for instruction in instructions {
+                                if let Some(parsed) = instruction.get("parsed") {
+                                    if let Some(info) = parsed.get("info") {
+                                        // Look for transferChecked instructions with SOL (WSOL)
+                                        if let Some(token_amount) = info.get("tokenAmount") {
+                                            if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
+                                                if mint == "So11111111111111111111111111111111111111112" {
+                                                    if let Some(ui_amount) = token_amount.get("uiAmount").and_then(|v| v.as_f64()) {
+                                                        if ui_amount > 0.001 { // Ignore tiny amounts that might be fees
+                                                            return ui_amount;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -6442,7 +6522,21 @@ impl TransactionsManager {
                 }
             }
         }
-        transaction.sol_balance_change.abs()
+        
+        // Calculate ATA rent to exclude from balance change
+        let ata_rent = self.analyze_ata_operations(transaction).await.unwrap_or(0.0);
+        
+        // Use balance change minus ATA rent as fallback
+        let adjusted_balance_change = transaction.sol_balance_change.abs() - ata_rent;
+        
+        if self.debug_enabled && ata_rent > 0.0 {
+            log(LogTag::Transactions, "SOL_EXTRACT", 
+                &format!("Excluding ATA rent: {:.9} SOL from balance change {:.9} SOL", 
+                         ata_rent, transaction.sol_balance_change.abs()));
+        }
+        
+        // Return the adjusted amount, ensuring it's not negative
+        adjusted_balance_change.max(0.0)
     }
     
     /// Extract token amount from Pump.fun transaction
