@@ -60,6 +60,15 @@ const VOLUME_SPIKE_MULTIPLIER: f64 = 3.0;        // NEW: Volume spike detection 
 
 // NEAR-TOP FILTER PARAMETERS (Prevent buying at recent peaks)
 const NEAR_TOP_THRESHOLD_PERCENT: f64 = 10.0;    // Must be MORE than 10% below 15-min high to enter
+// Multi-window near-top minimums (stricter near fresh highs)
+const NEAR_TOP_1M_MIN: f64 = 3.0;  // at least 3% below 1m high
+const NEAR_TOP_5M_MIN: f64 = 6.0;  // at least 6% below 5m high
+// Cooldown after making a new window high to avoid buying the spike
+const COOLDOWN_AFTER_NEW_HIGH_SEC: i64 = 45;
+// ATH proximity guard across all available history
+const ATH_PROXIMITY_PERCENT: f64 = 3.5; // avoid entries within ~3.5% of observed ATH
+// Toggle risky ultra-fresh entries (disabled by default)
+const ULTRA_FRESH_ENTRY_ENABLED: bool = false;
 
 // PROFIT TARGET CALCULATION PARAMETERS
 const PROFIT_BASE_MIN: f64 = 50.0;               // Base minimum profit target %
@@ -131,9 +140,16 @@ fn is_near_recent_top(
         return false;
     }
     
-    // Find the highest price in the 15-minute window
-    let recent_high = recent_prices.iter().fold(0.0f64, |a, &b| a.max(b));
-    let recent_low = recent_prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+    // Find the highest/lowest price in the 15-minute window and when it occurred
+    let mut recent_high = 0.0f64;
+    let mut recent_low = f64::INFINITY;
+    let mut recent_high_ts = None;
+    for (ts, price) in price_history.iter() {
+        if (now - *ts).num_seconds() <= NEAR_TOP_ANALYSIS_WINDOW_SEC {
+            if *price > recent_high { recent_high = *price; recent_high_ts = Some(*ts); }
+            if *price < recent_low { recent_low = *price; }
+        }
+    }
     
     if recent_high <= 0.0 || !recent_high.is_finite() || current_price <= 0.0 || !current_price.is_finite() {
         return false;
@@ -160,12 +176,46 @@ fn is_near_recent_top(
     dynamic_threshold = dynamic_threshold.max(NEAR_TOP_THRESHOLD_MIN).min(NEAR_TOP_THRESHOLD_MAX);
 
     // STRICT RULE: Must be MORE than dynamic_threshold below 15-min high to allow entry
-    let is_too_close_to_top = drop_from_high_percent < dynamic_threshold;
+    let mut is_too_close_to_top = drop_from_high_percent < dynamic_threshold;
+
+    // Additional 5m and 1m window checks (prevent buys near shorter-term highs)
+    let window_check = |secs: i64| -> Option<f64> {
+        let high = price_history
+            .iter()
+            .filter(|(ts, _)| (now - *ts).num_seconds() <= secs)
+            .map(|(_, p)| *p)
+            .fold(0.0f64, |a, b| a.max(b));
+        if high > 0.0 && high.is_finite() {
+            Some(((high - current_price) / high) * 100.0)
+        } else { None }
+    };
+    if let Some(drop_5m) = window_check(300) {
+        if drop_5m < NEAR_TOP_5M_MIN { is_too_close_to_top = true; }
+    }
+    if let Some(drop_1m) = window_check(60) {
+        if drop_1m < NEAR_TOP_1M_MIN { is_too_close_to_top = true; }
+    }
+
+    // Cooldown after printing a new 15m high
+    if let Some(high_ts) = recent_high_ts {
+        let secs_since_high = (now - high_ts).num_seconds();
+        if secs_since_high >= 0 && secs_since_high <= COOLDOWN_AFTER_NEW_HIGH_SEC {
+            is_too_close_to_top = true;
+        }
+    }
+
+    // ATH guard across all available history (observed within the provided history span)
+    let observed_ath = price_history.iter().map(|(_, p)| *p).fold(0.0f64, |a, b| a.max(b));
+    if observed_ath > 0.0 && observed_ath.is_finite() {
+        let drop_from_ath = ((observed_ath - current_price) / observed_ath) * 100.0;
+        if drop_from_ath < ATH_PROXIMITY_PERCENT { is_too_close_to_top = true; }
+    }
     
     if is_debug_entry_enabled() {
         log(LogTag::Entry, "NEAR_TOP_CHECK", &format!(
-            "🔝 15-min high analysis: current={:.12}, high={:.12}, drop={:.2}%, required=>{:.1}% (dyn, range={:.1}%), too_close={}",
-            current_price, recent_high, drop_from_high_percent, dynamic_threshold, range_pct, is_too_close_to_top
+            "🔝 High proximity: current={:.12} | 15m drop={:.2}% req>{:.1}% (range={:.1}%) | 5m req>{:.1}% | 1m req>{:.1}% | cooldown={} | ath_guard={} -> too_close={}",
+            current_price, drop_from_high_percent, dynamic_threshold, range_pct, NEAR_TOP_5M_MIN, NEAR_TOP_1M_MIN,
+            COOLDOWN_AFTER_NEW_HIGH_SEC, ATH_PROXIMITY_PERCENT, is_too_close_to_top
         ));
     }
     
@@ -270,12 +320,12 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             token.symbol, price_history.len()));
     }
     
-    // CRITICAL SAFETY CHECK: Reject entries if price is near recent top (15-min high)
+    // CRITICAL SAFETY CHECK: Reject entries if price is near recent top (multi-window + ATH guards)
     if is_near_recent_top(current_pool_price, &price_history, liquidity_usd) {
         if is_debug_entry_enabled() {
             log(LogTag::Entry, "NEAR_TOP_REJECT", &format!("🚫 {} rejected: price too close to 15-min high (safety filter)", token.symbol));
         }
-    return (false, 0.0, "Price too close to 15-min high (safety filter)".to_string());
+    return (false, 0.0, "Price too close to highs (multi-window/ATH guard)".to_string());
     }
     
     // CORE LOGIC: Dynamic drop detection based on liquidity
@@ -456,12 +506,14 @@ async fn analyze_deep_drop_entry(
             liquidity_usd / THOUSAND_DIVISOR, min_drop_threshold, effective_min_drop, max_drop_threshold, target_drop_ratio * PERCENTAGE_MULTIPLIER, vol_percent));
     }
     
-    // Strategy 1: Immediate entry for ultra-fresh data (lowered liquidity requirement)
-    if data_age_minutes == 0 && price_history.is_empty() && liquidity_usd >= ULTRA_FRESH_MIN_LIQUIDITY {
-        if is_debug_entry_enabled() {
-            log(LogTag::Entry, "ULTRA_FRESH_ENTRY", &format!("⚡ Ultra-fresh entry for ${:.0}k liquidity", liquidity_usd / THOUSAND_DIVISOR));
+    // Strategy 1: (disabled by default) Ultra-fresh entry — risky near tops
+    if ULTRA_FRESH_ENTRY_ENABLED {
+        if data_age_minutes == 0 && price_history.is_empty() && liquidity_usd >= ULTRA_FRESH_MIN_LIQUIDITY {
+            if is_debug_entry_enabled() {
+                log(LogTag::Entry, "ULTRA_FRESH_ENTRY", &format!("⚡ Ultra-fresh entry for ${:.0}k liquidity", liquidity_usd / THOUSAND_DIVISOR));
+            }
+            return Some((0.0, format!("ultra-fresh entry (${:.0}k liquidity)", liquidity_usd / THOUSAND_DIVISOR)));
         }
-        return Some((0.0, format!("ultra-fresh entry (${:.0}k liquidity)", liquidity_usd / THOUSAND_DIVISOR)));
     }
     
     // Need at least 2 data points for drop analysis
@@ -743,7 +795,7 @@ async fn analyze_deep_drop_entry(
         }
     }
     
-    // Strategy 10: Instant drop detection (NEW - 5 second window for immediate reactions)
+    // Strategy 10: Instant drop detection (5s) with extra near-top guard
     let instant_recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
         .iter()
         .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= INSTANT_DROP_TIME_WINDOW_SEC)
@@ -756,13 +808,16 @@ async fn analyze_deep_drop_entry(
         if instant_high > 0.0 && instant_high.is_finite() {
             let instant_drop = ((instant_high - current_price) / instant_high) * 100.0;
             
-            // Instant drop threshold is very low (0.5x minimum) to catch immediate moves
-            let instant_threshold = effective_min_drop * 0.3;
+            // Instant drop threshold uses 0.5x minimum to avoid tiny dips at peaks
+            let instant_threshold = (effective_min_drop * 0.5).max(0.6);
+            // Additional guard: must also be > 1m near-top minimum
+            let one_min_high = instant_recent.iter().map(|(_, p)| *p).fold(0.0f64, |a, b| a.max(b));
+            let one_min_drop_from_high = if one_min_high > 0.0 { ((one_min_high - current_price) / one_min_high) * 100.0 } else { 0.0 };
             
-            if instant_drop >= instant_threshold && instant_drop <= max_drop_threshold {
+            if instant_drop >= instant_threshold && instant_drop <= max_drop_threshold && one_min_drop_from_high >= NEAR_TOP_1M_MIN {
                 if is_debug_entry_enabled() {
-                    log(LogTag::Entry, "INSTANT_DROP_HIT", &format!("⚡⚡ Instant drop {:.1}% ≥ {:.1}% threshold", 
-                        instant_drop, instant_threshold));
+                    log(LogTag::Entry, "INSTANT_DROP_HIT", &format!("⚡⚡ Instant drop {:.1}% ≥ {:.1}% (1m drop_from_high {:.1}% ≥ {:.1}%)", 
+                        instant_drop, instant_threshold, one_min_drop_from_high, NEAR_TOP_1M_MIN));
                 }
                 return Some((
                     instant_drop, 

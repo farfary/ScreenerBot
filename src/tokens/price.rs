@@ -319,163 +319,142 @@ impl TokenPriceService {
     }
 
     async fn update_single_token_price(&self, mint: &str) -> Result<(), String> {
-        // Check if this is an open position for pool price priority
-        let is_position_open = {
-            let positions = self.open_positions.read().await;
-            if positions.contains(mint) {
-                true
-            } else {
-                // Fallback to authoritative positions store to avoid transient desync
-                crate::positions::is_open_position(mint)
-            }
-        };
+        // Always prefer on-chain pool price when available; fall back to API
+        let pool_service = get_pool_service();
 
-        // For non-open positions, ALWAYS use API price, never pool
-        let (pool_result, api_token) = if is_position_open {
-            // Try pool price first for open positions
-            let pool_service = get_pool_service();
+        if is_debug_price_service_enabled() {
+            log(
+                LogTag::PriceService,
+                "POOL_REQUEST",
+                &format!("🏊 REQUESTING POOL PRICE for {} (real-time on-chain pools)", mint)
+            );
+        }
+
+        let pool_result = if pool_service.check_token_availability(mint).await {
+            // Use last known cached price (any source) for comparison hints
+            let cached_price_sol = {
+                let cache = self.price_cache.read().await;
+                if let Some(cached_entry) = cache.get(&mint.to_string()) {
+                    cached_entry.price_sol
+                } else {
+                    None
+                }
+            };
+
             if is_debug_price_service_enabled() {
                 log(
                     LogTag::PriceService,
-                    "POOL_REQUEST",
-                    &format!("🏊 REQUESTING POOL PRICE for open position {} (will check real-time blockchain pools)", mint)
+                    "POOL_COMPARISON_PREP",
+                    &format!(
+                        "🔍 Preparing price comparison for {}: cached_price={:.12} SOL",
+                        mint,
+                        cached_price_sol.unwrap_or(0.0)
+                    )
                 );
             }
 
-            let pool_result = if pool_service.check_token_availability(mint).await {
-                // Get current API price for comparison if available
-                let api_price_sol = {
-                    let cache = self.price_cache.read().await;
-                    if let Some(cached_entry) = cache.get(&mint.to_string()) {
-                        cached_entry.price_sol
-                    } else {
-                        None
-                    }
-                };
-
-                if is_debug_price_service_enabled() {
+            let pool_result = pool_service.get_pool_price(mint, cached_price_sol).await;
+            if is_debug_price_service_enabled() {
+                if let Some(ref result) = pool_result {
                     log(
                         LogTag::PriceService,
-                        "POOL_COMPARISON_PREP",
+                        "POOL_SUCCESS",
                         &format!(
-                            "🔍 Preparing price comparison for {}: API_price={:.12} SOL",
+                            "✅ POOL PRICE SUCCESS for {}: ${:.12} SOL from pool {} ({}) at {}",
                             mint,
-                            api_price_sol.unwrap_or(0.0)
+                            result.price_sol.unwrap_or(0.0),
+                            result.pool_address,
+                            result.pool_type.as_ref().unwrap_or(&"Unknown Pool".to_string()),
+                            result.calculated_at.format("%H:%M:%S%.3f")
                         )
                     );
-                }
 
-                let pool_result = pool_service.get_pool_price(mint, api_price_sol).await;
-                if is_debug_price_service_enabled() {
-                    if let Some(ref result) = pool_result {
-                        log(
-                            LogTag::PriceService,
-                            "POOL_SUCCESS",
-                            &format!(
-                                "✅ POOL PRICE SUCCESS for {}: ${:.12} SOL from pool {} ({}) at {}",
-                                mint,
-                                result.price_sol.unwrap_or(0.0),
-                                result.pool_address,
-                                result.pool_type.as_ref().unwrap_or(&"Unknown Pool".to_string()),
-                                result.calculated_at.format("%H:%M:%S%.3f")
-                            )
-                        );
+                    // Show detailed pool calculation information
+                    log(
+                        LogTag::PriceService,
+                        "POOL_DETAILS",
+                        &format!(
+                            "🔍 POOL CALCULATION DETAILS for {}: liquidity=${:.2}, reserves_calculation_time={}, calculated_on_blockchain={}",
+                            mint,
+                            result.liquidity_usd,
+                            result.calculated_at.format("%H:%M:%S%.3f"),
+                            "real-time"
+                        )
+                    );
 
-                        // Show detailed pool calculation information
-                        log(
-                            LogTag::PriceService,
-                            "POOL_DETAILS",
-                            &format!(
-                                "🔍 POOL CALCULATION DETAILS for {}: liquidity=${:.2}, reserves_calculation_time={}, calculated_on_blockchain={}",
-                                mint,
-                                result.liquidity_usd,
-                                result.calculated_at.format("%H:%M:%S%.3f"),
-                                "real-time"
-                            )
-                        );
+                    // Compare with cached price if present
+                    if let Some(cached_sol) = cached_price_sol {
+                        if let Some(pool_sol) = result.price_sol {
+                            let price_change = pool_sol - cached_sol;
+                            let price_change_percent = if cached_sol != 0.0 {
+                                ((pool_sol - cached_sol) / cached_sol) * 100.0
+                            } else {
+                                0.0
+                            };
 
-                        // Show the price change if we have an API price for comparison
-                        if let Some(api_sol) = api_price_sol {
-                            if let Some(pool_sol) = result.price_sol {
-                                let price_change = pool_sol - api_sol;
-                                let price_change_percent = if api_sol != 0.0 {
-                                    ((pool_sol - api_sol) / api_sol) * 100.0
-                                } else {
-                                    0.0
-                                };
+                            log(
+                                LogTag::PriceService,
+                                "POOL_VS_CACHED",
+                                &format!(
+                                    "💰 PRICE COMPARISON for {}: CACHED={:.12} → POOL={:.12} SOL (change: {:+.12} SOL, {:+.4}%)",
+                                    mint,
+                                    cached_sol,
+                                    pool_sol,
+                                    price_change,
+                                    price_change_percent
+                                )
+                            );
 
+                            if price_change_percent.abs() > 5.0 {
                                 log(
                                     LogTag::PriceService,
-                                    "POOL_VS_API",
+                                    "SIGNIFICANT_CHANGE",
                                     &format!(
-                                        "💰 PRICE COMPARISON for {}: API={:.12} → POOL={:.12} SOL (change: {:+.12} SOL, {:+.4}%)",
+                                        "🚨 SIGNIFICANT PRICE CHANGE for {}: {:+.4}% change from cached to pool price!",
                                         mint,
-                                        api_sol,
-                                        pool_sol,
-                                        price_change,
                                         price_change_percent
                                     )
                                 );
-
-                                if price_change_percent.abs() > 5.0 {
-                                    log(
-                                        LogTag::PriceService,
-                                        "SIGNIFICANT_CHANGE",
-                                        &format!(
-                                            "🚨 SIGNIFICANT PRICE CHANGE for {}: {:+.4}% change from API to pool price!",
-                                            mint,
-                                            price_change_percent
-                                        )
-                                    );
-                                } else if price_change_percent.abs() < 0.001 {
-                                    log(
-                                        LogTag::PriceService,
-                                        "STATIC_PRICE_WARNING",
-                                        &format!(
-                                            "⚠️  POSSIBLE STATIC PRICE for {}: Only {:+.6}% change - pool reserves may be frozen or cached",
-                                            mint,
-                                            price_change_percent
-                                        )
-                                    );
-                                }
+                            } else if price_change_percent.abs() < 0.001 {
+                                log(
+                                    LogTag::PriceService,
+                                    "STATIC_PRICE_WARNING",
+                                    &format!(
+                                        "⚠️  POSSIBLE STATIC PRICE for {}: Only {:+.6}% change - pool reserves may be frozen or cached",
+                                        mint,
+                                        price_change_percent
+                                    )
+                                );
                             }
                         }
-                    } else {
-                        log(
-                            LogTag::PriceService,
-                            "POOL_FAILED",
-                            &format!("❌ Pool service returned None for {} (no pools or calculation failed)", mint)
-                        );
                     }
-                }
-                pool_result
-            } else {
-                if is_debug_price_service_enabled() {
+                } else {
                     log(
                         LogTag::PriceService,
-                        "POOL_UNAVAILABLE",
-                        &format!("❌ Pool not available for {} (no pools with sufficient liquidity)", mint)
+                        "POOL_FAILED",
+                        &format!("❌ Pool service returned None for {} (no pools or calculation failed)", mint)
                     );
                 }
-                None
-            };
-
-            // Try API if no pool result for open positions
-            let api_token = if pool_result.is_none() {
-                self.database
-                    .get_token_by_mint(mint)
-                    .map_err(|e| format!("Failed to get token from database: {}", e))?
-            } else {
-                None
-            };
-
-            (pool_result, api_token)
+            }
+            pool_result
         } else {
-            // For non-open positions, ONLY use API price
-            let api_token = self.database
+            if is_debug_price_service_enabled() {
+                log(
+                    LogTag::PriceService,
+                    "POOL_UNAVAILABLE",
+                    &format!("❌ Pool not available for {} (no pools with sufficient liquidity)", mint)
+                );
+            }
+            None
+        };
+
+        // Try API only if no pool result
+        let api_token = if pool_result.is_none() {
+            self.database
                 .get_token_by_mint(mint)
-                .map_err(|e| format!("Failed to get token from database: {}", e))?;
-            (None, api_token)
+                .map_err(|e| format!("Failed to get token from database: {}", e))?
+        } else {
+            None
         };
 
         // Create cache entry
@@ -486,7 +465,7 @@ impl TokenPriceService {
                         LogTag::PriceService,
                         "POOL_PRICE",
                         &format!(
-                            "Using pool price for open position {}: ${:.8}",
+                            "Using pool price for {}: ${:.8}",
                             mint,
                             pool_result.price_sol.unwrap_or(0.0)
                         )
@@ -500,20 +479,10 @@ impl TokenPriceService {
             }
             (None, Some(api_token)) => {
                 if is_debug_price_service_enabled() {
-                    let position_type = if is_position_open {
-                        "open position"
-                    } else {
-                        "non-open position"
-                    };
                     log(
                         LogTag::PriceService,
                         "API_PRICE",
-                        &format!(
-                            "Using API price for {} {}: ${:.8}",
-                            position_type,
-                            mint,
-                            api_token.price_sol.unwrap_or(0.0)
-                        )
+                        &format!("Using API price for {}: ${:.8}", mint, api_token.price_sol.unwrap_or(0.0))
                     );
                 }
                 (PriceCacheEntry::from_api_token(&api_token), (None, None))
