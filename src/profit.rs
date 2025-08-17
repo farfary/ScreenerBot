@@ -30,6 +30,20 @@ use std::collections::HashMap;
 // 🔒 STOP LOSS PROTECTION - INTELLIGENT LOSS MANAGEMENT
 pub const STOP_LOSS_PERCENT: f64 = -55.0; // Intelligent stop loss at -55%
 
+// ➕ Liquidity-tier soft stops (percent)
+const SOFT_STOP_LARGE: f64 = -40.0;   // large/XLARGE liquidity: cut earlier at -40%
+const SOFT_STOP_MEDIUM: f64 = -50.0;  // medium liquidity: -50%
+const SOFT_STOP_DEFAULT: f64 = -55.0; // small/unknown: -55%
+
+// ⏳ Time caps (minutes) — earlier than 1 hour as requested
+const SOFT_TIME_CAP_MIN: f64 = 30.0;  // begin time pressure at 30 minutes
+const HARD_TIME_CAP_MIN: f64 = 45.0;  // must act by 45 minutes
+
+// 📐 Risk-Reward minimums by liquidity tier (RR = current_gain% / |MAE%|)
+const REQUIRED_RR_LARGE: f64 = 1.2;   // more tolerant for high-liquidity
+const REQUIRED_RR_MEDIUM: f64 = 1.4;
+const REQUIRED_RR_DEFAULT: f64 = 1.6; // tighter for small/unknown
+
 // ⏰ OPTIMIZED HOLD TIMES BY SAFETY LEVEL (MINUTES)
 // AGGRESSIVE FOR FAST PROFITS: 0.25 minutes to 45 minutes based on volatility
 const ULTRA_SAFE_MAX_TIME: f64 = 45.0; // Ultra safe tokens - 45 minutes max (reduced from 120)
@@ -1162,9 +1176,89 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ───────────────────────────────────────────────────────────────────────────────────────
+    // ⛑️ Dynamic soft stop by liquidity tier + time caps
+    // ───────────────────────────────────────────────────────────────────────────────────────
+    let liquidity_tier = position.liquidity_tier.clone().unwrap_or_else(|| "UNKNOWN".to_string());
+    let soft_stop = match liquidity_tier.as_str() {
+        "LARGE" | "XLARGE" => SOFT_STOP_LARGE,
+        "MEDIUM" => SOFT_STOP_MEDIUM,
+        _ => SOFT_STOP_DEFAULT,
+    };
+
+    // Hard stop is enforced later as well (double safety)
+    if pnl_percent <= STOP_LOSS_PERCENT {
+        return (1.0, format!("HARD STOP: {:.2}% <= {:.0}%", pnl_percent, STOP_LOSS_PERCENT));
+    }
+
+    // Early soft stop for higher-liquidity tokens
+    if pnl_percent <= soft_stop && minutes_held > 1.0 {
+        return (
+            0.95,
+            format!(
+                "SOFT STOP {tier}: pnl={:.2}% <= {:.0}%",
+                pnl_percent,
+                soft_stop,
+                tier = liquidity_tier
+            )
+        );
+    }
+
+    // Risk-Reward check using pool price history since entry
+    let (mae_pct, mfe_pct, rr_now) = {
+        let pool_service = get_pool_service();
+        let history = pool_service.get_recent_price_history(&position.mint).await;
+        let mut min_p = current_price;
+        let mut max_p = current_price;
+        for (ts, p) in history.iter() {
+            if *ts >= position.entry_time {
+                if *p < min_p { min_p = *p; }
+                if *p > max_p { max_p = *p; }
+            }
+        }
+        let mae = if entry_price > 0.0 { ((min_p / entry_price) - 1.0) * 100.0 } else { 0.0 };
+        let mfe = if entry_price > 0.0 { ((max_p / entry_price) - 1.0) * 100.0 } else { 0.0 };
+        let risk = mae.abs().max(0.1); // avoid div-by-zero; floor 0.1%
+        let rr = pnl_percent / risk;
+        (mae, mfe, rr)
+    };
+
+    let required_rr = match liquidity_tier.as_str() {
+        "LARGE" | "XLARGE" => REQUIRED_RR_LARGE,
+        "MEDIUM" => REQUIRED_RR_MEDIUM,
+        _ => REQUIRED_RR_DEFAULT,
+    };
+
+    // Time pressure and hard cap
+    if minutes_held >= HARD_TIME_CAP_MIN {
+        let urgency = if pnl_percent >= 0.0 { 0.85 } else { 0.95 };
+        return (
+            urgency,
+            format!("HARD TIME CAP: {:.1}m reached (pnl={:.2}%)", minutes_held, pnl_percent)
+        );
+    }
+
+    if minutes_held >= SOFT_TIME_CAP_MIN {
+        if pnl_percent < CONSERVATIVE_PROFIT_MIN || rr_now < required_rr {
+            let urgency = 0.7 + ((minutes_held - SOFT_TIME_CAP_MIN) / (HARD_TIME_CAP_MIN - SOFT_TIME_CAP_MIN)).clamp(0.0, 1.0) * 0.25;
+            return (
+                urgency.min(0.95),
+                format!("TIME PRESSURE: {:.1}m, pnl={:.2}%, RR_now={:.2} (<{:.1})", minutes_held, pnl_percent, rr_now, required_rr)
+            );
+        }
+    }
+
+    // Momentum fade guard
+    if mae_pct <= -35.0 && rr_now < required_rr * 0.8 {
+        return (
+            0.7,
+            format!("RISK ALERT: MAE={:.2}%, RR_now={:.2} (<{:.1})", mae_pct, rr_now, required_rr)
+        );
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────────────────
     // 🚀 PUMP DETECTION SYSTEM - HIGHEST PRIORITY
-    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ───────────────────────────────────────────────────────────────────────────────────────
     
     // Analyze pump patterns BEFORE other logic
     let pump_analysis = detect_pump(position, current_price, minutes_held).await;
@@ -1303,6 +1397,14 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         PumpAction::Hold => {
             // Normal logic continues
         }
+    }
+
+    // ⚡ Fast profit capture safeguards (non-pump scenarios)
+    if minutes_held <= LIGHTNING_PROFIT_TIME_LIMIT && pnl_percent >= LIGHTNING_PROFIT_THRESHOLD {
+        return (0.9, format!("LIGHTNING EXIT: +{:.2}% in {:.0}s", pnl_percent, minutes_held * 60.0));
+    }
+    if minutes_held <= FAST_PROFIT_TIME_LIMIT && pnl_percent >= FAST_PROFIT_THRESHOLD {
+        return (0.8, format!("FAST EXIT: +{:.2}% in {:.1}m", pnl_percent, minutes_held));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════

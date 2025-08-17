@@ -72,8 +72,8 @@ pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00001;
 /// Minimum hold time before considering sell (seconds) - reduced for flexibility
 pub const MIN_POSITION_HOLD_TIME_SECS: f64 = 30.0;
 
-/// Maximum hold time extended for longer-term profit taking (1 hour)
-pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 1.0 * 60.0 * 60.0; // 1 hour (3600 seconds)
+/// Maximum hold time cap for open positions (reduced to 45 minutes for risk control)
+pub const MAX_POSITION_HOLD_TIME_SECS: f64 = 45.0 * 60.0; // 45 minutes (2700 seconds)
 
 /// Time after which time decay pressure starts - now 2 hours for better patience
 pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
