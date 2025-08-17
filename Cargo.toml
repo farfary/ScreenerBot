@@ -80,6 +80,9 @@ bincode = "1.3.3"
 thiserror = "1.0"
 async-trait = "0.1"
 
+# Unicode width dependency for Unicode-aware truncation/padding
+unicode-width = "0.1"
+
 # Solana dependencies - with full features needed for trading
 solana-sdk = { version = "2.3.1", features = ["full"] }
 solana-client = { version = "2.1.0" }

@@ -224,13 +224,17 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
 /// Prints debug information about current arguments and enabled debug modes
 pub fn print_debug_info() {
     let args = get_cmd_args();
-    println!("Command-line arguments: {:?}", args);
+    if !is_dashboard_enabled() {
+        println!("Command-line arguments: {:?}", args);
+    }
     
     let enabled_modes = get_enabled_debug_modes();
-    if enabled_modes.is_empty() {
-        println!("No debug modes enabled");
-    } else {
-        println!("Enabled debug modes: {:?}", enabled_modes);
+    if !is_dashboard_enabled() {
+        if enabled_modes.is_empty() {
+            println!("No debug modes enabled");
+        } else {
+            println!("Enabled debug modes: {:?}", enabled_modes);
+        }
     }
 }
 

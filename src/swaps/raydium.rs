@@ -199,7 +199,7 @@ pub async fn get_raydium_quote(
         "RAYDIUM_DEPRECATED",
         "� Raydium direct API is no longer available. Raydium integration should use Jupiter with Raydium routes."
     );
-    println!("� DEBUG: Raydium direct API is no longer available");
+    // Avoid printing directly to stdout in dashboard mode to prevent terminal scrolling
     
     if is_debug_swap_enabled() {
         log(

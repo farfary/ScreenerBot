@@ -174,11 +174,9 @@ impl FileLogger {
                         let modified_chrono = chrono::DateTime::<Local>::from(modified);
                         if modified_chrono < cutoff_time {
                             if let Err(e) = fs::remove_file(entry.path()) {
-                                eprintln!(
-                                    "Failed to remove old log file {:?}: {}",
-                                    entry.path(),
-                                    e
-                                );
+                                // Avoid stderr spam in dashboard mode; log to file instead
+                                let msg = format!("Failed to remove old log file {:?}: {}", entry.path(), e);
+                                crate::logger::log(LogTag::System, "WARN", &msg);
                             }
                         }
                     }
@@ -195,7 +193,8 @@ impl FileLogger {
                 let files_to_remove = remaining_files.len() - MAX_LOG_FILES;
                 for entry in remaining_files.iter().take(files_to_remove) {
                     if let Err(e) = fs::remove_file(entry.path()) {
-                        eprintln!("Failed to remove excess log file {:?}: {}", entry.path(), e);
+                        let msg = format!("Failed to remove excess log file {:?}: {}", entry.path(), e);
+                        crate::logger::log(LogTag::System, "WARN", &msg);
                     }
                 }
             }
@@ -211,7 +210,10 @@ static FILE_LOGGER: Lazy<Arc<Mutex<Option<FileLogger>>>> = Lazy::new(|| {
         match FileLogger::new() {
             Ok(logger) => Arc::new(Mutex::new(Some(logger))),
             Err(e) => {
-                eprintln!("Failed to initialize file logger: {}", e);
+                // Can't use file logger yet; last resort stderr print
+                if !crate::arguments::is_dashboard_enabled() {
+                    eprintln!("Failed to initialize file logger: {}", e);
+                }
                 Arc::new(Mutex::new(None))
             }
         }

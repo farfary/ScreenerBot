@@ -29,12 +29,31 @@ async fn main() {
         
         // Start dashboard in a separate task
         let shutdown_dashboard = shutdown.clone();
+        let dashboard_shutdown_notifier = shutdown.clone();
+        let dashboard_running = dashboard.running.clone();
+        
         let dashboard_handle = tokio::spawn(async move {
             if let Err(e) = screenerbot::dashboard::run_dashboard(shutdown_dashboard).await {
-                eprintln!("Dashboard error: {}", e);
+                // Avoid stderr prints in dashboard context; route to file logger
+                log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
             }
             // Clear global dashboard on exit
             screenerbot::dashboard::clear_global_dashboard();
+        });
+        
+        // Monitor dashboard state and trigger main shutdown when dashboard exits
+        let shutdown_monitor = shutdown.clone();
+        tokio::spawn(async move {
+            loop {
+                if let Ok(running) = dashboard_running.lock() {
+                    if !*running {
+                        // Dashboard has exited, trigger main shutdown
+                        shutdown_monitor.notify_waiters();
+                        break;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
         });
         
         // In dashboard mode, we'll run a simplified background version

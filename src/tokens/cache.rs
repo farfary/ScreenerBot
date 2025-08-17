@@ -84,7 +84,7 @@ impl PriceCache {
 
         // Try to load existing cache
         if let Err(e) = cache.load_from_file() {
-            eprintln!("Warning: Failed to load price cache: {}", e);
+            log(LogTag::PriceService, "WARN", &format!("Failed to load price cache: {}", e));
         }
 
         cache
@@ -209,7 +209,7 @@ impl PriceCache {
 
         if should_save {
             if let Err(e) = self.save_to_file() {
-                eprintln!("Warning: Failed to save price cache: {}", e);
+                log(LogTag::PriceService, "WARN", &format!("Failed to save price cache: {}", e));
             } else {
                 self.last_save = Some(Instant::now());
             }
