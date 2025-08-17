@@ -198,6 +198,8 @@ pub struct RecentSwapDisplay {
     date: String,
     #[tabled(rename = "⏰ Time")]
     time: String,
+    #[tabled(rename = "⏳ Ago")]
+    ago: String,
     #[tabled(rename = "🔑 Signature")]
     signature: String,
     #[tabled(rename = "🔄 Type")]
@@ -214,6 +216,29 @@ pub struct RecentSwapDisplay {
     router: String,
     #[tabled(rename = "💳 Fee")]
     fee: String,
+    #[tabled(rename = "🎯 Status")]
+    status: String,
+}
+
+/// Display structure for recent transactions table (last 20)
+#[derive(Tabled)]
+pub struct RecentTransactionDisplay {
+    #[tabled(rename = "📅 Date")]
+    date: String,
+    #[tabled(rename = "⏰ Time")]
+    time: String,
+    #[tabled(rename = "⏳ Ago")]
+    ago: String,
+    #[tabled(rename = "🔑 Signature")]
+    signature: String,
+    #[tabled(rename = "🔢 Slot")]
+    slot: String,
+    #[tabled(rename = "🔄 Type")]
+    tx_type: String,
+    #[tabled(rename = "🏷️ Token")]
+    token: String,
+    #[tabled(rename = "💱 SOL Δ")]
+    sol_delta: String,
     #[tabled(rename = "🎯 Status")]
     status: String,
 }
@@ -806,6 +831,16 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         }
     }
 
+    // Build Recent Transactions table (last 20)
+    match build_recent_transactions_table().await {
+        Ok(tx_table) => {
+            summary_output.push_str(&tx_table);
+        }
+        Err(e) => {
+            log(LogTag::Summary, "WARN", &format!("Failed to build recent transactions table: {}", e));
+        }
+    }
+
     
 
     // Build RPC statistics tables if available
@@ -912,7 +947,7 @@ async fn build_recent_swaps_table() -> Result<String, String> {
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
     
-    // Get last 20 swaps
+    // Get last 20 swaps (already sorted newest-first by manager)
     let swaps = manager.get_all_swap_transactions_limited(Some(20)).await?;
     
     if swaps.is_empty() {
@@ -920,9 +955,8 @@ async fn build_recent_swaps_table() -> Result<String, String> {
     }
 
     let recent_swaps: Vec<RecentSwapDisplay> = swaps
-        .iter()
-        .rev() // Most recent first
-        .map(|swap| RecentSwapDisplay::from_swap_pnl_info(swap))
+        .into_iter()
+        .map(|swap| RecentSwapDisplay::from_swap_pnl_info(&swap))
         .collect();
 
     let mut output = String::new();
@@ -933,6 +967,49 @@ async fn build_recent_swaps_table() -> Result<String, String> {
         .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     output.push_str(&format!("{}\n", swaps_table));
     
+    Ok(output)
+}
+
+/// Build recent transactions table (last 20 by time) and return as string
+async fn build_recent_transactions_table() -> Result<String, String> {
+    let wallet_address_str = get_wallet_address()
+        .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet_address_str)
+        .map_err(|e| format!("Invalid wallet address: {}", e))?;
+    let mut manager = TransactionsManager::new(wallet_pubkey).await?;
+
+    // Pull a larger window, then sort by timestamp and take 20
+    let mut txs = manager
+        .get_recent_transactions(60)
+        .await
+        .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
+
+    // Best-effort recalc to populate analysis fields
+    for tx in &mut txs {
+        let _ = manager.recalculate_transaction_analysis(tx).await;
+    }
+
+    // Sort by timestamp desc and take last 20
+    txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    txs.truncate(20);
+
+    if txs.is_empty() {
+        return Ok("\n🧾 Recent Transactions (Last 20)\nNo transactions found\n\n".to_string());
+    }
+
+    let rows: Vec<RecentTransactionDisplay> = txs
+        .into_iter()
+        .map(RecentTransactionDisplay::from_transaction)
+        .collect();
+
+    let mut output = String::new();
+    output.push_str("\n🧾 Recent Transactions (Last 20)\n");
+    let mut table = Table::new(rows);
+    table
+        .with(Style::rounded())
+        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    output.push_str(&format!("{}\n", table));
+
     Ok(output)
 }
 
@@ -1264,6 +1341,7 @@ impl RecentSwapDisplay {
         Self {
             date: swap.timestamp.format("%m-%d").to_string(),
             time: swap.timestamp.format("%H:%M").to_string(),
+            ago: format!("{} ago", format_duration_compact(swap.timestamp, Utc::now())),
             signature: shortened_signature,
             swap_type: type_display,
             token: swap.token_symbol[..15.min(swap.token_symbol.len())].to_string(),
@@ -1273,6 +1351,61 @@ impl RecentSwapDisplay {
             router: swap.router[..12.min(swap.router.len())].to_string(),
             fee: format!("{:.6}", swap.fee_sol),
             status: swap.status.clone(),
+        }
+    }
+}
+
+impl RecentTransactionDisplay {
+    pub fn from_transaction(tx: crate::transactions::Transaction) -> Self {
+        // Shorten signature
+        let signature = if tx.signature.len() <= 16 {
+            tx.signature.clone()
+        } else {
+            format!("{}...{}", &tx.signature[..8], &tx.signature[tx.signature.len()-4..])
+        };
+
+        // Type string
+        let tx_type = match &tx.transaction_type {
+            crate::transactions::TransactionType::SwapSolToToken { .. } => "Buy".to_string(),
+            crate::transactions::TransactionType::SwapTokenToSol { .. } => "Sell".to_string(),
+            crate::transactions::TransactionType::SwapTokenToToken { .. } => "Token→Token".to_string(),
+            crate::transactions::TransactionType::SolTransfer { .. } => "SOL Transfer".to_string(),
+            crate::transactions::TransactionType::TokenTransfer { .. } => "Token Transfer".to_string(),
+            crate::transactions::TransactionType::AtaClose { .. } => "ATA Close".to_string(),
+            crate::transactions::TransactionType::Other { .. } => "Other".to_string(),
+            crate::transactions::TransactionType::Unknown => "Unknown".to_string(),
+        };
+
+        // Token symbol if present
+        let token = if let Some(info) = &tx.token_info {
+            info.symbol.clone()
+        } else {
+            "-".to_string()
+        };
+
+        // SOL delta with sign
+        let sol_delta = if tx.sol_balance_change >= 0.0 {
+            format!("+{:.6}", tx.sol_balance_change)
+        } else {
+            format!("{:.6}", tx.sol_balance_change)
+        };
+
+        // Status
+        let status = if tx.success { "✅ Success".to_string() } else { "❌ Failed".to_string() };
+
+        // Ago
+        let ago = format!("{} ago", format_duration_compact(tx.timestamp, Utc::now()));
+
+        Self {
+            date: tx.timestamp.format("%m-%d").to_string(),
+            time: tx.timestamp.format("%H:%M").to_string(),
+            ago,
+            signature,
+            slot: tx.slot.map(|s| s.to_string()).unwrap_or_else(|| "-".to_string()),
+            tx_type,
+            token,
+            sol_delta,
+            status,
         }
     }
 }
