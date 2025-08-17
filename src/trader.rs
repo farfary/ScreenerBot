@@ -85,7 +85,7 @@ pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
 // -----------------------------------------------------------------------------
 
 /// Summary display refresh interval (seconds)
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 6;
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 7;
 
 /// New entry signals check interval (seconds)
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 2;
