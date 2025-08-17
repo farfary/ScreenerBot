@@ -650,8 +650,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 "Checking {} tokens for entry opportunities (sorted by liquidity)",
                 tokens.len()
             )
-                .dimmed()
-                .to_string()
         );
 
         // Use centralized filtering system to get eligible tokens
