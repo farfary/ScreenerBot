@@ -978,15 +978,19 @@ async fn build_recent_transactions_table() -> Result<String, String> {
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
     let mut manager = TransactionsManager::new(wallet_pubkey).await?;
 
-    // Pull a larger window, then sort by timestamp and take 20
+    // Pull a smaller window to reduce processing - get 25 and take best 20
     let mut txs = manager
-        .get_recent_transactions(60)
+        .get_recent_transactions(25)
         .await
         .map_err(|e| format!("Failed to get recent transactions: {}", e))?;
 
-    // Best-effort recalc to populate analysis fields
+    // Since get_recent_transactions already does hydration, only recalc if really needed
     for tx in &mut txs {
-        let _ = manager.recalculate_transaction_analysis(tx).await;
+        // Only recalc if hydration failed AND transaction is finalized (worth the cost)
+        if matches!(tx.transaction_type, crate::transactions::TransactionType::Unknown) && 
+           matches!(tx.status, crate::transactions::TransactionStatus::Finalized) {
+            let _ = manager.recalculate_transaction_analysis(tx).await;
+        }
     }
 
     // Sort by timestamp desc and take last 20

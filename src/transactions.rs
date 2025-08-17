@@ -102,6 +102,9 @@ const ATA_RENT_COST_SOL: f64 = 0.00203928;              // Standard ATA creation
 const ATA_RENT_TOLERANCE_LAMPORTS: i64 = 10000;         // Tolerance for ATA rent variations (lamports)
 const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000;           // Default compute unit price (micro-lamports)
 
+// Analysis cache versioning (bump when snapshot schema changes)
+const ANALYSIS_CACHE_VERSION: u32 = 1;
+
 
 // =============================================================================
 // CORE DATA STRUCTURES
@@ -178,6 +181,10 @@ pub struct Transaction {
     pub priority_added_at: Option<DateTime<Utc>>,
     pub last_updated: DateTime<Utc>,
     pub cache_file_path: String,
+
+    // Optional persisted analysis snapshot for finalized txs to avoid re-analysis on every load
+    #[serde(default)]
+    pub cached_analysis: Option<CachedAnalysis>,
 }
 
 /// Enhanced priority transaction state management
@@ -419,6 +426,53 @@ pub struct SwapPnLInfo {
     
     pub slot: Option<u64>,  // Solana slot number for reliable chronological sorting
     pub status: String,     // Transaction status: "✅ Success", "❌ Failed", "⚠️ Partial", etc.
+}
+
+// =============================================================================
+// LIGHTWEIGHT CACHED ANALYSIS SNAPSHOT
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedAnalysis {
+    pub version: u32,
+    pub hydrated: bool,
+    pub transaction_type: TransactionType,
+    pub direction: TransactionDirection,
+    pub success: bool,
+    pub fee_sol: f64,
+    pub sol_balance_change: f64,
+    pub token_transfers: Vec<TokenTransfer>,
+    pub sol_balance_changes: Vec<SolBalanceChange>,
+    pub token_balance_changes: Vec<TokenBalanceChange>,
+    pub ata_analysis: Option<AtaAnalysis>,
+    pub token_info: Option<TokenSwapInfo>,
+    pub calculated_token_price_sol: Option<f64>,
+    pub price_source: Option<PriceSourceType>,
+    pub token_symbol: Option<String>,
+    pub token_decimals: Option<u8>,
+}
+
+impl CachedAnalysis {
+    fn from_transaction(tx: &Transaction) -> Self {
+        CachedAnalysis {
+            version: ANALYSIS_CACHE_VERSION,
+            hydrated: true,
+            transaction_type: tx.transaction_type.clone(),
+            direction: tx.direction.clone(),
+            success: tx.success,
+            fee_sol: tx.fee_sol,
+            sol_balance_change: tx.sol_balance_change,
+            token_transfers: tx.token_transfers.clone(),
+            sol_balance_changes: tx.sol_balance_changes.clone(),
+            token_balance_changes: tx.token_balance_changes.clone(),
+            ata_analysis: tx.ata_analysis.clone(),
+            token_info: tx.token_info.clone(),
+            calculated_token_price_sol: tx.calculated_token_price_sol,
+            price_source: tx.price_source.clone(),
+            token_symbol: tx.token_symbol.clone(),
+            token_decimals: tx.token_decimals,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -743,11 +797,36 @@ impl TransactionsManager {
         let use_cache = Path::new(&cache_file).exists();
 
         let mut transaction = if use_cache {
-            // Load from cache and recalculate
+            // Load from cache and try to hydrate from snapshot to avoid recalculation
             if self.debug_enabled {
                 log(LogTag::Transactions, "CACHE_LOAD", &format!("Loading cached transaction: {}", &signature[..8]));
             }
-            self.recalculate_cached_transaction(Path::new(&cache_file)).await?
+            let mut transaction = self.load_transaction_from_cache(Path::new(&cache_file)).await?;
+
+            // Attempt hydration from cached analysis snapshot
+            let hydrated = self.try_hydrate_from_cached_analysis(&mut transaction);
+
+            // Recalculate only if not hydrated or not finalized
+            if !hydrated || !matches!(transaction.status, TransactionStatus::Finalized) {
+                if self.debug_enabled {
+                    log(LogTag::Transactions, "RECALC", &format!(
+                        "Hydration {} for {}, recalculating...",
+                        if hydrated { "succeeded but not finalized" } else { "missed" },
+                        &signature[..8]
+                    ));
+                }
+                self.recalculate_transaction_analysis(&mut transaction).await?;
+                // Persist a snapshot for finalized transactions to avoid future re-analysis
+                if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                    transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+                }
+            } else if self.debug_enabled {
+                log(LogTag::Transactions, "HYDRATE", &format!(
+                    "Using cached analysis snapshot for finalized {}", &signature[..8]
+                ));
+            }
+
+            transaction
         } else {
             // Fetch fresh data from RPC
             if self.debug_enabled {
@@ -811,10 +890,16 @@ impl TransactionsManager {
                 },
                 last_updated: Utc::now(),
                 cache_file_path: cache_file.clone(),
+                cached_analysis: None,
             };
 
             // Analyze transaction type and extract details
             self.analyze_transaction(&mut transaction).await?;
+
+            // Persist a snapshot for finalized transactions to avoid future re-analysis
+            if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+            }
             
             transaction
         };
@@ -873,6 +958,30 @@ impl TransactionsManager {
 
         Ok(())
     }
+
+    /// If transaction has a valid cached analysis snapshot, hydrate derived fields from it
+    pub fn try_hydrate_from_cached_analysis(&self, transaction: &mut Transaction) -> bool {
+        if let Some(snapshot) = &transaction.cached_analysis {
+            if snapshot.version == ANALYSIS_CACHE_VERSION && snapshot.hydrated {
+                transaction.transaction_type = snapshot.transaction_type.clone();
+                transaction.direction = snapshot.direction.clone();
+                transaction.success = snapshot.success;
+                transaction.fee_sol = snapshot.fee_sol;
+                transaction.sol_balance_change = snapshot.sol_balance_change;
+                transaction.token_transfers = snapshot.token_transfers.clone();
+                transaction.sol_balance_changes = snapshot.sol_balance_changes.clone();
+                transaction.token_balance_changes = snapshot.token_balance_changes.clone();
+                transaction.ata_analysis = snapshot.ata_analysis.clone();
+                transaction.token_info = snapshot.token_info.clone();
+                transaction.calculated_token_price_sol = snapshot.calculated_token_price_sol;
+                transaction.price_source = snapshot.price_source.clone();
+                transaction.token_symbol = snapshot.token_symbol.clone();
+                transaction.token_decimals = snapshot.token_decimals;
+                return true;
+            }
+        }
+        false
+    }
     
     /// Clean transaction for cache storage by removing all calculated fields
     /// Clean transaction for caching - keeps ONLY raw blockchain data
@@ -893,6 +1002,11 @@ impl TransactionsManager {
             priority_added_at: transaction.priority_added_at,
             last_updated: transaction.last_updated,
             cache_file_path: transaction.cache_file_path.clone(),
+            // Keep snapshot only if transaction is finalized to avoid redundant recalcs
+            cached_analysis: match transaction.status {
+                TransactionStatus::Finalized => transaction.cached_analysis.clone(),
+                _ => None,
+            },
             
             // ALL calculated/derived fields are set to defaults - NEVER CACHED
             transaction_type: TransactionType::Unknown,
@@ -1409,6 +1523,7 @@ impl TransactionsManager {
             priority_added_at: None,
             last_updated: Utc::now(),
             cache_file_path: format!("{}/{}.json", get_transactions_cache_dir().display(), signature),
+            cached_analysis: None,
         };
 
         // Fetch fresh transaction data from blockchain
@@ -1416,6 +1531,15 @@ impl TransactionsManager {
 
         // Perform comprehensive analysis
         self.analyze_transaction(&mut transaction).await?;
+        // Defensive: if raw data has block_time and no error, treat as finalized
+        if transaction.block_time.is_some() && transaction.success {
+            transaction.status = TransactionStatus::Finalized;
+        }
+
+        // Persist a snapshot for finalized transactions to avoid future re-analysis
+        if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+        }
 
         // Cache the processed transaction
         self.cache_transaction(&transaction).await?;
@@ -1472,6 +1596,7 @@ impl TransactionsManager {
             priority_added_at: None,
             last_updated: Utc::now(),
             cache_file_path: format!("{}/{}.json", get_transactions_cache_dir().display(), signature),
+            cached_analysis: None,
         };
 
         // Convert encoded transaction to raw data format
@@ -1482,6 +1607,15 @@ impl TransactionsManager {
 
         // Perform comprehensive analysis
         self.analyze_transaction(&mut transaction).await?;
+        // Defensive: if raw data has block_time and no error, treat as finalized
+        if transaction.block_time.is_some() && transaction.success {
+            transaction.status = TransactionStatus::Finalized;
+        }
+
+        // Persist a snapshot for finalized transactions to avoid future re-analysis
+        if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+        }
 
         // Cache the processed transaction
         self.cache_transaction(&transaction).await?;
@@ -1606,7 +1740,9 @@ impl TransactionsManager {
         let mut transactions = Vec::new();
         for (file_path, _) in transaction_files.into_iter().take(limit) {
             if let Ok(content) = std::fs::read_to_string(&file_path) {
-                if let Ok(transaction) = serde_json::from_str::<Transaction>(&content) {
+                if let Ok(mut transaction) = serde_json::from_str::<Transaction>(&content) {
+                    // Best-effort hydration from snapshot
+                    let _ = self.try_hydrate_from_cached_analysis(&mut transaction);
                     transactions.push(transaction);
                 }
             }
@@ -1672,12 +1808,14 @@ impl TransactionsManager {
                 if !position.transaction_entry_verified {
                     if let Ok(entry_tx) = crate::transactions::get_transaction(entry_sig).await {
                         if let Some(mut tx) = entry_tx {
-                            // If loaded from cache, calculated fields are stripped. Recalculate now.
-                            if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
-                                log(LogTag::Transactions, "POSITION_VERIFY", &format!(
-                                    "⚠️ Failed to recalc entry {} for {}: {}",
-                                    get_signature_prefix(&tx.signature), position.symbol, e
-                                ));
+                            // If loaded from cache, try hydrate from snapshot first; otherwise recalc
+                            if !self.try_hydrate_from_cached_analysis(&mut tx) || !matches!(tx.status, TransactionStatus::Finalized) {
+                                if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
+                                    log(LogTag::Transactions, "POSITION_VERIFY", &format!(
+                                        "⚠️ Failed to recalc entry {} for {}: {}",
+                                        get_signature_prefix(&tx.signature), position.symbol, e
+                                    ));
+                                }
                             }
                             // Store transaction signature and type for precise position matching
                             verification_updates.push((tx.signature.clone(), "entry".to_string(), tx));
@@ -1691,12 +1829,14 @@ impl TransactionsManager {
                 if !position.transaction_exit_verified {
                     if let Ok(exit_tx) = crate::transactions::get_transaction(exit_sig).await {
                         if let Some(mut tx) = exit_tx {
-                            // If loaded from cache, calculated fields are stripped. Recalculate now.
-                            if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
-                                log(LogTag::Transactions, "POSITION_VERIFY", &format!(
-                                    "⚠️ Failed to recalc exit {} for {}: {}",
-                                    get_signature_prefix(&tx.signature), position.symbol, e
-                                ));
+                            // If loaded from cache, try hydrate from snapshot first; otherwise recalc
+                            if !self.try_hydrate_from_cached_analysis(&mut tx) || !matches!(tx.status, TransactionStatus::Finalized) {
+                                if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
+                                    log(LogTag::Transactions, "POSITION_VERIFY", &format!(
+                                        "⚠️ Failed to recalc exit {} for {}: {}",
+                                        get_signature_prefix(&tx.signature), position.symbol, e
+                                    ));
+                                }
                             }
                             // Store transaction signature and type for precise position matching
                             verification_updates.push((tx.signature.clone(), "exit".to_string(), tx));
@@ -1789,7 +1929,7 @@ impl TransactionsManager {
 
         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
         let empty_cache = std::collections::HashMap::new();
-        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache) {
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache, false) {
             log(LogTag::Transactions, "POSITION_ENTRY_SWAP_INFO", &format!(
                 "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
                 position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
@@ -1873,7 +2013,7 @@ impl TransactionsManager {
 
         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
         let empty_cache = std::collections::HashMap::new();
-        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache) {
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache, false) {
             if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
                 // Update position with analyze-swaps-exact calculations using effective pricing
                 position.transaction_exit_verified = true;
@@ -3671,34 +3811,55 @@ impl TransactionsManager {
                 continue;
             }
 
+            // Early exit if we've found enough swaps (optimization for summary calls)
+            if let Some(limit) = count {
+                if swap_count >= limit {
+                    break;
+                }
+            }
+
             // Read and parse transaction
             match self.load_transaction_from_cache(&path).await {
                 Ok(mut transaction) => {
                     processed_count += 1;
                     
-                    // ALWAYS force recalculation to ensure we have complete analysis
-                    // Reset analysis fields to force fresh calculation
-                    self.recalculate_transaction_analysis(&mut transaction).await?;
-                    
-                    // Re-run comprehensive analysis
-                    if let Err(e) = self.analyze_transaction(&mut transaction).await {
-                        log(LogTag::Transactions, "WARN", &format!(
-                            "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                    // Try to hydrate from cached analysis snapshot
+                    let hydrated = self.try_hydrate_from_cached_analysis(&mut transaction);
+                    let needs_recalc = !hydrated || !matches!(transaction.status, TransactionStatus::Finalized);
+
+                    if needs_recalc {
+                        // Reset analysis fields and recalc using cached raw data
+                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                            ));
+                            continue;
+                        }
+
+                        // Persist a snapshot for finalized transactions to avoid future re-analysis
+                        if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+                        }
+
+                        // Save updated transaction back to cache
+                        if let Err(e) = self.cache_transaction(&transaction).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                            ));
+                        }
+
+                        recalculated_count += 1;
+                    } else if self.debug_enabled {
+                        log(LogTag::Transactions, "HYDRATE", &format!(
+                            "Hydrated finalized transaction {} from snapshot (skip recalculation)",
+                            get_signature_prefix(&transaction.signature)
                         ));
-                        continue;
                     }
-                    
-                    // Save updated transaction back to cache
-                    if let Err(e) = self.cache_transaction(&transaction).await {
-                        log(LogTag::Transactions, "WARN", &format!(
-                            "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
-                        ));
-                    }
-                    
-                    recalculated_count += 1;
                     
                     // Convert to SwapPnLInfo if it's a swap transaction
-                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction, &token_symbol_cache) {
+                    // Use silent mode for hydrated transactions to reduce log spam
+                    let silent = hydrated && !needs_recalc;
+                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction, &token_symbol_cache, silent) {
                         swap_transactions.push(swap_info);
                         swap_count += 1;
                     }
@@ -3739,6 +3900,17 @@ impl TransactionsManager {
 
         // Load existing cached transaction
         let mut transaction = self.load_transaction_from_cache(cache_file_path).await?;
+
+        // If we have a valid cached snapshot and transaction is finalized, hydrate and skip heavy work
+        if self.try_hydrate_from_cached_analysis(&mut transaction) && matches!(transaction.status, TransactionStatus::Finalized) {
+            if self.debug_enabled {
+                log(LogTag::Transactions, "HYDRATE", &format!(
+                    "Recalc short-circuited by snapshot for {}",
+                    get_signature_prefix(&transaction.signature)
+                ));
+            }
+            return Ok(transaction);
+        }
         
         // Update last_updated timestamp
         transaction.last_updated = Utc::now();
@@ -3765,6 +3937,11 @@ impl TransactionsManager {
         // Run comprehensive analysis on cached data
         self.analyze_transaction(&mut transaction).await?;
 
+        // Persist a snapshot for finalized transactions to avoid future re-analysis
+        if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+        }
+
         // Update cache with new analysis
         self.cache_transaction(&transaction).await?;
 
@@ -3783,7 +3960,8 @@ impl TransactionsManager {
     }
 
     /// Convert transaction to SwapPnLInfo using precise ATA rent detection
-    fn convert_to_swap_pnl_info(&self, transaction: &Transaction, token_symbol_cache: &std::collections::HashMap<String, String>) -> Option<SwapPnLInfo> {
+    /// Set silent=true to skip detailed logging (for hydrated transactions)
+    fn convert_to_swap_pnl_info(&self, transaction: &Transaction, token_symbol_cache: &std::collections::HashMap<String, String>, silent: bool) -> Option<SwapPnLInfo> {
         if !self.is_swap_transaction(transaction) {
             return None;
         }
@@ -3833,7 +4011,7 @@ impl TransactionsManager {
             (0.0, 0.0, 0.0)
         };
 
-        if self.debug_enabled {
+        if self.debug_enabled && !silent {
             log(LogTag::Transactions, "PNL_CALC", &format!(
                 "Transaction {}: sol_balance_change={:.9}, net_ata_rent_flow={:.9}, type={}",
                 &transaction.signature[..8], transaction.sol_balance_change, net_ata_rent_flow, swap_type
@@ -3947,14 +4125,16 @@ impl TransactionsManager {
                     // Use the raw amount directly
                     let pure_trade = sol_amount_raw;
                     
-                    // Always log critical ATA calculations for verification
-                    log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
-                        "BUY tx {}: ata_closures={}, corrected_amount={:.9}, was_corrected=true",
-                        transaction.signature.chars().take(8).collect::<String>(),
-                        ata_closures_count, pure_trade
-                    ));
+                    // Log critical ATA calculations for verification (unless silent)
+                    if !silent {
+                        log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
+                            "BUY tx {}: ata_closures={}, corrected_amount={:.9}, was_corrected=true",
+                            transaction.signature.chars().take(8).collect::<String>(),
+                            ata_closures_count, pure_trade
+                        ));
+                    }
                     
-                    if self.debug_enabled {
+                    if self.debug_enabled && !silent {
                         log(LogTag::Transactions, "BUY_CALC", &format!(
                             "Buy calculation: corrected_sol_amount={:.9}, raw_balance_change={:.9}, using_corrected=true",
                             pure_trade, transaction.sol_balance_change.abs()
@@ -3968,12 +4148,14 @@ impl TransactionsManager {
                     // This is likely a buy with our standard amount (0.005)
                     let pure_trade = -0.005;
                     
-                    // Always log critical ATA calculations for verification
-                    log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
-                        "BUY tx {}: ata_closures={}, amount_too_small={:.9}, using_standard_amount=0.005",
-                        transaction.signature.chars().take(8).collect::<String>(),
-                        ata_closures_count, sol_amount_raw
-                    ));
+                    // Log critical ATA calculations for verification (unless silent)
+                    if !silent {
+                        log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
+                            "BUY tx {}: ata_closures={}, amount_too_small={:.9}, using_standard_amount=0.005",
+                            transaction.signature.chars().take(8).collect::<String>(),
+                            ata_closures_count, sol_amount_raw
+                        ));
+                    }
                     
                     pure_trade
                 }
@@ -3981,12 +4163,14 @@ impl TransactionsManager {
                 else {
                     let pure_trade = sol_amount_raw;
                     
-                    // Always log critical ATA calculations for verification
-                    log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
-                        "BUY tx {}: ata_closures={}, corrected_amount={:.9}, was_corrected=true",
-                        transaction.signature.chars().take(8).collect::<String>(),
-                        ata_closures_count, pure_trade
-                    ));
+                    // Log critical ATA calculations for verification (unless silent)
+                    if !silent {
+                        log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
+                            "BUY tx {}: ata_closures={}, corrected_amount={:.9}, was_corrected=true",
+                            transaction.signature.chars().take(8).collect::<String>(),
+                            ata_closures_count, pure_trade
+                        ));
+                    }
                     
                     pure_trade
                 }
@@ -3995,22 +4179,26 @@ impl TransactionsManager {
                 // For SELL transactions: Prefer router-provided amount when available; otherwise fallback
                 if sol_amount_raw.abs() > 0.0 {
                     let pure_trade = sol_amount_raw.abs();
-                    log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
-                        "SELL tx {}: router SOL amount used as pure trade = {:.9}",
-                        transaction.signature.chars().take(8).collect::<String>(), pure_trade
-                    ));
+                    if !silent {
+                        log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
+                            "SELL tx {}: router SOL amount used as pure trade = {:.9}",
+                            transaction.signature.chars().take(8).collect::<String>(), pure_trade
+                        ));
+                    }
                     pure_trade
                 } else {
                 // Fallback: derive from balance changes and token-specific ATA rent recovery
                 let total_sol_received = transaction.sol_balance_change;
                 let pure_trade = total_sol_received - actual_ata_rent_impact;
                 
-                // Always log critical ATA calculations for verification
-                log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
-                    "SELL tx {}: ata_closures={}, token_rent_recovered={:.9}, pure_trade_adjusted={}",
-                    transaction.signature.chars().take(8).collect::<String>(),
-                    ata_closures_count, actual_ata_rent_impact, ata_closures_count > 0
-                ));
+                // Log critical ATA calculations for verification (unless silent)
+                if !silent {
+                    log(LogTag::Transactions, "ATA_RENT_FIX", &format!(
+                        "SELL tx {}: ata_closures={}, token_rent_recovered={:.9}, pure_trade_adjusted={}",
+                        transaction.signature.chars().take(8).collect::<String>(),
+                        ata_closures_count, actual_ata_rent_impact, ata_closures_count > 0
+                    ));
+                }
                 
                 if self.debug_enabled {
                     log(LogTag::Transactions, "SELL_CALC", &format!(
@@ -4110,7 +4298,7 @@ impl TransactionsManager {
             transaction.timestamp
         };
 
-        if self.debug_enabled {
+        if self.debug_enabled && !silent {
             log(LogTag::Transactions, "FINAL_RESULT", &format!(
                 "Final calculation for {}: {:.9} SOL, price={:.12} SOL/token",
                 &transaction.signature[..8], final_sol_amount, calculated_price_sol
@@ -4123,7 +4311,7 @@ impl TransactionsManager {
                 // For BUY: effective_sol_spent = pure trading amount (final_sol_amount already excludes ATA rent)
                 let effective_spent = final_sol_amount;
                 
-                if self.debug_enabled {
+                if self.debug_enabled && !silent {
                     log(LogTag::Transactions, "EFFECTIVE_BUY", &format!(
                         "Buy {}: effective_spent={:.9} (pure trade amount)",
                         &transaction.signature[..8], effective_spent
@@ -4136,7 +4324,7 @@ impl TransactionsManager {
                 // For SELL: effective_sol_received = pure trading amount (final_sol_amount already excludes ATA rent)
                 let effective_received = final_sol_amount;
                 
-                if self.debug_enabled {
+                if self.debug_enabled && !silent {
                     log(LogTag::Transactions, "EFFECTIVE_SELL", &format!(
                         "Sell {}: effective_received={:.9} (pure trade amount)",
                         &transaction.signature[..8], effective_received
@@ -4492,19 +4680,20 @@ impl TransactionsManager {
                             &entry_sig[..8], position.symbol
                         ));
 
-                        // IMPORTANT: Transactions loaded from cache contain raw-only data.
-                        // We must recalculate analysis from cached raw before converting.
-                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
-                            log(LogTag::Transactions, "RECALC_ERROR", &format!(
-                                "❌ Failed to recalculate analysis for entry {}: {}",
-                                &entry_sig[..8], e
-                            ));
-                            // Continue; conversion will likely fail without analysis
+                        // IMPORTANT: Try hydration first; only recalc if snapshot missing/invalid or not finalized
+                        if !self.try_hydrate_from_cached_analysis(&mut transaction) || !matches!(transaction.status, TransactionStatus::Finalized) {
+                            if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                                log(LogTag::Transactions, "RECALC_ERROR", &format!(
+                                    "❌ Failed to recalculate analysis for entry {}: {}",
+                                    &entry_sig[..8], e
+                                ));
+                                // Continue; conversion will likely fail without analysis
+                            }
                         }
 
                         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
                         let empty_cache = std::collections::HashMap::new();
-                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache) {
+                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache, false) {
                             log(LogTag::Transactions, "RECALC_ENTRY_SWAP_INFO", &format!(
                                 "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
                                 position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
@@ -4581,17 +4770,19 @@ impl TransactionsManager {
             if let Some(ref exit_sig) = position.exit_transaction_signature {
                 match get_transaction(exit_sig).await {
                     Ok(Some(mut transaction)) => {
-                        // Recalculate analysis from cached raw data to populate derived fields
-                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
-                            log(LogTag::Transactions, "RECALC_ERROR", &format!(
-                                "❌ Failed to recalculate analysis for exit {}: {}",
-                                &exit_sig[..8], e
-                            ));
-                            // Continue; conversion may fail without analysis
+                        // Try hydration first; only recalc if snapshot missing/invalid or not finalized
+                        if !self.try_hydrate_from_cached_analysis(&mut transaction) || !matches!(transaction.status, TransactionStatus::Finalized) {
+                            if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                                log(LogTag::Transactions, "RECALC_ERROR", &format!(
+                                    "❌ Failed to recalculate analysis for exit {}: {}",
+                                    &exit_sig[..8], e
+                                ));
+                                // Continue; conversion may fail without analysis
+                            }
                         }
                         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
                         let empty_cache = std::collections::HashMap::new();
-                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache) {
+                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache, false) {
                             if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
                                 let old_price = position.effective_exit_price;
                                 
