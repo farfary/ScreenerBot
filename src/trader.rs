@@ -541,8 +541,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     LogTag::Trader,
                     "DEBUG",
                     &format!("Total tokens from safe system: {}", tokens_from_module.len())
-                        .dimmed()
-                        .to_string()
                 );
             }
 
@@ -593,8 +591,6 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                         "Using all {} tokens for trading (startup filter removed)",
                         tokens_from_module.len()
                     )
-                        .dimmed()
-                        .to_string()
                 );
             }
 

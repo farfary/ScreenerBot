@@ -651,6 +651,18 @@ pub struct PoolServiceStats {
     pub api_fallbacks: u64,
     pub tokens_with_price_history: u64,
     pub total_price_history_entries: u64,
+    // Runtime monitoring metrics ("chunks" = monitoring cycles)
+    pub monitoring_cycles: u64,
+    pub last_cycle_tokens: u64,
+    pub total_cycle_tokens: u64,
+    pub avg_tokens_per_cycle: f64,
+    pub last_cycle_duration_ms: f64,
+    pub total_cycle_duration_ms: f64,
+    pub avg_cycle_duration_ms: f64,
+    // Watch list snapshot (updated in get_enhanced_stats)
+    pub watch_total: u64,
+    pub watch_expired: u64,
+    pub watch_never_checked: u64,
     pub last_updated: DateTime<Utc>,
 }
 
@@ -665,6 +677,16 @@ impl Default for PoolServiceStats {
             api_fallbacks: 0,
             tokens_with_price_history: 0,
             total_price_history_entries: 0,
+            monitoring_cycles: 0,
+            last_cycle_tokens: 0,
+            total_cycle_tokens: 0,
+            avg_tokens_per_cycle: 0.0,
+            last_cycle_duration_ms: 0.0,
+            total_cycle_duration_ms: 0.0,
+            avg_cycle_duration_ms: 0.0,
+            watch_total: 0,
+            watch_expired: 0,
+            watch_never_checked: 0,
             last_updated: Utc::now(),
         }
     }
@@ -1089,6 +1111,7 @@ impl PoolPriceService {
         let watch_list = self.watch_list.clone();
         let pool_price_history = self.pool_price_history.clone();
         let monitoring_active = self.monitoring_active.clone();
+    let stats_arc = self.stats.clone();
 
         // Start main monitoring loop
         tokio::spawn(async move {
@@ -1104,6 +1127,8 @@ impl PoolPriceService {
                         break;
                     }
                 }
+
+                let cycle_start = Instant::now();
 
                 // Process watch list and clean up expired entries
                 let tokens_to_monitor = {
@@ -1136,6 +1161,17 @@ impl PoolPriceService {
                     // Get remaining active tokens for monitoring
                     watch_list.keys().cloned().collect::<Vec<_>>()
                 };
+
+                // Record last cycle token count early
+                {
+                    let mut stats = stats_arc.write().await;
+                    stats.last_cycle_tokens = tokens_to_monitor.len() as u64;
+                    stats.total_cycle_tokens += stats.last_cycle_tokens;
+                    stats.monitoring_cycles += 1;
+                    stats.avg_tokens_per_cycle = if stats.monitoring_cycles > 0 {
+                        (stats.total_cycle_tokens as f64) / (stats.monitoring_cycles as f64)
+                    } else { 0.0 };
+                }
 
                 if !tokens_to_monitor.is_empty() {
                     if is_debug_pool_prices_enabled() {
@@ -1187,6 +1223,17 @@ impl PoolPriceService {
                             }
                         }
                     }
+                }
+
+                // Finish cycle timing stats
+                let duration_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
+                {
+                    let mut stats = stats_arc.write().await;
+                    stats.last_cycle_duration_ms = duration_ms;
+                    stats.total_cycle_duration_ms += duration_ms;
+                    stats.avg_cycle_duration_ms = if stats.monitoring_cycles > 0 {
+                        stats.total_cycle_duration_ms / (stats.monitoring_cycles as f64)
+                    } else { 0.0 };
                 }
             }
 
@@ -2509,6 +2556,22 @@ impl PoolPriceService {
             .values()
             .map(|v| v.len() as u64)
             .sum();
+
+        // Watch list snapshot
+        let (watch_total, watch_expired, watch_never_checked) = {
+            let wl = self.watch_list.read().await;
+            let total = wl.len();
+            let mut expired = 0usize;
+            let mut never = 0usize;
+            for entry in wl.values() {
+                if entry.is_expired() { expired += 1; }
+                if entry.last_price_check.is_none() { never += 1; }
+            }
+            (total as u64, expired as u64, never as u64)
+        };
+        stats.watch_total = watch_total;
+        stats.watch_expired = watch_expired;
+        stats.watch_never_checked = watch_never_checked;
         stats.last_updated = Utc::now();
 
         stats.clone()

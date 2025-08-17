@@ -139,6 +139,12 @@ pub struct PoolServiceDisplay {
     memory_cache: String,
     #[tabled(rename = "💰 Price Cache")]
     price_cache: String,
+    #[tabled(rename = "⏳ Cycles")]
+    cycles: String,
+    #[tabled(rename = "📦 Avg/Chunk")]
+    avg_per_chunk: String,
+    #[tabled(rename = "⏱️ Last/Avg (ms)")]
+    last_avg_ms: String,
     #[tabled(rename = "📞 Total Requests")]
     total_requests: String,
     #[tabled(rename = "✅ Success Rate")]
@@ -149,6 +155,8 @@ pub struct PoolServiceDisplay {
     blockchain_calcs: String,
     #[tabled(rename = "📈 Memory History")]
     memory_history: String,
+    #[tabled(rename = "📡 Watch (tot/exp/never)")]
+    watch_snapshot: String,
 }
 
 /// Display structure for detailed disk cache statistics
@@ -822,6 +830,13 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     let pool_service_stats = PoolServiceDisplay {
         memory_cache: format!("{} pools", pool_cache_count),
         price_cache: format!("{} prices", price_cache_count),
+        cycles: format!("{}", enhanced_stats.monitoring_cycles),
+        avg_per_chunk: if enhanced_stats.monitoring_cycles > 0 {
+            format!("{:.1}", enhanced_stats.avg_tokens_per_cycle)
+        } else { "N/A".to_string() },
+        last_avg_ms: if enhanced_stats.monitoring_cycles > 0 {
+            format!("{:.0}/{:.0}", enhanced_stats.last_cycle_duration_ms, enhanced_stats.avg_cycle_duration_ms)
+        } else { "-".to_string() },
         total_requests: format!("{}", enhanced_stats.total_price_requests),
         success_rate: if enhanced_stats.total_price_requests > 0 {
             format!("{:.1}%", enhanced_stats.get_success_rate())
@@ -835,6 +850,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         },
         blockchain_calcs: format!("{}", enhanced_stats.blockchain_calculations),
         memory_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
+        watch_snapshot: format!("{}/{}/{}", enhanced_stats.watch_total, enhanced_stats.watch_expired, enhanced_stats.watch_never_checked),
     };
 
     // Build disk cache display
