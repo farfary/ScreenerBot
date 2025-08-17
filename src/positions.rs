@@ -40,6 +40,36 @@ static LAST_OPEN_POSITION_AT: Lazy<StdArc<StdMutex<Option<DateTime<Utc>>>>> = La
     StdArc::new(StdMutex::new(None))
 });
 
+/// Centralized re-entry cooldown after closing a position for the same token (minutes)
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15;
+
+/// Track last close time per mint to enforce re-entry cooldown
+static LAST_CLOSE_TIME_PER_MINT: Lazy<StdArc<StdMutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(|| {
+    StdArc::new(StdMutex::new(HashMap::new()))
+});
+
+/// Record a close time for a mint (called when closing a position)
+fn record_close_time_for_mint(mint: &str, when: DateTime<Utc>) {
+    if let Ok(mut map) = LAST_CLOSE_TIME_PER_MINT.lock() {
+        map.insert(mint.to_string(), when);
+    }
+}
+
+/// Returns remaining cooldown minutes for a mint if within re-entry cooldown, else None
+pub fn get_remaining_reentry_cooldown_minutes(mint: &str) -> Option<i64> {
+    if POSITION_CLOSE_COOLDOWN_MINUTES <= 0 { return None; }
+    if let Ok(map) = LAST_CLOSE_TIME_PER_MINT.lock() {
+        if let Some(last_close) = map.get(mint) {
+            let now = Utc::now();
+            let minutes = (now - *last_close).num_minutes();
+            if minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
+                return Some(POSITION_CLOSE_COOLDOWN_MINUTES - minutes);
+            }
+        }
+    }
+    None
+}
+
 /// Try to acquire the global "open position" cooldown window.
 /// Returns Ok(()) if allowed now and sets the timestamp; Err(remaining_secs) if still cooling down.
 fn try_acquire_open_cooldown() -> Result<(), i64> {
@@ -408,7 +438,22 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
         return;
     }
 
-    // GLOBAL COOLDOWN: Enforce 15s delay between openings (regardless of token)
+    // RE-ENTRY COOLDOWN: Block re-entry for same mint shortly after closing
+    if let Some(remaining) = get_remaining_reentry_cooldown_minutes(&token.mint) {
+        log(
+            LogTag::Trader,
+            "COOLDOWN",
+            &format!(
+                "Re-entry cooldown active for {} ({}): wait {}m",
+                token.symbol,
+                &token.mint[..8],
+                remaining
+            )
+        );
+        return;
+    }
+
+    // GLOBAL COOLDOWN: Enforce delay between openings (regardless of token)
     match try_acquire_open_cooldown() {
         Ok(()) => { /* proceed */ }
         Err(remaining) => {
@@ -858,6 +903,9 @@ pub async fn close_position(
                     &transaction_signature[..8]
                 )
             );
+
+            // Record close time for cooldown tracking
+            record_close_time_for_mint(&position.mint, Utc::now());
 
             // DEADLOCK FIX: Get positions snapshot, then save outside lock
             let positions_snapshot = if let Ok(positions) = SAVED_POSITIONS.lock() {

@@ -12,6 +12,7 @@ use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_entry_enabled };
 use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
+use crate::positions::SAVED_POSITIONS; // read-only access to past trades
 use chrono::Utc;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -30,10 +31,10 @@ const MAX_DATA_AGE_MINUTES: i64 = 10; // Extended from 5 to 10 minutes for maxim
 const TARGET_LIQUIDITY_MIN: f64 = 5000.0;    // Reduced from 10k to 5k - catch smaller tokens
 const TARGET_LIQUIDITY_MAX: f64 = 5_000_000.0; // Increased from 500k to 1M - catch bigger opportunities
 
-// DROP PERCENTAGE RANGES (Ultra-aggressive - catch micro drops)
+// DROP PERCENTAGE RANGES (Ultra-aggressive - catch micro to deep drops)
 const DROP_PERCENT_MIN: f64 = 1.0;   // Reduced from 3% to 1% - catch micro drops
 const DROP_PERCENT_MAX: f64 = 15.0;  // Reduced from 20% to 15% - focus on smaller moves
-const DROP_PERCENT_ULTRA_MAX: f64 = 30.0; // Reduced from 40% - avoid extreme crashes
+const DROP_PERCENT_ULTRA_MAX: f64 = 70.0; // Expanded up to 70% to allow deep capitulation entries dynamically
 
 // TIME WINDOWS FOR ANALYSIS (Multiple ultra-aggressive timeframes)
 const INSTANT_DROP_TIME_WINDOW_SEC: i64 = 5;   // NEW: Ultra-fast detection (5 seconds)
@@ -73,6 +74,14 @@ const COOLDOWN_AFTER_NEW_HIGH_SEC: i64 = 45;
 const ATH_PROXIMITY_PERCENT: f64 = 3.5; // avoid entries within ~3.5% of observed ATH
 // Toggle risky ultra-fresh entries (disabled by default)
 const ULTRA_FRESH_ENTRY_ENABLED: bool = false;
+
+// RE-ENTRY AGGRESSION PARAMETERS (be stricter about paying premiums after prior trades)
+const REENTRY_PREMIUM_BASE_MAX: f64 = 12.0; // first re-entry: allow up to +12% over anchor
+const REENTRY_PREMIUM_MIN_FLOOR: f64 = 3.0; // never allow more than +3% at high experience
+const REENTRY_PREMIUM_DECAY_PER_TRADE: f64 = 1.8; // shrink premium allowance each completed cycle
+const REENTRY_VALUE_ZONE_BASE: f64 = 10.0; // if price is this % below anchor, treat as value
+const REENTRY_VALUE_ZONE_GROW_PER_TRADE: f64 = 4.0; // widen value zone with experience
+const REENTRY_VALUE_ZONE_MAX: f64 = 35.0; // cap value-zone widening
 
 // PROFIT TARGET CALCULATION PARAMETERS
 const PROFIT_BASE_MIN: f64 = 50.0;               // Base minimum profit target %
@@ -316,6 +325,9 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             token.symbol, liquidity_usd));
     }
 
+    // Compute token re-entry profile from past closed trades
+    let reentry_profile_opt = get_reentry_profile(&token.mint);
+
     // Get recent price history for deep drop analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
     
@@ -332,7 +344,27 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     return (false, 0.0, "Price too close to highs (multi-window/ATH guard)".to_string());
     }
     
-    // CORE LOGIC: Dynamic drop detection based on liquidity
+    // Re-entry premium guard: avoid buying "very higher" than prior anchors
+    if let Some(profile) = &reentry_profile_opt {
+        if profile.anchor_price > 0.0 && profile.anchor_price.is_finite() {
+            let premium_pct = ((current_pool_price - profile.anchor_price) / profile.anchor_price) * 100.0;
+            let allowed_premium = reentry_allowed_premium(profile.completed_trades);
+            if premium_pct > allowed_premium {
+                if is_debug_entry_enabled() {
+                    log(LogTag::Entry, "REENTRY_PREMIUM_REJECT", &format!(
+                        "🚫 {} price {:.2}% above anchor {:.12} SOL (allowed ≤{:.1}%)",
+                        token.symbol, premium_pct, profile.anchor_price, allowed_premium
+                    ));
+                }
+                return (false, 0.0, format!(
+                    "Above prior anchor by {:.1}% (limit {:.1}%)",
+                    premium_pct, allowed_premium
+                ));
+            }
+        }
+    }
+
+    // CORE LOGIC: Dynamic drop detection based on liquidity + history bias
     let volume_24h = token.volume.as_ref().and_then(|v| v.h24);
     let deep_drop_result = analyze_deep_drop_entry(
         &token.mint,
@@ -340,7 +372,8 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         &price_history,
         pool_data_age,
         liquidity_usd,
-        volume_24h
+        volume_24h,
+        build_history_bias(&reentry_profile_opt, current_pool_price)
     ).await;
 
     if let Some((drop_percent, entry_reason)) = deep_drop_result {
@@ -495,7 +528,8 @@ async fn analyze_deep_drop_entry(
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
     data_age_minutes: i64,
     liquidity_usd: f64,
-    volume_24h: Option<f64>
+    volume_24h: Option<f64>,
+    history_bias: Option<HistoryBias>
 ) -> Option<(f64, String)> {
     use chrono::Utc;
     
@@ -591,11 +625,29 @@ async fn analyze_deep_drop_entry(
         } else { 1.0 }
     };
 
-    let effective_min_drop = (min_drop_threshold * volatility_factor * adaptive_scale).max(DROP_PERCENT_MIN * 0.5);
+    // History-aware biasing: if below anchor (value zone), lower threshold; above anchor, raise threshold slightly
+    let history_scale = if let Some(hb) = &history_bias {
+        if hb.anchor_price > 0.0 {
+            if hb.below_anchor_by_pct > 0.0 {
+                // Reduce threshold up to 40% when deeply below anchor; stronger with experience
+                let depth = (hb.below_anchor_by_pct / REENTRY_VALUE_ZONE_MAX).min(1.0);
+                let exp = (hb.completed_trades as f64).min(5.0) / 5.0; // 0..1
+                let reduce = 0.2 + 0.2 * depth + 0.1 * exp; // 20%..50%
+                (1.0 - reduce).max(0.5)
+            } else if hb.premium_over_anchor_pct > 0.0 {
+                // Slightly increase threshold when above anchor to avoid chasing
+                let inc = (hb.premium_over_anchor_pct / 20.0).min(0.25); // up to +25%
+                1.0 + inc
+            } else { 1.0 }
+        } else { 1.0 }
+    } else { 1.0 };
+
+    let effective_min_drop = (min_drop_threshold * volatility_factor * adaptive_scale * history_scale)
+        .max(DROP_PERCENT_MIN * 0.5);
     
     if is_debug_entry_enabled() {
-        log(LogTag::Entry, "DROP_THRESHOLDS", &format!("🎯 Dynamic thresholds for ${:.0}k: min {:.1}% (eff {:.1}%, scale {:.2}) - max {:.1}%, ratio: {:.1}% | vol {:.1}% vel {:.1}%/min", 
-            liquidity_usd / THOUSAND_DIVISOR, min_drop_threshold, effective_min_drop, adaptive_scale, max_drop_threshold, target_drop_ratio * PERCENTAGE_MULTIPLIER, vol_percent, velocity_per_minute));
+        log(LogTag::Entry, "DROP_THRESHOLDS", &format!("🎯 Dynamic thresholds for ${:.0}k: min {:.1}% (eff {:.1}%, scale {:.2} hist {:.2}) - max {:.1}%, ratio: {:.1}% | vol {:.1}% vel {:.1}%/min", 
+            liquidity_usd / THOUSAND_DIVISOR, min_drop_threshold, effective_min_drop, adaptive_scale, history_scale, max_drop_threshold, target_drop_ratio * PERCENTAGE_MULTIPLIER, vol_percent, velocity_per_minute));
     }
     
     // Strategy 1: (disabled by default) Ultra-fresh entry — risky near tops
@@ -1006,3 +1058,94 @@ async fn analyze_deep_drop_entry(
 }
 
 // Enhanced entry decision with liquidity-based confidence scoring merged into should_buy
+
+// ======================== RE-ENTRY HISTORY SUPPORT ==========================
+
+#[derive(Debug, Clone)]
+struct ReentryProfile {
+    completed_trades: usize,
+    last_entry_price: Option<f64>,
+    last_exit_price: Option<f64>,
+    avg_entry_price: Option<f64>,
+    avg_exit_price: Option<f64>,
+    anchor_price: f64,
+}
+
+fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
+    use crate::positions::Position;
+    let positions_guard = SAVED_POSITIONS.lock().ok()?;
+    let mut closed: Vec<&Position> = positions_guard
+        .iter()
+        .filter(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_some())
+        .collect();
+    if closed.is_empty() { return None; }
+
+    // Sort by exit_time to find last trade
+    closed.sort_by_key(|p| p.exit_time);
+    let completed_trades = closed.len();
+
+    let last = *closed.last().unwrap();
+    let last_entry = last.effective_entry_price.or(Some(last.entry_price));
+    let last_exit = last.effective_exit_price.or(last.exit_price);
+
+    // Compute averages using effective prices when available
+    let mut sum_entry = 0.0;
+    let mut sum_exit = 0.0;
+    let mut cnt_entry = 0usize;
+    let mut cnt_exit = 0usize;
+    for p in closed.iter() {
+        if let Some(eff) = p.effective_entry_price.or(Some(p.entry_price)) {
+            if eff.is_finite() && eff > 0.0 { sum_entry += eff; cnt_entry += 1; }
+        }
+        if let Some(ex) = p.effective_exit_price.or(p.exit_price) {
+            if ex.is_finite() && ex > 0.0 { sum_exit += ex; cnt_exit += 1; }
+        }
+    }
+    let avg_entry = if cnt_entry > 0 { Some(sum_entry / cnt_entry as f64) } else { None };
+    let avg_exit = if cnt_exit > 0 { Some(sum_exit / cnt_exit as f64) } else { None };
+
+    // Anchor: favor last exit (60%) blended with average exit (40%); fallback to entry prices
+    let anchor = if let Some(le) = last_exit {
+        let avg = avg_exit.or(avg_entry).or(last_entry).unwrap_or(le);
+        0.6 * le + 0.4 * avg
+    } else if let Some(avg) = avg_exit.or(avg_entry).or(last_entry) { avg } else { 0.0 };
+
+    Some(ReentryProfile {
+        completed_trades,
+        last_entry_price: last_entry,
+        last_exit_price: last_exit,
+        avg_entry_price: avg_entry,
+        avg_exit_price: avg_exit,
+        anchor_price: anchor,
+    })
+}
+
+fn reentry_allowed_premium(completed_trades: usize) -> f64 {
+    let decay = (completed_trades as f64) * REENTRY_PREMIUM_DECAY_PER_TRADE;
+    let cap = (REENTRY_PREMIUM_BASE_MAX - decay).max(REENTRY_PREMIUM_MIN_FLOOR);
+    cap
+}
+
+#[derive(Debug, Clone)]
+struct HistoryBias {
+    anchor_price: f64,
+    completed_trades: usize,
+    premium_over_anchor_pct: f64,
+    below_anchor_by_pct: f64,
+}
+
+fn build_history_bias(profile: &Option<ReentryProfile>, current_price: f64) -> Option<HistoryBias> {
+    if let Some(p) = profile {
+        if p.anchor_price > 0.0 && p.anchor_price.is_finite() && current_price.is_finite() && current_price > 0.0 {
+            let diff_pct = ((current_price - p.anchor_price) / p.anchor_price) * 100.0;
+            let (premium_over, below_by) = if diff_pct >= 0.0 { (diff_pct, 0.0) } else { (0.0, -diff_pct) };
+            return Some(HistoryBias {
+                anchor_price: p.anchor_price,
+                completed_trades: p.completed_trades,
+                premium_over_anchor_pct: premium_over,
+                below_anchor_by_pct: below_by,
+            });
+        }
+    }
+    None
+}

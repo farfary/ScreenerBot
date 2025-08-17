@@ -22,7 +22,7 @@ use chrono::{ Duration as ChronoDuration, Utc };
 // 🚀 QUICK PARAMETER REFERENCE:
 //   - MIN_TOKEN_AGE_SECONDS = 3600 (tokens must be at least 1 hour old)
 //   - MAX_TOKEN_AGE_SECONDS = 2592000 (30 days max age)
-//   - POSITION_CLOSE_COOLDOWN_MINUTES = 1440 (24 hour cooldown)
+//   - Position re-entry cooldown moved to positions.rs (centralized)
 //   - MIN_LIQUIDITY_USD = 1000.0 (minimum liquidity requirement)
 //   - MIN_LP_LOCK_PERCENTAGE = 80.0 (minimum LP lock requirement)
 //   - Note: ATH checking moved to trader for intelligent analysis
@@ -42,11 +42,6 @@ pub const MIN_TOKEN_AGE_SECONDS: i64 = 0; // 0 seconds - catch gems the moment t
 /// Maximum token age in seconds
 /// Extended to catch both new gems and established tokens
 pub const MAX_TOKEN_AGE_SECONDS: i64 = 24 * 30 * 24 * 60 * 60; // 2 years for bigger range
-
-// ===== POSITION MANAGEMENT PARAMETERS =====
-/// Cooldown period after closing position before re-entering same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15;
-
 
 // ===== PRICE ACTION FILTERING PARAMETERS =====
 
@@ -1458,41 +1453,7 @@ fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
         });
     }
 
-    // Check for recently closed positions (cooldown period)
-    let cooldown_duration = ChronoDuration::minutes(POSITION_CLOSE_COOLDOWN_MINUTES);
-    let now = Utc::now();
-
-    for position in positions.iter() {
-        if position.mint == token.mint && position.exit_time.is_some() {
-            if let Some(exit_time) = position.exit_time {
-                let time_since_close = now - exit_time;
-                if time_since_close <= cooldown_duration {
-                    let minutes_ago = time_since_close.num_minutes();
-                    let hours_remaining = (POSITION_CLOSE_COOLDOWN_MINUTES - minutes_ago) / 60;
-                    let minutes_remaining = (POSITION_CLOSE_COOLDOWN_MINUTES - minutes_ago) % 60;
-
-                    if is_debug_filtering_enabled() {
-                        log(
-                            LogTag::Filtering,
-                            "DEBUG_POSITION",
-                            &format!(
-                                "❌ Token {} in cooldown: closed {}m ago, {}h {}m remaining",
-                                token.symbol,
-                                minutes_ago,
-                                hours_remaining,
-                                minutes_remaining
-                            )
-                        );
-                    }
-
-                    return Some(FilterReason::RecentlyClosed {
-                        minutes_ago,
-                        cooldown_minutes: POSITION_CLOSE_COOLDOWN_MINUTES,
-                    });
-                }
-            }
-        }
-    }
+    // Re-entry cooldown is enforced in positions.rs during open_position()
 
     if is_debug_filtering_enabled() {
         log(
