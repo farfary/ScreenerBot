@@ -18,9 +18,15 @@ async fn main() {
 
     // Create shared shutdown notification for all background tasks
     let shutdown = Arc::new(Notify::new());
+    // Local trigger for initiating shutdown (from dashboard exit or OS Ctrl+C)
+    let shutdown_trigger = Arc::new(Notify::new());
 
     // Check for dashboard mode
-    if screenerbot::arguments::is_dashboard_enabled() {
+    let dashboard_mode = screenerbot::arguments::is_dashboard_enabled();
+    // Keep a handle so we can await dashboard shutdown at the end
+    let mut dashboard_handle_opt: Option<tokio::task::JoinHandle<()>> = None;
+
+    if dashboard_mode {
         log(LogTag::System, "INFO", "🖥️ Dashboard mode enabled - Starting terminal UI");
         
         // Create dashboard instance and set it globally for log forwarding
@@ -28,11 +34,10 @@ async fn main() {
         screenerbot::dashboard::set_global_dashboard(dashboard.clone());
         
         // Start dashboard in a separate task
-        let shutdown_dashboard = shutdown.clone();
-        let dashboard_shutdown_notifier = shutdown.clone();
+    let shutdown_dashboard = shutdown.clone();
         let dashboard_running = dashboard.running.clone();
         
-        let dashboard_handle = tokio::spawn(async move {
+    let dashboard_handle = tokio::spawn(async move {
             if let Err(e) = screenerbot::dashboard::run_dashboard(shutdown_dashboard).await {
                 // Avoid stderr prints in dashboard context; route to file logger
                 log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
@@ -40,19 +45,31 @@ async fn main() {
             // Clear global dashboard on exit
             screenerbot::dashboard::clear_global_dashboard();
         });
+    dashboard_handle_opt = Some(dashboard_handle);
         
         // Monitor dashboard state and trigger main shutdown when dashboard exits
         let shutdown_monitor = shutdown.clone();
+        let shutdown_trigger_for_monitor = shutdown_trigger.clone();
         tokio::spawn(async move {
             loop {
                 if let Ok(running) = dashboard_running.lock() {
                     if !*running {
                         // Dashboard has exited, trigger main shutdown
                         shutdown_monitor.notify_waiters();
+                        shutdown_trigger_for_monitor.notify_waiters();
                         break;
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
+
+        // Also watch for OS Ctrl+C and trigger unified shutdown in dashboard mode
+        let shutdown_trigger_os = shutdown_trigger.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                log(LogTag::System, "INFO", "Shutdown signal received (Ctrl+C)");
+                shutdown_trigger_os.notify_waiters();
             }
         });
         
@@ -67,63 +84,8 @@ async fn main() {
 
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
 
-    // Set up emergency shutdown handler (second Ctrl+C will force kill)
+    // Emergency shutdown flag (used below after first Ctrl+C)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let emergency_shutdown_clone = emergency_shutdown.clone();
-
-    tokio::spawn(async move {
-        // Wait for second Ctrl+C
-        if tokio::signal::ctrl_c().await.is_ok() {
-            if emergency_shutdown_clone.load(std::sync::atomic::Ordering::SeqCst) {
-                // Check for critical operations before force killing
-                let critical_ops = screenerbot::trader::CriticalOperationGuard::get_active_count();
-                if critical_ops > 0 {
-                    log(
-                        LogTag::System,
-                        "EMERGENCY",
-                        &format!("🚨 SECOND Ctrl+C DETECTED BUT {} CRITICAL TRADING OPERATIONS STILL ACTIVE!", critical_ops)
-                    );
-                    log(
-                        LogTag::System,
-                        "EMERGENCY",
-                        "⚠️  FORCE KILL BLOCKED - Would cause financial loss!"
-                    );
-                    log(
-                        LogTag::System,
-                        "EMERGENCY",
-                        "🔒 Waiting for trading operations to complete..."
-                    );
-                    log(
-                        LogTag::System,
-                        "EMERGENCY",
-                        "💡 Press Ctrl+C a THIRD time to override (DANGEROUS!)"
-                    );
-
-                    // Wait for third Ctrl+C to override protection
-                    if tokio::signal::ctrl_c().await.is_ok() {
-                        log(
-                            LogTag::System,
-                            "EMERGENCY",
-                            "💀 THIRD Ctrl+C - FORCE KILLING DESPITE ACTIVE OPERATIONS!"
-                        );
-                        log(
-                            LogTag::System,
-                            "EMERGENCY",
-                            "⚠️  THIS MAY CAUSE FINANCIAL LOSS OR INCOMPLETE TRADES!"
-                        );
-                        std::process::abort();
-                    }
-                } else {
-                    log(
-                        LogTag::System,
-                        "EMERGENCY",
-                        "Second Ctrl+C detected - FORCE KILLING APPLICATION"
-                    );
-                    std::process::abort(); // Immediate termination
-                }
-            }
-        }
-    });
 
     // Initialize tokens system
     let mut tokens_system = match screenerbot::tokens::initialize_tokens_system().await {
@@ -297,30 +259,32 @@ async fn main() {
         log(LogTag::System, "INFO", "Transaction manager service task ended");
     });
 
-    log(
-        LogTag::System,
-        "INFO",
-        "Waiting for Ctrl+C to shutdown (press Ctrl+C twice for immediate kill)"
-    );
-
-    // Set up Ctrl+C signal handler with better error handling
-    match tokio::signal::ctrl_c().await {
-        Ok(_) => {
-            emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-            log(
-                LogTag::System,
-                "INFO",
-                "Shutdown signal received, initiating graceful shutdown..."
-            );
-            log(
-                LogTag::System,
-                "INFO",
-                "Press Ctrl+C again within 5 seconds to force immediate termination"
-            );
-        }
-        Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to listen for shutdown signal: {}", e));
-            std::process::exit(1);
+    if dashboard_mode {
+        log(LogTag::System, "INFO", "Waiting for exit (q/Esc/Ctrl+C) to shutdown");
+        // Wait until dashboard requests shutdown or OS Ctrl+C arrives
+        shutdown_trigger.notified().await;
+        emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+        log(LogTag::System, "INFO", "Shutdown requested, initiating graceful shutdown...");
+    } else {
+        log(
+            LogTag::System,
+            "INFO",
+            "Waiting for Ctrl+C to shutdown"
+        );
+        // Set up Ctrl+C signal handler with better error handling
+        match tokio::signal::ctrl_c().await {
+            Ok(_) => {
+                emergency_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+                log(
+                    LogTag::System,
+                    "INFO",
+                    "Shutdown signal received, initiating graceful shutdown..."
+                );
+            }
+            Err(e) => {
+                log(LogTag::System, "ERROR", &format!("Failed to listen for shutdown signal: {}", e));
+                std::process::exit(1);
+            }
         }
     }
 
@@ -400,7 +364,7 @@ async fn main() {
 
     // Wait for background tasks to finish with timeout that respects critical operations
     let final_critical_ops = screenerbot::trader::CriticalOperationGuard::get_active_count();
-    let task_timeout_seconds = if final_critical_ops > 0 {
+    let mut task_timeout_seconds = if final_critical_ops > 0 {
         log(
             LogTag::System,
             "CRITICAL",
@@ -408,8 +372,13 @@ async fn main() {
         );
         120 // Extended timeout when critical operations are active
     } else {
-        5 // Normal timeout when no critical operations
+        if dashboard_mode { 20 } else { 10 } // More time in dashboard mode to drain logs/UI
     };
+
+    // If in dashboard mode, ensure timeout is at least as long as dashboard's max wait window
+    if dashboard_mode {
+        task_timeout_seconds = task_timeout_seconds.max(22);
+    }
 
     log(
         LogTag::System,
@@ -565,11 +534,22 @@ async fn main() {
             log(
                 LogTag::System,
                 "WARN",
-                &format!("Tasks did not finish within {} second timeout, forcing immediate exit.", task_timeout_seconds)
+                &format!("Tasks did not finish within {} second timeout.", task_timeout_seconds)
             );
-            // Force immediate termination
-            std::process::abort();
+            if dashboard_mode {
+                log(LogTag::System, "WARN", "Exiting without abort to preserve terminal state (dashboard mode)");
+                // Prefer a normal exit code in dashboard mode to avoid 'zsh: abort'
+                std::process::exit(1);
+            } else {
+                // Force immediate termination
+                std::process::abort();
+            }
         }
+    }
+
+    // Finally, if dashboard was running, wait briefly for it to restore the terminal
+    if let Some(handle) = dashboard_handle_opt.take() {
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), handle).await;
     }
 }
 

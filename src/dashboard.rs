@@ -33,7 +33,7 @@ use once_cell::sync::Lazy;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::positions::{get_open_positions, get_closed_positions, calculate_position_pnl};
-use crate::tokens::get_pool_service;
+use crate::tokens::get_token_price_safe;
 use crate::utils::{get_sol_balance, get_wallet_address};
 use crate::rpc::get_global_rpc_stats;
 use crate::logger::LogTag;
@@ -461,12 +461,12 @@ impl Dashboard {
                 rows_left = rows_left.saturating_sub(1);
             }
             for position in open_positions.iter().take(rows_left) {
-                // Get current price quickly with timeout
-                let current_price = if let Ok(pool_result) = tokio::time::timeout(
-                    Duration::from_millis(100),
-                    async { get_pool_service().get_pool_price(&position.mint, None).await }
+                // Get current price via centralized price service (bounded wait)
+                let current_price = if let Ok(price_opt) = tokio::time::timeout(
+                    Duration::from_millis(150),
+                    get_token_price_safe(&position.mint)
                 ).await {
-                    if let Some(result) = pool_result { result.price_sol.unwrap_or(0.0) } else { 0.0 }
+                    price_opt.unwrap_or(0.0)
                 } else { 0.0 };
                 let (pnl_sol, pnl_percent) = if current_price > 0.0 { calculate_position_pnl(position, Some(current_price)) } else { (0.0, 0.0) };
                 let color = if pnl_percent > 0.0 { Color::Green } else if pnl_percent < 0.0 { Color::Red } else { Color::White };
@@ -699,19 +699,13 @@ impl Dashboard {
             for (i, position) in open_positions.iter().take(available_rows as usize).enumerate() {
                 if current_row >= start_row + height { break; }
                 
-                // Get current price for P&L calculation
-                let current_price = if let Ok(pool_result) = tokio::time::timeout(
-                    Duration::from_millis(100),
-                    async { get_pool_service().get_pool_price(&position.mint, None).await }
+                // Get current price for P&L calculation via centralized price service
+                let current_price = if let Ok(price_opt) = tokio::time::timeout(
+                    Duration::from_millis(150),
+                    get_token_price_safe(&position.mint)
                 ).await {
-                    if let Some(result) = pool_result {
-                        result.price_sol.unwrap_or(0.0)
-                    } else {
-                        0.0
-                    }
-                } else {
-                    0.0
-                };
+                    price_opt.unwrap_or(0.0)
+                } else { 0.0 };
                 
                 let (pnl_sol, pnl_percent) = if current_price > 0.0 {
                     calculate_position_pnl(position, Some(current_price))
