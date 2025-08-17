@@ -26,8 +26,9 @@ use std::path::Path;
 // CONSTANTS
 // =============================================================================
 
-/// Pool cache TTL (5 minutes)
-const POOL_CACHE_TTL_SECONDS: i64 = 300;
+/// Pool cache TTL (10 minutes)
+/// Requirement: cache all tokens pools addresses and infos for maximum 10 minutes
+const POOL_CACHE_TTL_SECONDS: i64 = 600;
 
 /// Price cache TTL (1 second for real-time monitoring)
 const PRICE_CACHE_TTL_SECONDS: i64 = 1;
@@ -40,6 +41,11 @@ const PRICE_HISTORY_CACHE_DIR: &str = CACHE_PRICES_DIR;
 const PRICE_HISTORY_MAX_AGE_HOURS: i64 = 2; // 2 hours maximum
 const PRICE_HISTORY_SAVE_INTERVAL_SECONDS: u64 = 5; // Save every 5 seconds
 const PRICE_HISTORY_MAX_ENTRIES: usize = 1440; // Max entries (2 hours * 60 min * 12 entries/min = 1440)
+
+/// Pools infos disk cache file
+const POOLS_INFO_CACHE_FILE: &str = "data/pools_infos.json";
+/// Pools infos auto-save interval (seconds)
+const POOLS_INFO_SAVE_INTERVAL_SECONDS: u64 = 30;
 
 /// SOL mint address
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
@@ -312,13 +318,11 @@ impl TokenPriceHistoryCache {
         true // Price was recorded
     }
 
-    /// Clean up entries older than 2 hours and enforce max entries limit
+    /// Remove old entries by age and cap total entries
     pub fn cleanup_old_entries(&mut self) {
         let cutoff_time = Utc::now() - chrono::Duration::hours(PRICE_HISTORY_MAX_AGE_HOURS);
-
-        // Remove entries older than 2 hours
+        // Remove entries older than cutoff
         self.entries.retain(|entry| entry.timestamp > cutoff_time);
-
         // Enforce max entries limit (keep newest entries)
         if self.entries.len() > PRICE_HISTORY_MAX_ENTRIES {
             let excess = self.entries.len() - PRICE_HISTORY_MAX_ENTRIES;
@@ -501,6 +505,65 @@ impl PoolPriceService {
             stats: Arc::new(RwLock::new(PoolServiceStats::default())),
         };
 
+        // Load existing pools infos cache from disk on startup
+        tokio::spawn({
+            let pool_cache = service.pool_cache.clone();
+            async move {
+                match Self::load_pools_info_cache_from_disk(&pool_cache).await {
+                    Ok(loaded) => {
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "POOLS_INFO_LOAD",
+                                &format!(
+                                    "Loaded {} tokens of pools infos from {} (<= {}s old)",
+                                    loaded,
+                                    POOLS_INFO_CACHE_FILE,
+                                    POOL_CACHE_TTL_SECONDS
+                                )
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Pool,
+                            "POOLS_INFO_LOAD_ERROR",
+                            &format!("Failed to load pools infos cache: {}", e)
+                        );
+                    }
+                }
+            }
+        });
+
+        // Start periodic auto-save and cleanup for pools infos cache
+        tokio::spawn({
+            let pool_cache = service.pool_cache.clone();
+            async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(POOLS_INFO_SAVE_INTERVAL_SECONDS));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = Self::save_pools_info_cache_to_disk(&pool_cache).await {
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "POOLS_INFO_SAVE_ERROR",
+                                &format!("Failed to save pools infos cache: {}", e)
+                            );
+                        }
+                    }
+                    // Cleanup expired entries
+                    let cleaned = Self::cleanup_expired_pools_infos_internal(&pool_cache).await;
+                    if cleaned > 0 && is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "POOLS_INFO_CLEANUP",
+                            &format!("Removed {} expired tokens from pools infos cache", cleaned)
+                        );
+                    }
+                }
+            }
+        });
+
         // Load existing price history from disk on startup
         tokio::spawn({
             let disk_price_history = service.disk_price_history.clone();
@@ -522,6 +585,131 @@ impl PoolPriceService {
         });
 
         service
+    }
+
+    /// Load pools infos cache from disk (only keep entries within TTL)
+    async fn load_pools_info_cache_from_disk(
+        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
+    ) -> Result<usize, String> {
+        // Read file
+        let path = Path::new(POOLS_INFO_CACHE_FILE);
+        if !path.exists() {
+            return Ok(0);
+        }
+        let data = fs::read_to_string(path).map_err(|e| format!("Read error: {}", e))?;
+        let raw: HashMap<String, Vec<CachedPoolInfo>> = serde_json::from_str(&data)
+            .map_err(|e| format!("Deserialize error: {}", e))?;
+
+        // Filter out expired entries
+        let mut kept: HashMap<String, Vec<CachedPoolInfo>> = HashMap::new();
+        let now = Utc::now();
+        for (mint, pools) in raw.into_iter() {
+            let mut fresh: Vec<CachedPoolInfo> = pools
+                .into_iter()
+                .filter(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS)
+                .collect();
+            if !fresh.is_empty() {
+                // Normalize cached_at to now to extend life only up to TTL behavior from load time
+                for p in &mut fresh {
+                    // keep original cached_at; TTL check already applied
+                    let _ = &p.cached_at;
+                }
+                kept.insert(mint, fresh);
+            }
+        }
+
+        let count = kept.len();
+        let mut cache = pool_cache.write().await;
+        *cache = kept;
+        Ok(count)
+    }
+
+    /// Save pools infos cache to disk
+    async fn save_pools_info_cache_to_disk(
+        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
+    ) -> Result<(), String> {
+        // Ensure data directory exists
+        if let Some(parent) = Path::new(POOLS_INFO_CACHE_FILE).parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create data dir: {}", e))?;
+        }
+        // Clone under read lock for minimal hold time
+        let snapshot: HashMap<String, Vec<CachedPoolInfo>> = {
+            let cache = pool_cache.read().await;
+            cache.clone()
+        };
+
+        let json = serde_json::to_string_pretty(&snapshot)
+            .map_err(|e| format!("Serialize error: {}", e))?;
+        fs::write(POOLS_INFO_CACHE_FILE, json).map_err(|e| format!("Write error: {}", e))?;
+        Ok(())
+    }
+
+    /// Internal cleanup helper: remove tokens whose pools infos are all expired
+    async fn cleanup_expired_pools_infos_internal(
+        pool_cache: &Arc<RwLock<HashMap<String, Vec<CachedPoolInfo>>>>
+    ) -> usize {
+        let mut cache = pool_cache.write().await;
+        let now = Utc::now();
+        let mut to_remove: Vec<String> = Vec::new();
+        for (mint, pools) in cache.iter() {
+            let any_fresh = pools.iter().any(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS);
+            if !any_fresh {
+                to_remove.push(mint.clone());
+            }
+        }
+        let removed = to_remove.len();
+        for mint in to_remove {
+            cache.remove(&mint);
+        }
+        removed
+    }
+
+    /// Public cleanup: remove expired and persist file
+    pub async fn cleanup_expired_pools_infos(&self) -> usize {
+        let removed = Self::cleanup_expired_pools_infos_internal(&self.pool_cache).await;
+        let _ = Self::save_pools_info_cache_to_disk(&self.pool_cache).await;
+        removed
+    }
+
+    /// Get tokens with pools infos updated within given seconds (e.g., last 10 min)
+    pub async fn get_tokens_with_recent_pools_infos(&self, window_seconds: i64) -> Vec<String> {
+        let cache = self.pool_cache.read().await;
+        let now = Utc::now();
+        cache
+            .iter()
+            .filter_map(|(mint, pools)| {
+                let recent = pools.iter().any(|p| (now - p.cached_at).num_seconds() <= window_seconds);
+                if recent { Some(mint.clone()) } else { None }
+            })
+            .collect()
+    }
+
+    /// Refresh pools infos for tokens that are missing or expired; limit the number processed
+    pub async fn refresh_pools_infos_for_tokens(&self, mints: &[String], max_tokens: usize) -> usize {
+        let now = Utc::now();
+        // Determine which tokens need refresh
+        let mut to_refresh: Vec<String> = Vec::new();
+        {
+            let cache = self.pool_cache.read().await;
+            for mint in mints {
+                match cache.get(mint) {
+                    Some(pools) if !pools.is_empty() => {
+                        let fresh = pools.iter().any(|p| (now - p.cached_at).num_seconds() <= POOL_CACHE_TTL_SECONDS);
+                        if !fresh { to_refresh.push(mint.clone()); }
+                    }
+                    _ => to_refresh.push(mint.clone()),
+                }
+                if to_refresh.len() >= max_tokens { break; }
+            }
+        }
+
+        let mut updated_count = 0usize;
+        for mint in to_refresh {
+            if self.refresh_pools_infos(&mint).await.is_ok() {
+                updated_count += 1;
+            }
+        }
+        updated_count
     }
 
     /// Load all price history caches from disk on startup
@@ -1559,7 +1747,32 @@ impl PoolPriceService {
             }
         }
 
+        // Persist pools infos cache to disk (best-effort)
+        if let Err(e) = Self::save_pools_info_cache_to_disk(&self.pool_cache).await {
+            if is_debug_pool_prices_enabled() {
+                log(
+                    LogTag::Pool,
+                    "POOLS_INFO_SAVE_ERROR",
+                    &format!("Failed to save pools infos cache after update: {}", e)
+                );
+            }
+        }
+
         Ok(cached_pools)
+    }
+
+    /// Get cached pools infos for a token (if available and not necessarily fresh)
+    pub async fn get_cached_pools_infos(&self, token_address: &str) -> Option<Vec<CachedPoolInfo>> {
+        let cache = self.pool_cache.read().await;
+        cache.get(token_address).cloned()
+    }
+
+    /// Force refresh pools infos for a token (honors rate-limits internally)
+    pub async fn refresh_pools_infos(&self, token_address: &str) -> Result<Vec<CachedPoolInfo>, String> {
+        let result = self.fetch_and_cache_pools(token_address).await?;
+        // Persist best-effort
+        let _ = Self::save_pools_info_cache_to_disk(&self.pool_cache).await;
+        Ok(result)
     }
 
     /// Calculate pool price for a token
@@ -2169,6 +2382,34 @@ pub async fn cleanup_old_price_history_caches() -> Result<usize, String> {
     );
 
     Ok(cleaned_count)
+}
+
+// =============================================================================
+// GLOBAL HELPERS FOR POOLS INFOS CACHE
+// =============================================================================
+
+/// Get cached pools infos for a token, if any (not guaranteed fresh)
+pub async fn get_cached_pools_infos_safe(token_address: &str) -> Option<Vec<CachedPoolInfo>> {
+    let service = get_pool_service();
+    service.get_cached_pools_infos(token_address).await
+}
+
+/// Refresh pools infos for a token (rate-limited internally) and return updated list
+pub async fn refresh_pools_infos_safe(token_address: &str) -> Result<Vec<CachedPoolInfo>, String> {
+    let service = get_pool_service();
+    service.refresh_pools_infos(token_address).await
+}
+
+/// Get tokens which have pools infos within the last `window_seconds`
+pub async fn get_tokens_with_recent_pools_infos_safe(window_seconds: i64) -> Vec<String> {
+    let service = get_pool_service();
+    service.get_tokens_with_recent_pools_infos(window_seconds).await
+}
+
+/// Refresh pools infos for a list of tokens (only those missing/expired). Returns count updated.
+pub async fn refresh_pools_infos_for_tokens_safe(mints: &[String], max_tokens: usize) -> usize {
+    let service = get_pool_service();
+    service.refresh_pools_infos_for_tokens(mints, max_tokens).await
 }
 
 // =============================================================================

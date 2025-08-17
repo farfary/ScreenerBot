@@ -15,6 +15,10 @@ use crate::tokens::dexscreener::{
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::blacklist::{ check_and_track_liquidity, is_token_blacklisted };
 use crate::tokens::price::{ get_priority_tokens_safe, update_tokens_prices_safe };
+use crate::tokens::pool::{
+    refresh_pools_infos_for_tokens_safe,
+    get_tokens_with_recent_pools_infos_safe,
+};
 use crate::tokens::types::*;
 use tokio::time::{ sleep, Duration };
 use tokio::sync::Semaphore;
@@ -35,6 +39,9 @@ pub const MONITOR_HIGH_LIQUIDITY_THRESHOLD: f64 = 50000.0;
 
 /// Maximum number of tokens to monitor per cycle (reduced for 2-second intervals)
 pub const MAX_TOKENS_PER_MONITOR_CYCLE: usize = 150;
+
+/// Window for "recent pools infos" refresh (seconds)
+pub const MONITOR_RECENT_POOLS_WINDOW_SECONDS: i64 = 600; // 10 minutes
 
 // =============================================================================
 // ENHANCED TOKEN MONITOR
@@ -107,7 +114,33 @@ impl TokenMonitor {
             );
 
             // Process priority tokens first
-            self.process_priority_tokens(priority_mints).await?;
+            self.process_priority_tokens(priority_mints.clone()).await?;
+
+            // Pre-warm/refresh pools infos for priority tokens without exceeding rate limits
+            // Limit refreshes per cycle to avoid API rate caps; 2 API calls worth of tokens
+            let refresh_budget = MAX_TOKENS_PER_API_CALL * 2;
+            let refreshed = refresh_pools_infos_for_tokens_safe(&priority_mints, refresh_budget).await;
+            if refreshed > 0 && is_debug_monitor_enabled() {
+                log(
+                    LogTag::Monitor,
+                    "POOLS_INFO_REFRESH",
+                    &format!("Refreshed pools infos for {} priority tokens", refreshed)
+                );
+            }
+
+            // Refresh pools infos for tokens seen in the last 10 minutes (bounded budget)
+            let recent_mints = get_tokens_with_recent_pools_infos_safe(MONITOR_RECENT_POOLS_WINDOW_SECONDS).await;
+            if !recent_mints.is_empty() {
+                let recent_budget = MAX_TOKENS_PER_API_CALL / 2; // keep it light per cycle
+                let refreshed_recent = refresh_pools_infos_for_tokens_safe(&recent_mints, recent_budget).await;
+                if refreshed_recent > 0 && is_debug_monitor_enabled() {
+                    log(
+                        LogTag::Monitor,
+                        "POOLS_INFO_RECENT_REFRESH",
+                        &format!("Refreshed pools infos for {} recently-seen tokens", refreshed_recent)
+                    );
+                }
+            }
 
             // Also check for new entry opportunities with remaining API budget
             self.monitor_for_new_entries().await?;
@@ -196,6 +229,10 @@ impl TokenMonitor {
                                     &format!("Priority: Updated {} tokens", updated_tokens.len())
                                 );
                             }
+
+                            // Hint pool service with tokens we just updated so their pools infos stay hot
+                            let mints: Vec<String> = chunk.iter().cloned().collect();
+                            let _ = refresh_pools_infos_for_tokens_safe(&mints, MAX_TOKENS_PER_API_CALL).await;
                         }
                     }
                 }
@@ -341,6 +378,8 @@ impl TokenMonitor {
                         } else {
                             // Update price service cache
                             update_tokens_prices_safe(&mints).await;
+                            // Warm pools infos cache for these tokens within budget
+                            let _ = refresh_pools_infos_for_tokens_safe(&mints, MAX_TOKENS_PER_API_CALL / 2).await;
                             updated += updated_tokens.len();
 
                             // Only log significant updates to reduce noise
