@@ -174,7 +174,7 @@ fn is_near_recent_top(
 
 /// Deep drop entry decision with dynamic liquidity-based scaling
 /// Returns true if token shows deep drop pattern for immediate entry
-pub async fn should_buy(token: &Token) -> bool {
+pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     if is_debug_entry_enabled() {
         log(LogTag::Entry, "ENTRY_CHECK_START", &format!("🔍 Analyzing {} ({})", token.symbol, &token.mint[..8]));
     }
@@ -184,13 +184,13 @@ pub async fn should_buy(token: &Token) -> bool {
         if is_debug_entry_enabled() {
             log(LogTag::Entry, "BLACKLIST_REJECT", &format!("❌ {} blacklisted", token.symbol));
         }
-        return false;
+    return (false, 0.0, "Token blacklisted or excluded".to_string());
     }
 
     let pool_service = get_pool_service();
     
     if !pool_service.check_token_availability(&token.mint).await {
-        return false;
+        return (false, 0.0, "Pool not available".to_string());
     }
 
     // Get current pool price with age validation AND liquidity data
@@ -205,7 +205,7 @@ pub async fn should_buy(token: &Token) -> bool {
                             log(LogTag::Entry, "DATA_AGE_REJECT", &format!("❌ {} data too old: {}min > {}min", 
                                 token.symbol, data_age_minutes, MAX_DATA_AGE_MINUTES));
                         }
-                        return false;
+                        return (false, 0.0, format!("Pool data too old: {}min > {}min", data_age_minutes, MAX_DATA_AGE_MINUTES));
                     }
                     
                     // Get liquidity or fallback to token data
@@ -224,7 +224,7 @@ pub async fn should_buy(token: &Token) -> bool {
                     if is_debug_entry_enabled() {
                         log(LogTag::Entry, "PRICE_INVALID", &format!("❌ {} invalid pool price", token.symbol));
                     }
-                    return false;
+                    return (false, 0.0, "Invalid pool price".to_string());
                 }
             }
         }
@@ -232,7 +232,7 @@ pub async fn should_buy(token: &Token) -> bool {
             if is_debug_entry_enabled() {
                 log(LogTag::Entry, "NO_POOL_DATA", &format!("❌ {} no pool data available", token.symbol));
             }
-            return false;
+            return (false, 0.0, "No pool data available".to_string());
         }
     };
 
@@ -244,7 +244,7 @@ pub async fn should_buy(token: &Token) -> bool {
                 log(LogTag::Entry, "NANO_LIQUIDITY_REJECT", &format!("❌ {} liquidity ${:.0} too small (under $100)", 
                     token.symbol, liquidity_usd));
             }
-            return false;
+            return (false, 0.0, format!("Liquidity ${:.0} too small (under $100)", liquidity_usd));
         }
     } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
         // Allow mega tokens (even over $10M) - no upper limit rejection
@@ -275,7 +275,7 @@ pub async fn should_buy(token: &Token) -> bool {
         if is_debug_entry_enabled() {
             log(LogTag::Entry, "NEAR_TOP_REJECT", &format!("🚫 {} rejected: price too close to 15-min high (safety filter)", token.symbol));
         }
-        return false;
+    return (false, 0.0, "Price too close to 15-min high (safety filter)".to_string());
     }
     
     // CORE LOGIC: Dynamic drop detection based on liquidity
@@ -299,14 +299,32 @@ pub async fn should_buy(token: &Token) -> bool {
                 )
             );
         }
-        return true;
+        // Confidence scoring (merged from should_buy_with_confidence)
+        let confidence = if liquidity_usd < TARGET_LIQUIDITY_MIN {
+            CONFIDENCE_BELOW_RANGE
+        } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
+            CONFIDENCE_ABOVE_RANGE
+        } else {
+            let position_in_range = (liquidity_usd - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
+            let distance_from_center = (position_in_range - 0.5).abs() * 2.0; // 0.0 = center, 1.0 = edges
+            let base_confidence = CONFIDENCE_CENTER_MAX - (distance_from_center * CONFIDENCE_CENTER_ADJUSTMENT);
+            base_confidence.max(CONFIDENCE_EDGE_MIN).min(CONFIDENCE_CENTER_MAX)
+        };
+
+        if is_debug_entry_enabled() {
+            log(LogTag::Entry, "CONFIDENCE_SCORE", &format!("🎯 Confidence: {:.1}% for ${:.0}k liquidity", 
+                confidence, liquidity_usd / THOUSAND_DIVISOR));
+        }
+
+        let reason = format!("{} (${:.0}k liquidity)", entry_reason, liquidity_usd / THOUSAND_DIVISOR);
+        return (true, confidence, reason);
     }
 
     if is_debug_entry_enabled() {
         log(LogTag::Entry, "NO_ENTRY_SIGNAL", &format!("❌ {} no dynamic drop signal detected", token.symbol));
     }
 
-    false
+    (false, 0.0, "No dynamic drop signal".to_string())
 }
 
 /// Get profit target range based on pool liquidity (DYNAMIC TARGETING)
@@ -750,59 +768,4 @@ async fn analyze_deep_drop_entry(
     None
 }
 
-/// Enhanced entry decision with liquidity-based confidence scoring 
-/// Returns (should_enter, confidence_score, reason)
-pub async fn should_buy_with_confidence(token: &Token) -> (bool, f64, String) {
-    // Check blacklist first
-    if is_token_excluded_from_trading(&token.mint) {
-        return (false, 0.0, "Token blacklisted or excluded".to_string());
-    }
-
-    // Additional near-top safety check for confidence-based entries
-    let pool_service = get_pool_service();
-    
-    if let Some(pool_result) = pool_service.get_pool_price(&token.mint, None).await {
-        if let Some(current_price) = pool_result.price_sol {
-            let liquidity_usd = pool_result.liquidity_usd.max(
-                token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0)
-            );
-            let price_history = pool_service.get_recent_price_history(&token.mint).await;
-            
-            if is_near_recent_top(current_price, &price_history, liquidity_usd) {
-                return (false, 0.0, "Price too close to recent 15-min high (safety filter)".to_string());
-            }
-        }
-    }
-
-    // Use the main should_buy logic for entry decision
-    let should_enter = should_buy(token).await;
-    
-    if should_enter {
-        // Calculate confidence based on liquidity positioning within our target range
-        let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd).unwrap_or(0.0);
-        
-        let confidence = if liquidity_usd < TARGET_LIQUIDITY_MIN {
-            CONFIDENCE_BELOW_RANGE // Below our target range = lower confidence
-        } else if liquidity_usd > TARGET_LIQUIDITY_MAX {
-            CONFIDENCE_ABOVE_RANGE // Above our target range = moderate confidence  
-        } else {
-            // Within our target range - calculate position-based confidence
-            let position_in_range = (liquidity_usd - TARGET_LIQUIDITY_MIN) / (TARGET_LIQUIDITY_MAX - TARGET_LIQUIDITY_MIN);
-            
-            // SWEET SPOT: Middle of our range gets highest confidence
-            let distance_from_center = (position_in_range - 0.5).abs() * 2.0; // 0.0 = center, 1.0 = edges
-            let base_confidence = CONFIDENCE_CENTER_MAX - (distance_from_center * CONFIDENCE_CENTER_ADJUSTMENT); // 85% at center, 70% at edges
-            
-            base_confidence.max(CONFIDENCE_EDGE_MIN).min(CONFIDENCE_CENTER_MAX)
-        };
-        
-        if is_debug_entry_enabled() {
-            log(LogTag::Entry, "CONFIDENCE_SCORE", &format!("🎯 Confidence: {:.1}% for ${:.0}k liquidity", 
-                confidence, liquidity_usd / THOUSAND_DIVISOR));
-        }
-        
-        (true, confidence, format!("Dynamic drop detected (${:.0}k liquidity)", liquidity_usd / THOUSAND_DIVISOR))
-    } else {
-        (false, 0.0, "No dynamic drop signal".to_string())
-    }
-}
+// Enhanced entry decision with liquidity-based confidence scoring merged into should_buy

@@ -425,20 +425,21 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     }
 
     // Simple entry analysis
-    let is_safe_for_entry = should_buy(token).await;
+    let (is_safe_for_entry, confidence_score, entry_reason) = should_buy(token).await;
 
     if !is_safe_for_entry {
         if is_debug_trader_enabled() {
             log(
                 LogTag::Trader,
                 "ENTRY_REJECT",
-                &format!("❌ {} rejected by entry analysis", token.symbol)
+                &format!("❌ {} rejected by entry analysis: {}", token.symbol, entry_reason)
             );
         }
         return 0.0;
     }
 
     // Simple urgency calculation based on price drop
+    // Incorporate confidence_score mildly into urgency
     let base_urgency = if price_drop_percent >= 10.0 {
         1.5 // High urgency for big drops
     } else if price_drop_percent >= 5.0 {
@@ -448,6 +449,7 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
     } else {
         0.8 // Very low urgency for tiny/no drops
     };
+    let adjusted_urgency = (base_urgency + (confidence_score / 100.0) * 0.2).min(1.8);
 
     if is_debug_trader_enabled() {
         log(
@@ -462,7 +464,7 @@ pub async fn should_buy_enhanced(token: &Token, current_price: f64, prev_price: 
         );
     }
 
-    base_urgency
+    adjusted_urgency
 }
 
 /// Background task to monitor new tokens for entry opportunities
