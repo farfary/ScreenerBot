@@ -55,6 +55,7 @@ use bs58;
 use futures;
 use once_cell::sync::Lazy;
 use std::sync::{Arc as StdArc, Mutex as StdMutex};
+use url::Url;
 
 /// Structure to hold token account information
 #[derive(Debug)]
@@ -333,6 +334,83 @@ impl From<serde_json::Error> for SwapError {
     fn from(err: serde_json::Error) -> Self {
         SwapError::ParseError(format!("JSON parsing error: {}", err))
     }
+}
+
+/// Return the SPL Token program id (legacy Tokenkeg)
+pub fn spl_token_program_id() -> &'static str {
+    // SPL Token Program (legacy)
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+}
+
+/// Derive a websocket URL from the configured HTTP RPC URL
+/// Examples:
+///  - https://api.mainnet-beta.solana.com -> wss://api.mainnet-beta.solana.com
+///  - http://localhost:8899 -> ws://localhost:8899
+pub fn get_websocket_url() -> Result<String, SwapError> {
+    let cfg = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let http = cfg.rpc_url;
+    let parsed = Url::parse(&http).map_err(|e| SwapError::ConfigError(format!("Invalid RPC URL: {}", e)))?;
+    let ws_scheme = match parsed.scheme() {
+        "https" => "wss",
+        "http" => "ws",
+        other => {
+            // Default to secure websocket for unknown schemes
+            if is_debug_rpc_enabled() {
+                log(LogTag::Rpc, "WS_URL_SCHEME_WARN", &format!("Unknown scheme '{}', defaulting to wss", other));
+            }
+            "wss"
+        }
+    };
+    let mut ws_url = parsed.clone();
+    ws_url.set_scheme(ws_scheme).map_err(|_| SwapError::ConfigError("Failed to set WS scheme".to_string()))?;
+    Ok(ws_url.to_string())
+}
+
+/// Derive a websocket URL from the configured PREMIUM HTTP RPC URL
+/// Examples:
+///  - https://premium.rpc.provider -> wss://premium.rpc.provider
+///  - http://localhost:8899 -> ws://localhost:8899
+pub fn get_premium_websocket_url() -> Result<String, SwapError> {
+    let cfg = read_configs().map_err(|e| SwapError::ConfigError(e.to_string()))?;
+    let http = cfg.rpc_url_premium;
+    let parsed = Url::parse(&http).map_err(|e| SwapError::ConfigError(format!("Invalid PREMIUM RPC URL: {}", e)))?;
+    let ws_scheme = match parsed.scheme() {
+        "https" => "wss",
+        "http" => "ws",
+        other => {
+            if is_debug_rpc_enabled() {
+                log(LogTag::Rpc, "WS_URL_SCHEME_WARN", &format!("Unknown scheme '{}' for premium URL, defaulting to wss", other));
+            }
+            "wss"
+        }
+    };
+    let mut ws_url = parsed.clone();
+    ws_url.set_scheme(ws_scheme).map_err(|_| SwapError::ConfigError("Failed to set WS scheme (premium)".to_string()))?;
+    Ok(ws_url.to_string())
+}
+
+/// Build a JSON-RPC logsSubscribe payload for mentions filter
+pub fn build_logs_subscribe_payload(mentions: &[&str]) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "logsSubscribe",
+        "params": [
+            { "mentions": mentions },
+            { "commitment": "finalized" }
+        ]
+    })
+}
+
+/// Check if a logs array contains an InitializeMint instruction
+pub fn logs_contains_initialize_mint(logs: &[String]) -> bool {
+    logs.iter().any(|l| l.contains("InitializeMint"))
+}
+
+/// Check if a logs array contains an InitializeAccount instruction (including v3)
+pub fn logs_contains_initialize_account(logs: &[String]) -> bool {
+    logs.iter().any(|l| l.contains("InitializeAccount"))
+        || logs.iter().any(|l| l.contains("InitializeAccount3"))
 }
 
 /// Converts lamports to SOL amount
@@ -2900,6 +2978,50 @@ impl RpcClient {
                 "Failed to get transaction details from main RPC".to_string()
             )
         )
+    }
+
+    /// Premium-only variant of get_transaction_details, bypassing main RPC and fallbacks
+    pub async fn get_transaction_details_premium(
+        &self,
+        transaction_signature: &str
+    ) -> Result<TransactionDetails, SwapError> {
+        let rpc_payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTransaction",
+            "params": [
+                transaction_signature,
+                { "encoding": "json", "maxSupportedTransactionVersion": 0 }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        if let Some(premium_url) = &self.premium_url {
+            self.record_call_for_url(premium_url, "getTransaction");
+            let response = client
+                .post(premium_url)
+                .header("Content-Type", "application/json")
+                .json(&rpc_payload)
+                .send()
+                .await
+                .map_err(SwapError::NetworkError)?;
+
+            if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                if let Some(error) = rpc_response.get("error") {
+                    return Err(SwapError::TransactionError(format!("Premium RPC error: {:?}", error)));
+                }
+                if let Some(result) = rpc_response.get("result") {
+                    if result.is_null() {
+                        return Err(SwapError::TransactionError("Transaction not found or not confirmed yet".to_string()));
+                    }
+                    let transaction_details: TransactionDetails = serde_json::from_value(result.clone())
+                        .map_err(|e| SwapError::InvalidResponse(format!("Failed to parse transaction details: {}", e)))?;
+                    return Ok(transaction_details);
+                }
+            }
+            return Err(SwapError::TransactionError("Invalid premium RPC response".to_string()));
+        }
+        Err(SwapError::TransactionError("Premium RPC URL not configured".to_string()))
     }
 
     /// Gets the associated token account address for a wallet and mint

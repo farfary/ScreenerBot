@@ -97,7 +97,7 @@ spl-token-confidential-transfer-ciphertext-arithmetic = "0.3.0"
 axum = { version = "0.7", features = ["ws"], default-features = false, optional = true }
 tower = { version = "0.4", default-features = false, optional = true }
 tower-http = { version = "0.5", features = ["cors"], default-features = false, optional = true }
-tokio-tungstenite = { version = "0.21", features = ["__rustls-tls"], default-features = false, optional = true }
+tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"], default-features = false, optional = true }
 futures = "0.3"
 futures-util = "0.3"
 url = "2.4"
