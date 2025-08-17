@@ -8,10 +8,13 @@ use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
 use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
+use crate::transactions::{TransactionsManager, SwapPnLInfo};
+use crate::utils::get_wallet_address;
 // New pool price system is now integrated via background services
 
 use chrono::{ Utc };
 use std::sync::Arc;
+use std::str::FromStr;
 use tokio::sync::Notify;
 use std::time::{Duration, Instant};
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
@@ -188,6 +191,32 @@ pub struct RpcOverviewDisplay {
     uptime: String,
 }
 
+/// Display structure for recent swaps table
+#[derive(Tabled)]
+pub struct RecentSwapDisplay {
+    #[tabled(rename = "📅 Date")]
+    date: String,
+    #[tabled(rename = "⏰ Time")]
+    time: String,
+    #[tabled(rename = "🔑 Signature")]
+    signature: String,
+    #[tabled(rename = "🔄 Type")]
+    swap_type: String,
+    #[tabled(rename = "🏷️ Token")]
+    token: String,
+    #[tabled(rename = "💰 SOL")]
+    sol_amount: String,
+    #[tabled(rename = "🪙 Tokens")]
+    token_amount: String,
+    #[tabled(rename = "💲 Price")]
+    price: String,
+    #[tabled(rename = "🌐 Router")]
+    router: String,
+    #[tabled(rename = "💳 Fee")]
+    fee: String,
+    #[tabled(rename = "🎯 Status")]
+    status: String,
+}
 
 
 /// Display structure for wallet transaction statistics
@@ -751,6 +780,32 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", pool_table));
 
+    // Build Recent Swaps table (last 20)
+    if is_debug_summary_enabled() {
+        log(LogTag::Summary, "DEBUG", "Fetching recent swaps for summary");
+    }
+    let swaps_start = Instant::now();
+    match build_recent_swaps_table().await {
+        Ok(swaps_table) => {
+            summary_output.push_str(&swaps_table);
+            if is_debug_summary_enabled() {
+                log(
+                    LogTag::Summary,
+                    "DEBUG",
+                    &format!(
+                        "Recent swaps table built in {} ms",
+                        swaps_start.elapsed().as_millis()
+                    )
+                );
+            }
+        }
+        Err(e) => {
+            if is_debug_summary_enabled() {
+                log(LogTag::Summary, "DEBUG", &format!("Failed to build recent swaps table: {}", e));
+            }
+        }
+    }
+
     
 
     // Build RPC statistics tables if available
@@ -847,6 +902,38 @@ fn calculate_win_loss_streaks(pnl_values: &[f64]) -> (usize, usize) {
     }
 
     (best_win_streak, worst_loss_streak)
+}
+
+/// Build recent swaps table and return as string
+async fn build_recent_swaps_table() -> Result<String, String> {
+    let wallet_address_str = get_wallet_address()
+        .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet_address_str)
+        .map_err(|e| format!("Invalid wallet address: {}", e))?;
+    let mut manager = TransactionsManager::new(wallet_pubkey).await?;
+    
+    // Get last 20 swaps
+    let swaps = manager.get_all_swap_transactions_limited(Some(20)).await?;
+    
+    if swaps.is_empty() {
+        return Ok("\n📈 Recent Swaps (Last 20)\nNo swaps found\n\n".to_string());
+    }
+
+    let recent_swaps: Vec<RecentSwapDisplay> = swaps
+        .iter()
+        .rev() // Most recent first
+        .map(|swap| RecentSwapDisplay::from_swap_pnl_info(swap))
+        .collect();
+
+    let mut output = String::new();
+    output.push_str("\n📈 Recent Swaps (Last 20)\n");
+    let mut swaps_table = Table::new(recent_swaps);
+    swaps_table
+        .with(Style::rounded())
+        .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    output.push_str(&format!("{}\n", swaps_table));
+    
+    Ok(output)
 }
 
 /// Build RPC usage statistics tables and return as string
@@ -1127,6 +1214,65 @@ impl OpenPositionDisplay {
             fees_sol: format!("{:.6}", total_fees),
             duration,
             status,
+        }
+    }
+}
+
+impl RecentSwapDisplay {
+    pub fn from_swap_pnl_info(swap: &SwapPnLInfo) -> Self {
+        // Helper function to shorten signatures like in the transactions module
+        let shorten_signature = |signature: &str| -> String {
+            if signature.len() <= 16 {
+                signature.to_string()
+            } else {
+                format!("{}...{}", &signature[..8], &signature[signature.len()-4..])
+            }
+        };
+
+        let shortened_signature = shorten_signature(&swap.signature);
+
+        // Apply intuitive sign conventions for display
+        let (display_sol_amount, display_token_amount) = if swap.swap_type == "Buy" {
+            // Buy: SOL spent (negative), tokens received (positive)
+            (-swap.sol_amount, swap.token_amount.abs())
+        } else {
+            // Sell: SOL received (positive), tokens sold (negative)  
+            (swap.sol_amount, -swap.token_amount.abs())
+        };
+
+        // Color coding for better readability
+        let type_display = if swap.swap_type == "Buy" {
+            "🟢 Buy".to_string()  // Green for buy
+        } else {
+            "🔴 Sell".to_string() // Red for sell
+        };
+
+        // Format SOL amount with sign
+        let sol_formatted = if display_sol_amount >= 0.0 {
+            format!("+{:.6}", display_sol_amount)
+        } else {
+            format!("{:.6}", display_sol_amount)
+        };
+
+        // Format token amount with sign
+        let token_formatted = if display_token_amount >= 0.0 {
+            format!("+{:.2}", display_token_amount)
+        } else {
+            format!("{:.2}", display_token_amount)
+        };
+
+        Self {
+            date: swap.timestamp.format("%m-%d").to_string(),
+            time: swap.timestamp.format("%H:%M").to_string(),
+            signature: shortened_signature,
+            swap_type: type_display,
+            token: swap.token_symbol[..15.min(swap.token_symbol.len())].to_string(),
+            sol_amount: sol_formatted,
+            token_amount: token_formatted,
+            price: format!("{:.9}", swap.calculated_price_sol),
+            router: swap.router[..12.min(swap.router.len())].to_string(),
+            fee: format!("{:.6}", swap.fee_sol),
+            status: swap.status.clone(),
         }
     }
 }

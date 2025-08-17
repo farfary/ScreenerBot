@@ -1027,6 +1027,13 @@ impl TransactionsManager {
                         ));
                     }
                     
+                    // Immediately verify positions affected by this transaction so UI updates fast
+                    if let Err(e) = self.check_and_verify_position_transactions().await {
+                        log(LogTag::Transactions, "PRIORITY", &format!(
+                            "Post-process verification failed for {}: {}", &signature[..8], e
+                        ));
+                    }
+
                     // Remove from priority since it's now processed
                     self.priority_transactions.remove(&signature);
                 }
@@ -1664,7 +1671,14 @@ impl TransactionsManager {
             if let Some(ref entry_sig) = position.entry_transaction_signature {
                 if !position.transaction_entry_verified {
                     if let Ok(entry_tx) = crate::transactions::get_transaction(entry_sig).await {
-                        if let Some(tx) = entry_tx {
+                        if let Some(mut tx) = entry_tx {
+                            // If loaded from cache, calculated fields are stripped. Recalculate now.
+                            if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
+                                log(LogTag::Transactions, "POSITION_VERIFY", &format!(
+                                    "⚠️ Failed to recalc entry {} for {}: {}",
+                                    get_signature_prefix(&tx.signature), position.symbol, e
+                                ));
+                            }
                             // Store transaction signature and type for precise position matching
                             verification_updates.push((tx.signature.clone(), "entry".to_string(), tx));
                         }
@@ -1676,7 +1690,14 @@ impl TransactionsManager {
             if let Some(ref exit_sig) = position.exit_transaction_signature {
                 if !position.transaction_exit_verified {
                     if let Ok(exit_tx) = crate::transactions::get_transaction(exit_sig).await {
-                        if let Some(tx) = exit_tx {
+                        if let Some(mut tx) = exit_tx {
+                            // If loaded from cache, calculated fields are stripped. Recalculate now.
+                            if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
+                                log(LogTag::Transactions, "POSITION_VERIFY", &format!(
+                                    "⚠️ Failed to recalc exit {} for {}: {}",
+                                    get_signature_prefix(&tx.signature), position.symbol, e
+                                ));
+                            }
                             // Store transaction signature and type for precise position matching
                             verification_updates.push((tx.signature.clone(), "exit".to_string(), tx));
                         }
@@ -4465,11 +4486,21 @@ impl TransactionsManager {
                 ));
 
                 match get_transaction(entry_sig).await {
-                    Ok(Some(transaction)) => {
+                    Ok(Some(mut transaction)) => {
                         log(LogTag::Transactions, "RECALC_ENTRY_FOUND", &format!(
                             "✅ Retrieved entry transaction {} for position {} - processing",
                             &entry_sig[..8], position.symbol
                         ));
+
+                        // IMPORTANT: Transactions loaded from cache contain raw-only data.
+                        // We must recalculate analysis from cached raw before converting.
+                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                            log(LogTag::Transactions, "RECALC_ERROR", &format!(
+                                "❌ Failed to recalculate analysis for entry {}: {}",
+                                &entry_sig[..8], e
+                            ));
+                            // Continue; conversion will likely fail without analysis
+                        }
 
                         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
                         let empty_cache = std::collections::HashMap::new();
@@ -4549,7 +4580,15 @@ impl TransactionsManager {
             // Recalculate exit transaction data using analyze-swaps-exact logic
             if let Some(ref exit_sig) = position.exit_transaction_signature {
                 match get_transaction(exit_sig).await {
-                    Ok(Some(transaction)) => {
+                    Ok(Some(mut transaction)) => {
+                        // Recalculate analysis from cached raw data to populate derived fields
+                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                            log(LogTag::Transactions, "RECALC_ERROR", &format!(
+                                "❌ Failed to recalculate analysis for exit {}: {}",
+                                &exit_sig[..8], e
+                            ));
+                            // Continue; conversion may fail without analysis
+                        }
                         // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
                         let empty_cache = std::collections::HashMap::new();
                         if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache) {
