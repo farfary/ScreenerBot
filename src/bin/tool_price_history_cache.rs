@@ -1,10 +1,12 @@
 use screenerbot::{
-    global::{ read_configs, CACHE_PRICES_DIR },
+    global::{ read_configs, CACHE_POOL_DIR },
     arguments::{ set_cmd_args, get_cmd_args },
     tokens::{
         pool::{
             init_pool_service,
             get_price_history_for_rl_learning,
+            get_detailed_pool_price_history,
+            get_pools_with_price_history,
             cleanup_old_price_history_caches,
         },
         dexscreener::init_dexscreener_api,
@@ -77,7 +79,7 @@ fn print_help() {
     println!();
     println!("⚠️  Safety Information:");
     println!("  🟢 Low-Risk: All commands are read-only or maintenance operations");
-    println!("  💾 Cache Location: {} directory", CACHE_PRICES_DIR);
+    println!("  💾 Cache Location: {} directory", CACHE_POOL_DIR);
     println!("  🕒 Cache Duration: 2 hours maximum per token");
     println!("  📊 Change Detection: Only records when price changes");
 }
@@ -121,6 +123,34 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
             latest.0.format("%Y-%m-%d %H:%M:%S"),
             latest.1
         );
+    }
+
+    // Check detailed pool price history
+    println!("\n🏊 Checking detailed pool price history...");
+    let detailed_history = get_detailed_pool_price_history(token_mint).await;
+    println!("🏊 Found {} pools with price history", detailed_history.len());
+
+    for (pool_address, history) in &detailed_history {
+        println!(
+            "   📍 Pool {}: {} entries",
+            &pool_address[..8],
+            history.len()
+        );
+        if let Some(latest) = history.last() {
+            println!(
+                "       📅 Latest: {} (price: {:.12} SOL, liquidity: ${:.2})",
+                latest.0.format("%Y-%m-%d %H:%M:%S"),
+                latest.1,
+                latest.5
+            );
+        }
+    }
+
+    // Get pools with history
+    let pools_with_history = get_pools_with_price_history(token_mint).await;
+    println!("\n🗂️  Pools with price history: {}", pools_with_history.len());
+    for pool in &pools_with_history {
+        println!("   📍 {}", pool);
     }
 
     // Test price retrieval and caching
@@ -168,7 +198,24 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
             );
         }
     } else {
-        println!("   ℹ️  No new entries added (price unchanged or cache behavior)");
+        println!("   ℹ️  No new entries added (price may not have changed significantly)");
+    }
+
+    // Check updated detailed pool history
+    println!("\n🏊 Checking updated detailed pool history...");
+    let updated_detailed_history = get_detailed_pool_price_history(token_mint).await;
+    
+    for (pool_address, history) in &updated_detailed_history {
+        let previous_count = detailed_history.get(pool_address).map(|h| h.len()).unwrap_or(0);
+        if history.len() > previous_count {
+            let new_pool_entries = history.len() - previous_count;
+            println!(
+                "   🆕 Pool {}: Added {} new entries (total: {})",
+                &pool_address[..8],
+                new_pool_entries,
+                history.len()
+            );
+        }
     }
 
     // Test RL learning integration
@@ -228,51 +275,79 @@ async fn cleanup_cache() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn show_cache_stats() -> Result<(), Box<dyn std::error::Error>> {
-    println!("📊 Price History Cache Statistics");
-    println!("=================================");
+    println!("📊 Pool Price History Cache Statistics");
+    println!("=====================================");
 
-    let cache_dir = std::path::Path::new(CACHE_PRICES_DIR);
+    let cache_dir = std::path::Path::new(CACHE_POOL_DIR);
 
     if !cache_dir.exists() {
         println!("📁 Cache directory does not exist");
         return Ok(());
     }
 
-    let mut total_files = 0;
+    let mut total_tokens = 0;
+    let mut total_pools = 0;
     let mut total_entries = 0;
     let mut total_size = 0;
 
     match std::fs::read_dir(cache_dir) {
-        Ok(entries) => {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        total_files += 1;
+        Ok(token_entries) => {
+            for token_entry in token_entries {
+                if let Ok(token_entry) = token_entry {
+                    let token_path = token_entry.path();
+                    if token_path.is_dir() {
+                        if let Some(token_mint) = token_path.file_name().and_then(|s| s.to_str()) {
+                            total_tokens += 1;
+                            let mut token_pools = 0;
+                            let mut token_entries = 0;
+                            let mut token_size = 0;
 
-                        // Get file size
-                        if let Ok(metadata) = std::fs::metadata(&path) {
-                            total_size += metadata.len();
-                        }
+                            match std::fs::read_dir(&token_path) {
+                                Ok(pool_entries) => {
+                                    for pool_entry in pool_entries {
+                                        if let Ok(pool_entry) = pool_entry {
+                                            let pool_path = pool_entry.path();
+                                            if pool_path.extension().and_then(|s| s.to_str()) == Some("json") {
+                                                if let Some(_pool_address) = pool_path.file_stem().and_then(|s| s.to_str()) {
+                                                    token_pools += 1;
 
-                        // Try to load and count entries
-                        if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            if let Ok(contents) = std::fs::read_to_string(&path) {
-                                if
-                                    let Ok(cache) =
-                                        serde_json::from_str::<screenerbot::tokens::pool::TokenPriceHistoryCache>(
-                                            &contents
-                                        )
-                                {
-                                    total_entries += cache.entries.len();
-                                    println!(
-                                        "📄 {}: {} entries (last updated: {})",
-                                        file_stem,
-                                        cache.entries.len(),
-                                        cache.last_updated.format("%Y-%m-%d %H:%M:%S")
-                                    );
+                                                    // Get file size
+                                                    if let Ok(metadata) = std::fs::metadata(&pool_path) {
+                                                        token_size += metadata.len();
+                                                    }
+
+                                                    // Try to load and count entries
+                                                    if let Ok(contents) = std::fs::read_to_string(&pool_path) {
+                                                        if
+                                                            let Ok(pool_cache) =
+                                                                serde_json::from_str::<screenerbot::tokens::pool::PoolPriceHistoryCache>(
+                                                                    &contents
+                                                                )
+                                                        {
+                                                            token_entries += pool_cache.entries.len();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("❌ Failed to read token directory {}: {}", token_mint, e);
                                 }
                             }
+
+                            total_pools += token_pools;
+                            total_entries += token_entries;
+                            total_size += token_size;
+
+                            println!(
+                                "📄 {}: {} entries from {} pools ({:.2} KB)",
+                                token_mint,
+                                token_entries,
+                                token_pools,
+                                (token_size as f64) / 1024.0
+                            );
                         }
                     }
                 }
@@ -285,7 +360,8 @@ async fn show_cache_stats() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n📋 Summary:");
-    println!("   🗂️  Total cache files: {}", total_files);
+    println!("   🗂️  Total tokens: {}", total_tokens);
+    println!("   🏊 Total pools: {}", total_pools);
     println!("   📊 Total price entries: {}", total_entries);
     println!(
         "   💾 Total cache size: {} bytes ({:.2} KB)",
@@ -293,8 +369,10 @@ async fn show_cache_stats() -> Result<(), Box<dyn std::error::Error>> {
         (total_size as f64) / 1024.0
     );
 
-    if total_files > 0 {
-        let avg_entries = (total_entries as f64) / (total_files as f64);
+    if total_tokens > 0 {
+        let avg_pools = (total_pools as f64) / (total_tokens as f64);
+        let avg_entries = (total_entries as f64) / (total_tokens as f64);
+        println!("   📈 Average pools per token: {:.1}", avg_pools);
         println!("   📈 Average entries per token: {:.1}", avg_entries);
     }
 

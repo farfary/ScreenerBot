@@ -135,11 +135,11 @@ pub struct AtaCleanupDisplay {
 /// Display structure for pool service statistics
 #[derive(Tabled)]
 pub struct PoolServiceDisplay {
-    #[tabled(rename = "🏊 Pool Cache")]
-    pool_cache: String,
+    #[tabled(rename = "🏊 Memory Cache")]
+    memory_cache: String,
     #[tabled(rename = "💰 Price Cache")]
     price_cache: String,
-    #[tabled(rename = "� Total Requests")]
+    #[tabled(rename = "📞 Total Requests")]
     total_requests: String,
     #[tabled(rename = "✅ Success Rate")]
     success_rate: String,
@@ -147,8 +147,27 @@ pub struct PoolServiceDisplay {
     cache_hit_rate: String,
     #[tabled(rename = "⛓️ Blockchain")]
     blockchain_calcs: String,
-    #[tabled(rename = "📈 Price History")]
-    price_history: String,
+    #[tabled(rename = "📈 Memory History")]
+    memory_history: String,
+}
+
+/// Display structure for detailed disk cache statistics
+#[derive(Tabled)]
+pub struct PoolDiskCacheDisplay {
+    #[tabled(rename = "💾 Disk Tokens")]
+    disk_tokens: String,
+    #[tabled(rename = "🏊 Disk Pools")]
+    disk_pools: String,
+    #[tabled(rename = "📁 Cache Files")]
+    cache_files: String,
+    #[tabled(rename = "📊 Total Entries")]
+    total_entries: String,
+    #[tabled(rename = "💿 Cache Size")]
+    cache_size: String,
+    #[tabled(rename = "📅 Data Range")]
+    data_range: String,
+    #[tabled(rename = "📈 Avg/Token")]
+    avg_per_token: String,
 }
 
 /// Display structure for Discovery statistics (printed first, compact)
@@ -785,6 +804,10 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     let (pool_cache_count, price_cache_count, _availability_cache_count) =
         pool_service.get_cache_stats().await;
     let enhanced_stats = pool_service.get_enhanced_stats().await;
+    
+    // Get detailed disk cache statistics
+    let disk_cache_stats = pool_service.get_disk_cache_stats().await.unwrap_or_default();
+    
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -797,7 +820,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     }
 
     let pool_service_stats = PoolServiceDisplay {
-        pool_cache: format!("{} pools", pool_cache_count),
+        memory_cache: format!("{} pools", pool_cache_count),
         price_cache: format!("{} prices", price_cache_count),
         total_requests: format!("{}", enhanced_stats.total_price_requests),
         success_rate: if enhanced_stats.total_price_requests > 0 {
@@ -811,7 +834,39 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
             "0.0%".to_string()
         },
         blockchain_calcs: format!("{}", enhanced_stats.blockchain_calculations),
-        price_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
+        memory_history: format!("{} tokens", enhanced_stats.tokens_with_price_history),
+    };
+
+    // Build disk cache display
+    let disk_cache_display = PoolDiskCacheDisplay {
+        disk_tokens: format!("{}", disk_cache_stats.total_tokens),
+        disk_pools: format!("{}", disk_cache_stats.total_pools),
+        cache_files: format!("{}", disk_cache_stats.total_files),
+        total_entries: format!("{}", disk_cache_stats.total_entries),
+        cache_size: if disk_cache_stats.total_size_bytes > 0 {
+            format!("{:.2} MB", disk_cache_stats.get_cache_size_mb())
+        } else {
+            "0 MB".to_string()
+        },
+        data_range: if let (Some(oldest), Some(newest)) = (disk_cache_stats.oldest_entry, disk_cache_stats.newest_entry) {
+            let duration = newest.signed_duration_since(oldest);
+            if duration.num_hours() > 0 {
+                format!("{}h ago", duration.num_hours())
+            } else if duration.num_minutes() > 0 {
+                format!("{}m ago", duration.num_minutes())
+            } else {
+                format!("{}s ago", duration.num_seconds())
+            }
+        } else {
+            "No data".to_string()
+        },
+        avg_per_token: if disk_cache_stats.total_tokens > 0 {
+            format!("{:.1} pools, {:.0} entries", 
+                disk_cache_stats.get_avg_pools_per_token(),
+                disk_cache_stats.get_avg_entries_per_token())
+        } else {
+            "N/A".to_string()
+        },
     };
 
     // Build all table strings first, then display in one shot
@@ -854,6 +909,12 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     let mut pool_table = Table::new(vec![pool_service_stats]);
     pool_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
     summary_output.push_str(&format!("{}\n", pool_table));
+
+    // Build Pool Disk Cache Statistics table
+    summary_output.push_str("\n💾 Pool Disk Cache Statistics\n");
+    let mut disk_cache_table = Table::new(vec![disk_cache_display]);
+    disk_cache_table.with(Style::rounded()).with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+    summary_output.push_str(&format!("{}\n", disk_cache_table));
 
     // Build Recent Swaps table (last 20)
     if is_debug_summary_enabled() {
