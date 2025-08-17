@@ -20,6 +20,8 @@ async fn main() {
     let shutdown = Arc::new(Notify::new());
     // Local trigger for initiating shutdown (from dashboard exit or OS Ctrl+C)
     let shutdown_trigger = Arc::new(Notify::new());
+    // Service completion tracker - dashboard waits for this before exiting
+    let services_completed = Arc::new(Notify::new());
 
     // Check for dashboard mode
     let dashboard_mode = screenerbot::arguments::is_dashboard_enabled();
@@ -36,9 +38,10 @@ async fn main() {
         // Start dashboard in a separate task
     let shutdown_dashboard = shutdown.clone();
         let dashboard_running = dashboard.running.clone();
+        let services_completed_dashboard = services_completed.clone();
         
     let dashboard_handle = tokio::spawn(async move {
-            if let Err(e) = screenerbot::dashboard::run_dashboard(shutdown_dashboard).await {
+            if let Err(e) = screenerbot::dashboard::run_dashboard(shutdown_dashboard, services_completed_dashboard).await {
                 // Avoid stderr prints in dashboard context; route to file logger
                 log(LogTag::System, "ERROR", &format!("Dashboard error: {}", e));
             }
@@ -485,6 +488,8 @@ async fn main() {
     match shutdown_timeout.await {
         Ok(_) => {
             log(LogTag::System, "INFO", "All background tasks finished gracefully. Exiting.");
+            // Notify dashboard that all services have completed
+            services_completed.notify_waiters();
         }
         Err(_) => {
             let final_critical_check =
@@ -536,6 +541,10 @@ async fn main() {
                 "WARN",
                 &format!("Tasks did not finish within {} second timeout.", task_timeout_seconds)
             );
+            
+            // Even on timeout, notify dashboard that we're done trying
+            services_completed.notify_waiters();
+            
             if dashboard_mode {
                 log(LogTag::System, "WARN", "Exiting without abort to preserve terminal state (dashboard mode)");
                 // Prefer a normal exit code in dashboard mode to avoid 'zsh: abort'

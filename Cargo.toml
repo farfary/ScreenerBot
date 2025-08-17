@@ -10,11 +10,13 @@ resolver = "2"
 # Dev profile — fastest possible compile + good debugging
 [profile.dev]
 opt-level = 0
-debug = 1
+debug = 0                # no debug info -> much faster compile/link
 incremental = true
 codegen-units = 256
 lto = false
-panic = "unwind"
+panic = "abort"          # simpler codegen, faster builds
+debug-assertions = false  # skip extra checks for speed
+overflow-checks = false   # skip integer overflow checks
 
 # Release profile — optimized but still fast to compile
 [profile.release]

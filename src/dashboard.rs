@@ -17,9 +17,9 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor, Attribute, SetAttribute},
-    terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, SetSize, DisableLineWrap, EnableLineWrap, SetTitle},
-    ExecutableCommand, QueueableCommand,
+    style::{Color, Print, ResetColor, SetForegroundColor, Attribute, SetAttribute},
+    terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap, SetTitle},
+    QueueableCommand,
 };
 use std::io::{self, Write, stdout};
 use std::sync::{Arc, Mutex};
@@ -27,15 +27,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use tokio::time::sleep;
-use chrono::{Local, Utc};
+use chrono::Local;
 use std::collections::VecDeque;
 use once_cell::sync::Lazy;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::positions::{get_open_positions, get_closed_positions, calculate_position_pnl};
-use crate::tokens::get_token_price_safe;
+use crate::tokens::{get_token_price_safe, get_pricing_stats, get_pool_service};
 use crate::utils::{get_sol_balance, get_wallet_address};
 use crate::rpc::get_global_rpc_stats;
+use crate::transactions::get_transaction_stats;
 use crate::logger::LogTag;
 
 /// Dashboard configuration constants
@@ -57,9 +58,97 @@ enum DashboardPhase {
 /// A single renderable line with style (module-scope so all methods can use it)
 struct RenderLine {
     text: String,
-    color: Color,
-    bg: Option<Color>,
+    color: Color,         // content color
     bold: bool,
+    is_wrapped: bool,     // line contains vertical borders at both ends
+    is_border_only: bool, // line is a pure border line (top/bottom/separator)
+}
+
+const BORDER_COLOR: Color = Color::Grey;
+
+/// Modern Unicode box-drawing characters for panel borders
+struct BorderChars {
+    pub top_left: char,
+    pub top_right: char,
+    pub bottom_left: char,
+    pub bottom_right: char,
+    pub horizontal: char,
+    pub vertical: char,
+    pub top_tee: char,
+    pub bottom_tee: char,
+    pub left_tee: char,
+    pub right_tee: char,
+    pub cross: char,
+}
+
+impl BorderChars {
+    /// Spaces between content and vertical borders
+    const INSET: usize = 1;
+    /// Modern rounded border style (Unicode box-drawing)
+    pub const ROUNDED: BorderChars = BorderChars {
+        top_left: '╭',
+        top_right: '╮',
+        bottom_left: '╰',
+        bottom_right: '╯',
+        horizontal: '─',
+        vertical: '│',
+        top_tee: '┬',
+        bottom_tee: '┴',
+        left_tee: '├',
+        right_tee: '┤',
+        cross: '┼',
+    };
+
+    /// Generate a top border line
+    pub fn top_border(&self, width: u16) -> String {
+        if width < 2 { return String::new(); }
+        format!("{}{}{}", 
+            self.top_left,
+            self.horizontal.to_string().repeat(width as usize - 2),
+            self.top_right
+        )
+    }
+
+    /// Generate a bottom border line
+    pub fn bottom_border(&self, width: u16) -> String {
+        if width < 2 { return String::new(); }
+        format!("{}{}{}", 
+            self.bottom_left,
+            self.horizontal.to_string().repeat(width as usize - 2),
+            self.bottom_right
+        )
+    }
+
+    /// Generate a separator line (horizontal divider)
+    pub fn separator(&self, width: u16) -> String {
+        if width < 2 { return String::new(); }
+        format!("{}{}{}", 
+            self.left_tee,
+            self.horizontal.to_string().repeat(width as usize - 2),
+            self.right_tee
+        )
+    }
+
+    /// Wrap text content with vertical borders and a tiny inset
+    pub fn wrap_content(&self, content: &str, width: u16) -> String {
+        if width < 2 { return String::new(); }
+        let inner = width as usize - 2;
+        let inset_each = Self::INSET.min(inner / 2);
+        let avail = inner.saturating_sub(inset_each * 2);
+        // Build truncated content by display width (Unicode-safe)
+        let mut acc = String::new();
+        let mut curw = 0usize;
+        for ch in content.chars() {
+            let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+            if curw + w > avail { break; }
+            acc.push(ch);
+            curw += w;
+        }
+        if curw < avail { acc.push_str(&" ".repeat(avail - curw)); }
+        let left_pad = " ".repeat(inset_each);
+        let right_pad = " ".repeat(inset_each);
+        format!("{}{}{}{}{}", self.vertical, left_pad, acc, right_pad, self.vertical)
+    }
 }
 
 /// Dashboard state structure
@@ -83,6 +172,7 @@ pub struct Dashboard {
     last_log_len: usize,
     last_log_change: Instant,
     spinner_idx: usize,
+    services_completed: bool,
 }
 
 /// Log entry for dashboard display
@@ -117,6 +207,7 @@ impl Dashboard {
             last_log_len: 0,
             last_log_change: Instant::now(),
             spinner_idx: 0,
+            services_completed: false,
         }
     }
 
@@ -151,17 +242,26 @@ impl Dashboard {
     }
 
     /// Main dashboard loop
-    pub async fn run(&mut self, shutdown: Arc<Notify>) -> io::Result<()> {
+    pub async fn run(&mut self, shutdown: Arc<Notify>, services_completed: Arc<Notify>) -> io::Result<()> {
         let mut last_draw = Instant::now();
+        let mut services_finished = false;
         
         loop {
             // Check for shutdown signal first
             tokio::select! {
                 _ = shutdown.notified() => {
-                    // Switch to shutdown phase and keep UI alive to stream logs
+                    // Switch to shutdown phase and keep UI alive to monitor service shutdown
                     self.phase = DashboardPhase::ShuttingDown;
                     if self.shutdown_started_at.is_none() { self.shutdown_started_at = Some(Instant::now()); }
                     self.shutdown_requested = true;
+                    self.force_redraw.store(true, Ordering::SeqCst);
+                    // Don't exit here - keep monitoring until services complete
+                }
+                _ = services_completed.notified() => {
+                    // All background services have completed
+                    services_finished = true;
+                    self.services_completed = true;
+                    self.add_log("SYSTEM", "INFO", "🎯 All background services completed - dashboard will exit in 3 seconds");
                     self.force_redraw.store(true, Ordering::SeqCst);
                 }
                 result = async {
@@ -227,26 +327,44 @@ impl Dashboard {
                 }
             }
 
-            // Decide if we should exit the loop (only after shutdown drain)
+            // Decide if we should exit the loop
             if self.phase == DashboardPhase::ShuttingDown {
-                // Update inactivity timer based on logs length - minimize lock time
-                let current_log_len = {
-                    if let Ok(logs) = self.logs.lock() {
-                        logs.len()
-                    } else {
-                        self.last_log_len // fallback to previous value
+                // In shutdown phase, wait for services to complete before considering exit
+                if services_finished {
+                    // Services are done, wait a bit for user to see final status then exit
+                    let grace_period_elapsed = self.shutdown_started_at
+                        .map(|t| t.elapsed() >= Duration::from_millis(3000)) // 3 second grace period
+                        .unwrap_or(true);
+                    
+                    if grace_period_elapsed {
+                        break; // Safe to exit now
                     }
-                };
-                
-                if current_log_len != self.last_log_len { 
-                    self.last_log_len = current_log_len; 
-                    self.last_log_change = Instant::now(); 
-                }
-                
-                let inactive = self.last_log_change.elapsed() >= Duration::from_millis(SHUTDOWN_INACTIVITY_MS);
-                let timed_out = self.shutdown_started_at.map(|t| t.elapsed() >= Duration::from_millis(SHUTDOWN_MAX_WAIT_MS)).unwrap_or(false);
-                if inactive || timed_out {
-                    break;
+                } else {
+                    // Still waiting for services - stay active to show progress
+                    // Update inactivity timer based on logs length - minimize lock time
+                    let current_log_len = {
+                        if let Ok(logs) = self.logs.lock() {
+                            logs.len()
+                        } else {
+                            self.last_log_len // fallback to previous value
+                        }
+                    };
+                    
+                    if current_log_len != self.last_log_len { 
+                        self.last_log_len = current_log_len; 
+                        self.last_log_change = Instant::now(); 
+                    }
+                    
+                    // Extended timeout when waiting for critical services
+                    let max_wait_time = Duration::from_millis(SHUTDOWN_MAX_WAIT_MS * 3); // 60 seconds
+                    let timed_out = self.shutdown_started_at
+                        .map(|t| t.elapsed() >= max_wait_time)
+                        .unwrap_or(false);
+                    
+                    if timed_out {
+                        self.add_log("SYSTEM", "WARN", "⚠️  Force exit: services taking too long to shutdown");
+                        break;
+                    }
                 }
             }
         }
@@ -320,7 +438,8 @@ impl Dashboard {
     Self::draw_section(&mut stdout, 0, width, &header_lines, &mut self.prev_header)?;
         
         // Calculate layout sections
-        let header_height = 3;
+    // Header actually renders 4 lines (top border, title, timestamp, bottom border)
+    let header_height = 4;
         let footer_height = 2;
         let available_height = max_content_height.saturating_sub(header_height + footer_height);
         
@@ -397,10 +516,41 @@ impl Dashboard {
             if cached.map(|c| c.as_str()) != Some(new_text.as_str()) {
                 stdout.queue(MoveTo(0, row))?;
                 stdout.queue(Clear(ClearType::CurrentLine))?;
-                if let Some(bg) = rl.bg { stdout.queue(SetBackgroundColor(bg))?; }
-                stdout.queue(SetForegroundColor(rl.color))?;
-                if rl.bold { stdout.queue(SetAttribute(Attribute::Bold))?; }
-                stdout.queue(Print(new_text.clone()))?;
+                // Reset styling to avoid bleed between lines
+                stdout.queue(SetAttribute(Attribute::Reset))?;
+                stdout.queue(ResetColor)?;
+                if rl.is_border_only {
+                    // Entire line is a border
+                    stdout.queue(SetForegroundColor(BORDER_COLOR))?;
+                    if rl.bold { stdout.queue(SetAttribute(Attribute::Bold))?; }
+                    stdout.queue(Print(new_text.clone()))?;
+                } else if rl.is_wrapped && new_text.len() >= 2 {
+                    // Print borders in light gray and content with its color
+                    let mut chars = new_text.chars();
+                    let left = chars.next().unwrap_or(' ');
+                    let right = new_text.chars().last().unwrap_or(' ');
+                    // Middle content (may be empty)
+                    let middle: String = new_text.chars().skip(1).take(new_text.len().saturating_sub(2)).collect();
+                    // Left border
+                    stdout.queue(SetForegroundColor(BORDER_COLOR))?;
+                    if rl.bold { stdout.queue(SetAttribute(Attribute::Bold))?; }
+                    stdout.queue(Print(left.to_string()))?;
+                    // Middle content
+                    stdout.queue(SetForegroundColor(rl.color))?;
+                    if rl.bold { stdout.queue(SetAttribute(Attribute::Bold))?; }
+                    stdout.queue(Print(middle))?;
+                    // Right border
+                    stdout.queue(SetForegroundColor(BORDER_COLOR))?;
+                    if rl.bold { stdout.queue(SetAttribute(Attribute::Bold))?; }
+                    stdout.queue(Print(right.to_string()))?;
+                } else {
+                    // Plain line
+                    stdout.queue(SetForegroundColor(rl.color))?;
+                    if rl.bold { stdout.queue(SetAttribute(Attribute::Bold))?; }
+                    stdout.queue(Print(new_text.clone()))?;
+                }
+                // Ensure attributes and colors are reset after each line
+                stdout.queue(SetAttribute(Attribute::Reset))?;
                 stdout.queue(ResetColor)?;
                 if prev_cache.len() <= i { prev_cache.resize(i+1, String::new()); }
                 prev_cache[i] = new_text;
@@ -426,17 +576,25 @@ impl Dashboard {
 
     fn build_header_lines(&self, width: u16, height: u16) -> Vec<RenderLine> {
         let mut v = Vec::new();
+        let border = &BorderChars::ROUNDED;
+        
         if height >= 1 {
-            let title = format!("ScreenerBot Dashboard  [{} {}]", self.phase_label(), self.spinner());
-            let t = format!("{:^width$}", title, width = width as usize);
-            v.push(RenderLine{ text: Self::pad_truncate(&t, width), color: Color::White, bg: Some(Color::DarkBlue), bold: true });
+            // Top border
+            v.push(RenderLine{ text: border.top_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
         }
         if height >= 2 {
-            let t = format!("{:^width$}", Local::now().format("%Y-%m-%d %H:%M:%S"), width = width as usize);
-            v.push(RenderLine{ text: Self::pad_truncate(&t, width), color: Color::White, bg: Some(Color::DarkBlue), bold: true });
+            let title = format!("ScreenerBot Dashboard  [{} {}]", self.phase_label(), self.spinner());
+            let wrapped = border.wrap_content(&format!("{:^width$}", title, width = width.saturating_sub(2) as usize), width);
+            v.push(RenderLine{ text: wrapped, color: Color::White, bold: true, is_wrapped: true, is_border_only: false });
         }
         if height >= 3 {
-            v.push(RenderLine{ text: "-".repeat(width as usize), color: Color::DarkGrey, bg: None, bold: false });
+            let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+            let wrapped = border.wrap_content(&format!("{:^width$}", timestamp, width = width.saturating_sub(2) as usize), width);
+            v.push(RenderLine{ text: wrapped, color: Color::White, bold: true, is_wrapped: true, is_border_only: false });
+        }
+        if height >= 4 {
+            // Bottom border
+            v.push(RenderLine{ text: border.bottom_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
         }
         v
     }
@@ -444,65 +602,107 @@ impl Dashboard {
     async fn build_positions_lines(&self, width: u16, height: u16) -> Vec<RenderLine> {
         let mut v = Vec::new();
         if height == 0 { return v; }
-        v.push(RenderLine{ text: "POSITIONS".to_string(), color: Color::Cyan, bg: None, bold: true });
+        let border = &BorderChars::ROUNDED;
+        
+        // Section header with top border
+    v.push(RenderLine{ text: border.top_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
         if height == 1 { return v; }
+        
+    v.push(RenderLine{ text: border.wrap_content("POSITIONS", width), color: Color::White, bold: true, is_wrapped: true, is_border_only: false });
+        if height == 2 { return v; }
 
-        let mut rows_left = height.saturating_sub(1) as usize;
+        let mut rows_left = height.saturating_sub(3) as usize; // Account for header + borders
         let open_positions = get_open_positions();
         let closed_positions = get_closed_positions();
 
-        if !open_positions.is_empty() && rows_left > 0 {
-            v.push(RenderLine{ text: format!("Open Positions ({})", open_positions.len()), color: Color::Green, bg: None, bold: true });
-            rows_left = rows_left.saturating_sub(1);
-            if rows_left > 0 {
-                let hdr = format!("{:<12} {:>14} {:>14} {:>14} {:>9}", "Symbol", "Entry", "Current", "P&L SOL", "P&L %");
-                v.push(RenderLine{ text: hdr, color: Color::Yellow, bg: None, bold: false });
-                v.push(RenderLine{ text: "-".repeat(width as usize), color: Color::DarkGrey, bg: None, bold: false });
-                rows_left = rows_left.saturating_sub(1);
-            }
-            for position in open_positions.iter().take(rows_left) {
-                // Get current price via centralized price service (bounded wait)
+        // Separator before content
+        v.push(RenderLine{ text: border.separator(width), color: BORDER_COLOR, bold: false, is_wrapped: false, is_border_only: true });
+        rows_left = rows_left.saturating_sub(1);
+
+        // Column layout: left (open), right (closed)
+        let inner_w = width.saturating_sub(2) as usize; // exclude vertical borders
+        let col_gap = 2usize; // spaces between columns
+        let col_w = if inner_w > col_gap { (inner_w - col_gap) / 2 } else { inner_w / 2 };
+
+        // Titles row
+        if rows_left > 0 {
+            let left_title = format!("Open Positions ({})", open_positions.len());
+            let right_title = "Recent Closed".to_string();
+            let row = format!("{:<lw$}{:gap$}{:<rw$}",
+                Self::pad_truncate(&left_title, col_w as u16),
+                "",
+                Self::pad_truncate(&right_title, col_w as u16),
+                lw = col_w,
+                gap = col_gap,
+                rw = col_w
+            );
+            v.push(RenderLine{ text: border.wrap_content(&row, width), color: Color::White, bold: true, is_wrapped: true, is_border_only: false });
+            rows_left -= 1;
+        }
+
+        // Headers row
+        if rows_left > 0 {
+            let hdr = format!("{:<12} {:>11} {:>11} {:>11} {:>7}", "Symbol", "Entry", "Current", "P&L SOL", "P&L %");
+            let row = format!("{:<lw$}{:gap$}{:<rw$}",
+                Self::pad_truncate(&hdr, col_w as u16),
+                "",
+                Self::pad_truncate(&hdr, col_w as u16),
+                lw = col_w,
+                gap = col_gap,
+                rw = col_w
+            );
+            v.push(RenderLine{ text: border.wrap_content(&row, width), color: Color::Yellow, bold: false, is_wrapped: true, is_border_only: false });
+            rows_left -= 1;
+        }
+
+        // Rows in columns
+        if rows_left > 0 {
+            let left_iter = open_positions.iter();
+            let right_iter = closed_positions.iter().filter(|p| p.exit_price.is_some()).rev();
+            let mut left_rows: Vec<String> = Vec::new();
+            let mut right_rows: Vec<String> = Vec::new();
+
+            for position in left_iter.take(rows_left) {
                 let current_price = if let Ok(price_opt) = tokio::time::timeout(
                     Duration::from_millis(150),
                     get_token_price_safe(&position.mint)
-                ).await {
-                    price_opt.unwrap_or(0.0)
-                } else { 0.0 };
+                ).await { price_opt.unwrap_or(0.0) } else { 0.0 };
                 let (pnl_sol, pnl_percent) = if current_price > 0.0 { calculate_position_pnl(position, Some(current_price)) } else { (0.0, 0.0) };
-                let color = if pnl_percent > 0.0 { Color::Green } else if pnl_percent < 0.0 { Color::Red } else { Color::White };
                 let sym = {
-                    let mut acc = String::new();
-                    let mut w = 0usize;
+                    let mut acc = String::new(); let mut w = 0usize; 
                     for ch in position.symbol.chars() { let cw = UnicodeWidthChar::width(ch).unwrap_or(0); if w + cw > 11 { break; } acc.push(ch); w += cw; }
                     acc
                 };
-                let row = format!("{:<12} {:>14.9} {:>14.9} {:>14.9} {:>8.2}%",
-                    sym, position.entry_price, current_price, pnl_sol, pnl_percent);
-                v.push(RenderLine{ text: Self::pad_truncate(&row, width), color, bg: None, bold: false });
+                let row = format!("{:<12} {:>11.9} {:>11.9} {:>11.9} {:>6.2}%", sym, position.entry_price, current_price, pnl_sol, pnl_percent);
+                left_rows.push(Self::pad_truncate(&row, col_w as u16));
             }
-        } else {
-            v.push(RenderLine{ text: "No open positions".to_string(), color: Color::Grey, bg: None, bold: false });
-            rows_left = rows_left.saturating_sub(1);
-        }
 
-        if rows_left > 0 && !closed_positions.is_empty() {
-            v.push(RenderLine{ text: "Recent Closed Positions".to_string(), color: Color::Yellow, bg: None, bold: true });
-            rows_left = rows_left.saturating_sub(1);
-            let recent_closed: Vec<_> = closed_positions.iter().filter(|p| p.exit_price.is_some()).rev().take(rows_left).collect();
-            for position in recent_closed {
+            for position in right_iter.take(rows_left) {
                 let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
-                let color = if pnl_percent > 0.0 { Color::Green } else if pnl_percent < 0.0 { Color::Red } else { Color::White };
                 let sym = {
-                    let mut acc = String::new();
-                    let mut w = 0usize;
+                    let mut acc = String::new(); let mut w = 0usize; 
                     for ch in position.symbol.chars() { let cw = UnicodeWidthChar::width(ch).unwrap_or(0); if w + cw > 11 { break; } acc.push(ch); w += cw; }
                     acc
                 };
-                let row = format!("{:<12} {:>14.9} {:>14.9} {:>14.9} {:>8.2}%",
-                    sym, position.entry_price, position.exit_price.unwrap_or(0.0), pnl_sol, pnl_percent);
-                v.push(RenderLine{ text: Self::pad_truncate(&row, width), color, bg: None, bold: false });
+                let row = format!("{:<12} {:>11.9} {:>11.9} {:>11.9} {:>6.2}%", sym, position.entry_price, position.exit_price.unwrap_or(0.0), pnl_sol, pnl_percent);
+                right_rows.push(Self::pad_truncate(&row, col_w as u16));
             }
+
+            let max_rows = left_rows.len().max(right_rows.len()).min(rows_left);
+            for i in 0..max_rows {
+                let left = left_rows.get(i).cloned().unwrap_or_else(|| "".to_string());
+                let right = right_rows.get(i).cloned().unwrap_or_else(|| "".to_string());
+                // Determine color by left side P&L only to keep simple; borders stay light gray due to renderer
+                let color = Color::White;
+                let row = format!("{:<lw$}{:gap$}{:<rw$}", left, "", right, lw = col_w, gap = col_gap, rw = col_w);
+                v.push(RenderLine{ text: border.wrap_content(&row, width), color, bold: false, is_wrapped: true, is_border_only: false });
+            }
+            rows_left = rows_left.saturating_sub(max_rows);
         }
+        
+        // Bottom border
+    v.push(RenderLine{ text: border.bottom_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
+        
         // Ensure we don't exceed height
         v.truncate(height as usize);
         v
@@ -511,12 +711,21 @@ impl Dashboard {
     async fn build_statistics_lines(&self, width: u16, height: u16) -> Vec<RenderLine> {
         let mut v = Vec::new();
         if height == 0 { return v; }
-    v.push(RenderLine{ text: "STATISTICS".to_string(), color: Color::Magenta, bg: None, bold: true });
+    // Use a single modern border style everywhere to avoid visual mismatch
+    let border = &BorderChars::ROUNDED;
+        
+        // Section header with top border
+    v.push(RenderLine{ text: border.top_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
         if height == 1 { return v; }
+        
+    v.push(RenderLine{ text: border.wrap_content("STATISTICS", width), color: Color::White, bold: true, is_wrapped: true, is_border_only: false });
+        if height == 2 { return v; }
 
         // Wallet balance (fast, with timeout)
         let wallet_balance = if let Ok(wallet_addr) = get_wallet_address() {
-            if let Ok(balance) = tokio::time::timeout(Duration::from_millis(200), get_sol_balance(&wallet_addr.to_string())).await { balance.unwrap_or(0.0) } else { 0.0 }
+            if let Ok(balance) = tokio::time::timeout(Duration::from_millis(200), get_sol_balance(&wallet_addr.to_string())).await { 
+                balance.unwrap_or(0.0) 
+            } else { 0.0 }
         } else { 0.0 };
 
         let open_positions = get_open_positions();
@@ -524,28 +733,157 @@ impl Dashboard {
         let total_open = open_positions.len();
         let total_closed = closed_positions.len();
 
-        let mut total_pnl_sol = 0.0; let mut winners = 0; let mut losers = 0;
-        for position in &closed_positions { let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None); total_pnl_sol += pnl_sol; if pnl_percent > 0.0 { winners += 1; } else if pnl_percent < 0.0 { losers += 1; } }
+        let mut total_pnl_sol = 0.0; 
+        let mut winners = 0; 
+        let mut losers = 0;
+        for position in &closed_positions { 
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None); 
+            total_pnl_sol += pnl_sol; 
+            if pnl_percent > 0.0 { winners += 1; } 
+            else if pnl_percent < 0.0 { losers += 1; } 
+        }
         let win_rate = if total_closed > 0 { (winners as f64 / total_closed as f64) * 100.0 } else { 0.0 };
+        
+        // Get system stats
         let rpc_stats = get_global_rpc_stats();
         let total_requests: u64 = if let Some(stats) = &rpc_stats { stats.calls_per_method.values().sum() } else { 0 };
+        
+        // Get pricing stats (non-blocking with timeout)
+        let pricing_stats = if let Ok(stats) = tokio::time::timeout(Duration::from_millis(100), get_pricing_stats()).await {
+            stats
+        } else { "Price Cache: Loading...".to_string() };
+        
+        // Get transaction stats (non-blocking with timeout)
+        let tx_stats = if let Ok(stats) = tokio::time::timeout(Duration::from_millis(100), get_transaction_stats()).await {
+            stats
+        } else { 
+            crate::transactions::TransactionStats { 
+                total_transactions: 0, 
+                new_transactions_count: 0, 
+                priority_transactions_count: 0, 
+                known_signatures_count: 0,
+            }
+        };
+        
+        // Get pool service stats (non-blocking with timeout)
+        let pool_stats = if let Ok(stats) = tokio::time::timeout(Duration::from_millis(100), async {
+            let pool_service = get_pool_service();
+            pool_service.get_enhanced_stats().await
+        }).await {
+            stats
+        } else { 
+            crate::tokens::pool::PoolServiceStats::default()
+        };
 
-        // Row 1
-        if v.len() < height as usize {
-            let col1 = Self::pad_truncate(&format!("Wallet: {:.9} SOL", wallet_balance), width/3);
-            let col2 = Self::pad_truncate(&format!("Open: {}", total_open), width/3);
-            let col3 = Self::pad_truncate(&format!("RPC Calls: {}", total_requests), width - (width/3)*2);
-            v.push(RenderLine{ text: format!("{}{}{}", col1, col2, col3), color: Color::White, bg: None, bold: false });
+        // Multi-row display for comprehensive stats
+        let mut current_line = 3usize; // Account for header + top border
+        
+        // Separator line
+        if current_line < height as usize {
+            v.push(RenderLine{ text: border.separator(width), color: BORDER_COLOR, bold: false, is_wrapped: false, is_border_only: true });
+            current_line += 1;
         }
-        // Row 2
-        if v.len() < height as usize {
+        
+        // Row 1: Wallet & Core Trading Stats
+        if current_line < height as usize {
+            let col1 = format!("Wallet: {:.9} SOL", wallet_balance);
+            let col2 = format!("Open: {} | Closed: {}", total_open, total_closed);
+            let col3 = format!("Win Rate: {:.1}%", win_rate);
+            let content_width = width.saturating_sub(2) as usize;
+            let col_w = content_width / 3;
+            let row_content = format!("{:<col_w$}{:<col_w$}{:<col_w$}", 
+                col1.chars().take(col_w).collect::<String>(),
+                col2.chars().take(col_w).collect::<String>(),
+                col3.chars().take(col_w).collect::<String>(),
+                col_w = col_w);
+            v.push(RenderLine{ text: border.wrap_content(&row_content, width), color: Color::White, bold: false, is_wrapped: true, is_border_only: false });
+            current_line += 1;
+        }
+        
+        // Row 2: P&L & RPC Stats
+        if current_line < height as usize {
             let pnl_color = if total_pnl_sol > 0.0 { Color::Green } else if total_pnl_sol < 0.0 { Color::Red } else { Color::White };
-            let col1 = Self::pad_truncate(&format!("P&L: {:+.9} SOL", total_pnl_sol), width/3);
-            let col2 = Self::pad_truncate(&format!("WinRate: {:.1}%", win_rate), width/3);
+            let col1 = format!("P&L: {:+.9} SOL", total_pnl_sol);
+            let col2 = format!("RPC Calls: {}", total_requests);
             let success_rate = if total_requests > 0 { 95.0 } else { 0.0 };
-            let col3 = Self::pad_truncate(&format!("RPC Success: {:.1}%", success_rate), width - (width/3)*2);
-            v.push(RenderLine{ text: format!("{}{}{}", col1, col2, col3), color: pnl_color, bg: None, bold: false });
+            let col3 = format!("RPC Success: {:.1}%", success_rate);
+            let content_width = width.saturating_sub(2) as usize;
+            let col_w = content_width / 3;
+            let row_content = format!("{:<col_w$}{:<col_w$}{:<col_w$}", 
+                col1.chars().take(col_w).collect::<String>(),
+                col2.chars().take(col_w).collect::<String>(),
+                col3.chars().take(col_w).collect::<String>(),
+                col_w = col_w);
+            v.push(RenderLine{ text: border.wrap_content(&row_content, width), color: pnl_color, bold: false, is_wrapped: true, is_border_only: false });
+            current_line += 1;
         }
+        
+        // Row 3: Transaction Stats
+        if current_line < height as usize {
+            let col1 = format!("Tx Total: {}", tx_stats.total_transactions);
+            let col2 = format!("New: {}", tx_stats.new_transactions_count);
+            let col3 = format!("Priority: {}", tx_stats.priority_transactions_count);
+            let content_width = width.saturating_sub(2) as usize;
+            let col_w = content_width / 3;
+            let row_content = format!("{:<col_w$}{:<col_w$}{:<col_w$}", 
+                col1.chars().take(col_w).collect::<String>(),
+                col2.chars().take(col_w).collect::<String>(),
+                col3.chars().take(col_w).collect::<String>(),
+                col_w = col_w);
+            v.push(RenderLine{ text: border.wrap_content(&row_content, width), color: Color::Cyan, bold: false, is_wrapped: true, is_border_only: false });
+            current_line += 1;
+        }
+        
+        // Row 4: Pool Performance  
+        if current_line < height as usize {
+            let col1 = format!("Pool Req: {}", pool_stats.total_price_requests);
+            let col2 = format!("Cache Hits: {}", pool_stats.cache_hits);
+            let pool_success_rate = if pool_stats.total_price_requests > 0 {
+                (pool_stats.successful_calculations as f64 / pool_stats.total_price_requests as f64) * 100.0
+            } else { 0.0 };
+            let col3 = format!("Pool Rate: {:.1}%", pool_success_rate);
+            let pool_color = if pool_success_rate >= 90.0 { Color::Green } else if pool_success_rate >= 70.0 { Color::Yellow } else { Color::Red };
+            let content_width = width.saturating_sub(2) as usize;
+            let col_w = content_width / 3;
+            let row_content = format!("{:<col_w$}{:<col_w$}{:<col_w$}", 
+                col1.chars().take(col_w).collect::<String>(),
+                col2.chars().take(col_w).collect::<String>(),
+                col3.chars().take(col_w).collect::<String>(),
+                col_w = col_w);
+            v.push(RenderLine{ text: border.wrap_content(&row_content, width), color: pool_color, bold: false, is_wrapped: true, is_border_only: false });
+            current_line += 1;
+        }
+        
+        // Row 5: Pool Timing Stats
+        if current_line < height as usize {
+            let col1 = format!("Pool OK: {}", pool_stats.successful_calculations);
+            let col2 = format!("Pool Fail: {}", pool_stats.failed_calculations);
+            let col3 = format!("Blockchain: {}", pool_stats.blockchain_calculations);
+            let content_width = width.saturating_sub(2) as usize;
+            let col_w = content_width / 3;
+            let row_content = format!("{:<col_w$}{:<col_w$}{:<col_w$}", 
+                col1.chars().take(col_w).collect::<String>(),
+                col2.chars().take(col_w).collect::<String>(),
+                col3.chars().take(col_w).collect::<String>(),
+                col_w = col_w);
+            v.push(RenderLine{ text: border.wrap_content(&row_content, width), color: Color::Blue, bold: false, is_wrapped: true, is_border_only: false });
+            current_line += 1;
+        }
+        
+        // Row 6: Price Service Summary (compact)
+        if current_line < height as usize {
+            let price_summary = if pricing_stats.len() > width.saturating_sub(4) as usize {
+                format!("{:.width$}...", pricing_stats, width = width.saturating_sub(7) as usize)
+            } else {
+                pricing_stats
+            };
+            v.push(RenderLine{ text: border.wrap_content(&price_summary, width), color: Color::Grey, bold: false, is_wrapped: true, is_border_only: false });
+            current_line += 1;
+        }
+        
+        // Bottom border
+    v.push(RenderLine{ text: border.bottom_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
+        
         v.truncate(height as usize);
         v
     }
@@ -553,10 +891,20 @@ impl Dashboard {
     async fn build_logs_lines(&self, width: u16, height: u16) -> Vec<RenderLine> {
         let mut v = Vec::new();
         if height == 0 { return v; }
-        v.push(RenderLine{ text: "ACTIVITY LOG".to_string(), color: Color::White, bg: None, bold: true });
-        v.push(RenderLine{ text: "-".repeat(width as usize), color: Color::DarkGrey, bg: None, bold: false });
+    let border = &BorderChars::ROUNDED;
+        
+        // Section header with top border
+    v.push(RenderLine{ text: border.top_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
         if height == 1 { return v; }
-        let mut current = 2usize;
+        
+    v.push(RenderLine{ text: border.wrap_content("ACTIVITY LOG", width), color: Color::White, bold: true, is_wrapped: true, is_border_only: false });
+        if height == 2 { return v; }
+
+        // Separator line
+    v.push(RenderLine{ text: border.separator(width), color: BORDER_COLOR, bold: false, is_wrapped: false, is_border_only: true });
+        if height == 3 { return v; }
+        
+        let mut current = 3usize;
         
         // Copy logs quickly to avoid holding lock during formatting
         let logs_snapshot = {
@@ -567,9 +915,9 @@ impl Dashboard {
             }
         };
         
-        let avail = height as usize - 1;
+        let avail = height.saturating_sub(4) as usize; // Account for borders + footer
         for log_entry in logs_snapshot.iter().rev().take(avail) {
-            let max_msg_len = (width as usize).saturating_sub(25);
+            let max_msg_len = width.saturating_sub(27) as usize; // Account for borders and timestamp
             let message = {
                 // build truncated message by display width
                 let mut acc = String::new();
@@ -595,451 +943,59 @@ impl Dashboard {
                 }
             };
             let line = format!("[{}] [{}] {}", log_entry.timestamp, log_entry.tag, message);
-            v.push(RenderLine{ text: line, color: log_entry.color, bg: None, bold: false });
+            v.push(RenderLine{ text: border.wrap_content(&line, width), color: log_entry.color, bold: false, is_wrapped: true, is_border_only: false });
             current += 1;
-            if current >= height as usize { break; }
+            if current >= height.saturating_sub(1) as usize { break; } // Reserve space for bottom border
         }
+        
+        // Bottom border
+    v.push(RenderLine{ text: border.bottom_border(width), color: BORDER_COLOR, bold: true, is_wrapped: false, is_border_only: true });
+        
         v.truncate(height as usize);
         v
     }    fn build_footer_lines(&self, width: u16, height: u16) -> Vec<RenderLine> {
         let mut v = Vec::new();
         if height == 0 { return v; }
-        let controls = format!("Controls: [Q/ESC] Exit | [R] Refresh | [C] Clear Logs | [Ctrl+C] Force Exit  [{} {}]",
-                               self.phase_label(), self.spinner());
-        v.push(RenderLine{ text: Self::pad_truncate(&controls, width), color: Color::White, bg: Some(Color::DarkGrey), bold: false });
+    let border = &BorderChars::ROUNDED;
+        
+        // Top border
+    v.push(RenderLine{ text: border.top_border(width), color: BORDER_COLOR, bold: false, is_wrapped: false, is_border_only: true });
+        
         if height >= 2 {
+            let controls = if self.phase == DashboardPhase::ShuttingDown {
+                if self.services_completed {
+                    format!("✅ Shutdown Complete - Dashboard will exit shortly [{} {}]", self.phase_label(), self.spinner())
+                } else {
+                    format!("🔄 Shutdown in Progress - Please wait for services to complete [{} {}]", self.phase_label(), self.spinner())
+                }
+            } else {
+                format!("Controls: [Q/ESC] Exit | [R] Refresh | [C] Clear Logs | [Ctrl+C] Force Exit  [{} {}]", self.phase_label(), self.spinner())
+            };
+            
+            v.push(RenderLine{ text: border.wrap_content(&controls, width), color: if self.services_completed { Color::Green } else { Color::White }, bold: false, is_wrapped: true, is_border_only: false });
+        }
+        
+        if height >= 3 {
             let status = match self.phase {
                 DashboardPhase::Startup => format!("Starting services... | Last Update: {} | Terminal: {}x{}", Local::now().format("%H:%M:%S"), width, terminal::size().map(|(_, h)| h).unwrap_or(self.terminal_size.1)),
                 DashboardPhase::Running => format!("Dashboard Running | Last Update: {} | Terminal: {}x{}", Local::now().format("%H:%M:%S"), width, terminal::size().map(|(_, h)| h).unwrap_or(self.terminal_size.1)),
-                DashboardPhase::ShuttingDown => format!("Shutting down... waiting for services | Last Update: {} | Terminal: {}x{}", Local::now().format("%H:%M:%S"), width, terminal::size().map(|(_, h)| h).unwrap_or(self.terminal_size.1)),
+                DashboardPhase::ShuttingDown => {
+                    if self.services_completed {
+                        format!("✅ All services completed - exiting soon | Last Update: {} | Terminal: {}x{}", Local::now().format("%H:%M:%S"), width, terminal::size().map(|(_, h)| h).unwrap_or(self.terminal_size.1))
+                    } else {
+                        let elapsed = self.shutdown_started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+                        format!("🔄 Shutting down... waiting for services ({} seconds) | Terminal: {}x{}", elapsed, width, terminal::size().map(|(_, h)| h).unwrap_or(self.terminal_size.1))
+                    }
+                },
             };
-            v.push(RenderLine{ text: Self::pad_truncate(&status, width), color: Color::White, bg: Some(Color::DarkGrey), bold: false });
+            v.push(RenderLine{ text: border.wrap_content(&status, width), color: if self.services_completed { Color::Green } else { Color::White }, bold: false, is_wrapped: true, is_border_only: false });
         }
+        
         v
     }
 
-    /// Draw the header section
-    async fn draw_header(&self, stdout: &mut io::Stdout, width: u16, height: u16) -> io::Result<()> {
-        let now = Local::now();
-    let title = "ScreenerBot Dashboard";
-        let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
-        
-        // Header background
-        stdout.queue(SetBackgroundColor(Color::DarkBlue))?;
-        stdout.queue(SetForegroundColor(Color::White))?;
-        stdout.queue(SetAttribute(Attribute::Bold))?;
-        
-        // Title line
-        if height >= 1 {
-            stdout.queue(MoveTo(0, 0))?;
-            let mut line = format!("{:^width$}", title, width = width as usize);
-            if line.len() > width as usize { line.truncate(width as usize); }
-            stdout.queue(Print(line))?;
-        }
-        
-        // Timestamp line
-        if height >= 2 {
-            stdout.queue(MoveTo(0, 1))?;
-            let mut line = format!("{:^width$}", timestamp, width = width as usize);
-            if line.len() > width as usize { line.truncate(width as usize); }
-            stdout.queue(Print(line))?;
-        }
-        
-        // Separator line
-        if height >= 3 {
-            stdout.queue(MoveTo(0, 2))?;
-            let sep = "═".repeat(width as usize);
-            stdout.queue(Print(sep))?;
-        }
-        
-        stdout.queue(ResetColor)?;
-        Ok(())
-    }
-
-    /// Draw the positions section
-    async fn draw_positions_section(&self, stdout: &mut io::Stdout, start_row: u16, width: u16, height: u16) -> io::Result<u16> {
-        if height == 0 { return Ok(start_row); }
-        // Section header
-        if height >= 1 {
-            stdout.queue(MoveTo(0, start_row))?;
-            stdout.queue(SetForegroundColor(Color::Cyan))?;
-            stdout.queue(SetAttribute(Attribute::Bold))?;
-            stdout.queue(Print("POSITIONS"))?;
-            stdout.queue(ResetColor)?;
-        }
-        
-        let mut current_row = start_row + 1;
-        
-        // Get positions data
-        let open_positions = get_open_positions();
-        let closed_positions = get_closed_positions();
-        
-        // Draw open positions
-    if !open_positions.is_empty() {
-            stdout.queue(MoveTo(0, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Green))?;
-            stdout.queue(Print(format!("Open Positions ({})", open_positions.len())))?;
-            stdout.queue(ResetColor)?;
-            current_row += 1;
-            
-            // Header
-            if current_row < start_row + height {
-                stdout.queue(MoveTo(0, current_row))?;
-                stdout.queue(SetForegroundColor(Color::Yellow))?;
-                let mut hdr = format!("{:<12} {:<10} {:<12} {:<12} {:<10}", 
-                    "Symbol", "Entry", "Current", "P&L SOL", "P&L %");
-                if hdr.len() > width as usize { hdr.truncate(width as usize); }
-                stdout.queue(Print(hdr))?;
-                stdout.queue(ResetColor)?;
-                current_row += 1;
-            }
-            
-            // Show up to available space
-            let available_rows = (start_row + height).saturating_sub(current_row);
-            for (i, position) in open_positions.iter().take(available_rows as usize).enumerate() {
-                if current_row >= start_row + height { break; }
-                
-                // Get current price for P&L calculation via centralized price service
-                let current_price = if let Ok(price_opt) = tokio::time::timeout(
-                    Duration::from_millis(150),
-                    get_token_price_safe(&position.mint)
-                ).await {
-                    price_opt.unwrap_or(0.0)
-                } else { 0.0 };
-                
-                let (pnl_sol, pnl_percent) = if current_price > 0.0 {
-                    calculate_position_pnl(position, Some(current_price))
-                } else {
-                    (0.0, 0.0)
-                };
-                
-                stdout.queue(MoveTo(0, current_row))?;
-                
-                // Color based on P&L
-                if pnl_percent > 0.0 {
-                    stdout.queue(SetForegroundColor(Color::Green))?;
-                } else if pnl_percent < 0.0 {
-                    stdout.queue(SetForegroundColor(Color::Red))?;
-                } else {
-                    stdout.queue(SetForegroundColor(Color::White))?;
-                }
-                
-                let mut row = format!("{:<12} {:<10.6} {:<12.6} {:<12.6} {:<10.2}%", 
-                    position.symbol.chars().take(11).collect::<String>(),
-                    position.entry_price,
-                    current_price,
-                    pnl_sol,
-                    pnl_percent
-                );
-                if row.len() > width as usize { row.truncate(width as usize); }
-                stdout.queue(Print(row))?;
-                stdout.queue(ResetColor)?;
-                current_row += 1;
-            }
-        } else {
-            if current_row < start_row + height {
-                stdout.queue(MoveTo(0, current_row))?;
-                stdout.queue(SetForegroundColor(Color::Grey))?;
-                stdout.queue(Print("No open positions"))?;
-                stdout.queue(ResetColor)?;
-                current_row += 1;
-            }
-        }
-        
-        // Recent closed positions
-        if current_row < start_row + height && !closed_positions.is_empty() {
-            current_row += 1; // Space
-            stdout.queue(MoveTo(0, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Yellow))?;
-            stdout.queue(Print("Recent Closed Positions"))?;
-            stdout.queue(ResetColor)?;
-            current_row += 1;
-            
-            let available_rows = (start_row + height).saturating_sub(current_row);
-            let recent_closed: Vec<_> = closed_positions.iter()
-                .filter(|p| p.exit_price.is_some())
-                .rev()
-                .take(available_rows as usize)
-                .collect();
-            
-            for position in recent_closed {
-                if current_row >= start_row + height { break; }
-                
-                let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
-                
-                stdout.queue(MoveTo(0, current_row))?;
-                
-                // Color based on P&L
-                if pnl_percent > 0.0 {
-                    stdout.queue(SetForegroundColor(Color::Green))?;
-                } else if pnl_percent < 0.0 {
-                    stdout.queue(SetForegroundColor(Color::Red))?;
-                } else {
-                    stdout.queue(SetForegroundColor(Color::White))?;
-                }
-                
-                let mut row = format!("{:<12} {:<10.6} {:<12.6} {:<12.6} {:<10.2}%", 
-                    position.symbol.chars().take(11).collect::<String>(),
-                    position.entry_price,
-                    position.exit_price.unwrap_or(0.0),
-                    pnl_sol,
-                    pnl_percent
-                );
-                if row.len() > width as usize { row.truncate(width as usize); }
-                stdout.queue(Print(row))?;
-                stdout.queue(ResetColor)?;
-                current_row += 1;
-            }
-        }
-        
-        Ok(start_row + height)
-    }
-
-    /// Draw the statistics section
-    async fn draw_statistics_section(&self, stdout: &mut io::Stdout, start_row: u16, width: u16, height: u16) -> io::Result<u16> {
-        if height == 0 { return Ok(start_row); }
-        // Section header
-        if height >= 1 {
-            stdout.queue(MoveTo(0, start_row))?;
-            stdout.queue(SetForegroundColor(Color::Magenta))?;
-            stdout.queue(SetAttribute(Attribute::Bold))?;
-            stdout.queue(Print("STATISTICS"))?;
-            stdout.queue(ResetColor)?;
-        }
-        
-        let mut current_row = start_row + 1;
-        
-        // Get wallet balance
-        let wallet_balance = if let Ok(wallet_addr) = get_wallet_address() {
-            if let Ok(balance) = tokio::time::timeout(
-                Duration::from_millis(200),
-                get_sol_balance(&wallet_addr.to_string())
-            ).await {
-                balance.unwrap_or(0.0)
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        };
-        
-        // Calculate totals
-        let open_positions = get_open_positions();
-        let closed_positions = get_closed_positions();
-        
-        let total_open = open_positions.len();
-        let total_closed = closed_positions.len();
-        
-        // Calculate P&L summary
-        let mut total_pnl_sol = 0.0;
-        let mut winners = 0;
-        let mut losers = 0;
-        
-        for position in &closed_positions {
-            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
-            total_pnl_sol += pnl_sol;
-            if pnl_percent > 0.0 {
-                winners += 1;
-            } else if pnl_percent < 0.0 {
-                losers += 1;
-            }
-        }
-        
-        let win_rate = if total_closed > 0 {
-            (winners as f64 / total_closed as f64) * 100.0
-        } else {
-            0.0
-        };
-        
-        // Get RPC stats
-        let rpc_stats = get_global_rpc_stats();
-        let total_requests: u64 = if let Some(stats) = &rpc_stats {
-            stats.calls_per_method.values().sum()
-        } else {
-            0
-        };
-        let total_calls: u64 = if let Some(stats) = &rpc_stats {
-            stats.calls_per_url.values().sum()
-        } else {
-            0
-        };
-        
-        // Display statistics in columns
-        let col1_width = width / 3;
-        let col2_width = width / 3;
-        
-        // Row 1: Wallet & Positions
-    if current_row < start_row + height {
-            stdout.queue(MoveTo(0, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Cyan))?;
-            let mut part = format!("Wallet: {:.6} SOL", wallet_balance);
-            if part.len() > (col1_width as usize).saturating_sub(1) { part.truncate((col1_width as usize).saturating_sub(1)); }
-            stdout.queue(Print(part))?;
-            
-            stdout.queue(MoveTo(col1_width, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Green))?;
-            let mut part = format!("Open: {}", total_open);
-            if part.len() > (col1_width as usize).saturating_sub(1) { part.truncate((col1_width as usize).saturating_sub(1)); }
-            stdout.queue(Print(part))?;
-            
-            stdout.queue(MoveTo(col2_width * 2, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Yellow))?;
-            let mut part = format!("Closed: {}", total_closed);
-            if part.len() > (width as usize).saturating_sub((col2_width * 2) as usize) { part.truncate((width as usize).saturating_sub((col2_width * 2) as usize)); }
-            stdout.queue(Print(part))?;
-            stdout.queue(ResetColor)?;
-            current_row += 1;
-        }
-        
-        // Row 2: P&L & Win Rate
-    if current_row < start_row + height {
-            stdout.queue(MoveTo(0, current_row))?;
-            if total_pnl_sol > 0.0 {
-                stdout.queue(SetForegroundColor(Color::Green))?;
-                let mut part = format!("P&L: +{:.6} SOL", total_pnl_sol);
-                if part.len() > (col1_width as usize).saturating_sub(1) { part.truncate((col1_width as usize).saturating_sub(1)); }
-                stdout.queue(Print(part))?;
-            } else if total_pnl_sol < 0.0 {
-                stdout.queue(SetForegroundColor(Color::Red))?;
-                let mut part = format!("P&L: {:.6} SOL", total_pnl_sol);
-                if part.len() > (col1_width as usize).saturating_sub(1) { part.truncate((col1_width as usize).saturating_sub(1)); }
-                stdout.queue(Print(part))?;
-            } else {
-                stdout.queue(SetForegroundColor(Color::White))?;
-                let mut part = format!("P&L: {:.6} SOL", total_pnl_sol);
-                if part.len() > (col1_width as usize).saturating_sub(1) { part.truncate((col1_width as usize).saturating_sub(1)); }
-                stdout.queue(Print(part))?;
-            }
-            
-            stdout.queue(MoveTo(col1_width, current_row))?;
-            if win_rate > 50.0 {
-                stdout.queue(SetForegroundColor(Color::Green))?;
-            } else {
-                stdout.queue(SetForegroundColor(Color::Red))?;
-            }
-            let mut part = format!("WinRate: {:.1}%", win_rate);
-            if part.len() > (col1_width as usize).saturating_sub(1) { part.truncate((col1_width as usize).saturating_sub(1)); }
-            stdout.queue(Print(part))?;
-            
-            stdout.queue(MoveTo(col2_width * 2, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Blue))?;
-            let mut part = format!("RPC Calls: {}", total_requests);
-            if part.len() > (width as usize).saturating_sub((col2_width * 2) as usize) { part.truncate((width as usize).saturating_sub((col2_width * 2) as usize)); }
-            stdout.queue(Print(part))?;
-            stdout.queue(ResetColor)?;
-            current_row += 1;
-        }
-        
-        // Row 3: Winners/Losers & Success Rate
-    if current_row < start_row + height {
-            stdout.queue(MoveTo(0, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Green))?;
-            stdout.queue(Print(format!("Winners: {}", winners)))?;
-            
-            stdout.queue(MoveTo(col1_width, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Red))?;
-            stdout.queue(Print(format!("Losers: {}", losers)))?;
-            
-            stdout.queue(MoveTo(col2_width * 2, current_row))?;
-            let success_rate = if total_requests > 0 {
-                // Assuming most calls are successful for now - you might want to track failures
-                95.0
-            } else {
-                0.0
-            };
-            stdout.queue(SetForegroundColor(Color::Cyan))?;
-            stdout.queue(Print(format!("RPC Success: {:.1}%", success_rate)))?;
-            stdout.queue(ResetColor)?;
-            current_row += 1;
-        }
-        
-        Ok(start_row + height)
-    }
-
-    /// Draw the logs section
-    async fn draw_logs_section(&self, stdout: &mut io::Stdout, start_row: u16, width: u16, height: u16) -> io::Result<()> {
-        if height == 0 { return Ok(()); }
-        // Section header
-        if height >= 1 {
-            stdout.queue(MoveTo(0, start_row))?;
-            stdout.queue(SetForegroundColor(Color::White))?;
-            stdout.queue(SetAttribute(Attribute::Bold))?;
-            stdout.queue(Print("ACTIVITY LOG"))?;
-            stdout.queue(ResetColor)?;
-        }
-        
-        let mut current_row = start_row + 1;
-        
-        // Get recent logs
-        if let Ok(logs) = self.logs.lock() {
-            let available_rows = (start_row + height).saturating_sub(current_row);
-            let recent_logs: Vec<_> = logs.iter()
-                .rev()
-                .take(available_rows as usize)
-                .collect();
-            
-            for log_entry in recent_logs {
-                if current_row >= start_row + height { break; }
-                
-                stdout.queue(MoveTo(0, current_row))?;
-                stdout.queue(SetForegroundColor(log_entry.color))?;
-                
-                // Truncate message to fit terminal width
-                let max_msg_len = (width as usize).saturating_sub(25); // Space for timestamp and tag
-                let message = if log_entry.message.len() > max_msg_len {
-                    format!("{}...", &log_entry.message[..max_msg_len.saturating_sub(3)])
-                } else {
-                    log_entry.message.clone()
-                };
-                
-                let mut line = format!("[{}] [{}] {}", 
-                    log_entry.timestamp,
-                    log_entry.tag,
-                    message
-                );
-                if line.len() > width as usize { line.truncate(width as usize); }
-                stdout.queue(Print(line))?;
-                stdout.queue(ResetColor)?;
-                current_row += 1;
-            }
-        }
-        
-        if current_row == start_row + 1 {
-            stdout.queue(MoveTo(0, current_row))?;
-            stdout.queue(SetForegroundColor(Color::Grey))?;
-            stdout.queue(Print("No recent activity"))?;
-            stdout.queue(ResetColor)?;
-        }
-        
-        Ok(())
-    }
-
-    /// Draw the footer section
-    async fn draw_footer(&self, stdout: &mut io::Stdout, start_row: u16, width: u16) -> io::Result<()> {
-        // Footer background
-        stdout.queue(SetBackgroundColor(Color::DarkGrey))?;
-        stdout.queue(SetForegroundColor(Color::White))?;
-        
-        // Controls line
-        stdout.queue(MoveTo(0, start_row))?;
-    let controls = "Controls: [Q/ESC] Exit | [R] Refresh | [C] Clear Logs | [Ctrl+C] Force Exit";
-    let mut line = format!("{:<width$}", controls, width = width as usize);
-    if line.len() > width as usize { line.truncate(width as usize); }
-    stdout.queue(Print(line))?;
-        
-        // Status line
-        stdout.queue(MoveTo(0, start_row + 1))?;
-    let status = format!("Dashboard Running | Last Update: {} | Terminal: {}x{}", 
-               Local::now().format("%H:%M:%S"),
-               width, 
-               terminal::size().map(|(_, h)| h).unwrap_or(self.terminal_size.1));
-    let mut line = format!("{:<width$}", status, width = width as usize);
-    if line.len() > width as usize { line.truncate(width as usize); }
-    stdout.queue(Print(line))?;
-        
-        stdout.queue(ResetColor)?;
-        Ok(())
-    }
+    // Removed legacy immediate-draw functions; the dashboard now uses the
+    // modern incremental renderer with Unicode borders only.
 
     /// Add a log entry to the dashboard
     pub fn add_log(&self, tag: &str, log_type: &str, message: &str) {
@@ -1096,7 +1052,7 @@ impl Dashboard {
 }
 
 /// Initialize and run the dashboard
-pub async fn run_dashboard(shutdown: Arc<Notify>) -> io::Result<()> {
+pub async fn run_dashboard(shutdown: Arc<Notify>, services_completed: Arc<Notify>) -> io::Result<()> {
     let mut dashboard = Dashboard::new();
     
     // Initialize terminal for dashboard
@@ -1106,7 +1062,7 @@ pub async fn run_dashboard(shutdown: Arc<Notify>) -> io::Result<()> {
     dashboard.add_log("SYSTEM", "INFO", "Dashboard initialized successfully");
     
     // Run the dashboard
-    let result = dashboard.run(shutdown).await;
+    let result = dashboard.run(shutdown, services_completed).await;
     
     // Always cleanup terminal state
     let _ = dashboard.shutdown().await;
