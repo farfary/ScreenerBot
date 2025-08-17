@@ -8,6 +8,7 @@ pub mod interface;
 pub mod types;
 // transaction.rs and pricing.rs have been removed - functions moved to execution.rs and transactions_tools.rs
 pub mod execution;
+pub mod raydium_direct;
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
@@ -78,6 +79,7 @@ pub use execution::{get_swap_quote, execute_swap_with_quote};
 // Router-specific functions
 pub use gmgn::{get_gmgn_quote, execute_gmgn_swap, gmgn_sign_and_send_transaction, GMGNSwapResult};
 pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send_transaction, JupiterSwapResult};
+pub use raydium_direct::{execute_raydium_cpmm_swap, execute_test_raydium_cpmm_swap, RaydiumCpmmSwapResult, get_test_pool_config};
 
 // =============================================================================
 // UNIFIED ROUTER INTERFACE

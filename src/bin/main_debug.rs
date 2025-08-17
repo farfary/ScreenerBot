@@ -67,7 +67,7 @@ use screenerbot::tokens::types::PriceSourceType;
 use screenerbot::tokens::{Token, get_token_decimals_sync};
 use screenerbot::swaps::{
     get_jupiter_quote, execute_jupiter_swap, get_gmgn_quote,
-    JupiterSwapResult
+    JupiterSwapResult, execute_test_raydium_cpmm_swap, RaydiumCpmmSwapResult
 };
 use screenerbot::positions;
 
@@ -294,10 +294,10 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
         .arg(
             Arg::new("router")
                 .long("router")
-                .help("Swap router: jupiter (recommended) or gmgn")
+                .help("Swap router: jupiter (recommended), gmgn, or raydium-cpmm (direct pool access)")
                 .value_name("ROUTER")
                 .default_value("jupiter")
-                .value_parser(["jupiter", "gmgn"])
+                .value_parser(["jupiter", "gmgn", "raydium-cpmm"])
         )
         
         // === ANALYSIS FILTERS ===
@@ -747,7 +747,7 @@ impl SwapTestConfig {
         
         // Validate router (this should already be validated by clap, but double-check)
         match self.router.as_str() {
-            "jupiter" | "gmgn" => {},
+            "jupiter" | "gmgn" | "raydium-cpmm" => {},
             _ => return Err(format!("Invalid router: {}", self.router)),
         }
         
@@ -2948,6 +2948,18 @@ async fn perform_preflight_checks(
                 false,
             ).await
         }
+        "raydium-cpmm" => {
+            // Skip quote test for Raydium CPMM as it doesn't use traditional quotes
+            log(LogTag::Transactions, "PREFLIGHT", "✅ Raydium CPMM: Direct pool access, skipping quote test");
+            
+            // Check if the token is the supported test token
+            if token_mint != "5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t" {
+                return Err(format!("Raydium CPMM only supports test token 5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t, got: {}", token_mint));
+            }
+            
+            // Return a dummy success result since we skipped the actual quote test
+            return Ok(());
+        }
         _ => return Err(format!("Unknown router: {}", router)),
     };
 
@@ -3001,6 +3013,7 @@ async fn execute_sol_to_token_test(
     let swap_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, sol_amount, slippage, true).await,
         "gmgn" => execute_gmgn_swap_test(token, sol_amount, slippage, true).await,
+        "raydium-cpmm" => execute_raydium_cpmm_swap_test(token, sol_amount, slippage, true).await,
         _ => {
             log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
             return;
@@ -3111,6 +3124,10 @@ async fn execute_token_to_sol_test(
     let swap_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, tokens_to_sell, slippage, false).await,
         "gmgn" => execute_gmgn_swap_test(token, tokens_to_sell, slippage, false).await,
+        "raydium-cpmm" => {
+            log(LogTag::Transactions, "WARNING", "Raydium CPMM does not support token-to-SOL swaps in this test version");
+            return;
+        }
         _ => {
             log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
             return;
@@ -3188,6 +3205,7 @@ async fn execute_round_trip_test(
     let buy_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, sol_amount, slippage, true).await,
         "gmgn" => execute_gmgn_swap_test(token, sol_amount, slippage, true).await,
+        "raydium-cpmm" => execute_raydium_cpmm_swap_test(token, sol_amount, slippage, true).await,
         _ => {
             log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
             return;
@@ -3246,6 +3264,10 @@ async fn execute_round_trip_test(
     let sell_result = match router {
         "jupiter" => execute_jupiter_swap_test(token, tokens_received, slippage, false).await,
         "gmgn" => execute_gmgn_swap_test(token, tokens_received, slippage, false).await,
+        "raydium-cpmm" => {
+            log(LogTag::Transactions, "WARNING", "Raydium CPMM does not support token-to-SOL swaps in this test version");
+            return;
+        }
         _ => {
             log(LogTag::Transactions, "ERROR", &format!("Unknown router: {}", router));
             return;
@@ -3364,6 +3386,48 @@ async fn execute_gmgn_swap_test(
     // Execute the swap (note: execute_gmgn_swap has different signature, adapt as needed)
     // For now, return a placeholder result
     Err(SwapError::ConfigError("GMGN swap execution not yet implemented in test".to_string()))
+}
+
+/// Execute Raydium CPMM direct swap test
+async fn execute_raydium_cpmm_swap_test(
+    token: &Token,
+    sol_amount: f64,
+    slippage: f64,
+    is_buy: bool,
+) -> Result<JupiterSwapResult, SwapError> {
+    if !is_buy {
+        return Err(SwapError::ConfigError("Raydium CPMM test only supports SOL-to-token swaps currently".to_string()));
+    }
+
+    // Special handling for our test token
+    if token.mint != "5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t" {
+        return Err(SwapError::ConfigError(format!(
+            "Raydium CPMM test only supports the test token 5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t, got: {}", 
+            token.mint
+        )));
+    }
+
+    log(LogTag::Transactions, "RAYDIUM_CPMM_TEST", &format!(
+        "🔵 Testing Raydium CPMM direct swap:\n  • Token: {} ({})\n  • SOL Amount: {:.6}\n  • Slippage: {:.1}%",
+        token.symbol, &token.mint[..8], sol_amount, slippage
+    ));
+
+    // Execute the Raydium CPMM test swap
+    let result = execute_test_raydium_cpmm_swap(sol_amount, slippage).await?;
+
+    // Convert RaydiumCpmmSwapResult to JupiterSwapResult for compatibility
+    Ok(JupiterSwapResult {
+        success: result.success,
+        transaction_signature: result.transaction_signature,
+        input_amount: result.input_amount,
+        output_amount: result.output_amount,
+        price_impact: result.price_impact,
+        fee_lamports: result.fee_lamports,
+        execution_time: result.execution_time,
+        effective_price: result.effective_price,
+        swap_data: None, // Raydium CPMM doesn't use SwapData format
+        error: result.error,
+    })
 }
 
 /// Analyze a specific swap transaction
