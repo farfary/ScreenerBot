@@ -18,6 +18,7 @@ use std::str::FromStr;
 use tokio::sync::Notify;
 use std::time::{Duration, Instant};
 use tabled::{ Tabled, Table, settings::{ Style, Alignment, object::Rows, Modify } };
+use crate::tokens::discovery::get_discovery_stats;
 
 /// Display structure for closed positions with specific "Exit" column
 #[derive(Tabled)]
@@ -148,6 +149,21 @@ pub struct PoolServiceDisplay {
     blockchain_calcs: String,
     #[tabled(rename = "📈 Price History")]
     price_history: String,
+}
+
+/// Display structure for Discovery statistics (printed first, compact)
+#[derive(Tabled)]
+pub struct DiscoveryDisplay {
+    #[tabled(rename = "� Cycles")]
+    cycles: String,
+    #[tabled(rename = "📦 Proc/Add")]
+    proc_add: String,
+    #[tabled(rename = "🧹 Dedup/BL")]
+    filters: String,
+    #[tabled(rename = "📚 Sources (prof/boost/top | new/view/trend/verify)")]
+    sources: String,
+    #[tabled(rename = "⚠️ Error")]
+    error: String,
 }
 
 /// Display structure for RPC URL usage statistics
@@ -391,6 +407,40 @@ pub async fn display_positions_table() {
 
     // Build all positions output in one shot
     let mut positions_output = String::new();
+
+    // Discovery section FIRST (less important but requested first)
+    {
+        let ds = get_discovery_stats().await;
+        let cycles = format!("{}", ds.total_cycles);
+        let proc_add = format!("{}/{}", ds.last_processed, ds.last_added);
+        let filters = format!("{}/{}", ds.last_deduplicated_removed, ds.last_blacklist_removed);
+        let sources = format!(
+            "{}/{}/{} | {}/{}/{}/{}",
+            ds.per_source.profiles,
+            ds.per_source.boosted,
+            ds.per_source.top_boosts,
+            ds.per_source.rug_new,
+            ds.per_source.rug_viewed,
+            ds.per_source.rug_trending,
+            ds.per_source.rug_verified,
+        );
+        let error = ds.last_error.unwrap_or_default();
+
+        let discovery_display = DiscoveryDisplay {
+            cycles,
+            proc_add,
+            filters,
+            sources,
+            error,
+        };
+
+        positions_output.push_str("\n🧭 Discovery\n");
+        let mut discovery_table = Table::new(vec![discovery_display]);
+        discovery_table
+            .with(Style::rounded())
+            .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
+        positions_output.push_str(&format!("{}\n", discovery_table));
+    }
 
     // Display bot summary section (now with owned data)
     let closed_refs: Vec<&Position> = closed_positions.iter().collect();

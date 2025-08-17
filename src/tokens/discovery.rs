@@ -5,7 +5,9 @@ use crate::tokens::dexscreener::get_global_dexscreener_api;
 use crate::tokens::cache::TokenDatabase;
 use crate::tokens::is_token_excluded_from_trading;
 use tokio::time::{ sleep, Duration };
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::RwLock;
+use chrono::{Utc, DateTime};
 
 // =============================================================================
 // API FUNCTIONS
@@ -336,6 +338,41 @@ pub const DISCOVERY_CYCLE_SECONDS: u64 = 10;
 // TOKEN DISCOVERY MANAGER
 // =============================================================================
 
+/// Discovery statistics snapshot
+#[derive(Debug, Clone, Default)]
+pub struct DiscoverySourceCounts {
+    pub profiles: usize,
+    pub boosted: usize,
+    pub top_boosts: usize,
+    pub rug_new: usize,
+    pub rug_viewed: usize,
+    pub rug_trending: usize,
+    pub rug_verified: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DiscoveryStats {
+    pub total_cycles: u64,
+    pub last_cycle_started: Option<DateTime<Utc>>, 
+    pub last_cycle_completed: Option<DateTime<Utc>>,
+    pub last_processed: usize,
+    pub last_added: usize,
+    pub last_deduplicated_removed: usize,
+    pub last_blacklist_removed: usize,
+    pub total_processed: u64,
+    pub total_added: u64,
+    pub per_source: DiscoverySourceCounts,
+    pub last_error: Option<String>,
+}
+
+static DISCOVERY_STATS: OnceLock<Arc<RwLock<DiscoveryStats>>> = OnceLock::new();
+
+fn get_discovery_stats_handle() -> Arc<RwLock<DiscoveryStats>> {
+    DISCOVERY_STATS
+        .get_or_init(|| Arc::new(RwLock::new(DiscoveryStats::default())))
+        .clone()
+}
+
 pub struct TokenDiscovery {
     database: TokenDatabase,
 }
@@ -362,7 +399,20 @@ impl TokenDiscovery {
             log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
         }
 
+        // Mark stats: cycle start
+        {
+            let stats_handle = get_discovery_stats_handle();
+            let mut stats = stats_handle.write().await;
+            stats.total_cycles = stats.total_cycles.saturating_add(1);
+            stats.last_cycle_started = Some(Utc::now());
+            stats.last_error = None; // reset at start
+            // reset per-source for this cycle; will be overwritten below
+            stats.per_source = DiscoverySourceCounts::default();
+        }
+
         let mut all_mints = Vec::new();
+        // Per-cycle source counters
+        let mut cycle_counts = DiscoverySourceCounts::default();
 
         // Check for shutdown before starting
         if let Some(shutdown) = &shutdown {
@@ -375,7 +425,7 @@ impl TokenDiscovery {
         }
 
         // Fetch latest token profiles
-        match fetch_dexscreener_latest_token_profiles().await {
+    match fetch_dexscreener_latest_token_profiles().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -384,10 +434,14 @@ impl TokenDiscovery {
                         &format!("DexScreener profiles: {} mints", mints.len())
                     );
                 }
+        cycle_counts.profiles = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
                 log(LogTag::Discovery, "ERROR", &format!("Failed to fetch token profiles: {}", e));
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("profiles: {}", e));
             }
         }
 
@@ -400,7 +454,7 @@ impl TokenDiscovery {
         }
 
         // Fetch latest boosted tokens
-        match fetch_dexscreener_latest_boosted_tokens().await {
+    match fetch_dexscreener_latest_boosted_tokens().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -409,10 +463,14 @@ impl TokenDiscovery {
                         &format!("DexScreener boosted: {} mints", mints.len())
                     );
                 }
+        cycle_counts.boosted = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
                 log(LogTag::Discovery, "ERROR", &format!("Failed to fetch boosted tokens: {}", e));
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("boosted: {}", e));
             }
         }
 
@@ -425,7 +483,7 @@ impl TokenDiscovery {
         }
 
         // Fetch tokens with most active boosts
-        match fetch_dexscreener_tokens_with_most_active_boosts().await {
+    match fetch_dexscreener_tokens_with_most_active_boosts().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -434,6 +492,7 @@ impl TokenDiscovery {
                         &format!("DexScreener top boosts: {} mints", mints.len())
                     );
                 }
+        cycle_counts.top_boosts = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -442,6 +501,9 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch top boosted tokens: {}", e)
                 );
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("top_boosts: {}", e));
             }
         }
 
@@ -454,7 +516,7 @@ impl TokenDiscovery {
         }
 
         // Fetch new tokens from RugCheck
-        match fetch_rugcheck_new_tokens().await {
+    match fetch_rugcheck_new_tokens().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -463,6 +525,7 @@ impl TokenDiscovery {
                         &format!("RugCheck new: {} mints", mints.len())
                     );
                 }
+        cycle_counts.rug_new = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -471,6 +534,9 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch new tokens from RugCheck: {}", e)
                 );
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("rug_new: {}", e));
             }
         }
 
@@ -483,7 +549,7 @@ impl TokenDiscovery {
         }
 
         // Fetch most viewed tokens from RugCheck
-        match fetch_rugcheck_most_viewed().await {
+    match fetch_rugcheck_most_viewed().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -492,6 +558,7 @@ impl TokenDiscovery {
                         &format!("RugCheck viewed: {} mints", mints.len())
                     );
                 }
+        cycle_counts.rug_viewed = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -500,6 +567,9 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch most viewed tokens from RugCheck: {}", e)
                 );
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("rug_viewed: {}", e));
             }
         }
 
@@ -512,7 +582,7 @@ impl TokenDiscovery {
         }
 
         // Fetch trending tokens from RugCheck
-        match fetch_rugcheck_trending().await {
+    match fetch_rugcheck_trending().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -521,6 +591,7 @@ impl TokenDiscovery {
                         &format!("RugCheck trending: {} mints", mints.len())
                     );
                 }
+        cycle_counts.rug_trending = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -529,6 +600,9 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch trending tokens from RugCheck: {}", e)
                 );
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("rug_trending: {}", e));
             }
         }
 
@@ -541,7 +615,7 @@ impl TokenDiscovery {
         }
 
         // Fetch verified tokens from RugCheck
-        match fetch_rugcheck_verified().await {
+    match fetch_rugcheck_verified().await {
             Ok(mints) => {
                 if is_debug_discovery_enabled() {
                     log(
@@ -550,6 +624,7 @@ impl TokenDiscovery {
                         &format!("RugCheck verified: {} mints", mints.len())
                     );
                 }
+        cycle_counts.rug_verified = mints.len();
                 all_mints.extend(mints);
             }
             Err(e) => {
@@ -558,6 +633,9 @@ impl TokenDiscovery {
                     "ERROR",
                     &format!("Failed to fetch verified tokens from RugCheck: {}", e)
                 );
+        let stats_handle = get_discovery_stats_handle();
+        let mut stats = stats_handle.write().await;
+        stats.last_error = Some(format!("rug_verified: {}", e));
             }
         }
 
@@ -569,17 +647,18 @@ impl TokenDiscovery {
             }
         }
 
-        // Deduplicate mints
+    // Deduplicate mints
         let original_count = all_mints.len();
         all_mints.sort();
         all_mints.dedup();
         let deduplicated_count = all_mints.len();
+    let dedup_removed = original_count.saturating_sub(deduplicated_count);
 
         // Filter out blacklisted/excluded tokens
         let before_blacklist_count = all_mints.len();
         all_mints.retain(|mint| !is_token_excluded_from_trading(mint));
         let after_blacklist_count = all_mints.len();
-        let blacklisted_count = before_blacklist_count - after_blacklist_count;
+    let blacklisted_count = before_blacklist_count - after_blacklist_count;
 
         log(
             LogTag::Discovery,
@@ -595,6 +674,15 @@ impl TokenDiscovery {
 
         if all_mints.is_empty() {
             log(LogTag::Discovery, "COMPLETE", "No tokens to process");
+            // Update stats and return
+            let stats_handle = get_discovery_stats_handle();
+            let mut stats = stats_handle.write().await;
+            stats.last_processed = 0;
+            stats.last_added = 0;
+            stats.last_deduplicated_removed = dedup_removed;
+            stats.last_blacklist_removed = blacklisted_count;
+            stats.per_source = cycle_counts;
+            stats.last_cycle_completed = Some(Utc::now());
             return Ok(());
         }
 
@@ -608,8 +696,8 @@ impl TokenDiscovery {
 
         // Process tokens in batches to avoid overwhelming APIs
         let batch_size = 30; // DexScreener API limit
-        let mut total_processed = 0;
-        let mut total_added = 0;
+    let mut total_processed = 0;
+    let mut total_added = 0;
 
         for (batch_index, batch) in all_mints.chunks(batch_size).enumerate() {
             // Check for shutdown before each batch
@@ -828,7 +916,7 @@ impl TokenDiscovery {
             }
         }
 
-        log(
+    log(
             LogTag::Discovery,
             "COMPLETE",
             &format!(
@@ -838,7 +926,19 @@ impl TokenDiscovery {
             )
         );
 
-        Ok(())
+    // Persist stats
+    let stats_handle = get_discovery_stats_handle();
+    let mut stats = stats_handle.write().await;
+    stats.last_processed = total_processed;
+    stats.last_added = total_added;
+    stats.last_deduplicated_removed = dedup_removed;
+    stats.last_blacklist_removed = blacklisted_count;
+    stats.total_processed = stats.total_processed.saturating_add(total_processed as u64);
+    stats.total_added = stats.total_added.saturating_add(total_added as u64);
+    stats.per_source = cycle_counts;
+    stats.last_cycle_completed = Some(Utc::now());
+
+    Ok(())
     }
     /// Start continuous discovery loop in background
     pub async fn start_discovery_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
@@ -894,4 +994,14 @@ pub async fn discover_tokens_once() -> Result<(), String> {
         format!("Failed to create discovery: {}", e)
     )?;
     discovery.discover_new_tokens(None).await
+}
+
+/// Get a snapshot of discovery stats for display
+pub async fn get_discovery_stats() -> DiscoveryStats {
+    let handle = get_discovery_stats_handle();
+    let snapshot = {
+        let guard = handle.read().await;
+        guard.clone()
+    };
+    snapshot
 }
