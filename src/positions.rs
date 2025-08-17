@@ -32,6 +32,34 @@ static FROZEN_ACCOUNT_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<U
 /// Cooldown duration for frozen account errors (15 minutes)
 const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
 
+/// Global cooldown between opening positions (seconds)
+const POSITION_OPEN_COOLDOWN_SECS: i64 = 15;
+
+/// Static global: last time a position was opened (for global cooldown)
+static LAST_OPEN_POSITION_AT: Lazy<StdArc<StdMutex<Option<DateTime<Utc>>>>> = Lazy::new(|| {
+    StdArc::new(StdMutex::new(None))
+});
+
+/// Try to acquire the global "open position" cooldown window.
+/// Returns Ok(()) if allowed now and sets the timestamp; Err(remaining_secs) if still cooling down.
+fn try_acquire_open_cooldown() -> Result<(), i64> {
+    if let Ok(mut last_ts) = LAST_OPEN_POSITION_AT.lock() {
+        let now = Utc::now();
+        if let Some(prev) = *last_ts {
+            let elapsed = (now - prev).num_seconds();
+            if elapsed < POSITION_OPEN_COOLDOWN_SECS {
+                return Err(POSITION_OPEN_COOLDOWN_SECS - elapsed);
+            }
+        }
+        // Set the new timestamp and allow
+        *last_ts = Some(now);
+        Ok(())
+    } else {
+        // If lock poisoned, fail-safe: block for full cooldown
+        Err(POSITION_OPEN_COOLDOWN_SECS)
+    }
+}
+
 /// Checks if a mint is currently in cooldown due to frozen account error
 fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
     if let Ok(cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
@@ -397,6 +425,24 @@ pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
             )
         );
         return;
+    }
+
+    // GLOBAL COOLDOWN: Enforce 15s delay between openings (regardless of token)
+    match try_acquire_open_cooldown() {
+        Ok(()) => { /* proceed */ }
+        Err(remaining) => {
+            log(
+                LogTag::Trader,
+                "COOLDOWN",
+                &format!(
+                    "Opening positions cooldown active: wait {}s before new position (requested: {} / {})",
+                    remaining,
+                    token.symbol,
+                    &token.mint[..8]
+                )
+            );
+            return;
+        }
     }
 
     // DEADLOCK FIX: Check positions first, release lock, then check pending transactions
