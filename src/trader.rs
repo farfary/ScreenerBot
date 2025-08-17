@@ -93,9 +93,6 @@ pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 2;
 /// Open positions monitoring interval (seconds)
 pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 2;
 
-/// Price history tracking duration (hours)
-pub const PRICE_HISTORY_DURATION_HOURS: i64 = 2;
-
 // -----------------------------------------------------------------------------
 // Task Timeout Configuration
 // -----------------------------------------------------------------------------
