@@ -1,4 +1,4 @@
-/// ScreenerBot Trading Engine
+/// Trading System
 ///
 /// ======================================
 /// STOP LOSS PROTECTION SYSTEM
