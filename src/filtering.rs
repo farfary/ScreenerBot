@@ -73,7 +73,7 @@ pub const GEM_HUNTING_MIN_LIQUIDITY_USD: f64 = 0.1; // God-tier aggressive mode
 
 /// MARKET CAP FILTERING - Avoid large market cap tokens that won't have big moves
 /// Maximum market cap in USD to focus on micro-cap gems
-pub const MAX_MARKET_CAP_USD: f64 = 10_000_000.0; // $500K max market cap for moonshot hunting
+pub const MAX_MARKET_CAP_USD: f64 = 50_000_000.0; // $500K max market cap for moonshot hunting
 
 /// Minimum volume/liquidity ratio for activity detection
 /// High ratio indicates active trading despite small liquidity (pump signals)
