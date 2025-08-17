@@ -16,13 +16,37 @@ async fn main() {
         log(LogTag::System, "CRITICAL", "📊 All trading signals and analysis will be logged but not executed");
     }
 
+    // Create shared shutdown notification for all background tasks
+    let shutdown = Arc::new(Notify::new());
+
+    // Check for dashboard mode
+    if screenerbot::arguments::is_dashboard_enabled() {
+        log(LogTag::System, "INFO", "🖥️ Dashboard mode enabled - Starting terminal UI");
+        
+        // Create dashboard instance and set it globally for log forwarding
+        let dashboard = std::sync::Arc::new(screenerbot::dashboard::Dashboard::new());
+        screenerbot::dashboard::set_global_dashboard(dashboard.clone());
+        
+        // Start dashboard in a separate task
+        let shutdown_dashboard = shutdown.clone();
+        let dashboard_handle = tokio::spawn(async move {
+            if let Err(e) = screenerbot::dashboard::run_dashboard(shutdown_dashboard).await {
+                eprintln!("Dashboard error: {}", e);
+            }
+            // Clear global dashboard on exit
+            screenerbot::dashboard::clear_global_dashboard();
+        });
+        
+        // In dashboard mode, we'll run a simplified background version
+        log(LogTag::System, "INFO", "Running in dashboard mode with terminal UI");
+    } else {
+        log(LogTag::System, "INFO", "Running in console mode");
+    }
+
     // Initialize centralized blacklist system with system/stable tokens
     screenerbot::tokens::initialize_system_stable_blacklist();
 
     log(LogTag::System, "INFO", "Starting ScreenerBot background tasks");
-    
-    // Create shared shutdown notification for all background tasks
-    let shutdown = Arc::new(Notify::new());
 
     // Set up emergency shutdown handler (second Ctrl+C will force kill)
     let emergency_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));

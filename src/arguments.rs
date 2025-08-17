@@ -156,6 +156,16 @@ pub fn is_dry_run_enabled() -> bool {
     has_arg("--dry-run")
 }
 
+/// No-summary mode - disables console output from summary module
+pub fn is_no_summary_enabled() -> bool {
+    has_arg("--no-summary")
+}
+
+/// Dashboard mode - enables terminal UI and disables all console logging
+pub fn is_dashboard_enabled() -> bool {
+    has_arg("--dashboard")
+}
+
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
@@ -205,6 +215,8 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_debug_transactions_enabled() { modes.push("transactions"); }
     if is_debug_rpc_enabled() { modes.push("rpc"); }
     if is_dry_run_enabled() { modes.push("dry-run"); }
+    if is_no_summary_enabled() { modes.push("no-summary"); }
+    if is_dashboard_enabled() { modes.push("dashboard"); }
     
     modes
 }

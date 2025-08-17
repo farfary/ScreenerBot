@@ -93,6 +93,7 @@ use std::io::{ Write, BufWriter };
 use std::path::PathBuf;
 use std::sync::{ Arc, Mutex };
 use once_cell::sync::Lazy;
+use crate::arguments::is_dashboard_enabled;
 
 /// File logger state for thread-safe file operations
 struct FileLogger {
@@ -589,7 +590,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
 
     // Print first line with full prefix (console output)
     let console_line = format!("{}{}", base_line, message_color);
-    println!("{}", console_line);
+    if !is_dashboard_enabled() {
+        println!("{}", console_line);
+    }
 
     // Write to file (clean version without color codes)
     let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
@@ -620,6 +623,11 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
     };
     let file_line = format!("{} [{}] [{}] {}", timestamp, tag_clean, log_type, message_chunks[0]);
     write_to_file(&file_line);
+
+    // Send to dashboard if dashboard mode is active
+    if is_dashboard_enabled() {
+        crate::dashboard::dashboard_log(tag_clean, log_type, &message_chunks[0]);
+    }
 
     // Print continuation lines with proper indentation (console)
     if message_chunks.len() > 1 {
@@ -654,7 +662,9 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             };
 
             let console_continuation = format!("{}{}", continuation_prefix, chunk_color);
-            println!("{}", console_continuation);
+            if !is_dashboard_enabled() {
+                println!("{}", console_continuation);
+            }
 
             // Write continuation lines to file as well
             let file_continuation = format!(
