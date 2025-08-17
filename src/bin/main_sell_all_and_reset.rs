@@ -90,7 +90,6 @@ fn print_help() {
     println!("    • data/token_blacklist.json (blacklisted tokens)");
     println!("    • data/wallet_transactions_stats.json (wallet sync data)");
     println!("    • data/transactions/ (individual transaction files)");
-    println!("    • data/cache_prices/ (price history cache)");
     println!("    • data/cache_ohlcvs/ (OHLCV data cache)");
     println!("");
     println!("SAFETY FEATURES:");

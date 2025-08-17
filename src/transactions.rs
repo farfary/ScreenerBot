@@ -6234,8 +6234,88 @@ impl TransactionsManager {
     }
     
     /// Extract target token mint from Jupiter transaction
+    /// Strategy:
+    /// - Prefer wallet-owned token balance changes (pre/postTokenBalances) to determine mint.
+    ///   For SELL (SOL increase), choose the non-WSOL mint with the most negative delta (tokens decreased).
+    ///   For BUY  (SOL decrease), choose the non-WSOL mint with the most positive delta (tokens increased).
+    /// - Fallback to scanning ATA init instructions for a non-WSOL mint if balance changes are unavailable.
     async fn extract_target_token_mint_from_jupiter(&self, transaction: &Transaction) -> Option<String> {
-        // Look for ATA creation instructions for non-WSOL tokens
+        let wallet_str = self.wallet_pubkey.to_string();
+        const WSOL: &str = "So11111111111111111111111111111111111111112";
+        let epsilon = 1e-12f64;
+
+        // 1) Prefer wallet pre/post token balance deltas
+        if let Some(raw_data) = &transaction.raw_transaction_data {
+            if let Some(meta) = raw_data.get("meta") {
+                if let (Some(pre_balances), Some(post_balances)) = (
+                    meta.get("preTokenBalances").and_then(|v| v.as_array()),
+                    meta.get("postTokenBalances").and_then(|v| v.as_array())
+                ) {
+                    // Gather deltas for wallet-owned token accounts (exclude WSOL)
+                    let mut candidates: Vec<(String, f64)> = Vec::new();
+                    for post_balance in post_balances {
+                        let owner = post_balance.get("owner").and_then(|v| v.as_str());
+                        let mint = post_balance.get("mint").and_then(|v| v.as_str());
+                        if owner == Some(wallet_str.as_str()) {
+                            if let Some(mint_str) = mint {
+                                if mint_str == WSOL { continue; }
+                                let account_index = post_balance.get("accountIndex").and_then(|v| v.as_u64());
+                                let pre_amount = pre_balances.iter()
+                                    .find(|pre| pre.get("accountIndex").and_then(|v| v.as_u64()) == account_index)
+                                    .and_then(|pre| pre.get("uiTokenAmount"))
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                let post_amount = post_balance.get("uiTokenAmount")
+                                    .and_then(|ui| ui.get("uiAmount"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+                                let delta = post_amount - pre_amount; // positive = increased, negative = decreased
+                                if delta.abs() > epsilon {
+                                    candidates.push((mint_str.to_string(), delta));
+                                }
+                            }
+                        }
+                    }
+
+                    if !candidates.is_empty() {
+                        // Decide on expected direction from SOL balance change
+                        let is_sell = transaction.sol_balance_change > 0.000001;   // gained SOL
+                        let is_buy  = transaction.sol_balance_change < -0.000001;  // spent SOL
+
+                        if is_sell {
+                            // Pick most negative delta (largest token decrease)
+                            if let Some((mint, _)) = candidates
+                                .iter()
+                                .filter(|(_, d)| *d < -epsilon)
+                                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                            {
+                                return Some(mint.clone());
+                            }
+                        } else if is_buy {
+                            // Pick most positive delta (largest token increase)
+                            if let Some((mint, _)) = candidates
+                                .iter()
+                                .filter(|(_, d)| *d > epsilon)
+                                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                            {
+                                return Some(mint.clone());
+                            }
+                        }
+
+                        // Fallback: pick largest absolute delta if direction unclear
+                        if let Some((mint, _)) = candidates
+                            .iter()
+                            .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap_or(std::cmp::Ordering::Equal))
+                        {
+                            return Some(mint.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2) Fallback: Look for ATA creation instructions for non-WSOL tokens
         if let Some(raw_data) = &transaction.raw_transaction_data {
             if let Some(meta) = raw_data.get("meta") {
                 if let Some(inner_instructions) = meta.get("innerInstructions").and_then(|v| v.as_array()) {
@@ -6245,7 +6325,7 @@ impl TransactionsManager {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
                                         if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
-                                            if mint != "So11111111111111111111111111111111111111112" {
+                                            if mint != WSOL {
                                                 return Some(mint.to_string());
                                             }
                                         }

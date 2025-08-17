@@ -16,7 +16,6 @@ data/
 .cache_ohlcv/*
 .cache_trades/*
 .cache_ohlcvs/*
-.cache_prices/*
 
 # Build artifacts
 Cargo.lock
