@@ -1893,13 +1893,35 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     // ⏰ SAFETY-BASED TIME EXIT LOGIC - RESPECTS TOKEN SAFETY LEVELS
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    // Get safety-based time thresholds (don't override safer tokens with arbitrary 30-min rule)
-    let safety_level = SafetyLevel::from_score(token_analysis.safety_score);
-    let max_hold_time = safety_level.get_max_hold_time();
+    // Use previously computed safety_level and max_hold_time; derive thresholds
     let warning_time = max_hold_time * 0.7; // 70% of max hold time = warning
     let urgent_time = max_hold_time * 0.9; // 90% of max hold time = urgent
 
-    // 🚨 SAFETY-BASED TIME EXIT: Approaching max hold time with profit
+    // 🚨 URGENT SAFETY EXIT: Near or past urgent threshold with any profit
+    if minutes_held >= urgent_time && pnl_percent > 0.0 {
+        log(
+            LogTag::Profit,
+            "URGENT_SAFETY_EXIT",
+            &format!(
+                "URGENT SAFETY EXIT: {:.1}min held (>{:.1}min urgent threshold) with {:.2}% profit - immediate sell!",
+                minutes_held,
+                urgent_time,
+                pnl_percent
+            )
+        );
+
+        return (
+            1.0,
+            format!(
+                "URGENT SAFETY EXIT: {:.1}min held (>{:.0}min limit) with {:.2}% profit!",
+                minutes_held,
+                urgent_time,
+                pnl_percent
+            ),
+        );
+    }
+
+    // 🟡 SAFETY TIME EXIT: Approaching max hold time with profit
     if minutes_held >= warning_time && pnl_percent > 0.0 {
         let time_progress = (minutes_held - warning_time) / (max_hold_time - warning_time);
         let time_exit_urgency = (0.6 + time_progress * 0.4).min(1.0); // 60-100% urgency
@@ -1932,30 +1954,6 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 minutes_held,
                 (minutes_held / max_hold_time) * 100.0,
                 max_hold_time,
-                pnl_percent
-            ),
-        );
-    }
-
-    // � URGENT SAFETY EXIT: At or past max hold time with any profit
-    if minutes_held >= urgent_time && pnl_percent > 0.0 {
-        log(
-            LogTag::Profit,
-            "URGENT_SAFETY_EXIT",
-            &format!(
-                "URGENT SAFETY EXIT: {:.1}min held (>{:.1}min urgent threshold) with {:.2}% profit - immediate sell!",
-                minutes_held,
-                urgent_time,
-                pnl_percent
-            )
-        );
-
-        return (
-            1.0,
-            format!(
-                "URGENT SAFETY EXIT: {:.1}min held (>{:.0}min limit) with {:.2}% profit!",
-                minutes_held,
-                urgent_time,
                 pnl_percent
             ),
         );
@@ -2001,25 +1999,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // ⏰ OPTIMIZED MINIMUM HOLD TIME - NEW FEATURE
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    if minutes_held < MIN_HOLD_TIME {
-        log(
-            LogTag::Profit,
-            "MIN_HOLD",
-            &format!(
-                "Minimum hold time not reached: {:.2}min < {:.2}min threshold",
-                minutes_held,
-                MIN_HOLD_TIME
-            )
-        );
-        return (
-            0.0,
-            format!("Minimum hold time: {:.2}min < {:.2}min required", minutes_held, MIN_HOLD_TIME),
-        );
-    }
+    // Note: Minimum hold time is enforced earlier (seconds-level message). No redundant check here.
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🎯 TIME DECAY PROFIT TARGET ADJUSTMENT - NEW FEATURE

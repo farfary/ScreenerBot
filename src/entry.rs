@@ -13,6 +13,7 @@ use crate::global::{ is_debug_entry_enabled };
 use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
 use chrono::Utc;
+use std::cmp::Ordering;
 
 // ============================================================================
 // 🎯 TRADING PARAMETERS - HARDCODED CONFIGURATION
@@ -38,6 +39,9 @@ const MEDIUM_DROP_TIME_WINDOW_SEC: i64 = 120;  // Medium-term analysis (2 minute
 const LONG_DROP_TIME_WINDOW_SEC: i64 = 300;    // Long-term analysis (5 minutes)
 const EXTENDED_DROP_TIME_WINDOW_SEC: i64 = 600; // NEW: Extended analysis (10 minutes)
 const NEAR_TOP_ANALYSIS_WINDOW_SEC: i64 = 900; // Near-top analysis (15 minutes)
+// Dynamic near-top floor/ceiling based on liquidity and volatility
+const NEAR_TOP_THRESHOLD_MIN: f64 = 8.0;   // never below 8%
+const NEAR_TOP_THRESHOLD_MAX: f64 = 20.0;  // never above 20%
 
 // DYNAMIC TARGET RATIOS (Ultra-aggressive)
 const TARGET_DROP_RATIO_MIN: f64 = 0.05; // Reduced from 0.08 (5% instead of 8%) 
@@ -66,7 +70,7 @@ const PROFIT_TARGET_MIN_FLOOR: f64 = 8.0;        // Never go below 8% profit tar
 const PROFIT_TARGET_MIN_RANGE: f64 = 10.0;       // Always at least 10% range
 
 // FAST DROP MULTIPLIER
-const FAST_DROP_THRESHOLD_MULTIPLIER: f64 = 1.2; // Reduced from 1.5x to 1.2x - more aggressive fast detection
+const FAST_DROP_THRESHOLD_MULTIPLIER: f64 = 1.2; // Fast drop threshold = 1.2x the min threshold (was 1.5x)
 
 // CONFIDENCE SCORING PARAMETERS (for should_buy_with_confidence)
 const CONFIDENCE_BELOW_RANGE: f64 = 45.0;        // Confidence for tokens below target liquidity
@@ -116,7 +120,7 @@ fn is_near_recent_top(
     
     // Get prices from last 15 minutes
     let now = Utc::now();
-    let recent_prices: Vec<f64> = price_history
+    let mut recent_prices: Vec<f64> = price_history
         .iter()
         .filter(|(timestamp, _)| (now - *timestamp).num_seconds() <= NEAR_TOP_ANALYSIS_WINDOW_SEC)
         .map(|(_, price)| *price)
@@ -129,6 +133,7 @@ fn is_near_recent_top(
     
     // Find the highest price in the 15-minute window
     let recent_high = recent_prices.iter().fold(0.0f64, |a, &b| a.max(b));
+    let recent_low = recent_prices.iter().fold(f64::INFINITY, |a, &b| a.min(b));
     
     if recent_high <= 0.0 || !recent_high.is_finite() || current_price <= 0.0 || !current_price.is_finite() {
         return false;
@@ -136,14 +141,31 @@ fn is_near_recent_top(
     
     // Calculate how much BELOW the recent high we are
     let drop_from_high_percent = ((recent_high - current_price) / recent_high) * PERCENTAGE_MULTIPLIER;
-    
-    // STRICT RULE: Must be MORE than 10% below 15-min high to allow entry
-    let is_too_close_to_top = drop_from_high_percent < NEAR_TOP_THRESHOLD_PERCENT;
+
+    // Dynamic near-top threshold: tighter when volatility and liquidity are low, looser when high
+    let range_pct = if recent_low.is_finite() && recent_low > 0.0 {
+        ((recent_high - recent_low) / recent_high).max(0.0) * 100.0
+    } else { 0.0 };
+    // Map range 0..30% -> threshold 12..8 (more conservative near tops when calm), beyond 30% -> 15%
+    let mut dynamic_threshold = if range_pct < 30.0 {
+        // linear from 12 down to 8
+        12.0 - (range_pct / 30.0) * 4.0
+    } else if range_pct < 80.0 {
+        // moderate volatility -> increase threshold to avoid top entries
+        12.0 + ((range_pct - 30.0) / 50.0) * 3.0 // up to 15%
+    } else {
+        15.0
+    };
+    // Clamp to global min/max bounds
+    dynamic_threshold = dynamic_threshold.max(NEAR_TOP_THRESHOLD_MIN).min(NEAR_TOP_THRESHOLD_MAX);
+
+    // STRICT RULE: Must be MORE than dynamic_threshold below 15-min high to allow entry
+    let is_too_close_to_top = drop_from_high_percent < dynamic_threshold;
     
     if is_debug_entry_enabled() {
         log(LogTag::Entry, "NEAR_TOP_CHECK", &format!(
-            "🔝 15-min high analysis: current={:.12}, high={:.12}, drop={:.2}%, required=>{:.1}%, too_close={}",
-            current_price, recent_high, drop_from_high_percent, NEAR_TOP_THRESHOLD_PERCENT, is_too_close_to_top
+            "🔝 15-min high analysis: current={:.12}, high={:.12}, drop={:.2}%, required=>{:.1}% (dyn, range={:.1}%), too_close={}",
+            current_price, recent_high, drop_from_high_percent, dynamic_threshold, range_pct, is_too_close_to_top
         ));
     }
     
@@ -372,7 +394,9 @@ async fn analyze_deep_drop_entry(
     use chrono::Utc;
     
     // Get dynamic thresholds based on liquidity
-    let (min_drop_threshold, max_drop_threshold, target_drop_ratio) = get_liquidity_based_thresholds(liquidity_usd);
+    let (base_min_drop, max_drop_threshold, target_drop_ratio) = get_liquidity_based_thresholds(liquidity_usd);
+    // Slight relaxation to increase opportunities; other safeties prevent top buys
+    let min_drop_threshold = (base_min_drop * 0.9).max(DROP_PERCENT_MIN);
     
     if is_debug_entry_enabled() {
         log(LogTag::Entry, "DROP_THRESHOLDS", &format!("🎯 Dynamic thresholds for ${:.0}k: {:.1}%-{:.1}%, ratio: {:.1}%", 
@@ -409,6 +433,7 @@ async fn analyze_deep_drop_entry(
     
     // Find recent high and calculate drop
     let recent_high = recent_prices.iter().map(|(_, price)| *price).fold(0.0f64, |a, b| a.max(b));
+    let recent_low  = recent_prices.iter().map(|(_, price)| *price).fold(f64::INFINITY, |a, b| a.min(b));
     
     if recent_high <= 0.0 || !recent_high.is_finite() {
         return None;
@@ -424,8 +449,25 @@ async fn analyze_deep_drop_entry(
     }
     
     if is_debug_entry_enabled() {
-        log(LogTag::Entry, "DROP_ANALYSIS", &format!("📉 Drop: {:.2}% (high: {:.12} → current: {:.12})", 
-            drop_percent, recent_high, current_price));
+        log(LogTag::Entry, "DROP_ANALYSIS", &format!("📉 Drop: {:.2}% (high: {:.12} → current: {:.12}, low: {:.12})", 
+            drop_percent, recent_high, current_price, recent_low));
+    }
+
+    // Bounce suppression: if price has already retraced > 35% of the drop from low -> avoid chasing tops
+    if recent_low.is_finite() && recent_low > 0.0 && recent_high > 0.0 && current_price > recent_low {
+        let total_drop_from_high = recent_high - recent_low;
+        if total_drop_from_high.is_finite() && total_drop_from_high > 0.0 {
+            let retrace = (current_price - recent_low) / total_drop_from_high; // 0..1
+            if retrace >= 0.35 {
+                if is_debug_entry_enabled() {
+                    log(LogTag::Entry, "BOUNCE_SUPPRESS", &format!(
+                        "🚫 Retrace {:.0}% of drop detected (>{:.0}%), skipping to avoid buying bounce",
+                        retrace * 100.0, 35.0
+                    ));
+                }
+                return None;
+            }
+        }
     }
     
     // Strategy 2: Dynamic drop detection (main entry condition) - LIQUIDITY ADJUSTED
