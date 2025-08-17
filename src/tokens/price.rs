@@ -811,8 +811,19 @@ pub static PRICE_SERVICE: Lazy<Arc<tokio::sync::Mutex<Option<TokenPriceService>>
 
 /// Initialize the global price service
 pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>> {
-    let service = TokenPriceService::new()?;
     let mut global_service = PRICE_SERVICE.lock().await;
+
+    // Idempotent init: if already initialized, skip re-creating the service
+    if global_service.is_some() {
+        log(
+            LogTag::PriceService,
+            "INIT_SKIP",
+            "Price service already initialized, skipping"
+        );
+        return Ok(());
+    }
+
+    let service = TokenPriceService::new()?;
     *global_service = Some(service);
     log(LogTag::PriceService, "INIT", "Price service initialized successfully");
     Ok(())

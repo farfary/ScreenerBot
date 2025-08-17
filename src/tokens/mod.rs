@@ -236,6 +236,12 @@ pub async fn initialize_global_rugcheck_service(
     database: TokenDatabase,
     shutdown: Arc<Notify>
 ) -> Result<(), String> {
+    // Idempotent init: if already present, skip
+    if GLOBAL_RUGCHECK_SERVICE.lock().unwrap().is_some() {
+        log(LogTag::System, "INIT", "Global rugcheck service already initialized, skipping");
+        return Ok(());
+    }
+
     let service = Arc::new(RugcheckService::new(database, shutdown));
 
     // Start background service

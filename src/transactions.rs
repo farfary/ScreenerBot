@@ -5598,11 +5598,15 @@ pub async fn wait_for_priority_transaction_verification(
 
 /// Initialize global transaction manager for monitoring
 pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Result<(), String> {
-    let manager = TransactionsManager::new(wallet_pubkey).await?;
-    
     let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+    if manager_guard.is_some() {
+        log(LogTag::Transactions, "INIT", "Global transaction manager already initialized, skipping");
+        return Ok(());
+    }
+
+    let manager = TransactionsManager::new(wallet_pubkey).await?;
     *manager_guard = Some(manager);
-    
+
     log(LogTag::Transactions, "INIT", "Global transaction manager initialized for monitoring");
     Ok(())
 }

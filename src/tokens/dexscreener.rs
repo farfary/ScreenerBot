@@ -770,7 +770,7 @@ pub async fn init_dexscreener_api() -> Result<(), String> {
         |_| "Failed to initialize global DexScreener API state"
     )?;
 
-    log(LogTag::Api, "SUCCESS", "DexScreener API client initialized successfully");
+    // Initialization already logged inside DexScreenerApi::initialize(); avoid duplicate success log here
     Ok(())
 }
 
