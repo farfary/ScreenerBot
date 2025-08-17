@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use std::time::{ Duration, Instant };
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+use tokio::time::timeout;
 use reqwest::StatusCode;
 use serde_json;
 use chrono::Utc;
@@ -738,8 +739,18 @@ pub async fn get_token_prices_from_api(mints: Vec<String>) -> HashMap<String, f6
 /// Standalone function to get token pairs from API
 pub async fn get_token_pairs_from_api(token_address: &str) -> Result<Vec<TokenPair>, String> {
     let api = get_global_dexscreener_api().await?;
-    let mut api_instance = api.lock().await;
-    api_instance.get_solana_token_pairs(token_address).await
+    
+    // Use timeout to prevent deadlock on API lock acquisition
+    let result = timeout(Duration::from_secs(5), api.lock()).await;
+    match result {
+        Ok(mut api_instance) => {
+            api_instance.get_solana_token_pairs(token_address).await
+        }
+        Err(_) => {
+            log(LogTag::Api, "ERROR", "DexScreener API lock timeout in get_token_pairs_from_api");
+            Err("API lock timeout".to_string())
+        }
+    }
 }
 
 // =============================================================================
@@ -762,8 +773,16 @@ pub async fn init_dexscreener_api() -> Result<(), String> {
 
     // Initialize the API instance once
     {
-        let mut api_instance = api.lock().await;
-        api_instance.initialize().await?;
+        let result = timeout(Duration::from_secs(10), api.lock()).await;
+        match result {
+            Ok(mut api_instance) => {
+                api_instance.initialize().await?;
+            }
+            Err(_) => {
+                log(LogTag::Api, "ERROR", "DexScreener API lock timeout during initialization");
+                return Err("API initialization lock timeout".to_string());
+            }
+        }
     }
 
     GLOBAL_DEXSCREENER_API.set(api).map_err(
@@ -787,8 +806,17 @@ pub async fn get_global_dexscreener_api() -> Result<Arc<Mutex<DexScreenerApi>>, 
 pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {
     match get_global_dexscreener_api().await {
         Ok(api) => {
-            let mut api_instance = api.lock().await;
-            api_instance.get_token_price(mint).await
+            // Use timeout to prevent deadlock on API lock acquisition
+            let result = timeout(Duration::from_secs(5), api.lock()).await;
+            match result {
+                Ok(mut api_instance) => {
+                    api_instance.get_token_price(mint).await
+                }
+                Err(_) => {
+                    log(LogTag::Api, "ERROR", "DexScreener API lock timeout in get_token_price_from_global_api");
+                    None
+                }
+            }
         }
         Err(e) => {
             log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
@@ -801,8 +829,17 @@ pub async fn get_token_price_from_global_api(mint: &str) -> Option<f64> {
 pub async fn get_token_from_mint_global_api(mint: &str) -> Result<Option<Token>, String> {
     match get_global_dexscreener_api().await {
         Ok(api) => {
-            let mut api_instance = api.lock().await;
-            api_instance.get_token_from_mint(mint).await
+            // Use timeout to prevent deadlock on API lock acquisition
+            let result = timeout(Duration::from_secs(5), api.lock()).await;
+            match result {
+                Ok(mut api_instance) => {
+                    api_instance.get_token_from_mint(mint).await
+                }
+                Err(_) => {
+                    log(LogTag::Api, "ERROR", "DexScreener API lock timeout in get_token_from_mint_global_api");
+                    Err("API lock timeout".to_string())
+                }
+            }
         }
         Err(e) => {
             log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));
@@ -815,8 +852,17 @@ pub async fn get_token_from_mint_global_api(mint: &str) -> Result<Option<Token>,
 pub async fn get_multiple_token_prices_from_global_api(mints: &[String]) -> HashMap<String, f64> {
     match get_global_dexscreener_api().await {
         Ok(api) => {
-            let mut api_instance = api.lock().await;
-            api_instance.get_multiple_token_prices(mints).await
+            // Use timeout to prevent deadlock on API lock acquisition
+            let result = timeout(Duration::from_secs(5), api.lock()).await;
+            match result {
+                Ok(mut api_instance) => {
+                    api_instance.get_multiple_token_prices(mints).await
+                }
+                Err(_) => {
+                    log(LogTag::Api, "ERROR", "DexScreener API lock timeout in get_multiple_token_prices_from_global_api");
+                    HashMap::new()
+                }
+            }
         }
         Err(e) => {
             log(LogTag::Api, "ERROR", &format!("Failed to get global API client: {}", e));

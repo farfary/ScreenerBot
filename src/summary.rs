@@ -437,7 +437,14 @@ pub async fn display_positions_table() {
 
     // Discovery section FIRST (less important but requested first)
     {
-        let ds = get_discovery_stats().await;
+        // Add timeout protection for discovery stats
+        let ds = match tokio::time::timeout(Duration::from_secs(2), get_discovery_stats()).await {
+            Ok(stats) => stats,
+            Err(_) => {
+                log(LogTag::Summary, "WARN", "Discovery stats timeout - using default");
+                crate::tokens::discovery::DiscoveryStats::default()
+            }
+        };
         let cycles = format!("{}", ds.total_cycles);
         let proc_add = format!("{}/{}", ds.last_processed, ds.last_added);
         let filters = format!("{}/{}", ds.last_deduplicated_removed, ds.last_blacklist_removed);
@@ -564,9 +571,18 @@ pub async fn display_positions_table() {
                 );
             }
 
-            // Fetch all prices in one batch call (much faster!)
+            // Fetch all prices in one batch call (much faster!) with timeout protection
             let price_fetch_start = Instant::now();
-            let price_map = crate::tokens::get_current_token_prices_batch(&mints).await;
+            let price_map = match tokio::time::timeout(
+                Duration::from_secs(4), 
+                crate::tokens::get_current_token_prices_batch(&mints)
+            ).await {
+                Ok(prices) => prices,
+                Err(_) => {
+                    log(LogTag::Summary, "WARN", "Token price batch fetch timeout - using empty map");
+                    std::collections::HashMap::new()
+                }
+            };
 
             if is_debug_summary_enabled() {
                 let prices_found = price_map.values().filter(|p| p.is_some()).count();
@@ -806,15 +822,36 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         last_cleanup: ata_stats.last_cleanup_time.unwrap_or_else(|| "Never".to_string()),
     };
 
-    // Get pool service statistics
+    // Get pool service statistics with timeout protection
     let pool_service = get_pool_service();
     let pool_stats_start = Instant::now();
-    let (pool_cache_count, price_cache_count, _availability_cache_count) =
-        pool_service.get_cache_stats().await;
-    let enhanced_stats = pool_service.get_enhanced_stats().await;
     
-    // Get detailed disk cache statistics
-    let disk_cache_stats = pool_service.get_disk_cache_stats().await.unwrap_or_default();
+    // Add timeout protection for pool service calls
+    let (pool_cache_count, price_cache_count, _availability_cache_count) = 
+        match tokio::time::timeout(Duration::from_secs(3), pool_service.get_cache_stats()).await {
+            Ok(stats) => stats,
+            Err(_) => {
+                log(LogTag::Summary, "WARN", "Pool cache stats timeout - using default");
+                (0, 0, 0)
+            }
+        };
+    
+    let enhanced_stats = match tokio::time::timeout(Duration::from_secs(3), pool_service.get_enhanced_stats()).await {
+        Ok(stats) => stats,
+        Err(_) => {
+            log(LogTag::Summary, "WARN", "Enhanced pool stats timeout - using default");
+            crate::tokens::pool::PoolServiceStats::default()
+        }
+    };
+    
+    // Get detailed disk cache statistics with timeout
+    let disk_cache_stats = match tokio::time::timeout(Duration::from_secs(2), pool_service.get_disk_cache_stats()).await {
+        Ok(Ok(stats)) => stats,
+        _ => {
+            log(LogTag::Summary, "WARN", "Disk cache stats timeout - using default");
+            crate::tokens::pool::PoolDiskCacheStats::default()
+        }
+    };
     
     if is_debug_summary_enabled() {
         log(

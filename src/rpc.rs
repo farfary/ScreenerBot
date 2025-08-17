@@ -162,9 +162,16 @@ fn is_premium_rpc_only() -> bool {
 
 /// Get current ATA rent amount from chain with 10-second cache
 pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
-    // Check cache first
+    // Check cache first with safe lock handling
     {
-        let cache = ATA_RENT_CACHE.lock().unwrap();
+        let cache = match ATA_RENT_CACHE.try_lock() {
+            Ok(cache) => cache,
+            Err(_) => {
+                // If we can't get the cache lock, fall back to default value
+                log(LogTag::Rpc, "WARN", "ATA rent cache lock contention - using default ATA rent");
+                return Ok(2039280); // Default ATA rent: 0.00203928 SOL
+            }
+        };
         if let Some(ref info) = *cache {
             if info.cached_at.elapsed() < Duration::from_secs(10) {
                 return Ok(info.rent_lamports);
@@ -201,13 +208,16 @@ pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
             if let Some(result) = rpc_response.get("result") {
                 if let Some(rent_lamports) = result.as_u64() {
-                    // Update cache
+                    // Update cache with safe lock handling
                     {
-                        let mut cache = ATA_RENT_CACHE.lock().unwrap();
-                        *cache = Some(AtaRentInfo {
-                            rent_lamports,
-                            cached_at: Instant::now(),
-                        });
+                        if let Ok(mut cache) = ATA_RENT_CACHE.try_lock() {
+                            *cache = Some(AtaRentInfo {
+                                rent_lamports,
+                                cached_at: Instant::now(),
+                            });
+                        } else {
+                            log(LogTag::Rpc, "WARN", "Failed to update ATA rent cache - lock contention");
+                        }
                     }
                     
                     log(LogTag::Rpc, "ATA_RENT", &format!("Retrieved ATA rent from premium RPC: {} lamports ({:.9} SOL)", 
@@ -239,11 +249,17 @@ pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
             if let Some(rent_lamports) = result.as_u64() {
                 // Update cache
                 {
-                    let mut cache = ATA_RENT_CACHE.lock().unwrap();
-                    *cache = Some(AtaRentInfo {
-                        rent_lamports,
-                        cached_at: Instant::now(),
-                    });
+                    match ATA_RENT_CACHE.try_lock() {
+                        Ok(mut cache) => {
+                            *cache = Some(AtaRentInfo {
+                                rent_lamports,
+                                cached_at: Instant::now(),
+                            });
+                        }
+                        Err(_) => {
+                            log(LogTag::Rpc, "WARN", "ATA_RENT_CACHE lock contention during update - cache not updated");
+                        }
+                    }
                 }
                 
                 log(LogTag::Rpc, "ATA_RENT", &format!("Retrieved ATA rent from chain: {} lamports ({:.9} SOL)", 
@@ -267,11 +283,17 @@ pub async fn get_ata_rent_lamports() -> Result<u64, SwapError> {
             if let Some(rent_lamports) = result.as_u64() {
                 // Update cache
                 {
-                    let mut cache = ATA_RENT_CACHE.lock().unwrap();
-                    *cache = Some(AtaRentInfo {
-                        rent_lamports,
-                        cached_at: Instant::now(),
-                    });
+                    match ATA_RENT_CACHE.try_lock() {
+                        Ok(mut cache) => {
+                            *cache = Some(AtaRentInfo {
+                                rent_lamports,
+                                cached_at: Instant::now(),
+                            });
+                        }
+                        Err(_) => {
+                            log(LogTag::Rpc, "WARN", "ATA_RENT_CACHE lock contention during fallback update - cache not updated");
+                        }
+                    }
                 }
                 
                 log(LogTag::Rpc, "ATA_RENT", &format!("Retrieved ATA rent from chain (fallback): {} lamports ({:.9} SOL)", 
@@ -885,12 +907,24 @@ impl RpcClient {
 
     /// Get RPC statistics
     pub fn get_stats(&self) -> RpcStats {
-        self.stats.lock().unwrap().clone()
+        match self.stats.try_lock() {
+            Ok(stats) => stats.clone(),
+            Err(_) => {
+                log(LogTag::Rpc, "WARN", "RPC stats lock contention - returning default stats");
+                RpcStats::default()
+            }
+        }
     }
 
     /// Save RPC statistics to disk
     pub fn save_stats(&self) -> Result<(), String> {
-        self.stats.lock().unwrap().save_to_disk()
+        match self.stats.try_lock() {
+            Ok(mut stats) => stats.save_to_disk(),
+            Err(_) => {
+                log(LogTag::Rpc, "WARN", "RPC stats lock contention during save - stats not saved");
+                Err("Failed to acquire stats lock for saving".to_string())
+            }
+        }
     }
 
     /// Record an RPC call for statistics

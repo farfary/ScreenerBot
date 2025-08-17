@@ -85,13 +85,13 @@ pub const TIME_DECAY_START_SECS: f64 = 7200.0; // 2 hours
 // -----------------------------------------------------------------------------
 
 /// Summary display refresh interval (seconds)
-pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 5;
+pub const SUMMARY_DISPLAY_INTERVAL_SECS: u64 = 6;
 
 /// New entry signals check interval (seconds)
-pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 5;
+pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 2;
 
 /// Open positions monitoring interval (seconds)
-pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 5;
+pub const POSITION_MONITOR_INTERVAL_SECS: u64 = 2;
 
 /// Price history tracking duration (hours)
 pub const PRICE_HISTORY_DURATION_HOURS: i64 = 2;
@@ -215,6 +215,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Static global: tracks critical trading operations in progress to prevent force shutdown
 pub static CRITICAL_OPERATIONS_IN_PROGRESS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = Lazy::new(||
+    Arc::new(std::sync::atomic::AtomicUsize::new(0))
+);
+
+/// Global tracker: number of buy operations currently in-flight (reserved but not yet reflected in open positions)
+pub static IN_FLIGHT_BUY_SLOTS: Lazy<Arc<std::sync::atomic::AtomicUsize>> = Lazy::new(||
     Arc::new(std::sync::atomic::AtomicUsize::new(0))
 );
 
@@ -1254,6 +1259,30 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     return None;
                                 }
 
+                                // Global capacity check to prevent oversubscription across cycles
+                                let open_now = get_open_positions_count();
+                                let inflight_now = IN_FLIGHT_BUY_SLOTS.load(Ordering::SeqCst);
+                                if open_now + inflight_now >= MAX_OPEN_POSITIONS {
+                                    // Release per-cycle reserved slot and skip
+                                    remaining_slots_clone.fetch_add(1, Ordering::SeqCst);
+                                    if is_debug_entry_enabled() {
+                                        log(
+                                            LogTag::Trader,
+                                            "GLOBAL_LIMIT",
+                                            &format!(
+                                                "🚫 Global position limit reached for {} — open: {}, in-flight: {}, max: {}",
+                                                token.symbol,
+                                                open_now,
+                                                inflight_now,
+                                                MAX_OPEN_POSITIONS
+                                            )
+                                        );
+                                    }
+                                    return None;
+                                }
+                                // Reserve one global in-flight slot
+                                IN_FLIGHT_BUY_SLOTS.fetch_add(1, Ordering::SeqCst);
+
                                 if is_debug_entry_enabled() {
                                     let left = remaining_slots_clone.load(Ordering::SeqCst);
                                     log(
@@ -1275,6 +1304,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                 let shutdown_for_buy = shutdown_clone.clone();
                                 let remaining_slots_for_buy = remaining_slots_clone.clone();
                                 let buy_semaphore_for_buy = buy_semaphore_stream_clone.clone();
+                                let inflight_counter_for_buy = IN_FLIGHT_BUY_SLOTS.clone();
 
                                 tokio::spawn(async move {
                                     // Acquire buy semaphore with timeout
@@ -1295,6 +1325,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                             );
                                             // Release reserved slot
                                             remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                            inflight_counter_for_buy.fetch_sub(1, Ordering::SeqCst);
                                             return;
                                         }
                                         Err(_) => {
@@ -1308,6 +1339,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                             );
                                             // Release reserved slot
                                             remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                            inflight_counter_for_buy.fetch_sub(1, Ordering::SeqCst);
                                             return;
                                         }
                                     };
@@ -1333,6 +1365,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                         );
                                         // Release reserved slot
                                         remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                        inflight_counter_for_buy.fetch_sub(1, Ordering::SeqCst);
                                         return;
                                     }
 
@@ -1350,7 +1383,38 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                                     token_symbol_for_logs
                                                 )
                                             );
-                                            // Slot remains consumed on success
+                                            // Check if a position was actually created; if not, release per-cycle slot
+                                            let mut created = false;
+                                            // Use try_lock with timeout to prevent deadlock
+                                            match tokio::time::timeout(
+                                                Duration::from_millis(100),
+                                                async {
+                                                    if let Ok(positions) = SAVED_POSITIONS.try_lock() {
+                                                        positions.iter().any(|p| p.mint == token_for_buy.mint && p.exit_price.is_none())
+                                                    } else {
+                                                        false // Assume not created if can't get lock quickly
+                                                    }
+                                                }
+                                            ).await {
+                                                Ok(result) => created = result,
+                                                Err(_) => {
+                                                    log(LogTag::Trader, "WARN", &format!("Position check timeout for {}", token_symbol_for_logs));
+                                                    created = false; // Assume not created on timeout
+                                                }
+                                            }
+                                            if !created {
+                                                remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                                log(
+                                                    LogTag::Trader,
+                                                    "BUY_SKIPPED",
+                                                    &format!(
+                                                        "No position found for {} after buy call — slot returned",
+                                                        token_symbol_for_logs
+                                                    )
+                                                );
+                                            }
+                                            // Per-cycle slot remains consumed when created; decrement global in-flight either way
+                                            inflight_counter_for_buy.fetch_sub(1, Ordering::SeqCst);
                                         }
                                         Err(_) => {
                                             log(
@@ -1364,6 +1428,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                             );
                                             // Release reserved slot on failure/timeout
                                             remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                            inflight_counter_for_buy.fetch_sub(1, Ordering::SeqCst);
                                         }
                                     }
                                 });

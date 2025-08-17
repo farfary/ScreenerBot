@@ -5598,17 +5598,26 @@ pub async fn wait_for_priority_transaction_verification(
 
 /// Initialize global transaction manager for monitoring
 pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Result<(), String> {
-    let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    if manager_guard.is_some() {
-        log(LogTag::Transactions, "INIT", "Global transaction manager already initialized, skipping");
-        return Ok(());
+    // Use try_lock to prevent deadlock with timeout
+    match tokio::time::timeout(Duration::from_secs(5), GLOBAL_TRANSACTION_MANAGER.lock()).await {
+        Ok(mut manager_guard) => {
+            if manager_guard.is_some() {
+                log(LogTag::Transactions, "INIT_SKIP", "Global transaction manager already initialized");
+                return Ok(());
+            }
+
+            let manager = TransactionsManager::new(wallet_pubkey).await?;
+            *manager_guard = Some(manager);
+
+            log(LogTag::Transactions, "INIT", "Global transaction manager initialized for monitoring");
+            Ok(())
+        }
+        Err(_) => {
+            let error_msg = "Failed to acquire global transaction manager lock within timeout";
+            log(LogTag::Transactions, "ERROR", error_msg);
+            Err(error_msg.to_string())
+        }
     }
-
-    let manager = TransactionsManager::new(wallet_pubkey).await?;
-    *manager_guard = Some(manager);
-
-    log(LogTag::Transactions, "INIT", "Global transaction manager initialized for monitoring");
-    Ok(())
 }
 
 /// Get transaction by signature (for positions.rs integration) - cache-first approach
@@ -5720,37 +5729,64 @@ pub async fn get_global_swap_transactions() -> Result<Vec<SwapPnLInfo>, String> 
 /// Check if there are pending transactions for a specific token mint
 /// This prevents duplicate buy transactions for the same token
 pub async fn has_pending_transactions_for_token(token_mint: &str) -> Result<bool, String> {
+    let token_mint = token_mint.to_string(); // Convert to owned String for spawn_blocking
+    
     log(
         LogTag::Transactions,
         "PENDING_CHECK_START",
         &format!("🔍 Checking for pending transactions for token: {}", &token_mint[..8])
     );
 
-    // DEADLOCK FIX: Get position data first, then get manager data separately
+    // DEADLOCK FIX: Get position data first with timeout protection, then get manager data separately
     // Never hold both mutexes at the same time
-    let positions_with_unverified_for_token = {
-        let positions = crate::positions::SAVED_POSITIONS.lock().map_err(|e| format!("Failed to lock positions: {}", e))?;
-        
-        positions
-            .iter()
-            .filter(|position| {
-                // Check if this position is for the requested token
-                position.mint == token_mint && (
-                    // Has unverified entry transaction
-                    (position.entry_transaction_signature.is_some() && !position.transaction_entry_verified) ||
-                    // Has unverified exit transaction  
-                    (position.exit_transaction_signature.is_some() && !position.transaction_exit_verified)
-                )
+    let positions_with_unverified_for_token: Vec<(String, Option<String>, Option<String>, bool, bool)> = {
+        let token_mint_clone = token_mint.clone(); // Clone for the closure
+        // Use timeout to prevent deadlock if position lock is held by another thread
+        match tokio::time::timeout(
+            Duration::from_millis(500), 
+            tokio::task::spawn_blocking(move || -> Result<Vec<(String, Option<String>, Option<String>, bool, bool)>, String> {
+                match crate::positions::SAVED_POSITIONS.try_lock() {
+                    Ok(positions) => {
+                        // Extract and filter positions for specific token with unverified transactions
+                        let result: Vec<(String, Option<String>, Option<String>, bool, bool)> = positions
+                            .iter()
+                            .filter(|pos| pos.mint == token_mint_clone)
+                            .filter(|position| {
+                                // Has unverified entry transaction
+                                (position.entry_transaction_signature.is_some() && !position.transaction_entry_verified) ||
+                                // Has unverified exit transaction  
+                                (position.exit_transaction_signature.is_some() && !position.transaction_exit_verified)
+                            })
+                            .map(|p| (
+                                p.symbol.clone(),
+                                p.entry_transaction_signature.clone(),
+                                p.exit_transaction_signature.clone(),
+                                p.transaction_entry_verified,
+                                p.transaction_exit_verified
+                            ))
+                            .collect();
+                        Ok(result)
+                    }
+                    Err(e) => Err(format!("Failed to lock positions: {}", e))
+                }
             })
-            .map(|p| (
-                p.symbol.clone(),
-                p.entry_transaction_signature.clone(),
-                p.exit_transaction_signature.clone(),
-                p.transaction_entry_verified,
-                p.transaction_exit_verified
-            ))
-            .collect::<Vec<_>>()
-    }; // SAVED_POSITIONS lock is dropped here
+        ).await {
+            Ok(spawn_result) => match spawn_result {
+                Ok(positions_result) => match positions_result {
+                    Ok(positions) => positions,
+                    Err(lock_err) => return Err(lock_err),
+                },
+                Err(join_err) => {
+                    log(LogTag::Transactions, "WARN", &format!("Position lock task join failed: {} - assuming no pending transactions", join_err));
+                    return Ok(false);
+                }
+            },
+            Err(_timeout_elapsed) => {
+                log(LogTag::Transactions, "WARN", "Position lock timeout - assuming no pending transactions");
+                return Ok(false);
+            }
+        }
+    };
 
     // Now check manager data separately
     let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
