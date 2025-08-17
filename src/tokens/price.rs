@@ -322,7 +322,12 @@ impl TokenPriceService {
         // Check if this is an open position for pool price priority
         let is_position_open = {
             let positions = self.open_positions.read().await;
-            positions.contains(mint)
+            if positions.contains(mint) {
+                true
+            } else {
+                // Fallback to authoritative positions store to avoid transient desync
+                crate::positions::is_open_position(mint)
+            }
         };
 
         // For non-open positions, ALWAYS use API price, never pool
@@ -682,6 +687,9 @@ impl TokenPriceService {
             // Mark these as open positions in watch list
             drop(positions);
             self.add_to_watch_list(&mint, true).await;
+            // Also pin into pool service watch list with high priority
+            let pool = get_pool_service();
+            pool.add_to_watch_list(&mint, 100).await;
             positions = self.open_positions.write().await;
         }
     }
