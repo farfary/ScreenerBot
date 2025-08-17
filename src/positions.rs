@@ -191,25 +191,6 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
         let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
 
-        if is_debug_profit_enabled() {
-            // Log detailed PnL calculation for debugging
-            log(
-                LogTag::Trader,
-                "PNL_DETAILED",
-                &format!(
-                    "💰 DETAILED PNL CALCULATION for {}:\n  Entry size: {:.9} SOL\n  SOL received: {:.9} SOL\n  Buy fee: {:.9} SOL\n  Sell fee: {:.9} SOL\n  Profit buffer: {:.9} SOL\n  Total fees + buffer: {:.9} SOL\n  Net P&L: {:.9} SOL ({:.2}%)",
-                    position.symbol,
-                    sol_invested,
-                    sol_received,
-                    buy_fee,
-                    sell_fee,
-                    PROFIT_EXTRA_NEEDED_SOL,
-                    total_fees,
-                    net_pnl_sol,
-                    net_pnl_percent
-                )
-            );
-        }
 
         return (net_pnl_sol, net_pnl_percent);
     }
