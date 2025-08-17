@@ -207,6 +207,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use std::time::Duration;
 use colored::Colorize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // =============================================================================
 // GLOBAL STATE AND STATIC STORAGE
@@ -718,8 +719,13 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
-        // Process all tokens in parallel with concurrent tasks
-        let mut handles = Vec::new();
+    // Process all tokens in parallel with concurrent tasks
+    // Prepare streaming-buy controls: remaining position slots and a shared buy semaphore
+    let current_open_count = get_open_positions_count();
+    let available_slots = MAX_OPEN_POSITIONS.saturating_sub(current_open_count);
+    let remaining_slots = Arc::new(AtomicUsize::new(available_slots));
+    let buy_semaphore_stream = Arc::new(Semaphore::new(3)); // Same limit as aggregated buy phase
+    let mut handles: Vec<tokio::task::JoinHandle<Option<(Token, f64, f64)>>> = Vec::new();
 
         // Note: tokens are still sorted by liquidity from highest to lowest
         for token in tokens.iter() {
@@ -763,6 +769,8 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             // Clone necessary variables for the task
             let token = token.clone();
             let shutdown_clone = shutdown.clone();
+            let remaining_slots_clone = remaining_slots.clone();
+            let buy_semaphore_stream_clone = buy_semaphore_stream.clone();
 
             // Spawn a new task for this token with overall timeout
             let handle = tokio::spawn(async move {
@@ -1213,20 +1221,155 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                                     }
                                 };
 
+                                // STREAMING BUY: attempt to reserve a slot and spawn buy immediately
+                                // Reserve one position slot atomically
+                                let mut reserved = false;
+                                loop {
+                                    let cur = remaining_slots_clone.load(Ordering::SeqCst);
+                                    if cur == 0 {
+                                        break;
+                                    }
+                                    if remaining_slots_clone
+                                        .compare_exchange(cur, cur - 1, Ordering::SeqCst, Ordering::SeqCst)
+                                        .is_ok()
+                                    {
+                                        reserved = true;
+                                        break;
+                                    }
+                                }
+
+                                if !reserved {
+                                    // No available slots, skip buy
+                                    if is_debug_entry_enabled() {
+                                        log(
+                                            LogTag::Trader,
+                                            "POSITION_LIMIT_REACHED",
+                                            &format!(
+                                                "🚫 No available slots for {} — skipping immediate buy (max {} reached)",
+                                                token.symbol,
+                                                MAX_OPEN_POSITIONS
+                                            )
+                                        );
+                                    }
+                                    return None;
+                                }
+
                                 if is_debug_entry_enabled() {
+                                    let left = remaining_slots_clone.load(Ordering::SeqCst);
                                     log(
                                         LogTag::Trader,
-                                        "BUY_DECISION_FINAL",
+                                        "STREAM_BUY_RESERVE",
                                         &format!(
-                                            "✅ {} PASSED ALL CHECKS → Returning for buy execution (price: {:.10}, change: {:.2}%)",
+                                            "🎯 Reserved slot for {} → {} slots remaining (price: {:.10}, change: {:.2}%)",
                                             token.symbol,
+                                            left,
                                             current_price,
                                             change
                                         )
                                     );
                                 }
 
-                                return Some((token, current_price, change));
+                                // Spawn the buy task so this analysis task can finish quickly
+                                let token_for_buy = token.clone();
+                                let token_symbol_for_logs = token.symbol.clone();
+                                let shutdown_for_buy = shutdown_clone.clone();
+                                let remaining_slots_for_buy = remaining_slots_clone.clone();
+                                let buy_semaphore_for_buy = buy_semaphore_stream_clone.clone();
+
+                                tokio::spawn(async move {
+                                    // Acquire buy semaphore with timeout
+                                    let permit = match tokio::time::timeout(
+                                        Duration::from_secs(BUY_SEMAPHORE_ACQUIRE_TIMEOUT_SECS),
+                                        buy_semaphore_for_buy.acquire_owned()
+                                    ).await {
+                                        Ok(Ok(p)) => p,
+                                        Ok(Err(e)) => {
+                                            log(
+                                                LogTag::Trader,
+                                                "ERROR",
+                                                &format!(
+                                                    "Failed to acquire semaphore permit for buy ({}): {}",
+                                                    token_symbol_for_logs,
+                                                    e
+                                                )
+                                            );
+                                            // Release reserved slot
+                                            remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                            return;
+                                        }
+                                        Err(_) => {
+                                            log(
+                                                LogTag::Trader,
+                                                "WARN",
+                                                &format!(
+                                                    "Semaphore acquire timed out for buy operation ({})",
+                                                    token_symbol_for_logs
+                                                )
+                                            );
+                                            // Release reserved slot
+                                            remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                            return;
+                                        }
+                                    };
+
+                                    let _permit = permit; // keep until task end
+
+                                    // CRITICAL OPERATION PROTECTION - Prevent shutdown during buy
+                                    let _guard = CriticalOperationGuard::new(&format!("BUY_{}", token_symbol_for_logs));
+
+                                    // Check for shutdown before starting buy operation
+                                    let shutdown_check = tokio::time::timeout(
+                                        Duration::from_millis(BUY_OPERATION_SHUTDOWN_CHECK_MS),
+                                        shutdown_for_buy.notified()
+                                    ).await;
+                                    if shutdown_check.is_ok() {
+                                        log(
+                                            LogTag::Trader,
+                                            "SHUTDOWN",
+                                            &format!(
+                                                "Skipping buy operation for {} - shutdown in progress",
+                                                token_symbol_for_logs
+                                            )
+                                        );
+                                        // Release reserved slot
+                                        remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                        return;
+                                    }
+
+                                    // Execute buy with timeout
+                                    match tokio::time::timeout(
+                                        Duration::from_secs(BUY_OPERATION_SMART_TIMEOUT_SECS),
+                                        async { open_position(&token_for_buy, current_price, change).await }
+                                    ).await {
+                                        Ok(_) => {
+                                            log(
+                                                LogTag::Trader,
+                                                "SUCCESS",
+                                                &format!(
+                                                    "Completed buy operation for {} (streaming)",
+                                                    token_symbol_for_logs
+                                                )
+                                            );
+                                            // Slot remains consumed on success
+                                        }
+                                        Err(_) => {
+                                            log(
+                                                LogTag::Trader,
+                                                "ERROR",
+                                                &format!(
+                                                    "Buy operation for {} timed out after {} seconds (streaming)",
+                                                    token_symbol_for_logs,
+                                                    BUY_OPERATION_SMART_TIMEOUT_SECS
+                                                )
+                                            );
+                                            // Release reserved slot on failure/timeout
+                                            remaining_slots_for_buy.fetch_add(1, Ordering::SeqCst);
+                                        }
+                                    }
+                                });
+
+                                // We've spawned the buy; don't return an opportunity to avoid duplicate buys
+                                return None;
                             } else {
                                 use crate::global::is_debug_entry_enabled;
 

@@ -33,7 +33,7 @@ static FROZEN_ACCOUNT_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<U
 const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
 
 /// Global cooldown between opening positions (seconds)
-const POSITION_OPEN_COOLDOWN_SECS: i64 = 15;
+const POSITION_OPEN_COOLDOWN_SECS: i64 = 0;
 
 /// Static global: last time a position was opened (for global cooldown)
 static LAST_OPEN_POSITION_AT: Lazy<StdArc<StdMutex<Option<DateTime<Utc>>>>> = Lazy::new(|| {
