@@ -14,6 +14,10 @@ use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
 use chrono::Utc;
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 // ============================================================================
 // 🎯 TRADING PARAMETERS - HARDCODED CONFIGURATION
@@ -331,6 +335,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     // CORE LOGIC: Dynamic drop detection based on liquidity
     let volume_24h = token.volume.as_ref().and_then(|v| v.h24);
     let deep_drop_result = analyze_deep_drop_entry(
+        &token.mint,
         current_pool_price,
         &price_history,
         pool_data_age,
@@ -388,7 +393,9 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
             {
                     // Accept only when combined score high and timing favorable, and price not near top (already checked)
                     if analysis.should_enter && analysis.confidence >= 0.6 {
-                        let conf = (analysis.combined_score * 100.0).clamp(55.0, 90.0);
+                        let mut conf = analysis.combined_score * 100.0;
+                        if conf < 55.0 { conf = 55.0; }
+                        if conf > 90.0 { conf = 90.0; }
                         if is_debug_entry_enabled() {
                             log(LogTag::Entry, "RL_FALLBACK_ENTRY", &format!(
                                 "🤖 RL-approved entry: score {:.2}, conf {:.2}", analysis.combined_score, analysis.confidence
@@ -483,6 +490,7 @@ fn calculate_price_volatility(price_history: &[(chrono::DateTime<chrono::Utc>, f
 /// Dynamic drop analysis with liquidity-based entry decisions
 /// Returns Some((drop_percent, reason)) if dynamic drop detected, None otherwise
 async fn analyze_deep_drop_entry(
+    mint: &str,
     current_price: f64,
     price_history: &[(chrono::DateTime<chrono::Utc>, f64)],
     data_age_minutes: i64,
@@ -490,6 +498,24 @@ async fn analyze_deep_drop_entry(
     volume_24h: Option<f64>
 ) -> Option<(f64, String)> {
     use chrono::Utc;
+    
+    // --- Adaptive tuner (runtime auto-tuning of min drop) -----------------
+    // Lightweight, in-memory EMA-based scaler per token
+    struct TunerState {
+        scale_ema: f64,        // threshold multiplier (0.6..1.4)
+        ema_volatility: f64,   // smoothed volatility %
+        ema_velocity: f64,     // smoothed pct/minute (+/-)
+        last_update: Instant,
+    }
+
+    struct AdaptiveDropTuner {
+        inner: RwLock<HashMap<String, TunerState>>,
+    }
+
+    static ADAPTIVE_TUNER: OnceLock<AdaptiveDropTuner> = OnceLock::new();
+    fn get_adaptive_tuner() -> &'static AdaptiveDropTuner {
+        ADAPTIVE_TUNER.get_or_init(|| AdaptiveDropTuner { inner: RwLock::new(HashMap::new()) })
+    }
     
     // Get dynamic thresholds based on liquidity
     let (base_min_drop, max_drop_threshold, target_drop_ratio) = get_liquidity_based_thresholds(liquidity_usd);
@@ -499,11 +525,77 @@ async fn analyze_deep_drop_entry(
     // Volatility-aware adjustment: in higher volatility allow smaller drops to qualify
     let vol_percent = calculate_price_volatility(price_history, current_price);
     let volatility_factor = if vol_percent > 100.0 { 0.7 } else if vol_percent > 60.0 { 0.8 } else if vol_percent > 30.0 { 0.9 } else { 1.0 };
-    let effective_min_drop = (min_drop_threshold * volatility_factor).max(DROP_PERCENT_MIN * 0.5);
+
+    // Short-term velocity (percent per minute) over last ~30s
+    let velocity_per_minute = {
+        let now = Utc::now();
+        let window_sec: i64 = 30;
+        let recent: Vec<(chrono::DateTime<chrono::Utc>, f64)> = price_history
+            .iter()
+            .filter(|(ts, _)| (now - *ts).num_seconds() <= window_sec)
+            .cloned()
+            .collect();
+        if recent.len() >= 2 {
+            let first = recent.first().unwrap();
+            let last = recent.last().unwrap();
+            if first.1 > 0.0 && first.1.is_finite() && last.1.is_finite() {
+                let dt = (last.0 - first.0).num_seconds().max(1) as f64;
+                let pct_change = ((last.1 - first.1) / first.1) * 100.0; // % over dt seconds
+                pct_change * (60.0 / dt) // % per minute
+            } else { 0.0 }
+        } else { 0.0 }
+    };
+
+    // Adaptive tuner: compute a per-mint scale with EMA smoothing
+    let adaptive_scale = {
+        // Compute a bounded target scale from current observations
+        let vol_scale = if vol_percent <= 20.0 { 0.90 } else if vol_percent <= 40.0 { 0.98 } else if vol_percent <= 80.0 { 1.05 } else { 1.20 };
+        let vel_scale = if velocity_per_minute < -6.0 {
+            // accelerating downtrend: lower threshold to catch
+            0.92
+        } else if velocity_per_minute > 6.0 {
+            // accelerating uptrend: raise threshold to avoid chasing
+            1.10
+        } else { 1.0 };
+        let liq_scale = if liquidity_usd >= 200_000.0 { 0.92 } else if liquidity_usd <= 5_000.0 { 1.08 } else { 1.0 };
+    let mut target_scale = vol_scale * vel_scale * liq_scale;
+    if target_scale < 0.6f64 { target_scale = 0.6f64; }
+    if target_scale > 1.4f64 { target_scale = 1.4f64; }
+
+        // Update EMA state
+        let tuner = get_adaptive_tuner();
+        if let Ok(mut map) = tuner.inner.try_write() {
+            let st = map.entry(mint.to_string()).or_insert(TunerState {
+                scale_ema: 1.0,
+                ema_volatility: vol_percent,
+                ema_velocity: velocity_per_minute,
+                last_update: Instant::now(),
+            });
+            let old_scale = st.scale_ema;
+            st.ema_volatility = st.ema_volatility * 0.8 + vol_percent * 0.2;
+            st.ema_velocity = st.ema_velocity * 0.8 + velocity_per_minute * 0.2;
+            st.scale_ema = st.scale_ema * 0.7 + target_scale * 0.3;
+            if st.scale_ema < 0.6f64 { st.scale_ema = 0.6f64; }
+            if st.scale_ema > 1.4f64 { st.scale_ema = 1.4f64; }
+            st.last_update = Instant::now();
+            let new_scale = st.scale_ema;
+            if is_debug_entry_enabled() && (new_scale - old_scale).abs() >= 0.05 {
+                log(LogTag::Entry, "ADAPT_TUNE", &format!(
+                    "🛠️ Tuner {}: vol {:.1}% vel {:.1}%/min liq ${:.0} → scale {:.2} (target {:.2})",
+                    &mint[..8], vol_percent, velocity_per_minute, liquidity_usd, new_scale, target_scale
+                ));
+            }
+            new_scale
+        } else if let Ok(map_ro) = tuner.inner.try_read() {
+            if let Some(st) = map_ro.get(mint) { st.scale_ema } else { 1.0 }
+        } else { 1.0 }
+    };
+
+    let effective_min_drop = (min_drop_threshold * volatility_factor * adaptive_scale).max(DROP_PERCENT_MIN * 0.5);
     
     if is_debug_entry_enabled() {
-        log(LogTag::Entry, "DROP_THRESHOLDS", &format!("🎯 Dynamic thresholds for ${:.0}k: min {:.1}% (eff {:.1}%) - max {:.1}%, ratio: {:.1}% | vol {:.1}%", 
-            liquidity_usd / THOUSAND_DIVISOR, min_drop_threshold, effective_min_drop, max_drop_threshold, target_drop_ratio * PERCENTAGE_MULTIPLIER, vol_percent));
+        log(LogTag::Entry, "DROP_THRESHOLDS", &format!("🎯 Dynamic thresholds for ${:.0}k: min {:.1}% (eff {:.1}%, scale {:.2}) - max {:.1}%, ratio: {:.1}% | vol {:.1}% vel {:.1}%/min", 
+            liquidity_usd / THOUSAND_DIVISOR, min_drop_threshold, effective_min_drop, adaptive_scale, max_drop_threshold, target_drop_ratio * PERCENTAGE_MULTIPLIER, vol_percent, velocity_per_minute));
     }
     
     // Strategy 1: (disabled by default) Ultra-fresh entry — risky near tops
