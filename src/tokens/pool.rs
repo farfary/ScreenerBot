@@ -807,10 +807,24 @@ impl PoolPriceService {
         // Start periodic auto-save and cleanup for pools infos cache
         tokio::spawn({
             let pool_cache = service.pool_cache.clone();
+            // Respect service shutdown by observing the same monitoring_active flag
+            let monitoring_active = service.monitoring_active.clone();
             async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(POOLS_INFO_SAVE_INTERVAL_SECONDS));
                 loop {
                     interval.tick().await;
+
+                    // Stop when monitoring is no longer active (graceful shutdown)
+                    {
+                        let active = monitoring_active.read().await;
+                        if !*active {
+                            if is_debug_pool_prices_enabled() {
+                                log(LogTag::Pool, "POOLS_INFO_SAVE_STOP", "Pools infos auto-save loop stopping (monitoring inactive)");
+                            }
+                            break;
+                        }
+                    }
+
                     if let Err(e) = Self::save_pools_info_cache_to_disk(&pool_cache).await {
                         if is_debug_pool_prices_enabled() {
                             log(

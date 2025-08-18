@@ -3714,7 +3714,7 @@ async fn test_real_position_management(
                 _ = tokio::time::sleep(Duration::from_secs(300)) => {
                     log(LogTag::Transactions, "POSITION_TEST", "Transaction monitoring timeout (5 minutes)");
                 }
-                _ = start_lightweight_transaction_monitoring(wallet_pubkey) => {
+                _ = start_lightweight_transaction_monitoring(wallet_pubkey, shutdown_clone.clone()) => {
                     log(LogTag::Transactions, "POSITION_TEST", "Transaction monitoring completed");
                 }
             }
@@ -4117,7 +4117,7 @@ async fn generate_comprehensive_position_test_report(
 }
 
 /// Lightweight transaction monitoring for position tests
-async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
+async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey, shutdown: Arc<tokio::sync::Notify>) {
     log(LogTag::Transactions, "MONITOR", "Starting lightweight transaction monitoring...");
     
     // Create a monitoring manager
@@ -4142,9 +4142,16 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
 
     // Monitor frequently for position tests (every 2 seconds)
     let mut interval = tokio::time::interval(Duration::from_secs(2));
-    
+
     loop {
-        interval.tick().await;
+        // Wait for either the next tick or shutdown
+        tokio::select! {
+            _ = shutdown.notified() => {
+                log(LogTag::Transactions, "MONITOR", "Shutdown received - stopping lightweight monitoring loop");
+                break;
+            }
+            _ = interval.tick() => {}
+        }
         
         // Check for new transactions
         match manager.check_new_transactions().await {
@@ -4155,8 +4162,13 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
                         new_signatures.len()
                     ));
                     
-                    // Process each new transaction
+                    // Process each new transaction, but respect shutdown between items
                     for signature in new_signatures {
+                        // Fast shutdown check between items
+                        if screenerbot::utils::check_shutdown_or_delay(&shutdown, Duration::from_millis(0)).await {
+                            log(LogTag::Transactions, "MONITOR", "Stopping processing new signatures due to shutdown");
+                            break;
+                        }
                         if let Err(e) = manager.process_transaction(&signature).await {
                             log(LogTag::Transactions, "WARN", &format!(
                                 "Failed to process transaction {}: {}", 
@@ -4177,7 +4189,7 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey) {
         }
         
         // Check priority transactions
-        if let Err(e) = manager.check_priority_transactions().await {
+    if let Err(e) = manager.check_priority_transactions().await {
             log(LogTag::Transactions, "WARN", &format!("Priority check failed: {}", e));
         }
     }
