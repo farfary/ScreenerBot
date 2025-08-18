@@ -12,7 +12,7 @@ use crate::tokens::is_system_or_stable_token;
 use crate::rpc::get_rpc_client;
 use solana_client::rpc_client::RpcClient as SolanaRpcClient;
 use solana_sdk::{ account::Account, pubkey::Pubkey, commitment_config::CommitmentConfig };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::time::{ Duration, Instant };
 use tokio::sync::RwLock;
@@ -638,6 +638,8 @@ pub struct PoolPriceService {
     monitoring_active: Arc<RwLock<bool>>,
     // Enhanced statistics tracking
     stats: Arc<RwLock<PoolServiceStats>>,
+    // Track tokens currently being refreshed to deduplicate background updates
+    in_flight_updates: Arc<RwLock<HashSet<String>>>,
 }
 
 /// Pool service comprehensive statistics
@@ -772,6 +774,7 @@ impl PoolPriceService {
             pool_price_history: Arc::new(RwLock::new(HashMap::new())),
             monitoring_active: Arc::new(RwLock::new(false)),
             stats: Arc::new(RwLock::new(PoolServiceStats::default())),
+            in_flight_updates: Arc::new(RwLock::new(HashSet::new())),
         };
 
         // Load existing pools infos cache from disk on startup
@@ -868,6 +871,33 @@ impl PoolPriceService {
         });
 
         service
+    }
+
+    /// Trigger background refresh of a token price with in-flight deduplication (stale-while-revalidate)
+    async fn trigger_background_refresh(&self, token_address: &str) {
+        // Try to mark as in-flight; if already in set, skip
+        {
+            let mut inflight = self.in_flight_updates.write().await;
+            if inflight.contains(token_address) {
+                return;
+            }
+            inflight.insert(token_address.to_string());
+        }
+
+        let token = token_address.to_string();
+        let price_cache = self.price_cache.clone();
+        let in_flight_updates = self.in_flight_updates.clone();
+        tokio::spawn(async move {
+            // Perform fresh calculation; ignore result on error
+            if let Ok(fresh) = get_pool_service().calculate_pool_price(&token).await {
+                // Update cache
+                let mut pc = price_cache.write().await;
+                pc.insert(token.clone(), fresh);
+            }
+            // Clear in-flight flag
+            let mut inflight = in_flight_updates.write().await;
+            inflight.remove(&token);
+        });
     }
 
     /// Load pools infos cache from disk (only keep entries within TTL)
@@ -1751,17 +1781,45 @@ impl PoolPriceService {
                     }
 
                     return Some(updated_result);
-                } else if is_debug_pool_prices_enabled() {
-                    log(
-                        LogTag::Pool,
-                        "CACHE_EXPIRED",
-                        &format!(
-                            "❌ CACHE EXPIRED for {}: age={}s > max={}s, will fetch FRESH price from blockchain",
-                            token_address,
-                            age.num_seconds(),
-                            PRICE_CACHE_TTL_SECONDS
-                        )
-                    );
+                } else {
+                    // Stale-while-revalidate: serve stale cached price immediately and refresh in background
+                    if let Some(price_sol) = cached_price.price_sol {
+                        was_cache_hit = true;
+
+                        if is_debug_pool_prices_enabled() {
+                            log(
+                                LogTag::Pool,
+                                "CACHE_STALE_SERVE",
+                                &format!(
+                                    "⚡ Serving STALE cache for {}: price={:.12} SOL, age={}s (> TTL {}s). Refresh scheduled.",
+                                    token_address,
+                                    price_sol,
+                                    age.num_seconds(),
+                                    PRICE_CACHE_TTL_SECONDS
+                                )
+                            );
+                        }
+
+                        // Clone for return with updated timestamp
+                        let mut updated_result = cached_price.clone();
+                        updated_result.calculated_at = Utc::now();
+
+                        // Fire-and-forget background refresh (deduplicated)
+                        self.trigger_background_refresh(token_address).await;
+
+                        // Record as cache-served success (not blockchain)
+                        self.record_price_request(true, was_cache_hit, was_blockchain).await;
+                        return Some(updated_result);
+                    } else if is_debug_pool_prices_enabled() {
+                        log(
+                            LogTag::Pool,
+                            "CACHE_EXPIRED",
+                            &format!(
+                                "❌ CACHE EXPIRED for {} and contains no price; proceeding to fresh calculation",
+                                token_address
+                            )
+                        );
+                    }
                 }
             } else if is_debug_pool_prices_enabled() {
                 log(
