@@ -339,7 +339,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Attempt to sell all tokens
-                    match sell_token(&token, account.balance, None).await {
+                    match sell_token(&token, account.balance, None, None).await {
                         Ok(swap_result) => {
                             if swap_result.success {
                                 // Parse the amount from swap result

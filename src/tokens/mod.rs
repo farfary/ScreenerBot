@@ -521,15 +521,17 @@ pub async fn start_enhanced_monitoring(
     let handle = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2)); // Every 2 seconds
 
-        loop {
+    // Hold shutdown future across iterations to avoid missing the notification
+    let mut shutdown_fut = Box::pin(shutdown.notified());
+
+    loop {
             tokio::select! {
-                _ = shutdown.notified() => {
+                _ = shutdown_fut.as_mut() => {
                     log(LogTag::System, "SHUTDOWN", "Enhanced monitoring stopping");
                     break;
                 }
-                
                 _ = interval.tick() => {
-                    if let Err(e) = enhanced_monitoring_cycle().await {
+            if let Err(e) = enhanced_monitoring_cycle(shutdown.clone()).await {
                         log(LogTag::System, "ERROR", 
                             &format!("Enhanced monitoring cycle failed: {}", e));
                     }
@@ -544,7 +546,11 @@ pub async fn start_enhanced_monitoring(
 }
 
 /// Execute one enhanced monitoring cycle
-async fn enhanced_monitoring_cycle() -> Result<(), String> {
+async fn enhanced_monitoring_cycle(shutdown: Arc<Notify>) -> Result<(), String> {
+    // Fast-cancel if shutdown requested
+    if crate::utils::check_shutdown_or_delay(&shutdown, std::time::Duration::from_millis(0)).await {
+        return Ok(());
+    }
     // Get priority tokens from price service
     let priority_mints = get_priority_tokens_safe().await;
 
@@ -570,6 +576,13 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
     let mut total_updated = 0;
 
     for chunk in priority_mints.chunks(batch_size) {
+        // Respect shutdown between chunks
+        if crate::utils::check_shutdown_or_delay(&shutdown, std::time::Duration::from_millis(0)).await {
+            if is_debug_monitor_enabled() {
+                log(LogTag::System, "SHUTDOWN", "Stopping enhanced monitoring cycle mid-run due to shutdown");
+            }
+            break;
+        }
         let tokens_result = {
             let mut api_instance = api.lock().await;
             // CRITICAL: Only hold the lock for the API call, then release immediately
@@ -608,8 +621,13 @@ async fn enhanced_monitoring_cycle() -> Result<(), String> {
             }
         }
 
-        // Rate limiting between batches (reduced for faster updates)
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Rate limiting between batches (reduced for faster updates) - but still cancellable
+        if crate::utils::check_shutdown_or_delay(&shutdown, std::time::Duration::from_millis(100)).await {
+            if is_debug_monitor_enabled() {
+                log(LogTag::System, "SHUTDOWN", "Stopping enhanced monitoring cycle during inter-batch delay");
+            }
+            break;
+        }
     }
 
     log(
@@ -652,13 +670,15 @@ async fn start_cache_cleanup_task(
     let handle = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
 
+    // Avoid missing shutdown by keeping the notified future
+    let mut shutdown_fut = Box::pin(shutdown.notified());
+
         loop {
             tokio::select! {
-                _ = shutdown.notified() => {
+                _ = shutdown_fut.as_mut() => {
                     log(LogTag::System, "SHUTDOWN", "Cache cleanup stopping");
                     break;
                 }
-                
                 _ = interval.tick() => {
                     let removed_count = price::cleanup_price_cache().await;
                     if removed_count > 0 {

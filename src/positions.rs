@@ -12,6 +12,8 @@ use crate::transactions::add_priority_transaction;
 use once_cell::sync::Lazy;
 use std::sync::{ Arc as StdArc, Mutex as StdMutex };
 use chrono::{ Utc, DateTime };
+use std::sync::Arc;
+use tokio::sync::Notify;
 use serde::{ Serialize, Deserialize };
 use colored::Colorize;
 use std::collections::HashMap;
@@ -766,7 +768,8 @@ pub async fn close_position(
     position: &mut Position,
     token: &Token,
     exit_price: f64,
-    exit_time: DateTime<Utc>
+    exit_time: DateTime<Utc>,
+    shutdown: Option<Arc<Notify>>
 ) -> bool {
     // CRITICAL CHECK: Don't close position if it already has an exit transaction
     if position.exit_transaction_signature.is_some() {
@@ -870,8 +873,8 @@ pub async fn close_position(
         )
     );
 
-    // Execute the token sale
-    match sell_token(token, position.token_amount.unwrap_or(0), None).await {
+    // Execute the token sale (shutdown-aware to avoid retries during shutdown)
+    match sell_token(token, position.token_amount.unwrap_or(0), None, shutdown.clone()).await {
         Ok(swap_result) => {
             // Check if the transaction was successful
             if !swap_result.success {

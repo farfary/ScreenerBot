@@ -4,12 +4,14 @@ use crate::tokens::Token;
 use crate::rpc::{SwapError, sol_to_lamports, lamports_to_sol};
 use crate::logger::{log, LogTag};
 use crate::global::{is_debug_swap_enabled};
-use crate::utils::get_token_balance;
+use crate::utils::{get_token_balance, check_shutdown_or_delay};
 use crate::utils::get_wallet_address;
 use crate::transactions::{add_priority_transaction, wait_for_transaction_verification, wait_for_priority_transaction_verification};
 use super::{get_best_quote, execute_best_swap, RouterType};
 use super::types::{SwapData};
 use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
+use std::sync::Arc;
+use tokio::sync::Notify;
 
 /// Enhanced swap result with comprehensive routing information
 #[derive(Debug)]
@@ -139,7 +141,8 @@ pub async fn buy_token(
 pub async fn sell_token(
     token: &Token,
     token_amount: u64, // Position amount (used for validation only - actual sale uses full wallet balance)
-    expected_sol_output: Option<f64>
+    expected_sol_output: Option<f64>,
+    shutdown: Option<Arc<Notify>>
 ) -> Result<SwapResult, SwapError> {
     // CRITICAL SAFETY CHECK: Validate expected SOL output if provided
     if let Some(expected_sol) = expected_sol_output {
@@ -154,6 +157,22 @@ pub async fn sell_token(
     let slippages = &SELL_RETRY_SLIPPAGES;
 
     for (attempt, &slippage) in slippages.iter().enumerate() {
+        // Abort before starting a new attempt if shutdown is in progress
+        if let Some(ref s) = shutdown {
+            if check_shutdown_or_delay(s, tokio::time::Duration::from_millis(0)).await {
+                log(
+                    LogTag::Swap,
+                    "SHUTDOWN",
+                    &format!(
+                        "⏹️  Aborting further sell attempts for {} due to shutdown (before attempt {} with {:.1}% slippage)",
+                        token.symbol,
+                        attempt + 1,
+                        slippage
+                    )
+                );
+                return Err(SwapError::ConfigError("Shutdown in progress - aborting sell".to_string()));
+            }
+        }
         log(
             LogTag::Swap,
             "SELL_ATTEMPT",
@@ -165,7 +184,7 @@ pub async fn sell_token(
             )
         );
 
-        match sell_token_with_slippage(token, token_amount, slippage).await {
+    match sell_token_with_slippage(token, token_amount, slippage).await {
             Ok(result) => {
                 // Add transaction to monitoring if we have a signature
                 if let Some(ref signature) = result.transaction_signature {
@@ -209,6 +228,22 @@ pub async fn sell_token(
 
                 // If this isn't the last attempt, wait and clear recent attempt to allow retry
                 if attempt < slippages.len() - 1 {
+                    // Before retry delay, check for shutdown and abort if requested
+                    if let Some(ref s) = shutdown {
+                        if check_shutdown_or_delay(s, tokio::time::Duration::from_millis(0)).await {
+                            log(
+                                LogTag::Swap,
+                                "SHUTDOWN",
+                                &format!(
+                                    "⏹️  Skipping sell retry for {} due to shutdown (next slippage would be {:.1}%)",
+                                    token.symbol,
+                                    slippages[attempt + 1]
+                                )
+                            );
+                            return Err(SwapError::ConfigError("Shutdown in progress - aborting sell retries".to_string()));
+                        }
+                    }
+
                     // Wait before retry (simplified - no transaction attempt clearing)
                     tokio::time::sleep(tokio::time::Duration::from_secs((attempt + 1) as u64 * 2)).await;
                 } else {

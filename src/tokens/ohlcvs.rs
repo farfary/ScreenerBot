@@ -1581,7 +1581,7 @@ pub async fn start_ohlcv_monitoring(
 }
 
 /// Sync watch list with price service priority tokens (called from trader)
-pub async fn sync_watch_list_with_trader() -> Result<(), String> {
+pub async fn sync_watch_list_with_trader(shutdown: Option<std::sync::Arc<Notify>>) -> Result<(), String> {
     // Get priority tokens from price service (these are the ones we're actively monitoring)
     let priority_tokens = get_priority_tokens_safe().await;
 
@@ -1596,6 +1596,15 @@ pub async fn sync_watch_list_with_trader() -> Result<(), String> {
     let service = get_ohlcv_service_clone().await?;
     
     for token_mint in &priority_tokens {
+        // If shutdown requested, stop syncing to avoid late logs during shutdown
+        if let Some(ref s) = shutdown {
+            if crate::utils::check_shutdown_or_delay(s, std::time::Duration::from_millis(0)).await {
+                if is_debug_ohlcv_enabled() {
+                    log(LogTag::Ohlcv, "SHUTDOWN", "Skipping OHLCV watch list sync due to shutdown");
+                }
+                break;
+            }
+        }
         // Check if it's an open position (higher priority)
         let is_open_position = crate::positions::is_open_position(token_mint);
         service.add_to_watch_list(token_mint, is_open_position).await;

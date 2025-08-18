@@ -72,13 +72,15 @@ impl TokenMonitor {
     pub async fn start_enhanced_monitoring_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Monitor, "START", "Enhanced token monitor started with 2-second price updates");
 
+    // Create the shutdown future once to avoid missing notifications between ticks
+    let mut shutdown_fut = Box::pin(shutdown.notified());
+
         loop {
             tokio::select! {
-                _ = shutdown.notified() => {
+                _ = shutdown_fut.as_mut() => {
                     log(LogTag::Monitor, "SHUTDOWN", "Enhanced token monitor stopping");
                     break;
                 }
-                
                 _ = sleep(Duration::from_secs(ENHANCED_CYCLE_DURATION_SECONDS)) => {
                     self.current_cycle += 1;
                     

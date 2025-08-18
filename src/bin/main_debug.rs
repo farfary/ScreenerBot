@@ -3774,7 +3774,7 @@ async fn test_real_position_management(
             let exit_price = current_price * 1.02; // Simulate 2% profit
             let exit_time = chrono::Utc::now();
 
-            let success = positions::close_position(&mut position, &test_token, exit_price, exit_time).await;
+            let success = positions::close_position(&mut position, &test_token, exit_price, exit_time, None).await;
 
             if success {
                 log(LogTag::Transactions, "POSITION_TEST", &format!(

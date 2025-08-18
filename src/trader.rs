@@ -705,8 +705,9 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             log(LogTag::Trader, "DEBUG", "📈 Syncing OHLCV watch list with filtered tokens...");
         }
         let ohlcv_sync_start = std::time::Instant::now();
+        let shutdown_clone_for_ohlcv = shutdown.clone();
         tokio::spawn(async move {
-            if let Err(e) = sync_watch_list_with_trader().await {
+            if let Err(e) = sync_watch_list_with_trader(Some(shutdown_clone_for_ohlcv)).await {
                 log(LogTag::Trader, "WARN", &format!("OHLCV sync failed: {}", e));
             }
         });
@@ -1852,7 +1853,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                 log(
                     LogTag::Trader,
                     "INFO",
-                    &format!("Spawned {} concurrent buy tasks", handles.len()).dimmed().to_string()
+                    &format!("Spawned {} concurrent buy tasks", handles.len())
                 );
 
                 // Collect results from all concurrent buy operations with overall timeout
@@ -2373,7 +2374,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
                         tokio::time::timeout(
                             Duration::from_secs(SELL_OPERATION_SMART_TIMEOUT_SECS),
                             async {
-                                close_position(&mut position, &token, exit_price, exit_time).await
+                                close_position(&mut position, &token, exit_price, exit_time, Some(shutdown_for_task.clone())).await
                             }
                         ).await
                     {
@@ -2415,7 +2416,7 @@ pub async fn monitor_open_positions(shutdown: Arc<Notify>) {
             log(
                 LogTag::Trader,
                 "INFO",
-                &format!("Spawned {} concurrent sell tasks", handles.len()).dimmed().to_string()
+                &format!("Spawned {} concurrent sell tasks", handles.len())
             );
 
             // Collect results from all concurrent sell operations with overall timeout

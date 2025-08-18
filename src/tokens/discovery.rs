@@ -394,6 +394,8 @@ impl TokenDiscovery {
     ) -> Result<(), String> {
         use crate::utils::check_shutdown_or_delay;
         use tokio::time::Duration;
+    // Hold a single shutdown future across the whole discovery to avoid missing notifications
+    let mut shutdown_fut_opt = shutdown.as_ref().map(|s| Box::pin(s.notified()));
 
         if is_debug_discovery_enabled() {
             log(LogTag::Discovery, "START", "Starting comprehensive discovery cycle");
@@ -414,15 +416,8 @@ impl TokenDiscovery {
         // Per-cycle source counters
         let mut cycle_counts = DiscoverySourceCounts::default();
 
-        // Check for shutdown before starting
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                if is_debug_discovery_enabled() {
-                    log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before starting");
-                }
-                return Ok(());
-            }
-        }
+    // Check for shutdown before starting (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { if is_debug_discovery_enabled() { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before starting"); } return Ok(()); }, else => {} } }
 
         // Fetch latest token profiles
     match fetch_dexscreener_latest_token_profiles().await {
@@ -445,13 +440,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before next API call
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after token profiles");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before next API call (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after token profiles"); return Ok(()); }, else => {} } }
 
         // Fetch latest boosted tokens
     match fetch_dexscreener_latest_boosted_tokens().await {
@@ -474,13 +464,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before next API call
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after boosted tokens");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before next API call (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after boosted tokens"); return Ok(()); }, else => {} } }
 
         // Fetch tokens with most active boosts
     match fetch_dexscreener_tokens_with_most_active_boosts().await {
@@ -507,13 +492,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before next API call
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after top boosts");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before next API call (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after top boosts"); return Ok(()); }, else => {} } }
 
         // Fetch new tokens from RugCheck
     match fetch_rugcheck_new_tokens().await {
@@ -540,13 +520,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before next API call
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck new");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before next API call (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck new"); return Ok(()); }, else => {} } }
 
         // Fetch most viewed tokens from RugCheck
     match fetch_rugcheck_most_viewed().await {
@@ -573,13 +548,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before next API call
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck viewed");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before next API call (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck viewed"); return Ok(()); }, else => {} } }
 
         // Fetch trending tokens from RugCheck
     match fetch_rugcheck_trending().await {
@@ -606,13 +576,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before next API call
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck trending");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before next API call (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck trending"); return Ok(()); }, else => {} } }
 
         // Fetch verified tokens from RugCheck
     match fetch_rugcheck_verified().await {
@@ -639,13 +604,8 @@ impl TokenDiscovery {
             }
         }
 
-        // Check for shutdown before processing mints
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck verified");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before processing mints (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled after RugCheck verified"); return Ok(()); }, else => {} } }
 
     // Deduplicate mints
         let original_count = all_mints.len();
@@ -686,13 +646,8 @@ impl TokenDiscovery {
             return Ok(());
         }
 
-        // Check for shutdown before batch processing
-        if let Some(shutdown) = &shutdown {
-            if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before batch processing");
-                return Ok(());
-            }
-        }
+    // Check for shutdown before batch processing (non-blocking)
+    if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled before batch processing"); return Ok(()); }, else => {} } }
 
         // Process tokens in batches to avoid overwhelming APIs
         let batch_size = 30; // DexScreener API limit
@@ -700,17 +655,8 @@ impl TokenDiscovery {
     let mut total_added = 0;
 
         for (batch_index, batch) in all_mints.chunks(batch_size).enumerate() {
-            // Check for shutdown before each batch
-            if let Some(shutdown) = &shutdown {
-                if check_shutdown_or_delay(shutdown, Duration::from_millis(1)).await {
-                    log(
-                        LogTag::Discovery,
-                        "SHUTDOWN",
-                        &format!("Discovery cancelled during batch {}", batch_index + 1)
-                    );
-                    return Ok(());
-                }
-            }
+            // Check for shutdown before each batch (non-blocking)
+            if let Some(fut) = &mut shutdown_fut_opt { tokio::select!{ _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", &format!("Discovery cancelled during batch {}", batch_index + 1)); return Ok(()); }, else => {} } }
 
             log(
                 LogTag::Discovery,
@@ -910,9 +856,16 @@ impl TokenDiscovery {
 
             total_processed += batch.len();
 
-            // Small delay between batches to respect rate limits
+            // Small delay between batches to respect rate limits, but allow fast shutdown
             if batch_index < (all_mints.len() + batch_size - 1) / batch_size - 1 {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                if let Some(fut) = &mut shutdown_fut_opt {
+                    tokio::select! {
+                        _ = fut.as_mut() => { log(LogTag::Discovery, "SHUTDOWN", "Discovery cancelled during inter-batch delay"); return Ok(()); }
+                        _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {}
+                    }
+                } else {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
         }
 
@@ -944,13 +897,15 @@ impl TokenDiscovery {
     pub async fn start_discovery_loop(&mut self, shutdown: Arc<tokio::sync::Notify>) {
         log(LogTag::Discovery, "START", "Discovery loop started");
 
+        // IMPORTANT: Create the shutdown future once to avoid missing notifications
+    let mut shutdown_fut = Box::pin(shutdown.notified());
+
         loop {
             tokio::select! {
-                _ = shutdown.notified() => {
+        _ = shutdown_fut.as_mut() => {
                     log(LogTag::Discovery, "SHUTDOWN", "Discovery loop stopping");
                     break;
                 }
-                
                 _ = sleep(Duration::from_secs(DISCOVERY_CYCLE_SECONDS)) => {
                     if let Err(e) = self.discover_new_tokens(Some(shutdown.clone())).await {
                         log(LogTag::Discovery, "ERROR", &format!("Discovery cycle failed: {}", e));
