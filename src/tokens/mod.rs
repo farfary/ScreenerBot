@@ -142,7 +142,7 @@ impl TokensSystem {
         let monitor = TokenMonitor::new()?;
         let database = TokenDatabase::new()?;
 
-        // Create rugcheck service with shutdown notify (will be passed later)
+        // Create rugcheck service with a temporary shutdown notify (will be replaced by global service)
         let shutdown_notify = Arc::new(Notify::new());
         let rugcheck_service = Arc::new(RugcheckService::new(database.clone(), shutdown_notify));
 
@@ -235,24 +235,24 @@ static GLOBAL_RUGCHECK_SERVICE: Mutex<Option<Arc<RugcheckService>>> = Mutex::new
 pub async fn initialize_global_rugcheck_service(
     database: TokenDatabase,
     shutdown: Arc<Notify>
-) -> Result<(), String> {
-    // Idempotent init: if already present, skip
-    if GLOBAL_RUGCHECK_SERVICE.lock().unwrap().is_some() {
-        log(LogTag::System, "INIT", "Global rugcheck service already initialized, skipping");
-        return Ok(());
+) -> Result<tokio::task::JoinHandle<()>, String> {
+    // Check if already initialized and stop the old one first
+    if let Some(old_service) = GLOBAL_RUGCHECK_SERVICE.lock().unwrap().take() {
+        log(LogTag::System, "INIT", "Replacing existing global rugcheck service");
+        // The old service will stop when its shutdown notify is triggered
     }
 
     let service = Arc::new(RugcheckService::new(database, shutdown));
 
     // Start background service
     let service_clone = service.clone();
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         service_clone.start_background_service().await;
     });
 
     *GLOBAL_RUGCHECK_SERVICE.lock().unwrap() = Some(service);
     log(LogTag::System, "INIT", "Global rugcheck service initialized");
-    Ok(())
+    Ok(handle)
 }
 
 /// Get global rugcheck service instance
