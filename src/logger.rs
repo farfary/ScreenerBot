@@ -79,7 +79,7 @@ const ENABLE_GENERAL_LOGS: bool = true; // For any log type not specifically lis
 
 /// Log format character widths (hardcoded for precise alignment)
 const TAG_WIDTH: usize = 10; // "[SYSTEM  ]" = 10 chars (8 + 2 brackets)
-const LOG_TYPE_WIDTH: usize = 22; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
+const LOG_TYPE_WIDTH: usize = 24; // "[UPDATE  ]" = 10 chars (8 + 2 brackets)
 const BRACKET_SPACE_WIDTH: usize = 3; // " [" + "] " = 3 chars between each component
 const TOTAL_PREFIX_WIDTH: usize = TAG_WIDTH + LOG_TYPE_WIDTH + BRACKET_SPACE_WIDTH * 2; // +1 for final space
 

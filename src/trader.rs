@@ -478,17 +478,31 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
     log(LogTag::Trader, "STARTUP", "🚀 Starting monitor_new_entries task");
 
     'outer: loop {
+        // Check for shutdown at the very beginning of each loop iteration
+        if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
+            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown requested at loop start");
+            break 'outer;
+        }
+
         // CRITICAL: Wait for position recalculation to complete before starting any trading operations
         if !crate::global::POSITION_RECALCULATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst) {
             log(LogTag::Trader, "STARTUP", "⏳ Waiting for position recalculation to complete...");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            
+            // Use shutdown-aware sleep instead of fixed sleep
+            if check_shutdown_or_delay(&shutdown, Duration::from_secs(1)).await {
+                log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown during position recalc wait");
+                break 'outer;
+            }
             continue;
         }
+
+        log(LogTag::Trader, "DEBUG", "📍 Starting new token monitoring cycle...");
 
         // Add a maximum processing time for the entire token checking cycle
         let cycle_start = std::time::Instant::now();
 
         // Update position tracking in price service
+        log(LogTag::Trader, "DEBUG", "📍 Updating position tracking...");
         let position_update_start = std::time::Instant::now();
         update_position_tracking_in_service().await;
         if is_debug_trader_enabled() {
@@ -502,7 +516,14 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
             );
         }
 
+        // Check for shutdown after position tracking update
+        if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
+            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown after position tracking update");
+            break 'outer;
+        }
+
         // Ensure we have tokens to work with
+        log(LogTag::Trader, "DEBUG", "📍 Ensuring tokens are populated...");
         if is_debug_trader_enabled() {
             log(LogTag::Trader, "DEBUG", "🪙 Ensuring tokens are populated...");
         }
@@ -517,6 +538,12 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
                     token_populate_start.elapsed().as_millis()
                 )
             );
+        }
+
+        // Check for shutdown after token population
+        if check_shutdown_or_delay(&shutdown, Duration::from_millis(10)).await {
+            log(LogTag::Trader, "INFO", "✅ New entries monitor shutdown after token population");
+            break 'outer;
         }
 
         let mut tokens: Vec<_> = {

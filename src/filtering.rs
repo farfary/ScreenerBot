@@ -610,44 +610,85 @@ fn validate_blacklist_exclusion(token: &Token) -> Option<FilterReason> {
 
 /// Validate rugcheck security risks (HIGHEST PRIORITY - RUNS FIRST)
 fn validate_rugcheck_risks(token: &Token) -> Option<FilterReason> {
-    // Create database connection for rugcheck data lookup
-    let database = match TokenDatabase::new() {
-        Ok(db) => db,
-        Err(e) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "ERROR",
-                    &format!("Failed to connect to database for rugcheck: {}", e)
-                );
+    use crate::tokens::get_global_rugcheck_service;
+    
+    // Get rugcheck data using global service if available, fallback to database
+    let rugcheck_data = match get_global_rugcheck_service() {
+        Some(service) => {
+            // Use blocking call to access async service from sync context
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    match service.get_rugcheck_data(&token.mint).await {
+                        Ok(Some(data)) => Some(data),
+                        Ok(None) => {
+                            if is_debug_filtering_enabled() {
+                                log(
+                                    LogTag::Filtering,
+                                    "RUGCHECK_MISSING",
+                                    &format!("No rugcheck data for token: {}", token.symbol)
+                                );
+                            }
+                            None
+                        }
+                        Err(e) => {
+                            if is_debug_filtering_enabled() {
+                                log(
+                                    LogTag::Filtering,
+                                    "ERROR",
+                                    &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
+                                );
+                            }
+                            None
+                        }
+                    }
+                })
+            })
+        }
+        None => {
+            // Fallback to direct database access if service not available
+            let database = match TokenDatabase::new() {
+                Ok(db) => db,
+                Err(e) => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "ERROR",
+                            &format!("Failed to connect to database for rugcheck: {}", e)
+                        );
+                    }
+                    return None; // Skip validation if database unavailable
+                }
+            };
+
+            match database.get_rugcheck_data(&token.mint) {
+                Ok(Some(data)) => Some(data),
+                Ok(None) => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "RUGCHECK_MISSING",
+                            &format!("No rugcheck data for token: {}", token.symbol)
+                        );
+                    }
+                    None
+                }
+                Err(e) => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "ERROR",
+                            &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
+                        );
+                    }
+                    None
+                }
             }
-            return None; // Skip validation if database unavailable
         }
     };
 
-    // Get rugcheck data from database
-    let rugcheck_data = match database.get_rugcheck_data(&token.mint) {
-        Ok(Some(data)) => data,
-        Ok(None) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "RUGCHECK_MISSING",
-                    &format!("No rugcheck data for token: {}", token.symbol)
-                );
-            }
-            return None; // No rugcheck data available - let it pass
-        }
-        Err(e) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "ERROR",
-                    &format!("Failed to get rugcheck data for {}: {}", token.symbol, e)
-                );
-            }
-            return None; // Database error - let it pass
-        }
+    let rugcheck_data = match rugcheck_data {
+        Some(data) => data,
+        None => return None, // No rugcheck data available - let it pass
     };
 
     // CRITICAL: Hard-coded risk score check - HIGHER SCORES MEAN MORE RISK!
@@ -1104,44 +1145,85 @@ fn validate_liquidity(token: &Token) -> Option<FilterReason> {
 /// Validate holder distribution to prevent whale concentration risk
 /// CRITICAL FOR MICRO-CAPS: Ensure no single holder can cause >20% loss
 fn validate_holder_distribution(token: &Token) -> Option<FilterReason> {
-    // Get database connection for rugcheck data
-    let database = match TokenDatabase::new() {
-        Ok(db) => db,
-        Err(e) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_HOLDERS",
-                    &format!("Failed to connect to database for holders: {}", e)
-                );
+    use crate::tokens::get_global_rugcheck_service;
+    
+    // Get rugcheck data using global service if available, fallback to database
+    let rugcheck_data = match get_global_rugcheck_service() {
+        Some(service) => {
+            // Use blocking call to access async service from sync context
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    match service.get_rugcheck_data(&token.mint).await {
+                        Ok(Some(data)) => Some(data),
+                        Ok(None) => {
+                            if is_debug_filtering_enabled() {
+                                log(
+                                    LogTag::Filtering,
+                                    "DEBUG_HOLDERS",
+                                    &format!("No rugcheck/holder data for token: {}", token.symbol)
+                                );
+                            }
+                            None
+                        }
+                        Err(e) => {
+                            if is_debug_filtering_enabled() {
+                                log(
+                                    LogTag::Filtering,
+                                    "DEBUG_HOLDERS",
+                                    &format!("Failed to get holder data for {}: {}", token.symbol, e)
+                                );
+                            }
+                            None
+                        }
+                    }
+                })
+            })
+        }
+        None => {
+            // Fallback to direct database access if service not available
+            let database = match TokenDatabase::new() {
+                Ok(db) => db,
+                Err(e) => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "DEBUG_HOLDERS",
+                            &format!("Failed to connect to database for holders: {}", e)
+                        );
+                    }
+                    return None; // Skip validation if database unavailable
+                }
+            };
+
+            match database.get_rugcheck_data(&token.mint) {
+                Ok(Some(data)) => Some(data),
+                Ok(None) => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "DEBUG_HOLDERS",
+                            &format!("No rugcheck/holder data for token: {}", token.symbol)
+                        );
+                    }
+                    None
+                }
+                Err(e) => {
+                    if is_debug_filtering_enabled() {
+                        log(
+                            LogTag::Filtering,
+                            "DEBUG_HOLDERS",
+                            &format!("Failed to get holder data for {}: {}", token.symbol, e)
+                        );
+                    }
+                    None
+                }
             }
-            return None; // Skip validation if database unavailable
         }
     };
 
-    // Get rugcheck data which includes holder information
-    let rugcheck_data = match database.get_rugcheck_data(&token.mint) {
-        Ok(Some(data)) => data,
-        Ok(None) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_HOLDERS",
-                    &format!("No rugcheck/holder data for token: {}", token.symbol)
-                );
-            }
-            return None; // No holder data - allow through (better than blocking)
-        }
-        Err(e) => {
-            if is_debug_filtering_enabled() {
-                log(
-                    LogTag::Filtering,
-                    "DEBUG_HOLDERS",
-                    &format!("Failed to get holder data for {}: {}", token.symbol, e)
-                );
-            }
-            return None; // Database error - allow through
-        }
+    let rugcheck_data = match rugcheck_data {
+        Some(data) => data,
+        None => return None, // No holder data - allow through (better than blocking)
     };
 
     // Check top holders for concentration risk

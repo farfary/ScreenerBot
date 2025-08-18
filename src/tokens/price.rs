@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
 use chrono::{ DateTime, Utc, Duration };
-use once_cell::sync::Lazy;
+use tokio::sync::OnceCell;
 
 // =============================================================================
 // PRICE SERVICE CONFIGURATION
@@ -26,6 +26,10 @@ const PRICE_CACHE_MAX_AGE_SECONDS: i64 = 10;
 
 /// Time to keep watching a token after last request (in seconds)
 const WATCH_TIMEOUT_SECONDS: i64 = 300; // 5 minutes
+
+/// If fresh cache is missing, allow serving a slightly stale price up to this age (seconds)
+/// This avoids N/A in UI while a background refresh runs
+const STALE_RETURN_MAX_AGE_SECONDS: i64 = 180; // 3 minutes
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -110,13 +114,13 @@ impl TokenPriceService {
         })
     }
 
-    /// Get token price - instant cache lookup, no timeouts
+    /// Get token price - instant cache lookup, no timeouts; will serve slightly stale values
     pub async fn get_token_price(&self, mint: &str) -> Option<f64> {
         // Track this token request
         self.add_to_watch_list(mint, false).await;
 
         // First check cache (instant, no await on lock contention)
-        if let Some(price) = self.get_cached_price(mint).await {
+        if let Some(price) = self.get_cached_price_maybe_stale(mint, true).await {
             if is_debug_price_service_enabled() {
                 log(
                     LogTag::PriceService,
@@ -130,20 +134,11 @@ impl TokenPriceService {
         // Cache miss - trigger background update, but don't wait
         // DEADLOCK FIX: Don't hold mutex during spawn
         let mint_clone = mint.to_string();
-        tokio::spawn(async move {
-            // Quick check if service is available, then release lock immediately
-            let has_service = {
-                let service_guard = PRICE_SERVICE.lock().await;
-                service_guard.is_some()
-            };
-            
-            if has_service {
-                let service_guard = PRICE_SERVICE.lock().await;
-                if let Some(ref service) = *service_guard {
-                    let _ = service.update_single_token_price(&mint_clone).await;
-                }
-            }
-        });
+        if let Some(service) = PRICE_SERVICE.get().cloned() {
+            tokio::spawn(async move {
+                let _ = service.update_single_token_price(&mint_clone).await;
+            });
+        }
 
         if is_debug_price_service_enabled() {
             log(
@@ -162,7 +157,7 @@ impl TokenPriceService {
         self.add_to_watch_list(mint, false).await;
 
         // First check cache
-        if let Some(price) = self.get_cached_price(mint).await {
+        if let Some(price) = self.get_cached_price_maybe_stale(mint, false).await {
             if is_debug_price_service_enabled() {
                 log(
                     LogTag::PriceService,
@@ -185,7 +180,10 @@ impl TokenPriceService {
         match self.update_single_token_price(mint).await {
             Ok(()) => {
                 // Try to get the price again after update
-                let price = self.get_cached_price(mint).await;
+                // Try to get the price again after update (fresh only)
+                let price = self.get_cached_price_maybe_stale(mint, false).await
+                    // Final fallback: allow stale cache so callers rarely see None
+                    .or(self.get_cached_price_maybe_stale(mint, true).await);
                 if is_debug_price_service_enabled() {
                     log(
                         LogTag::PriceService,
@@ -212,7 +210,7 @@ impl TokenPriceService {
         }
     }
 
-    async fn get_cached_price(&self, mint: &str) -> Option<f64> {
+    async fn get_cached_price_maybe_stale(&self, mint: &str, allow_stale: bool) -> Option<f64> {
         let cache = self.price_cache.read().await;
         if let Some(entry) = cache.get(mint) {
             let age_seconds = (Utc::now() - entry.last_updated).num_seconds();
@@ -223,18 +221,19 @@ impl TokenPriceService {
                     LogTag::PriceService,
                     "CACHE_CHECK",
                     &format!(
-                        "🔍 CACHE CHECK for {}: found_entry=YES, age={}s, max_age={}s, expired={}, price={:.12} SOL, source={}",
+                        "🔍 CACHE CHECK for {}: found_entry=YES, age={}s, max_age={}s, expired={}, allow_stale={}, price={:.12} SOL, source={}",
                         mint,
                         age_seconds,
                         PRICE_CACHE_MAX_AGE_SECONDS,
                         is_expired,
+                        allow_stale,
                         entry.price_sol.unwrap_or(0.0),
                         entry.source
                     )
                 );
             }
 
-            if !is_expired {
+            if !is_expired || (allow_stale && age_seconds <= STALE_RETURN_MAX_AGE_SECONDS) {
                 if let Some(price) = entry.price_sol {
                     if price > 0.0 && price.is_finite() {
                         if is_debug_price_service_enabled() {
@@ -242,7 +241,8 @@ impl TokenPriceService {
                                 LogTag::PriceService,
                                 "CACHE_VALID",
                                 &format!(
-                                    "✅ VALID CACHE for {}: price={:.12} SOL, age={}s",
+                                    "✅ VALID {}CACHE for {}: price={:.12} SOL, age={}s",
+                                    if is_expired {"STALE-"} else {""},
                                     mint,
                                     price,
                                     age_seconds
@@ -781,27 +781,20 @@ impl TokenPriceService {
 // GLOBAL PRICE SERVICE INSTANCE
 // =============================================================================
 
-/// Global thread-safe price service instance
-pub static PRICE_SERVICE: Lazy<Arc<tokio::sync::Mutex<Option<TokenPriceService>>>> = Lazy::new(||
-    Arc::new(tokio::sync::Mutex::new(None))
-);
+/// Global price service instance (single Arc, lock-free access)
+pub static PRICE_SERVICE: OnceCell<Arc<TokenPriceService>> = OnceCell::const_new();
 
 /// Initialize the global price service
 pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>> {
-    let mut global_service = PRICE_SERVICE.lock().await;
-
-    // Idempotent init: if already initialized, skip re-creating the service
-    if global_service.is_some() {
-        log(
-            LogTag::PriceService,
-            "INIT_SKIP",
-            "Price service already initialized, skipping"
-        );
+    if PRICE_SERVICE.get().is_some() {
+        log(LogTag::PriceService, "INIT_SKIP", "Price service already initialized, skipping");
         return Ok(());
     }
 
-    let service = TokenPriceService::new()?;
-    *global_service = Some(service);
+    let service = Arc::new(TokenPriceService::new()?);
+    let _ = PRICE_SERVICE
+        .set(service)
+        .map_err(|_| "Price service already initialized")?;
     log(LogTag::PriceService, "INIT", "Price service initialized successfully");
     Ok(())
 }
@@ -816,9 +809,9 @@ pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
         );
     }
 
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
-        let result = service.get_token_price_blocking(mint).await;
+    if let Some(service) = PRICE_SERVICE.get() {
+        // Fast path: non-blocking to avoid UI stalls
+        let result = service.get_token_price(mint).await;
 
         if is_debug_price_service_enabled() {
             log(
@@ -829,14 +822,12 @@ pub async fn get_token_price_safe(mint: &str) -> Option<f64> {
         }
 
         return result;
-    } else {
-        if is_debug_price_service_enabled() {
-            log(
-                LogTag::PriceService,
-                "GLOBAL_ERROR",
-                &format!("❌ GLOBAL service not available for {}", mint)
-            );
-        }
+    } else if is_debug_price_service_enabled() {
+        log(
+            LogTag::PriceService,
+            "GLOBAL_ERROR",
+            &format!("❌ GLOBAL service not available for {}", mint)
+        );
     }
     None
 }
@@ -851,8 +842,7 @@ pub async fn get_token_price_blocking_safe(mint: &str) -> Option<f64> {
         );
     }
 
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
+    if let Some(service) = PRICE_SERVICE.get() {
         let result = service.get_token_price_blocking(mint).await;
 
         if is_debug_price_service_enabled() {
@@ -868,30 +858,26 @@ pub async fn get_token_price_blocking_safe(mint: &str) -> Option<f64> {
         }
 
         return result;
-    } else {
-        if is_debug_price_service_enabled() {
-            log(
-                LogTag::PriceService,
-                "GLOBAL_BLOCKING_ERROR",
-                &format!("❌ GLOBAL BLOCKING service not available for {}", mint)
-            );
-        }
+    } else if is_debug_price_service_enabled() {
+        log(
+            LogTag::PriceService,
+            "GLOBAL_BLOCKING_ERROR",
+            &format!("❌ GLOBAL BLOCKING service not available for {}", mint)
+        );
     }
     None
 }
 
 /// Update open positions in global service
 pub async fn update_open_positions_safe(mints: Vec<String>) {
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
+    if let Some(service) = PRICE_SERVICE.get() {
         service.update_open_positions(mints).await;
     }
 }
 
 /// Get priority tokens for monitoring
 pub async fn get_priority_tokens_safe() -> Vec<String> {
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
+    if let Some(service) = PRICE_SERVICE.get() {
         return service.get_priority_tokens().await;
     }
     Vec::new()
@@ -899,7 +885,7 @@ pub async fn get_priority_tokens_safe() -> Vec<String> {
 
 /// Get multiple token prices in batch (for compatibility)
 pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Option<f64>> {
-    let mut results = HashMap::new();
+    use futures::stream::{FuturesOrdered, StreamExt};
 
     if is_debug_price_service_enabled() {
         log(
@@ -909,32 +895,43 @@ pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Op
         );
     }
 
-    // Use blocking version for more accurate prices, especially for open positions
-    for mint in mints {
-        let price = get_token_price_blocking_safe(mint).await;
-        results.insert(mint.clone(), price);
+    let mut results = HashMap::new();
+
+    if let Some(service) = PRICE_SERVICE.get() {
+        let mut futs = FuturesOrdered::new();
+        for mint in mints.iter().cloned() {
+            let svc = service.clone();
+            futs.push_back(async move {
+                // Non-blocking, cache-first; returns Some(stale_ok) fast or None and triggers refresh
+                let price = svc.get_token_price(&mint).await;
+                (mint, price)
+            });
+        }
+
+        while let Some((mint, price)) = futs.next().await {
+            if is_debug_price_service_enabled() {
+                log(
+                    LogTag::PriceService,
+                    "BATCH_ITEM",
+                    &format!("📊 BATCH RESULT for {}: ${:.12} SOL", mint, price.unwrap_or(0.0))
+                );
+            }
+            results.insert(mint, price);
+        }
 
         if is_debug_price_service_enabled() {
+            let found_prices = results.values().filter(|p| p.is_some()).count();
             log(
                 LogTag::PriceService,
-                "BATCH_ITEM",
-                &format!("📊 BATCH RESULT for {}: ${:.12} SOL", mint, price.unwrap_or(0.0))
+                "BATCH_COMPLETE",
+                &format!("✅ BATCH COMPLETE: {}/{} tokens have prices", found_prices, mints.len())
             );
         }
+
+        return results;
     }
 
-    if is_debug_price_service_enabled() {
-        let found_prices = results
-            .values()
-            .filter(|p| p.is_some())
-            .count();
-        log(
-            LogTag::PriceService,
-            "BATCH_COMPLETE",
-            &format!("✅ BATCH COMPLETE: {}/{} tokens have prices", found_prices, mints.len())
-        );
-    }
-
+    // Fallback if service not initialized
     results
 }
 
@@ -948,24 +945,20 @@ pub async fn update_tokens_prices_safe(mints: &[String]) {
         );
     }
 
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
+    if let Some(service) = PRICE_SERVICE.get() {
         service.update_tokens_from_api(mints).await;
-    } else {
-        if is_debug_price_service_enabled() {
-            log(
-                LogTag::PriceService,
-                "MONITOR_UPDATE_ERROR",
-                "❌ MONITOR UPDATE FAILED: Price service not available"
-            );
-        }
+    } else if is_debug_price_service_enabled() {
+        log(
+            LogTag::PriceService,
+            "MONITOR_UPDATE_ERROR",
+            "❌ MONITOR UPDATE FAILED: Price service not available"
+        );
     }
 }
 
 /// Get cache statistics
 pub async fn get_price_cache_stats() -> String {
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
+    if let Some(service) = PRICE_SERVICE.get() {
         let (total, valid, expired) = service.get_cache_stats().await;
         return format!("Price Cache: {} total, {} valid, {} expired", total, valid, expired);
     }
@@ -974,8 +967,7 @@ pub async fn get_price_cache_stats() -> String {
 
 /// Cleanup expired cache entries
 pub async fn cleanup_price_cache() -> usize {
-    let service_guard = PRICE_SERVICE.lock().await;
-    if let Some(ref service) = *service_guard {
+    if let Some(service) = PRICE_SERVICE.get() {
         return service.cleanup_expired().await;
     }
     0

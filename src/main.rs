@@ -129,19 +129,20 @@ async fn main() {
     };
 
     let shutdown_rugcheck = shutdown.clone();
-    if
-        let Err(e) = screenerbot::tokens::initialize_global_rugcheck_service(
-            database,
-            shutdown_rugcheck
-        ).await
-    {
+    let rugcheck_handle = match screenerbot::tokens::initialize_global_rugcheck_service(
+        database,
+        shutdown_rugcheck
+    ).await {
+        Ok(handle) => handle,
+        Err(e) => {
         log(
             LogTag::System,
             "ERROR",
             &format!("Failed to initialize global rugcheck service: {}", e)
         );
         std::process::exit(1);
-    }
+        }
+    };
     log(LogTag::System, "INFO", "Global rugcheck service initialized successfully");
 
     // Start tokens system background tasks (includes rugcheck service)
@@ -292,8 +293,10 @@ async fn main() {
     }
 
     // Notify all tasks to shutdown
+    log(LogTag::System, "INFO", "📢 Starting shutdown notification to all background tasks...");
     shutdown.notify_waiters();
-    log(LogTag::System, "INFO", "Shutdown notification sent to all background tasks");
+    log(LogTag::System, "INFO", "✅ Shutdown notification sent to all background tasks");
+    let shutdown_start_time = std::time::Instant::now();
 
     // CRITICAL PROTECTION: Check for active trading operations
     let critical_ops_count = screenerbot::trader::CriticalOperationGuard::get_active_count();
@@ -388,117 +391,180 @@ async fn main() {
         "INFO",
         &format!("Waiting for background tasks to shutdown (max {} seconds)...", task_timeout_seconds)
     );
+
+    // Start a progress monitor task that runs in parallel
+    let progress_shutdown = shutdown.clone();
+    let progress_task = tokio::spawn(async move {
+        let mut progress_interval = tokio::time::interval(Duration::from_secs(2));
+        let mut elapsed = 0u64;
+        
+        loop {
+            tokio::select! {
+                _ = progress_shutdown.notified() => break,
+                _ = progress_interval.tick() => {
+                    elapsed += 2;
+                    log(LogTag::System, "INFO", &format!("⏳ Shutdown progress: {}s elapsed, still waiting for tasks...", elapsed));
+                }
+            }
+        }
+    });
+
     let shutdown_timeout = tokio::time::timeout(
         std::time::Duration::from_secs(task_timeout_seconds),
         async {
             // Wait for trader tasks
+            log(LogTag::System, "INFO", "🔄 Waiting for entries monitor task to shutdown...");
             if let Err(e) = entries_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("New entries monitor task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ Entries monitor task shutdown completed");
             }
 
+            log(LogTag::System, "INFO", "🔄 Waiting for positions monitor task to shutdown...");
             if let Err(e) = positions_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("Open positions monitor task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ Positions monitor task shutdown completed");
             }
 
+            log(LogTag::System, "INFO", "🔄 Waiting for positions display task to shutdown...");
             if let Err(e) = display_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("Positions display task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ Positions display task shutdown completed");
             }
 
             // Wait for RPC stats auto-save service
+            log(LogTag::System, "INFO", "🔄 Waiting for RPC stats auto-save task to shutdown...");
             if let Err(e) = rpc_stats_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("RPC stats auto-save task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ RPC stats auto-save task shutdown completed");
             }
 
             // Wait for ATA cleanup service
+            log(LogTag::System, "INFO", "🔄 Waiting for ATA cleanup task to shutdown...");
             if let Err(e) = ata_cleanup_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("ATA cleanup task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ ATA cleanup task shutdown completed");
             }
 
             // Wait for transaction manager service
+            log(LogTag::System, "INFO", "🔄 Waiting for transaction manager task to shutdown...");
             if let Err(e) = transaction_manager_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("Transaction manager task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ Transaction manager task shutdown completed");
             }
 
             // Wait for RL learning service
+            log(LogTag::System, "INFO", "🔄 Waiting for RL learning task to shutdown...");
             if let Err(e) = rl_learning_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("RL learning task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ RL learning task shutdown completed");
             }
 
             // Wait for RL auto-save service
+            log(LogTag::System, "INFO", "🔄 Waiting for RL auto-save task to shutdown...");
             if let Err(e) = rl_autosave_handle.await {
                 log(
                     LogTag::System,
                     "WARN",
                     &format!("RL auto-save task failed to shutdown cleanly: {}", e)
                 );
+            } else {
+                log(LogTag::System, "INFO", "✅ RL auto-save task shutdown completed");
             }
 
-            // Wait for tokens system tasks (includes rugcheck service)
+            // Wait for tokens system tasks (includes rugcheck-related tasks)
+            log(LogTag::System, "INFO", &format!("🔄 Waiting for {} tokens system tasks to shutdown...", tokens_handles.len()));
             for (i, handle) in tokens_handles.into_iter().enumerate() {
+                log(LogTag::System, "INFO", &format!("🔄 Waiting for tokens task {} to shutdown...", i));
                 if let Err(e) = handle.await {
                     log(
                         LogTag::System,
                         "WARN",
                         &format!("Tokens task {} failed to shutdown cleanly: {}", i, e)
                     );
+                } else {
+                    log(LogTag::System, "INFO", &format!("✅ Tokens task {} shutdown completed", i));
                 }
             }
 
+            // Wait for Rugcheck service task explicitly
+            log(LogTag::System, "INFO", "🔄 Waiting for Rugcheck service task to shutdown...");
+            if let Err(e) = rugcheck_handle.await {
+                log(LogTag::System, "WARN", &format!("Rugcheck task failed to shutdown cleanly: {}", e));
+            } else {
+                log(LogTag::System, "INFO", "✅ Rugcheck service task shutdown completed");
+            }
+
             // Wait for pricing tasks
+            log(LogTag::System, "INFO", &format!("🔄 Waiting for {} pricing tasks to shutdown...", pricing_handles.len()));
             for (i, handle) in pricing_handles.into_iter().enumerate() {
+                log(LogTag::System, "INFO", &format!("🔄 Waiting for pricing task {} to shutdown...", i));
                 if let Err(e) = handle.await {
                     log(
                         LogTag::System,
                         "WARN",
                         &format!("Pricing task {} failed to shutdown cleanly: {}", i, e)
                     );
+                } else {
+                    log(LogTag::System, "INFO", &format!("✅ Pricing task {} shutdown completed", i));
                 }
             }
         }
     );
 
+    // Stop the progress monitor
+    progress_task.abort();
+
     match shutdown_timeout.await {
         Ok(_) => {
-            log(LogTag::System, "INFO", "All background tasks finished gracefully. Exiting.");
+            let total_shutdown_time = shutdown_start_time.elapsed();
+            log(LogTag::System, "INFO", &format!("All background tasks finished gracefully in {:.2}s. Exiting.", total_shutdown_time.as_secs_f64()));
             // Notify dashboard that all services have completed
             services_completed.notify_waiters();
         }
         Err(_) => {
+            let total_shutdown_time = shutdown_start_time.elapsed();
             let final_critical_check =
                 screenerbot::trader::CriticalOperationGuard::get_active_count();
             if final_critical_check > 0 {
                 log(
                     LogTag::System,
                     "EMERGENCY",
-                    &format!("🚨 CRITICAL: {} trading operations still active during forced shutdown! This may cause data loss!", final_critical_check)
+                    &format!("🚨 CRITICAL: {} trading operations still active during forced shutdown after {:.2}s! This may cause data loss!", final_critical_check, total_shutdown_time.as_secs_f64())
                 );
                 log(
                     LogTag::System,
@@ -539,7 +605,7 @@ async fn main() {
             log(
                 LogTag::System,
                 "WARN",
-                &format!("Tasks did not finish within {} second timeout.", task_timeout_seconds)
+                &format!("⚠️ Tasks did not finish within {} second timeout (total time: {:.2}s). Some tasks may still be running.", task_timeout_seconds, total_shutdown_time.as_secs_f64())
             );
             
             // Even on timeout, notify dashboard that we're done trying

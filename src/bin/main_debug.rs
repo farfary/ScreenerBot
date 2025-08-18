@@ -67,7 +67,7 @@ use screenerbot::tokens::types::PriceSourceType;
 use screenerbot::tokens::{Token, get_token_decimals_sync};
 use screenerbot::swaps::{
     get_jupiter_quote, execute_jupiter_swap, get_gmgn_quote,
-    JupiterSwapResult, execute_test_raydium_cpmm_swap, RaydiumCpmmSwapResult
+    JupiterSwapResult
 };
 use screenerbot::positions;
 
@@ -3388,46 +3388,17 @@ async fn execute_gmgn_swap_test(
     Err(SwapError::ConfigError("GMGN swap execution not yet implemented in test".to_string()))
 }
 
-/// Execute Raydium CPMM direct swap test
+/// Execute Raydium CPMM direct swap test (DEPRECATED - Raydium direct API is no longer available)
 async fn execute_raydium_cpmm_swap_test(
     token: &Token,
     sol_amount: f64,
     slippage: f64,
     is_buy: bool,
 ) -> Result<JupiterSwapResult, SwapError> {
-    if !is_buy {
-        return Err(SwapError::ConfigError("Raydium CPMM test only supports SOL-to-token swaps currently".to_string()));
-    }
-
-    // Special handling for our test token
-    if token.mint != "5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t" {
-        return Err(SwapError::ConfigError(format!(
-            "Raydium CPMM test only supports the test token 5DhEM7PZrPVPfA4UK3tcNxxZ8UGwc6yFYwpAXB14uw2t, got: {}", 
-            token.mint
-        )));
-    }
-
-    log(LogTag::Transactions, "RAYDIUM_CPMM_TEST", &format!(
-        "🔵 Testing Raydium CPMM direct swap:\n  • Token: {} ({})\n  • SOL Amount: {:.6}\n  • Slippage: {:.1}%",
-        token.symbol, &token.mint[..8], sol_amount, slippage
-    ));
-
-    // Execute the Raydium CPMM test swap
-    let result = execute_test_raydium_cpmm_swap(sol_amount, slippage).await?;
-
-    // Convert RaydiumCpmmSwapResult to JupiterSwapResult for compatibility
-    Ok(JupiterSwapResult {
-        success: result.success,
-        transaction_signature: result.transaction_signature,
-        input_amount: result.input_amount,
-        output_amount: result.output_amount,
-        price_impact: result.price_impact,
-        fee_lamports: result.fee_lamports,
-        execution_time: result.execution_time,
-        effective_price: result.effective_price,
-        swap_data: None, // Raydium CPMM doesn't use SwapData format
-        error: result.error,
-    })
+    // Raydium direct API is deprecated - use Jupiter aggregator which includes Raydium routes
+    Err(SwapError::ConfigError(
+        "Raydium CPMM direct test is deprecated. Use Jupiter aggregator which includes Raydium routes.".to_string()
+    ))
 }
 
 /// Analyze a specific swap transaction

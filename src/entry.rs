@@ -490,14 +490,28 @@ pub fn get_entry_threshold(token: &Token) -> f64 {
 
 /// Helper function to get rugcheck score for a token (simplified)
 pub async fn get_rugcheck_score_for_token(mint: &str) -> Option<f64> {
-    match TokenDatabase::new() {
-        Ok(database) => {
-            match database.get_rugcheck_data(mint) {
+    // Use global rugcheck service instead of direct database access
+    use crate::tokens::get_global_rugcheck_service;
+    
+    match get_global_rugcheck_service() {
+        Some(service) => {
+            match service.get_rugcheck_data(mint).await {
                 Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
                 _ => None,
             }
         }
-        Err(_) => None,
+        None => {
+            // Fallback to direct database access if service not available
+            match TokenDatabase::new() {
+                Ok(database) => {
+                    match database.get_rugcheck_data(mint) {
+                        Ok(Some(rugcheck_data)) => rugcheck_data.score.map(|s| s as f64),
+                        _ => None,
+                    }
+                }
+                Err(_) => None,
+            }
+        }
     }
 }
 
