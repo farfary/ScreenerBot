@@ -6,27 +6,13 @@ use crate::logger::{log, LogTag};
 use crate::global::{is_debug_swaps_enabled};
 use crate::utils::{get_token_balance, check_shutdown_or_delay};
 use crate::utils::get_wallet_address;
-use super::{get_best_quote, execute_best_swap, RouterType};
+use super::{get_best_quote, execute_best_swap, RouterType, SwapResult};
 use super::types::{SwapData};
 use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, GMGN_FEE_SOL, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-/// Enhanced swap result with comprehensive routing information
-#[derive(Debug)]
-pub struct SwapResult {
-    pub success: bool,
-    pub router_used: Option<RouterType>, // Track which router was used for the swap
-    pub transaction_signature: Option<String>,
-    pub input_amount: String,
-    pub output_amount: String,
-    pub price_impact: String,
-    pub fee_lamports: u64,
-    pub execution_time: f64,
-    pub effective_price: Option<f64>, // Price per token in SOL
-    pub swap_data: Option<SwapData>, // Complete swap data for reference
-    pub error: Option<String>,
-}
+
 
 /// Buy tokens with SOL - single purpose function
 pub async fn buy_token(

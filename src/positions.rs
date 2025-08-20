@@ -1,10 +1,11 @@
 use crate::global::*;
 use crate::logger::{log, LogTag};
-use crate::rpc::{lamports_to_sol, get_rpc_client};
-use crate::swaps::{buy_token, sell_token};
+use crate::rpc::{lamports_to_sol, get_rpc_client, SwapError, sol_to_lamports};
+use crate::swaps::{get_best_quote, execute_best_swap, RouterType, SwapResult};
+use crate::swaps::types::SwapData;
+use crate::swaps::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SELL_RETRY_SLIPPAGES};
 use crate::tokens::Token;
 use crate::arguments::is_debug_positions_enabled;
-use crate::tokens::decimals::sol_to_lamports;
 use crate::trader::*;
 use crate::transactions::{
     get_transaction, is_transaction_verified, Transaction, SwapPnLInfo, TransactionStatus,
@@ -21,7 +22,6 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tokio::time::{interval, Duration};
-
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
@@ -671,13 +671,94 @@ impl PositionsManager {
 
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
-                "💸 Executing buy_token for {} with {} SOL at price {:.8}",
+                "💸 Executing swap for {} with {} SOL at price {:.8}",
                 token.symbol, size_sol, price
             ));
         }
 
-        match buy_token(token, size_sol, Some(price)).await {
-            Ok(swap_result) => {
+        // Validate expected price if provided
+        if let Some(price) = Some(price) {
+            if price <= 0.0 || !price.is_finite() {
+                log(
+                    LogTag::Swap,
+                    "ERROR",
+                    &format!(
+                        "❌ REFUSING TO BUY: Invalid expected_price for {} ({}). Price = {:.10}",
+                        token.symbol,
+                        token.mint,
+                        price
+                    )
+                );
+                return Err(format!("Invalid expected price: {:.10}", price));
+            }
+        }
+
+        log(
+            LogTag::Swap,
+            "BUY_START",
+            &format!(
+                "🟢 BUYING {} SOL worth of {} tokens (mint: {})",
+                size_sol,
+                token.symbol,
+                token.mint
+            )
+        );
+
+        let wallet_address = get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+
+        let best_quote = get_best_quote(
+            SOL_MINT,
+            &token.mint,
+            sol_to_lamports(size_sol),
+            &wallet_address,
+            QUOTE_SLIPPAGE_PERCENT,
+        ).await.map_err(|e| format!("Failed to get quote: {}", e))?;
+
+        if is_debug_swaps_enabled() {
+            log(
+                LogTag::Swap,
+                "QUOTE",
+                &format!(
+                    "📊 Best quote from {:?}: {} SOL -> {} tokens",
+                    best_quote.router,
+                    lamports_to_sol(best_quote.input_amount),
+                    best_quote.output_amount
+                )
+            );
+        }
+
+        log(LogTag::Swap, "SWAP", &format!("🚀 Executing swap with best quote via {:?}...", best_quote.router));
+
+        let swap_result = execute_best_swap(
+            token,
+            SOL_MINT,
+            &token.mint,
+            sol_to_lamports(size_sol),
+            best_quote
+        ).await.map_err(|e| format!("Failed to execute swap: {}", e))?;
+
+        if let Some(ref signature) = swap_result.transaction_signature {
+            log(LogTag::Swap, "TRANSACTION", &format!(
+                "Transaction {} will be monitored by positions manager", 
+                &signature[..8]
+            ));
+        }
+
+        if is_debug_swaps_enabled() {
+            log(
+                LogTag::Swap,
+                "BUY_COMPLETE",
+                &format!(
+                    "🟢 BUY operation completed for {} - Success: {} | TX: {}",
+                    token.symbol,
+                    swap_result.success,
+                    swap_result.transaction_signature.as_ref().unwrap_or(&"None".to_string())
+                )
+            );
+        }
+
+        match swap_result {
+            swap_result => {
                 let transaction_signature = swap_result
                     .transaction_signature
                     .clone()
@@ -784,7 +865,6 @@ impl PositionsManager {
 
                 Ok((token.mint.clone(), transaction_signature))
             }
-            Err(e) => Err(format!("Failed to execute buy swap: {}", e)),
         }
     }
 
@@ -925,89 +1005,318 @@ impl PositionsManager {
                 ),
             );
 
-            match sell_token(
-                token,
-                position.token_amount.unwrap_or(0),
-                Some(exit_price),
-                Some(self.shutdown.clone()),
-            )
-            .await
-            {
-                Ok(swap_result) => {
-                    let exit_signature = swap_result
-                        .transaction_signature
-                        .clone()
-                        .unwrap_or_default();
-
-                    // Update position
-                    position.exit_transaction_signature = Some(exit_signature.clone());
-                    position.exit_price = Some(exit_price);
-                    position.exit_time = Some(exit_time);
-
-                    /// Save updated position (in-memory only)
-                    if let Some(pos) = self.positions.iter_mut().find(|p| p.mint == position.mint) {
-                        *pos = position.clone();
-                        
-                        // Save positions to disk after updating position
-                        self.save_positions_to_disk();
-                    }
-
-                    // Log exit transaction with comprehensive verification
-                    log(
-                        LogTag::Positions,
-                        "POSITION_EXIT",
-                        &format!(
-                            "📝 Exit transaction {} added to comprehensive verification queue (RPC + transaction analysis)",
-                            get_signature_prefix(&exit_signature)
-                        ),
-                    );
-
-                    // Track for comprehensive verification using RPC and transaction analysis
-                    self.pending_verifications
-                        .insert(exit_signature.clone(), Utc::now());
-
-                    // Record close time for re-entry cooldown
-                    self.record_close_time_for_mint(&position.mint, exit_time);
-
-                    log(
-                        LogTag::Positions,
-                        "SUCCESS",
-                        &format!(
-                            "✅ POSITION CLOSED: {} | TX: {} | Exit Price: {:.12} SOL | Verification: Pending",
-                            position.symbol,
-                            get_signature_prefix(&exit_signature),
-                            exit_price
-                        ),
-                    );
-
-                    return Ok((position.mint.clone(), exit_signature));
+            // Validate expected SOL output if provided
+            if let Some(expected_sol) = Some(exit_price) {
+                if expected_sol <= 0.0 || !expected_sol.is_finite() {
+                    return Err(format!("Invalid expected SOL output: {:.10}", expected_sol));
                 }
-                Err(e) => {
+            }
+
+            // Auto-retry with progressive slippage from config
+            let slippages = &SELL_RETRY_SLIPPAGES;
+            let shutdown = Some(self.shutdown.clone());
+            let token_amount = position.token_amount.unwrap_or(0);
+
+            let mut last_error = None;
+
+            for (slippage_attempt, &slippage) in slippages.iter().enumerate() {
+                // Abort before starting a new attempt if shutdown is in progress
+                if let Some(ref s) = shutdown {
+                    if check_shutdown_or_delay(s, tokio::time::Duration::from_millis(0)).await {
+                        log(
+                            LogTag::Swap,
+                            "SHUTDOWN",
+                            &format!(
+                                "⏹️  Aborting further sell attempts for {} due to shutdown (before attempt {} with {:.1}% slippage)",
+                                token.symbol,
+                                slippage_attempt + 1,
+                                slippage
+                            )
+                        );
+                        return Err("Shutdown in progress - aborting sell".to_string());
+                    }
+                }
+
+                log(
+                    LogTag::Swap,
+                    "SELL_ATTEMPT",
+                    &format!(
+                        "🔴 Sell attempt {} for {} with {:.1}% slippage",
+                        slippage_attempt + 1,
+                        token.symbol,
+                        slippage
+                    )
+                );
+
+                // Execute sell_token_with_slippage logic inline
+                if is_debug_swaps_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "SELL_START",
+                        &format!(
+                            "🔴 Starting SELL operation for {} ({}) - Expected amount: {} tokens, Slippage: {:.1}%",
+                            token.symbol,
+                            token.mint,
+                            token_amount,
+                            slippage
+                        )
+                    );
+                }
+
+                let wallet_address = match get_wallet_address() {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        last_error = Some(format!("Failed to get wallet address: {}", e));
+                        continue;
+                    }
+                };
+
+                let actual_wallet_balance = match get_token_balance(&wallet_address, &token.mint).await {
+                    Ok(balance) => balance,
+                    Err(e) => {
+                        last_error = Some(format!("Failed to get token balance: {}", e));
+                        continue;
+                    }
+                };
+
+                if actual_wallet_balance == 0 {
+                    log(
+                        LogTag::Swap,
+                        "WARNING",
+                        &format!(
+                            "⚠️ No {} tokens in wallet to sell (expected: {}, actual: 0)",
+                            token.symbol,
+                            token_amount
+                        )
+                    );
+                    return Err(format!("No {} tokens in wallet", token.symbol));
+                }
+
+                let actual_sell_amount = actual_wallet_balance;
+                
+                log(
+                    LogTag::Swap,
+                    "SELL_AMOUNT",
+                    &format!(
+                        "💰 Selling {} {} tokens (position: {}, wallet: {})",
+                        actual_sell_amount,
+                        token.symbol,
+                        token_amount,
+                        actual_wallet_balance
+                    )
+                );
+
+                let best_quote = match get_best_quote(
+                    &token.mint,
+                    SOL_MINT,
+                    actual_sell_amount,
+                    &wallet_address,
+                    slippage,
+                ).await {
+                    Ok(quote) => quote,
+                    Err(e) => {
+                        last_error = Some(format!("Failed to get quote: {}", e));
+                        continue;
+                    }
+                };
+
+                let swap_result = match execute_best_swap(
+                    token,
+                    &token.mint,
+                    SOL_MINT,
+                    actual_sell_amount,
+                    best_quote,
+                ).await {
+                    Ok(result) => {
+                        if let Some(ref signature) = result.transaction_signature {
+                            log(LogTag::Swap, "TRANSACTION", &format!(
+                                "Sell transaction {} will be monitored by positions manager", 
+                                &signature[..8]
+                            ));
+                        }
+                        
+                        log(
+                            LogTag::Swap,
+                            "SELL_SUCCESS",
+                            &format!(
+                                "✅ Sell successful for {} on attempt {} with {:.1}% slippage",
+                                token.symbol,
+                                slippage_attempt + 1,
+                                slippage
+                            )
+                        );
+
+                        if is_debug_swaps_enabled() {
+                            log(
+                                LogTag::Swap,
+                                "SELL_COMPLETE",
+                                &format!(
+                                    "🔴 SELL operation completed for {} - Success: {} | TX: {}",
+                                    token.symbol,
+                                    result.success,
+                                    result.transaction_signature.as_ref().unwrap_or(&"None".to_string())
+                                )
+                            );
+                        }
+
+                        result
+                    }
+                    Err(e) => {
+                        let error_str = format!("{}", e);
+                        log(
+                            LogTag::Swap,
+                            "SELL_RETRY",
+                            &format!(
+                                "⚠️ Sell attempt {} failed for {} with {:.1}% slippage: {}",
+                                slippage_attempt + 1,
+                                token.symbol,
+                                slippage,
+                                e
+                            )
+                        );
+
+                        // Check for error types that should not be retried
+                        if error_str.contains("insufficient balance") || error_str.contains("InvalidAmount") || error_str.contains("ConfigError") {
+                            if error_str.contains("insufficient balance") {
+                                log(
+                                    LogTag::Swap,
+                                    "SELL_FAILED_NO_RETRY",
+                                    &format!(
+                                        "❌ Stopping retries for {} - insufficient balance (tokens may have been sold in previous attempt)",
+                                        token.symbol
+                                    )
+                                );
+                            } else {
+                                log(
+                                    LogTag::Swap,
+                                    "SELL_FAILED_NO_RETRY",
+                                    &format!(
+                                        "❌ Stopping retries for {} - unretryable error: {}",
+                                        token.symbol,
+                                        error_str
+                                    )
+                                );
+                            }
+                            return Err(error_str);
+                        }
+
+                        last_error = Some(error_str);
+
+                        // If this isn't the last attempt, wait and continue
+                        if slippage_attempt < slippages.len() - 1 {
+                            // Before retry delay, check for shutdown and abort if requested
+                            if let Some(ref s) = shutdown {
+                                if check_shutdown_or_delay(s, tokio::time::Duration::from_millis(0)).await {
+                                    log(
+                                        LogTag::Swap,
+                                        "SHUTDOWN",
+                                        &format!(
+                                            "⏹️  Skipping sell retry for {} due to shutdown (next slippage would be {:.1}%)",
+                                            token.symbol,
+                                            slippages[slippage_attempt + 1]
+                                        )
+                                    );
+                                    return Err("Shutdown in progress - aborting sell retries".to_string());
+                                }
+                            }
+
+                            // Wait before retry
+                            tokio::time::sleep(tokio::time::Duration::from_secs((slippage_attempt + 1) as u64 * 2)).await;
+                        }
+                        continue;
+                    }
+                };
+
+                // Success case - process the swap result
+                let exit_signature = swap_result
+                    .transaction_signature
+                    .clone()
+                    .unwrap_or_default();
+
+                // Update position
+                position.exit_transaction_signature = Some(exit_signature.clone());
+                position.exit_price = Some(exit_price);
+                position.exit_time = Some(exit_time);
+
+                /// Save updated position (in-memory only)
+                if let Some(pos) = self.positions.iter_mut().find(|p| p.mint == position.mint) {
+                    *pos = position.clone();
+                    
+                    // Save positions to disk after updating position
+                    self.save_positions_to_disk();
+                }
+
+                // Log exit transaction with comprehensive verification
+                log(
+                    LogTag::Positions,
+                    "POSITION_EXIT",
+                    &format!(
+                        "📝 Exit transaction {} added to comprehensive verification queue (RPC + transaction analysis)",
+                        get_signature_prefix(&exit_signature)
+                    ),
+                );
+
+                // Track for comprehensive verification using RPC and transaction analysis
+                self.pending_verifications
+                    .insert(exit_signature.clone(), Utc::now());
+
+                // Record close time for re-entry cooldown
+                self.record_close_time_for_mint(&position.mint, exit_time);
+
+                log(
+                    LogTag::Positions,
+                    "SUCCESS",
+                    &format!(
+                        "✅ POSITION CLOSED: {} | TX: {} | Exit Price: {:.12} SOL | Verification: Pending",
+                        position.symbol,
+                        get_signature_prefix(&exit_signature),
+                        exit_price
+                    ),
+                );
+
+                return Ok((position.mint.clone(), exit_signature));
+            }
+
+            // All slippage attempts failed
+            log(
+                LogTag::Swap,
+                "SELL_FAILED",
+                &format!(
+                    "❌ All sell attempts failed for {} after {} tries",
+                    token.symbol,
+                    slippages.len()
+                )
+            );
+
+            let final_error = last_error.unwrap_or_else(|| "Unknown error".to_string());
+
+            match attempt {
+                _ if attempt < max_attempts => {
                     log(LogTag::Positions, "SELL_FAILED", &format!(
                         "❌ Sell attempt {}/{} failed for {}: {}",
-                        attempt, max_attempts, position.symbol, e
+                        attempt, max_attempts, position.symbol, final_error
                     ));
 
                     // Check if it's a frozen account error
-                    if is_frozen_account_error(&format!("{:?}", e)) {
+                    if is_frozen_account_error(&final_error) {
                         self.add_mint_to_frozen_cooldown(&position.mint);
-                        return Err(format!("Token frozen, added to cooldown: {}", e));
-                    }
-
-                    if attempt == max_attempts {
-                        // Add to retry queue for later
-                        self.retry_queue.insert(
-                            position.mint.clone(),
-                            (Utc::now() + chrono::Duration::minutes(5), 1),
-                        );
-                        return Err(format!(
-                            "All sell attempts failed, added to retry queue: {}",
-                            e
-                        ));
+                        return Err(format!("Token frozen, added to cooldown: {}", final_error));
                     }
 
                     // Wait before retry
                     tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+                _ => {
+                    // Last attempt failed
+                    // Add to retry queue for later
+                    self.retry_queue.insert(
+                        position.mint.clone(),
+                        (Utc::now() + chrono::Duration::minutes(5), 1),
+                    );
+                    return Err(format!(
+                        "All sell attempts failed, added to retry queue: {}",
+                        final_error
+                    ));
                 }
             }
         }

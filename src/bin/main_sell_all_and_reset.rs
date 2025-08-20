@@ -27,11 +27,13 @@
 //! ## Warning
 //! This tool will attempt to sell ALL tokens in your wallet AND delete specific bot data files. Use with caution!
 
-use screenerbot::global::{ read_configs };
+use screenerbot::global::{ read_configs, is_debug_swaps_enabled };
 use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
-use screenerbot::utils::{ get_wallet_address, close_token_account_with_context };
-use screenerbot::swaps::sell_token;
+use screenerbot::utils::{ get_wallet_address, close_token_account_with_context, get_token_balance, check_shutdown_or_delay, SwapResult };
+use screenerbot::swaps::{ get_best_quote, execute_best_swap, RouterType };
+use screenerbot::swaps::config::{ SOL_MINT, SELL_RETRY_SLIPPAGES };
+use screenerbot::swaps::types::SwapData;
 use screenerbot::rpc::{ SwapError, init_rpc_client, get_rpc_client };
 use screenerbot::arguments::is_debug_ata_enabled;
 use reqwest;
@@ -42,6 +44,7 @@ use std::fs;
 use std::path::Path;
 use std::collections::HashSet;
 use tokio::sync::Semaphore;
+use tokio::time::{sleep, Duration};
 use futures::stream::{ self, StreamExt };
 
 /// Print comprehensive help menu for the Sell All and Reset Tool
@@ -119,9 +122,6 @@ fn print_help() {
     println!("    • Use --dry-run first to understand the impact");
     println!("");
 }
-
-/// SOL token mint address (native Solana)
-const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
 /// Data files to be removed during reset
 const DATA_FILES_TO_REMOVE: &[&str] = &[
@@ -337,8 +337,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         boosts: None,
                     };
 
-                    // Attempt to sell all tokens
-                    match sell_token(&token, account.balance, None, None).await {
+                    // Attempt to sell all tokens - inline implementation
+                    let sell_result = async {
+                        let wallet_address = get_wallet_address()?;
+                        let actual_wallet_balance = get_token_balance(&wallet_address, &token.mint).await?;
+
+                        if actual_wallet_balance == 0 {
+                            return Err(SwapError::InsufficientBalance(
+                                format!("No {} tokens in wallet", token.symbol)
+                            ));
+                        }
+
+                        // Use QUOTE_SLIPPAGE_PERCENT as default slippage
+                        let slippage = screenerbot::swaps::config::QUOTE_SLIPPAGE_PERCENT;
+
+                        let best_quote = get_best_quote(
+                            &token.mint,
+                            SOL_MINT,
+                            actual_wallet_balance,
+                            &wallet_address,
+                            slippage,
+                        ).await?;
+
+                        let swap_result = execute_best_swap(
+                            &token,
+                            &token.mint,
+                            SOL_MINT,
+                            actual_wallet_balance,
+                            best_quote,
+                        ).await?;
+
+                        Ok::<SwapResult, SwapError>(swap_result)
+                    }.await;
+
+                    match sell_result {
                         Ok(swap_result) => {
                             if swap_result.success {
                                 // Parse the amount from swap result

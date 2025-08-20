@@ -10,6 +10,22 @@ pub enum RouterType {
     Jupiter,
 }
 
+/// Enhanced swap result with comprehensive routing information
+#[derive(Debug)]
+pub struct SwapResult {
+    pub success: bool,
+    pub router_used: Option<RouterType>, // Track which router was used for the swap
+    pub transaction_signature: Option<String>,
+    pub input_amount: String,
+    pub output_amount: String,
+    pub price_impact: String,
+    pub fee_lamports: u64,
+    pub execution_time: f64,
+    pub effective_price: Option<f64>, // Price per token in SOL
+    pub swap_data: Option<SwapData>, // Complete swap data for reference
+    pub error: Option<String>,
+}
+
 /// Configuration constants for swap operations (re-exported from config)
 pub use super::config::{
     SOL_MINT, 

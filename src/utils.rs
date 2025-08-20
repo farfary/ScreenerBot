@@ -11,7 +11,7 @@ use crate::global::POSITIONS_FILE;
 use crate::global::read_configs;
 use crate::rpc::SwapError;
 // Re-export for backward compatibility
-pub use crate::swaps::interface::SwapResult;
+pub use crate::swaps::SwapResult;
 // Remove dependency on swaps module for get_wallet_address
 // pub use crate::swaps::get_wallet_address;
 

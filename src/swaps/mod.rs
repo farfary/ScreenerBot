@@ -4,7 +4,6 @@
 pub mod config;
 pub mod gmgn;
 pub mod jupiter;
-pub mod interface;
 pub mod types;
 
 use crate::tokens::Token;
@@ -51,11 +50,11 @@ pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
 // =============================================================================
 
 // Main swap functions
-pub use interface::{buy_token, sell_token, SwapResult};
+// (No longer needed - interface.rs being removed)
 
 // Common types and structures
 pub use types::{
-    SwapData, SwapQuote, RawTransaction, SwapRequest, 
+    SwapData, SwapQuote, RawTransaction, SwapRequest, SwapResult,
     GMGNApiResponse, JupiterQuoteResponse, JupiterSwapResponse, RouterType
 };
 
@@ -299,7 +298,7 @@ pub async fn execute_best_swap(
     output_mint: &str,
     input_amount: u64,
     quote: UnifiedQuote,
-) -> Result<interface::SwapResult, SwapError> {
+) -> Result<SwapResult, SwapError> {
     log(
         LogTag::Swap,
         "EXECUTE",
@@ -316,7 +315,7 @@ pub async fn execute_best_swap(
     let primary_result = match quote.execution_data {
         QuoteExecutionData::GMGN(ref gmgn_data) => {
             match gmgn::execute_gmgn_swap(token, input_mint, output_mint, input_amount, gmgn_data.clone()).await {
-                Ok(result) => Ok(interface::SwapResult {
+                Ok(result) => Ok(SwapResult {
                     success: result.success,
                     router_used: Some(RouterType::GMGN),
                     transaction_signature: result.transaction_signature,
@@ -334,7 +333,7 @@ pub async fn execute_best_swap(
         }
         QuoteExecutionData::Jupiter(ref jupiter_data) => {
             match jupiter::execute_jupiter_swap(token, input_mint, output_mint, jupiter_data.clone()).await {
-                Ok(result) => Ok(interface::SwapResult {
+                Ok(result) => Ok(SwapResult {
                     success: result.success,
                     router_used: Some(RouterType::Jupiter),
                     transaction_signature: result.transaction_signature,
@@ -465,7 +464,7 @@ pub async fn execute_best_swap(
                         // Fallback to GMGN
                         log(LogTag::Swap, "FALLBACK_EXECUTE", "🔵 Executing GMGN fallback swap...");
                         match gmgn::execute_gmgn_swap(token, input_mint, output_mint, input_amount, fallback_data).await {
-                            Ok(result) => Ok(interface::SwapResult {
+                            Ok(result) => Ok(SwapResult {
                                 success: result.success,
                                 router_used: Some(RouterType::GMGN),
                                 transaction_signature: result.transaction_signature,
@@ -485,7 +484,7 @@ pub async fn execute_best_swap(
                         // Fallback to Jupiter
                         log(LogTag::Swap, "FALLBACK_EXECUTE", "🟡 Executing Jupiter fallback swap...");
                         match jupiter::execute_jupiter_swap(token, input_mint, output_mint, fallback_data).await {
-                            Ok(result) => Ok(interface::SwapResult {
+                            Ok(result) => Ok(SwapResult {
                                 success: result.success,
                                 router_used: Some(RouterType::Jupiter),
                                 transaction_signature: result.transaction_signature,
