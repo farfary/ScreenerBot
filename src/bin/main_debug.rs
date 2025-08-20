@@ -112,11 +112,13 @@ COMMON USAGE EXAMPLES:
 
   Deep Investigation:
     cargo run --bin main_debug -- --signature TRANSACTION_SIGNATURE
+    cargo run --bin main_debug -- --signature TRANSACTION_SIGNATURE --debug-transactions
     cargo run --bin main_debug -- --deep-analyze TRANSACTION_SIGNATURE
     cargo run --bin main_debug -- --show-unknown --count 100
     cargo run --bin main_debug -- --analyze-all --filter-mint <MINT>
 
   Note: --deep-analyze provides comprehensive instruction-level transaction analysis
+  Note: --debug-transactions enables verbose transaction verification logging
 
   Token Database Lookup:
     cargo run --bin main_debug -- --token-info DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
@@ -376,6 +378,12 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("debug-transactions")
+                .long("debug-transactions")
+                .help("Enable verbose transaction verification and processing debug logs")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("benchmark")
                 .long("benchmark")
                 .help("Run performance benchmark tests")
@@ -411,7 +419,7 @@ IMPORTANT: Use --dry-run flag for safe testing without real transactions!
 
     // Set command args for debug flags
     let mut args = vec!["main_debug".to_string()];
-    if matches.get_flag("verbose") || matches.get_one::<String>("signature").is_some() {
+    if matches.get_flag("verbose") || matches.get_one::<String>("signature").is_some() || matches.get_flag("debug-transactions") {
         args.push("--debug-transactions".to_string());
     }
     set_cmd_args(args);
@@ -3717,7 +3725,7 @@ async fn test_real_position_management(
     log(LogTag::Transactions, "POSITION_TEST", "🟢 STEP 1: Opening position with transaction verification...");
 
     // Open position using the PositionsManager
-    if let Err(e) = positions::open_position_global(test_token.clone(), current_price, -5.0).await {
+    if let Err(e) = positions::open_position_global(test_token.clone(), current_price, -5.0, sol_amount).await {
         log(LogTag::Transactions, "ERROR", &format!("Failed to open position: {}", e));
         return;
     }

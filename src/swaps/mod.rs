@@ -247,6 +247,14 @@ pub async fn get_best_quote(
     if quotes.is_empty() {
         let error_msg = "No routers available for quote - GMGN and Jupiter all failed";
         log(LogTag::Swap, "QUOTE_ERROR", &format!("❌ {}", error_msg));
+        
+        // Log detailed failure summary for debugging
+        log(LogTag::Swap, "FAILURE_SUMMARY", &format!(
+            "🔍 Quote failure summary - GMGN: {}, Jupiter: {} (check token liquidity and API status)",
+            if GMGN_ENABLED { "enabled but failed" } else { "disabled" },
+            if JUPITER_ENABLED { "enabled but failed" } else { "disabled" }
+        ));
+        
         return Err(SwapError::ApiError(error_msg.to_string()));
     }
 

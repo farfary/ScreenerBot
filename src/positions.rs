@@ -293,10 +293,14 @@ impl PositionsManager {
         // Load positions from disk on startup
         manager.load_positions_from_disk();
         
+        // Re-queue unverified transactions for comprehensive verification
+        manager.requeue_unverified_transactions();
+        
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
-                "📊 PositionsManager initialized with {} positions loaded from disk",
-                manager.positions.len()
+                "📊 PositionsManager initialized with {} positions loaded from disk, {} pending verifications queued",
+                manager.positions.len(),
+                manager.pending_verifications.len()
             ));
         }
         
@@ -366,14 +370,14 @@ impl PositionsManager {
 
     async fn handle_request(&mut self, msg: PositionsRequest) {
         match msg {
-            PositionsRequest::OpenPosition { token, price, percent_change, reply } => {
+            PositionsRequest::OpenPosition { token, price, percent_change, size_sol, reply } => {
                 if is_debug_positions_enabled() {
                     log(LogTag::Positions, "DEBUG", &format!(
-                        "📈 Received OpenPosition request for {} at price {} ({}% change)",
-                        token.symbol, price, percent_change
+                        "📈 Received OpenPosition request for {} at price {} ({}% change) with size {} SOL",
+                        token.symbol, price, percent_change, size_sol
                     ));
                 }
-                let _ = reply.send(self.open_position(&token, price, percent_change).await);
+                let _ = reply.send(self.open_position(&token, price, percent_change, size_sol).await);
             }
             PositionsRequest::ClosePosition { mint, token, exit_price, exit_time, reply } => {
                 if is_debug_positions_enabled() {
@@ -423,72 +427,74 @@ impl PositionsManager {
             PositionsRequest::GetActiveFrozenCooldowns { reply } => {
                 let _ = reply.send(self.get_active_frozen_cooldowns());
             }
+            PositionsRequest::ForceReverifyAll { reply } => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", "🔄 Received ForceReverifyAll request");
+                }
+                let _ = reply.send(self.force_reverify_all_positions());
+            }
         }
     }
 
-    /// Get open positions count
+    /// Get open positions count (includes Open and Closing states)
     fn get_open_positions_count(&self) -> usize {
         self.positions
             .iter()
             .filter(|p| {
-                p.position_type == "buy"
-                    && !(p.transaction_entry_verified
-                        && p.transaction_exit_verified
-                        && p.exit_price.is_some())
+                p.position_type == "buy" && {
+                    let state = self.get_position_state(p);
+                    state == PositionState::Open || state == PositionState::Closing
+                }
             })
             .count()
     }
 
-    /// Get open positions
+    /// Get open positions (includes Open and Closing states)
     fn get_open_positions(&self) -> Vec<Position> {
         self.positions
             .iter()
             .filter(|p| {
-                p.position_type == "buy"
-                    && !(p.transaction_entry_verified
-                        && p.transaction_exit_verified
-                        && p.exit_price.is_some())
+                p.position_type == "buy" && {
+                    let state = self.get_position_state(p);
+                    state == PositionState::Open || state == PositionState::Closing
+                }
             })
             .cloned()
             .collect()
     }
 
-    /// Get closed positions
+    /// Get closed positions (only Closed state)
     fn get_closed_positions(&self) -> Vec<Position> {
         self.positions
             .iter()
             .filter(|p| {
-                p.position_type == "buy"
-                    && p.transaction_entry_verified
-                    && p.transaction_exit_verified
-                    && p.exit_price.is_some()
+                p.position_type == "buy" && self.get_position_state(p) == PositionState::Closed
             })
             .cloned()
             .collect()
     }
 
-    /// Get open positions mints
+    /// Get open positions mints (includes Open and Closing states)
     fn get_open_positions_mints(&self) -> Vec<String> {
         self.positions
             .iter()
             .filter(|p| {
-                p.position_type == "buy"
-                    && !(p.transaction_entry_verified
-                        && p.transaction_exit_verified
-                        && p.exit_price.is_some())
+                p.position_type == "buy" && {
+                    let state = self.get_position_state(p);
+                    state == PositionState::Open || state == PositionState::Closing
+                }
             })
             .map(|p| p.mint.clone())
             .collect()
     }
 
-    /// Check if mint is an open position
+    /// Check if mint is an open position (includes Open and Closing states)
     fn is_open_position(&self, mint: &str) -> bool {
         self.positions.iter().any(|p| {
-            p.mint == mint
-                && p.position_type == "buy"
-                && !(p.transaction_entry_verified
-                    && p.transaction_exit_verified
-                    && p.exit_price.is_some())
+            p.mint == mint && p.position_type == "buy" && {
+                let state = self.get_position_state(p);
+                state == PositionState::Open || state == PositionState::Closing
+            }
         })
     }
 
@@ -556,11 +562,12 @@ impl PositionsManager {
         token: &Token,
         price: f64,
         percent_change: f64,
+        size_sol: f64,
     ) -> Result<(String, String), String> {
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
-                "🎯 Starting open_position for {} at price {:.8} SOL ({}% change)",
-                token.symbol, price, percent_change
+                "🎯 Starting open_position for {} at price {:.8} SOL ({}% change) with size {} SOL",
+                token.symbol, price, percent_change, size_sol
             ));
         }
         
@@ -665,16 +672,36 @@ impl PositionsManager {
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
                 "💸 Executing buy_token for {} with {} SOL at price {:.8}",
-                token.symbol, TRADE_SIZE_SOL, price
+                token.symbol, size_sol, price
             ));
         }
 
-        match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
+        match buy_token(token, size_sol, Some(price)).await {
             Ok(swap_result) => {
                 let transaction_signature = swap_result
                     .transaction_signature
                     .clone()
                     .unwrap_or_default();
+
+                // CRITICAL VALIDATION: Verify transaction signature is valid before creating position
+                if transaction_signature.is_empty() || transaction_signature.len() < 32 {
+                    return Err("Invalid transaction signature - swap may have failed".to_string());
+                }
+                
+                // Additional validation: Check if signature is valid base58
+                if bs58::decode(&transaction_signature).into_vec().is_err() {
+                    return Err(format!("Invalid base58 transaction signature: {}", get_signature_prefix(&transaction_signature)));
+                }
+
+                // Log swap execution details for debugging
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "✅ Swap executed via {:?} - signature: {}, success: {}",
+                        swap_result.router_used.as_ref().map(|r| format!("{:?}", r)).unwrap_or_else(|| "Unknown".to_string()),
+                        get_signature_prefix(&transaction_signature),
+                        swap_result.success
+                    ));
+                }
 
                 // Create position optimistically
                 let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
@@ -688,8 +715,8 @@ impl PositionsManager {
                     exit_price: None,
                     exit_time: None,
                     position_type: "buy".to_string(),
-                    entry_size_sol: TRADE_SIZE_SOL,
-                    total_size_sol: TRADE_SIZE_SOL,
+                    entry_size_sol: size_sol,
+                    total_size_sol: size_sol,
                     price_highest: price,
                     price_lowest: price,
                     entry_transaction_signature: Some(transaction_signature.clone()),
@@ -738,6 +765,12 @@ impl PositionsManager {
                 self.pending_verifications
                     .insert(transaction_signature.clone(), Utc::now());
 
+                // Immediately attempt to fetch transaction to accelerate verification (fire-and-forget)
+                let sig_for_fetch = transaction_signature.clone();
+                tokio::spawn(async move {
+                    let _ = crate::transactions::get_transaction(&sig_for_fetch).await;
+                });
+
                 log(
                     LogTag::Positions,
                     "SUCCESS",
@@ -773,13 +806,58 @@ impl PositionsManager {
         // Find the position to close
         let mut position_opt = None;
 
+        // Add debug information about available positions
+        log(LogTag::Positions, "DEBUG", &format!(
+            "🔍 Looking for position to close - mint: {}, total positions: {}",
+            mint, self.positions.len()
+        ));
+        
+        for (i, pos) in self.positions.iter().enumerate() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "📊 Position {}: mint={}, symbol={}, exit_sig={:?}, exit_verified={}",
+                i,
+                &pos.mint[..8],
+                pos.symbol,
+                pos.exit_transaction_signature.as_ref().map(|s| &s[..8]),
+                pos.transaction_exit_verified
+            ));
+        }
+
         if let Some(pos) = self
             .positions
             .iter_mut()
-            .find(|p| p.mint == mint && p.exit_transaction_signature.is_none())
+            .find(|p| {
+                let matches_mint = p.mint == mint;
+                let no_exit_sig = p.exit_transaction_signature.is_none();
+                let failed_exit = p.exit_transaction_signature.is_some() && !p.transaction_exit_verified;
+                let can_close = no_exit_sig || failed_exit;
+                
+                log(LogTag::Positions, "DEBUG", &format!(
+                    "🎯 Position check: mint_match={}, no_exit_sig={}, failed_exit={}, can_close={}",
+                    matches_mint, no_exit_sig, failed_exit, can_close
+                ));
+                
+                matches_mint && can_close
+            })
         {
-            if pos.exit_transaction_signature.is_some() {
-                return Err("Position already has exit transaction".to_string());
+            // Allow retry if previous exit transaction failed
+            if pos.exit_transaction_signature.is_some() && !pos.transaction_exit_verified {
+                log(
+                    LogTag::Positions,
+                    "RETRY_EXIT",
+                    &format!(
+                        "🔄 Previous exit transaction failed for {} - clearing failed exit data and retrying",
+                        pos.symbol
+                    ),
+                );
+                // Clear failed exit transaction data
+                pos.exit_transaction_signature = None;
+                pos.exit_price = None;
+                pos.exit_time = None;
+                pos.transaction_exit_verified = false;
+                pos.sol_received = None;
+                pos.effective_exit_price = None;
+                pos.exit_fee_lamports = None;
             }
             position_opt = Some(pos.clone());
         }
@@ -836,13 +914,14 @@ impl PositionsManager {
         let _guard =
             crate::trader::CriticalOperationGuard::new(&format!("SELL {}", position.symbol));
 
-        for attempt in 1..=3 {
+    let max_attempts = crate::arguments::get_max_exit_retries();
+    for attempt in 1..=max_attempts {
             log(
                 LogTag::Positions,
                 "SELL_ATTEMPT",
                 &format!(
-                    "💰 Attempting to sell {} (attempt {}/3) at {:.6} SOL",
-                    position.symbol, attempt, exit_price
+            "💰 Attempting to sell {} (attempt {}/{}) at {:.6} SOL",
+            position.symbol, attempt, max_attempts, exit_price
                 ),
             );
 
@@ -904,14 +983,10 @@ impl PositionsManager {
                     return Ok((position.mint.clone(), exit_signature));
                 }
                 Err(e) => {
-                    log(
-                        LogTag::Positions,
-                        "SELL_FAILED",
-                        &format!(
-                            "❌ Sell attempt {}/3 failed for {}: {}",
-                            attempt, position.symbol, e
-                        ),
-                    );
+                    log(LogTag::Positions, "SELL_FAILED", &format!(
+                        "❌ Sell attempt {}/{} failed for {}: {}",
+                        attempt, max_attempts, position.symbol, e
+                    ));
 
                     // Check if it's a frozen account error
                     if is_frozen_account_error(&format!("{:?}", e)) {
@@ -919,7 +994,7 @@ impl PositionsManager {
                         return Err(format!("Token frozen, added to cooldown: {}", e));
                     }
 
-                    if attempt == 3 {
+                    if attempt == max_attempts {
                         // Add to retry queue for later
                         self.retry_queue.insert(
                             position.mint.clone(),
@@ -1028,6 +1103,49 @@ impl PositionsManager {
         }
         
         removed
+    }
+
+    /// Force reverification of all positions with unverified transactions
+    fn force_reverify_all_positions(&mut self) -> usize {
+        let mut reverified_count = 0;
+        let now = Utc::now();
+        
+        log(LogTag::Positions, "FORCE_REVERIFY", "🔄 Starting forced reverification of all unverified transactions");
+        
+        for position in &self.positions {
+            // Check entry transaction
+            if let Some(entry_sig) = &position.entry_transaction_signature {
+                if !position.transaction_entry_verified {
+                    log(LogTag::Positions, "FORCE_REVERIFY", &format!(
+                        "📝 Re-queuing unverified entry transaction {} for position {}",
+                        get_signature_prefix(entry_sig),
+                        position.symbol
+                    ));
+                    self.pending_verifications.insert(entry_sig.clone(), now);
+                    reverified_count += 1;
+                }
+            }
+            
+            // Check exit transaction
+            if let Some(exit_sig) = &position.exit_transaction_signature {
+                if !position.transaction_exit_verified {
+                    log(LogTag::Positions, "FORCE_REVERIFY", &format!(
+                        "📝 Re-queuing unverified exit transaction {} for position {}",
+                        get_signature_prefix(exit_sig),
+                        position.symbol
+                    ));
+                    self.pending_verifications.insert(exit_sig.clone(), now);
+                    reverified_count += 1;
+                }
+            }
+        }
+        
+        log(LogTag::Positions, "FORCE_REVERIFY", &format!(
+            "✅ Force reverification complete: {} transactions re-queued for verification",
+            reverified_count
+        ));
+        
+        reverified_count
     }
 
     /// Get active frozen cooldowns
@@ -1187,16 +1305,31 @@ impl PositionsManager {
                         None => {
                             // Transaction still not confirmed, check timeout
                             if let Some(added_at) = self.pending_verifications.get(&signature) {
-                                let elapsed = Utc::now().signed_duration_since(*added_at).num_minutes();
-                                if elapsed > 10 {
-                                    // 10 minutes timeout
+                                let elapsed_minutes = Utc::now().signed_duration_since(*added_at).num_minutes();
+                                let elapsed_seconds = Utc::now().signed_duration_since(*added_at).num_seconds();
+                                
+                                // Add debug log to see what's happening
+                                log(
+                                    LogTag::Positions,
+                                    "DEBUG",
+                                    &format!(
+                                        "🔍 Transaction {} still pending - elapsed: {}s ({}m)",
+                                        get_signature_prefix(&signature),
+                                        elapsed_seconds,
+                                        elapsed_minutes
+                                    ),
+                                );
+                                
+                                if elapsed_seconds > 15 {
+                                    // 15 seconds timeout - swaps should be fast!
                                     log(
                                         LogTag::Positions,
                                         "TIMEOUT",
                                         &format!(
-                                            "⏰ Transaction verification timeout for {}: {}m elapsed",
+                                            "⏰ Transaction verification timeout for {}: {}s elapsed ({}m)",
                                             get_signature_prefix(&signature),
-                                            elapsed
+                                            elapsed_seconds,
+                                            elapsed_minutes
                                         ),
                                     );
                                     
@@ -1222,32 +1355,29 @@ impl PositionsManager {
                 Err(e) => {
                     log(
                         LogTag::Positions,
-                        "ERROR",
+                        "FAILED_TX",
                         &format!(
-                            "Error verifying transaction {}: {}",
+                            "❌ Transaction verification failed for {}: {}",
                             get_signature_prefix(&signature),
                             e
                         ),
                     );
                     
-                    // Don't remove from pending on verification errors - retry later
-                    // Only remove on timeout
-                    if let Some(added_at) = self.pending_verifications.get(&signature) {
-                        let elapsed = Utc::now().signed_duration_since(*added_at).num_minutes();
-                        if elapsed > 15 {
-                            // Extended timeout for RPC errors
-                            log(
-                                LogTag::Positions,
-                                "RPC_TIMEOUT",
-                                &format!(
-                                    "⏰ RPC timeout for transaction {}: {}m elapsed",
-                                    get_signature_prefix(&signature),
-                                    elapsed
-                                ),
-                            );
-                            self.pending_verifications.remove(&signature);
-                        }
+                    // Handle failed transaction - remove phantom position if it exists
+                    if let Err(cleanup_err) = self.handle_failed_transaction(&signature, &e).await {
+                        log(
+                            LogTag::Positions,
+                            "ERROR",
+                            &format!(
+                                "Failed to handle failed transaction {}: {}",
+                                get_signature_prefix(&signature),
+                                cleanup_err
+                            ),
+                        );
                     }
+                    
+                    // Remove from pending verifications
+                    self.pending_verifications.remove(&signature);
                 }
             }
         }
@@ -1393,22 +1523,56 @@ impl PositionsManager {
                 }
             }
             Ok(None) => {
-                // Transaction not found, still pending
+                // Transaction not found in our system - check verification age
+                let verification_age_minutes = if let Some(added_at) = self.pending_verifications.get(signature) {
+                    Utc::now().signed_duration_since(*added_at).num_minutes()
+                } else {
+                    0
+                };
+                
+                let verification_age_seconds = if let Some(added_at) = self.pending_verifications.get(signature) {
+                    Utc::now().signed_duration_since(*added_at).num_seconds()
+                } else {
+                    0
+                };
+
+                // Add debug logging to understand what's happening
                 log(
                     LogTag::Positions,
-                    "VERIFY_PENDING",
+                    "DEBUG",
                     &format!(
-                        "⏳ Transaction {} not found in transactions system, still pending",
-                        get_signature_prefix(signature)
+                        "🔍 Transaction {} not found in system - age: {}s ({}m)",
+                        get_signature_prefix(signature),
+                        verification_age_seconds,
+                        verification_age_minutes
                     ),
                 );
-                return Ok(None);
+
+                if verification_age_seconds > 15 {
+                    // After 15 seconds, if not found in our system, likely failed
+                    return Err(format!("Transaction not found in system after {}s ({}m) - likely failed", 
+                        verification_age_seconds, verification_age_minutes));
+                } else {
+                    // Still within reasonable time window, treat as pending
+                    log(
+                        LogTag::Positions,
+                        "VERIFY_PENDING",
+                        &format!(
+                            "⏳ Transaction {} not yet processed by system ({}s elapsed, {}m)",
+                            get_signature_prefix(signature),
+                            verification_age_seconds,
+                            verification_age_minutes
+                        ),
+                    );
+                    return Ok(None);
+                }
             }
             Err(e) => {
                 return Err(format!("Error getting transaction: {}", e));
             }
         }
     }
+
 
     /// Update position from verified transaction with detailed data
     async fn update_position_from_verified_transaction(&mut self, signature: &str, transaction: &Transaction) -> Result<(), String> {
@@ -1626,10 +1790,77 @@ impl PositionsManager {
             "CLEANUP",
             "🧹 Checking for phantom positions to cleanup",
         );
+        // Criteria for phantom removal:
+        // 1. Explicitly flagged with phantom_remove (set when entry tx failed)
+        // 2. Entry tx unverified for > 10 minutes AND transaction no longer found in cache
+        // 3. Entry tx unverified AND wallet holds zero tokens for mint
+        // Positions that meet criteria are removed to prevent inflated exposure accounting
 
-        // Implementation for phantom position cleanup would go here
-        // This would check all open positions against wallet balances
-        // and resolve any inconsistencies
+        let now = Utc::now();
+        let mut to_remove: Vec<usize> = Vec::new();
+
+        for (idx, position) in self.positions.iter().enumerate() {
+            // Skip already closed positions
+            if position.exit_transaction_signature.is_some() { continue; }
+
+            let mut remove = false;
+
+            // Condition 1: Explicit phantom flag
+            if position.phantom_remove {
+                remove = true;
+            }
+
+            // Condition 2: Aged unverified entry tx not found
+            if !remove && position.entry_transaction_signature.is_some() && !position.transaction_entry_verified {
+                let age_minutes = now.signed_duration_since(position.entry_time).num_minutes();
+                if age_minutes > 10 {
+                    // Try quick lookup of transaction; if still missing, mark remove
+                    if let Some(sig) = &position.entry_transaction_signature {
+                        match crate::transactions::get_transaction(sig).await {
+                            Ok(Some(_)) => { /* exists - keep */ }
+                            _ => { remove = true; }
+                        }
+                    }
+                }
+            }
+
+            // Condition 3: No tokens in wallet for this mint (best-effort, ignore errors)
+            if !remove && position.token_amount.unwrap_or(0) == 0 {
+                // Only check wallet balance if entry still unverified to avoid RPC load
+                if !position.transaction_entry_verified {
+                    if let Ok(wallet) = crate::utils::get_wallet_address() {
+                        if let Ok(balance) = crate::utils::get_token_balance(&wallet, &position.mint).await {
+                            if balance == 0 { remove = true; }
+                        }
+                    }
+                }
+            }
+
+            if remove {
+                to_remove.push(idx);
+            }
+        }
+
+        // Remove in reverse order to keep indices valid
+        if !to_remove.is_empty() {
+            for idx in to_remove.iter().rev() {
+                if let Some(removed) = self.positions.get(*idx) {
+                    log(
+                        LogTag::Positions,
+                        "PHANTOM_REMOVE",
+                        &format!(
+                            "🗑️ Removing phantom position {} ({}) - unverified entry tx {}",
+                            removed.symbol,
+                            get_mint_prefix(&removed.mint),
+                            removed.entry_transaction_signature.as_ref().map(|s| get_signature_prefix(s)).unwrap_or_else(|| "NONE".to_string())
+                        )
+                    );
+                }
+                self.positions.remove(*idx);
+            }
+            // Persist updated positions
+            self.save_positions_to_disk();
+        }
     }
 
     /// Verify and resolve position state using transaction history
@@ -1882,12 +2113,71 @@ impl PositionsManager {
         }
     }
 
+    /// Re-queue unverified transactions for comprehensive verification on startup
+    /// This ensures that positions with unverified transactions get re-verified
+    fn requeue_unverified_transactions(&mut self) {
+        let mut requeued_count = 0;
+
+        for position in &self.positions {
+            // Check entry transactions that need verification
+            if let Some(entry_sig) = &position.entry_transaction_signature {
+                if !position.transaction_entry_verified {
+                    self.pending_verifications.insert(entry_sig.clone(), Utc::now());
+                    requeued_count += 1;
+                    
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", &format!(
+                            "🔄 Re-queued entry transaction {} for verification ({})",
+                            get_signature_prefix(entry_sig),
+                            position.symbol
+                        ));
+                    }
+                }
+            }
+
+            // Check exit transactions that need verification
+            if let Some(exit_sig) = &position.exit_transaction_signature {
+                if !position.transaction_exit_verified {
+                    self.pending_verifications.insert(exit_sig.clone(), Utc::now());
+                    requeued_count += 1;
+                    
+                    if is_debug_positions_enabled() {
+                        log(LogTag::Positions, "DEBUG", &format!(
+                            "🔄 Re-queued exit transaction {} for verification ({})",
+                            get_signature_prefix(exit_sig),
+                            position.symbol
+                        ));
+                    }
+                }
+            }
+        }
+
+        if requeued_count > 0 {
+            log(LogTag::Positions, "REQUEUE", &format!(
+                "🔄 Re-queued {} unverified transactions for comprehensive verification",
+                requeued_count
+            ));
+        }
+    }
+
     /// Save positions to disk after changes
-    fn save_positions_to_disk(&self) {
+    fn save_positions_to_disk(&mut self) {
+        // First, remove phantom positions marked for deletion
+        let initial_count = self.positions.len();
+        self.positions.retain(|p| !p.phantom_remove);
+        let final_count = self.positions.len();
+        
+        if initial_count != final_count {
+            log(LogTag::Positions, "CLEANUP", &format!(
+                "🗑️ Removed {} phantom positions during save", 
+                initial_count - final_count
+            ));
+        }
+        
         if is_debug_positions_enabled() {
             log(LogTag::Positions, "DEBUG", &format!(
                 "💾 Saving {} positions to disk: {}", 
-                self.positions.len(), POSITIONS_FILE
+                final_count, POSITIONS_FILE
             ));
         }
         
@@ -1938,6 +2228,7 @@ pub enum PositionsRequest {
         token: Token,
         price: f64,
         percent_change: f64,
+        size_sol: f64,
         reply: oneshot::Sender<Result<(String, String), String>>,
     },
     ClosePosition {
@@ -1958,6 +2249,7 @@ pub enum PositionsRequest {
     GetByState { state: PositionState, reply: oneshot::Sender<Vec<Position>> },
     RemoveByEntrySignature { signature: String, reason: String, reply: oneshot::Sender<bool> },
     GetActiveFrozenCooldowns { reply: oneshot::Sender<Vec<(String, i64)>> },
+    ForceReverifyAll { reply: oneshot::Sender<usize> },
 }
 
 #[derive(Clone)]
@@ -1973,9 +2265,10 @@ impl PositionsHandle {
         token: Token,
         price: f64,
         percent_change: f64,
+        size_sol: f64,
     ) -> Result<(String, String), String> {
         let (reply_tx, reply_rx) = oneshot::channel();
-        let msg = PositionsRequest::OpenPosition { token, price, percent_change, reply: reply_tx };
+        let msg = PositionsRequest::OpenPosition { token, price, percent_change, size_sol, reply: reply_tx };
         self.tx.send(msg).await.map_err(|_| "PositionsManager unavailable".to_string())?;
         reply_rx.await.map_err(|_| "PositionsManager dropped".to_string())?
     }
@@ -2053,6 +2346,12 @@ impl PositionsHandle {
         let (txr, rxr) = oneshot::channel();
         let _ = self.tx.send(PositionsRequest::GetByState { state, reply: txr }).await;
         rxr.await.unwrap_or_default()
+    }
+
+    pub async fn force_reverify_all(&self) -> usize {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::ForceReverifyAll { reply: txr }).await;
+        rxr.await.unwrap_or(0)
     }
 }
 
@@ -2132,9 +2431,10 @@ pub async fn open_position_global(
     token: Token,
     price: f64,
     percent_change: f64,
+    size_sol: f64,
 ) -> Result<(String, String), String> {
     if let Some(h) = get_positions_handle() {
-        h.open_position(token, price, percent_change).await
+        h.open_position(token, price, percent_change, size_sol).await
     } else {
         Err("PositionsManager not available".to_string())
     }

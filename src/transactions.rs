@@ -4700,26 +4700,58 @@ pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Res
     }
 }
 
+/// Get global transaction manager instance
+async fn get_global_transaction_manager() -> Option<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> {
+    Some(GLOBAL_TRANSACTION_MANAGER.clone())
+}
+
 /// Get transaction by signature (for positions.rs integration) - cache-first approach
 pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "GET_TX_START", &format!("🔍 Getting transaction: {}", &signature[..8]));
+    }
+    
     let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
     
     if !Path::new(&cache_file).exists() {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "CACHE_MISS", &format!("📄 No cache file for {}, fetching from RPC", &signature[..8]));
+        }
+        
         // Try to fetch and cache if not found
         let wallet_address = match load_wallet_address_from_config().await {
             Ok(addr) => addr,
-            Err(_) => return Ok(None), // Can't fetch without wallet
+            Err(e) => {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "WALLET_ERROR", &format!("❌ Failed to load wallet address: {}", e));
+                }
+                return Ok(None); // Can't fetch without wallet
+            },
         };
         
         let mut manager = TransactionsManager::new(wallet_address).await
             .map_err(|e| format!("Failed to create manager: {}", e))?;
         
         match manager.process_transaction(signature).await {
-            Ok(transaction) => return Ok(Some(transaction)),
-            Err(_) => return Ok(None), // Transaction not found or error
+            Ok(transaction) => {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "FETCH_SUCCESS", &format!("✅ Fetched transaction {}: success={}, status={:?}", &signature[..8], transaction.success, transaction.status));
+                }
+                return Ok(Some(transaction));
+            },
+            Err(e) => {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "FETCH_ERROR", &format!("❌ Failed to fetch transaction {}: {}", &signature[..8], e));
+                }
+                return Ok(None); // Transaction not found or error
+            },
         }
     }
 
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "CACHE_HIT", &format!("📂 Loading cached transaction: {}", &signature[..8]));
+    }
+    
     // Load from cache
     let content = fs::read_to_string(&cache_file)
         .map_err(|e| format!("Failed to read cache file: {}", e))?;
@@ -4727,14 +4759,42 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     let transaction: Transaction = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
     
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "CACHE_LOADED", &format!("📋 Loaded cached transaction {}: success={}, status={:?}", &signature[..8], transaction.success, transaction.status));
+    }
+    
     Ok(Some(transaction))
 }
 
 /// Check if transaction is verified/finalized
 pub async fn is_transaction_verified(signature: &str) -> bool {
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "VERIFY_CHECK", &format!("🔍 Checking verification for transaction: {}", &signature[..8]));
+    }
+    
     match get_transaction(signature).await {
-        Ok(Some(tx)) => tx.status == TransactionStatus::Finalized && tx.success,
-        _ => false,
+        Ok(Some(tx)) => {
+            let is_verified = tx.status == TransactionStatus::Finalized && tx.success;
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "VERIFY_RESULT", &format!(
+                    "📋 Transaction {}: status={:?}, success={}, verified={}",
+                    &signature[..8], tx.status, tx.success, is_verified
+                ));
+            }
+            is_verified
+        },
+        Ok(None) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "VERIFY_NOT_FOUND", &format!("❌ Transaction {} not found for verification", &signature[..8]));
+            }
+            false
+        },
+        Err(e) => {
+            if is_debug_transactions_enabled() {
+                log(LogTag::Transactions, "VERIFY_ERROR", &format!("❌ Error verifying transaction {}: {}", &signature[..8], e));
+            }
+            false
+        }
     }
 }
 
@@ -4893,6 +4953,146 @@ async fn clean_single_cache_file(file_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to write cleaned cache file: {}", e))?;
 
     Ok(())
+}
+
+// =============================================================================
+// PRIORITY TRANSACTION FUNCTIONS
+// =============================================================================
+
+/// Add a transaction to priority verification queue
+pub async fn add_priority_transaction(signature: String, transaction_type: String) -> Result<(), String> {
+    log(LogTag::Transactions, "PRIORITY", &format!(
+        "🔥 Adding priority transaction: {} (type: {})", 
+        &signature[..8], transaction_type
+    ));
+    
+    if let Some(manager_arc) = get_global_transaction_manager().await {
+        let mut manager_guard = manager_arc.lock().await;
+        if let Some(ref mut manager) = manager_guard.as_mut() {
+            // Check if transaction already exists
+            if manager.known_signatures().contains(&signature) {
+                log(LogTag::Transactions, "INFO", &format!(
+                    "✅ Priority transaction {} already in system", &signature[..8]
+                ));
+                return Ok(());
+            }
+            
+            // Process the priority transaction immediately
+            match manager.process_transaction(&signature).await {
+                Ok(transaction) => {
+                    log(LogTag::Transactions, "SUCCESS", &format!(
+                        "✅ Priority transaction {} processed successfully", &signature[..8]
+                    ));
+                    
+                    // Additional logging for priority transactions
+                    match &transaction.transaction_type {
+                        TransactionType::SwapSolToToken { token_mint, sol_amount, token_amount, router } => {
+                            log(LogTag::Transactions, "PRIORITY", &format!(
+                                "🔥 Priority BUY: {} SOL → {} tokens ({}) via {}", 
+                                sol_amount, token_amount, &token_mint[..8], router
+                            ));
+                        }
+                        TransactionType::SwapTokenToSol { token_mint, token_amount, sol_amount, router } => {
+                            log(LogTag::Transactions, "PRIORITY", &format!(
+                                "🔥 Priority SELL: {} tokens → {} SOL ({}) via {}", 
+                                token_amount, sol_amount, &token_mint[..8], router
+                            ));
+                        }
+                        _ => {
+                            log(LogTag::Transactions, "PRIORITY", &format!(
+                                "🔥 Priority transaction type: {:?}", transaction.transaction_type
+                            ));
+                        }
+                    }
+                    
+                    Ok(())
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "ERROR", &format!(
+                        "❌ Failed to process priority transaction {}: {}", &signature[..8], e
+                    ));
+                    Err(format!("Priority transaction processing failed: {}", e))
+                }
+            }
+        } else {
+            Err("TransactionManager not initialized".to_string())
+        }
+    } else {
+        Err("TransactionManager not available".to_string())
+    }
+}
+
+/// Wait for a priority transaction to be verified and return the result
+pub async fn wait_for_priority_transaction_verification(
+    signature: String, 
+    timeout_seconds: u64
+) -> Result<Transaction, String> {
+    log(LogTag::Transactions, "PRIORITY", &format!(
+        "⏳ Waiting for priority transaction verification: {} (timeout: {}s)", 
+        &signature[..8], timeout_seconds
+    ));
+    
+    let start_time = std::time::Instant::now();
+    let timeout_duration = Duration::from_secs(timeout_seconds);
+    
+    // First add it to priority queue if not already processed
+    add_priority_transaction(signature.clone(), "priority".to_string()).await?;
+    
+    // Poll for verification with exponential backoff
+    let mut check_interval = Duration::from_millis(500); // Start with 500ms
+    let max_interval = Duration::from_secs(5); // Max 5 seconds between checks
+    
+    loop {
+        // Check if we've exceeded timeout
+        if start_time.elapsed() > timeout_duration {
+            log(LogTag::Transactions, "ERROR", &format!(
+                "❌ Priority transaction verification timeout: {} ({}s)", 
+                &signature[..8], timeout_seconds
+            ));
+            return Err(format!("Transaction verification timeout after {}s", timeout_seconds));
+        }
+        
+        // Check if transaction exists and is verified
+        match get_transaction(&signature).await? {
+            Some(transaction) => {
+                log(LogTag::Transactions, "SUCCESS", &format!(
+                    "✅ Priority transaction {} verified in {:.1}s", 
+                    &signature[..8], start_time.elapsed().as_secs_f32()
+                ));
+                
+                // Additional success logging for swaps
+                match &transaction.transaction_type {
+                    TransactionType::SwapSolToToken { sol_amount, token_amount, .. } => {
+                        log(LogTag::Transactions, "PRIORITY", &format!(
+                            "🎯 Verified BUY: {} SOL → {} tokens", sol_amount, token_amount
+                        ));
+                    }
+                    TransactionType::SwapTokenToSol { token_amount, sol_amount, .. } => {
+                        log(LogTag::Transactions, "PRIORITY", &format!(
+                            "🎯 Verified SELL: {} tokens → {} SOL", token_amount, sol_amount
+                        ));
+                    }
+                    _ => {}
+                }
+                
+                return Ok(transaction);
+            }
+            None => {
+                // Transaction not found yet, wait and retry
+                tokio::time::sleep(check_interval).await;
+                
+                // Exponential backoff up to max interval
+                check_interval = std::cmp::min(check_interval.mul_f32(1.5), max_interval);
+                
+                if start_time.elapsed().as_secs() % 10 == 0 {
+                    log(LogTag::Transactions, "INFO", &format!(
+                        "⏳ Still waiting for transaction {}: {:.1}s elapsed", 
+                        &signature[..8], start_time.elapsed().as_secs_f32()
+                    ));
+                }
+            }
+        }
+    }
 }
 
 // =============================================================================

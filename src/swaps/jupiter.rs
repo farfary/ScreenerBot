@@ -143,6 +143,12 @@ pub async fn get_jupiter_quote(
 
     if is_debug_swaps_enabled() {
         log(LogTag::Swap, "JUPITER_URL", &format!("🌐 Jupiter API URL: {}", url));
+        
+        log(
+            LogTag::Swap,
+            "JUPITER_FINAL_URL_DEBUG",
+            &format!("🔗 Final Jupiter URL being called: {}", url)
+        );
     }
 
     if is_debug_api_enabled() {

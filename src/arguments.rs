@@ -161,6 +161,17 @@ pub fn is_dry_run_enabled() -> bool {
     has_arg("--dry-run")
 }
 
+/// Get configured max exit retries (defaults to 3). Clamped 1-10.
+pub fn get_max_exit_retries() -> u32 {
+    let args = get_cmd_args();
+    for i in 0..args.len() {
+        if args[i] == "--max-exit-retries" && i + 1 < args.len() {
+            if let Ok(v) = args[i + 1].parse::<u32>() { return v.clamp(1, 10); }
+        }
+    }
+    3
+}
+
 /// Summary mode - enables console output from summary module
 pub fn is_summary_enabled() -> bool {
     has_arg("--summary")

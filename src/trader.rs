@@ -728,7 +728,7 @@ pub async fn monitor_new_entries(shutdown: Arc<Notify>) {
 
                         // Send open-position request to PositionsManager via handle
                         if let Some(h) = &positions_handle_opt {
-                            let _ = h.open_position(token.clone(), current_price, change).await;
+                            let _ = h.open_position(token.clone(), current_price, change, TRADE_SIZE_SOL).await;
                         }
                     },
                 )

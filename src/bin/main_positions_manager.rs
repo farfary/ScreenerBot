@@ -38,13 +38,14 @@ use screenerbot::tokens::price::{initialize_price_service, get_token_price_block
 use screenerbot::tokens::init_dexscreener_api;
 use screenerbot::logger::{log, LogTag, init_file_logging};
 use screenerbot::configs::{read_configs, validate_configs};
+use screenerbot::transactions::{start_transactions_service, get_transaction, is_transaction_verified};
 
 use screenerbot::rpc::get_rpc_client;
 
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use colored::Colorize;
 use tokio::sync::Notify;
 
@@ -59,6 +60,8 @@ fn print_help() {
     println!("  --list-open              List all open positions with P&L");
     println!("  --list-closed            List all closed positions with final P&L");
     println!("  --list-all               List both open and closed positions");
+    println!("  --diagnostics            Show detailed diagnostics for all positions");
+    println!("  --reverify               Force re-verification of all unverified transactions");
     println!();
     
     println!("{}", "🔍 STATUS COMMANDS:".bright_yellow().bold());
@@ -72,10 +75,21 @@ fn print_help() {
     println!("  --action <open|close>    Action to perform on the position");
     println!();
     
+    println!("{}", "🔁 TESTING COMMANDS:".bright_purple().bold());
+    println!("  --test-loop              Run continuous open/close position testing");
+    println!("  --test-iterations <N>    Number of test iterations (default: infinite)");
+    println!();
+    
     println!("{}", "⚙️  UTILITY COMMANDS:".bright_magenta().bold());
     println!("  --help, -h               Show this help menu");
     println!("  --debug                  Enable debug logging for positions");
+    println!("  --debug-positions        Verbose position lifecycle logs");
+    println!("  --debug-transactions     Verbose transaction verification logs");
+    println!("  --debug-swaps            Verbose swap analysis logs");
     println!("  --dry-run               Simulate actions without executing");
+    println!("  --verify-timeout <S>     Max seconds to wait for a tx (default 30)");
+    println!("  --verify-poll <S>        Poll interval seconds (default 1)");
+    println!("  --max-exit-retries <N>   Max sell retries before queue (default 3)");
     println!();
     
     println!("{}", "📊 EXAMPLES:".bright_white().bold());
@@ -107,12 +121,24 @@ struct PositionsManagerArgs {
     pub list_closed: bool,
     pub list_all: bool,
     pub summary: bool,
+    pub diagnostics: bool,
+    pub reverify: bool,
     pub status_mint: Option<String>,
     pub target_mint: Option<String>,
     pub position_size: Option<f64>,
     pub action: Option<String>,
     pub debug: bool,
+    // Fine-grained debug flags
+    pub debug_positions: bool,
+    pub debug_transactions: bool,
+    pub debug_swaps: bool,
     pub dry_run: bool,
+    pub test_loop: bool,
+    pub test_iterations: Option<usize>,
+    // Verification tuning
+    pub verify_timeout_secs: u64,
+    pub verify_poll_secs: u64,
+    pub max_exit_retries: u32,
 }
 
 impl PositionsManagerArgs {
@@ -123,12 +149,22 @@ impl PositionsManagerArgs {
             list_closed: false,
             list_all: false,
             summary: false,
+            diagnostics: false,
+            reverify: false,
             status_mint: None,
             target_mint: None,
             position_size: None,
             action: None,
             debug: false,
+            debug_positions: false,
+            debug_transactions: false,
+            debug_swaps: false,
             dry_run: false,
+            test_loop: false,
+            test_iterations: None,
+            verify_timeout_secs: 30, // default 30s wait in tool loop
+            verify_poll_secs: 1,     // default poll every 1s
+            max_exit_retries: 3,     // default sell attempts
         };
 
         let mut i = 1;
@@ -139,11 +175,34 @@ impl PositionsManagerArgs {
                 "--list-closed" => config.list_closed = true,
                 "--list-all" => config.list_all = true,
                 "--summary" => config.summary = true,
+                "--diagnostics" => config.diagnostics = true,
+                "--reverify" => config.reverify = true,
                 "--debug" => config.debug = true,
+                "--debug-positions" => config.debug_positions = true,
+                "--debug-transactions" => config.debug_transactions = true,
+                "--debug-swaps" => config.debug_swaps = true,
                 "--dry-run" => config.dry_run = true,
                 "--status" => {
                     if i + 1 < args.len() {
                         config.status_mint = Some(args[i + 1].clone());
+                        i += 1;
+                    }
+                }
+                "--verify-timeout" => {
+                    if i + 1 < args.len() {
+                        if let Ok(v) = args[i + 1].parse::<u64>() { config.verify_timeout_secs = v.max(5).min(600); }
+                        i += 1;
+                    }
+                }
+                "--verify-poll" => {
+                    if i + 1 < args.len() {
+                        if let Ok(v) = args[i + 1].parse::<u64>() { config.verify_poll_secs = v.clamp(1, 30); }
+                        i += 1;
+                    }
+                }
+                "--max-exit-retries" => {
+                    if i + 1 < args.len() {
+                        if let Ok(v) = args[i + 1].parse::<u32>() { config.max_exit_retries = v.clamp(1, 10); }
                         i += 1;
                     }
                 }
@@ -164,6 +223,15 @@ impl PositionsManagerArgs {
                 "--action" => {
                     if i + 1 < args.len() {
                         config.action = Some(args[i + 1].clone());
+                        i += 1;
+                    }
+                }
+                "--test-loop" => config.test_loop = true,
+                "--test-iterations" => {
+                    if i + 1 < args.len() {
+                        if let Ok(iterations) = args[i + 1].parse::<usize>() {
+                            config.test_iterations = Some(iterations);
+                        }
                         i += 1;
                     }
                 }
@@ -211,13 +279,26 @@ impl PositionsManagerArgs {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let config = PositionsManagerArgs::from_args(args);
+    let config = PositionsManagerArgs::from_args(args.clone());
 
     // Show help and exit if requested
     if config.show_help {
         print_help();
         return Ok(());
     }
+
+    // Set global command args so debug flags work in swap modules
+    let mut global_args = args.clone();
+    if config.debug_swaps {
+        global_args.push("--debug-swaps".to_string());
+    }
+    if config.debug_positions {
+        global_args.push("--debug-positions".to_string());
+    }
+    if config.debug_transactions {
+        global_args.push("--debug-transactions".to_string());
+    }
+    screenerbot::arguments::set_cmd_args(global_args);
 
     // Validate arguments
     if let Err(e) = config.validate() {
@@ -232,18 +313,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         config.summary || config.status_mint.is_some() || 
                         config.action.is_some());
                        
-    if needs_service {
-        if let Err(e) = initialize_system(&config).await {
-            eprintln!("{} {}", "❌ Initialization failed:".bright_red().bold(), e);
-            std::process::exit(1);
+    // Initialize system (only if needed)
+    let needs_service = !config.dry_run && 
+                       (config.list_open || config.list_closed || config.list_all || 
+                        config.summary || config.status_mint.is_some() || 
+                        config.action.is_some());
+                       
+    let shutdown_handle = if needs_service {
+        match initialize_system(&config).await {
+            Ok(shutdown) => Some(shutdown),
+            Err(e) => {
+                eprintln!("{} {}", "❌ Initialization failed:".bright_red().bold(), e);
+                std::process::exit(1);
+            }
         }
     } else {
         // Minimal initialization for dry-run or help operations
-        if let Err(e) = initialize_system(&config).await {
-            eprintln!("{} {}", "❌ Initialization failed:".bright_red().bold(), e);
-            std::process::exit(1);
+        match initialize_system(&config).await {
+            Ok(shutdown) => Some(shutdown),
+            Err(e) => {
+                eprintln!("{} {}", "❌ Initialization failed:".bright_red().bold(), e);
+                std::process::exit(1);
+            }
         }
-    }
+    };
 
     // Execute requested operation
     match execute_operation(&config).await {
@@ -258,11 +351,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Allow background tasks time to complete before shutdown
+    if needs_service {
+        if config.debug {
+            log(LogTag::Positions, "INFO", "⏳ Allowing background tasks to complete...");
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        
+        // Signal shutdown to background services
+        if let Some(shutdown) = shutdown_handle {
+            if config.debug {
+                log(LogTag::Positions, "INFO", "📤 Signaling shutdown to background services...");
+            }
+            shutdown.notify_waiters();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     Ok(())
 }
 
 /// Initialize system components and validate prerequisites
-async fn initialize_system(config: &PositionsManagerArgs) -> Result<(), String> {
+async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>, String> {
     println!("{}", "🔧 INITIALIZING POSITIONS MANAGER".bright_blue().bold());
     println!("{}", "=================================".bright_blue());
 
@@ -341,15 +451,15 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(), String> 
         }
     }
 
+    // Create shutdown notification for services
+    let shutdown = Arc::new(Notify::new());
+
     // Start PositionsManager service if not already running
     if get_positions_handle().is_none() {
         if config.debug {
             println!("� Starting PositionsManager service...");
             log(LogTag::Positions, "INFO", "🚀 Initializing PositionsManager service...");
         }
-        
-        // Create shutdown notification for the service
-        let shutdown = Arc::new(Notify::new());
         
         // Capture debug flag for the spawned task
         let debug_enabled = config.debug;
@@ -363,6 +473,23 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(), String> 
             start_positions_manager_service(shutdown_positions_manager).await;
             if debug_enabled {
                 log(LogTag::System, "INFO", "PositionsManager service task ended");
+            }
+        });
+
+        // Start TransactionManager background service (CRITICAL for verification)
+        if config.debug {
+            println!("⚡ Starting TransactionManager service...");
+            log(LogTag::Positions, "INFO", "⚡ Initializing TransactionManager service...");
+        }
+        
+        let shutdown_transaction_manager = shutdown.clone();
+        let transaction_manager_handle = tokio::spawn(async move {
+            if debug_enabled {
+                log(LogTag::System, "INFO", "TransactionManager service task started");
+            }
+            start_transactions_service(shutdown_transaction_manager).await;
+            if debug_enabled {
+                log(LogTag::System, "INFO", "TransactionManager service task ended");
             }
         });
 
@@ -392,9 +519,14 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(), String> 
             return Err("PositionsManager service failed to initialize - no handle available".to_string());
         }
 
-        // Keep the service running for the duration of the tool
-        // Note: In production, you'd want proper shutdown handling
-        std::mem::forget(positions_manager_handle);
+        // Keep the services running for the duration of the tool
+        // Store handles for proper cleanup
+        tokio::task::spawn(async move {
+            positions_manager_handle.await.ok();
+        });
+        tokio::task::spawn(async move {
+            transaction_manager_handle.await.ok();
+        });
         
     } else {
         if config.debug {
@@ -407,7 +539,7 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(), String> 
     if config.debug {
         log(LogTag::Positions, "INFO", "✅ Full system initialization completed successfully");
     }
-    Ok(())
+    Ok(shutdown)
 }
 
 /// Execute the requested operation based on configuration
@@ -433,6 +565,16 @@ async fn execute_operation(config: &PositionsManagerArgs) -> Result<(), String> 
         show_positions_summary(config).await?;
     }
 
+    // Diagnostics (after summary so it can build upon it)
+    if config.diagnostics {
+        show_positions_diagnostics(config).await?;
+    }
+
+    // Force reverify unverified transactions
+    if config.reverify {
+        force_reverify_positions(config).await?;
+    }
+
     // Handle trading operations
     if let Some(action) = &config.action {
         match action.as_str() {
@@ -448,6 +590,11 @@ async fn execute_operation(config: &PositionsManagerArgs) -> Result<(), String> 
             }
             _ => return Err("Invalid action specified".to_string()),
         }
+    }
+
+    // Handle test loop operations
+    if config.test_loop {
+        run_continuous_test_loop(config).await?;
     }
 
     Ok(())
@@ -768,6 +915,76 @@ async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), Str
     Ok(())
 }
 
+/// Show verbose diagnostics for all positions (open + closed + closing)
+async fn show_positions_diagnostics(config: &PositionsManagerArgs) -> Result<(), String> {
+    println!("{}", "🧪 POSITIONS DIAGNOSTICS".bright_white().bold());
+    println!("{}", "======================".bright_white());
+
+    if get_positions_handle().is_none() {
+        println!("⚠️  PositionsManager service not available.");
+        return Ok(());
+    }
+
+    let open_positions = get_open_positions().await;
+    let closed_positions = get_closed_positions().await;
+
+    println!("Open/Closing: {} | Closed: {}", open_positions.len(), closed_positions.len());
+    println!();
+
+    for p in open_positions.iter().chain(closed_positions.iter()) {
+        println!("{} {}", if p.exit_price.is_some() {"📊"} else {"📈"}, p.symbol.bold());
+        println!("  Mint: {}", get_mint_prefix(&p.mint));
+        println!("  Entry: {:.10} SOL @ {}", p.entry_price, p.entry_time.format("%H:%M:%S"));
+        if let Some(exit_p) = p.exit_price { println!("  Exit:  {:.10} SOL", exit_p); }
+        println!("  Size: {:.6} SOL", p.entry_size_sol);
+        println!("  Tx Entry: {:?} (verified={})", p.entry_transaction_signature.as_ref().map(|s| get_signature_prefix(s)), p.transaction_entry_verified);
+        if p.exit_transaction_signature.is_some() { println!("  Tx Exit:  {:?} (verified={})", p.exit_transaction_signature.as_ref().map(|s| get_signature_prefix(s)), p.transaction_exit_verified); }
+        println!("  High/Low: {:.10} / {:.10}", p.price_highest, p.price_lowest);
+        if p.phantom_remove { println!("  Flag: PHANTOM_REMOVE"); }
+        println!();
+    }
+
+    Ok(())
+}
+
+/// Force reverification of all unverified transactions
+async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), String> {
+    println!("{}", "🔄 FORCE REVERIFY TRANSACTIONS".bright_yellow().bold());
+    println!("{}", "=============================".bright_yellow());
+
+    if get_positions_handle().is_none() {
+        println!("⚠️  PositionsManager service not available.");
+        return Ok(());
+    }
+
+    println!("⏳ Requesting forced reverification of all unverified transactions...");
+    
+    if config.debug || config.debug_transactions {
+        log(LogTag::Positions, "DEBUG", "🔄 Triggering force reverification via positions handle");
+    }
+
+    match get_positions_handle().unwrap().force_reverify_all().await {
+        count if count > 0 => {
+            println!("✅ {} unverified transactions re-queued for verification", count);
+            println!("   Verification will occur in the background every 10 seconds");
+            
+            if config.debug || config.debug_transactions {
+                log(LogTag::Positions, "INFO", &format!(
+                    "✅ Force reverification completed: {} transactions re-queued", count
+                ));
+            }
+        }
+        0 => {
+            println!("ℹ️  No unverified transactions found - all positions are already verified");
+        }
+        _ => {
+            println!("❌ Unexpected result from reverification command");
+        }
+    }
+
+    Ok(())
+}
+
 /// Open a new position for the specified token
 async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> Result<(), String> {
     println!("{}", format!("📈 OPENING POSITION: {}", get_mint_prefix(mint)).bright_green().bold());
@@ -818,13 +1035,13 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
     println!("🚀 Opening position...");
     
     if config.debug {
-        log(LogTag::Positions, "INFO", &format!("📈 Opening position for {} at ${:.12} SOL", token.symbol, current_price));
+        log(LogTag::Positions, "INFO", &format!("📈 Opening position for {} at ${:.12} SOL with size {:.6} SOL", token.symbol, current_price, size));
     }
     
     // Calculate percent change (we'll use 0.0 as initial value since this is a new position)
     let percent_change = 0.0;
     
-    match open_position_global(token.clone(), current_price, percent_change).await {
+    match open_position_global(token.clone(), current_price, percent_change, size).await {
         Ok((position_id, transaction_sig)) => {
             println!("✅ Position opened successfully!");
             println!("   Position ID: {}", position_id);
@@ -837,6 +1054,55 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
                 
                 if config.debug {
                     log(LogTag::Positions, "INFO", &format!("📄 Transaction signature: {}", transaction_sig));
+                }
+                
+                // Step 5: Wait for transaction verification (CRITICAL)
+                println!("⏳ Waiting for transaction verification...");
+                
+                if config.debug {
+                    log(LogTag::Positions, "INFO", "⏳ Waiting for transaction to be confirmed on-chain");
+                }
+                
+                // Simple verification waiting loop (configurable)
+                let mut verification_attempts = 0;
+                let max_attempts = if config.verify_poll_secs > 0 { (config.verify_timeout_secs / config.verify_poll_secs).max(1) } else { 30 };
+                let mut verified = false;
+                
+                while verification_attempts < max_attempts && !verified {
+                    tokio::time::sleep(Duration::from_secs(config.verify_poll_secs)).await;
+                    verification_attempts += 1;
+                    
+                    match get_transaction(&transaction_sig).await {
+                        Ok(Some(transaction)) => {
+                            if transaction.success {
+                                println!("✅ Transaction verified successfully!");
+                                verified = true;
+                                if config.debug {
+                                    log(LogTag::Positions, "INFO", &format!("✅ Transaction {} verified successfully", get_signature_prefix(&transaction_sig)));
+                                }
+                            } else {
+                                println!("❌ Transaction found but marked as failed!");
+                                log(LogTag::Positions, "ERROR", &format!("❌ Transaction {} found but marked as failed", get_signature_prefix(&transaction_sig)));
+                                return Err("Transaction failed on-chain - position may be phantom".to_string());
+                            }
+                        }
+                        Ok(None) => {
+                            if (config.debug || config.debug_transactions) && verification_attempts % 10 == 0 {
+                                println!("⏳ Still waiting for transaction... (attempt {}/{})", verification_attempts, max_attempts);
+                            }
+                        }
+                        Err(e) => {
+                            if config.debug {
+                                log(LogTag::Positions, "WARNING", &format!("Transaction verification error (attempt {}): {}", verification_attempts, e));
+                            }
+                        }
+                    }
+                }
+                
+                if !verified {
+                    println!("⚠️  Transaction verification timed out after {} seconds", config.verify_timeout_secs);
+                    log(LogTag::Positions, "WARNING", &format!("⚠️  Transaction {} verification timed out", get_signature_prefix(&transaction_sig)));
+                    return Err("Transaction verification timed out - position may be phantom".to_string());
                 }
             }
             
@@ -954,6 +1220,55 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
                     if config.debug {
                         log(LogTag::Positions, "INFO", &format!("📄 Exit transaction signature: {}", exit_transaction));
                     }
+                    
+                    // Step 6: Wait for exit transaction verification (CRITICAL)
+                    println!("⏳ Waiting for exit transaction verification...");
+                    
+                    if config.debug {
+                        log(LogTag::Positions, "INFO", "⏳ Waiting for exit transaction to be confirmed on-chain");
+                    }
+                    
+                    // Simple verification waiting loop for exit transaction (configurable)
+                    let mut verification_attempts = 0;
+                    let max_attempts = if config.verify_poll_secs > 0 { (config.verify_timeout_secs / config.verify_poll_secs).max(1) } else { 30 };
+                    let mut verified = false;
+                    
+                    while verification_attempts < max_attempts && !verified {
+                        tokio::time::sleep(Duration::from_secs(config.verify_poll_secs)).await;
+                        verification_attempts += 1;
+                        
+                        match get_transaction(&exit_transaction).await {
+                            Ok(Some(transaction)) => {
+                                if transaction.success {
+                                    println!("✅ Exit transaction verified successfully!");
+                                    verified = true;
+                                    if config.debug {
+                                        log(LogTag::Positions, "INFO", &format!("✅ Exit transaction {} verified successfully", get_signature_prefix(&exit_transaction)));
+                                    }
+                                } else {
+                                    println!("❌ Exit transaction found but marked as failed!");
+                                    log(LogTag::Positions, "ERROR", &format!("❌ Exit transaction {} found but marked as failed", get_signature_prefix(&exit_transaction)));
+                                    return Err("Exit transaction failed on-chain".to_string());
+                                }
+                            }
+                            Ok(None) => {
+                                if (config.debug || config.debug_transactions) && verification_attempts % 10 == 0 {
+                                    println!("⏳ Still waiting for exit transaction... (attempt {}/{})", verification_attempts, max_attempts);
+                                }
+                            }
+                            Err(e) => {
+                                if config.debug {
+                                    log(LogTag::Positions, "WARNING", &format!("Exit transaction verification error (attempt {}): {}", verification_attempts, e));
+                                }
+                            }
+                        }
+                    }
+                    
+                    if !verified {
+                        println!("⚠️  Exit transaction verification timed out after {} seconds", config.verify_timeout_secs);
+                        log(LogTag::Positions, "WARNING", &format!("⚠️  Exit transaction {} verification timed out", get_signature_prefix(&exit_transaction)));
+                        return Err("Exit transaction verification timed out".to_string());
+                    }
                 }
                 
                 if config.debug {
@@ -1019,4 +1334,152 @@ async fn get_token_info_placeholder(mint: &str) -> Result<(String, String), Stri
     let name = format!("Token {}", &mint[..8]);
     
     Ok((symbol, name))
+}
+
+/// Run continuous test loop for opening and closing positions with verification
+async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), String> {
+    println!("{}", "🔁 CONTINUOUS POSITION TESTING LOOP".bright_purple().bold());
+    println!("{}", "=".repeat(50).bright_purple());
+    
+    // Test configuration
+    let test_sol_amount = 0.005; // Fixed 0.005 SOL for all tests
+    let default_mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263".to_string(); // BONK token - good for testing
+    let test_mint = config.target_mint.as_ref().unwrap_or(&default_mint);
+    let max_iterations = config.test_iterations.unwrap_or(usize::MAX); // Default: infinite
+    
+    println!("🎯 Test Configuration:");
+    println!("   Token Mint: {}", get_mint_prefix(test_mint));
+    println!("   Position Size: {:.6} SOL", test_sol_amount);
+    println!("   Max Iterations: {}", if max_iterations == usize::MAX { "infinite".to_string() } else { max_iterations.to_string() });
+    println!("   Debug Mode: {}", config.debug);
+    println!();
+    
+    if config.debug {
+        log(LogTag::Positions, "INFO", &format!("🔁 Starting continuous test loop: mint={}, size={:.6}, max_iter={}", 
+            test_mint, test_sol_amount, max_iterations));
+    }
+    
+    let mut iteration = 0;
+    let mut successful_cycles = 0;
+    let mut failed_cycles = 0;
+    
+    loop {
+        iteration += 1;
+        
+        if iteration > max_iterations {
+            println!("✅ Test loop completed: reached maximum iterations");
+            break;
+        }
+        
+        println!("{}", format!("🔄 ITERATION {} / {}", iteration, if max_iterations == usize::MAX { "∞".to_string() } else { max_iterations.to_string() }).bright_cyan().bold());
+        println!("{}", "=".repeat(40).bright_cyan());
+        
+        let start_time = std::time::Instant::now();
+        
+        // Check if we already have an open position
+        let existing_positions = get_open_positions().await;
+        let has_open_position = existing_positions.iter().any(|pos| pos.mint == *test_mint);
+        
+        if has_open_position {
+            println!("🔍 Found existing open position, closing first...");
+            if let Err(e) = close_position(test_mint, config).await {
+                println!("❌ Failed to close existing position: {}", e);
+                failed_cycles += 1;
+                
+                if config.debug {
+                    log(LogTag::Positions, "ERROR", &format!("❌ Iteration {} failed - close error: {}", iteration, e));
+                }
+                
+                // Wait before retrying
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+            
+            // Wait a bit between close and open
+            println!("⏳ Waiting 3 seconds between close and open...");
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+        
+        // Step 1: Open position with verification
+        println!("📈 PHASE 1: Opening position...");
+        match open_position(test_mint, test_sol_amount, config).await {
+            Ok(_) => {
+                println!("✅ Position opened and verified successfully!");
+                
+                if config.debug {
+                    log(LogTag::Positions, "INFO", &format!("✅ Iteration {} - position opened successfully", iteration));
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to open position: {}", e);
+                failed_cycles += 1;
+                
+                if config.debug {
+                    log(LogTag::Positions, "ERROR", &format!("❌ Iteration {} failed - open error: {}", iteration, e));
+                }
+                
+                // Wait before retrying
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+        }
+        
+        // Wait between open and close operations
+        println!("⏳ Waiting 10 seconds before closing position...");
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        
+        // Step 2: Close position with verification
+        println!("📉 PHASE 2: Closing position...");
+        match close_position(test_mint, config).await {
+            Ok(_) => {
+                println!("✅ Position closed and verified successfully!");
+                successful_cycles += 1;
+                
+                if config.debug {
+                    log(LogTag::Positions, "INFO", &format!("✅ Iteration {} - position closed successfully", iteration));
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to close position: {}", e);
+                failed_cycles += 1;
+                
+                if config.debug {
+                    log(LogTag::Positions, "ERROR", &format!("❌ Iteration {} failed - close error: {}", iteration, e));
+                }
+                
+                // Continue to next iteration even if close fails
+            }
+        }
+        
+        let cycle_duration = start_time.elapsed();
+        
+        // Print iteration summary
+        println!();
+        println!("{}", "📊 ITERATION SUMMARY".bright_white().bold());
+        println!("   Iteration: {} / {}", iteration, if max_iterations == usize::MAX { "∞".to_string() } else { max_iterations.to_string() });
+        println!("   Duration: {:.2}s", cycle_duration.as_secs_f64());
+        println!("   Successful Cycles: {}", successful_cycles);
+        println!("   Failed Cycles: {}", failed_cycles);
+        println!("   Success Rate: {:.1}%", if iteration > 0 { (successful_cycles as f64 / iteration as f64) * 100.0 } else { 0.0 });
+        println!();
+        
+        // Wait between iterations
+        println!("⏳ Waiting 15 seconds before next iteration...");
+        tokio::time::sleep(Duration::from_secs(15)).await;
+    }
+    
+    // Final summary
+    println!("{}", "🎉 FINAL TEST SUMMARY".bright_green().bold());
+    println!("{}", "=".repeat(50).bright_green());
+    println!("   Total Iterations: {}", iteration);
+    println!("   Successful Cycles: {}", successful_cycles);
+    println!("   Failed Cycles: {}", failed_cycles);
+    println!("   Final Success Rate: {:.1}%", if iteration > 0 { (successful_cycles as f64 / iteration as f64) * 100.0 } else { 0.0 });
+    
+    if config.debug {
+        log(LogTag::Positions, "INFO", &format!("🎉 Test loop completed: {} iterations, {} successful, {} failed", 
+            iteration, successful_cycles, failed_cycles));
+    }
+    
+    Ok(())
 }
