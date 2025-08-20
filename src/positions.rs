@@ -1586,27 +1586,60 @@ impl PositionsManager {
                 Ok(verification_result) => {
                     match verification_result {
                         Some(transaction) => {
-                            // Transaction is confirmed and successful
-                            if let Err(e) = self.update_position_from_verified_transaction(&signature, &transaction).await {
+                            // Transaction is confirmed and successful - determine if entry or exit and use correct verification
+                            let mut verification_success = false;
+                            let signature_clone = signature.clone();
+                            
+                            // Check for entry transaction
+                            if let Some(position_index) = self.positions.iter().position(|p| {
+                                p.entry_transaction_signature.as_ref() == Some(&signature.to_string())
+                            }) {
+                                // Temporarily extract position to avoid borrowing conflicts
+                                let mut position = self.positions.remove(position_index);
+                                self.entry_verification(&mut position, &transaction).await;
+                                self.positions.insert(position_index, position);
+                                verification_success = true;
                                 log(
                                     LogTag::Positions,
-                                    "ERROR",
+                                    "ENTRY_VERIFIED", 
                                     &format!(
-                                        "Failed to update position from verified transaction {}: {}",
-                                        get_signature_prefix(&signature),
-                                        e
+                                        "✅ Entry transaction {} verified using correct verification method",
+                                        get_signature_prefix(&signature_clone)
+                                    ),
+                                );
+                            }
+                            // Check for exit transaction
+                            else if let Some(position_index) = self.positions.iter().position(|p| {
+                                p.exit_transaction_signature.as_ref() == Some(&signature.to_string())
+                            }) {
+                                // Temporarily extract position to avoid borrowing conflicts
+                                let mut position = self.positions.remove(position_index);
+                                self.exit_verification(&mut position, &transaction).await;
+                                self.positions.insert(position_index, position);
+                                verification_success = true;
+                                log(
+                                    LogTag::Positions,
+                                    "EXIT_VERIFIED",
+                                    &format!(
+                                        "✅ Exit transaction {} verified using correct verification method", 
+                                        get_signature_prefix(&signature_clone)
+                                    ),
+                                );
+                            } else {
+                                log(
+                                    LogTag::Positions,
+                                    "WARN",
+                                    &format!(
+                                        "⚠️ No position found for verified transaction: {}",
+                                        get_signature_prefix(&signature)
                                     ),
                                 );
                             }
                             
-                            log(
-                                LogTag::Positions,
-                                "VERIFIED",
-                                &format!(
-                                    "✅ Transaction {} verified and position updated",
-                                    get_signature_prefix(&signature)
-                                ),
-                            );
+                            if verification_success {
+                                // Save positions to disk after verification update
+                                self.save_positions_to_disk();
+                            }
                             
                             // Remove from pending
                             self.pending_verifications.remove(&signature);
@@ -1919,154 +1952,6 @@ impl PositionsManager {
     }
 
 
-    /// Update position from verified transaction with detailed data
-    async fn update_position_from_verified_transaction(&mut self, signature: &str, transaction: &Transaction) -> Result<(), String> {
-        // Find the position with this signature
-        let mut position_updated = false;
-        let mut position_symbol = String::new();
-
-        if let Some(position) = self.positions.iter_mut().find(|p| {
-            p.entry_transaction_signature.as_ref() == Some(&signature.to_string())
-                || p.exit_transaction_signature.as_ref() == Some(&signature.to_string())
-        }) {
-            // Update position with verified transaction data
-            if position.entry_transaction_signature.as_ref() == Some(&signature.to_string()) {
-                position.transaction_entry_verified = transaction.success;
-                position.entry_fee_lamports = Some(crate::tokens::decimals::sol_to_lamports(transaction.fee_sol));
-                
-                // Extract token amount and effective price from swap analysis using optimized single transaction lookup
-                match crate::transactions::get_single_transaction_swap_info(signature).await {
-                    Ok(Some(swap_info)) => {
-                        // For entry transactions, use token_amount and calculated_price_sol
-                        position.token_amount = Some(swap_info.token_amount as u64);
-                        position.effective_entry_price = Some(swap_info.calculated_price_sol);
-                        
-                        log(
-                            LogTag::Positions,
-                            "ENTRY_ANALYSIS",
-                            &format!(
-                                "📊 Entry verified: {:.6} tokens at {:.12} SOL calculated price",
-                                swap_info.token_amount,
-                                swap_info.calculated_price_sol
-                            ),
-                        );
-                    }
-                    Ok(None) => {
-                        log(
-                            LogTag::Positions,
-                            "WARN",
-                            &format!(
-                                "Entry transaction {} is not a swap transaction",
-                                get_signature_prefix(signature)
-                            ),
-                        );
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Positions,
-                            "WARN",
-                            &format!(
-                                "Could not get swap analysis for entry transaction {}: {}",
-                                get_signature_prefix(signature), e
-                            ),
-                        );
-                    }
-                }
-                
-                log(
-                    LogTag::Positions,
-                    "ENTRY_VERIFIED",
-                    &format!(
-                        "✅ Entry transaction verified for {}: fee={:.6} SOL",
-                        position.symbol,
-                        transaction.fee_sol
-                    ),
-                );
-                
-            } else if position.exit_transaction_signature.as_ref() == Some(&signature.to_string()) {
-                position.transaction_exit_verified = transaction.success;
-                position.exit_fee_lamports = Some(crate::tokens::decimals::sol_to_lamports(transaction.fee_sol));
-                
-                // Extract SOL received from swap analysis using optimized single transaction lookup
-                match crate::transactions::get_single_transaction_swap_info(signature).await {
-                    Ok(Some(swap_info)) => {
-                        // For exit transactions, use effective_sol_received and calculated_price_sol
-                        position.sol_received = Some(swap_info.effective_sol_received);
-                        position.effective_exit_price = Some(swap_info.calculated_price_sol);
-                        
-                        log(
-                            LogTag::Positions,
-                            "EXIT_ANALYSIS",
-                            &format!(
-                                "📊 Exit verified: {:.6} SOL received at {:.12} SOL calculated price",
-                                swap_info.effective_sol_received,
-                                swap_info.calculated_price_sol
-                            ),
-                        );
-                    }
-                    Ok(None) => {
-                        log(
-                            LogTag::Positions,
-                            "WARN",
-                            &format!(
-                                "Exit transaction {} is not a swap transaction",
-                                get_signature_prefix(signature)
-                            ),
-                        );
-                    }
-                    Err(e) => {
-                        log(
-                            LogTag::Positions,
-                            "WARN",
-                            &format!(
-                                "Could not get swap analysis for exit transaction {}: {}",
-                                get_signature_prefix(signature), e
-                            ),
-                        );
-                    }
-                }
-                
-                log(
-                    LogTag::Positions,
-                    "EXIT_VERIFIED",
-                    &format!(
-                        "✅ Exit transaction verified for {}: fee={:.6} SOL",
-                        position.symbol,
-                        transaction.fee_sol
-                    ),
-                );
-            }
-
-            position_symbol = position.symbol.clone();
-            position_updated = true;
-        }
-
-        if position_updated {
-            log(
-                LogTag::Positions,
-                "POSITION_UPDATED",
-                &format!(
-                    "🔄 Position {} updated from comprehensive verification: {}",
-                    position_symbol,
-                    get_signature_prefix(signature)
-                ),
-            );
-            
-            // Save positions to disk after verification update
-            self.save_positions_to_disk();
-        } else {
-            log(
-                LogTag::Positions,
-                "WARN",
-                &format!(
-                    "⚠️ No position found for verified transaction: {}",
-                    get_signature_prefix(signature)
-                ),
-            );
-        }
-
-        Ok(())
-    }
 
     /// Handle failed transaction by removing phantom positions or updating state
     async fn handle_failed_transaction(&mut self, signature: &str, error: &str) -> Result<(), String> {
@@ -2248,7 +2133,7 @@ impl PositionsManager {
     
     /// Apply entry verification data to position using analyze-swaps-exact logic
     async fn entry_verification(
-        &self, 
+        &mut self, 
         position: &mut crate::positions::Position, 
         transaction: &Transaction
     ) {
@@ -2336,7 +2221,7 @@ impl PositionsManager {
 
     /// Apply exit verification data to position using analyze-swaps-exact logic
     async fn exit_verification(
-        &self, 
+        &mut self, 
         position: &mut crate::positions::Position, 
         transaction: &Transaction
     ) {

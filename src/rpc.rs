@@ -22,7 +22,7 @@
 /// 
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = true;
+const FORCE_PREMIUM_RPC_ONLY: bool = false;
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_rpc_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled, read_configs, RPC_STATS };
@@ -2140,6 +2140,14 @@ impl RpcClient {
             )
         );
 
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "TX_DEBUG_START",
+                &format!("🚀 Starting sign_and_send_transaction process with {} byte transaction", swap_transaction_base64.len())
+            );
+        }
+
         // Decode the base64 transaction
         let transaction_bytes = base64::engine::general_purpose::STANDARD
             .decode(swap_transaction_base64)
@@ -2218,6 +2226,14 @@ impl RpcClient {
                 log(LogTag::Rpc, "PREMIUM_ONLY", "FORCE_PREMIUM_RPC_ONLY is active - sending signed transaction to premium RPC only");
             }
 
+            if is_debug_transactions_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "TX_DEBUG_SEND_PREMIUM_ONLY", 
+                    &format!("🎯 Sending transaction to premium RPC only: {}", &configs.rpc_url_premium)
+                );
+            }
+
             match
                 client
                     .post(&configs.rpc_url_premium)
@@ -2226,8 +2242,24 @@ impl RpcClient {
                     .send().await
             {
                 Ok(response) => {
+                    if is_debug_transactions_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "TX_DEBUG_RESPONSE_STATUS",
+                            &format!("📡 Premium RPC response status: {}", response.status())
+                        );
+                    }
+
                     if response.status().is_success() {
                         if let Ok(rpc_response) = response.json::<serde_json::Value>().await {
+                            if is_debug_transactions_enabled() {
+                                log(
+                                    LogTag::Rpc,
+                                    "TX_DEBUG_RESPONSE_BODY",
+                                    &format!("📄 Premium RPC response: {}", serde_json::to_string_pretty(&rpc_response).unwrap_or_else(|_| "Failed to serialize".to_string()))
+                                );
+                            }
+
                             if let Some(result) = rpc_response.get("result") {
                                 if let Some(tx_sig) = result.as_str() {
                                     log(
@@ -2236,6 +2268,15 @@ impl RpcClient {
                                         &format!("Signed transaction sent successfully via premium RPC only: {}", tx_sig)
                                     );
                                     self.record_call_for_url(&configs.rpc_url_premium, "send_transaction");
+                                    
+                                    if is_debug_transactions_enabled() {
+                                        log(
+                                            LogTag::Rpc,
+                                            "TX_DEBUG_SUCCESS",
+                                            &format!("🎉 Transaction successfully submitted! Signature: {}", tx_sig)
+                                        );
+                                    }
+                                    
                                     return Ok(tx_sig.to_string());
                                 }
                             }
@@ -2245,14 +2286,53 @@ impl RpcClient {
                                     .get("message")
                                     .and_then(|m| m.as_str())
                                     .unwrap_or("Unknown RPC error");
+                                
+                                if is_debug_transactions_enabled() {
+                                    log(
+                                        LogTag::Rpc,
+                                        "TX_DEBUG_ERROR",
+                                        &format!("❌ Premium RPC returned error: {}", error_msg)
+                                    );
+                                    if let Some(error_code) = error.get("code") {
+                                        log(
+                                            LogTag::Rpc,
+                                            "TX_DEBUG_ERROR_CODE",
+                                            &format!("📍 Error code: {}", error_code)
+                                        );
+                                    }
+                                }
+                                
                                 return Err(
                                     SwapError::TransactionError(format!("Premium RPC error: {}", error_msg))
                                 );
                             }
+                        } else {
+                            if is_debug_transactions_enabled() {
+                                log(
+                                    LogTag::Rpc,
+                                    "TX_DEBUG_PARSE_ERROR",
+                                    "❌ Failed to parse premium RPC response as JSON"
+                                );
+                            }
+                        }
+                    } else {
+                        if is_debug_transactions_enabled() {
+                            log(
+                                LogTag::Rpc,
+                                "TX_DEBUG_HTTP_ERROR",
+                                &format!("❌ Premium RPC returned HTTP error: {}", response.status())
+                            );
                         }
                     }
                 }
                 Err(e) => {
+                    if is_debug_transactions_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "TX_DEBUG_NETWORK_ERROR",
+                            &format!("❌ Network error sending to premium RPC: {}", e)
+                        );
+                    }
                     return Err(SwapError::NetworkError(e));
                 }
             }
@@ -3191,6 +3271,14 @@ impl RpcClient {
 
     /// Helper method to get signature status using getSignatureStatuses  
     async fn get_signature_status(&self, signature: &str) -> Result<Option<SignatureStatusData>, SwapError> {
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "STATUS_DEBUG_START",
+                &format!("🔍 Checking signature status for {} using RPC client", &signature[..8])
+            );
+        }
+        
         log(
             LogTag::Rpc,
             "STATUS_API_CALL_START",
@@ -3208,6 +3296,14 @@ impl RpcClient {
                 }
             ]
         });
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "STATUS_DEBUG_PAYLOAD",
+                &format!("📤 Request payload for {}: {}", &signature[..8], serde_json::to_string(&rpc_payload).unwrap_or_else(|_| "Failed to serialize".to_string()))
+            );
+        }
 
         let client = reqwest::Client::new();
         let rpc_url = if is_premium_rpc_only() {
@@ -3235,8 +3331,23 @@ impl RpcClient {
                     "STATUS_API_NETWORK_ERROR",
                     &format!("🔌 Network error in getSignatureStatuses for {}: {}", &signature[..8], e)
                 );
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "STATUS_DEBUG_NETWORK_ERROR_DETAIL",
+                        &format!("❌ Detailed network error for {}: {}", &signature[..8], e)
+                    );
+                }
                 SwapError::NetworkError(e)
             })?;
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "STATUS_DEBUG_HTTP_STATUS",
+                &format!("📡 HTTP status for signature status check {}: {}", &signature[..8], response.status())
+            );
+        }
 
         if !response.status().is_success() {
             log(
@@ -3253,15 +3364,39 @@ impl RpcClient {
             &format!("✅ Received HTTP 200 response from getSignatureStatuses for {}", &signature[..8])
         );
 
-        let rpc_response: SignatureStatusResponse = response
-            .json()
-            .await
+        let response_text = response.text().await.map_err(|e| {
+            if is_debug_transactions_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "STATUS_DEBUG_TEXT_ERROR",
+                    &format!("❌ Failed to get response text for {}: {}", &signature[..8], e)
+                );
+            }
+            SwapError::NetworkError(e)
+        })?;
+
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "STATUS_DEBUG_RAW_RESPONSE",
+                &format!("📄 Raw response for {}: {}", &signature[..8], &response_text)
+            );
+        }
+
+        let rpc_response: SignatureStatusResponse = serde_json::from_str(&response_text)
             .map_err(|e| {
                 log(
                     LogTag::Rpc,
                     "STATUS_API_PARSE_ERROR",
                     &format!("🔍 Failed to parse getSignatureStatuses response for {}: {}", &signature[..8], e)
                 );
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "STATUS_DEBUG_PARSE_ERROR_DETAIL",
+                        &format!("❌ Parse error detail for {}: Response was: {}", &signature[..8], &response_text)
+                    );
+                }
                 SwapError::InvalidResponse(format!("Failed to parse signature status: {}", e))
             })?;
 
@@ -3271,12 +3406,32 @@ impl RpcClient {
             LogTag::Rpc,
             "STATUS_API_RESULT",
             &format!(
-                "📊 getSignatureStatuses result for {}: {:?}",
+                "📊 getSignatureStatuses result for {}: {}",
                 &signature[..8], 
                 result.as_ref().map(|r| format!("confirmation_status={:?}, err={:?}", r.confirmation_status, r.err))
                     .unwrap_or_else(|| "null".to_string())
             )
         );
+
+        if is_debug_transactions_enabled() {
+            if result.is_none() {
+                log(
+                    LogTag::Rpc,
+                    "STATUS_DEBUG_NULL_RESULT",
+                    &format!("⚠️ Signature {} returned null status - transaction may not be visible on network yet", &signature[..8])
+                );
+            } else if let Some(ref status) = result {
+                log(
+                    LogTag::Rpc,
+                    "STATUS_DEBUG_FOUND",
+                    &format!("✅ Found status for {}: confirmation={:?}, error={:?}", 
+                        &signature[..8], 
+                        status.confirmation_status, 
+                        status.err
+                    )
+                );
+            }
+        }
 
         Ok(result)
     }
@@ -3287,19 +3442,48 @@ impl RpcClient {
     /// RPC propagation is slightly delayed.
     /// Returns Ok(true) if a status record (any) appears within timeout, Ok(false) if not.
     pub async fn wait_for_signature_propagation(&self, signature: &str) -> Result<bool, SwapError> {
-        // Exactly 3 attempts at t=0,5,10 seconds (total window ~10s from first check)
-        const ATTEMPTS: u32 = 3;
+        // Extended timing for better reliability: 4 attempts at t=2,7,12,17 seconds 
+        const ATTEMPTS: u32 = 4;
+        const FIRST_DELAY_SECS: u64 = 2; // Initial delay before first check
         const SLEEP_SECS: u64 = 5;
+        
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "PROPAGATION_DEBUG_START",
+                &format!("🚀 Starting propagation wait for signature {} with {} attempts starting after {}s delay", &signature[..8], ATTEMPTS, FIRST_DELAY_SECS)
+            );
+        }
+        
         log(
             LogTag::Rpc,
             "STATUS_PROPAGATION_WAIT_START",
             &format!(
-                "🚦 Propagation wait start for {} ({} attempts spaced {}s)",
-                &signature[..8], ATTEMPTS, SLEEP_SECS
+                "🚦 Propagation wait start for {} ({} attempts with {}s initial delay)",
+                &signature[..8], ATTEMPTS, FIRST_DELAY_SECS
             )
         );
+        
+        // Initial delay to allow transaction to propagate
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "PROPAGATION_DEBUG_INITIAL_DELAY",
+                &format!("⏳ Waiting {}s before first propagation check for {}", FIRST_DELAY_SECS, &signature[..8])
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(FIRST_DELAY_SECS)).await;
+        
         let start = Instant::now();
         for attempt in 1..=ATTEMPTS {
+            if is_debug_transactions_enabled() {
+                log(
+                    LogTag::Rpc,
+                    "PROPAGATION_DEBUG_ATTEMPT_START",
+                    &format!("📋 Starting attempt {}/{} for signature {}", attempt, ATTEMPTS, &signature[..8])
+                );
+            }
+            
             match self.get_signature_status(signature).await {
                 Ok(Some(status)) => {
                     log(
@@ -3314,6 +3498,15 @@ impl RpcClient {
                             status.err
                         )
                     );
+                    
+                    if is_debug_transactions_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "PROPAGATION_DEBUG_SUCCESS_DETAIL",
+                            &format!("✅ Propagation successful for {}: Found status after {:.2}s", &signature[..8], start.elapsed().as_secs_f64())
+                        );
+                    }
+                    
                     return Ok(true);
                 }
                 Ok(None) => {
@@ -3328,6 +3521,14 @@ impl RpcClient {
                             start.elapsed().as_secs_f64()
                         )
                     );
+                    
+                    if is_debug_transactions_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "PROPAGATION_DEBUG_NULL_ATTEMPT",
+                            &format!("⏳ Attempt {}/{} returned null for {} - trying again in {}s", attempt, ATTEMPTS, &signature[..8], SLEEP_SECS)
+                        );
+                    }
                 }
                 Err(e) => {
                     log(
@@ -3341,18 +3542,46 @@ impl RpcClient {
                             e
                         )
                     );
+                    
+                    if is_debug_transactions_enabled() {
+                        log(
+                            LogTag::Rpc,
+                            "PROPAGATION_DEBUG_ERROR_DETAIL",
+                            &format!("❌ Detailed error on attempt {}/{} for {}: {}", attempt, ATTEMPTS, &signature[..8], e)
+                        );
+                    }
                 }
             }
-            if attempt < ATTEMPTS { tokio::time::sleep(Duration::from_secs(SLEEP_SECS)).await; }
+            
+            if attempt < ATTEMPTS { 
+                if is_debug_transactions_enabled() {
+                    log(
+                        LogTag::Rpc,
+                        "PROPAGATION_DEBUG_SLEEP",
+                        &format!("😴 Sleeping {}s before next attempt for {}", SLEEP_SECS, &signature[..8])
+                    );
+                }
+                tokio::time::sleep(Duration::from_secs(SLEEP_SECS)).await; 
+            }
         }
+        
         log(
             LogTag::Rpc,
             "STATUS_PROPAGATION_FAILED",
             &format!(
                 "❌ Propagation failed for {} after {} attempts (~{}s)",
-                &signature[..8], ATTEMPTS, (ATTEMPTS - 1) as u64 * SLEEP_SECS
+                &signature[..8], ATTEMPTS, start.elapsed().as_secs_f64() as u64
             )
         );
+        
+        if is_debug_transactions_enabled() {
+            log(
+                LogTag::Rpc,
+                "PROPAGATION_DEBUG_FAILED",
+                &format!("❌ Transaction {} failed to propagate - likely dropped by network", &signature[..8])
+            );
+        }
+        
         Ok(false)
     }
 

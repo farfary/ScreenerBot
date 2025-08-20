@@ -67,6 +67,19 @@ pub async fn gmgn_sign_and_send_transaction(
         .sign_and_send_transaction(swap_transaction_base64)
         .await?;
 
+    if is_debug_swaps_enabled() {
+        log(
+            LogTag::Swap,
+            "GMGN_TX_SENT_SUCCESS",
+            &format!("🎉 GMGN: Transaction sent successfully! Signature: {}", &signature)
+        );
+        log(
+            LogTag::Swap,
+            "GMGN_TX_STARTING_PROPAGATION_CHECK",
+            &format!("🔍 GMGN: Starting propagation check for signature {}", &signature[..8])
+        );
+    }
+
     // Enforce propagation policy (3 attempts @ 5s). Abort if not propagated.
     match rpc_client.wait_for_signature_propagation(&signature).await {
         Ok(true) => {

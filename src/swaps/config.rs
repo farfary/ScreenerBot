@@ -97,7 +97,7 @@ pub const JUPITER_QUOTE_API: &str = "https://lite-api.jup.ag/swap/v1/quote";
 pub const JUPITER_SWAP_API: &str = "https://lite-api.jup.ag/swap/v1/swap";
 
 /// Jupiter dynamic compute unit limit
-pub const JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT: bool = true;
+pub const JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT: bool = false;
 
 /// Jupiter default priority fee (lamports) - Used in transaction execution, not quotes
 pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 1_000;
