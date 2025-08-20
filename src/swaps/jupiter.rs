@@ -11,7 +11,7 @@ use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, JupiterQuoteRespo
 use super::config::{
     JUPITER_QUOTE_API, JUPITER_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
     JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT, JUPITER_DEFAULT_PRIORITY_FEE,
-    SOL_MINT, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
+    JUPITER_DEFAULT_SWAP_MODE, SOL_MINT, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS,
     TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };
 
@@ -67,6 +67,35 @@ pub async fn jupiter_sign_and_send_transaction(
     let rpc_client = crate::rpc::get_rpc_client();
     let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
     
+    // Enforce propagation policy (3 attempts @ 5s). Abort if not propagated.
+    match rpc_client.wait_for_signature_propagation(&signature).await {
+        Ok(true) => {
+            if is_debug_swaps_enabled() {
+                log(
+                    LogTag::Swap,
+                    "JUPITER_PROPAGATION_DONE",
+                    &format!("🔎 Jupiter: Propagation confirmed for {}", &signature[..8])
+                );
+            }
+        }
+        Ok(false) => {
+            log(
+                LogTag::Swap,
+                "JUPITER_PROPAGATION_FAILED",
+                &format!("❌ Jupiter: Signature {} not propagated in policy window; aborting swap", &signature[..8])
+            );
+            return Err(SwapError::TransactionError(format!("Transaction {} not propagated (dropped)", &signature[..8])));
+        }
+        Err(e) => {
+            log(
+                LogTag::Swap,
+                "JUPITER_PROPAGATION_ERROR",
+                &format!("⚠️ Jupiter: Propagation check error for {}: {}", &signature[..8], e)
+            );
+            return Err(SwapError::TransactionError(format!("Propagation check error: {}", e)));
+        }
+    }
+    
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -93,11 +122,7 @@ pub async fn get_jupiter_quote(
     input_mint: &str,
     output_mint: &str,
     input_amount: u64,
-    from_address: &str,
     slippage: f64,
-    swap_mode: &str,
-    fee: f64,
-    is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
     if is_debug_swaps_enabled() {
         log(
@@ -107,19 +132,11 @@ pub async fn get_jupiter_quote(
                 "🟡 Jupiter Quote Request:
   Input: {} ({} units)
   Output: {}
-  From: {}
-  Slippage: {}%
-  Swap Mode: {}
-  Fee: {}%
-  Anti-MEV: {}",
+  Slippage: {}%",
                 if input_mint == SOL_MINT { "SOL" } else { &input_mint[..8] },
                 input_amount,
                 if output_mint == SOL_MINT { "SOL" } else { &output_mint[..8] },
-                &from_address[..8],
-                slippage,
-                swap_mode,
-                fee,
-                is_anti_mev
+                slippage
             )
         );
     }
@@ -131,7 +148,7 @@ pub async fn get_jupiter_quote(
         ("outputMint".to_string(), output_mint.to_string()),
         ("amount".to_string(), input_amount.to_string()),
         ("slippageBps".to_string(), slippage_bps.to_string()),
-        ("swapMode".to_string(), swap_mode.to_string()),
+        ("swapMode".to_string(), JUPITER_DEFAULT_SWAP_MODE.to_string()),
     ];
 
     let url = format!("{}?{}", JUPITER_QUOTE_API, 
@@ -191,15 +208,13 @@ pub async fn get_jupiter_quote(
   • Output Mint: {}
   • Amount: {} lamports
   • Slippage: {}% ({} BPS)
-  • Swap Mode: {}
-  • From Address: {}",
+  • Swap Mode: {}",
                 input_mint,
                 output_mint,
                 input_amount,
                 slippage,
                 slippage_bps,
-                swap_mode,
-                from_address
+                JUPITER_DEFAULT_SWAP_MODE
             )
         );
     }

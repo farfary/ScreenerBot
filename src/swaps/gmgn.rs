@@ -1,6 +1,7 @@
 use super::config::{
     GMGN_PARTNER, GMGN_QUOTE_API, QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS, SOL_MINT,
     TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS,
+    GMGN_DEFAULT_SWAP_MODE, GMGN_FEE_SOL, GMGN_ANTI_MEV,
 };
 use super::types::{GMGNApiResponse, SwapData};
 use crate::global::is_debug_swaps_enabled;
@@ -66,6 +67,35 @@ pub async fn gmgn_sign_and_send_transaction(
         .sign_and_send_transaction(swap_transaction_base64)
         .await?;
 
+    // Enforce propagation policy (3 attempts @ 5s). Abort if not propagated.
+    match rpc_client.wait_for_signature_propagation(&signature).await {
+        Ok(true) => {
+            if is_debug_swaps_enabled() {
+                log(
+                    LogTag::Swap,
+                    "GMGN_PROPAGATION_DONE",
+                    &format!("🔎 GMGN: Propagation confirmed for {}", &signature[..8])
+                );
+            }
+        }
+        Ok(false) => {
+            log(
+                LogTag::Swap,
+                "GMGN_PROPAGATION_FAILED",
+                &format!("❌ GMGN: Signature {} not propagated in policy window; aborting swap", &signature[..8])
+            );
+            return Err(SwapError::TransactionError(format!("Transaction {} not propagated (dropped)", &signature[..8])));
+        }
+        Err(e) => {
+            log(
+                LogTag::Swap,
+                "GMGN_PROPAGATION_ERROR",
+                &format!("⚠️ GMGN: Propagation check error for {}: {}", &signature[..8], e)
+            );
+            return Err(SwapError::TransactionError(format!("Propagation check error: {}", e)));
+        }
+    }
+
     if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
@@ -97,9 +127,6 @@ pub async fn get_gmgn_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64,
-    swap_mode: &str,
-    fee: f64,
-    is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
     if is_debug_swaps_enabled() {
         log(
@@ -127,9 +154,9 @@ pub async fn get_gmgn_quote(
                 },
                 &from_address[..8],
                 slippage,
-                swap_mode,
-                fee,
-                is_anti_mev
+                GMGN_DEFAULT_SWAP_MODE,
+                GMGN_FEE_SOL,
+                GMGN_ANTI_MEV
             ),
         );
     }
@@ -142,9 +169,9 @@ pub async fn get_gmgn_quote(
         input_amount,
         from_address,
         slippage,
-        swap_mode,
-        fee,
-        is_anti_mev,
+        GMGN_DEFAULT_SWAP_MODE,
+        GMGN_FEE_SOL,
+        GMGN_ANTI_MEV,
         GMGN_PARTNER
     );
 

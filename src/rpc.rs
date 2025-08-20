@@ -22,7 +22,7 @@
 /// 
 /// WARNING: If premium RPC fails when this is enabled, operations will fail
 /// instead of falling back to other endpoints.
-const FORCE_PREMIUM_RPC_ONLY: bool = false;
+const FORCE_PREMIUM_RPC_ONLY: bool = true;
 
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_rpc_enabled, is_debug_transactions_enabled, is_debug_wallet_enabled, read_configs, RPC_STATS };
@@ -3279,6 +3279,81 @@ impl RpcClient {
         );
 
         Ok(result)
+    }
+
+    /// Wait for a freshly submitted transaction signature to propagate so that
+    /// getSignatureStatuses returns a non-null entry (even if still pending).
+    /// This avoids immediately treating a just-sent transaction as failed when
+    /// RPC propagation is slightly delayed.
+    /// Returns Ok(true) if a status record (any) appears within timeout, Ok(false) if not.
+    pub async fn wait_for_signature_propagation(&self, signature: &str) -> Result<bool, SwapError> {
+        // Exactly 3 attempts at t=0,5,10 seconds (total window ~10s from first check)
+        const ATTEMPTS: u32 = 3;
+        const SLEEP_SECS: u64 = 5;
+        log(
+            LogTag::Rpc,
+            "STATUS_PROPAGATION_WAIT_START",
+            &format!(
+                "🚦 Propagation wait start for {} ({} attempts spaced {}s)",
+                &signature[..8], ATTEMPTS, SLEEP_SECS
+            )
+        );
+        let start = Instant::now();
+        for attempt in 1..=ATTEMPTS {
+            match self.get_signature_status(signature).await {
+                Ok(Some(status)) => {
+                    log(
+                        LogTag::Rpc,
+                        "STATUS_PROPAGATION_SUCCESS",
+                        &format!(
+                            "🟢 Propagated {} after {:.2}s on attempt {} (confirmation={:?} err={:?})",
+                            &signature[..8],
+                            start.elapsed().as_secs_f64(),
+                            attempt,
+                            status.confirmation_status,
+                            status.err
+                        )
+                    );
+                    return Ok(true);
+                }
+                Ok(None) => {
+                    log(
+                        LogTag::Rpc,
+                        "STATUS_PROPAGATION_ATTEMPT",
+                        &format!(
+                            "⏳ Attempt {}/{}: signature {} not yet visible (elapsed {:.2}s)",
+                            attempt,
+                            ATTEMPTS,
+                            &signature[..8],
+                            start.elapsed().as_secs_f64()
+                        )
+                    );
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Rpc,
+                        "STATUS_PROPAGATION_ERROR",
+                        &format!(
+                            "⚠️ Attempt {}/{} error checking {}: {}",
+                            attempt,
+                            ATTEMPTS,
+                            &signature[..8],
+                            e
+                        )
+                    );
+                }
+            }
+            if attempt < ATTEMPTS { tokio::time::sleep(Duration::from_secs(SLEEP_SECS)).await; }
+        }
+        log(
+            LogTag::Rpc,
+            "STATUS_PROPAGATION_FAILED",
+            &format!(
+                "❌ Propagation failed for {} after {} attempts (~{}s)",
+                &signature[..8], ATTEMPTS, (ATTEMPTS - 1) as u64 * SLEEP_SECS
+            )
+        );
+        Ok(false)
     }
 
     /// Get wallet signatures using main RPC (lightweight operation)

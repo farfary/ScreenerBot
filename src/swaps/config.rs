@@ -15,7 +15,7 @@ pub const JUPITER_ENABLED: bool = true;
 pub const RAYDIUM_ENABLED: bool = false;
 
 // =============================================================================
-// COMMON CONFIGURATION
+// COMMON CONFIGURATION (Used by all routers)
 // =============================================================================
 
 /// SOL token mint address
@@ -52,24 +52,21 @@ pub const FAST_FAILURE_THRESHOLD_ATTEMPTS: u32 = 10;
 pub const PRIORITY_CONFIRMATION_RETRY_DELAY_MS: u64 = 1000;
 
 // =============================================================================
-// SLIPPAGE CONFIGURATION
+// SLIPPAGE CONFIGURATION (Used by all routers)
 // =============================================================================
 
-/// Default slippage tolerance for quotes (sent to router APIs)
+/// Default slippage tolerance for quotes (percentage - used by all routers)
 pub const QUOTE_SLIPPAGE_PERCENT: f64 = 5.0;
 
-/// Internal slippage tolerance for our calculations and validations
+/// Internal slippage tolerance for our calculations and validations (percentage)
 pub const INTERNAL_SLIPPAGE_PERCENT: f64 = 5.0;
 
 /// Sell retry slippage progression (used when sell fails and needs retry)
 /// Progressive slippage: attempt 1 -> 15%, attempt 2 -> 25%, attempt 3 -> 35%, attempt 4 -> 50%
 pub const SELL_RETRY_SLIPPAGES: [f64; 4] = [15.0, 25.0, 35.0, 50.0];
 
-/// Swap fee percentage (currently 0% - no additional fees)
-pub const SWAP_FEE_PERCENT: f64 = 0.0;
-
 // =============================================================================
-// GMGN ROUTER CONFIGURATION
+// GMGN ROUTER SPECIFIC CONFIGURATION
 // =============================================================================
 
 /// GMGN API base URL for quotes
@@ -78,8 +75,11 @@ pub const GMGN_QUOTE_API: &str = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap
 /// GMGN partner identifier
 pub const GMGN_PARTNER: &str = "screenerbot";
 
-/// GMGN default anti-MEV setting
+/// GMGN default anti-MEV setting (boolean)
 pub const GMGN_ANTI_MEV: bool = false;
+
+/// GMGN network and priority fees in SOL (required for GMGN API)
+pub const GMGN_FEE_SOL: f64 = 0.0;
 
 /// GMGN default swap mode - "ExactIn" or "ExactOut"
 /// ExactIn: Specify exact input amount, output amount is calculated
@@ -87,7 +87,7 @@ pub const GMGN_ANTI_MEV: bool = false;
 pub const GMGN_DEFAULT_SWAP_MODE: &str = "ExactIn";
 
 // =============================================================================
-// JUPITER ROUTER CONFIGURATION
+// JUPITER ROUTER SPECIFIC CONFIGURATION  
 // =============================================================================
 
 /// Jupiter quote API URL
@@ -99,7 +99,7 @@ pub const JUPITER_SWAP_API: &str = "https://lite-api.jup.ag/swap/v1/swap";
 /// Jupiter dynamic compute unit limit
 pub const JUPITER_DYNAMIC_COMPUTE_UNIT_LIMIT: bool = true;
 
-/// Jupiter default priority fee (lamports) - Reduced to minimize transaction costs
+/// Jupiter default priority fee (lamports) - Used in transaction execution, not quotes
 pub const JUPITER_DEFAULT_PRIORITY_FEE: u64 = 1_000;
 
 /// Jupiter default swap mode - "ExactIn" or "ExactOut"  

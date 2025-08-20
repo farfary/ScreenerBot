@@ -1549,9 +1549,45 @@ impl PositionsManager {
                 );
 
                 if verification_age_seconds > 15 {
-                    // After 15 seconds, if not found in our system, likely failed
-                    return Err(format!("Transaction not found in system after {}s ({}m) - likely failed", 
-                        verification_age_seconds, verification_age_minutes));
+                    // Extended propagation grace: first check RPC signature status before declaring failure
+                    // Propagation grace aligned with RPC propagation policy (3 attempts * 5s = 15s)
+                    let propagation_grace_secs: i64 = 15; // allow up to 15s for propagation
+                    if verification_age_seconds as i64 <= propagation_grace_secs {
+                        log(
+                            LogTag::Positions,
+                            "VERIFY_PENDING",
+                            &format!(
+                                "⏳ Transaction {} still within propagation grace ({}s <= {}s)",
+                                get_signature_prefix(signature),
+                                verification_age_seconds,
+                                propagation_grace_secs
+                            ),
+                        );
+                        return Ok(None);
+                    }
+
+                    // As a final safeguard, attempt a lightweight getSignatureStatuses call
+                    match crate::rpc::get_rpc_client().wait_for_signature_propagation(signature).await {
+                        Ok(true) => {
+                            // Status appeared just now; treat as pending still
+                            log(
+                                LogTag::Positions,
+                                "VERIFY_PENDING",
+                                &format!(
+                                    "⏳ Transaction {} appeared during final grace poll ({}s)",
+                                    get_signature_prefix(signature),
+                                    verification_age_seconds
+                                ),
+                            );
+                            return Ok(None);
+                        }
+                        Ok(false) | Err(_) => {
+                            return Err(format!(
+                                "Transaction not found in system after {}s ({}m) - likely failed",
+                                verification_age_seconds, verification_age_minutes
+                            ));
+                        }
+                    }
                 } else {
                     // Still within reasonable time window, treat as pending
                     log(
@@ -1589,33 +1625,40 @@ impl PositionsManager {
                 position.transaction_entry_verified = transaction.success;
                 position.entry_fee_lamports = Some(crate::tokens::decimals::sol_to_lamports(transaction.fee_sol));
                 
-                // Extract token amount and effective price from swap analysis using centralized convert_to_swap_pnl_info
-                // Use the transactions module to get SwapPnLInfo for this transaction
-                match crate::transactions::get_global_swap_transactions().await {
-                    Ok(swap_transactions) => {
-                        if let Some(swap_info) = swap_transactions.iter().find(|s| s.signature == signature) {
-                            // For entry transactions, use token_amount and calculated_price_sol
-                            position.token_amount = Some(swap_info.token_amount as u64);
-                            position.effective_entry_price = Some(swap_info.calculated_price_sol);
-                            
-                            log(
-                                LogTag::Positions,
-                                "ENTRY_ANALYSIS",
-                                &format!(
-                                    "📊 Entry verified: {:.6} tokens at {:.12} SOL calculated price",
-                                    swap_info.token_amount,
-                                    swap_info.calculated_price_sol
-                                ),
-                            );
-                        }
+                // Extract token amount and effective price from swap analysis using optimized single transaction lookup
+                match crate::transactions::get_single_transaction_swap_info(signature).await {
+                    Ok(Some(swap_info)) => {
+                        // For entry transactions, use token_amount and calculated_price_sol
+                        position.token_amount = Some(swap_info.token_amount as u64);
+                        position.effective_entry_price = Some(swap_info.calculated_price_sol);
+                        
+                        log(
+                            LogTag::Positions,
+                            "ENTRY_ANALYSIS",
+                            &format!(
+                                "📊 Entry verified: {:.6} tokens at {:.12} SOL calculated price",
+                                swap_info.token_amount,
+                                swap_info.calculated_price_sol
+                            ),
+                        );
                     }
-                    Err(_) => {
+                    Ok(None) => {
                         log(
                             LogTag::Positions,
                             "WARN",
                             &format!(
-                                "Could not get swap analysis for entry transaction {}",
+                                "Entry transaction {} is not a swap transaction",
                                 get_signature_prefix(signature)
+                            ),
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Positions,
+                            "WARN",
+                            &format!(
+                                "Could not get swap analysis for entry transaction {}: {}",
+                                get_signature_prefix(signature), e
                             ),
                         );
                     }
@@ -1635,32 +1678,40 @@ impl PositionsManager {
                 position.transaction_exit_verified = transaction.success;
                 position.exit_fee_lamports = Some(crate::tokens::decimals::sol_to_lamports(transaction.fee_sol));
                 
-                // Extract SOL received from swap analysis using centralized convert_to_swap_pnl_info
-                match crate::transactions::get_global_swap_transactions().await {
-                    Ok(swap_transactions) => {
-                        if let Some(swap_info) = swap_transactions.iter().find(|s| s.signature == signature) {
-                            // For exit transactions, use effective_sol_received and calculated_price_sol
-                            position.sol_received = Some(swap_info.effective_sol_received);
-                            position.effective_exit_price = Some(swap_info.calculated_price_sol);
-                            
-                            log(
-                                LogTag::Positions,
-                                "EXIT_ANALYSIS",
-                                &format!(
-                                    "📊 Exit verified: {:.6} SOL received at {:.12} SOL calculated price",
-                                    swap_info.effective_sol_received,
-                                    swap_info.calculated_price_sol
-                                ),
-                            );
-                        }
+                // Extract SOL received from swap analysis using optimized single transaction lookup
+                match crate::transactions::get_single_transaction_swap_info(signature).await {
+                    Ok(Some(swap_info)) => {
+                        // For exit transactions, use effective_sol_received and calculated_price_sol
+                        position.sol_received = Some(swap_info.effective_sol_received);
+                        position.effective_exit_price = Some(swap_info.calculated_price_sol);
+                        
+                        log(
+                            LogTag::Positions,
+                            "EXIT_ANALYSIS",
+                            &format!(
+                                "📊 Exit verified: {:.6} SOL received at {:.12} SOL calculated price",
+                                swap_info.effective_sol_received,
+                                swap_info.calculated_price_sol
+                            ),
+                        );
                     }
-                    Err(_) => {
+                    Ok(None) => {
                         log(
                             LogTag::Positions,
                             "WARN",
                             &format!(
-                                "Could not get swap analysis for exit transaction {}",
+                                "Exit transaction {} is not a swap transaction",
                                 get_signature_prefix(signature)
+                            ),
+                        );
+                    }
+                    Err(e) => {
+                        log(
+                            LogTag::Positions,
+                            "WARN",
+                            &format!(
+                                "Could not get swap analysis for exit transaction {}: {}",
+                                get_signature_prefix(signature), e
                             ),
                         );
                     }

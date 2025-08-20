@@ -6,7 +6,6 @@ pub mod gmgn;
 pub mod jupiter;
 pub mod interface;
 pub mod types;
-pub mod execution;
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
@@ -63,9 +62,6 @@ pub use types::{
 // Configuration constants (re-exported for external use)
 pub use config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
-// Execution functions
-pub use execution::{get_swap_quote};
-
 // Router-specific functions
 pub use gmgn::{get_gmgn_quote, execute_gmgn_swap, gmgn_sign_and_send_transaction, GMGNSwapResult};
 pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send_transaction, JupiterSwapResult};
@@ -109,9 +105,6 @@ pub async fn get_best_quote(
     input_amount: u64,
     from_address: &str,
     slippage: f64,
-    swap_mode: &str,
-    fee: f64,
-    is_anti_mev: bool,
 ) -> Result<UnifiedQuote, SwapError> {
     log(
         LogTag::Swap,
@@ -136,9 +129,6 @@ pub async fn get_best_quote(
                 input_amount,
                 from_address,
                 slippage,
-                "ExactIn", // Default to ExactIn mode
-                fee,
-                is_anti_mev,
             ).await {
                 Ok(gmgn_data) => {
                     let unified_quote = UnifiedQuote {
@@ -186,11 +176,7 @@ pub async fn get_best_quote(
                 input_mint,
                 output_mint,
                 input_amount,
-                from_address,
                 slippage,
-                swap_mode,
-                fee,
-                is_anti_mev,
             ).await {
                 Ok(jupiter_data) => {
                     let unified_quote = UnifiedQuote {
@@ -306,7 +292,7 @@ pub async fn get_best_quote(
     Ok(best_quote)
 }
 
-/// Execute swap with unified quote (simplified implementation)
+/// Execute swap with unified quote (with fallback retry mechanism)
 pub async fn execute_best_swap(
     token: &Token,
     input_mint: &str,
@@ -326,9 +312,10 @@ pub async fn execute_best_swap(
         )
     );
 
-    match quote.execution_data {
-        QuoteExecutionData::GMGN(gmgn_data) => {
-            match gmgn::execute_gmgn_swap(token, input_mint, output_mint, input_amount, gmgn_data).await {
+    // Try primary router first
+    let primary_result = match quote.execution_data {
+        QuoteExecutionData::GMGN(ref gmgn_data) => {
+            match gmgn::execute_gmgn_swap(token, input_mint, output_mint, input_amount, gmgn_data.clone()).await {
                 Ok(result) => Ok(interface::SwapResult {
                     success: result.success,
                     router_used: Some(RouterType::GMGN),
@@ -345,8 +332,8 @@ pub async fn execute_best_swap(
                 Err(e) => Err(e),
             }
         }
-        QuoteExecutionData::Jupiter(jupiter_data) => {
-            match jupiter::execute_jupiter_swap(token, input_mint, output_mint, jupiter_data).await {
+        QuoteExecutionData::Jupiter(ref jupiter_data) => {
+            match jupiter::execute_jupiter_swap(token, input_mint, output_mint, jupiter_data.clone()).await {
                 Ok(result) => Ok(interface::SwapResult {
                     success: result.success,
                     router_used: Some(RouterType::Jupiter),
@@ -363,5 +350,186 @@ pub async fn execute_best_swap(
                 Err(e) => Err(e),
             }
         }
+    };
+
+    // Check if primary router failed and fallback is available
+    if let Err(ref primary_error) = primary_result {
+        log(
+            LogTag::Swap,
+            "FALLBACK_TRIGGERED",
+            &format!(
+                "⚠️ Primary router {:?} failed: {}",
+                quote.router,
+                primary_error
+            )
+        );
+
+        // Only try fallback for certain error types (propagation failures, transaction errors)
+        let should_fallback = match primary_error {
+            SwapError::TransactionError(msg) if msg.contains("not propagated") => true,
+            SwapError::TransactionError(msg) if msg.contains("dropped") => true,
+            SwapError::NetworkError(_) => true,
+            _ => false,
+        };
+
+        if should_fallback {
+            log(
+                LogTag::Swap,
+                "FALLBACK_ATTEMPT",
+                "🔄 Attempting fallback to alternative router..."
+            );
+
+            // Get fallback quote from the other router
+            let wallet_address = match crate::configs::read_configs() {
+                Ok(configs) => match crate::configs::get_wallet_pubkey_string(&configs) {
+                    Ok(addr) => addr,
+                    Err(_) => return primary_result, // If can't get wallet, return original error
+                },
+                Err(_) => return primary_result, // If can't get wallet, return original error
+            };
+
+            let fallback_quote = match quote.router {
+                RouterType::Jupiter => {
+                    // Jupiter failed, try GMGN
+                    if crate::swaps::config::GMGN_ENABLED {
+                        log(LogTag::Swap, "FALLBACK_GMGN", "🔵 Falling back to GMGN router...");
+                        
+                        match gmgn::get_gmgn_quote(
+                            input_mint,
+                            output_mint,
+                            input_amount,
+                            &wallet_address,
+                            quote.slippage_bps as f64 / 100.0, // Convert bps to percentage
+                        ).await {
+                            Ok(gmgn_data) => {
+                                log(
+                                    LogTag::Swap,
+                                    "FALLBACK_QUOTE_SUCCESS",
+                                    &format!(
+                                        "✅ GMGN fallback quote: {} tokens, impact: {:.2}%",
+                                        gmgn_data.quote.out_amount,
+                                        gmgn_data.quote.price_impact_pct.parse::<f64>().unwrap_or(0.0)
+                                    )
+                                );
+                                Some(gmgn_data)
+                            }
+                            Err(e) => {
+                                log(LogTag::Swap, "FALLBACK_QUOTE_FAILED", &format!("❌ GMGN fallback quote failed: {}", e));
+                                None
+                            }
+                        }
+                    } else {
+                        log(LogTag::Swap, "FALLBACK_UNAVAILABLE", "❌ GMGN fallback not available (disabled)");
+                        None
+                    }
+                }
+                RouterType::GMGN => {
+                    // GMGN failed, try Jupiter
+                    if crate::swaps::config::JUPITER_ENABLED {
+                        log(LogTag::Swap, "FALLBACK_JUPITER", "🟡 Falling back to Jupiter router...");
+                        
+                        match jupiter::get_jupiter_quote(
+                            input_mint,
+                            output_mint,
+                            input_amount,
+                            quote.slippage_bps as f64 / 100.0, // Convert bps to percentage
+                        ).await {
+                            Ok(jupiter_data) => {
+                                log(
+                                    LogTag::Swap,
+                                    "FALLBACK_QUOTE_SUCCESS",
+                                    &format!(
+                                        "✅ Jupiter fallback quote: {} tokens, impact: {:.2}%",
+                                        jupiter_data.quote.out_amount,
+                                        jupiter_data.quote.price_impact_pct.parse::<f64>().unwrap_or(0.0)
+                                    )
+                                );
+                                Some(jupiter_data)
+                            }
+                            Err(e) => {
+                                log(LogTag::Swap, "FALLBACK_QUOTE_FAILED", &format!("❌ Jupiter fallback quote failed: {}", e));
+                                None
+                            }
+                        }
+                    } else {
+                        log(LogTag::Swap, "FALLBACK_UNAVAILABLE", "❌ Jupiter fallback not available (disabled)");
+                        None
+                    }
+                }
+            };
+
+            // Execute fallback if we got a quote
+            if let Some(fallback_data) = fallback_quote {
+                let fallback_result = match quote.router {
+                    RouterType::Jupiter => {
+                        // Fallback to GMGN
+                        log(LogTag::Swap, "FALLBACK_EXECUTE", "🔵 Executing GMGN fallback swap...");
+                        match gmgn::execute_gmgn_swap(token, input_mint, output_mint, input_amount, fallback_data).await {
+                            Ok(result) => Ok(interface::SwapResult {
+                                success: result.success,
+                                router_used: Some(RouterType::GMGN),
+                                transaction_signature: result.transaction_signature,
+                                input_amount: result.input_amount,
+                                output_amount: result.output_amount,
+                                price_impact: result.price_impact,
+                                fee_lamports: result.fee_lamports,
+                                execution_time: result.execution_time,
+                                effective_price: result.effective_price,
+                                swap_data: result.swap_data,
+                                error: result.error,
+                            }),
+                            Err(e) => Err(e),
+                        }
+                    }
+                    RouterType::GMGN => {
+                        // Fallback to Jupiter
+                        log(LogTag::Swap, "FALLBACK_EXECUTE", "🟡 Executing Jupiter fallback swap...");
+                        match jupiter::execute_jupiter_swap(token, input_mint, output_mint, fallback_data).await {
+                            Ok(result) => Ok(interface::SwapResult {
+                                success: result.success,
+                                router_used: Some(RouterType::Jupiter),
+                                transaction_signature: result.transaction_signature,
+                                input_amount: result.input_amount,
+                                output_amount: result.output_amount,
+                                price_impact: result.price_impact,
+                                fee_lamports: result.fee_lamports,
+                                execution_time: result.execution_time,
+                                effective_price: result.effective_price,
+                                swap_data: result.swap_data,
+                                error: result.error,
+                            }),
+                            Err(e) => Err(e),
+                        }
+                    }
+                };
+
+                match fallback_result {
+                    Ok(result) => {
+                        log(
+                            LogTag::Swap,
+                            "FALLBACK_SUCCESS",
+                            &format!(
+                                "✅ Fallback swap succeeded via {:?}! TX: {}",
+                                result.router_used.as_ref().unwrap(),
+                                result.transaction_signature.as_ref().unwrap_or(&"None".to_string())
+                            )
+                        );
+                        return Ok(result);
+                    }
+                    Err(fallback_error) => {
+                        log(
+                            LogTag::Swap,
+                            "FALLBACK_FAILED",
+                            &format!("❌ Fallback swap also failed: {}", fallback_error)
+                        );
+                        // Return the original error, not the fallback error
+                        return primary_result;
+                    }
+                }
+            }
+        }
     }
+
+    // Return primary result (success or error if no fallback was attempted)
+    primary_result
 }

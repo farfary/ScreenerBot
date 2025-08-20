@@ -2937,11 +2937,7 @@ async fn perform_preflight_checks(
                 "So11111111111111111111111111111111111111112", // SOL mint
                 token_mint,
                 lamport_amount,
-                &wallet_address,
                 slippage,
-                "ExactIn",
-                0.25,
-                false,
             ).await
         }
         "gmgn" => {
@@ -2951,9 +2947,6 @@ async fn perform_preflight_checks(
                 lamport_amount,
                 &wallet_address,
                 slippage,
-                "ExactIn",
-                0.25,
-                false,
             ).await
         }
         "raydium-cpmm" => {
@@ -3343,11 +3336,7 @@ async fn execute_jupiter_swap_test(
         &input_mint,
         &output_mint,
         input_amount,
-        &wallet_address,
         slippage,
-        "ExactIn",
-        0.25,
-        false,
     ).await?;
 
     // Execute the swap
@@ -3386,9 +3375,6 @@ async fn execute_gmgn_swap_test(
         input_amount,
         &wallet_address,
         slippage,
-        "ExactIn",
-        0.25,
-        false,
     ).await?;
 
     // Execute the swap (note: execute_gmgn_swap has different signature, adapt as needed)

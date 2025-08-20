@@ -17,7 +17,7 @@ pub use super::config::{
     GMGN_PARTNER as PARTNER,
     GMGN_DEFAULT_SWAP_MODE,
     JUPITER_DEFAULT_SWAP_MODE,
-    SWAP_FEE_PERCENT,
+    GMGN_FEE_SOL,
     QUOTE_SLIPPAGE_PERCENT,
     INTERNAL_SLIPPAGE_PERCENT,
     // Legacy alias for backward compatibility in types
@@ -243,7 +243,7 @@ impl Default for SwapRequest {
             from_address: String::new(),
             slippage: SLIPPAGE_TOLERANCE_PERCENT,
             swap_mode: GMGN_DEFAULT_SWAP_MODE.to_string(), // Use config default
-            fee: SWAP_FEE_PERCENT,
+            fee: GMGN_FEE_SOL,
             is_anti_mev: ANTI_MEV,
             expected_price: None,
         }

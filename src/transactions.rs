@@ -781,33 +781,22 @@ impl TransactionsManager {
         let use_cache = Path::new(&cache_file).exists();
 
         let mut transaction = if use_cache {
-            // Load from cache and try to hydrate from snapshot to avoid recalculation
+            // Load from cache and always recalculate
             if self.debug_enabled {
                 log(LogTag::Transactions, "CACHE_LOAD", &format!("Loading cached transaction: {}", &signature[..8]));
             }
             let mut transaction = self.load_transaction_from_cache(Path::new(&cache_file)).await?;
 
-            // Attempt hydration from cached analysis snapshot
-            let hydrated = self.try_hydrate_from_cached_analysis(&mut transaction);
-
-            // Recalculate only if not hydrated or not finalized
-            if !hydrated || !matches!(transaction.status, TransactionStatus::Finalized) {
-                if self.debug_enabled {
-                    log(LogTag::Transactions, "RECALC", &format!(
-                        "Hydration {} for {}, recalculating...",
-                        if hydrated { "succeeded but not finalized" } else { "missed" },
-                        &signature[..8]
-                    ));
-                }
-                self.recalculate_transaction_analysis(&mut transaction).await?;
-                // Persist a snapshot for finalized transactions to avoid future re-analysis
-                if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
-                    transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
-                }
-            } else if self.debug_enabled {
-                log(LogTag::Transactions, "HYDRATE", &format!(
-                    "Using cached analysis snapshot for finalized {}", &signature[..8]
+            // Always recalculate transaction analysis
+            if self.debug_enabled {
+                log(LogTag::Transactions, "RECALC", &format!(
+                    "Recalculating transaction: {}", &signature[..8]
                 ));
+            }
+            self.recalculate_transaction_analysis(&mut transaction).await?;
+            // Persist a snapshot for finalized transactions
+            if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
             }
 
             transaction
@@ -3367,43 +3356,31 @@ impl TransactionsManager {
                 Ok(mut transaction) => {
                     processed_count += 1;
                     
-                    // Try to hydrate from cached analysis snapshot
-                    let hydrated = self.try_hydrate_from_cached_analysis(&mut transaction);
-                    let needs_recalc = !hydrated || !matches!(transaction.status, TransactionStatus::Finalized);
+                    // Always recalculate transaction analysis
+                    // Reset analysis fields and recalc using cached raw data
+                    if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                        log(LogTag::Transactions, "WARN", &format!(
+                            "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                        ));
+                        continue;
+                    }
 
-                    if needs_recalc {
-                        // Reset analysis fields and recalc using cached raw data
-                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
-                            ));
-                            continue;
-                        }
+                    // Persist a snapshot for finalized transactions
+                    if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                        transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+                    }
 
-                        // Persist a snapshot for finalized transactions to avoid future re-analysis
-                        if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
-                            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
-                        }
-
-                        // Save updated transaction back to cache
-                        if let Err(e) = self.cache_transaction(&transaction).await {
-                            log(LogTag::Transactions, "WARN", &format!(
-                                "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
-                            ));
-                        }
-
-                        recalculated_count += 1;
-                    } else if self.debug_enabled {
-                        log(LogTag::Transactions, "HYDRATE", &format!(
-                            "Hydrated finalized transaction {} from snapshot (skip recalculation)",
-                            get_signature_prefix(&transaction.signature)
+                    // Save updated transaction back to cache
+                    if let Err(e) = self.cache_transaction(&transaction).await {
+                        log(LogTag::Transactions, "WARN", &format!(
+                            "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
                         ));
                     }
+
+                    recalculated_count += 1;
                     
                     // Convert to SwapPnLInfo if it's a swap transaction
-                    // Use silent mode for hydrated transactions to reduce log spam
-                    let silent = hydrated && !needs_recalc;
-                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction, &token_symbol_cache, silent) {
+                    if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction, &token_symbol_cache, false) {
                         swap_transactions.push(swap_info);
                         swap_count += 1;
                     }
@@ -4863,6 +4840,87 @@ pub async fn get_global_swap_transactions() -> Result<Vec<SwapPnLInfo>, String> 
     let mut temp_manager = TransactionsManager::new(wallet_address).await?;
     
     temp_manager.get_all_swap_transactions().await
+}
+
+/// Get swap info for a specific transaction signature (OPTIMIZED for positions verification)
+/// This is much more efficient than loading all transactions when only one is needed
+pub async fn get_single_transaction_swap_info(signature: &str) -> Result<Option<SwapPnLInfo>, String> {
+    // Try to use existing global transaction if available (from cached data)
+    if let Ok(Some(existing_transaction)) = get_transaction(signature).await {
+        log(LogTag::Transactions, "CACHE_HIT", &format!(
+            "Using existing transaction data for {}", get_signature_prefix(signature)
+        ));
+        
+        // Convert existing transaction to SwapPnLInfo if it's a swap
+        let wallet_address = load_wallet_address_from_config().await?;
+        let mut temp_manager = TransactionsManager::new(wallet_address).await?;
+        let symbol_cache = std::collections::HashMap::new(); // Empty cache for single transaction
+        
+        if let Some(swap_info) = temp_manager.convert_to_swap_pnl_info(&existing_transaction, &symbol_cache, false) {
+            log(LogTag::Transactions, "SUCCESS", &format!(
+                "Generated swap info from existing transaction {}: {} tokens at {:.12} SOL", 
+                get_signature_prefix(signature), swap_info.token_amount, swap_info.calculated_price_sol
+            ));
+            return Ok(Some(swap_info));
+        } else {
+            log(LogTag::Transactions, "INFO", &format!(
+                "Existing transaction {} is not a swap transaction", get_signature_prefix(signature)
+            ));
+            return Ok(None);
+        }
+    }
+    
+    // If not available globally, process just this single transaction
+    log(LogTag::Transactions, "SINGLE_TX_PROCESS", &format!(
+        "Processing single transaction {} (not in global cache)", get_signature_prefix(signature)
+    ));
+    
+    let wallet_address = load_wallet_address_from_config().await?;
+    let mut temp_manager = TransactionsManager::new(wallet_address).await?;
+    
+    // Get the specific transaction (this processes only ONE transaction)
+    match temp_manager.process_transaction(signature).await {
+        Ok(mut transaction) => {
+            // Always recalculate transaction analysis (no hydration optimization)
+            if let Err(e) = temp_manager.recalculate_transaction_analysis(&mut transaction).await {
+                log(LogTag::Transactions, "WARN", &format!(
+                    "Failed to recalculate transaction {}: {}", get_signature_prefix(signature), e
+                ));
+                return Ok(None);
+            }
+            
+            // Cache the updated analysis for finalized transactions
+            if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+                if let Err(e) = temp_manager.cache_transaction(&transaction).await {
+                    log(LogTag::Transactions, "WARN", &format!(
+                        "Failed to cache recalculated transaction {}: {}", get_signature_prefix(signature), e
+                    ));
+                }
+            }
+            
+            // Convert to SwapPnLInfo if it's a swap
+            let symbol_cache = std::collections::HashMap::new(); // Empty cache for single transaction
+            if let Some(swap_info) = temp_manager.convert_to_swap_pnl_info(&transaction, &symbol_cache, false) {
+                log(LogTag::Transactions, "SUCCESS", &format!(
+                    "Generated swap info for single transaction {}: {} tokens at {:.12} SOL", 
+                    get_signature_prefix(signature), swap_info.token_amount, swap_info.calculated_price_sol
+                ));
+                Ok(Some(swap_info))
+            } else {
+                log(LogTag::Transactions, "INFO", &format!(
+                    "Transaction {} is not a swap transaction", get_signature_prefix(signature)
+                ));
+                Ok(None)
+            }
+        }
+        Err(e) => {
+            log(LogTag::Transactions, "WARN", &format!(
+                "Failed to process transaction {}: {}", get_signature_prefix(signature), e
+            ));
+            Ok(None)
+        }
+    }
 }
 
 /// Clean all existing cache files by removing calculated fields

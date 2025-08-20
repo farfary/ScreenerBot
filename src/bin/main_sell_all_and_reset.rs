@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 //! # Sell All Tokens, Close ATAs, and Reset Bot Data
 //!
 //! This utility performs a comprehensive wallet cleanup and bot data reset by:
@@ -30,7 +32,7 @@ use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
 use screenerbot::utils::{ get_wallet_address, close_token_account_with_context };
 use screenerbot::swaps::sell_token;
-use screenerbot::rpc::SwapError;
+use screenerbot::rpc::{ SwapError, init_rpc_client, get_rpc_client };
 use screenerbot::arguments::is_debug_ata_enabled;
 use reqwest;
 use serde_json;
@@ -186,32 +188,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log(LogTag::System, "WALLET", &format!("Processing wallet: {}", wallet_address));
 
-    // Step 1: Get all token accounts (both regular SPL and Token-2022)
-    log(LogTag::System, "INFO", "Scanning for SPL Token accounts...");
-    let mut token_accounts = match get_all_token_accounts(&wallet_address).await {
+    // Step 1: Get all token accounts using centralized RPC client (prevents stale account data)
+    log(LogTag::System, "INFO", "Scanning for all token accounts using centralized RPC client...");
+    
+    // Initialize centralized RPC client to avoid stale cache issues
+    init_rpc_client()?;
+    let rpc_client = get_rpc_client();
+    
+    let rpc_token_accounts = match rpc_client.get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            log(LogTag::System, "ERROR", &format!("Failed to get SPL token accounts: {}", e));
+            log(LogTag::System, "ERROR", &format!("Failed to get token accounts: {}", e));
             return Err(Box::new(e) as Box<dyn std::error::Error>);
         }
     };
-
-    log(LogTag::System, "INFO", "Scanning for Token-2022 accounts...");
-    match get_token_2022_accounts(&wallet_address).await {
-        Ok(mut token_2022_accounts) => {
-            if !token_2022_accounts.is_empty() {
-                log(
-                    LogTag::System,
-                    "INFO",
-                    &format!("Found {} Token-2022 accounts", token_2022_accounts.len())
-                );
-                token_accounts.append(&mut token_2022_accounts);
-            }
+    
+    // Convert from RPC TokenAccountInfo to local TokenAccount format
+    let token_accounts: Vec<TokenAccount> = rpc_token_accounts.into_iter().map(|rpc_account| {
+        TokenAccount {
+            mint: rpc_account.mint,
+            balance: rpc_account.balance,
+            ui_amount: (rpc_account.balance as f64) / 1_000_000.0, // Approximate UI amount
         }
-        Err(e) => {
-            log(LogTag::System, "WARNING", &format!("Could not scan Token-2022 accounts: {}", e));
-        }
-    }
+    }).collect();
 
     if token_accounts.is_empty() {
         log(LogTag::System, "INFO", "No token accounts found - wallet is already clean!");
@@ -560,6 +559,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "ATA_START",
                         &format!("Starting ATA close for token: {}", account.mint)
                     );
+
+                    // Verify the ATA actually exists before trying to close it
+                    // This prevents "invalid account data" errors on already-closed ATAs
+                    let rpc_client = get_rpc_client();
+                    match rpc_client.get_associated_token_account(&wallet_address, &account.mint).await {
+                        Ok(ata_address) => {
+                            // Double-check that the account still exists with fresh RPC data
+                            match rpc_client.is_token_account_token_2022(&ata_address).await {
+                                Ok(_) => {
+                                    // Account exists, proceed with closing
+                                    if is_debug_ata_enabled() {
+                                        log(
+                                            LogTag::System,
+                                            "DEBUG",
+                                            &format!("✅ ATA_VERIFIED: account {} exists, proceeding with close", &ata_address[..8])
+                                        );
+                                    }
+                                }
+                                Err(_) => {
+                                    // Account doesn't exist or is already closed
+                                    if is_debug_ata_enabled() {
+                                        log(
+                                            LogTag::System,
+                                            "DEBUG",
+                                            &format!("⚠️ ATA_ALREADY_CLOSED: account for mint {} appears to be already closed", &account.mint[..8])
+                                        );
+                                    }
+                                    log(
+                                        LogTag::System,
+                                        "ATA_SKIP",
+                                        &format!("ATA for {} appears to be already closed, skipping", account.mint)
+                                    );
+                                    return (account, true, Some("ALREADY_CLOSED".to_string()));
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Cannot find ATA, likely already closed
+                            log(
+                                LogTag::System,
+                                "ATA_SKIP",
+                                &format!("Cannot find ATA for {}, likely already closed", account.mint)
+                            );
+                            return (account, true, Some("NOT_FOUND".to_string()));
+                        }
+                    }
 
                     let start_time = std::time::Instant::now();
                     

@@ -8,7 +8,7 @@ use crate::utils::{get_token_balance, check_shutdown_or_delay};
 use crate::utils::get_wallet_address;
 use super::{get_best_quote, execute_best_swap, RouterType};
 use super::types::{SwapData};
-use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
+use super::config::{SOL_MINT, QUOTE_SLIPPAGE_PERCENT, GMGN_FEE_SOL, SELL_RETRY_SLIPPAGES, GMGN_DEFAULT_SWAP_MODE};
 use std::sync::Arc;
 use tokio::sync::Notify;
 
@@ -73,9 +73,6 @@ pub async fn buy_token(
         sol_to_lamports(amount_sol),
         &wallet_address,
         QUOTE_SLIPPAGE_PERCENT,
-        GMGN_DEFAULT_SWAP_MODE, // Use config value instead of hardcoded
-        SWAP_FEE_PERCENT,
-        false, // Anti-MEV
     ).await?;
 
     if is_debug_swaps_enabled() {
@@ -208,6 +205,46 @@ pub async fn sell_token(
                     )
                 );
 
+                // Check for error types that should not be retried
+                match &e {
+                    SwapError::InsufficientBalance(_) => {
+                        log(
+                            LogTag::Swap,
+                            "SELL_FAILED_NO_RETRY",
+                            &format!(
+                                "❌ Stopping retries for {} - insufficient balance (tokens may have been sold in previous attempt)",
+                                token.symbol
+                            )
+                        );
+                        return Err(e);
+                    }
+                    SwapError::InvalidAmount(_) => {
+                        log(
+                            LogTag::Swap,
+                            "SELL_FAILED_NO_RETRY",
+                            &format!(
+                                "❌ Stopping retries for {} - invalid amount (unretryable error)",
+                                token.symbol
+                            )
+                        );
+                        return Err(e);
+                    }
+                    SwapError::ConfigError(_) => {
+                        log(
+                            LogTag::Swap,
+                            "SELL_FAILED_NO_RETRY",
+                            &format!(
+                                "❌ Stopping retries for {} - configuration error (unretryable error)",
+                                token.symbol
+                            )
+                        );
+                        return Err(e);
+                    }
+                    _ => {
+                        // Continue with retry logic for other error types
+                    }
+                }
+
                 // If this isn't the last attempt, wait and clear recent attempt to allow retry
                 if attempt < slippages.len() - 1 {
                     // Before retry delay, check for shutdown and abort if requested
@@ -312,9 +349,6 @@ async fn sell_token_with_slippage(
         actual_sell_amount,
         &wallet_address,
         slippage,
-        GMGN_DEFAULT_SWAP_MODE, // Use config value instead of hardcoded
-        SWAP_FEE_PERCENT,
-        false,
     ).await?;
 
     // Execute the swap

@@ -8,7 +8,7 @@ use crate::rpc::{SwapError, lamports_to_sol};
 use crate::global::{is_debug_swaps_enabled, is_debug_api_enabled, read_configs};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction};
 use super::config::{
-    SOL_MINT, QUOTE_SLIPPAGE_PERCENT, SWAP_FEE_PERCENT, QUOTE_TIMEOUT_SECS, 
+    SOL_MINT, QUOTE_SLIPPAGE_PERCENT, GMGN_FEE_SOL, QUOTE_TIMEOUT_SECS, 
     API_TIMEOUT_SECS, RETRY_ATTEMPTS, RAYDIUM_SWAP_API,
     TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
 };

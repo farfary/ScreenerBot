@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 //! # Positions Manager Tool
 //!
 //! A comprehensive tool for managing trading positions with the following capabilities:
@@ -51,66 +53,66 @@ use tokio::sync::Notify;
 
 /// Print comprehensive help menu for the Positions Manager Tool
 fn print_help() {
-    println!("{}", "🎯 POSITIONS MANAGER TOOL".bright_blue().bold());
-    println!("{}", "========================".bright_blue());
-    println!("Comprehensive trading positions management and monitoring tool");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "🎯 POSITIONS MANAGER TOOL".bright_blue().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "========================".bright_blue()));
+    log(LogTag::Positions, "INFO", "Comprehensive trading positions management and monitoring tool");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "📋 LISTING COMMANDS:".bright_green().bold());
-    println!("  --list-open              List all open positions with P&L");
-    println!("  --list-closed            List all closed positions with final P&L");
-    println!("  --list-all               List both open and closed positions");
-    println!("  --diagnostics            Show detailed diagnostics for all positions");
-    println!("  --reverify               Force re-verification of all unverified transactions");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "📋 LISTING COMMANDS:".bright_green().bold()));
+    log(LogTag::Positions, "INFO", "  --list-open              List all open positions with P&L");
+    log(LogTag::Positions, "INFO", "  --list-closed            List all closed positions with final P&L");
+    log(LogTag::Positions, "INFO", "  --list-all               List both open and closed positions");
+    log(LogTag::Positions, "INFO", "  --diagnostics            Show detailed diagnostics for all positions");
+    log(LogTag::Positions, "INFO", "  --reverify               Force re-verification of all unverified transactions");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "🔍 STATUS COMMANDS:".bright_yellow().bold());
-    println!("  --status <MINT>          Show detailed status of specific position");
-    println!("  --summary                Show positions summary statistics");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "🔍 STATUS COMMANDS:".bright_yellow().bold()));
+    log(LogTag::Positions, "INFO", "  --status <MINT>          Show detailed status of specific position");
+    log(LogTag::Positions, "INFO", "  --summary                Show positions summary statistics");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "📈 TRADING COMMANDS:".bright_cyan().bold());
-    println!("  --mint <ADDRESS>         Token mint address for position operations");
-    println!("  --size <SOL_AMOUNT>      Position size in SOL (for opening positions)");
-    println!("  --action <open|close>    Action to perform on the position");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "📈 TRADING COMMANDS:".bright_cyan().bold()));
+    log(LogTag::Positions, "INFO", "  --mint <ADDRESS>         Token mint address for position operations");
+    log(LogTag::Positions, "INFO", "  --size <SOL_AMOUNT>      Position size in SOL (for opening positions)");
+    log(LogTag::Positions, "INFO", "  --action <open|close>    Action to perform on the position");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "🔁 TESTING COMMANDS:".bright_purple().bold());
-    println!("  --test-loop              Run continuous open/close position testing");
-    println!("  --test-iterations <N>    Number of test iterations (default: infinite)");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "🔁 TESTING COMMANDS:".bright_purple().bold()));
+    log(LogTag::Positions, "INFO", "  --test-loop              Run continuous open/close position testing");
+    log(LogTag::Positions, "INFO", "  --test-iterations <N>    Number of test iterations (default: infinite)");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "⚙️  UTILITY COMMANDS:".bright_magenta().bold());
-    println!("  --help, -h               Show this help menu");
-    println!("  --debug                  Enable debug logging for positions");
-    println!("  --debug-positions        Verbose position lifecycle logs");
-    println!("  --debug-transactions     Verbose transaction verification logs");
-    println!("  --debug-swaps            Verbose swap analysis logs");
-    println!("  --dry-run               Simulate actions without executing");
-    println!("  --verify-timeout <S>     Max seconds to wait for a tx (default 30)");
-    println!("  --verify-poll <S>        Poll interval seconds (default 1)");
-    println!("  --max-exit-retries <N>   Max sell retries before queue (default 3)");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "⚙️  UTILITY COMMANDS:".bright_magenta().bold()));
+    log(LogTag::Positions, "INFO", "  --help, -h               Show this help menu");
+    log(LogTag::Positions, "INFO", "  --debug                  Enable debug logging for positions");
+    log(LogTag::Positions, "INFO", "  --debug-positions        Verbose position lifecycle logs");
+    log(LogTag::Positions, "INFO", "  --debug-transactions     Verbose transaction verification logs");
+    log(LogTag::Positions, "INFO", "  --debug-swaps            Verbose swap analysis logs");
+    log(LogTag::Positions, "INFO", "  --dry-run               Simulate actions without executing");
+    log(LogTag::Positions, "INFO", "  --verify-timeout <S>     Max seconds to wait for a tx (default 30)");
+    log(LogTag::Positions, "INFO", "  --verify-poll <S>        Poll interval seconds (default 1)");
+    log(LogTag::Positions, "INFO", "  --max-exit-retries <N>   Max sell retries before queue (default 3)");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "📊 EXAMPLES:".bright_white().bold());
-    println!("  # List all open positions");
-    println!("  cargo run --bin main_positions_manager -- --list-open");
-    println!();
-    println!("  # Check specific token status");
-    println!("  cargo run --bin main_positions_manager -- --status So11111111111111111111111111111111111111112");
-    println!();
-    println!("  # Open new 0.01 SOL position");
-    println!("  cargo run --bin main_positions_manager -- --mint So11111111111111111111111111111111111111112 --size 0.01 --action open");
-    println!();
-    println!("  # Close existing position");
-    println!("  cargo run --bin main_positions_manager -- --mint So11111111111111111111111111111111111111112 --action close");
-    println!();
+    log(LogTag::Positions, "INFO", &format!("{}", "📊 EXAMPLES:".bright_white().bold()));
+    log(LogTag::Positions, "INFO", "  # List all open positions");
+    log(LogTag::Positions, "INFO", "  cargo run --bin main_positions_manager -- --list-open");
+    log(LogTag::Positions, "INFO", "");
+    log(LogTag::Positions, "INFO", "  # Check specific token status");
+    log(LogTag::Positions, "INFO", "  cargo run --bin main_positions_manager -- --status So11111111111111111111111111111111111111112");
+    log(LogTag::Positions, "INFO", "");
+    log(LogTag::Positions, "INFO", "  # Open new 0.01 SOL position");
+    log(LogTag::Positions, "INFO", "  cargo run --bin main_positions_manager -- --mint So11111111111111111111111111111111111111112 --size 0.01 --action open");
+    log(LogTag::Positions, "INFO", "");
+    log(LogTag::Positions, "INFO", "  # Close existing position");
+    log(LogTag::Positions, "INFO", "  cargo run --bin main_positions_manager -- --mint So11111111111111111111111111111111111111112 --action close");
+    log(LogTag::Positions, "INFO", "");
     
-    println!("{}", "⚠️  NOTES:".bright_red().bold());
-    println!("  • Positions are managed by the global PositionsManager service");
-    println!("  • All operations require valid RPC connection and wallet configuration");
-    println!("  • Position sizes are specified in SOL (e.g., 0.01 = 0.01 SOL)");
-    println!("  • Use --dry-run to test commands without actual execution");
+    log(LogTag::Positions, "INFO", &format!("{}", "⚠️  NOTES:".bright_red().bold()));
+    log(LogTag::Positions, "INFO", "  • Positions are managed by the global PositionsManager service");
+    log(LogTag::Positions, "INFO", "  • All operations require valid RPC connection and wallet configuration");
+    log(LogTag::Positions, "INFO", "  • Position sizes are specified in SOL (e.g., 0.01 = 0.01 SOL)");
+    log(LogTag::Positions, "INFO", "  • Use --dry-run to test commands without actual execution");
 }
 
 /// Parse command line arguments and extract configuration
@@ -302,8 +304,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Validate arguments
     if let Err(e) = config.validate() {
-        eprintln!("{} {}", "❌ Error:".bright_red().bold(), e);
-        eprintln!("Use --help for usage information");
+        log(LogTag::Positions, "ERROR", &format!("{} {}", "❌ Error:".bright_red().bold(), e));
+        log(LogTag::Positions, "INFO", "Use --help for usage information");
         std::process::exit(1);
     }
 
@@ -313,29 +315,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         config.summary || config.status_mint.is_some() || 
                         config.action.is_some());
                        
-    // Initialize system (only if needed)
-    let needs_service = !config.dry_run && 
-                       (config.list_open || config.list_closed || config.list_all || 
-                        config.summary || config.status_mint.is_some() || 
-                        config.action.is_some());
-                       
-    let shutdown_handle = if needs_service {
+    let (shutdown_handle, task_handles) = if needs_service {
         match initialize_system(&config).await {
-            Ok(shutdown) => Some(shutdown),
+            Ok((shutdown, handles)) => (Some(shutdown), handles),
             Err(e) => {
-                eprintln!("{} {}", "❌ Initialization failed:".bright_red().bold(), e);
+                log(LogTag::Positions, "ERROR", &format!("{} {}", "❌ Initialization failed:".bright_red().bold(), e));
                 std::process::exit(1);
             }
         }
     } else {
-        // Minimal initialization for dry-run or help operations
-        match initialize_system(&config).await {
-            Ok(shutdown) => Some(shutdown),
-            Err(e) => {
-                eprintln!("{} {}", "❌ Initialization failed:".bright_red().bold(), e);
-                std::process::exit(1);
-            }
+        // Minimal initialization for dry-run or help operations - no background services needed
+        if config.debug {
+            log(LogTag::Positions, "INFO", "🧪 Dry-run mode: skipping background service initialization");
         }
+        (None, Vec::new())
     };
 
     // Execute requested operation
@@ -346,25 +339,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("{} {}", "❌ Operation failed:".bright_red().bold(), e);
+            log(LogTag::Positions, "ERROR", &format!("{} {}", "❌ Operation failed:".bright_red().bold(), e));
             std::process::exit(1);
         }
     }
 
     // Allow background tasks time to complete before shutdown
-    if needs_service {
+    if needs_service && !task_handles.is_empty() {
         if config.debug {
             log(LogTag::Positions, "INFO", "⏳ Allowing background tasks to complete...");
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
         
-        // Signal shutdown to background services
+        // Signal shutdown to background services first
         if let Some(shutdown) = shutdown_handle {
             if config.debug {
                 log(LogTag::Positions, "INFO", "📤 Signaling shutdown to background services...");
             }
             shutdown.notify_waiters();
-            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        
+        // Wait for background tasks to complete with proper timeout
+        if config.debug {
+            log(LogTag::Positions, "INFO", &format!("🔄 Waiting for {} background tasks to shutdown...", task_handles.len()));
+        }
+        
+        let shutdown_timeout = tokio::time::timeout(
+            Duration::from_secs(10), // Increased timeout for proper shutdown
+            async {
+                for (i, handle) in task_handles.into_iter().enumerate() {
+                    if config.debug {
+                        log(LogTag::Positions, "INFO", &format!("🔄 Waiting for task {} to shutdown...", i + 1));
+                    }
+                    if let Err(e) = handle.await {
+                        log(LogTag::Positions, "WARN", &format!("Background task {} failed to shutdown cleanly: {}", i + 1, e));
+                    } else if config.debug {
+                        log(LogTag::Positions, "INFO", &format!("✅ Task {} shutdown completed", i + 1));
+                    }
+                }
+            }
+        ).await;
+        
+        match shutdown_timeout {
+            Ok(_) => {
+                if config.debug {
+                    log(LogTag::Positions, "INFO", "✅ All background tasks shutdown successfully");
+                }
+            }
+            Err(_) => {
+                log(LogTag::Positions, "WARN", "⚠️  Background task shutdown timed out after 10 seconds");
+            }
         }
     }
 
@@ -372,9 +395,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Initialize system components and validate prerequisites
-async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>, String> {
-    println!("{}", "🔧 INITIALIZING POSITIONS MANAGER".bright_blue().bold());
-    println!("{}", "=================================".bright_blue());
+async fn initialize_system(config: &PositionsManagerArgs) -> Result<(Arc<Notify>, Vec<tokio::task::JoinHandle<()>>), String> {
+    log(LogTag::Positions, "INFO", &format!("{}", "🔧 INITIALIZING POSITIONS MANAGER".bright_blue().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "=================================".bright_blue()));
 
     // Initialize file logging system first
     init_file_logging();
@@ -388,7 +411,7 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
         Ok(configs) => {
             validate_configs(&configs).map_err(|e| format!("Invalid configs: {}", e))?;
             if config.debug {
-                println!("✅ Configuration loaded and validated successfully");
+                log(LogTag::Positions, "INFO", "✅ Configuration loaded and validated successfully");
                 log(LogTag::Positions, "INFO", "✅ Configurations validated");
             }
         }
@@ -399,14 +422,14 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
 
     // Check RPC connection
     if config.debug {
-        println!("🌐 Testing RPC connection...");
+        log(LogTag::Positions, "INFO", "🌐 Testing RPC connection...");
     }
     
     let rpc_client = get_rpc_client();
     match rpc_client.get_latest_blockhash().await {
         Ok(_) => {
             if config.debug {
-                println!("✅ RPC connection established");
+                log(LogTag::Positions, "INFO", "✅ RPC connection established");
                 log(LogTag::Positions, "INFO", "✅ RPC connection verified");
             }
         }
@@ -417,14 +440,14 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
 
     // Initialize Price Service
     if config.debug {
-        println!("💰 Initializing Price Service...");
+        log(LogTag::Positions, "INFO", "💰 Initializing Price Service...");
         log(LogTag::Positions, "INFO", "💰 Initializing Price Service...");
     }
     
     match initialize_price_service().await {
         Ok(_) => {
             if config.debug {
-                println!("✅ Price Service initialized successfully");
+                log(LogTag::Positions, "INFO", "✅ Price Service initialized successfully");
                 log(LogTag::Positions, "INFO", "✅ Price Service initialized successfully");
             }
         }
@@ -435,14 +458,14 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
 
     // Initialize DexScreener API
     if config.debug {
-        println!("🌐 Initializing DexScreener API...");
+        log(LogTag::Positions, "INFO", "🌐 Initializing DexScreener API...");
         log(LogTag::Positions, "INFO", "🌐 Initializing DexScreener API...");
     }
     
     match init_dexscreener_api().await {
         Ok(_) => {
             if config.debug {
-                println!("✅ DexScreener API initialized successfully");
+                log(LogTag::Positions, "INFO", "✅ DexScreener API initialized successfully");
                 log(LogTag::Positions, "INFO", "✅ DexScreener API initialized successfully");
             }
         }
@@ -453,11 +476,12 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
 
     // Create shutdown notification for services
     let shutdown = Arc::new(Notify::new());
+    let mut task_handles = Vec::new();
 
     // Start PositionsManager service if not already running
     if get_positions_handle().is_none() {
         if config.debug {
-            println!("� Starting PositionsManager service...");
+            log(LogTag::Positions, "INFO", "🚀 Starting PositionsManager service...");
             log(LogTag::Positions, "INFO", "🚀 Initializing PositionsManager service...");
         }
         
@@ -478,7 +502,7 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
 
         // Start TransactionManager background service (CRITICAL for verification)
         if config.debug {
-            println!("⚡ Starting TransactionManager service...");
+            log(LogTag::Positions, "INFO", "⚡ Starting TransactionManager service...");
             log(LogTag::Positions, "INFO", "⚡ Initializing TransactionManager service...");
         }
         
@@ -493,13 +517,17 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
             }
         });
 
+        // Store handles for proper shutdown
+        task_handles.push(positions_manager_handle);
+        task_handles.push(transaction_manager_handle);
+
         // Give the service time to initialize
         tokio::time::sleep(Duration::from_millis(500)).await;
         
         // Verify the service is available and responding
         if let Some(handle) = get_positions_handle() {
             if config.debug {
-                println!("✅ PositionsManager service started successfully");
+                log(LogTag::Positions, "INFO", "✅ PositionsManager service started successfully");
                 log(LogTag::Positions, "INFO", "✅ PositionsManager service initialized and handle available");
             }
             
@@ -507,7 +535,7 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
             match tokio::time::timeout(Duration::from_secs(2), handle.get_open_positions_count()).await {
                 Ok(_count) => {
                     if config.debug {
-                        println!("✅ PositionsManager service responding to requests");
+                        log(LogTag::Positions, "INFO", "✅ PositionsManager service responding to requests");
                         log(LogTag::Positions, "INFO", "✅ PositionsManager service responding to requests");
                     }
                 }
@@ -520,26 +548,20 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<Arc<Notify>,
         }
 
         // Keep the services running for the duration of the tool
-        // Store handles for proper cleanup
-        tokio::task::spawn(async move {
-            positions_manager_handle.await.ok();
-        });
-        tokio::task::spawn(async move {
-            transaction_manager_handle.await.ok();
-        });
+        // No need to spawn tasks here since we already stored the handles
         
     } else {
         if config.debug {
-            println!("✅ PositionsManager service already available");
+            log(LogTag::Positions, "INFO", "✅ PositionsManager service already available");
             log(LogTag::Positions, "INFO", "✅ PositionsManager service already available");
         }
     }
 
-    println!("✅ System initialization complete\n");
+    log(LogTag::Positions, "INFO", "✅ System initialization complete\n");
     if config.debug {
         log(LogTag::Positions, "INFO", "✅ Full system initialization completed successfully");
     }
-    Ok(shutdown)
+    Ok((shutdown, task_handles))
 }
 
 /// Execute the requested operation based on configuration
@@ -551,7 +573,7 @@ async fn execute_operation(config: &PositionsManagerArgs) -> Result<(), String> 
 
     if config.list_closed || config.list_all {
         if config.list_all {
-            println!(); // Add spacing between open and closed listings
+            log(LogTag::Positions, "INFO", ""); // Add spacing between open and closed listings
         }
         list_closed_positions(config).await?;
     }
@@ -602,25 +624,25 @@ async fn execute_operation(config: &PositionsManagerArgs) -> Result<(), String> 
 
 /// List all open positions with detailed information
 async fn list_open_positions(config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", "📈 OPEN POSITIONS".bright_green().bold());
-    println!("{}", "================".bright_green());
+    log(LogTag::Positions, "INFO", &format!("{}", "📈 OPEN POSITIONS".bright_green().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "================".bright_green()));
 
     if get_positions_handle().is_none() {
-        println!("⚠️  PositionsManager service not available. Start the main bot first to view actual positions.");
+        log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available. Start the main bot first to view actual positions.");
         return Ok(());
     }
 
     let open_positions = get_open_positions().await;
     
     if open_positions.is_empty() {
-        println!("ℹ️  No open positions found");
+        log(LogTag::Positions, "INFO", "ℹ️  No open positions found");
         return Ok(());
     }
 
-    println!("Found {} open position(s):\n", open_positions.len());
+    log(LogTag::Positions, "INFO", &format!("Found {} open position(s):\n", open_positions.len()));
 
     // Table header
-    println!("{:<12} {:<10} {:<12} {:<12} {:<10} {:<15} {:<10}",
+    log(LogTag::Positions, "INFO", &format!("{:<12} {:<10} {:<12} {:<12} {:<10} {:<15} {:<10}",
         "SYMBOL".bright_white().bold(),
         "MINT".bright_white().bold(),
         "ENTRY_PRICE".bright_white().bold(),
@@ -628,8 +650,8 @@ async fn list_open_positions(config: &PositionsManagerArgs) -> Result<(), String
         "P&L_SOL".bright_white().bold(),
         "P&L_%".bright_white().bold(),
         "STATUS".bright_white().bold()
-    );
-    println!("{}", "─".repeat(100).bright_black());
+    ));
+    log(LogTag::Positions, "INFO", &format!("{}", "─".repeat(100).bright_black()));
 
     for position in open_positions {
         display_position_row(&position, config).await;
@@ -640,25 +662,25 @@ async fn list_open_positions(config: &PositionsManagerArgs) -> Result<(), String
 
 /// List all closed positions with final P&L
 async fn list_closed_positions(config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", "📊 CLOSED POSITIONS".bright_yellow().bold());
-    println!("{}", "==================".bright_yellow());
+    log(LogTag::Positions, "INFO", &format!("{}", "📊 CLOSED POSITIONS".bright_yellow().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "==================".bright_yellow()));
 
     if get_positions_handle().is_none() {
-        println!("⚠️  PositionsManager service not available. Start the main bot first to view actual positions.");
+        log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available. Start the main bot first to view actual positions.");
         return Ok(());
     }
 
     let closed_positions = get_closed_positions().await;
     
     if closed_positions.is_empty() {
-        println!("ℹ️  No closed positions found");
+        log(LogTag::Positions, "INFO", "ℹ️  No closed positions found");
         return Ok(());
     }
 
-    println!("Found {} closed position(s):\n", closed_positions.len());
+    log(LogTag::Positions, "INFO", &format!("Found {} closed position(s):\n", closed_positions.len()));
 
     // Table header
-    println!("{:<12} {:<10} {:<12} {:<12} {:<12} {:<10} {:<15} {:<10}",
+    log(LogTag::Positions, "INFO", &format!("{:<12} {:<10} {:<12} {:<12} {:<12} {:<10} {:<15} {:<10}",
         "SYMBOL".bright_white().bold(),
         "MINT".bright_white().bold(),
         "ENTRY_PRICE".bright_white().bold(),
@@ -667,8 +689,8 @@ async fn list_closed_positions(config: &PositionsManagerArgs) -> Result<(), Stri
         "P&L_SOL".bright_white().bold(),
         "P&L_%".bright_white().bold(),
         "DURATION".bright_white().bold()
-    );
-    println!("{}", "─".repeat(120).bright_black());
+    ));
+    log(LogTag::Positions, "INFO", &format!("{}", "─".repeat(120).bright_black()));
 
     for position in closed_positions {
         display_closed_position_row(&position, config).await;
@@ -703,7 +725,7 @@ async fn display_position_row(position: &Position, config: &PositionsManagerArgs
         "PENDING".bright_yellow()
     };
 
-    println!("{:<12} {:<10} {:<12.8} {:<12.6} {:<10} {:<15} {:<10}",
+    log(LogTag::Positions, "INFO", &format!("{:<12} {:<10} {:<12.8} {:<12.6} {:<10} {:<15} {:<10}",
         position.symbol,
         mint_short,
         entry_price,
@@ -711,7 +733,7 @@ async fn display_position_row(position: &Position, config: &PositionsManagerArgs
         pnl_sol_colored,
         pnl_percent_colored,
         status
-    );
+    ));
 }
 
 /// Display a single closed position row in the table
@@ -745,7 +767,7 @@ async fn display_closed_position_row(position: &Position, config: &PositionsMana
         "N/A".to_string()
     };
 
-    println!("{:<12} {:<10} {:<12.8} {:<12.8} {:<12.6} {:<10} {:<15} {:<10}",
+    log(LogTag::Positions, "INFO", &format!("{:<12} {:<10} {:<12.8} {:<12.8} {:<12.6} {:<10} {:<15} {:<10}",
         position.symbol,
         mint_short,
         entry_price,
@@ -754,13 +776,13 @@ async fn display_closed_position_row(position: &Position, config: &PositionsMana
         pnl_sol_colored,
         pnl_percent_colored,
         duration
-    );
+    ));
 }
 
 /// Show detailed status for a specific position
 async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", format!("🔍 POSITION STATUS: {}", get_mint_prefix(mint)).bright_cyan().bold());
-    println!("{}", "=".repeat(50).bright_cyan());
+    log(LogTag::Positions, "INFO", &format!("{}", format!("🔍 POSITION STATUS: {}", get_mint_prefix(mint)).bright_cyan().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "=".repeat(50).bright_cyan()));
 
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("Fetching current price for {}", mint));
@@ -780,11 +802,11 @@ async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Resu
         
         if let Some(position) = open_position {
             // Show open position details
-            println!("✅ {}", "OPEN POSITION FOUND".bright_green().bold());
-            println!("   Mint: {}", mint);
-            println!("   Symbol: {}", position.symbol.bright_yellow());
-            println!("   Entry Price: ${:.12} SOL", position.entry_price);
-            println!("   Current Price: ${:.12} SOL", price);
+            log(LogTag::Positions, "INFO", &format!("✅ {}", "OPEN POSITION FOUND".bright_green().bold()));
+            log(LogTag::Positions, "INFO", &format!("   Mint: {}", mint));
+            log(LogTag::Positions, "INFO", &format!("   Symbol: {}", position.symbol.bright_yellow()));
+            log(LogTag::Positions, "INFO", &format!("   Entry Price: ${:.12} SOL", position.entry_price));
+            log(LogTag::Positions, "INFO", &format!("   Current Price: ${:.12} SOL", price));
             
             let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));
             let pnl_color = if pnl_percent > 0.0 { 
@@ -795,15 +817,15 @@ async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Resu
                 format!("⚪ P&L: {:.6} SOL ({:+.2}%)", pnl_sol, pnl_percent).white()
             };
             
-            println!("   {}", pnl_color);
-            println!("   Position Size: {:.6} SOL", position.entry_size_sol);
-            println!("   Entry Time: {}", position.entry_time.format("%Y-%m-%d %H:%M:%S UTC"));
+            log(LogTag::Positions, "INFO", &format!("   {}", pnl_color));
+            log(LogTag::Positions, "INFO", &format!("   Position Size: {:.6} SOL", position.entry_size_sol));
+            log(LogTag::Positions, "INFO", &format!("   Entry Time: {}", position.entry_time.format("%Y-%m-%d %H:%M:%S UTC")));
             
             if let Some(sig) = &position.entry_transaction_signature {
-                println!("   Entry TX: {}", get_signature_prefix(sig));
+                log(LogTag::Positions, "INFO", &format!("   Entry TX: {}", get_signature_prefix(sig)));
                 
                 // TODO: Check transaction verification status
-                println!("   📋 Entry transaction recorded");
+                log(LogTag::Positions, "INFO", "   📋 Entry transaction recorded");
             }
         } else {
             // Check closed positions
@@ -811,13 +833,13 @@ async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Resu
             let closed_position = closed_positions.iter().find(|pos| pos.mint == mint);
             
             if let Some(position) = closed_position {
-                println!("📊 {}", "CLOSED POSITION FOUND".bright_blue().bold());
-                println!("   Mint: {}", mint);
-                println!("   Symbol: {}", position.symbol.bright_yellow());
-                println!("   Entry Price: ${:.12} SOL", position.entry_price);
+                log(LogTag::Positions, "INFO", &format!("📊 {}", "CLOSED POSITION FOUND".bright_blue().bold()));
+                log(LogTag::Positions, "INFO", &format!("   Mint: {}", mint));
+                log(LogTag::Positions, "INFO", &format!("   Symbol: {}", position.symbol.bright_yellow()));
+                log(LogTag::Positions, "INFO", &format!("   Entry Price: ${:.12} SOL", position.entry_price));
                 
                 if let Some(exit_price) = position.exit_price {
-                    println!("   Exit Price: ${:.12} SOL", exit_price);
+                    log(LogTag::Positions, "INFO", &format!("   Exit Price: ${:.12} SOL", exit_price));
                     
                     let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
                     let pnl_color = if pnl_percent > 0.0 { 
@@ -828,37 +850,37 @@ async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Resu
                         format!("⚪ Final P&L: {:.6} SOL ({:+.2}%)", pnl_sol, pnl_percent).white()
                     };
                     
-                    println!("   {}", pnl_color);
+                    log(LogTag::Positions, "INFO", &format!("   {}", pnl_color));
                 }
                 
-                println!("   Current Market Price: ${:.12} SOL", price);
-                println!("   Position Size: {:.6} SOL", position.entry_size_sol);
-                println!("   Entry Time: {}", position.entry_time.format("%Y-%m-%d %H:%M:%S UTC"));
+                log(LogTag::Positions, "INFO", &format!("   Current Market Price: ${:.12} SOL", price));
+                log(LogTag::Positions, "INFO", &format!("   Position Size: {:.6} SOL", position.entry_size_sol));
+                log(LogTag::Positions, "INFO", &format!("   Entry Time: {}", position.entry_time.format("%Y-%m-%d %H:%M:%S UTC")));
                 
                 if let Some(exit_time) = position.exit_time {
-                    println!("   Exit Time: {}", exit_time.format("%Y-%m-%d %H:%M:%S UTC"));
+                    log(LogTag::Positions, "INFO", &format!("   Exit Time: {}", exit_time.format("%Y-%m-%d %H:%M:%S UTC")));
                 }
                 
                 if let Some(sig) = &position.entry_transaction_signature {
-                    println!("   Entry TX: {}", get_signature_prefix(sig));
+                    log(LogTag::Positions, "INFO", &format!("   Entry TX: {}", get_signature_prefix(sig)));
                 }
                 
                 if let Some(sig) = &position.exit_transaction_signature {
-                    println!("   Exit TX: {}", get_signature_prefix(sig));
+                    log(LogTag::Positions, "INFO", &format!("   Exit TX: {}", get_signature_prefix(sig)));
                 }
             } else {
-                println!("ℹ️  {}", "NO POSITION FOUND".bright_yellow().bold());
-                println!("   Mint: {}", mint);
-                println!("   Current Market Price: ${:.12} SOL", price);
-                println!("   Status: No open or closed positions for this token");
-                println!("   💡 Use --action open --size <SOL> to open a position");
+                log(LogTag::Positions, "INFO", &format!("ℹ️  {}", "NO POSITION FOUND".bright_yellow().bold()));
+                log(LogTag::Positions, "INFO", &format!("   Mint: {}", mint));
+                log(LogTag::Positions, "INFO", &format!("   Current Market Price: ${:.12} SOL", price));
+                log(LogTag::Positions, "INFO", "   Status: No open or closed positions for this token");
+                log(LogTag::Positions, "INFO", "   💡 Use --action open --size <SOL> to open a position");
             }
         }
     } else {
-        println!("❌ {}", "PRICE NOT AVAILABLE".bright_red().bold());
-        println!("   Mint: {}", mint);
-        println!("   Status: Unable to fetch current price");
-        println!("   💡 Price service may be initializing or token may not be tradeable");
+        log(LogTag::Positions, "INFO", &format!("❌ {}", "PRICE NOT AVAILABLE".bright_red().bold()));
+        log(LogTag::Positions, "INFO", &format!("   Mint: {}", mint));
+        log(LogTag::Positions, "INFO", "   Status: Unable to fetch current price");
+        log(LogTag::Positions, "INFO", "   💡 Price service may be initializing or token may not be tradeable");
         
         if config.debug {
             log(LogTag::Positions, "WARN", &format!("Failed to get price for {}", mint));
@@ -874,19 +896,19 @@ async fn show_position_status(mint: &str, config: &PositionsManagerArgs) -> Resu
 
 /// Show positions summary statistics
 async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", "📊 POSITIONS SUMMARY".bright_magenta().bold());
-    println!("{}", "===================".bright_magenta());
+    log(LogTag::Positions, "INFO", &format!("{}", "📊 POSITIONS SUMMARY".bright_magenta().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "===================".bright_magenta()));
 
     if get_positions_handle().is_none() {
-        println!("⚠️  PositionsManager service not available. Start the main bot first to view actual summary.");
+        log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available. Start the main bot first to view actual summary.");
         return Ok(());
     }
 
     let open_positions = get_open_positions().await;
     let closed_positions = get_closed_positions().await;
 
-    println!("📈 Open Positions: {}", open_positions.len().to_string().bright_green());
-    println!("📊 Closed Positions: {}", closed_positions.len().to_string().bright_yellow());
+    log(LogTag::Positions, "INFO", &format!("📈 Open Positions: {}", open_positions.len().to_string().bright_green()));
+    log(LogTag::Positions, "INFO", &format!("📊 Closed Positions: {}", closed_positions.len().to_string().bright_yellow()));
 
     // Calculate total invested
     let total_invested: f64 = open_positions.iter()
@@ -894,7 +916,7 @@ async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), Str
         .map(|p| p.entry_size_sol)
         .sum();
 
-    println!("💰 Total Invested: {:.6} SOL", total_invested.to_string().bright_cyan());
+    log(LogTag::Positions, "INFO", &format!("💰 Total Invested: {:.6} SOL", total_invested.to_string().bright_cyan()));
 
     // Calculate total P&L for closed positions
     let total_realized_pnl: f64 = closed_positions.iter()
@@ -907,41 +929,41 @@ async fn show_positions_summary(config: &PositionsManagerArgs) -> Result<(), Str
         format!("{:+.6} SOL", total_realized_pnl).bright_red()
     };
 
-    println!("💸 Realized P&L: {}", total_realized_pnl_colored);
+    log(LogTag::Positions, "INFO", &format!("💸 Realized P&L: {}", total_realized_pnl_colored));
 
     // TODO: Calculate unrealized P&L for open positions
-    println!("📊 Unrealized P&L: TBD (requires current prices)");
+    log(LogTag::Positions, "INFO", "📊 Unrealized P&L: TBD (requires current prices)");
 
     Ok(())
 }
 
 /// Show verbose diagnostics for all positions (open + closed + closing)
 async fn show_positions_diagnostics(config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", "🧪 POSITIONS DIAGNOSTICS".bright_white().bold());
-    println!("{}", "======================".bright_white());
+    log(LogTag::Positions, "INFO", &format!("{}", "🧪 POSITIONS DIAGNOSTICS".bright_white().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "======================".bright_white()));
 
     if get_positions_handle().is_none() {
-        println!("⚠️  PositionsManager service not available.");
+        log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available.");
         return Ok(());
     }
 
     let open_positions = get_open_positions().await;
     let closed_positions = get_closed_positions().await;
 
-    println!("Open/Closing: {} | Closed: {}", open_positions.len(), closed_positions.len());
-    println!();
+    log(LogTag::Positions, "INFO", &format!("Open/Closing: {} | Closed: {}", open_positions.len(), closed_positions.len()));
+    log(LogTag::Positions, "INFO", "");
 
     for p in open_positions.iter().chain(closed_positions.iter()) {
-        println!("{} {}", if p.exit_price.is_some() {"📊"} else {"📈"}, p.symbol.bold());
-        println!("  Mint: {}", get_mint_prefix(&p.mint));
-        println!("  Entry: {:.10} SOL @ {}", p.entry_price, p.entry_time.format("%H:%M:%S"));
-        if let Some(exit_p) = p.exit_price { println!("  Exit:  {:.10} SOL", exit_p); }
-        println!("  Size: {:.6} SOL", p.entry_size_sol);
-        println!("  Tx Entry: {:?} (verified={})", p.entry_transaction_signature.as_ref().map(|s| get_signature_prefix(s)), p.transaction_entry_verified);
-        if p.exit_transaction_signature.is_some() { println!("  Tx Exit:  {:?} (verified={})", p.exit_transaction_signature.as_ref().map(|s| get_signature_prefix(s)), p.transaction_exit_verified); }
-        println!("  High/Low: {:.10} / {:.10}", p.price_highest, p.price_lowest);
-        if p.phantom_remove { println!("  Flag: PHANTOM_REMOVE"); }
-        println!();
+        log(LogTag::Positions, "INFO", &format!("{} {}", if p.exit_price.is_some() {"📊"} else {"📈"}, p.symbol.bold()));
+        log(LogTag::Positions, "INFO", &format!("  Mint: {}", get_mint_prefix(&p.mint)));
+        log(LogTag::Positions, "INFO", &format!("  Entry: {:.10} SOL @ {}", p.entry_price, p.entry_time.format("%H:%M:%S")));
+        if let Some(exit_p) = p.exit_price { log(LogTag::Positions, "INFO", &format!("  Exit:  {:.10} SOL", exit_p)); }
+        log(LogTag::Positions, "INFO", &format!("  Size: {:.6} SOL", p.entry_size_sol));
+        log(LogTag::Positions, "INFO", &format!("  Tx Entry: {:?} (verified={})", p.entry_transaction_signature.as_ref().map(|s| get_signature_prefix(s)), p.transaction_entry_verified));
+        if p.exit_transaction_signature.is_some() { log(LogTag::Positions, "INFO", &format!("  Tx Exit:  {:?} (verified={})", p.exit_transaction_signature.as_ref().map(|s| get_signature_prefix(s)), p.transaction_exit_verified)); }
+        log(LogTag::Positions, "INFO", &format!("  High/Low: {:.10} / {:.10}", p.price_highest, p.price_lowest));
+        if p.phantom_remove { log(LogTag::Positions, "INFO", "  Flag: PHANTOM_REMOVE"); }
+        log(LogTag::Positions, "INFO", "");
     }
 
     Ok(())
@@ -949,15 +971,15 @@ async fn show_positions_diagnostics(config: &PositionsManagerArgs) -> Result<(),
 
 /// Force reverification of all unverified transactions
 async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", "🔄 FORCE REVERIFY TRANSACTIONS".bright_yellow().bold());
-    println!("{}", "=============================".bright_yellow());
+    log(LogTag::Positions, "INFO", &format!("{}", "🔄 FORCE REVERIFY TRANSACTIONS".bright_yellow().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "=============================".bright_yellow()));
 
     if get_positions_handle().is_none() {
-        println!("⚠️  PositionsManager service not available.");
+        log(LogTag::Positions, "WARN", "⚠️  PositionsManager service not available.");
         return Ok(());
     }
 
-    println!("⏳ Requesting forced reverification of all unverified transactions...");
+    log(LogTag::Positions, "INFO", "⏳ Requesting forced reverification of all unverified transactions...");
     
     if config.debug || config.debug_transactions {
         log(LogTag::Positions, "DEBUG", "🔄 Triggering force reverification via positions handle");
@@ -965,8 +987,8 @@ async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), S
 
     match get_positions_handle().unwrap().force_reverify_all().await {
         count if count > 0 => {
-            println!("✅ {} unverified transactions re-queued for verification", count);
-            println!("   Verification will occur in the background every 10 seconds");
+            log(LogTag::Positions, "INFO", &format!("✅ {} unverified transactions re-queued for verification", count));
+            log(LogTag::Positions, "INFO", "   Verification will occur in the background every 10 seconds");
             
             if config.debug || config.debug_transactions {
                 log(LogTag::Positions, "INFO", &format!(
@@ -975,10 +997,10 @@ async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), S
             }
         }
         0 => {
-            println!("ℹ️  No unverified transactions found - all positions are already verified");
+            log(LogTag::Positions, "INFO", "ℹ️  No unverified transactions found - all positions are already verified");
         }
         _ => {
-            println!("❌ Unexpected result from reverification command");
+            log(LogTag::Positions, "WARN", "❌ Unexpected result from reverification command");
         }
     }
 
@@ -987,13 +1009,13 @@ async fn force_reverify_positions(config: &PositionsManagerArgs) -> Result<(), S
 
 /// Open a new position for the specified token
 async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", format!("📈 OPENING POSITION: {}", get_mint_prefix(mint)).bright_green().bold());
-    println!("{}", "=".repeat(50).bright_green());
+    log(LogTag::Positions, "INFO", &format!("{}", format!("📈 OPENING POSITION: {}", get_mint_prefix(mint)).bright_green().bold()));
+    log(LogTag::Positions, "INFO", &format!("{}", "=".repeat(50).bright_green()));
 
     if config.dry_run {
-        println!("🧪 DRY RUN MODE: Position would be opened");
-        println!("   Mint: {}", mint);
-        println!("   Size: {:.6} SOL", size);
+        log(LogTag::Positions, "INFO", "🧪 DRY RUN MODE: Position would be opened");
+        log(LogTag::Positions, "INFO", &format!("   Mint: {}", mint));
+        log(LogTag::Positions, "INFO", &format!("   Size: {:.6} SOL", size));
         return Ok(());
     }
 
@@ -1005,7 +1027,7 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
     let current_price = get_token_price_blocking_safe(mint).await
         .ok_or_else(|| format!("Failed to get current price for {}", mint))?;
     
-    println!("✅ Current Price: ${:.12} SOL", current_price);
+    log(LogTag::Positions, "INFO", &format!("✅ Current Price: ${:.12} SOL", current_price));
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("✅ Got price: ${:.12} SOL", current_price));
@@ -1019,7 +1041,7 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
     let token = get_token_from_db(mint).await
         .ok_or_else(|| format!("Token not found in database: {}", mint))?;
     
-    println!("✅ Token Found: {} ({})", token.symbol, token.name);
+    log(LogTag::Positions, "INFO", &format!("✅ Token Found: {} ({})", token.symbol, token.name));
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("✅ Token: {} - {}", token.symbol, token.name));
@@ -1032,7 +1054,7 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
     }
 
     // Step 4: Open the position
-    println!("🚀 Opening position...");
+    log(LogTag::Positions, "INFO", "🚀 Opening position...");
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("📈 Opening position for {} at ${:.12} SOL with size {:.6} SOL", token.symbol, current_price, size));
@@ -1043,21 +1065,21 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
     
     match open_position_global(token.clone(), current_price, percent_change, size).await {
         Ok((position_id, transaction_sig)) => {
-            println!("✅ Position opened successfully!");
-            println!("   Position ID: {}", position_id);
-            println!("   Symbol: {}", token.symbol);
-            println!("   Entry Price: ${:.12} SOL", current_price);
-            println!("   Size: {:.6} SOL", size);
+            log(LogTag::Positions, "INFO", "✅ Position opened successfully!");
+            log(LogTag::Positions, "INFO", &format!("   Position ID: {}", position_id));
+            log(LogTag::Positions, "INFO", &format!("   Symbol: {}", token.symbol));
+            log(LogTag::Positions, "INFO", &format!("   Entry Price: ${:.12} SOL", current_price));
+            log(LogTag::Positions, "INFO", &format!("   Size: {:.6} SOL", size));
             
             if !transaction_sig.is_empty() {
-                println!("   Transaction: {}", get_signature_prefix(&transaction_sig));
+                log(LogTag::Positions, "INFO", &format!("   Transaction: {}", get_signature_prefix(&transaction_sig)));
                 
                 if config.debug {
                     log(LogTag::Positions, "INFO", &format!("📄 Transaction signature: {}", transaction_sig));
                 }
                 
                 // Step 5: Wait for transaction verification (CRITICAL)
-                println!("⏳ Waiting for transaction verification...");
+                log(LogTag::Positions, "INFO", "⏳ Waiting for transaction verification...");
                 
                 if config.debug {
                     log(LogTag::Positions, "INFO", "⏳ Waiting for transaction to be confirmed on-chain");
@@ -1075,20 +1097,20 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
                     match get_transaction(&transaction_sig).await {
                         Ok(Some(transaction)) => {
                             if transaction.success {
-                                println!("✅ Transaction verified successfully!");
+                                log(LogTag::Positions, "INFO", "✅ Transaction verified successfully!");
                                 verified = true;
                                 if config.debug {
                                     log(LogTag::Positions, "INFO", &format!("✅ Transaction {} verified successfully", get_signature_prefix(&transaction_sig)));
                                 }
                             } else {
-                                println!("❌ Transaction found but marked as failed!");
+                                log(LogTag::Positions, "ERROR", "❌ Transaction found but marked as failed!");
                                 log(LogTag::Positions, "ERROR", &format!("❌ Transaction {} found but marked as failed", get_signature_prefix(&transaction_sig)));
                                 return Err("Transaction failed on-chain - position may be phantom".to_string());
                             }
                         }
                         Ok(None) => {
                             if (config.debug || config.debug_transactions) && verification_attempts % 10 == 0 {
-                                println!("⏳ Still waiting for transaction... (attempt {}/{})", verification_attempts, max_attempts);
+                                log(LogTag::Positions, "INFO", &format!("⏳ Still waiting for transaction... (attempt {}/{})", verification_attempts, max_attempts));
                             }
                         }
                         Err(e) => {
@@ -1100,7 +1122,7 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
                 }
                 
                 if !verified {
-                    println!("⚠️  Transaction verification timed out after {} seconds", config.verify_timeout_secs);
+                    log(LogTag::Positions, "WARN", &format!("⚠️  Transaction verification timed out after {} seconds", config.verify_timeout_secs));
                     log(LogTag::Positions, "WARNING", &format!("⚠️  Transaction {} verification timed out", get_signature_prefix(&transaction_sig)));
                     return Err("Transaction verification timed out - position may be phantom".to_string());
                 }
@@ -1113,7 +1135,7 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
             Ok(())
         }
         Err(e) => {
-            println!("❌ Failed to open position: {}", e);
+            log(LogTag::Positions, "ERROR", &format!("❌ Failed to open position: {}", e));
             
             if config.debug {
                 log(LogTag::Positions, "ERROR", &format!("❌ Position opening failed: {}", e));
@@ -1126,12 +1148,12 @@ async fn open_position(mint: &str, size: f64, config: &PositionsManagerArgs) -> 
 
 /// Close an existing position for the specified token
 async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", format!("📉 CLOSING POSITION: {}", get_mint_prefix(mint)).bright_red().bold());
-    println!("{}", "=".repeat(50).bright_red());
+    log(LogTag::Positions, "INFO", &format!("📉 CLOSING POSITION: {}", get_mint_prefix(mint)));
+    log(LogTag::Positions, "INFO", &"=".repeat(50));
 
     if config.dry_run {
-        println!("🧪 DRY RUN MODE: Position would be closed");
-        println!("   Mint: {}", mint);
+        log(LogTag::Positions, "INFO", "🧪 DRY RUN MODE: Position would be closed");
+        log(LogTag::Positions, "INFO", &format!("   Mint: {}", mint));
         return Ok(());
     }
 
@@ -1151,7 +1173,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
         .find(|pos| pos.mint == mint)
         .ok_or_else(|| format!("No open position found for token {}", mint))?;
 
-    println!("✅ Position Found: {} ({})", position.symbol, position.name);
+    log(LogTag::Positions, "INFO", &format!("✅ Position Found: {} ({})", position.symbol, position.name));
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("✅ Found position: {} - entry price: ${:.12} SOL", 
@@ -1166,7 +1188,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
     let current_price = get_token_price_blocking_safe(mint).await
         .ok_or_else(|| format!("Failed to get current price for {}", mint))?;
     
-    println!("✅ Current Price: ${:.12} SOL", current_price);
+    log(LogTag::Positions, "INFO", &format!("✅ Current Price: ${:.12} SOL", current_price));
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("✅ Got exit price: ${:.12} SOL", current_price));
@@ -1187,7 +1209,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
         0.0
     };
     
-    println!("📊 Position P&L: {:.2}%", pnl_percentage);
+    log(LogTag::Positions, "INFO", &format!("📊 Position P&L: {:.2}%", pnl_percentage));
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("📊 P&L calculation: entry={:.12}, current={:.12}, pnl={:.2}%", 
@@ -1195,7 +1217,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
     }
 
     // Step 5: Close the position using positions system
-    println!("🚀 Closing position...");
+    log(LogTag::Positions, "INFO", "🚀 Closing position...");
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("📉 Closing position for {} at ${:.12} SOL", 
@@ -1207,22 +1229,22 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
         let exit_time = Utc::now();
         match handle.close_position(mint.to_string(), token, current_price, exit_time).await {
             Ok((position_id, exit_transaction)) => {
-                println!("✅ Position closed successfully!");
-                println!("   Position ID: {}", mint);
-                println!("   Symbol: {}", position.symbol);
-                println!("   Entry Price: ${:.12} SOL", position.entry_price);
-                println!("   Exit Price: ${:.12} SOL", current_price);
-                println!("   P&L: {:.2}%", pnl_percentage);
+                log(LogTag::Positions, "INFO", "✅ Position closed successfully!");
+                log(LogTag::Positions, "INFO", &format!("   Position ID: {}", mint));
+                log(LogTag::Positions, "INFO", &format!("   Symbol: {}", position.symbol));
+                log(LogTag::Positions, "INFO", &format!("   Entry Price: ${:.12} SOL", position.entry_price));
+                log(LogTag::Positions, "INFO", &format!("   Exit Price: ${:.12} SOL", current_price));
+                log(LogTag::Positions, "INFO", &format!("   P&L: {:.2}%", pnl_percentage));
                 
                 if !exit_transaction.is_empty() {
-                    println!("   Transaction: {}", get_signature_prefix(&exit_transaction));
+                    log(LogTag::Positions, "INFO", &format!("   Transaction: {}", get_signature_prefix(&exit_transaction)));
                     
                     if config.debug {
                         log(LogTag::Positions, "INFO", &format!("📄 Exit transaction signature: {}", exit_transaction));
                     }
                     
                     // Step 6: Wait for exit transaction verification (CRITICAL)
-                    println!("⏳ Waiting for exit transaction verification...");
+                    log(LogTag::Positions, "INFO", "⏳ Waiting for exit transaction verification...");
                     
                     if config.debug {
                         log(LogTag::Positions, "INFO", "⏳ Waiting for exit transaction to be confirmed on-chain");
@@ -1240,20 +1262,20 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
                         match get_transaction(&exit_transaction).await {
                             Ok(Some(transaction)) => {
                                 if transaction.success {
-                                    println!("✅ Exit transaction verified successfully!");
+                                    log(LogTag::Positions, "INFO", "✅ Exit transaction verified successfully!");
                                     verified = true;
                                     if config.debug {
                                         log(LogTag::Positions, "INFO", &format!("✅ Exit transaction {} verified successfully", get_signature_prefix(&exit_transaction)));
                                     }
                                 } else {
-                                    println!("❌ Exit transaction found but marked as failed!");
+                                    log(LogTag::Positions, "ERROR", "❌ Exit transaction found but marked as failed!");
                                     log(LogTag::Positions, "ERROR", &format!("❌ Exit transaction {} found but marked as failed", get_signature_prefix(&exit_transaction)));
                                     return Err("Exit transaction failed on-chain".to_string());
                                 }
                             }
                             Ok(None) => {
                                 if (config.debug || config.debug_transactions) && verification_attempts % 10 == 0 {
-                                    println!("⏳ Still waiting for exit transaction... (attempt {}/{})", verification_attempts, max_attempts);
+                                    log(LogTag::Positions, "INFO", &format!("⏳ Still waiting for exit transaction... (attempt {}/{})", verification_attempts, max_attempts));
                                 }
                             }
                             Err(e) => {
@@ -1265,7 +1287,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
                     }
                     
                     if !verified {
-                        println!("⚠️  Exit transaction verification timed out after {} seconds", config.verify_timeout_secs);
+                        log(LogTag::Positions, "WARN", &format!("⚠️  Exit transaction verification timed out after {} seconds", config.verify_timeout_secs));
                         log(LogTag::Positions, "WARNING", &format!("⚠️  Exit transaction {} verification timed out", get_signature_prefix(&exit_transaction)));
                         return Err("Exit transaction verification timed out".to_string());
                     }
@@ -1279,7 +1301,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
                 Ok(())
             }
             Err(e) => {
-                println!("❌ Failed to close position: {}", e);
+                log(LogTag::Positions, "ERROR", &format!("❌ Failed to close position: {}", e));
                 
                 if config.debug {
                     log(LogTag::Positions, "ERROR", &format!("❌ Position closing failed: {}", e));
@@ -1290,7 +1312,7 @@ async fn close_position(mint: &str, config: &PositionsManagerArgs) -> Result<(),
         }
     } else {
         let error_msg = "PositionsManager service not available";
-        println!("❌ {}", error_msg);
+        log(LogTag::Positions, "ERROR", &format!("❌ {}", error_msg));
         
         if config.debug {
             log(LogTag::Positions, "ERROR", error_msg);
@@ -1338,8 +1360,8 @@ async fn get_token_info_placeholder(mint: &str) -> Result<(String, String), Stri
 
 /// Run continuous test loop for opening and closing positions with verification
 async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), String> {
-    println!("{}", "🔁 CONTINUOUS POSITION TESTING LOOP".bright_purple().bold());
-    println!("{}", "=".repeat(50).bright_purple());
+    log(LogTag::Positions, "INFO", "🔁 CONTINUOUS POSITION TESTING LOOP");
+    log(LogTag::Positions, "INFO", &"=".repeat(50));
     
     // Test configuration
     let test_sol_amount = 0.005; // Fixed 0.005 SOL for all tests
@@ -1347,12 +1369,12 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
     let test_mint = config.target_mint.as_ref().unwrap_or(&default_mint);
     let max_iterations = config.test_iterations.unwrap_or(usize::MAX); // Default: infinite
     
-    println!("🎯 Test Configuration:");
-    println!("   Token Mint: {}", get_mint_prefix(test_mint));
-    println!("   Position Size: {:.6} SOL", test_sol_amount);
-    println!("   Max Iterations: {}", if max_iterations == usize::MAX { "infinite".to_string() } else { max_iterations.to_string() });
-    println!("   Debug Mode: {}", config.debug);
-    println!();
+    log(LogTag::Positions, "INFO", "🎯 Test Configuration:");
+    log(LogTag::Positions, "INFO", &format!("   Token Mint: {}", get_mint_prefix(test_mint)));
+    log(LogTag::Positions, "INFO", &format!("   Position Size: {:.6} SOL", test_sol_amount));
+    log(LogTag::Positions, "INFO", &format!("   Max Iterations: {}", if max_iterations == usize::MAX { "infinite".to_string() } else { max_iterations.to_string() }));
+    log(LogTag::Positions, "INFO", &format!("   Debug Mode: {}", config.debug));
+    log(LogTag::Positions, "INFO", "");
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("🔁 Starting continuous test loop: mint={}, size={:.6}, max_iter={}", 
@@ -1367,12 +1389,12 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
         iteration += 1;
         
         if iteration > max_iterations {
-            println!("✅ Test loop completed: reached maximum iterations");
+            log(LogTag::Positions, "INFO", "✅ Test loop completed: reached maximum iterations");
             break;
         }
         
-        println!("{}", format!("🔄 ITERATION {} / {}", iteration, if max_iterations == usize::MAX { "∞".to_string() } else { max_iterations.to_string() }).bright_cyan().bold());
-        println!("{}", "=".repeat(40).bright_cyan());
+        log(LogTag::Positions, "INFO", &format!("🔄 ITERATION {} / {}", iteration, if max_iterations == usize::MAX { "∞".to_string() } else { max_iterations.to_string() }));
+        log(LogTag::Positions, "INFO", &"=".repeat(40));
         
         let start_time = std::time::Instant::now();
         
@@ -1381,9 +1403,9 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
         let has_open_position = existing_positions.iter().any(|pos| pos.mint == *test_mint);
         
         if has_open_position {
-            println!("🔍 Found existing open position, closing first...");
+            log(LogTag::Positions, "INFO", "🔍 Found existing open position, closing first...");
             if let Err(e) = close_position(test_mint, config).await {
-                println!("❌ Failed to close existing position: {}", e);
+                log(LogTag::Positions, "ERROR", &format!("❌ Failed to close existing position: {}", e));
                 failed_cycles += 1;
                 
                 if config.debug {
@@ -1396,22 +1418,22 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
             }
             
             // Wait a bit between close and open
-            println!("⏳ Waiting 3 seconds between close and open...");
+            log(LogTag::Positions, "INFO", "⏳ Waiting 3 seconds between close and open...");
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
         
         // Step 1: Open position with verification
-        println!("📈 PHASE 1: Opening position...");
+        log(LogTag::Positions, "INFO", "📈 PHASE 1: Opening position...");
         match open_position(test_mint, test_sol_amount, config).await {
             Ok(_) => {
-                println!("✅ Position opened and verified successfully!");
+                log(LogTag::Positions, "INFO", "✅ Position opened and verified successfully!");
                 
                 if config.debug {
                     log(LogTag::Positions, "INFO", &format!("✅ Iteration {} - position opened successfully", iteration));
                 }
             }
             Err(e) => {
-                println!("❌ Failed to open position: {}", e);
+                log(LogTag::Positions, "ERROR", &format!("❌ Failed to open position: {}", e));
                 failed_cycles += 1;
                 
                 if config.debug {
@@ -1425,14 +1447,14 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
         }
         
         // Wait between open and close operations
-        println!("⏳ Waiting 10 seconds before closing position...");
+        log(LogTag::Positions, "INFO", "⏳ Waiting 10 seconds before closing position...");
         tokio::time::sleep(Duration::from_secs(10)).await;
         
         // Step 2: Close position with verification
-        println!("📉 PHASE 2: Closing position...");
+        log(LogTag::Positions, "INFO", "📉 PHASE 2: Closing position...");
         match close_position(test_mint, config).await {
             Ok(_) => {
-                println!("✅ Position closed and verified successfully!");
+                log(LogTag::Positions, "INFO", "✅ Position closed and verified successfully!");
                 successful_cycles += 1;
                 
                 if config.debug {
@@ -1440,7 +1462,7 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
                 }
             }
             Err(e) => {
-                println!("❌ Failed to close position: {}", e);
+                log(LogTag::Positions, "ERROR", &format!("❌ Failed to close position: {}", e));
                 failed_cycles += 1;
                 
                 if config.debug {
@@ -1454,27 +1476,27 @@ async fn run_continuous_test_loop(config: &PositionsManagerArgs) -> Result<(), S
         let cycle_duration = start_time.elapsed();
         
         // Print iteration summary
-        println!();
-        println!("{}", "📊 ITERATION SUMMARY".bright_white().bold());
-        println!("   Iteration: {} / {}", iteration, if max_iterations == usize::MAX { "∞".to_string() } else { max_iterations.to_string() });
-        println!("   Duration: {:.2}s", cycle_duration.as_secs_f64());
-        println!("   Successful Cycles: {}", successful_cycles);
-        println!("   Failed Cycles: {}", failed_cycles);
-        println!("   Success Rate: {:.1}%", if iteration > 0 { (successful_cycles as f64 / iteration as f64) * 100.0 } else { 0.0 });
-        println!();
+        log(LogTag::Positions, "INFO", "");
+        log(LogTag::Positions, "INFO", "📊 ITERATION SUMMARY");
+        log(LogTag::Positions, "INFO", &format!("   Iteration: {} / {}", iteration, if max_iterations == usize::MAX { "∞".to_string() } else { max_iterations.to_string() }));
+        log(LogTag::Positions, "INFO", &format!("   Duration: {:.2}s", cycle_duration.as_secs_f64()));
+        log(LogTag::Positions, "INFO", &format!("   Successful Cycles: {}", successful_cycles));
+        log(LogTag::Positions, "INFO", &format!("   Failed Cycles: {}", failed_cycles));
+        log(LogTag::Positions, "INFO", &format!("   Success Rate: {:.1}%", if iteration > 0 { (successful_cycles as f64 / iteration as f64) * 100.0 } else { 0.0 }));
+        log(LogTag::Positions, "INFO", "");
         
         // Wait between iterations
-        println!("⏳ Waiting 15 seconds before next iteration...");
+        log(LogTag::Positions, "INFO", "⏳ Waiting 15 seconds before next iteration...");
         tokio::time::sleep(Duration::from_secs(15)).await;
     }
     
     // Final summary
-    println!("{}", "🎉 FINAL TEST SUMMARY".bright_green().bold());
-    println!("{}", "=".repeat(50).bright_green());
-    println!("   Total Iterations: {}", iteration);
-    println!("   Successful Cycles: {}", successful_cycles);
-    println!("   Failed Cycles: {}", failed_cycles);
-    println!("   Final Success Rate: {:.1}%", if iteration > 0 { (successful_cycles as f64 / iteration as f64) * 100.0 } else { 0.0 });
+    log(LogTag::Positions, "INFO", "🎉 FINAL TEST SUMMARY");
+    log(LogTag::Positions, "INFO", &"=".repeat(50));
+    log(LogTag::Positions, "INFO", &format!("   Total Iterations: {}", iteration));
+    log(LogTag::Positions, "INFO", &format!("   Successful Cycles: {}", successful_cycles));
+    log(LogTag::Positions, "INFO", &format!("   Failed Cycles: {}", failed_cycles));
+    log(LogTag::Positions, "INFO", &format!("   Final Success Rate: {:.1}%", if iteration > 0 { (successful_cycles as f64 / iteration as f64) * 100.0 } else { 0.0 }));
     
     if config.debug {
         log(LogTag::Positions, "INFO", &format!("🎉 Test loop completed: {} iterations, {} successful, {} failed", 
