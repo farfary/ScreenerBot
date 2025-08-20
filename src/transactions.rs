@@ -203,7 +203,7 @@ pub enum TransactionStatus {
     Failed(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TransactionType {
     SwapSolToToken {
         token_mint: String,
@@ -4537,6 +4537,12 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         manager.known_signatures.len()
     ));
 
+    // CRITICAL: Initialize global transaction manager for positions manager integration
+    if let Err(e) = initialize_global_transaction_manager(wallet_address).await {
+        log(LogTag::Transactions, "ERROR", &format!("Failed to initialize global transaction manager: {}", e));
+        return;
+    }
+
     // Position verification and management is now handled by the positions manager service
     log(LogTag::Transactions, "STARTUP", "✅ Transaction service started - positions managed separately");
     
@@ -4733,14 +4739,53 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     let content = fs::read_to_string(&cache_file)
         .map_err(|e| format!("Failed to read cache file: {}", e))?;
     
-    let transaction: Transaction = serde_json::from_str(&content)
+    let mut cached_transaction: Transaction = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse cached transaction: {}", e))?;
     
-    if is_debug_transactions_enabled() {
-        log(LogTag::Transactions, "CACHE_LOADED", &format!("📋 Loaded cached transaction {}: success={}, status={:?}", &signature[..8], transaction.success, transaction.status));
+    // CRITICAL FIX: Cached transactions have calculated fields set to defaults
+    // We need to recalculate analysis for proper usage in convert_to_swap_pnl_info
+    if cached_transaction.transaction_type == TransactionType::Unknown {
+        if is_debug_transactions_enabled() {
+            log(LogTag::Transactions, "RECALC_NEEDED", &format!("🔄 Transaction {} has Unknown type, recalculating analysis", &signature[..8]));
+        }
+        
+        // Create a temporary manager to recalculate the transaction
+        let wallet_address = match load_wallet_address_from_config().await {
+            Ok(addr) => addr,
+            Err(e) => {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "WALLET_ERROR", &format!("❌ Failed to load wallet address for recalc: {}", e));
+                }
+                // Return cached transaction as-is if we can't recalculate
+                return Ok(Some(cached_transaction));
+            },
+        };
+        
+        let mut manager = TransactionsManager::new(wallet_address).await
+            .map_err(|e| format!("Failed to create manager for recalc: {}", e))?;
+        
+        // Recalculate analysis on the cached transaction
+        match manager.recalculate_transaction_analysis(&mut cached_transaction).await {
+            Ok(_) => {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "RECALC_SUCCESS", &format!("✅ Recalculated transaction {}: type={:?}", &signature[..8], cached_transaction.transaction_type));
+                }
+            },
+            Err(e) => {
+                if is_debug_transactions_enabled() {
+                    log(LogTag::Transactions, "RECALC_ERROR", &format!("⚠️ Failed to recalculate transaction {}: {} - returning cached version", &signature[..8], e));
+                }
+                // Continue with cached transaction even if recalculation fails
+            }
+        }
     }
     
-    Ok(Some(transaction))
+    if is_debug_transactions_enabled() {
+        log(LogTag::Transactions, "CACHE_LOADED", &format!("📋 Loaded transaction {}: success={}, status={:?}, type={:?}", 
+            &signature[..8], cached_transaction.success, cached_transaction.status, cached_transaction.transaction_type));
+    }
+    
+    Ok(Some(cached_transaction))
 }
 
 /// Check if transaction is verified/finalized

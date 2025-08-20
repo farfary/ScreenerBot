@@ -2211,11 +2211,12 @@ impl PositionsManager {
                 ));
             }
         } else {
-            position.transaction_entry_verified = false;
+            // Transaction manager not available - this should not happen with proper initialization order
             log(LogTag::Positions, "POSITION_ENTRY_NO_SWAP", &format!(
-                "⚠️ Entry transaction {} has no valid swap analysis for position {}",
+                "⚠️ Entry transaction {} has no valid swap analysis for position {} - TransactionsManager may not be ready",
                 &transaction.signature[..8], position.symbol
             ));
+            // Don't mark as failed - let it retry on next verification tick
         }
     }
 
@@ -2296,11 +2297,23 @@ impl PositionsManager {
         // Access the global transaction manager
         use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
         
+        if !silent {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "🔍 Attempting to access global TransactionsManager for tx {}",
+                &transaction.signature[..8]
+            ));
+        }
+        
         let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
         if let Some(ref manager) = *manager_guard {
+            if !silent {
+                log(LogTag::Positions, "DEBUG", "✅ Global TransactionsManager found, calling convert_to_swap_pnl_info");
+            }
             manager.convert_to_swap_pnl_info(transaction, token_symbol_cache, silent)
         } else {
-            log(LogTag::Positions, "ERROR", "Global TransactionsManager not initialized");
+            if !silent {
+                log(LogTag::Positions, "ERROR", "❌ Global TransactionsManager not initialized - verification cannot proceed");
+            }
             None
         }
     }

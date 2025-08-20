@@ -488,22 +488,9 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(Arc<Notify>
         // Capture debug flag for the spawned task
         let debug_enabled = config.debug;
         
-        // Start PositionsManager background service
-        let shutdown_positions_manager = shutdown.clone();
-        let positions_manager_handle = tokio::spawn(async move {
-            if debug_enabled {
-                log(LogTag::System, "INFO", "PositionsManager service task started");
-            }
-            start_positions_manager_service(shutdown_positions_manager).await;
-            if debug_enabled {
-                log(LogTag::System, "INFO", "PositionsManager service task ended");
-            }
-        });
-
-        // Start TransactionManager background service (CRITICAL for verification)
+        // Start TransactionManager background service FIRST (CRITICAL for verification)
         if config.debug {
-            log(LogTag::Positions, "INFO", "⚡ Starting TransactionManager service...");
-            log(LogTag::Positions, "INFO", "⚡ Initializing TransactionManager service...");
+            log(LogTag::Positions, "INFO", "⚡ Starting TransactionManager service first...");
         }
         
         let shutdown_transaction_manager = shutdown.clone();
@@ -517,21 +504,66 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(Arc<Notify>
             }
         });
 
-        // Store handles for proper shutdown
-        task_handles.push(positions_manager_handle);
-        task_handles.push(transaction_manager_handle);
-
-        // Give the service time to initialize
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // Wait for TransactionsManager to be fully initialized BEFORE starting PositionsManager
+        if config.debug {
+            log(LogTag::Positions, "INFO", "🔍 Waiting for TransactionsManager to initialize...");
+        }
         
-        // Verify the service is available and responding
+        let mut tx_manager_ready = false;
+        for attempt in 1..=20 {
+            use screenerbot::transactions::GLOBAL_TRANSACTION_MANAGER;
+            let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+            if manager_guard.is_some() {
+                tx_manager_ready = true;
+                if config.debug {
+                    log(LogTag::Positions, "INFO", &format!("✅ TransactionsManager ready after {} attempts", attempt));
+                }
+                drop(manager_guard);
+                break;
+            }
+            drop(manager_guard);
+            
+            if config.debug && attempt % 5 == 0 {
+                log(LogTag::Positions, "INFO", &format!("⏳ Still waiting for TransactionsManager (attempt {}/20)...", attempt));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        
+        if !tx_manager_ready {
+            return Err("TransactionsManager failed to initialize - position operations require transaction verification".to_string());
+        }
+
+        // Now start PositionsManager service (it can now safely verify transactions)
+        if config.debug {
+            log(LogTag::Positions, "INFO", "🚀 Starting PositionsManager service (TransactionsManager ready)...");
+        }
+        
+        let shutdown_positions_manager = shutdown.clone();
+        let positions_manager_handle = tokio::spawn(async move {
+            if debug_enabled {
+                log(LogTag::System, "INFO", "PositionsManager service task started");
+            }
+            start_positions_manager_service(shutdown_positions_manager).await;
+            if debug_enabled {
+                log(LogTag::System, "INFO", "PositionsManager service task ended");
+            }
+        });
+
+        // Store handles for proper shutdown
+        task_handles.push(transaction_manager_handle);
+        task_handles.push(positions_manager_handle);
+
+        // Give the services time to initialize properly
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        
+        // Verify both services are available and responding
         if let Some(handle) = get_positions_handle() {
             if config.debug {
                 log(LogTag::Positions, "INFO", "✅ PositionsManager service started successfully");
                 log(LogTag::Positions, "INFO", "✅ PositionsManager service initialized and handle available");
             }
             
-            // Test the service with a simple operation
+            // Test the PositionsManager service with a simple operation
             match tokio::time::timeout(Duration::from_secs(2), handle.get_open_positions_count()).await {
                 Ok(_count) => {
                     if config.debug {
@@ -542,6 +574,10 @@ async fn initialize_system(config: &PositionsManagerArgs) -> Result<(Arc<Notify>
                 Err(_) => {
                     return Err("PositionsManager service timeout - service not responding".to_string());
                 }
+            }
+            
+            if config.debug {
+                log(LogTag::Positions, "INFO", "✅ Both PositionsManager and TransactionsManager are ready for operations");
             }
         } else {
             return Err("PositionsManager service failed to initialize - no handle available".to_string());

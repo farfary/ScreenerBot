@@ -39,10 +39,10 @@
 // -----------------------------------------------------------------------------
 
 /// Maximum number of concurrent open positions
-pub const MAX_OPEN_POSITIONS: usize = 2;
+pub const MAX_OPEN_POSITIONS: usize = 1;
 
 /// Trade size in SOL for each position
-pub const TRADE_SIZE_SOL: f64 = 0.003;
+pub const TRADE_SIZE_SOL: f64 = 0.005;
 
 pub const PROFIT_EXTRA_NEEDED_SOL: f64 = 0.00001;
 
