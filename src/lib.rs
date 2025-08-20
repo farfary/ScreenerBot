@@ -16,6 +16,5 @@ pub mod ata_cleanup;
 pub mod transactions;
 pub mod entry;
 pub mod ohlcv_analysis;
-pub mod rl_learning;
 pub mod swaps;
 pub mod dashboard;

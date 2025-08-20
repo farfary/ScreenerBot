@@ -5,7 +5,7 @@
 /// calculates prices from pool reserves, and maintains a watch list for continuous monitoring.
 
 use crate::logger::{ log, LogTag };
-use crate::global::{ is_debug_pool_prices_enabled, is_debug_rl_learn_enabled, CACHE_POOL_DIR };
+use crate::global::{ is_debug_pool_prices_enabled, CACHE_POOL_DIR };
 use crate::tokens::dexscreener::{ get_token_pairs_from_api, TokenPair };
 use crate::tokens::decimals::{ get_cached_decimals };
 use crate::tokens::is_system_or_stable_token;
@@ -1482,12 +1482,12 @@ impl PoolPriceService {
         let cache = self.pool_price_history.read().await;
         if let Some(token_cache) = cache.get(token_address) {
             let history = token_cache.get_combined_price_history();
-            if is_debug_rl_learn_enabled() {
+            if is_debug_pool_prices_enabled() {
                 log(
                     LogTag::Pool,
-                    "RL_PRICE_HISTORY",
+                    "PRICE_HISTORY",
                     &format!(
-                        "🤖 RL Learning: Retrieved {} comprehensive price history entries for {} from {} pools",
+                        "📊 Analysis: Retrieved {} comprehensive price history entries for {} from {} pools",
                         history.len(),
                         token_address,
                         token_cache.pool_caches.len()
@@ -1507,12 +1507,12 @@ impl PoolPriceService {
                         let mut pool_cache = self.pool_price_history.write().await;
                         pool_cache.insert(token_address.to_string(), token_cache);
                     }
-                    if is_debug_rl_learn_enabled() {
+                    if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
-                            "RL_PRICE_HISTORY_LOADED",
+                            "PRICE_HISTORY_LOADED",
                             &format!(
-                                "🤖 RL Learning: Loaded {} price history entries from disk for {}",
+                                "📊 Analysis: Loaded {} price history entries from disk for {}",
                                 history.len(),
                                 token_address
                             )
@@ -1521,12 +1521,12 @@ impl PoolPriceService {
                     history
                 }
                 Err(e) => {
-                    if is_debug_rl_learn_enabled() {
+                    if is_debug_pool_prices_enabled() {
                         log(
                             LogTag::Pool,
-                            "RL_PRICE_HISTORY_ERROR",
+                            "PRICE_HISTORY_ERROR",
                             &format!(
-                                "🤖 RL Learning: Failed to load price history for {}: {}",
+                                "📊 Analysis: Failed to load price history for {}: {}",
                                 token_address,
                                 e
                             )
@@ -2883,8 +2883,8 @@ pub fn get_pool_service() -> &'static PoolPriceService {
     }
 }
 
-/// Get comprehensive price history for RL learning system (global function)
-pub async fn get_price_history_for_rl_learning(token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
+/// Get comprehensive price history for analysis (global function)
+pub async fn get_price_history_for_analysis(token_address: &str) -> Vec<(DateTime<Utc>, f64)> {
     let pool_service = get_pool_service();
     pool_service.get_comprehensive_price_history(token_address).await
 }

@@ -11,7 +11,6 @@ use crate::tokens::{
 };
 use crate::logger::{ log, LogTag };
 use crate::global::is_debug_filtering_enabled;
-use crate::positions::SAVED_POSITIONS;
 use crate::trader::MAX_OPEN_POSITIONS;
 use chrono::{ Duration as ChronoDuration, Utc };
 
@@ -1471,80 +1470,23 @@ fn validate_decimal_availability(token: &Token) -> Option<FilterReason> {
 }
 
 /// Validate position-related constraints
-fn validate_position_constraints(token: &Token) -> Option<FilterReason> {
-    let Ok(positions) = SAVED_POSITIONS.lock() else {
-        log(
-            LogTag::Filtering,
-            "ERROR",
-            &format!("Could not acquire lock on positions for {}", token.symbol)
-        );
-        return Some(FilterReason::LockAcquisitionFailed);
-    };
-
-    // Count all open positions for context
-    let open_positions_count = positions
-        .iter()
-        .filter(|p| p.position_type == "buy" && p.exit_price.is_none())
-        .count();
-
+/// Validate position-related constraints
+/// Note: Position validation is deferred to async trading decision point
+/// to avoid runtime blocking issues in high-throughput filtering
+fn validate_position_constraints(_token: &Token) -> Option<FilterReason> {
+    // Position constraints are now validated at trading decision point
+    // to avoid "Cannot start a runtime from within a runtime" errors
+    // when filtering large numbers of tokens in async context
+    
     if is_debug_filtering_enabled() {
         log(
             LogTag::Filtering,
             "DEBUG_POSITION",
-            &format!(
-                "🔒 Position check for {}: open positions {}/{}, checking existing/cooldown",
-                token.symbol,
-                open_positions_count,
-                MAX_OPEN_POSITIONS
-            )
+            &format!("✅ {}: Position constraints deferred to trading decision", _token.symbol)
         );
     }
-
-    // Check for existing open position
-    let has_open_position = positions
-        .iter()
-        .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none());
-
-    if has_open_position {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_POSITION",
-                &format!("❌ Token {} already has an open position", token.symbol)
-            );
-        }
-        return Some(FilterReason::ExistingOpenPosition);
-    }
-
-    // Check maximum open positions limit
-    if open_positions_count >= MAX_OPEN_POSITIONS {
-        if is_debug_filtering_enabled() {
-            log(
-                LogTag::Filtering,
-                "DEBUG_POSITION",
-                &format!(
-                    "❌ Maximum positions reached: {}/{} open positions",
-                    open_positions_count,
-                    MAX_OPEN_POSITIONS
-                )
-            );
-        }
-        return Some(FilterReason::MaxPositionsReached {
-            current: open_positions_count,
-            max: MAX_OPEN_POSITIONS,
-        });
-    }
-
-    // Re-entry cooldown is enforced in positions.rs during open_position()
-
-    if is_debug_filtering_enabled() {
-        log(
-            LogTag::Filtering,
-            "DEBUG_POSITION",
-            &format!("✅ Token {} position constraints satisfied", token.symbol)
-        );
-    }
-
+    
+    // Always pass at filtering stage - position checks happen during trading
     None
 }
 

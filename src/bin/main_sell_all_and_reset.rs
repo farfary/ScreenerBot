@@ -28,15 +28,17 @@
 use screenerbot::global::{ read_configs };
 use screenerbot::tokens::{ Token };
 use screenerbot::logger::{ log, LogTag };
-use screenerbot::utils::{ get_wallet_address, close_token_account };
+use screenerbot::utils::{ get_wallet_address, close_token_account_with_context };
 use screenerbot::swaps::sell_token;
 use screenerbot::rpc::SwapError;
+use screenerbot::arguments::is_debug_ata_enabled;
 use reqwest;
 use serde_json;
 use std::env;
 use std::sync::Arc;
 use std::fs;
 use std::path::Path;
+use std::collections::HashSet;
 use tokio::sync::Semaphore;
 use futures::stream::{ self, StreamExt };
 
@@ -78,7 +80,6 @@ fn print_help() {
     println!("");
     println!("DATA FILES THAT WILL BE DELETED:");
     println!("    • data/rpc_stats.json (RPC statistics)");
-    println!("    • data/rl_learning_records.json (RL learning data)");
     println!("    • data/positions.json (trading positions)");
     println!("    • data/ata_failed_cache.json (failed ATA cache)");
     println!("    • logs/screenerbot_*.log (all bot log files)");
@@ -123,7 +124,6 @@ const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
 /// Data files to be removed during reset
 const DATA_FILES_TO_REMOVE: &[&str] = &[
     "data/rpc_stats.json",
-    "data/rl_learning_records.json", 
     "data/positions.json",
     "data/ata_failed_cache.json",
 ];
@@ -232,7 +232,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Step 2: Sell all tokens with balances > 0
-    let (successful_sells, failed_sells) = if !token_accounts.is_empty() {
+    let (successful_sells, failed_sells, successfully_sold_mints) = if !token_accounts.is_empty() {
         log(
             LogTag::System,
             "SELL_START",
@@ -391,16 +391,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .filter(|(_, success, _)| !*success)
             .count();
 
+        // Track successfully sold token mints for enhanced ATA closing
+        let successfully_sold_mints: std::collections::HashSet<String> = sell_results
+            .iter()
+            .filter(|(_, success, _)| *success)
+            .map(|(account, _, _)| account.mint.clone())
+            .collect();
+
         log(
             LogTag::System,
             "SELL_SUMMARY",
             &format!("Sales completed: {} success, {} failed", successful_sells, failed_sells)
         );
 
-        (successful_sells, failed_sells)
+        (successful_sells, failed_sells, successfully_sold_mints)
     } else {
-        (0, 0)
+        (0, 0, HashSet::new())
     };
+
+    // Step 2.5: Wait for swap transactions to be processed before ATA closing
+    if successful_sells > 0 && !dry_run {
+        const SWAP_CONFIRMATION_DELAY_SECONDS: u64 = 10;
+        log(
+            LogTag::System,
+            "WAIT_CONFIRMATION",
+            &format!("Waiting {}s for {} swap transactions to be confirmed before ATA closing...", 
+                SWAP_CONFIRMATION_DELAY_SECONDS, successful_sells)
+        );
+        
+        if is_debug_ata_enabled() {
+            log(
+                LogTag::System,
+                "DEBUG",
+                &format!("⏳ RESET_WAIT_CONFIRMATION: delaying {}s for blockchain confirmation", SWAP_CONFIRMATION_DELAY_SECONDS)
+            );
+        }
+        
+        tokio::time::sleep(tokio::time::Duration::from_secs(SWAP_CONFIRMATION_DELAY_SECONDS)).await;
+        
+        log(
+            LogTag::System,
+            "WAIT_CONFIRMATION_DONE",
+            "Swap confirmation wait completed, proceeding with ATA closing"
+        );
+    }
 
     // Step 3: Close all ATAs
     let (successful_closes, failed_closes) = if !token_accounts.is_empty() {
@@ -414,17 +448,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
         );
 
+        if is_debug_ata_enabled() {
+            log(
+                LogTag::System,
+                "DEBUG",
+                &format!("🔧 RESET_ATA_START: processing {} accounts with debug enabled", token_accounts.len())
+            );
+        }
+
         // Filter accounts for ATA closing (skip SOL)
         let closable_accounts: Vec<_> = token_accounts
             .iter()
             .filter(|account| {
                 if account.mint == SOL_MINT {
+                    if is_debug_ata_enabled() {
+                        log(
+                            LogTag::System,
+                            "DEBUG",
+                            &format!("⏭️ RESET_SKIP_SOL: skipping SOL mint {}", &account.mint[..8])
+                        );
+                    }
                     log(LogTag::System, "SKIP_SOL_ATA", "Skipping SOL account for ATA closing");
                     return false;
+                }
+                if is_debug_ata_enabled() {
+                    log(
+                        LogTag::System,
+                        "DEBUG",
+                        &format!("✅ RESET_INCLUDE_TOKEN: including token {} for ATA closing", &account.mint[..8])
+                    );
                 }
                 true
             })
             .collect();
+
+        if is_debug_ata_enabled() {
+            log(
+                LogTag::System,
+                "DEBUG",
+                &format!("📊 RESET_FILTER_RESULT: {} closable accounts from {} total", 
+                    closable_accounts.len(), token_accounts.len())
+            );
+        }
 
         log(
             LogTag::System,
@@ -437,6 +502,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         // Process ATA closing with 3 concurrent tasks
+        if is_debug_ata_enabled() {
+            log(
+                LogTag::System,
+                "DEBUG",
+                &format!("🔄 RESET_CONCURRENT_START: starting {} concurrent ATA closing tasks", 3)
+            );
+        }
+        
         let close_semaphore = Arc::new(Semaphore::new(3));
         let close_results: Vec<_> = stream
             ::iter(closable_accounts.iter())
@@ -444,10 +517,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let semaphore = close_semaphore.clone();
                 let account = (*account).clone();
                 let wallet_address = wallet_address.clone();
+                let successfully_sold_mints = successfully_sold_mints.clone();
                 async move {
                     let _permit = semaphore.acquire().await.unwrap();
 
+                    if is_debug_ata_enabled() {
+                        let was_recently_sold = successfully_sold_mints.contains(&account.mint);
+                        log(
+                            LogTag::System,
+                            "DEBUG",
+                            &format!("🎬 RESET_ATA_TASK_START: processing mint {} with balance {}, recently_sold={}", 
+                                &account.mint[..8], account.ui_amount, was_recently_sold)
+                        );
+                    }
+
                     if dry_run {
+                        if is_debug_ata_enabled() {
+                            log(
+                                LogTag::System,
+                                "DEBUG",
+                                &format!("🧪 RESET_DRY_RUN: simulating ATA close for mint {}", &account.mint[..8])
+                            );
+                        }
                         log(
                             LogTag::System,
                             "DRY_ATA",
@@ -456,14 +547,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         return (account, true, Some("DRY_RUN_TX".to_string()));
                     }
 
+                    if is_debug_ata_enabled() {
+                        log(
+                            LogTag::System,
+                            "DEBUG",
+                            &format!("🚀 RESET_ATA_LIVE: executing live ATA close for mint {}", &account.mint[..8])
+                        );
+                    }
+
                     log(
                         LogTag::System,
                         "ATA_START",
                         &format!("Starting ATA close for token: {}", account.mint)
                     );
 
-                    match close_token_account(&account.mint, &wallet_address).await {
+                    let start_time = std::time::Instant::now();
+                    
+                    // Check if this token was recently sold and use enhanced retry logic
+                    let recently_sold = successfully_sold_mints.contains(&account.mint);
+                    
+                    match close_token_account_with_context(&account.mint, &wallet_address, recently_sold).await {
                         Ok(signature) => {
+                            let duration = start_time.elapsed();
+                            
+                            if is_debug_ata_enabled() {
+                                log(
+                                    LogTag::System,
+                                    "DEBUG",
+                                    &format!("🎉 RESET_ATA_SUCCESS: closed mint {} in {:.2}s, tx={}", 
+                                        &account.mint[..8], duration.as_secs_f64(), &signature[..8])
+                                );
+                            }
+                            
                             log(
                                 LogTag::System,
                                 "ATA_SUCCESS",
@@ -476,6 +591,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             
                             // Verify the ATA closing transaction if not in dry run mode
                             if !dry_run {
+                                if is_debug_ata_enabled() {
+                                    log(
+                                        LogTag::System,
+                                        "DEBUG",
+                                        &format!("🔍 RESET_ATA_VERIFY: starting verification for tx {}", &signature[..8])
+                                    );
+                                }
+                                
                                 log(LogTag::System, "ATA_VERIFY", &format!("Verifying ATA close transaction: {}", &signature[..8]));
                                 
                                 // Wait a moment for transaction to propagate
@@ -483,12 +606,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 
                                 // Note: ATA closing is not a "swap" so we can't use verify_swap_transaction_global
                                 // But we can log that we attempted verification
+                                if is_debug_ata_enabled() {
+                                    log(
+                                        LogTag::System,
+                                        "DEBUG",
+                                        &format!("📝 RESET_ATA_LOGGED: verification logged for tx {}", &signature[..8])
+                                    );
+                                }
+                                
                                 log(LogTag::System, "ATA_VERIFY_INFO", "ATA close transaction logged for future verification");
                             }
                             
                             (account, true, Some(signature))
                         }
                         Err(e) => {
+                            let duration = start_time.elapsed();
+                            
+                            if is_debug_ata_enabled() {
+                                log(
+                                    LogTag::System,
+                                    "DEBUG",
+                                    &format!("❌ RESET_ATA_FAILED: mint {} failed after {:.2}s: {}", 
+                                        &account.mint[..8], duration.as_secs_f64(), e)
+                                );
+                            }
+                            
                             log(
                                 LogTag::System,
                                 "ATA_FAILED",

@@ -10,6 +10,21 @@ async fn main() {
     // Initialize file logging system first
     init_file_logging();
 
+    // Check for help request first (before any other processing)
+    if screenerbot::arguments::patterns::is_help_requested() {
+        screenerbot::arguments::print_help();
+        std::process::exit(0);
+    }
+
+    // Check if --run flag is present (required to start bot)
+    if !screenerbot::arguments::is_run_enabled() {
+        println!("Error: --run flag is required to start the bot");
+        println!("Use --help to see all available options");
+        println!();
+        screenerbot::arguments::print_help();
+        std::process::exit(1);
+    }
+
     // Check for dry-run mode and log it prominently
     if screenerbot::arguments::is_dry_run_enabled() {
         log(LogTag::System, "CRITICAL", "🚫 DRY-RUN MODE ENABLED - NO ACTUAL TRADING WILL OCCUR");
@@ -189,22 +204,6 @@ async fn main() {
         log(LogTag::System, "INFO", "ATA cleanup service task ended");
     });
 
-    // Start reinforcement learning background service
-    let shutdown_rl_learning = shutdown.clone();
-    let rl_learning_handle = tokio::spawn(async move {
-        log(LogTag::System, "INFO", "Reinforcement learning service task started");
-        screenerbot::rl_learning::start_learning_service(shutdown_rl_learning).await;
-        log(LogTag::System, "INFO", "Reinforcement learning service task ended");
-    });
-
-    // Start RL auto-save background service
-    let shutdown_rl_autosave = shutdown.clone();
-    let rl_autosave_handle = tokio::spawn(async move {
-        log(LogTag::System, "INFO", "RL auto-save service task started");
-        screenerbot::rl_learning::start_rl_auto_save_service(shutdown_rl_autosave).await;
-        log(LogTag::System, "INFO", "RL auto-save service task ended");
-    });
-
     // Start trader tasks (moved from trader() function for centralized management)
     
     // Initialize global transaction manager FIRST (before reconciliation)
@@ -231,6 +230,14 @@ async fn main() {
             std::process::exit(1);
         }
     }
+
+    // Start PositionsManager background service
+    let shutdown_positions_manager = shutdown.clone();
+    let positions_manager_handle = tokio::spawn(async move {
+        log(LogTag::System, "INFO", "PositionsManager service task started");
+        let _sender = screenerbot::positions::start_positions_manager_service(shutdown_positions_manager).await;
+        log(LogTag::System, "INFO", "PositionsManager service task ended");
+    });
 
     let shutdown_entries = shutdown.clone();
     let entries_handle = tokio::spawn(async move {
@@ -446,6 +453,18 @@ async fn main() {
                 log(LogTag::System, "INFO", "✅ Positions display task shutdown completed");
             }
 
+            // Wait for PositionsManager service
+            log(LogTag::System, "INFO", "🔄 Waiting for PositionsManager task to shutdown...");
+            if let Err(e) = positions_manager_handle.await {
+                log(
+                    LogTag::System,
+                    "WARN",
+                    &format!("PositionsManager task failed to shutdown cleanly: {}", e)
+                );
+            } else {
+                log(LogTag::System, "INFO", "✅ PositionsManager task shutdown completed");
+            }
+
             // Wait for RPC stats auto-save service
             log(LogTag::System, "INFO", "🔄 Waiting for RPC stats auto-save task to shutdown...");
             if let Err(e) = rpc_stats_handle.await {
@@ -480,30 +499,6 @@ async fn main() {
                 );
             } else {
                 log(LogTag::System, "INFO", "✅ Transaction manager task shutdown completed");
-            }
-
-            // Wait for RL learning service
-            log(LogTag::System, "INFO", "🔄 Waiting for RL learning task to shutdown...");
-            if let Err(e) = rl_learning_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("RL learning task failed to shutdown cleanly: {}", e)
-                );
-            } else {
-                log(LogTag::System, "INFO", "✅ RL learning task shutdown completed");
-            }
-
-            // Wait for RL auto-save service
-            log(LogTag::System, "INFO", "🔄 Waiting for RL auto-save task to shutdown...");
-            if let Err(e) = rl_autosave_handle.await {
-                log(
-                    LogTag::System,
-                    "WARN",
-                    &format!("RL auto-save task failed to shutdown cleanly: {}", e)
-                );
-            } else {
-                log(LogTag::System, "INFO", "✅ RL auto-save task shutdown completed");
             }
 
             // Wait for tokens system tasks (includes rugcheck-related tasks)

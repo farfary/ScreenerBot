@@ -4,7 +4,7 @@ use crate::utils::check_shutdown_or_delay;
 use crate::logger::{ log, LogTag };
 use crate::utils::*;
 use crate::global::{STARTUP_TIME, is_debug_summary_enabled};
-use crate::arguments::{is_no_summary_enabled, is_dashboard_enabled};
+use crate::arguments::{is_summary_enabled, is_dashboard_enabled};
 use crate::ata_cleanup::{ get_ata_cleanup_statistics, get_failed_ata_count };
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::pool::get_pool_service;
@@ -324,7 +324,7 @@ pub struct TransactionFinalizationDisplay {
 
 /// Background task to display positions table every 10 seconds
 pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
-    if is_debug_summary_enabled() && !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_debug_summary_enabled() && !is_dashboard_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions display monitor");
     }
 
@@ -383,7 +383,7 @@ pub async fn monitor_positions_display(shutdown: Arc<Notify>) {
 
 pub async fn display_positions_table() {
     let fn_start = Instant::now();
-    if is_debug_summary_enabled() && !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_debug_summary_enabled() && !is_dashboard_enabled() {
         log(LogTag::Summary, "DEBUG", "Starting positions table display generation");
     }
 
@@ -392,8 +392,8 @@ pub async fn display_positions_table() {
 
     // Use existing safe functions instead of locking SAVED_POSITIONS directly
     let collect_start = Instant::now();
-    let open_positions = get_open_positions();
-    let closed_positions = get_closed_positions();
+    let open_positions = get_open_positions().await;
+    let closed_positions = get_closed_positions().await;
     if is_debug_summary_enabled() {
         log(
             LogTag::Summary,
@@ -627,17 +627,17 @@ pub async fn display_positions_table() {
             .with(Modify::new(Rows::new(1..)).with(Alignment::center()));
         positions_output.push_str(&format!("{}\n\n", open_table));
 
-        if is_debug_summary_enabled() && !is_no_summary_enabled() && !is_dashboard_enabled() {
+        if is_debug_summary_enabled() && !is_dashboard_enabled() {
             log(LogTag::Summary, "DEBUG", "Open positions table built");
         }
     }
 
     // Display everything in one shot
-    if !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", positions_output);
     }
 
-    if is_debug_summary_enabled() && !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_debug_summary_enabled() && !is_dashboard_enabled() {
         log(
             LogTag::Summary,
             "DEBUG",
@@ -651,7 +651,7 @@ pub async fn display_positions_table() {
 
 /// Convenience function to build bot summary using current positions and return as string
 pub async fn build_current_bot_summary() -> String {
-    let closed_positions = get_closed_positions();
+    let closed_positions = get_closed_positions().await;
     let refs: Vec<&_> = closed_positions.iter().collect();
     build_bot_summary(&refs).await
 }
@@ -668,7 +668,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     }
 
     // Get open positions count using existing function
-    let open_count = get_open_positions_count();
+    let open_count = get_open_positions_count().await;
 
     if is_debug_summary_enabled() {
         log(
@@ -1032,7 +1032,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 
 
     // Build frozen account cooldowns if any exist
-    let active_cooldowns = crate::positions::get_active_frozen_cooldowns();
+    let active_cooldowns = crate::positions::get_active_frozen_cooldowns().await;
     if !active_cooldowns.is_empty() {
         summary_output.push_str("\n❄️ Frozen Account Cooldowns\n");
         for (mint, remaining_minutes) in active_cooldowns {
@@ -1060,7 +1060,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
 /// Display comprehensive bot summary with detailed statistics and performance metrics (backwards compatibility)
 pub async fn display_bot_summary(closed_positions: &[&Position]) {
     let summary = build_bot_summary(closed_positions).await;
-    if !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", summary);
     }
 }
@@ -1068,7 +1068,7 @@ pub async fn display_bot_summary(closed_positions: &[&Position]) {
 /// Convenience function to display bot summary using current positions (backwards compatibility)
 pub async fn display_current_bot_summary() {
     let summary = build_current_bot_summary().await;
-    if !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", summary);
     }
 }
@@ -1077,7 +1077,7 @@ pub async fn display_current_bot_summary() {
 /// Display RPC usage statistics (backwards compatibility)
 pub fn display_rpc_statistics(rpc_stats: &crate::rpc::RpcStats) {
     let rpc_tables = build_rpc_statistics_tables(rpc_stats);
-    if !is_no_summary_enabled() && !is_dashboard_enabled() {
+    if is_summary_enabled() && !is_dashboard_enabled() {
         print!("{}", rpc_tables);
     }
 }

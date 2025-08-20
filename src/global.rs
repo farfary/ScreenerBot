@@ -11,8 +11,8 @@ pub use crate::arguments::{
     is_debug_filtering_enabled, is_debug_profit_enabled, is_debug_pool_prices_enabled,
     is_debug_trader_enabled, is_debug_api_enabled, is_debug_monitor_enabled,
     is_debug_discovery_enabled, is_debug_price_service_enabled, is_debug_rugcheck_enabled,
-    is_debug_entry_enabled, is_debug_rl_learn_enabled, is_debug_ohlcv_enabled,
-    is_debug_wallet_enabled, is_debug_swap_enabled, is_debug_decimals_enabled,
+    is_debug_entry_enabled, is_debug_ohlcv_enabled,
+    is_debug_wallet_enabled, is_debug_swaps_enabled, is_debug_decimals_enabled,
     is_debug_summary_enabled, is_debug_transactions_enabled, is_debug_rpc_enabled,
     is_dry_run_enabled, is_any_debug_enabled, get_enabled_debug_modes, print_debug_info
 };
@@ -50,7 +50,6 @@ pub const RPC_STATS: &str = "data/rpc_stats.json";
 
 /// Position and trading data
 pub const POSITIONS_FILE: &str = "data/positions.json";
-pub const RL_LEARNING_RECORDS: &str = "data/rl_learning_records.json";
 pub const ENTRY_ANALYSIS: &str = "data/entry_analysis.json";
 
 /// Cache directories

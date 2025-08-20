@@ -1,7 +1,7 @@
 /// Swap execution and quote management functions
 /// Handles GMGN router integration, quote fetching, and swap execution
 
-use crate::global::{is_debug_swap_enabled};
+use crate::global::{is_debug_swaps_enabled};
 use crate::tokens::Token;
 use crate::logger::{log, LogTag};
 use crate::rpc::{SwapError, lamports_to_sol};
@@ -49,7 +49,7 @@ fn validate_swap_request(request: &SwapRequest) -> Result<(), SwapError> {
 pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError> {
     validate_swap_request(request)?;
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "QUOTE_START",
@@ -88,11 +88,11 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
         GMGN_PARTNER
     );
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(LogTag::Swap, "QUOTE_URL", &format!("🌐 API URL: {}", url));
     }
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "DEBUG",
@@ -133,7 +133,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
     // Retry up to 3 times with increasing delays
     for attempt in 1..=3 {
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "QUOTE_ATTEMPT",
@@ -143,7 +143,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
         match client.get(&url).send().await {
             Ok(response) => {
-                if is_debug_swap_enabled() {
+                if is_debug_swaps_enabled() {
                     log(
                         LogTag::Swap,
                         "QUOTE_RESPONSE",
@@ -156,7 +156,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 }
 
                 if !response.status().is_success() {
-                    if is_debug_swap_enabled() {
+                    if is_debug_swaps_enabled() {
                         log(
                             LogTag::Swap,
                             "QUOTE_HTTP_ERROR",
@@ -171,7 +171,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         format!("HTTP error {}: {}", status_code, error_text)
                     );
 
-                    if is_debug_swap_enabled() {
+                    if is_debug_swaps_enabled() {
                         log(
                             LogTag::Swap,
                             "QUOTE_ERROR",
@@ -222,7 +222,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                 };
 
                 // Log the raw response for debugging
-                if is_debug_swap_enabled() {
+                if is_debug_swaps_enabled() {
                     log(
                         LogTag::Swap,
                         "DEBUG",
@@ -233,7 +233,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                     );
                 }
 
-                if is_debug_swap_enabled() {
+                if is_debug_swaps_enabled() {
                     log(
                         LogTag::Swap,
                         "QUOTE_RAW",
@@ -246,7 +246,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                     serde_json::from_str::<GMGNApiResponse>(&response_text)
                 {
                     Ok(response) => {
-                        if is_debug_swap_enabled() {
+                        if is_debug_swaps_enabled() {
                             log(
                                 LogTag::Swap,
                                 "QUOTE_PARSED",
@@ -260,7 +260,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
                         response
                     }
                     Err(e) => {
-                        if is_debug_swap_enabled() {
+                        if is_debug_swaps_enabled() {
                             log(
                                 LogTag::Swap,
                                 "QUOTE_PARSE_ERR",
@@ -304,7 +304,7 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
                 match api_response.data {
                     Some(data) => {
-                        if is_debug_swap_enabled() {
+                        if is_debug_swaps_enabled() {
                             let in_amount_sol = lamports_to_sol(
                                 data.quote.in_amount.parse().unwrap_or(0)
                             );
@@ -378,217 +378,4 @@ pub async fn get_swap_quote(request: &SwapRequest) -> Result<SwapData, SwapError
 
     // If we get here, all retries failed
     Err(last_error.unwrap_or_else(|| SwapError::ApiError("All retry attempts failed".to_string())))
-}
-
-/// Executes a swap operation with a pre-fetched quote to avoid duplicate API calls
-/// NEW: Now includes transaction confirmation and actual result verification
-pub async fn execute_swap_with_quote(
-    token: &Token,
-    input_mint: &str,
-    output_mint: &str,
-    input_amount: u64,
-    swap_data: SwapData
-) -> Result<SwapResult, SwapError> {
-    let start_time = std::time::Instant::now();
-
-    // Determine if this is SOL to token or token to SOL
-    let is_sol_to_token = input_mint == SOL_MINT;
-    let input_display = if is_sol_to_token {
-        format!("{:.6} SOL", lamports_to_sol(input_amount))
-    } else {
-        format!("{} tokens", input_amount)
-    };
-
-    log(
-        LogTag::Swap,
-        "SWAP",
-        &format!(
-            "Executing swap for {} ({}) - {} {} -> {} (using cached quote)",
-            token.symbol,
-            token.name,
-            input_display,
-            if input_mint == SOL_MINT {
-                "SOL"
-            } else {
-                &input_mint[..8]
-            },
-            if output_mint == SOL_MINT {
-                "SOL"
-            } else {
-                &output_mint[..8]
-            }
-        )
-    );
-
-    // Sign and send the transaction using global RPC client
-    let transaction_signature = sign_and_send_transaction(
-        &swap_data.raw_tx.swap_transaction
-    ).await?;
-
-    log(
-        LogTag::Swap,
-        "PENDING",
-        &format!("Transaction submitted! TX: {} - Now adding to monitoring service...", transaction_signature)
-    );
-
-    // Return success result - verification handled by signature-only analysis
-    let execution_time = start_time.elapsed().as_secs_f64();
-    
-    Ok(SwapResult {
-        success: true,
-        router_used: None, // TODO: Pass router type from caller
-        transaction_signature: Some(transaction_signature),
-        input_amount: swap_data.quote.in_amount.clone(),
-        output_amount: swap_data.quote.out_amount.clone(),
-        price_impact: swap_data.quote.price_impact_pct.clone(),
-        fee_lamports: 0, // Will be calculated by monitoring service
-        execution_time,
-        effective_price: None, // Will be calculated by monitoring service
-        swap_data: Some(swap_data),
-        error: None,
-    })
-}
-
-/// Simple transaction signing and sending function
-/// Moved from transaction.rs to avoid circular dependencies
-pub async fn sign_and_send_transaction(
-    swap_transaction_base64: &str,
-) -> Result<String, SwapError> {
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "TRANSACTION_SIGN_START",
-            &format!("🔐 Starting transaction signing and sending process:
-  📊 Transaction Details:
-  • Base64 Length: {} characters
-  • Data Size: ~{:.1} KB
-  • Preview (first 60 chars): {}
-  • Preview (last 60 chars): {}
-  🔧 Processing: Decoding -> Signing -> Broadcasting",
-                swap_transaction_base64.len(),
-                (swap_transaction_base64.len() as f64 * 0.75) / 1024.0, // Base64 is ~75% efficient
-                &swap_transaction_base64[..std::cmp::min(60, swap_transaction_base64.len())],
-                if swap_transaction_base64.len() > 120 { 
-                    &swap_transaction_base64[swap_transaction_base64.len()-60..] 
-                } else { 
-                    "N/A (short transaction)" 
-                }
-            )
-        );
-    }
-
-    let rpc_client = crate::rpc::get_rpc_client();
-    
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "TRANSACTION_RPC_CLIENT",
-            "🔗 Using global RPC client for transaction processing:
-  ✅ Client initialized
-  🌐 Ready for blockchain communication
-  🔐 Wallet signing enabled"
-        );
-    }
-    
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "TRANSACTION_SENDING",
-            "📤 Broadcasting signed transaction to Solana blockchain:
-  🎯 Target: Solana mainnet
-  ⏳ Waiting for transaction signature response...
-  🔄 Network propagation in progress"
-        );
-    }
-    
-    let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
-    
-    if is_debug_swap_enabled() {
-        log(
-            LogTag::Swap,
-            "TRANSACTION_SUCCESS",
-            &format!("✅ Transaction successfully signed and sent:
-  🎯 Transaction Signature: {}
-  📊 Status: Submitted to blockchain
-  ⏳ Next: Waiting for network confirmation
-  🔍 View on explorer: https://solscan.io/tx/{}", signature, signature)
-        );
-    }
-    
-    // Wait for transaction confirmation before proceeding
-    log(
-        LogTag::Swap,
-        "TRANSACTION_CONFIRMING",
-        &format!("⏳ Waiting for transaction confirmation: {}", &signature[..8])
-    );
-    
-    match rpc_client.wait_for_transaction_confirmation_smart(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
-        Ok(true) => {
-            log(
-                LogTag::Swap,
-                "TRANSACTION_CONFIRMED",
-                &format!("✅ Transaction confirmed on-chain: {}", &signature[..8])
-            );
-        }
-        Ok(false) => {
-            log(
-                LogTag::Swap,
-                "TRANSACTION_TIMEOUT",
-                &format!("⏰ Transaction confirmation timeout: {}", &signature[..8])
-            );
-            return Err(SwapError::TransactionError(
-                format!("Transaction confirmation timeout: {}", signature)
-            ));
-        }
-        Err(e) => {
-            log(
-                LogTag::Swap,
-                "TRANSACTION_CONFIRMATION_ERROR",
-                &format!("❌ Transaction confirmation error: {} - {}", &signature[..8], e)
-            );
-            return Err(e);
-        }
-    }
-    
-    Ok(signature)
-}
-
-/// Transaction verification result structure
-/// Simplified version for compatibility
-#[derive(Debug)]
-pub struct TransactionVerificationResult {
-    pub success: bool,
-    pub transaction_signature: String,
-    pub confirmed: bool,
-    
-    // Amounts extracted from transaction instructions (lamports for SOL, raw units for tokens)
-    pub input_amount: Option<u64>,     // Actual amount spent/consumed from instructions
-    pub output_amount: Option<u64>,    // Actual amount received/produced from instructions
-    
-    // SOL flow analysis from instruction data
-    pub sol_spent: Option<u64>,        // SOL spent in transaction (from transfers)
-    pub sol_received: Option<u64>,     // SOL received in transaction (from transfers, includes ATA rent)
-    pub sol_from_swap: Option<u64>,    // SOL received from swap only (excludes ATA rent)
-    pub transaction_fee: u64,          // Network transaction fee in lamports
-    pub priority_fee: Option<u64>,     // Priority fee in lamports (if any)
-    
-    // ATA analysis from instruction patterns
-    pub ata_created: bool,             // Whether ATA creation was detected
-    pub ata_closed: bool,              // Whether ATA closure was detected
-    pub ata_rent_paid: u64,            // Amount of rent paid for ATA creation
-    pub ata_rent_reclaimed: u64,       // Amount of rent reclaimed from ATA closure
-    
-    // Price calculations from instruction data
-    pub effective_price: Option<f64>,  // Price per token in SOL (from instruction amounts)
-    pub price_impact: Option<f64>,     // Calculated price impact percentage
-    
-    // Token transfer details
-    pub input_mint: String,            // Input token mint
-    pub output_mint: String,           // Output token mint
-    pub input_decimals: u32,           // Input token decimals
-    pub output_decimals: u32,          // Output token decimals
-    
-    // Status and error information
-    pub creation_status: String,       // Success/Error status
-    pub error_details: Option<String>, // Error details if verification failed
 }

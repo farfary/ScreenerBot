@@ -1,202 +1,53 @@
-use crate::trader::*;
 use crate::global::*;
-use crate::logger::{ log, LogTag };
+use crate::logger::{log, LogTag};
+use crate::rpc::{lamports_to_sol, get_rpc_client};
+use crate::swaps::{buy_token, sell_token};
 use crate::tokens::Token;
+use crate::arguments::is_debug_positions_enabled;
+use crate::tokens::decimals::sol_to_lamports;
+use crate::trader::*;
+use crate::transactions::{
+    get_transaction, is_transaction_verified, Transaction, SwapPnLInfo, TransactionStatus,
+};
 use crate::utils::*;
-use crate::rpc::lamports_to_sol;
-use crate::swaps::{ buy_token, sell_token, wait_for_swap_verification, wait_for_priority_swap_verification };
-use crate::rl_learning::{ get_trading_learner, record_completed_trade };
-use crate::entry::get_rugcheck_score_for_token;
-use crate::transactions::add_priority_transaction;
 
-use once_cell::sync::Lazy;
-use std::sync::{ Arc as StdArc, Mutex as StdMutex };
-use chrono::{ Utc, DateTime };
-use std::sync::Arc;
-use tokio::sync::Notify;
-use serde::{ Serialize, Deserialize };
+use chrono::{DateTime, Utc};
 use colored::Colorize;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::str::FromStr;
+use std::fs;
+use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
+use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::time::{interval, Duration};
 
-/// Static global: saved positions
-pub static SAVED_POSITIONS: Lazy<StdArc<StdMutex<Vec<Position>>>> = Lazy::new(|| {
-    let positions = load_positions_from_file();
-    StdArc::new(StdMutex::new(positions))
-});
-
-/// Static global: frozen account cooldown tracking
-/// Maps mint address to timestamp when sell failed due to frozen account
-static FROZEN_ACCOUNT_COOLDOWNS: Lazy<StdArc<StdMutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(
-    || { StdArc::new(StdMutex::new(HashMap::new())) }
-);
-
-/// Cooldown duration for frozen account errors (15 minutes)
-const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
-
-/// Global cooldown between opening positions (seconds)
-const POSITION_OPEN_COOLDOWN_SECS: i64 = 0;
-
-/// Static global: last time a position was opened (for global cooldown)
-static LAST_OPEN_POSITION_AT: Lazy<StdArc<StdMutex<Option<DateTime<Utc>>>>> = Lazy::new(|| {
-    StdArc::new(StdMutex::new(None))
-});
-
-/// Centralized re-entry cooldown after closing a position for the same token (minutes)
-pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15;
-
-/// Track last close time per mint to enforce re-entry cooldown
-static LAST_CLOSE_TIME_PER_MINT: Lazy<StdArc<StdMutex<HashMap<String, DateTime<Utc>>>>> = Lazy::new(|| {
-    StdArc::new(StdMutex::new(HashMap::new()))
-});
-
-/// Record a close time for a mint (called when closing a position)
-fn record_close_time_for_mint(mint: &str, when: DateTime<Utc>) {
-    if let Ok(mut map) = LAST_CLOSE_TIME_PER_MINT.lock() {
-        map.insert(mint.to_string(), when);
-    }
-}
-
-/// Returns remaining cooldown minutes for a mint if within re-entry cooldown, else None
-pub fn get_remaining_reentry_cooldown_minutes(mint: &str) -> Option<i64> {
-    if POSITION_CLOSE_COOLDOWN_MINUTES <= 0 { return None; }
-    if let Ok(map) = LAST_CLOSE_TIME_PER_MINT.lock() {
-        if let Some(last_close) = map.get(mint) {
-            let now = Utc::now();
-            let minutes = (now - *last_close).num_minutes();
-            if minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
-                return Some(POSITION_CLOSE_COOLDOWN_MINUTES - minutes);
-            }
-        }
-    }
-    None
-}
-
-/// Try to acquire the global "open position" cooldown window.
-/// Returns Ok(()) if allowed now and sets the timestamp; Err(remaining_secs) if still cooling down.
-fn try_acquire_open_cooldown() -> Result<(), i64> {
-    if let Ok(mut last_ts) = LAST_OPEN_POSITION_AT.lock() {
-        let now = Utc::now();
-        if let Some(prev) = *last_ts {
-            let elapsed = (now - prev).num_seconds();
-            if elapsed < POSITION_OPEN_COOLDOWN_SECS {
-                return Err(POSITION_OPEN_COOLDOWN_SECS - elapsed);
-            }
-        }
-        // Set the new timestamp and allow
-        *last_ts = Some(now);
-        Ok(())
-    } else {
-        // If lock poisoned, fail-safe: block for full cooldown
-        Err(POSITION_OPEN_COOLDOWN_SECS)
-    }
-}
-
-/// Checks if a mint is currently in cooldown due to frozen account error
-fn is_mint_in_frozen_cooldown(mint: &str) -> bool {
-    if let Ok(cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
-        if let Some(cooldown_time) = cooldowns.get(mint) {
-            let now = Utc::now();
-            let minutes_since_cooldown = (now - *cooldown_time).num_minutes();
-            if minutes_since_cooldown < FROZEN_ACCOUNT_COOLDOWN_MINUTES {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-/// Adds a mint to frozen account cooldown tracking
-fn add_mint_to_frozen_cooldown(mint: &str) {
-    if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
-        cooldowns.insert(mint.to_string(), Utc::now());
-        log(
-            LogTag::Trader,
-            "COOLDOWN",
-            &format!(
-                "Added {} to frozen account cooldown for {} minutes",
-                mint,
-                FROZEN_ACCOUNT_COOLDOWN_MINUTES
-            )
-        );
-    }
-}
-
-/// Removes expired cooldowns and returns remaining time for a mint
-fn get_remaining_cooldown_minutes(mint: &str) -> Option<i64> {
-    if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
-        if let Some(cooldown_time) = cooldowns.get(mint) {
-            let now = Utc::now();
-            let minutes_since_cooldown = (now - *cooldown_time).num_minutes();
-            if minutes_since_cooldown >= FROZEN_ACCOUNT_COOLDOWN_MINUTES {
-                // Cooldown expired, remove it
-                cooldowns.remove(mint);
-                None
-            } else {
-                Some(FROZEN_ACCOUNT_COOLDOWN_MINUTES - minutes_since_cooldown)
-            }
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-/// Checks if an error is a frozen account error (error code 0x11)
-fn is_frozen_account_error(error_msg: &str) -> bool {
-    error_msg.contains("custom program error: 0x11") ||
-        error_msg.contains("Account is frozen") ||
-        error_msg.contains("Error: Account is frozen")
-}
-
-/// Calculate liquidity tier based on USD liquidity amount
-/// Returns tier classification for position tracking and analysis
-pub fn calculate_liquidity_tier(token: &crate::tokens::types::Token) -> Option<String> {
-    let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd)?;
-
-    if liquidity_usd < 0.0 {
-        return Some("INVALID".to_string());
-    }
-
-    // Liquidity tier classification based on USD value
-    let tier = match liquidity_usd {
-        x if x < 1_000.0 => "MICRO", // < $1K
-        x if x < 10_000.0 => "SMALL", // $1K - $10K
-        x if x < 50_000.0 => "MEDIUM", // $10K - $50K
-        x if x < 250_000.0 => "LARGE", // $50K - $250K
-        x if x < 1_000_000.0 => "XLARGE", // $250K - $1M
-        _ => "MEGA", // > $1M
-    };
-
-    Some(tier.to_string())
-}
-
-/// Calculate total fees for a position including entry fees and exit fees only
-pub fn calculate_position_total_fees(position: &Position) -> f64 {
-    let entry_fees_sol = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-    let exit_fees_sol = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-
-    entry_fees_sol + exit_fees_sol
-}
-
-/// Calculate detailed breakdown of position fees for analysis
-pub fn calculate_position_fees_breakdown(position: &Position) -> (f64, f64, f64) {
-    let entry_fee_sol = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-    let exit_fee_sol = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-    let total_fees = entry_fee_sol + exit_fee_sol;
-
-    (entry_fee_sol, exit_fee_sol, total_fees)
-}
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
 /// For closed positions with sol_received, uses actual SOL invested vs SOL received
 /// NOTE: sol_received should contain ONLY the SOL from token sale, excluding ATA rent reclaim
 pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
+    if is_debug_positions_enabled() {
+        log(LogTag::Positions, "DEBUG", &format!(
+            "🧮 Calculating P&L for {} - entry: {:.8}, exit: {:?}, current: {:?}",
+            position.symbol, 
+            position.effective_entry_price.unwrap_or(position.entry_price),
+            position.exit_price,
+            current_price
+        ));
+    }
+    
     // Safety check: validate position has valid entry price
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+    let entry_price = position
+        .effective_entry_price
+        .unwrap_or(position.entry_price);
     if entry_price <= 0.0 || !entry_price.is_finite() {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "❌ Invalid entry price for {}: {}", position.symbol, entry_price
+            ));
+        }
         // Invalid entry price - return neutral P&L to avoid triggering emergency exits
         return (0.0, 0.0);
     }
@@ -215,21 +66,30 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
         let sol_invested = position.entry_size_sol;
 
         // Use actual transaction fees plus profit buffer for P&L calculation
-        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let buy_fee = position
+            .entry_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position
+            .exit_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
         let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer in P&L calculation
 
         let net_pnl_sol = sol_received - sol_invested - total_fees;
-        let safe_invested = if sol_invested < 0.00001 { 0.00001 } else { sol_invested };
+        let safe_invested = if sol_invested < 0.00001 {
+            0.00001
+        } else {
+            sol_invested
+        };
         let net_pnl_percent = (net_pnl_sol / safe_invested) * 100.0;
-
 
         return (net_pnl_sol, net_pnl_percent);
     }
 
     // Fallback for closed positions without sol_received (backward compatibility)
     if let Some(exit_price) = position.exit_price {
-        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+        let entry_price = position
+            .effective_entry_price
+            .unwrap_or(position.entry_price);
         let effective_exit = position.effective_exit_price.unwrap_or(exit_price);
 
         // For closed positions: actual transaction-based calculation
@@ -242,7 +102,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
                 Some(decimals) => decimals,
                 None => {
                     log(
-                        LogTag::System,
+                        LogTag::Positions,
                         "ERROR",
                         &format!(
                             "Cannot calculate P&L for {} - decimals not available, skipping calculation",
@@ -258,8 +118,12 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             let exit_value = ui_token_amount * effective_exit;
 
             // Account for actual buy + sell fees plus profit buffer
-            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-            let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let buy_fee = position
+                .entry_fee_lamports
+                .map_or(0.0, |fee| lamports_to_sol(fee));
+            let sell_fee = position
+                .exit_fee_lamports
+                .map_or(0.0, |fee| lamports_to_sol(fee));
             let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
             let net_pnl_sol = exit_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
@@ -269,8 +133,12 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // Fallback for closed positions without token amount
         let price_change = (effective_exit - entry_price) / entry_price;
-        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
-        let sell_fee = position.exit_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let buy_fee = position
+            .entry_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
+        let sell_fee = position
+            .exit_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
         let total_fees = buy_fee + sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
@@ -281,7 +149,9 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
     // For open positions, use current price
     if let Some(current) = current_price {
-        let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
+        let entry_price = position
+            .effective_entry_price
+            .unwrap_or(position.entry_price);
 
         // For open positions: current value vs entry cost
         if let Some(token_amount) = position.token_amount {
@@ -293,7 +163,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
                 Some(decimals) => decimals,
                 None => {
                     log(
-                        LogTag::System,
+                        LogTag::Positions,
                         "ERROR",
                         &format!(
                             "Cannot calculate P&L for {} - decimals not available, skipping calculation",
@@ -309,7 +179,9 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
             let entry_cost = position.entry_size_sol;
 
             // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
-            let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+            let buy_fee = position
+                .entry_fee_lamports
+                .map_or(0.0, |fee| lamports_to_sol(fee));
             let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
             let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
             let net_pnl_sol = current_value - entry_cost - total_fees;
@@ -320,7 +192,9 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
 
         // Fallback for open positions without token amount
         let price_change = (current - entry_price) / entry_price;
-        let buy_fee = position.entry_fee_lamports.map_or(0.0, |fee| lamports_to_sol(fee));
+        let buy_fee = position
+            .entry_fee_lamports
+            .map_or(0.0, |fee| lamports_to_sol(fee));
         let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
         let total_fees = buy_fee + estimated_sell_fee + PROFIT_EXTRA_NEEDED_SOL; // Include profit buffer
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
@@ -334,7 +208,7 @@ pub fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -
     (0.0, 0.0)
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Position {
     pub mint: String,
     pub symbol: String,
@@ -361,808 +235,808 @@ pub struct Position {
     pub liquidity_tier: Option<String>, // Liquidity tier for reference
     // Transaction verification status
     pub transaction_entry_verified: bool, // Whether entry transaction is fully verified
-    pub transaction_exit_verified: bool, // Whether exit transaction is fully verified
+    pub transaction_exit_verified: bool,  // Whether exit transaction is fully verified
     // Actual transaction fees (in lamports)
     pub entry_fee_lamports: Option<u64>, // Actual entry transaction fee
-    pub exit_fee_lamports: Option<u64>, // Actual exit transaction fee
+    pub exit_fee_lamports: Option<u64>,  // Actual exit transaction fee
+    // Phantom position cleanup flag (temporary, not persisted)
+    #[serde(skip)]
+    pub phantom_remove: bool,
 }
 
-/// Updates position with current price to track extremes
-pub fn update_position_tracking(position: &mut Position, current_price: f64) {
-    if current_price == 0.0 {
-        log(
-            LogTag::Trader,
-            "WARN",
-            &format!(
-                "Skipping position tracking update for {}: current_price is zero",
-                position.symbol
-            )
-                .yellow()
-                .dimmed()
-                .to_string()
-        );
-        return;
-    }
 
-    // On first update, set both high/low to the actual entry price
-    let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
-    if position.price_highest == 0.0 {
-        position.price_highest = entry_price;
-        position.price_lowest = entry_price;
-    }
+// =============================================================================
+// POSITIONS MANAGER - CENTRALIZED POSITION HANDLING
+// =============================================================================
 
-    // Update running extremes
-    if current_price > position.price_highest {
-        position.price_highest = current_price;
-    }
-    if current_price < position.price_lowest {
-        position.price_lowest = current_price;
-    }
-
-    // Track position extremes without logging
+/// Helper enum to categorize position states
+#[derive(Debug, Clone, PartialEq)]
+pub enum PositionState {
+    Open,    // No exit transaction, actively trading
+    Closing, // Exit transaction submitted but not yet verified
+    Closed,  // Exit transaction verified and exit_price set
 }
 
-/// Opens a new buy position for a token with real swap execution
-pub async fn open_position(token: &Token, price: f64, percent_change: f64) {
-    // CRITICAL SAFETY CHECK: Validate price before any trading operations
-    if price <= 0.0 || !price.is_finite() {
-        log(
-            LogTag::Trader,
-            "ERROR",
-            &format!(
-                "REFUSING TO TRADE: Invalid price for {} ({}). Price = {:.10}",
-                token.symbol,
-                token.mint,
-                price
-            )
-        );
-        return;
-    }
+/// PositionsManager handles all position operations in a centralized service
+pub struct PositionsManager {
+    shutdown: Arc<Notify>,
+    pending_verifications: HashMap<String, DateTime<Utc>>, // signature -> created_at
+    retry_queue: HashMap<String, (DateTime<Utc>, u32)>,    // mint -> (next_retry, attempt_count)
+    positions: Vec<Position>,                              // Internal positions storage (in-memory only)
+    frozen_cooldowns: HashMap<String, DateTime<Utc>>,      // mint -> cooldown_time
+    last_close_time_per_mint: HashMap<String, DateTime<Utc>>, // mint -> last_close_time
+    last_open_position_at: Option<DateTime<Utc>>,          // global open cooldown
+}
 
-    // DRY-RUN MODE CHECK: Skip actual trading if dry-run is enabled
-    if crate::arguments::is_dry_run_enabled() {
-        let colored_percent = format!("\x1b[31m{:.2}%\x1b[0m", percent_change);
-        let current_open_count = get_open_positions_count();
-        log(
-            LogTag::Trader,
-            "DRY-RUN",
-            &format!(
-                "🚫 DRY-RUN: Would open position for {} ({}) at {:.6} SOL ({}) - Size: {:.6} SOL [{}/{}]",
-                token.symbol,
-                token.mint,
-                price,
-                colored_percent,
-                TRADE_SIZE_SOL,
-                current_open_count + 1,
-                MAX_OPEN_POSITIONS
-            )
-        );
-        return;
-    }
+/// Constants for cooldowns
+const FROZEN_ACCOUNT_COOLDOWN_MINUTES: i64 = 15;
+const POSITION_OPEN_COOLDOWN_SECS: i64 = 0;
+pub const POSITION_CLOSE_COOLDOWN_MINUTES: i64 = 15;
 
-    // RE-ENTRY COOLDOWN: Block re-entry for same mint shortly after closing
-    if let Some(remaining) = get_remaining_reentry_cooldown_minutes(&token.mint) {
-        log(
-            LogTag::Trader,
-            "COOLDOWN",
-            &format!(
-                "Re-entry cooldown active for {} ({}): wait {}m",
-                token.symbol,
-                &token.mint[..8],
-                remaining
-            )
-        );
-        return;
-    }
-
-    // GLOBAL COOLDOWN: Enforce delay between openings (regardless of token)
-    match try_acquire_open_cooldown() {
-        Ok(()) => { /* proceed */ }
-        Err(remaining) => {
-            log(
-                LogTag::Trader,
-                "COOLDOWN",
-                &format!(
-                    "Opening positions cooldown active: wait {}s before new position (requested: {} / {})",
-                    remaining,
-                    token.symbol,
-                    &token.mint[..8]
-                )
-            );
-            return;
+impl PositionsManager {
+    /// Create new PositionsManager and load positions from disk
+    pub fn new(shutdown: Arc<Notify>) -> Self {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", "🏗️ Creating new PositionsManager instance");
         }
-    }
-
-    // DEADLOCK FIX: Check positions first, release lock, then check pending transactions
-    let (already_has_position, open_positions_count) = {
-        if let Ok(positions) = SAVED_POSITIONS.lock() {
-            let has_position = positions
-                .iter()
-                .any(|p| p.mint == token.mint && p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none());
-            
-            let count = positions
-                .iter()
-                .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-                .count();
-                
-            (has_position, count)
-        } else {
-            (false, 0)
+        
+        let mut manager = Self {
+            shutdown,
+            pending_verifications: HashMap::new(),
+            retry_queue: HashMap::new(),
+            positions: Vec::new(),
+            frozen_cooldowns: HashMap::new(),
+            last_close_time_per_mint: HashMap::new(),
+            last_open_position_at: None,
+        };
+        
+        // Load positions from disk on startup
+        manager.load_positions_from_disk();
+        
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "📊 PositionsManager initialized with {} positions loaded from disk",
+                manager.positions.len()
+            ));
         }
-    }; // Lock is released here
-
-    if already_has_position {
-        return; // Already have an open position for this token
+        
+        manager
     }
 
-    if open_positions_count >= MAX_OPEN_POSITIONS {
-        log(
-            LogTag::Trader,
-            "LIMIT",
-            &format!(
-                "Maximum open positions reached ({}/{}). Skipping new position for {} ({})",
-                open_positions_count,
-                MAX_OPEN_POSITIONS,
-                token.symbol,
-                token.mint
-            )
-        );
-        return;
-    }
+    /// Run actor loop: handle incoming requests and periodic background tasks
+    pub async fn run_actor(
+        mut self,
+        mut rx: mpsc::Receiver<PositionsRequest>,
+    ) {
+        log(LogTag::Positions, "INFO", "PositionsManager actor starting...");
+        
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "🎬 Actor started with {} open positions, {} pending verifications, {} retry queue items",
+                self.get_open_positions_count(),
+                self.pending_verifications.len(),
+                self.retry_queue.len()
+            ));
+        }
+        
+        let mut verification_interval = interval(Duration::from_secs(10));
+        let mut retry_interval = interval(Duration::from_secs(30));
+        let mut cleanup_interval = interval(Duration::from_secs(60));
 
-    // CRITICAL SAFETY CHECK: Check for pending transactions for this token
-    // This prevents duplicate positions and transaction conflicts
-    log(
-        LogTag::Trader,
-        "PENDING_TX_CHECK_START",
-        &format!(
-            "🔍 SAFETY CHECK: Checking for pending transactions before opening position for {} ({})",
-            token.symbol, &token.mint[..8]
-        )
-    );
-
-    match crate::transactions::has_pending_transactions_for_token(&token.mint).await {
-        Ok(has_pending) => {
-            if has_pending {
-                log(
-                    LogTag::Trader,
-                    "PENDING_TX_BLOCKED",
-                    &format!(
-                        "� PENDING TRANSACTION DETECTED: Skipping new position for {} ({}) - transaction already in progress",
-                        token.symbol, &token.mint[..8]
-                    )
-                );
-                return;
-            } else {
-                log(
-                    LogTag::Trader,
-                    "PENDING_TX_CLEAR",
-                    &format!(
-                        "✅ SAFETY CHECK PASSED: No pending transactions found for {} ({}) - proceeding with position",
-                        token.symbol, &token.mint[..8]
-                    )
-                );
+        loop {
+            tokio::select! {
+                _ = self.shutdown.notified() => {
+                    log(LogTag::Positions, "INFO", "PositionsManager shutting down gracefully");
+                    break;
+                }
+        _ = verification_interval.tick() => { 
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", "⏰ Running verification tick");
             }
+            self.check_pending_verifications().await; 
         }
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "PENDING_TX_ERROR",
-                &format!(
-                    "❌ SAFETY CHECK FAILED: Failed to check pending transactions for {} ({}): {} - BLOCKING position for safety",
-                    token.symbol, &token.mint[..8], e
-                )
-            );
-            return; // Err on the side of caution - don't open position if we can't verify pending state
-        }
-    }
-
-    let colored_percent = format!("\x1b[31m{:.2}%\x1b[0m", percent_change);
-    let current_open_count = get_open_positions_count();
-    log(
-        LogTag::Trader,
-        "BUY",
-        &format!(
-            "Opening position for {} ({}) at {:.6} SOL ({}) - Size: {:.6} SOL [{}/{}]",
-            token.symbol,
-            token.mint,
-            price,
-            colored_percent,
-            TRADE_SIZE_SOL,
-            current_open_count + 1,
-            MAX_OPEN_POSITIONS
-        )
-    );
-
-    // Execute real buy transaction with critical operation protection
-    let _guard = crate::trader::CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
-
-    // Get wallet address for balance tracking
-    let wallet_address = match crate::utils::get_wallet_address() {
-        Ok(addr) => addr,
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("❌ Failed to get wallet address for {}: {}", token.symbol, e)
-            );
-            return;
-        }
-    };
-
-    // Execute the token purchase using instruction-based analysis
-    match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
-        Ok(swap_result) => {
-            let transaction_signature = swap_result.transaction_signature
-                .clone()
-                .unwrap_or_default();
-
-            // NEW APPROACH: Create position optimistically even if initial confirmation failed
-            // The background verification system will validate and update the position
-            if !swap_result.success {
-                log(
-                    LogTag::Trader,
-                    "WARNING",
-                    &format!(
-                        "⚠️ Initial transaction confirmation timed out for {}: {} - Creating position optimistically for background verification",
-                        token.symbol,
-                        &transaction_signature[..8]
-                    )
-                );
-            } else {
-                log(
-                    LogTag::Trader,
-                    "SUCCESS",
-                    &format!(
-                        "✅ Transaction confirmed for {}: {} - Creating verified position",
-                        token.symbol,
-                        &transaction_signature[..8]
-                    )
-                );
+        _ = retry_interval.tick() => { 
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", "🔄 Running retry tick");
             }
-
-            log(
-                LogTag::Trader,
-                "POSITION_CREATE",
-                &format!(
-                    "📝 Creating unverified position for {}: {} - verification will happen in background",
-                    token.symbol,
-                    &transaction_signature[..8]
-                )
-            );
-
-            // Create position immediately without waiting for verification
-            let is_verified = false;
-
-            let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
-
-            // Create position with minimal data - no transaction details fetching
-            // All effective prices, token amounts, and fees will be filled during background verification
-            let new_position = Position {
-                mint: token.mint.clone(),
-                symbol: token.symbol.clone(),
-                name: token.name.clone(),
-                entry_price: price,
-                entry_time: Utc::now(),
-                exit_price: None,
-                exit_time: None,
-                position_type: "buy".to_string(),
-                entry_size_sol: TRADE_SIZE_SOL,
-                total_size_sol: TRADE_SIZE_SOL,
-                price_highest: price,
-                price_lowest: price,
-                entry_transaction_signature: Some(transaction_signature.clone()),
-                exit_transaction_signature: None,
-                token_amount: None, // Will be filled during verification
-                effective_entry_price: None, // Will be filled during verification
-                effective_exit_price: None,
-                sol_received: None,
-                profit_target_min: Some(profit_min),
-                profit_target_max: Some(profit_max),
-                liquidity_tier: calculate_liquidity_tier(token),
-                transaction_entry_verified: false, // Always unverified initially
-                transaction_exit_verified: false,
-                entry_fee_lamports: None, // Will be filled during verification
-                exit_fee_lamports: None,
-            };
-
-            log(
-                LogTag::Trader,
-                "SUCCESS",
-                &format!(
-                    "✅ POSITION CREATED (UNVERIFIED): {} | TX: {} | Signal Price: {:.12} SOL | Profit Target: {:.1}%-{:.1}% | Verification: PENDING",
-                    token.symbol,
-                    &transaction_signature[..8],
-                    price,
-                    profit_min,
-                    profit_max
-                )
-            );
-
-            // DEADLOCK FIX: Add position and get snapshot for saving, then save outside lock
-            let positions_snapshot = if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                positions.push(new_position);
-                let snapshot = positions.clone();
-                snapshot
-            } else {
-                log(LogTag::Trader, "ERROR", "Failed to lock positions for saving");
-                return;
-            }; // Lock is released here
-            
-            // Save to file outside of mutex lock to avoid blocking other threads
-            save_positions_to_file(&positions_snapshot);
-
-            log(
-                LogTag::Trader,
-                "SAVED",
-                &format!(
-                    "💾 Position saved to disk: {} - pending background verification",
-                    token.symbol
-                )
-            );
-
-            // Add transaction to transactions manager pending queue for background processing
-            if let Err(e) = add_priority_transaction(transaction_signature.clone()).await {
-                log(
-                    LogTag::Trader,
-                    "WARNING",
-                    &format!(
-                        "Failed to add entry transaction {} to priority queue: {}",
-                        &transaction_signature[..8],
-                        e
-                    )
-                );
-            } else {
-                log(
-                    LogTag::Trader,
-                    "PRIORITY_ADDED",
-                    &format!(
-                        "✅ Entry transaction {} added to priority processing queue",
-                        &transaction_signature[..8]
-                    )
-                );
+            self.process_retry_queue().await; 
+        }
+        _ = cleanup_interval.tick() => { 
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", "🧹 Running cleanup tick");
             }
-
-            // Simplified approach - no complex transaction monitoring
-            log(
-                LogTag::Trader,
-                "TRANSACTION",
-                &format!("📡 Position entry transaction completed: {}", &transaction_signature[..8])
-            );
-
-            // Record position for RL learning if enabled
-            let learner = get_trading_learner();
-            if learner.is_model_ready() {
-                if let Some(rugcheck_score) = get_rugcheck_score_for_token(&token.mint).await {
-                    // Note: We'll record the complete trade when position is closed
-                    if is_debug_rl_learn_enabled() {
-                        log(
-                            LogTag::Trader,
-                            "RL_READY",
-                            &format!(
-                                "🤖 Position {} ready for RL learning when closed",
-                                token.symbol
-                            )
-                        );
+            self.cleanup_phantom_positions().await; 
+        }
+                maybe_msg = rx.recv() => {
+                    match maybe_msg {
+                        Some(msg) => {
+                            self.handle_request(msg).await;
+                        }
+                        None => {
+                            log(LogTag::Positions, "WARN", "PositionsManager channel closed; exiting actor");
+                            break;
+                        }
                     }
                 }
             }
         }
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!(
-                    "❌ Failed to execute buy swap for {} ({}): {}",
-                    token.symbol,
-                    token.mint,
-                    e
-                )
-            );
-        }
-    }
-}
 
-/// Closes an existing position with real sell transaction
-pub async fn close_position(
-    position: &mut Position,
-    token: &Token,
-    exit_price: f64,
-    exit_time: DateTime<Utc>,
-    shutdown: Option<Arc<Notify>>
-) -> bool {
-    // CRITICAL CHECK: Don't close position if it already has an exit transaction
-    if position.exit_transaction_signature.is_some() {
-        log(
-            LogTag::Trader,
-            "ALREADY_CLOSED",
-            &format!(
-                "⚠️ Position for {} already has exit transaction signature: {}. Skipping close attempt.",
-                position.symbol,
-                position.exit_transaction_signature.as_ref().unwrap_or(&"None".to_string())
-            )
-        );
-        return true; // Position is already closed/being closed
+        log(LogTag::Positions, "INFO", "PositionsManager actor stopped");
     }
 
-    // DRY-RUN MODE CHECK: Skip actual selling if dry-run is enabled
-    if crate::arguments::is_dry_run_enabled() {
-        log(
-            LogTag::Trader,
-            "DRY-RUN",
-            &format!(
-                "🚫 DRY-RUN: Would close position for {} ({}) at {:.6} SOL",
-                position.symbol,
-                position.mint,
-                exit_price
-            )
-        );
-        return false; // Don't modify the position in dry-run mode
-    }
-
-    // PHANTOM POSITION PREVENTION: Verify wallet balance before attempting sell
-    let wallet_address = match crate::utils::get_wallet_address() {
-        Ok(addr) => addr,
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("Failed to get wallet address for {}: {}", position.symbol, e)
-            );
-            return false;
-        }
-    };
-
-    let wallet_balance = match crate::utils::get_token_balance(&wallet_address, &position.mint).await {
-        Ok(balance) => balance,
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("Failed to get wallet balance for {}: {}", position.symbol, e)
-            );
-            return false;
-        }
-    };
-
-    // CRITICAL: Handle zero balance position (phantom position detection)
-    if wallet_balance == 0 {
-        log(
-            LogTag::Trader,
-            "PHANTOM_DETECTED",
-            &format!(
-                "🚨 PHANTOM POSITION DETECTED: {} - Expected {} tokens, wallet has 0. Investigating transaction history...",
-                position.symbol,
-                position.token_amount.unwrap_or(0)
-            )
-        );
-
-        // Use transactions manager to investigate and resolve position state
-        return verify_and_resolve_position_state(position, token, exit_price, exit_time).await;
-    }
-
-    // Log wallet balance vs position expectation for debugging
-    let expected_amount = position.token_amount.unwrap_or(0);
-    if wallet_balance != expected_amount {
-        log(
-            LogTag::Trader,
-            "BALANCE_MISMATCH",
-            &format!(
-                "⚠️ Wallet balance mismatch for {}: Expected {} tokens, wallet has {} tokens",
-                position.symbol,
-                expected_amount,
-                wallet_balance
-            )
-        );
-    }
-
-    // Execute real sell transaction with critical operation protection
-    let _guard = crate::trader::CriticalOperationGuard::new(
-        &format!("SELL {}", position.symbol)
-    );
-
-    log(
-        LogTag::Trader,
-        "SELL",
-        &format!(
-            "Closing position for {} ({}) at {:.6} SOL - Wallet balance: {} tokens",
-            position.symbol,
-            position.mint,
-            exit_price,
-            wallet_balance
-        )
-    );
-
-    // Execute the token sale (shutdown-aware to avoid retries during shutdown)
-    match sell_token(token, position.token_amount.unwrap_or(0), None, shutdown.clone()).await {
-        Ok(swap_result) => {
-            // Check if the transaction was successful
-            if !swap_result.success {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!(
-                        "❌ Sell transaction failed on-chain for {}: {}",
-                        position.symbol,
-                        swap_result.error.as_ref().unwrap_or(&"Unknown error".to_string())
-                    )
-                );
-                return false;
+    async fn handle_request(&mut self, msg: PositionsRequest) {
+        match msg {
+            PositionsRequest::OpenPosition { token, price, percent_change, reply } => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "📈 Received OpenPosition request for {} at price {} ({}% change)",
+                        token.symbol, price, percent_change
+                    ));
+                }
+                let _ = reply.send(self.open_position(&token, price, percent_change).await);
             }
+            PositionsRequest::ClosePosition { mint, token, exit_price, exit_time, reply } => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "📉 Received ClosePosition request for {} at price {}",
+                        token.symbol, exit_price
+                    ));
+                }
+                let _ = reply.send(self.close_position(&mint, &token, exit_price, exit_time).await);
+            }
+            PositionsRequest::AddVerification { signature } => {
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "🔍 Adding signature {} to verification queue",
+                        get_signature_prefix(&signature)
+                    ));
+                }
+                self.add_verification(signature);
+            }
+            PositionsRequest::AddRetryFailedSell { mint } => {
+                self.add_retry_failed_sell(mint);
+            }
+            PositionsRequest::UpdateTracking { mint, current_price, reply } => {
+                let _ = reply.send(self.update_position_tracking(&mint, current_price));
+            }
+            PositionsRequest::GetOpenPositionsCount { reply } => {
+                let _ = reply.send(self.get_open_positions_count());
+            }
+            PositionsRequest::GetOpenPositions { reply } => {
+                let _ = reply.send(self.get_open_positions());
+            }
+            PositionsRequest::GetClosedPositions { reply } => {
+                let _ = reply.send(self.get_closed_positions());
+            }
+            PositionsRequest::GetOpenMints { reply } => {
+                let _ = reply.send(self.get_open_positions_mints());
+            }
+            PositionsRequest::IsOpen { mint, reply } => {
+                let _ = reply.send(self.is_open_position(&mint));
+            }
+            PositionsRequest::GetByState { state, reply } => {
+                let _ = reply.send(self.get_positions_by_state(&state));
+            }
+            PositionsRequest::RemoveByEntrySignature { signature, reason, reply } => {
+                let _ = reply.send(self.remove_position_by_entry_signature(&signature, &reason));
+            }
+            PositionsRequest::GetActiveFrozenCooldowns { reply } => {
+                let _ = reply.send(self.get_active_frozen_cooldowns());
+            }
+        }
+    }
 
-            let transaction_signature = swap_result.transaction_signature
-                .clone()
-                .unwrap_or_default();
+    /// Get open positions count
+    fn get_open_positions_count(&self) -> usize {
+        self.positions
+            .iter()
+            .filter(|p| {
+                p.position_type == "buy"
+                    && !(p.transaction_entry_verified
+                        && p.transaction_exit_verified
+                        && p.exit_price.is_some())
+            })
+            .count()
+    }
 
-            // Simply set the exit transaction signature and save
-            position.exit_transaction_signature = Some(transaction_signature.clone());
+    /// Get open positions
+    fn get_open_positions(&self) -> Vec<Position> {
+        self.positions
+            .iter()
+            .filter(|p| {
+                p.position_type == "buy"
+                    && !(p.transaction_entry_verified
+                        && p.transaction_exit_verified
+                        && p.exit_price.is_some())
+            })
+            .cloned()
+            .collect()
+    }
 
+    /// Get closed positions
+    fn get_closed_positions(&self) -> Vec<Position> {
+        self.positions
+            .iter()
+            .filter(|p| {
+                p.position_type == "buy"
+                    && p.transaction_entry_verified
+                    && p.transaction_exit_verified
+                    && p.exit_price.is_some()
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Get open positions mints
+    fn get_open_positions_mints(&self) -> Vec<String> {
+        self.positions
+            .iter()
+            .filter(|p| {
+                p.position_type == "buy"
+                    && !(p.transaction_entry_verified
+                        && p.transaction_exit_verified
+                        && p.exit_price.is_some())
+            })
+            .map(|p| p.mint.clone())
+            .collect()
+    }
+
+    /// Check if mint is an open position
+    fn is_open_position(&self, mint: &str) -> bool {
+        self.positions.iter().any(|p| {
+            p.mint == mint
+                && p.position_type == "buy"
+                && !(p.transaction_entry_verified
+                    && p.transaction_exit_verified
+                    && p.exit_price.is_some())
+        })
+    }
+
+    /// Get positions by state
+    fn get_positions_by_state(&self, state: &PositionState) -> Vec<Position> {
+        self.positions
+            .iter()
+            .filter(|p| p.position_type == "buy" && self.get_position_state(p) == *state)
+            .cloned()
+            .collect()
+    }
+
+    /// Get position state
+    pub fn get_position_state(&self, position: &Position) -> PositionState {
+        if position.transaction_entry_verified
+            && position.transaction_exit_verified
+            && position.exit_price.is_some()
+        {
+            PositionState::Closed
+        } else if position.exit_transaction_signature.is_some() {
+            PositionState::Closing
+        } else {
+            PositionState::Open
+        }
+    }
+
+    /// Update position tracking directly
+    pub fn update_position_tracking_direct(&mut self, position: &mut Position, current_price: f64) {
+        if current_price == 0.0 {
             log(
-                LogTag::Trader,
-                "SUCCESS",
+                LogTag::Positions,
+                "WARN",
                 &format!(
-                    "✅ POSITION EXIT SIGNATURE SAVED: {} | Exit TX: {} | Details will be filled by background verification",
-                    position.symbol,
-                    &transaction_signature[..8]
-                )
-            );
-
-            // Record close time for cooldown tracking
-            record_close_time_for_mint(&position.mint, Utc::now());
-
-            // DEADLOCK FIX: Get positions snapshot, then save outside lock
-            let positions_snapshot = if let Ok(positions) = SAVED_POSITIONS.lock() {
-                positions.clone()
-            } else {
-                log(LogTag::Trader, "ERROR", "Failed to lock positions for saving");
-                return false;
-            }; // Lock is released here
-            
-            // Save to file outside of mutex lock to avoid blocking other threads
-            save_positions_to_file(&positions_snapshot);
-            log(
-                LogTag::Trader,
-                "SAVED",
-                &format!(
-                    "💾 Position exit signature saved to disk: {} - pending background verification",
+                    "Skipping position tracking update for {}: current_price is zero",
                     position.symbol
                 )
+                .yellow()
+                .dimmed()
+                .to_string(),
             );
-
-            // Add transaction to transactions manager pending queue for background processing
-            if let Err(e) = add_priority_transaction(transaction_signature.clone()).await {
-                log(
-                    LogTag::Trader,
-                    "WARNING",
-                    &format!(
-                        "Failed to add exit transaction {} to priority queue: {}",
-                        &transaction_signature[..8],
-                        e
-                    )
-                );
-            } else {
-                log(
-                    LogTag::Trader,
-                    "PRIORITY_ADDED",
-                    &format!(
-                        "✅ Exit transaction {} added to priority processing queue",
-                        &transaction_signature[..8]
-                    )
-                );
-            }
-
-            return true;
+            return;
         }
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("❌ Failed to execute sell transaction for {}: {}", position.symbol, e)
-            );
-            return false;
+
+        // On first update, set both high/low to the actual entry price
+        let entry_price = position
+            .effective_entry_price
+            .unwrap_or(position.entry_price);
+        if position.price_highest == 0.0 {
+            position.price_highest = entry_price;
+            position.price_lowest = entry_price;
         }
-    }
-}
 
-/// Verify and resolve position state using transactions manager
-/// This function investigates phantom positions and resolves their state based on blockchain data
-async fn verify_and_resolve_position_state(
-    position: &mut Position,
-    token: &Token,
-    exit_price: f64,
-    exit_time: DateTime<Utc>
-) -> bool {
-    log(
-        LogTag::Trader,
-        "VERIFICATION",
-        &format!("🔍 Verifying position state for {} using transactions manager", position.symbol)
-    );
-
-    // Get all swap transactions from transactions manager
-    let swap_transactions = match crate::transactions::get_global_swap_transactions().await {
-        Ok(transactions) => transactions,
-        Err(e) => {
-            log(
-                LogTag::Trader,
-                "ERROR",
-                &format!("Failed to get swap transactions from manager: {}", e)
-            );
-            return false;
+        // Update running extremes
+        if current_price > position.price_highest {
+            position.price_highest = current_price;
         }
-    };
-
-    // Filter transactions for this token mint
-    let token_transactions: Vec<_> = swap_transactions
-        .iter()
-        .filter(|tx| tx.token_mint == position.mint)
-        .collect();
-
-    log(
-        LogTag::Trader,
-        "VERIFICATION",
-        &format!("Found {} transactions for token {}", token_transactions.len(), position.symbol)
-    );
-
-    // Check for entry transaction verification if we have entry signature
-    if let Some(ref entry_sig) = position.entry_transaction_signature {
-        match crate::transactions::get_transaction(entry_sig).await {
-            Ok(Some(tx)) => {
-                if !tx.success {
-                    log(
-                        LogTag::Trader,
-                        "PHANTOM_RESOLVED",
-                        &format!(
-                            "🚨 ENTRY TRANSACTION FAILED: {} - Entry transaction {} failed on blockchain. Marking position as closed.",
-                            position.symbol,
-                            &entry_sig[..8]
-                        )
-                    );
-                    
-                    // Mark phantom position as closed with zero values
-                    position.exit_price = Some(0.0);
-                    position.exit_time = Some(exit_time);
-                    position.transaction_exit_verified = true;
-                    position.sol_received = Some(0.0);
-                    
-                    // RACE CONDITION FIX: Update position in-place within locked context
-                    // Save the corrected position - we need to find and update the position in the vector
-                    let positions_snapshot = if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                        // Find the position by mint and update it
-                        if let Some(pos) = positions.iter_mut().find(|p| p.mint == position.mint) {
-                            pos.exit_price = Some(0.0);
-                            pos.exit_time = Some(exit_time);
-                            pos.transaction_exit_verified = true;
-                            pos.sol_received = Some(0.0);
-                        }
-                        positions.clone()
-                    } else {
-                        log(LogTag::Trader, "ERROR", "Failed to lock positions for phantom resolution");
-                        return false;
-                    }; // Lock is released here
-                    
-                    // Save to file outside of mutex lock
-                    save_positions_to_file(&positions_snapshot);
-                    
-                    return true; // Position resolved as phantom
-                }
-            }
-            Ok(None) => {
-                log(
-                    LogTag::Trader,
-                    "WARN",
-                    &format!("Entry transaction {} not found in transactions manager", &entry_sig[..8])
-                );
-            }
-            Err(e) => {
-                log(
-                    LogTag::Trader,
-                    "ERROR",
-                    &format!("Failed to verify entry transaction {}: {}", &entry_sig[..8], e)
-                );
-            }
+        if current_price < position.price_lowest {
+            position.price_lowest = current_price;
         }
     }
 
-    // Look for any untracked sell transactions that match this position
-    let sell_transactions: Vec<_> = token_transactions
-        .iter()
-        .filter(|tx| tx.swap_type == "Sell")
-        .collect();
-
-    if !sell_transactions.is_empty() {
-        log(
-            LogTag::Trader,
-            "UNTRACKED_SELL",
-            &format!("Found {} untracked sell transactions for {}", sell_transactions.len(), position.symbol)
-        );
+    /// Open a new position
+    pub async fn open_position(
+        &mut self,
+        token: &Token,
+        price: f64,
+        percent_change: f64,
+    ) -> Result<(String, String), String> {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "🎯 Starting open_position for {} at price {:.8} SOL ({}% change)",
+                token.symbol, price, percent_change
+            ));
+        }
         
-        // Find the most recent sell transaction that could match this position
-        if let Some(latest_sell) = sell_transactions.iter().max_by_key(|tx| tx.slot.unwrap_or(0)) {
+        // CRITICAL SAFETY CHECK: Validate price
+        if price <= 0.0 || !price.is_finite() {
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", &format!(
+                    "❌ Invalid price validation failed: {}", price
+                ));
+            }
+            return Err(format!("Invalid price: {}", price));
+        }
+
+        // DRY-RUN MODE CHECK
+        if crate::arguments::is_dry_run_enabled() {
             log(
-                LogTag::Trader,
-                "POSITION_RESOLVED",
+                LogTag::Positions,
+                "DRY-RUN",
                 &format!(
-                    "🔍 UNTRACKED SELL DETECTED: {} - Found sell transaction: {:.6} SOL received for {:.0} tokens at {:.9} SOL/token",
-                    position.symbol,
-                    latest_sell.sol_amount,
-                    latest_sell.token_amount,
-                    latest_sell.calculated_price_sol
-                )
+                    "🚫 DRY-RUN: Would open position for {} ({}) at {:.6} SOL ({})",
+                    token.symbol,
+                    get_mint_prefix(&token.mint),
+                    price,
+                    percent_change
+                ),
             );
+            return Err("DRY-RUN: Position would be opened".to_string());
+        }
 
-            // Update position with the untracked sell data
-            position.exit_price = Some(latest_sell.calculated_price_sol);
-            position.exit_time = Some(exit_time);
-            position.effective_exit_price = Some(latest_sell.calculated_price_sol);
-            position.sol_received = Some(latest_sell.sol_amount);
-            position.transaction_exit_verified = true;
-            position.exit_fee_lamports = Some((latest_sell.fee_sol * 1_000_000_000.0) as u64);
+        // RE-ENTRY COOLDOWN CHECK
+        if let Some(remaining) = self.get_remaining_reentry_cooldown_minutes(&token.mint) {
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", &format!(
+                    "⏳ Re-entry cooldown active for {} - {} minutes remaining",
+                    token.symbol, remaining
+                ));
+            }
+            return Err(format!(
+                "Re-entry cooldown active for {} ({}): wait {}m",
+                token.symbol,
+                get_mint_prefix(&token.mint),
+                remaining
+            ));
+        }
 
-            // RACE CONDITION FIX: Update position in-place within locked context  
-            // Save the updated position - we need to find and update the position in the vector
-            let positions_snapshot = if let Ok(mut positions) = SAVED_POSITIONS.lock() {
-                // Find the position by mint and update it
-                if let Some(pos) = positions.iter_mut().find(|p| p.mint == position.mint) {
-                    pos.exit_price = Some(latest_sell.calculated_price_sol);
-                    pos.exit_time = Some(exit_time);
-                    pos.effective_exit_price = Some(latest_sell.calculated_price_sol);
-                    pos.sol_received = Some(latest_sell.sol_amount);
-                    pos.transaction_exit_verified = true;
-                    pos.exit_fee_lamports = Some((latest_sell.fee_sol * 1_000_000_000.0) as u64);
+        // GLOBAL COOLDOWN CHECK
+        if let Err(remaining) = self.try_acquire_open_cooldown() {
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", &format!(
+                    "⏳ Global open cooldown active - {} seconds remaining", remaining
+                ));
+            }
+            return Err(format!(
+                "Opening positions cooldown active: wait {}s",
+                remaining
+            ));
+        }
+
+        // CHECK EXISTING POSITION
+        let (already_has_position, open_positions_count) = {
+            let has_position = self.positions.iter().any(|p| {
+                p.mint == token.mint
+                    && p.position_type == "buy"
+                    && p.exit_price.is_none()
+                    && p.exit_transaction_signature.is_none()
+            });
+
+            let count = self
+                .positions
+                .iter()
+                .filter(|p| {
+                    p.position_type == "buy"
+                        && p.exit_price.is_none()
+                        && p.exit_transaction_signature.is_none()
+                })
+                .count();
+
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", &format!(
+                    "📊 Position check - existing: {}, open count: {}/{}",
+                    has_position, count, MAX_OPEN_POSITIONS
+                ));
+            }
+
+            (has_position, count)
+        };
+
+        if already_has_position {
+            return Err("Already have open position for this token".to_string());
+        }
+
+        if open_positions_count >= MAX_OPEN_POSITIONS {
+            return Err(format!(
+                "Maximum open positions reached ({}/{})",
+                open_positions_count, MAX_OPEN_POSITIONS
+            ));
+        }
+
+        // Execute the buy transaction
+        let _guard = crate::trader::CriticalOperationGuard::new(&format!("BUY {}", token.symbol));
+
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "💸 Executing buy_token for {} with {} SOL at price {:.8}",
+                token.symbol, TRADE_SIZE_SOL, price
+            ));
+        }
+
+        match buy_token(token, TRADE_SIZE_SOL, Some(price)).await {
+            Ok(swap_result) => {
+                let transaction_signature = swap_result
+                    .transaction_signature
+                    .clone()
+                    .unwrap_or_default();
+
+                // Create position optimistically
+                let (profit_min, profit_max) = crate::entry::get_profit_target(token).await;
+
+                let new_position = Position {
+                    mint: token.mint.clone(),
+                    symbol: token.symbol.clone(),
+                    name: token.name.clone(),
+                    entry_price: price,
+                    entry_time: Utc::now(),
+                    exit_price: None,
+                    exit_time: None,
+                    position_type: "buy".to_string(),
+                    entry_size_sol: TRADE_SIZE_SOL,
+                    total_size_sol: TRADE_SIZE_SOL,
+                    price_highest: price,
+                    price_lowest: price,
+                    entry_transaction_signature: Some(transaction_signature.clone()),
+                    exit_transaction_signature: None,
+                    token_amount: None,
+                    effective_entry_price: None,
+                    effective_exit_price: None,
+                    sol_received: None,
+                    profit_target_min: Some(profit_min),
+                    profit_target_max: Some(profit_max),
+                    liquidity_tier: calculate_liquidity_tier(token),
+                    transaction_entry_verified: false,
+                    transaction_exit_verified: false,
+                    entry_fee_lamports: None,
+                    exit_fee_lamports: None,
+                    phantom_remove: false,
+                };
+
+                // Add position to in-memory list
+                self.positions.push(new_position);
+                
+                // Save positions to disk after adding new position
+                self.save_positions_to_disk();
+
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "✅ Position created for {} with signature {} - profit targets: {:.2}%-{:.2}%",
+                        token.symbol, 
+                        get_signature_prefix(&transaction_signature),
+                        profit_min,
+                        profit_max
+                    ));
                 }
-                positions.clone()
-            } else {
-                log(LogTag::Trader, "ERROR", "Failed to lock positions for untracked sell update");
-                return false;
-            }; // Lock is released here
-            
-            // Save to file outside of mutex lock
-            save_positions_to_file(&positions_snapshot);
-            log(
-                LogTag::Trader,
-                "POSITION_UPDATED",
-                &format!("💾 Position {} updated with untracked sell data and saved", position.symbol)
-            );
 
-            return true; // Position resolved with historical data
+                // Log entry transaction with comprehensive verification
+                log(
+                    LogTag::Positions,
+                    "POSITION_ENTRY",
+                    &format!(
+                        "📝 Entry transaction {} added to comprehensive verification queue (RPC + transaction analysis)",
+                        get_signature_prefix(&transaction_signature)
+                    ),
+                );
+
+                // Track for comprehensive verification using RPC and transaction analysis
+                self.pending_verifications
+                    .insert(transaction_signature.clone(), Utc::now());
+
+                log(
+                    LogTag::Positions,
+                    "SUCCESS",
+                    &format!(
+                        "✅ POSITION CREATED: {} | TX: {} | Signal Price: {:.12} SOL | Verification: Pending",
+                        token.symbol,
+                        get_signature_prefix(&transaction_signature),
+                        price
+                    ),
+                );
+
+                Ok((token.mint.clone(), transaction_signature))
+            }
+            Err(e) => Err(format!("Failed to execute buy swap: {}", e)),
         }
     }
 
-    // If we reach here, position might be genuinely phantom or have other issues
-    log(
-        LogTag::Trader,
-        "PHANTOM_UNRESOLVED",
-        &format!(
-            "❌ PHANTOM POSITION UNRESOLVED: {} - No matching sell transactions found. Position may be invalid. Consider manual review.",
-            position.symbol
-        )
-    );
+    /// Close a position
+    pub async fn close_position(
+        &mut self,
+        mint: &str,
+        token: &Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>,
+    ) -> Result<(String, String), String> {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "🎯 Starting close_position for {} at price {:.8} SOL",
+                token.symbol, exit_price
+            ));
+        }
+        
+        // Find the position to close
+        let mut position_opt = None;
 
-    // Don't attempt to sell - position is in an invalid state
-    return false;
-}
+        if let Some(pos) = self
+            .positions
+            .iter_mut()
+            .find(|p| p.mint == mint && p.exit_transaction_signature.is_none())
+        {
+            if pos.exit_transaction_signature.is_some() {
+                return Err("Position already has exit transaction".to_string());
+            }
+            position_opt = Some(pos.clone());
+        }
 
-/// Gets the current count of open positions
-pub fn get_open_positions_count() -> usize {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-            .count()
-    } else {
-        0
+        let mut position = match position_opt {
+            Some(pos) => pos,
+            None => return Err("Position not found or already closed".to_string()),
+        };
+
+        // DRY-RUN MODE CHECK
+        if crate::arguments::is_dry_run_enabled() {
+            log(
+                LogTag::Positions,
+                "DRY-RUN",
+                &format!(
+                    "🚫 DRY-RUN: Would close position for {} at {:.6} SOL",
+                    position.symbol, exit_price
+                ),
+            );
+            return Err("DRY-RUN: Position would be closed".to_string());
+        }
+
+        // Check wallet balance
+        let wallet_address = match crate::utils::get_wallet_address() {
+            Ok(addr) => addr,
+            Err(e) => return Err(format!("Failed to get wallet address: {}", e)),
+        };
+
+        let wallet_balance =
+            match crate::utils::get_token_balance(&wallet_address, &position.mint).await {
+                Ok(balance) => balance,
+                Err(e) => return Err(format!("Failed to get token balance: {}", e)),
+            };
+
+        if wallet_balance == 0 {
+            // Handle phantom position
+            self.handle_phantom_position(&mut position, token, exit_price, exit_time)
+                .await;
+            return Err("Phantom position resolved".to_string());
+        }
+
+        // Execute sell transaction with retry logic
+        self.execute_sell_with_retry(&mut position, token, exit_price, exit_time)
+            .await
     }
-}
 
-/// Gets active frozen account cooldowns for display
-pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
-    let mut active_cooldowns = Vec::new();
+    async fn execute_sell_with_retry(
+        &mut self,
+        position: &mut Position,
+        token: &Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>,
+    ) -> Result<(String, String), String> {
+        let _guard =
+            crate::trader::CriticalOperationGuard::new(&format!("SELL {}", position.symbol));
 
-    if let Ok(mut cooldowns) = FROZEN_ACCOUNT_COOLDOWNS.lock() {
+        for attempt in 1..=3 {
+            log(
+                LogTag::Positions,
+                "SELL_ATTEMPT",
+                &format!(
+                    "💰 Attempting to sell {} (attempt {}/3) at {:.6} SOL",
+                    position.symbol, attempt, exit_price
+                ),
+            );
+
+            match sell_token(
+                token,
+                position.token_amount.unwrap_or(0),
+                Some(exit_price),
+                Some(self.shutdown.clone()),
+            )
+            .await
+            {
+                Ok(swap_result) => {
+                    let exit_signature = swap_result
+                        .transaction_signature
+                        .clone()
+                        .unwrap_or_default();
+
+                    // Update position
+                    position.exit_transaction_signature = Some(exit_signature.clone());
+                    position.exit_price = Some(exit_price);
+                    position.exit_time = Some(exit_time);
+
+                    /// Save updated position (in-memory only)
+                    if let Some(pos) = self.positions.iter_mut().find(|p| p.mint == position.mint) {
+                        *pos = position.clone();
+                        
+                        // Save positions to disk after updating position
+                        self.save_positions_to_disk();
+                    }
+
+                    // Log exit transaction with comprehensive verification
+                    log(
+                        LogTag::Positions,
+                        "POSITION_EXIT",
+                        &format!(
+                            "📝 Exit transaction {} added to comprehensive verification queue (RPC + transaction analysis)",
+                            get_signature_prefix(&exit_signature)
+                        ),
+                    );
+
+                    // Track for comprehensive verification using RPC and transaction analysis
+                    self.pending_verifications
+                        .insert(exit_signature.clone(), Utc::now());
+
+                    // Record close time for re-entry cooldown
+                    self.record_close_time_for_mint(&position.mint, exit_time);
+
+                    log(
+                        LogTag::Positions,
+                        "SUCCESS",
+                        &format!(
+                            "✅ POSITION CLOSED: {} | TX: {} | Exit Price: {:.12} SOL | Verification: Pending",
+                            position.symbol,
+                            get_signature_prefix(&exit_signature),
+                            exit_price
+                        ),
+                    );
+
+                    return Ok((position.mint.clone(), exit_signature));
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Positions,
+                        "SELL_FAILED",
+                        &format!(
+                            "❌ Sell attempt {}/3 failed for {}: {}",
+                            attempt, position.symbol, e
+                        ),
+                    );
+
+                    // Check if it's a frozen account error
+                    if is_frozen_account_error(&format!("{:?}", e)) {
+                        self.add_mint_to_frozen_cooldown(&position.mint);
+                        return Err(format!("Token frozen, added to cooldown: {}", e));
+                    }
+
+                    if attempt == 3 {
+                        // Add to retry queue for later
+                        self.retry_queue.insert(
+                            position.mint.clone(),
+                            (Utc::now() + chrono::Duration::minutes(5), 1),
+                        );
+                        return Err(format!(
+                            "All sell attempts failed, added to retry queue: {}",
+                            e
+                        ));
+                    }
+
+                    // Wait before retry
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+            }
+        }
+
+        Err("Unexpected end of sell retry loop".to_string())
+    }
+
+    /// Update position tracking
+    fn update_position_tracking(&mut self, mint: &str, current_price: f64) -> bool {
+        if current_price == 0.0 {
+            log(
+                LogTag::Positions,
+                "WARN",
+                &format!(
+                    "Skipping position tracking update for mint {}: current_price is zero",
+                    get_mint_prefix(&mint)
+                )
+                .yellow()
+                .dimmed()
+                .to_string(),
+            );
+            return false;
+        }
+
+        if let Some(position) = self.positions.iter_mut().find(|p| p.mint == mint) {
+            if is_debug_positions_enabled() {
+                log(LogTag::Positions, "DEBUG", &format!(
+                    "📊 Updating tracking for {} - price: {:.8} (prev high: {:.8}, low: {:.8})",
+                    position.symbol, current_price, position.price_highest, position.price_lowest
+                ));
+            }
+            
+            let entry_price = position
+                .effective_entry_price
+                .unwrap_or(position.entry_price);
+            if position.price_highest == 0.0 {
+                position.price_highest = entry_price;
+                position.price_lowest = entry_price;
+            }
+
+            let mut updated = false;
+            if current_price > position.price_highest {
+                position.price_highest = current_price;
+                updated = true;
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "📈 New high for {}: {:.8} SOL", position.symbol, current_price
+                    ));
+                }
+            }
+            if current_price < position.price_lowest {
+                position.price_lowest = current_price;
+                updated = true;
+                if is_debug_positions_enabled() {
+                    log(LogTag::Positions, "DEBUG", &format!(
+                        "📉 New low for {}: {:.8} SOL", position.symbol, current_price
+                    ));
+                }
+            }
+
+            // in-memory only; no persistence
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Remove position by entry signature
+    fn remove_position_by_entry_signature(&mut self, signature: &str, reason: &str) -> bool {
+        let before = self.positions.len();
+        self.positions.retain(|p| {
+            let target = p.entry_transaction_signature.as_deref() == Some(signature);
+            let should_remove = target && !p.transaction_entry_verified;
+            if should_remove {
+                log(
+                    LogTag::Positions,
+                    "POSITION_REMOVED",
+                    &format!(
+                        "🗑️ Removing unverified position {} ({}): {}",
+                        p.symbol,
+                        get_mint_prefix(&p.mint),
+                        reason
+                    ),
+                );
+            }
+            !should_remove
+        });
+        let removed = before != self.positions.len();
+        
+        // Save positions to disk after removal
+        if removed {
+            self.save_positions_to_disk();
+        }
+        
+        removed
+    }
+
+    /// Get active frozen cooldowns
+    fn get_active_frozen_cooldowns(&mut self) -> Vec<(String, i64)> {
+        let mut active_cooldowns = Vec::new();
         let now = Utc::now();
         let mut expired_mints = Vec::new();
 
-        for (mint, cooldown_time) in cooldowns.iter() {
+        for (mint, cooldown_time) in self.frozen_cooldowns.iter() {
             let minutes_since_cooldown = (now - *cooldown_time).num_minutes();
             if minutes_since_cooldown >= FROZEN_ACCOUNT_COOLDOWN_MINUTES {
                 expired_mints.push(mint.clone());
@@ -1172,136 +1046,1281 @@ pub fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
             }
         }
 
-        // Remove expired cooldowns
         for mint in expired_mints {
-            cooldowns.remove(&mint);
+            self.frozen_cooldowns.remove(&mint);
+        }
+
+        active_cooldowns
+    }
+
+    /// Get remaining reentry cooldown for mint
+    fn get_remaining_reentry_cooldown_minutes(&self, mint: &str) -> Option<i64> {
+        if POSITION_CLOSE_COOLDOWN_MINUTES <= 0 {
+            return None;
+        }
+        if let Some(last_close) = self.last_close_time_per_mint.get(mint) {
+            let now = Utc::now();
+            let minutes = (now - *last_close).num_minutes();
+            if minutes < POSITION_CLOSE_COOLDOWN_MINUTES {
+                return Some(POSITION_CLOSE_COOLDOWN_MINUTES - minutes);
+            }
+        }
+        None
+    }
+
+    /// Record close time for mint
+    fn record_close_time_for_mint(&mut self, mint: &str, when: DateTime<Utc>) {
+        self.last_close_time_per_mint.insert(mint.to_string(), when);
+    }
+
+    /// Try to acquire open cooldown
+    fn try_acquire_open_cooldown(&mut self) -> Result<(), i64> {
+        let now = Utc::now();
+        if let Some(prev) = self.last_open_position_at {
+            let elapsed = (now - prev).num_seconds();
+            if elapsed < POSITION_OPEN_COOLDOWN_SECS {
+                return Err(POSITION_OPEN_COOLDOWN_SECS - elapsed);
+            }
+        }
+        self.last_open_position_at = Some(now);
+        Ok(())
+    }
+
+    /// Add mint to frozen cooldown
+    fn add_mint_to_frozen_cooldown(&mut self, mint: &str) {
+        self.frozen_cooldowns.insert(mint.to_string(), Utc::now());
+        log(
+            LogTag::Positions,
+            "COOLDOWN",
+            &format!(
+                "Added {} to frozen account cooldown for {} minutes",
+                mint, FROZEN_ACCOUNT_COOLDOWN_MINUTES
+            ),
+        );
+    }
+
+    /// Add verification for transaction signature
+    pub fn add_verification(&mut self, signature: String) {
+        self.pending_verifications.insert(signature, Utc::now());
+    }
+
+    /// Add retry for failed sell
+    pub fn add_retry_failed_sell(&mut self, mint: String) {
+        self.retry_queue
+            .insert(mint, (Utc::now() + chrono::Duration::minutes(5), 1));
+    }
+
+    /// Handle phantom position detection and resolution
+    async fn handle_phantom_position(
+        &mut self,
+        position: &mut Position,
+        token: &Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>,
+    ) {
+        log(
+            LogTag::Positions,
+            "PHANTOM",
+            &format!(
+                "🔍 PHANTOM POSITION DETECTED: {} - wallet has 0 tokens but position exists",
+                position.symbol
+            ),
+        );
+
+        // Try to resolve by checking transaction history
+        if let Err(e) = self
+            .verify_and_resolve_position_state(position, token, exit_price, exit_time)
+            .await
+        {
+            log(
+                LogTag::Positions,
+                "ERROR",
+                &format!(
+                    "Failed to resolve phantom position for {}: {}",
+                    position.symbol, e
+                ),
+            );
         }
     }
 
-    active_cooldowns
-}
+    /// Check pending verifications and update positions accordingly
+    /// Enhanced with comprehensive transaction verification using RPC and transaction analysis
+    async fn check_pending_verifications(&mut self) {
+        let signatures_to_check: Vec<String> = self.pending_verifications.keys().cloned().collect();
 
-/// Records a completed trade for RL learning
-async fn record_position_for_learning(position: &Position) -> Result<(), String> {
-    // Only record if we have exit data (entry data is always available)
-    if position.exit_price.is_none() || position.exit_time.is_none() {
-        return Err("Incomplete position data".to_string());
+        if is_debug_positions_enabled() && !signatures_to_check.is_empty() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "🔍 Checking {} pending verifications", signatures_to_check.len()
+            ));
+        }
+
+        for signature in signatures_to_check {
+            match self.verify_transaction_comprehensively(&signature).await {
+                Ok(verification_result) => {
+                    match verification_result {
+                        Some(transaction) => {
+                            // Transaction is confirmed and successful
+                            if let Err(e) = self.update_position_from_verified_transaction(&signature, &transaction).await {
+                                log(
+                                    LogTag::Positions,
+                                    "ERROR",
+                                    &format!(
+                                        "Failed to update position from verified transaction {}: {}",
+                                        get_signature_prefix(&signature),
+                                        e
+                                    ),
+                                );
+                            }
+                            
+                            log(
+                                LogTag::Positions,
+                                "VERIFIED",
+                                &format!(
+                                    "✅ Transaction {} verified and position updated",
+                                    get_signature_prefix(&signature)
+                                ),
+                            );
+                            
+                            // Remove from pending
+                            self.pending_verifications.remove(&signature);
+                        }
+                        None => {
+                            // Transaction still not confirmed, check timeout
+                            if let Some(added_at) = self.pending_verifications.get(&signature) {
+                                let elapsed = Utc::now().signed_duration_since(*added_at).num_minutes();
+                                if elapsed > 10 {
+                                    // 10 minutes timeout
+                                    log(
+                                        LogTag::Positions,
+                                        "TIMEOUT",
+                                        &format!(
+                                            "⏰ Transaction verification timeout for {}: {}m elapsed",
+                                            get_signature_prefix(&signature),
+                                            elapsed
+                                        ),
+                                    );
+                                    
+                                    // Handle timeout - treat as failed for safety
+                                    if let Err(e) = self.handle_transaction_timeout(&signature).await {
+                                        log(
+                                            LogTag::Positions,
+                                            "ERROR",
+                                            &format!(
+                                                "Failed to handle transaction timeout {}: {}",
+                                                get_signature_prefix(&signature),
+                                                e
+                                            ),
+                                        );
+                                    }
+                                    
+                                    self.pending_verifications.remove(&signature);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(
+                        LogTag::Positions,
+                        "ERROR",
+                        &format!(
+                            "Error verifying transaction {}: {}",
+                            get_signature_prefix(&signature),
+                            e
+                        ),
+                    );
+                    
+                    // Don't remove from pending on verification errors - retry later
+                    // Only remove on timeout
+                    if let Some(added_at) = self.pending_verifications.get(&signature) {
+                        let elapsed = Utc::now().signed_duration_since(*added_at).num_minutes();
+                        if elapsed > 15 {
+                            // Extended timeout for RPC errors
+                            log(
+                                LogTag::Positions,
+                                "RPC_TIMEOUT",
+                                &format!(
+                                    "⏰ RPC timeout for transaction {}: {}m elapsed",
+                                    get_signature_prefix(&signature),
+                                    elapsed
+                                ),
+                            );
+                            self.pending_verifications.remove(&signature);
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    let entry_price = position.entry_price;
-    let entry_time = position.entry_time;
-    // PANIC PREVENTION: Safe unwrapping with early return on invalid data
-    let exit_price = match position.exit_price {
-        Some(price) => price,
-        None => return Err("Position has no exit price".to_string()),
+    /// Process retry queue for failed sells
+    async fn process_retry_queue(&mut self) {
+        let mints_to_retry: Vec<String> = self
+            .retry_queue
+            .iter()
+            .filter(|(_, (retry_time, _))| &Utc::now() >= retry_time)
+            .map(|(mint, _)| mint.clone())
+            .collect();
+
+        for mint in mints_to_retry {
+            if let Some((_, attempt_count)) = self.retry_queue.remove(&mint) {
+                log(
+                    LogTag::Positions,
+                    "RETRY",
+                    &format!(
+                        "🔄 Retrying failed sell for {} (attempt {})",
+                        get_mint_prefix(&mint),
+                        attempt_count + 1
+                    ),
+                );
+
+                // A future enhancement could push a command into the actor mailbox to trigger sell
+                // We'll handle this in the next iteration
+                // For now, just log and re-add with longer delay if needed
+                if attempt_count < 5 {
+                    self.retry_queue.insert(
+                        mint,
+                        (
+                            Utc::now() + chrono::Duration::minutes(10),
+                            attempt_count + 1,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Update position data from verified transaction
+    async fn update_position_from_transaction(&mut self, signature: &str) -> Result<(), String> {
+        // Get transaction from transactions manager
+        let transaction = match get_transaction(signature).await? {
+            Some(tx) => tx,
+            None => return Err("Transaction not found".to_string()),
+        };
+
+        // Find the position with this signature
+        let mut position_updated = false;
+        let mut position_symbol = String::new();
+
+        if let Some(position) = self.positions.iter_mut().find(|p| {
+            p.entry_transaction_signature.as_ref() == Some(&signature.to_string())
+                || p.exit_transaction_signature.as_ref() == Some(&signature.to_string())
+        }) {
+        // Update position with transaction data
+            if position.entry_transaction_signature.as_ref() == Some(&signature.to_string()) {
+                position.transaction_entry_verified = transaction.success;
+                // Extract actual token amount, effective price, fees from transaction
+                // This would require parsing the transaction details
+                // For now, just mark as verified
+            } else if position.exit_transaction_signature.as_ref() == Some(&signature.to_string()) {
+                position.transaction_exit_verified = transaction.success;
+                // Extract actual SOL received, exit fees from transaction
+            }
+
+            position_symbol = position.symbol.clone();
+            position_updated = true;
+        }
+
+        if position_updated {
+            log(
+                LogTag::Positions,
+                "VERIFIED",
+                &format!(
+                    "✅ Position updated from verified transaction: {} | {}",
+                    position_symbol,
+            get_signature_prefix(signature)
+                ),
+            );
+            
+            // Save positions to disk after verification update
+            self.save_positions_to_disk();
+        }
+
+        Ok(())
+    }
+
+    /// Comprehensive transaction verification using RPC and transaction analysis
+    /// This replaces the simple is_transaction_verified check with detailed verification
+    /// Returns Transaction if confirmed, None if pending, Error if failed
+    async fn verify_transaction_comprehensively(&self, signature: &str) -> Result<Option<Transaction>, String> {
+        log(
+            LogTag::Positions,
+            "VERIFY",
+            &format!(
+                "🔍 Performing comprehensive verification for transaction {}",
+                get_signature_prefix(signature)
+            ),
+        );
+
+        // Use the centralized transactions system to get the full transaction
+        match get_transaction(signature).await {
+            Ok(Some(transaction)) => {
+                // Check transaction status and success
+                match transaction.status {
+                    TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                        if transaction.success {
+                            log(
+                                LogTag::Positions,
+                                "VERIFY_SUCCESS",
+                                &format!(
+                                    "✅ Transaction {} verified successfully: fee={:.6} SOL, sol_change={:.6} SOL",
+                                    get_signature_prefix(signature),
+                                    transaction.fee_sol,
+                                    transaction.sol_balance_change
+                                ),
+                            );
+                            return Ok(Some(transaction));
+                        } else {
+                            return Err(format!("Transaction failed on-chain: {}", 
+                                transaction.error_message.unwrap_or("Unknown error".to_string())
+                            ));
+                        }
+                    }
+                    TransactionStatus::Pending => {
+                        log(
+                            LogTag::Positions,
+                            "VERIFY_PENDING",
+                            &format!(
+                                "⏳ Transaction {} still pending verification",
+                                get_signature_prefix(signature)
+                            ),
+                        );
+                        return Ok(None);
+                    }
+                    TransactionStatus::Failed(error) => {
+                        return Err(format!("Transaction failed: {}", error));
+                    }
+                }
+            }
+            Ok(None) => {
+                // Transaction not found, still pending
+                log(
+                    LogTag::Positions,
+                    "VERIFY_PENDING",
+                    &format!(
+                        "⏳ Transaction {} not found in transactions system, still pending",
+                        get_signature_prefix(signature)
+                    ),
+                );
+                return Ok(None);
+            }
+            Err(e) => {
+                return Err(format!("Error getting transaction: {}", e));
+            }
+        }
+    }
+
+    /// Update position from verified transaction with detailed data
+    async fn update_position_from_verified_transaction(&mut self, signature: &str, transaction: &Transaction) -> Result<(), String> {
+        // Find the position with this signature
+        let mut position_updated = false;
+        let mut position_symbol = String::new();
+
+        if let Some(position) = self.positions.iter_mut().find(|p| {
+            p.entry_transaction_signature.as_ref() == Some(&signature.to_string())
+                || p.exit_transaction_signature.as_ref() == Some(&signature.to_string())
+        }) {
+            // Update position with verified transaction data
+            if position.entry_transaction_signature.as_ref() == Some(&signature.to_string()) {
+                position.transaction_entry_verified = transaction.success;
+                position.entry_fee_lamports = Some(crate::tokens::decimals::sol_to_lamports(transaction.fee_sol));
+                
+                // Extract token amount and effective price from swap analysis using centralized convert_to_swap_pnl_info
+                // Use the transactions module to get SwapPnLInfo for this transaction
+                match crate::transactions::get_global_swap_transactions().await {
+                    Ok(swap_transactions) => {
+                        if let Some(swap_info) = swap_transactions.iter().find(|s| s.signature == signature) {
+                            // For entry transactions, use token_amount and calculated_price_sol
+                            position.token_amount = Some(swap_info.token_amount as u64);
+                            position.effective_entry_price = Some(swap_info.calculated_price_sol);
+                            
+                            log(
+                                LogTag::Positions,
+                                "ENTRY_ANALYSIS",
+                                &format!(
+                                    "📊 Entry verified: {:.6} tokens at {:.12} SOL calculated price",
+                                    swap_info.token_amount,
+                                    swap_info.calculated_price_sol
+                                ),
+                            );
+                        }
+                    }
+                    Err(_) => {
+                        log(
+                            LogTag::Positions,
+                            "WARN",
+                            &format!(
+                                "Could not get swap analysis for entry transaction {}",
+                                get_signature_prefix(signature)
+                            ),
+                        );
+                    }
+                }
+                
+                log(
+                    LogTag::Positions,
+                    "ENTRY_VERIFIED",
+                    &format!(
+                        "✅ Entry transaction verified for {}: fee={:.6} SOL",
+                        position.symbol,
+                        transaction.fee_sol
+                    ),
+                );
+                
+            } else if position.exit_transaction_signature.as_ref() == Some(&signature.to_string()) {
+                position.transaction_exit_verified = transaction.success;
+                position.exit_fee_lamports = Some(crate::tokens::decimals::sol_to_lamports(transaction.fee_sol));
+                
+                // Extract SOL received from swap analysis using centralized convert_to_swap_pnl_info
+                match crate::transactions::get_global_swap_transactions().await {
+                    Ok(swap_transactions) => {
+                        if let Some(swap_info) = swap_transactions.iter().find(|s| s.signature == signature) {
+                            // For exit transactions, use effective_sol_received and calculated_price_sol
+                            position.sol_received = Some(swap_info.effective_sol_received);
+                            position.effective_exit_price = Some(swap_info.calculated_price_sol);
+                            
+                            log(
+                                LogTag::Positions,
+                                "EXIT_ANALYSIS",
+                                &format!(
+                                    "📊 Exit verified: {:.6} SOL received at {:.12} SOL calculated price",
+                                    swap_info.effective_sol_received,
+                                    swap_info.calculated_price_sol
+                                ),
+                            );
+                        }
+                    }
+                    Err(_) => {
+                        log(
+                            LogTag::Positions,
+                            "WARN",
+                            &format!(
+                                "Could not get swap analysis for exit transaction {}",
+                                get_signature_prefix(signature)
+                            ),
+                        );
+                    }
+                }
+                
+                log(
+                    LogTag::Positions,
+                    "EXIT_VERIFIED",
+                    &format!(
+                        "✅ Exit transaction verified for {}: fee={:.6} SOL",
+                        position.symbol,
+                        transaction.fee_sol
+                    ),
+                );
+            }
+
+            position_symbol = position.symbol.clone();
+            position_updated = true;
+        }
+
+        if position_updated {
+            log(
+                LogTag::Positions,
+                "POSITION_UPDATED",
+                &format!(
+                    "🔄 Position {} updated from comprehensive verification: {}",
+                    position_symbol,
+                    get_signature_prefix(signature)
+                ),
+            );
+            
+            // Save positions to disk after verification update
+            self.save_positions_to_disk();
+        } else {
+            log(
+                LogTag::Positions,
+                "WARN",
+                &format!(
+                    "⚠️ No position found for verified transaction: {}",
+                    get_signature_prefix(signature)
+                ),
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Handle failed transaction by removing phantom positions or updating state
+    async fn handle_failed_transaction(&mut self, signature: &str, error: &str) -> Result<(), String> {
+        log(
+            LogTag::Positions,
+            "HANDLE_FAILED",
+            &format!(
+                "🚨 Handling failed transaction {}: {}",
+                get_signature_prefix(signature),
+                error
+            ),
+        );
+
+        // Find the position with this signature
+        if let Some(position) = self.positions.iter_mut().find(|p| {
+            p.entry_transaction_signature.as_ref() == Some(&signature.to_string())
+                || p.exit_transaction_signature.as_ref() == Some(&signature.to_string())
+        }) {
+            if position.entry_transaction_signature.as_ref() == Some(&signature.to_string()) {
+                // Entry transaction failed - remove phantom position
+                log(
+                    LogTag::Positions,
+                    "REMOVE_PHANTOM",
+                    &format!(
+                        "🗑️ Removing phantom position for {} due to failed entry transaction",
+                        position.symbol
+                    ),
+                );
+                
+                position.phantom_remove = true;
+                position.transaction_entry_verified = false;
+            } else if position.exit_transaction_signature.as_ref() == Some(&signature.to_string()) {
+                // Exit transaction failed - reset exit data and add to retry queue
+                log(
+                    LogTag::Positions,
+                    "RESET_EXIT",
+                    &format!(
+                        "🔄 Resetting exit data for {} due to failed exit transaction",
+                        position.symbol
+                    ),
+                );
+                
+                position.exit_transaction_signature = None;
+                position.exit_price = None;
+                position.exit_time = None;
+                position.transaction_exit_verified = false;
+                
+                // Add to retry queue
+                self.retry_queue.insert(
+                    position.mint.clone(),
+                    (Utc::now() + chrono::Duration::minutes(5), 1),
+                );
+            }
+            
+            // Save positions to disk after handling failure
+            self.save_positions_to_disk();
+        }
+
+        Ok(())
+    }
+
+    /// Handle transaction timeout by treating it as failed for safety
+    async fn handle_transaction_timeout(&mut self, signature: &str) -> Result<(), String> {
+        log(
+            LogTag::Positions,
+            "HANDLE_TIMEOUT",
+            &format!(
+                "⏰ Handling transaction timeout for {}",
+                get_signature_prefix(signature)
+            ),
+        );
+
+        // Treat timeout as failure for safety
+        self.handle_failed_transaction(signature, "Transaction verification timeout").await
+    }
+
+    /// Clean up phantom positions
+    async fn cleanup_phantom_positions(&mut self) {
+        log(
+            LogTag::Positions,
+            "CLEANUP",
+            "🧹 Checking for phantom positions to cleanup",
+        );
+
+        // Implementation for phantom position cleanup would go here
+        // This would check all open positions against wallet balances
+        // and resolve any inconsistencies
+    }
+
+    /// Verify and resolve position state using transaction history
+    async fn verify_and_resolve_position_state(
+        &mut self,
+        position: &mut Position,
+        token: &Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>,
+    ) -> Result<(), String> {
+        log(
+            LogTag::Positions,
+            "VERIFY",
+            &format!(
+                "🔍 Verifying position state for {} using transaction history",
+                position.symbol
+            ),
+        );
+
+        // This would use the transactions manager to check for any untracked sell transactions
+        // For now, return an error to indicate phantom position
+        Err("Phantom position detected - requires manual investigation".to_string())
+    }
+
+    
+    /// Apply entry verification data to position using analyze-swaps-exact logic
+    async fn entry_verification(
+        &self, 
+        position: &mut crate::positions::Position, 
+        transaction: &Transaction
+    ) {
+        // Check if transaction was successful
+        if !transaction.success {
+            position.transaction_entry_verified = false;
+            log(LogTag::Positions, "POSITION_ENTRY_FAILED", &format!(
+                "❌ Entry transaction {} failed for position {}: marking as failed verification - PENDING TRANSACTION SHOULD BE REMOVED",
+                &transaction.signature[..8], position.symbol
+            ));
+            return;
+        }
+
+        log(LogTag::Positions, "POSITION_ENTRY_PROCESSING", &format!(
+            "🔄 Processing successful entry transaction {} for position {} - converting to swap PnL info",
+            &transaction.signature[..8], position.symbol
+        ));
+
+        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
+        let empty_cache = std::collections::HashMap::new();
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache, false).await {
+            log(LogTag::Positions, "POSITION_ENTRY_SWAP_INFO", &format!(
+                "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
+                position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
+                swap_pnl_info.sol_amount, swap_pnl_info.token_amount, swap_pnl_info.calculated_price_sol
+            ));
+
+            if swap_pnl_info.swap_type == "Buy" && swap_pnl_info.token_mint == position.mint {
+                // Update position with analyze-swaps-exact calculations using effective pricing
+                position.transaction_entry_verified = true;
+                
+                // Calculate effective entry price using effective SOL spent (excludes ATA rent)
+                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_spent > 0.0 {
+                    swap_pnl_info.effective_sol_spent / swap_pnl_info.token_amount.abs()
+                } else {
+                    swap_pnl_info.calculated_price_sol // Fallback to regular price
+                };
+                
+                position.effective_entry_price = Some(effective_price);
+                position.total_size_sol = swap_pnl_info.sol_amount;
+                
+                // Convert token amount from float to units (with decimals)
+                if let Some(token_decimals) = crate::tokens::get_token_decimals_sync(&position.mint) {
+                    let token_amount_units = (swap_pnl_info.token_amount.abs() * 
+                        (10_f64).powi(token_decimals as i32)) as u64;
+                    position.token_amount = Some(token_amount_units);
+                    
+                    log(LogTag::Positions, "POSITION_ENTRY_TOKEN_AMOUNT", &format!(
+                        "🔢 Converted token amount for {}: {} tokens ({} units with {} decimals)",
+                        position.symbol, swap_pnl_info.token_amount, token_amount_units, token_decimals
+                    ));
+                }
+                
+                // Convert fee from SOL to lamports
+                position.entry_fee_lamports = Some(sol_to_lamports(swap_pnl_info.fee_sol));
+                
+                log(LogTag::Positions, "POSITION_ENTRY_VERIFIED", &format!(
+                    "✅ ENTRY TRANSACTION VERIFIED: Position {} marked as verified, price={:.9} SOL, PENDING TRANSACTION CLEARED",
+                    position.symbol, swap_pnl_info.calculated_price_sol
+                ));
+
+                // Log entry verification completion (no longer using cleanup)
+                if let Some(ref entry_sig) = position.entry_transaction_signature {
+                    log(LogTag::Positions, "POSITION_ENTRY_VERIFIED", &format!(
+                        "✅ Entry transaction {} verified for position {}",
+                        get_signature_prefix(entry_sig), position.symbol
+                    ));
+                }
+            } else {
+                position.transaction_entry_verified = false;
+                log(LogTag::Positions, "POSITION_ENTRY_MISMATCH", &format!(
+                    "⚠️ Entry transaction {} type/token mismatch for position {}: expected Buy {}, got {} {} - PENDING TRANSACTION SHOULD BE REMOVED",
+                    get_signature_prefix(&transaction.signature), position.symbol, get_mint_prefix(&position.mint), 
+                    swap_pnl_info.swap_type, get_mint_prefix(&swap_pnl_info.token_mint)
+                ));
+            }
+        } else {
+            position.transaction_entry_verified = false;
+            log(LogTag::Positions, "POSITION_ENTRY_NO_SWAP", &format!(
+                "⚠️ Entry transaction {} has no valid swap analysis for position {}",
+                &transaction.signature[..8], position.symbol
+            ));
+        }
+    }
+
+    /// Apply exit verification data to position using analyze-swaps-exact logic
+    async fn exit_verification(
+        &self, 
+        position: &mut crate::positions::Position, 
+        transaction: &Transaction
+    ) {
+        // Check if transaction was successful
+        if !transaction.success {
+            position.transaction_exit_verified = false;
+            log(LogTag::Positions, "POSITION_EXIT_FAILED", &format!(
+                "❌ Exit transaction {} failed for position {}: marking as failed verification",
+                &transaction.signature[..8], position.symbol
+            ));
+            return;
+        }
+
+        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
+        let empty_cache = std::collections::HashMap::new();
+        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache, false).await {
+            if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
+                // Update position with analyze-swaps-exact calculations using effective pricing
+                position.transaction_exit_verified = true;
+                
+                // Calculate effective exit price using effective SOL received (excludes ATA rent)
+                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_received > 0.0 {
+                    swap_pnl_info.effective_sol_received / swap_pnl_info.token_amount.abs()
+                } else {
+                    swap_pnl_info.calculated_price_sol // Fallback to regular price
+                };
+                
+                position.effective_exit_price = Some(effective_price);
+                position.sol_received = Some(swap_pnl_info.sol_amount);
+                
+                // Update exit price if not set
+                if position.exit_price.is_none() {
+                    position.exit_price = Some(swap_pnl_info.calculated_price_sol);
+                }
+                
+                // Convert fee from SOL to lamports
+                position.exit_fee_lamports = Some(sol_to_lamports(swap_pnl_info.fee_sol));
+                
+                // Set exit time if not set
+                if position.exit_time.is_none() {
+                    position.exit_time = Some(swap_pnl_info.timestamp);
+                }
+                
+                log(LogTag::Positions, "POSITION_EXIT_UPDATED", &format!(
+                    "📝 Updated exit data for position {}: verified=true, price={:.9} SOL (analyze-swaps-exact)",
+                    position.symbol, swap_pnl_info.calculated_price_sol
+                ));
+            } else {
+                position.transaction_exit_verified = false;
+                log(LogTag::Positions, "POSITION_EXIT_MISMATCH", &format!(
+                    "⚠️ Exit transaction {} type/token mismatch for position {}: expected Sell {}, got {} {}",
+                    &transaction.signature[..8], position.symbol, position.mint, 
+                    swap_pnl_info.swap_type, swap_pnl_info.token_mint
+                ));
+            }
+        } else {
+            position.transaction_exit_verified = false;
+            log(LogTag::Positions, "POSITION_EXIT_NO_SWAP", &format!(
+                "⚠️ Exit transaction {} has no valid swap analysis for position {}",
+                &transaction.signature[..8], position.symbol
+            ));
+        }
+    }
+
+    /// Get swap PnL info using the global TransactionsManager's convert_to_swap_pnl_info method
+    pub async fn convert_to_swap_pnl_info(
+        &self,
+        transaction: &Transaction,
+        token_symbol_cache: &std::collections::HashMap<String, String>,
+        silent: bool,
+    ) -> Option<crate::transactions::SwapPnLInfo> {
+        // Access the global transaction manager
+        use crate::transactions::GLOBAL_TRANSACTION_MANAGER;
+        
+        let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
+        if let Some(ref manager) = *manager_guard {
+            manager.convert_to_swap_pnl_info(transaction, token_symbol_cache, silent)
+        } else {
+            log(LogTag::Positions, "ERROR", "Global TransactionsManager not initialized");
+            None
+        }
+    }
+
+    /// Load positions from disk on startup
+    fn load_positions_from_disk(&mut self) {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "📂 Loading positions from disk: {}", POSITIONS_FILE
+            ));
+        }
+        
+        match fs::read_to_string(POSITIONS_FILE) {
+            Ok(content) => {
+                match serde_json::from_str::<Vec<Position>>(&content) {
+                    Ok(positions) => {
+                        self.positions = positions;
+                        log(LogTag::Positions, "INFO", &format!(
+                            "📁 Loaded {} positions from disk ({})",
+                            self.positions.len(), POSITIONS_FILE
+                        ));
+                        
+                        if is_debug_positions_enabled() {
+                            let open_count = self.get_open_positions_count();
+                            let closed_count = self.positions.len() - open_count;
+                            log(LogTag::Positions, "DEBUG", &format!(
+                                "📊 Position breakdown - Open: {}, Closed: {}",
+                                open_count, closed_count
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        log(LogTag::Positions, "ERROR", &format!(
+                            "Failed to parse positions file {}: {}",
+                            POSITIONS_FILE, e
+                        ));
+                        self.positions = Vec::new();
+                    }
+                }
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    log(LogTag::Positions, "INFO", &format!(
+                        "📁 No existing positions file found ({}), starting with empty positions",
+                        POSITIONS_FILE
+                    ));
+                } else {
+                    log(LogTag::Positions, "ERROR", &format!(
+                        "Failed to read positions file {}: {}",
+                        POSITIONS_FILE, e
+                    ));
+                }
+                self.positions = Vec::new();
+            }
+        }
+    }
+
+    /// Save positions to disk after changes
+    fn save_positions_to_disk(&self) {
+        if is_debug_positions_enabled() {
+            log(LogTag::Positions, "DEBUG", &format!(
+                "💾 Saving {} positions to disk: {}", 
+                self.positions.len(), POSITIONS_FILE
+            ));
+        }
+        
+        // Ensure data directory exists
+        if let Err(e) = ensure_data_directories() {
+            log(LogTag::Positions, "ERROR", &format!(
+                "Failed to create data directories: {}",
+                e
+            ));
+            return;
+        }
+
+        match serde_json::to_string_pretty(&self.positions) {
+            Ok(json_content) => {
+                match fs::write(POSITIONS_FILE, json_content) {
+                    Ok(_) => {
+                        log(LogTag::Positions, "DEBUG", &format!(
+                            "💾 Saved {} positions to disk ({})",
+                            self.positions.len(), POSITIONS_FILE
+                        ));
+                    }
+                    Err(e) => {
+                        log(LogTag::Positions, "ERROR", &format!(
+                            "Failed to write positions file {}: {}",
+                            POSITIONS_FILE, e
+                        ));
+                    }
+                }
+            }
+            Err(e) => {
+                log(LogTag::Positions, "ERROR", &format!(
+                    "Failed to serialize positions: {}",
+                    e
+                ));
+            }
+        }
+    }
+
+}
+
+// =============================================================================
+// ACTOR INTERFACE (Requests + Handle) and Service Startup
+// =============================================================================
+
+#[allow(clippy::large_enum_variant)]
+pub enum PositionsRequest {
+    OpenPosition {
+        token: Token,
+        price: f64,
+        percent_change: f64,
+        reply: oneshot::Sender<Result<(String, String), String>>,
+    },
+    ClosePosition {
+        mint: String,
+        token: Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>,
+        reply: oneshot::Sender<Result<(String, String), String>>,
+    },
+    AddVerification { signature: String },
+    AddRetryFailedSell { mint: String },
+    UpdateTracking { mint: String, current_price: f64, reply: oneshot::Sender<bool> },
+    GetOpenPositionsCount { reply: oneshot::Sender<usize> },
+    GetOpenPositions { reply: oneshot::Sender<Vec<Position>> },
+    GetClosedPositions { reply: oneshot::Sender<Vec<Position>> },
+    GetOpenMints { reply: oneshot::Sender<Vec<String>> },
+    IsOpen { mint: String, reply: oneshot::Sender<bool> },
+    GetByState { state: PositionState, reply: oneshot::Sender<Vec<Position>> },
+    RemoveByEntrySignature { signature: String, reason: String, reply: oneshot::Sender<bool> },
+    GetActiveFrozenCooldowns { reply: oneshot::Sender<Vec<(String, i64)>> },
+}
+
+#[derive(Clone)]
+pub struct PositionsHandle {
+    tx: mpsc::Sender<PositionsRequest>,
+}
+
+impl PositionsHandle {
+    pub fn new(tx: mpsc::Sender<PositionsRequest>) -> Self { Self { tx } }
+
+    pub async fn open_position(
+        &self,
+        token: Token,
+        price: f64,
+        percent_change: f64,
+    ) -> Result<(String, String), String> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = PositionsRequest::OpenPosition { token, price, percent_change, reply: reply_tx };
+        self.tx.send(msg).await.map_err(|_| "PositionsManager unavailable".to_string())?;
+        reply_rx.await.map_err(|_| "PositionsManager dropped".to_string())?
+    }
+
+    pub async fn close_position(
+        &self,
+        mint: String,
+        token: Token,
+        exit_price: f64,
+        exit_time: DateTime<Utc>,
+    ) -> Result<(String, String), String> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = PositionsRequest::ClosePosition { mint, token, exit_price, exit_time, reply: reply_tx };
+        self.tx.send(msg).await.map_err(|_| "PositionsManager unavailable".to_string())?;
+        reply_rx.await.map_err(|_| "PositionsManager dropped".to_string())?
+    }
+
+    pub async fn add_verification(&self, signature: String) {
+        let _ = self.tx.send(PositionsRequest::AddVerification { signature }).await;
+    }
+
+    pub async fn add_retry_failed_sell(&self, mint: String) {
+        let _ = self.tx.send(PositionsRequest::AddRetryFailedSell { mint }).await;
+    }
+
+    pub async fn update_tracking(&self, mint: String, current_price: f64) -> bool {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::UpdateTracking { mint, current_price, reply: txr }).await;
+        rxr.await.unwrap_or(false)
+    }
+
+    pub async fn get_open_positions_count(&self) -> usize {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::GetOpenPositionsCount { reply: txr }).await;
+        rxr.await.unwrap_or(0)
+    }
+
+    pub async fn get_open_positions(&self) -> Vec<Position> {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::GetOpenPositions { reply: txr }).await;
+        rxr.await.unwrap_or_default()
+    }
+
+    pub async fn get_closed_positions(&self) -> Vec<Position> {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::GetClosedPositions { reply: txr }).await;
+        rxr.await.unwrap_or_default()
+    }
+
+    pub async fn get_open_mints(&self) -> Vec<String> {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::GetOpenMints { reply: txr }).await;
+        rxr.await.unwrap_or_default()
+    }
+
+    pub async fn is_open(&self, mint: String) -> bool {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::IsOpen { mint, reply: txr }).await;
+        rxr.await.unwrap_or(false)
+    }
+
+    pub async fn remove_by_entry_signature(&self, signature: String, reason: String) -> bool {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::RemoveByEntrySignature { signature, reason, reply: txr }).await;
+        rxr.await.unwrap_or(false)
+    }
+
+    pub async fn get_active_frozen_cooldowns(&self) -> Vec<(String, i64)> {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::GetActiveFrozenCooldowns { reply: txr }).await;
+        rxr.await.unwrap_or_default()
+    }
+
+    pub async fn get_positions_by_state(&self, state: PositionState) -> Vec<Position> {
+        let (txr, rxr) = oneshot::channel();
+        let _ = self.tx.send(PositionsRequest::GetByState { state, reply: txr }).await;
+        rxr.await.unwrap_or_default()
+    }
+}
+
+static GLOBAL_POSITIONS_HANDLE: Lazy<StdMutex<Option<PositionsHandle>>> = Lazy::new(|| StdMutex::new(None));
+
+pub fn set_positions_handle(handle: PositionsHandle) {
+    if let Ok(mut guard) = GLOBAL_POSITIONS_HANDLE.lock() {
+        *guard = Some(handle);
+    }
+}
+
+pub fn get_positions_handle() -> Option<PositionsHandle> {
+    if let Ok(guard) = GLOBAL_POSITIONS_HANDLE.lock() {
+        guard.clone()
+    } else { None }
+}
+
+/// Start the PositionsManager service (actor) and expose a global handle
+pub async fn start_positions_manager_service(shutdown: Arc<Notify>) {
+    let (tx, rx) = mpsc::channel::<PositionsRequest>(256);
+    let handle = PositionsHandle::new(tx.clone());
+    set_positions_handle(handle);
+
+    let manager = PositionsManager::new(shutdown.clone());
+    tokio::spawn(async move { manager.run_actor(rx).await; });
+
+    log(LogTag::Positions, "INFO", "PositionsManager service initialized (actor)");
+}
+
+// =============================================================================
+// Public async helpers for external modules (thin facade over the global handle)
+// =============================================================================
+
+pub async fn get_open_positions() -> Vec<Position> {
+    if let Some(h) = get_positions_handle() { h.get_open_positions().await } else { Vec::new() }
+}
+
+pub async fn get_closed_positions() -> Vec<Position> {
+    if let Some(h) = get_positions_handle() { h.get_closed_positions().await } else { Vec::new() }
+}
+
+pub async fn get_open_positions_count() -> usize {
+    if let Some(h) = get_positions_handle() { h.get_open_positions_count().await } else { 0 }
+}
+
+pub async fn get_positions_by_state(state: PositionState) -> Vec<Position> {
+    if let Some(h) = get_positions_handle() { h.get_positions_by_state(state).await } else { Vec::new() }
+}
+
+/// Check if a position is currently open for the given mint
+pub async fn is_open_position(mint: &str) -> bool {
+    if let Some(h) = get_positions_handle() { 
+        h.is_open(mint.to_string()).await 
+    } else { 
+        false 
+    }
+}
+
+/// Compatibility function for old SAVED_POSITIONS usage - returns all positions (open + closed)
+/// This replaces the old SAVED_POSITIONS.lock() pattern
+pub async fn get_all_positions() -> Vec<Position> {
+    if let Some(h) = get_positions_handle() {
+        let mut all_positions = h.get_open_positions().await;
+        all_positions.extend(h.get_closed_positions().await);
+        all_positions
+    } else {
+        Vec::new()
+    }
+}
+
+pub async fn get_active_frozen_cooldowns() -> Vec<(String, i64)> {
+    if let Some(h) = get_positions_handle() { h.get_active_frozen_cooldowns().await } else { Vec::new() }
+}
+
+// Global helper functions for opening and closing positions
+pub async fn open_position_global(
+    token: Token,
+    price: f64,
+    percent_change: f64,
+) -> Result<(String, String), String> {
+    if let Some(h) = get_positions_handle() {
+        h.open_position(token, price, percent_change).await
+    } else {
+        Err("PositionsManager not available".to_string())
+    }
+}
+
+pub async fn close_position_global(
+    mint: String,
+    token: Token,
+    exit_price: f64,
+    exit_time: DateTime<Utc>,
+) -> Result<(String, String), String> {
+    if let Some(h) = get_positions_handle() {
+        h.close_position(mint, token, exit_price, exit_time).await
+    } else {
+        Err("PositionsManager not available".to_string())
+    }
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+/// Checks if an error is a frozen account error (error code 0x11)
+fn is_frozen_account_error(error_msg: &str) -> bool {
+    error_msg.contains("custom program error: 0x11")
+        || error_msg.contains("Account is frozen")
+        || error_msg.contains("Error: Account is frozen")
+}
+
+/// Safe 8-char prefix for signatures (avoids direct string indexing)
+fn get_signature_prefix(s: &str) -> String {
+    s.chars().take(8).collect()
+}
+
+/// Safe 8-char prefix for mints (avoids direct string indexing)
+fn get_mint_prefix(s: &str) -> String {
+    s.chars().take(8).collect()
+}
+
+/// Calculate liquidity tier based on USD liquidity amount
+/// Returns tier classification for position tracking and analysis
+pub fn calculate_liquidity_tier(token: &crate::tokens::types::Token) -> Option<String> {
+    let liquidity_usd = token.liquidity.as_ref().and_then(|l| l.usd)?;
+
+    if liquidity_usd < 0.0 {
+        return Some("INVALID".to_string());
+    }
+
+    // Liquidity tier classification based on USD value
+    let tier = match liquidity_usd {
+        x if x < 1_000.0 => "MICRO",      // < $1K
+        x if x < 10_000.0 => "SMALL",     // $1K - $10K
+        x if x < 50_000.0 => "MEDIUM",    // $10K - $50K
+        x if x < 250_000.0 => "LARGE",    // $50K - $250K
+        x if x < 1_000_000.0 => "XLARGE", // $250K - $1M
+        _ => "MEGA",                      // > $1M
     };
-    let exit_time = match position.exit_time {
-        Some(time) => time,
-        None => return Err("Position has no exit time".to_string()),
-    };
 
-    // Get additional data needed for RL learning
-    // For now, use placeholder values - in a real implementation, we'd store these at entry time
-    let liquidity_usd = 1000.0; // Default liquidity estimate
-    let volume_24h = 50000.0; // Default volume estimate
-    let market_cap = None; // Unknown market cap
-    let rugcheck_score = get_rugcheck_score_for_token(&position.mint).await;
-
-    // Record the trade using the RL system
-    record_completed_trade(
-        &position.mint,
-        &position.symbol,
-        entry_price,
-        exit_price,
-        entry_time,
-        exit_time,
-        liquidity_usd,
-        volume_24h,
-        market_cap,
-        rugcheck_score
-    ).await;
-
-    Ok(())
+    Some(tier.to_string())
 }
 
-/// Gets all open position mints
-pub fn get_open_positions_mints() -> Vec<String> {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-            .map(|p| p.mint.clone())
-            .collect()
-    } else {
-        Vec::new()
+/// Calculate total fees for a position including entry fees and exit fees only
+pub fn calculate_position_total_fees(position: &Position) -> f64 {
+    let entry_fees_sol = position
+        .entry_fee_lamports
+        .map_or(0.0, |fee| lamports_to_sol(fee));
+    let exit_fees_sol = position
+        .exit_fee_lamports
+        .map_or(0.0, |fee| lamports_to_sol(fee));
+
+    entry_fees_sol + exit_fees_sol
+}
+
+/// Calculate detailed breakdown of position fees for analysis
+pub fn calculate_position_fees_breakdown(position: &Position) -> (f64, f64, f64) {
+    let entry_fee_sol = position
+        .entry_fee_lamports
+        .map_or(0.0, |fee| lamports_to_sol(fee));
+    let exit_fee_sol = position
+        .exit_fee_lamports
+        .map_or(0.0, |fee| lamports_to_sol(fee));
+    let total_fees = entry_fee_sol + exit_fee_sol;
+
+    (entry_fee_sol, exit_fee_sol, total_fees)
+}
+
+/// Verify a transaction using the positions manager's comprehensive verification system
+/// This should be used instead of direct RPC calls to ensure consistent verification logic
+/// Returns Transaction if verified and successful, None if pending, Error if failed
+pub async fn verify_transaction_with_positions_manager(signature: &str) -> Result<Option<Transaction>, String> {
+    log(
+        LogTag::Positions,
+        "EXTERNAL_VERIFY",
+        &format!(
+            "🔍 External verification request for transaction {} - using positions manager verification system",
+            get_signature_prefix(signature)
+        ),
+    );
+    
+    // Use the centralized transactions system directly instead of creating temporary manager
+    // This is more efficient and uses the same verification logic
+    match get_transaction(signature).await {
+        Ok(Some(transaction)) => {
+            match transaction.status {
+                TransactionStatus::Finalized | TransactionStatus::Confirmed => {
+                    if transaction.success {
+                        log(
+                            LogTag::Positions,
+                            "EXTERNAL_VERIFY_SUCCESS",
+                            &format!(
+                                "✅ External verification successful for transaction {}",
+                                get_signature_prefix(signature)
+                            ),
+                        );
+                        Ok(Some(transaction))
+                    } else {
+                        let error = transaction.error_message.unwrap_or("Transaction failed on-chain".to_string());
+                        log(
+                            LogTag::Positions,
+                            "EXTERNAL_VERIFY_FAILED",
+                            &format!(
+                                "❌ External verification failed for transaction {}: {}",
+                                get_signature_prefix(signature),
+                                error
+                            ),
+                        );
+                        Err(error)
+                    }
+                }
+                TransactionStatus::Pending => {
+                    log(
+                        LogTag::Positions,
+                        "EXTERNAL_VERIFY_PENDING",
+                        &format!(
+                            "⏳ External verification pending for transaction {}",
+                            get_signature_prefix(signature)
+                        ),
+                    );
+                    Ok(None)
+                }
+                TransactionStatus::Failed(error) => {
+                    log(
+                        LogTag::Positions,
+                        "EXTERNAL_VERIFY_FAILED",
+                        &format!(
+                            "❌ External verification failed for transaction {}: {}",
+                            get_signature_prefix(signature),
+                            error
+                        ),
+                    );
+                    Err(error)
+                }
+            }
+        }
+        Ok(None) => {
+            log(
+                LogTag::Positions,
+                "EXTERNAL_VERIFY_PENDING",
+                &format!(
+                    "⏳ External verification pending for transaction {} (not found)",
+                    get_signature_prefix(signature)
+                ),
+            );
+            Ok(None)
+        }
+        Err(e) => {
+            log(
+                LogTag::Positions,
+                "EXTERNAL_VERIFY_ERROR",
+                &format!(
+                    "❌ External verification error for transaction {}: {}",
+                    get_signature_prefix(signature),
+                    e
+                ),
+            );
+            Err(e)
+        }
     }
 }
 
-/// Gets all open positions
-pub fn get_open_positions() -> Vec<Position> {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-            .cloned()
-            .collect()
-    } else {
-        Vec::new()
+/// Check if a transaction is verified using positions manager verification
+/// This provides a simple boolean check while using the comprehensive verification system
+pub async fn is_transaction_verified_comprehensive(signature: &str) -> bool {
+    match verify_transaction_with_positions_manager(signature).await {
+        Ok(Some(_)) => true,
+        _ => false,
     }
 }
 
-/// Gets all closed positions
-pub fn get_closed_positions() -> Vec<Position> {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && (p.exit_price.is_some() || p.exit_transaction_signature.is_some()))
-            .cloned()
-            .collect()
-    } else {
-        Vec::new()
-    }
-}
-
-/// Checks if a mint is an open position
-pub fn is_open_position(mint: &str) -> bool {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        positions
-            .iter()
-            .any(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_none() && p.exit_transaction_signature.is_none())
-    } else {
-        false
-    }
-}
-
-/// Helper enum to categorize position states
-#[derive(Debug, Clone, PartialEq)]
-pub enum PositionState {
-    Open,          // No exit transaction, actively trading
-    Closing,       // Exit transaction submitted but not yet verified
-    Closed,        // Exit transaction verified and exit_price set
-}
-
-/// Get the current state of a position
-pub fn get_position_state(position: &Position) -> PositionState {
-    if position.exit_price.is_some() {
-        PositionState::Closed
-    } else if position.exit_transaction_signature.is_some() {
-        PositionState::Closing
-    } else {
-        PositionState::Open
-    }
-}
-
-/// Gets positions by state
-pub fn get_positions_by_state(state: PositionState) -> Vec<Position> {
-    if let Ok(positions) = SAVED_POSITIONS.lock() {
-        positions
-            .iter()
-            .filter(|p| p.position_type == "buy" && get_position_state(p) == state)
-            .cloned()
-            .collect()
-    } else {
-        Vec::new()
-    }
-}

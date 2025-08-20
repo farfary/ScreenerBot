@@ -1606,7 +1606,7 @@ pub async fn sync_watch_list_with_trader(shutdown: Option<std::sync::Arc<Notify>
             }
         }
         // Check if it's an open position (higher priority)
-        let is_open_position = crate::positions::is_open_position(token_mint);
+        let is_open_position = crate::positions::is_open_position(token_mint).await;
         service.add_to_watch_list(token_mint, is_open_position).await;
 
         if is_debug_ohlcv_enabled() {

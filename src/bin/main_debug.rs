@@ -3716,14 +3716,17 @@ async fn test_real_position_management(
 
     log(LogTag::Transactions, "POSITION_TEST", "🟢 STEP 1: Opening position with transaction verification...");
 
-    // Open position using the main bot logic
-    positions::open_position(&test_token, current_price, -5.0).await;
+    // Open position using the PositionsManager
+    if let Err(e) = positions::open_position_global(test_token.clone(), current_price, -5.0).await {
+        log(LogTag::Transactions, "ERROR", &format!("Failed to open position: {}", e));
+        return;
+    }
 
     // Wait a moment for position to be created
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     // Check if position was created
-    let open_positions = positions::get_open_positions();
+    let open_positions = positions::get_open_positions().await;
     let test_position = open_positions.iter().find(|p| p.mint == token_mint);
 
     if let Some(position) = test_position {
@@ -3740,14 +3743,18 @@ async fn test_real_position_management(
         log(LogTag::Transactions, "POSITION_TEST", "🔴 STEP 2: Closing position with transaction verification...");
 
         // Get the position again in case it was updated
-        let open_positions = positions::get_open_positions();
-        if let Some(mut position) = open_positions.iter().find(|p| p.mint == token_mint).cloned() {
+        let open_positions = positions::get_open_positions().await;
+        if let Some(position) = open_positions.iter().find(|p| p.mint == token_mint).cloned() {
             let exit_price = current_price * 1.02; // Simulate 2% profit
             let exit_time = chrono::Utc::now();
 
-            let success = positions::close_position(&mut position, &test_token, exit_price, exit_time, None).await;
-
-            if success {
+            match positions::close_position_global(
+                position.mint.clone(),
+                test_token.clone(),
+                exit_price,
+                exit_time,
+            ).await {
+                Ok(_) => {
                 log(LogTag::Transactions, "POSITION_TEST", &format!(
                     "✅ Position closed successfully: {} | Exit: {:.9} SOL | TX: {}",
                     position.symbol,
@@ -3764,20 +3771,22 @@ async fn test_real_position_management(
                     wallet_pubkey,
                     &position,
                 ).await;
-            } else {
-                log(LogTag::Transactions, "POSITION_TEST", &format!(
-                    "❌ Failed to close position for {}", position.symbol
-                ));
-                
-                // Generate report even if closing failed
-                generate_comprehensive_position_test_report(
-                    &test_token,
-                    token_symbol,
-                    token_mint,
-                    sol_amount,
-                    wallet_pubkey,
-                    &position,
-                ).await;
+                }
+                Err(e) => {
+                    log(LogTag::Transactions, "POSITION_TEST", &format!(
+                        "❌ Failed to send close position request for {}: {}", position.symbol, e
+                    ));
+                    
+                    // Generate report even if closing failed
+                    generate_comprehensive_position_test_report(
+                        &test_token,
+                        token_symbol,
+                        token_mint,
+                        sol_amount,
+                        wallet_pubkey,
+                        &position,
+                    ).await;
+                }
             }
         } else {
             log(LogTag::Transactions, "POSITION_TEST", "❌ Position not found for closing");
@@ -4159,10 +4168,7 @@ async fn start_lightweight_transaction_monitoring(wallet_pubkey: Pubkey, shutdow
             }
         }
         
-        // Check priority transactions
-    if let Err(e) = manager.check_priority_transactions().await {
-            log(LogTag::Transactions, "WARN", &format!("Priority check failed: {}", e));
-        }
+        // Priority transaction system removed in favor of positions manager
     }
 }
 

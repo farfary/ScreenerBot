@@ -10,9 +10,8 @@ use crate::tokens::get_pool_service;
 use crate::tokens::is_token_excluded_from_trading;
 use crate::logger::{ log, LogTag };
 use crate::global::{ is_debug_entry_enabled };
-use crate::rl_learning::{ get_trading_learner, collect_market_features };
 use crate::tokens::cache::TokenDatabase;
-use crate::positions::SAVED_POSITIONS; // read-only access to past trades
+// use crate::positions::SAVED_POSITIONS; // TODO: read-only access to past trades - refactor to async
 use chrono::Utc;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -247,7 +246,29 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         if is_debug_entry_enabled() {
             log(LogTag::Entry, "BLACKLIST_REJECT", &format!("❌ {} blacklisted", token.symbol));
         }
-    return (false, 0.0, "Token blacklisted or excluded".to_string());
+        return (false, 0.0, "Token blacklisted or excluded".to_string());
+    }
+    
+    // Position validation - moved here from filtering to avoid async runtime conflicts
+    // Check for existing open position
+    if crate::positions::is_open_position(&token.mint).await {
+        if is_debug_entry_enabled() {
+            log(LogTag::Entry, "POSITION_REJECT", &format!("❌ {} already has an open position", token.symbol));
+        }
+        return (false, 0.0, "Token already has an open position".to_string());
+    }
+    
+    // Check maximum open positions limit
+    use crate::trader::MAX_OPEN_POSITIONS;
+    let open_positions_count = crate::positions::get_open_positions_count().await;
+    if open_positions_count >= MAX_OPEN_POSITIONS {
+        if is_debug_entry_enabled() {
+            log(LogTag::Entry, "MAX_POSITIONS_REJECT", &format!(
+                "❌ {} max positions reached: {}/{}", 
+                token.symbol, open_positions_count, MAX_OPEN_POSITIONS
+            ));
+        }
+        return (false, 0.0, format!("Maximum positions reached: {}/{}", open_positions_count, MAX_OPEN_POSITIONS));
     }
 
     let pool_service = get_pool_service();
@@ -326,7 +347,7 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
     }
 
     // Compute token re-entry profile from past closed trades
-    let reentry_profile_opt = get_reentry_profile(&token.mint);
+    let reentry_profile_opt: Option<ReentryProfile> = get_reentry_profile(&token.mint).await;
 
     // Get recent price history for deep drop analysis
     let price_history = pool_service.get_recent_price_history(&token.mint).await;
@@ -408,35 +429,18 @@ pub async fn should_buy(token: &Token) -> (bool, f64, String) {
         return (true, confidence, reason);
     }
 
-    // RL-ASSISTED FALLBACK: If no drop signal, consult learning system for promising timing
+    // VOLUME-BASED FALLBACK: If no drop signal, check for high volume activity  
     if let Some(vol_24h) = token.volume.as_ref().and_then(|v| v.h24) {
-        let learner = get_trading_learner();
-        // Only attempt lightweight analysis; do not block trading paths
-        if learner.is_model_ready() {
-            let market_cap = token.market_cap;
-            let rug = get_rugcheck_score_for_token(&token.mint).await;
-            let analysis = learner.analyze_entry_opportunity(
-                &token.mint,
-                current_pool_price,
-                liquidity_usd,
-                vol_24h,
-                market_cap,
-                rug
-            ).await;
-            {
-                    // Accept only when combined score high and timing favorable, and price not near top (already checked)
-                    if analysis.should_enter && analysis.confidence >= 0.6 {
-                        let mut conf = analysis.combined_score * 100.0;
-                        if conf < 55.0 { conf = 55.0; }
-                        if conf > 90.0 { conf = 90.0; }
-                        if is_debug_entry_enabled() {
-                            log(LogTag::Entry, "RL_FALLBACK_ENTRY", &format!(
-                                "🤖 RL-approved entry: score {:.2}, conf {:.2}", analysis.combined_score, analysis.confidence
-                            ));
-                        }
-                        return (true, conf, "RL timing opportunity".to_string());
-                    }
+        // High volume (>$50k) with good liquidity suggests active trading
+        if vol_24h > 50000.0 && liquidity_usd > 10000.0 {
+            let confidence = 60.0; // Conservative confidence for volume-based entry
+            if is_debug_entry_enabled() {
+                log(LogTag::Entry, "VOLUME_ENTRY", &format!(
+                    "📈 Volume-based entry: ${:.0}k vol, ${:.0}k liq", 
+                    vol_24h / 1000.0, liquidity_usd / 1000.0
+                ));
             }
+            return (true, confidence, "High volume activity".to_string());
         }
     }
 
@@ -1085,14 +1089,21 @@ struct ReentryProfile {
     anchor_price: f64,
 }
 
-fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
-    use crate::positions::Position;
-    let positions_guard = SAVED_POSITIONS.lock().ok()?;
-    let mut closed: Vec<&Position> = positions_guard
+async fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
+    use crate::positions::{get_closed_positions, PositionState};
+    
+    // Get all closed positions from the async positions manager
+    let all_closed = get_closed_positions().await;
+    
+    // Filter for this specific mint and buy positions with exit prices
+    let mut closed: Vec<_> = all_closed
         .iter()
         .filter(|p| p.mint == mint && p.position_type == "buy" && p.exit_price.is_some())
         .collect();
-    if closed.is_empty() { return None; }
+    
+    if closed.is_empty() { 
+        return None; 
+    }
 
     // Sort by exit_time to find last trade
     closed.sort_by_key(|p| p.exit_time);
@@ -1107,14 +1118,22 @@ fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
     let mut sum_exit = 0.0;
     let mut cnt_entry = 0usize;
     let mut cnt_exit = 0usize;
+    
     for p in closed.iter() {
         if let Some(eff) = p.effective_entry_price.or(Some(p.entry_price)) {
-            if eff.is_finite() && eff > 0.0 { sum_entry += eff; cnt_entry += 1; }
+            if eff.is_finite() && eff > 0.0 { 
+                sum_entry += eff; 
+                cnt_entry += 1; 
+            }
         }
         if let Some(ex) = p.effective_exit_price.or(p.exit_price) {
-            if ex.is_finite() && ex > 0.0 { sum_exit += ex; cnt_exit += 1; }
+            if ex.is_finite() && ex > 0.0 { 
+                sum_exit += ex; 
+                cnt_exit += 1; 
+            }
         }
     }
+    
     let avg_entry = if cnt_entry > 0 { Some(sum_entry / cnt_entry as f64) } else { None };
     let avg_exit = if cnt_exit > 0 { Some(sum_exit / cnt_exit as f64) } else { None };
 
@@ -1122,7 +1141,11 @@ fn get_reentry_profile(mint: &str) -> Option<ReentryProfile> {
     let anchor = if let Some(le) = last_exit {
         let avg = avg_exit.or(avg_entry).or(last_entry).unwrap_or(le);
         0.6 * le + 0.4 * avg
-    } else if let Some(avg) = avg_exit.or(avg_entry).or(last_entry) { avg } else { 0.0 };
+    } else if let Some(avg) = avg_exit.or(avg_entry).or(last_entry) { 
+        avg 
+    } else { 
+        0.0 
+    };
 
     Some(ReentryProfile {
         completed_trades,

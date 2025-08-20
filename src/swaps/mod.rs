@@ -6,9 +6,7 @@ pub mod gmgn;
 pub mod jupiter;
 pub mod interface;
 pub mod types;
-// transaction.rs and pricing.rs have been removed - functions moved to execution.rs and transactions_tools.rs
 pub mod execution;
-pub mod raydium_direct;
 
 use crate::tokens::Token;
 use crate::rpc::SwapError;
@@ -54,7 +52,7 @@ pub const EARLY_ATTEMPTS_COUNT: u32 = 3;
 // =============================================================================
 
 // Main swap functions
-pub use interface::{buy_token, sell_token, wait_for_swap_verification, wait_for_priority_swap_verification, SwapResult};
+pub use interface::{buy_token, sell_token, SwapResult};
 
 // Common types and structures
 pub use types::{
@@ -65,21 +63,12 @@ pub use types::{
 // Configuration constants (re-exported for external use)
 pub use config::{SOL_MINT, GMGN_ANTI_MEV as ANTI_MEV, GMGN_PARTNER as PARTNER};
 
-// Transaction utilities (moved to execution.rs)
-pub use execution::{
-    sign_and_send_transaction
-};
-
-// Legacy pricing functions (moved to transactions_tools.rs - use transactions_tools::analyze_post_swap_transaction instead)
-// pub use pricing::{calculate_effective_price, calculate_effective_price_from_raw, calculate_effective_price_from_raw_with_quote};
-
 // Execution functions
-pub use execution::{get_swap_quote, execute_swap_with_quote};
+pub use execution::{get_swap_quote};
 
 // Router-specific functions
 pub use gmgn::{get_gmgn_quote, execute_gmgn_swap, gmgn_sign_and_send_transaction, GMGNSwapResult};
 pub use jupiter::{get_jupiter_quote, execute_jupiter_swap, jupiter_sign_and_send_transaction, JupiterSwapResult};
-pub use raydium_direct::{execute_raydium_cpmm_swap, execute_test_raydium_cpmm_swap, RaydiumCpmmSwapResult, get_test_pool_config};
 
 // =============================================================================
 // UNIFIED ROUTER INTERFACE

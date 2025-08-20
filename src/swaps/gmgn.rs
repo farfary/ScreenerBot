@@ -4,7 +4,7 @@
 use crate::tokens::Token;
 use crate::rpc::{SwapError, lamports_to_sol};
 use crate::logger::{log, LogTag};
-use crate::global::is_debug_swap_enabled;
+use crate::global::is_debug_swaps_enabled;
 use super::config::{
     GMGN_QUOTE_API, SOL_MINT, GMGN_PARTNER,
     QUOTE_TIMEOUT_SECS, RETRY_ATTEMPTS,
@@ -34,7 +34,7 @@ pub struct GMGNSwapResult {
 pub async fn gmgn_sign_and_send_transaction(
     swap_transaction_base64: &str,
 ) -> Result<String, SwapError> {
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_SIGN_START",
@@ -42,7 +42,7 @@ pub async fn gmgn_sign_and_send_transaction(
         );
     }
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_RPC_SELECTED",
@@ -53,7 +53,7 @@ pub async fn gmgn_sign_and_send_transaction(
     // Get RPC client and sign transaction
     let rpc_client = crate::rpc::get_rpc_client();
     
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_SIGNING",
@@ -63,7 +63,7 @@ pub async fn gmgn_sign_and_send_transaction(
     
     let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
     
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_TRANSACTION_SENT",
@@ -71,47 +71,13 @@ pub async fn gmgn_sign_and_send_transaction(
         );
     }
     
-    // Wait for transaction confirmation before proceeding
+    // Do NOT wait for confirmation here; background verification will handle it
     log(
         LogTag::Swap,
-        "GMGN_CONFIRMING",
-        &format!("⏳ GMGN: Waiting for transaction confirmation: {}", &signature[..8])
+        "GMGN_SUBMITTED",
+        &format!("📤 GMGN: Transaction submitted: {} — verification will run in background", &signature[..8])
     );
-    
-    match rpc_client.wait_for_transaction_confirmation_smart(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
-        Ok(true) => {
-            log(
-                LogTag::Swap,
-                "GMGN_CONFIRMED",
-                &format!("✅ GMGN: Transaction confirmed on-chain: {}", &signature[..8])
-            );
-        }
-        Ok(false) => {
-            log(
-                LogTag::Swap,
-                "GMGN_TIMEOUT",
-                &format!("⏰ GMGN: Transaction confirmation timeout: {}", &signature[..8])
-            );
-            return Err(SwapError::TransactionError(
-                format!("Transaction confirmation timeout: {}", signature)
-            ));
-        }
-        Err(e) => {
-            log(
-                LogTag::Swap,
-                "GMGN_CONFIRMATION_ERROR",
-                &format!("❌ GMGN: Transaction confirmation error: {} - {}", &signature[..8], e)
-            );
-            return Err(e);
-        }
-    }
-    
-    log(
-        LogTag::Swap,
-        "GMGN_SIGN_SUCCESS",
-        &format!("✅ GMGN: Transaction signed, sent and confirmed: {}", signature)
-    );
-    
+
     Ok(signature)
 }
 
@@ -126,7 +92,7 @@ pub async fn get_gmgn_quote(
     fee: f64,
     is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_QUOTE_START",
@@ -165,11 +131,11 @@ pub async fn get_gmgn_quote(
         GMGN_PARTNER
     );
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(LogTag::Swap, "GMGN_URL", &format!("🌐 GMGN API URL: {}", url));
     }
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_QUOTE_DETAILS",
@@ -222,7 +188,7 @@ pub async fn get_gmgn_quote(
 
     // Retry up to configured attempts with increasing delays
     for attempt in 1..=RETRY_ATTEMPTS {
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "GMGN_QUOTE_ATTEMPT",
@@ -235,7 +201,7 @@ pub async fn get_gmgn_quote(
             .send()
             .await {
             Ok(response) => {
-                if is_debug_swap_enabled() {
+                if is_debug_swaps_enabled() {
                     log(
                         LogTag::Swap,
                         "GMGN_RESPONSE_STATUS",
@@ -246,7 +212,7 @@ pub async fn get_gmgn_quote(
                 if response.status().is_success() {
                     match response.json::<GMGNApiResponse>().await {
                         Ok(api_response) => {
-                            if is_debug_swap_enabled() {
+                            if is_debug_swaps_enabled() {
                                 log(
                                     LogTag::Swap,
                                     "GMGN_RESPONSE_PARSED",
@@ -257,7 +223,7 @@ pub async fn get_gmgn_quote(
 
                             if api_response.code == 0 {
                                 if let Some(data) = api_response.data {
-                                    if is_debug_swap_enabled() {
+                                    if is_debug_swaps_enabled() {
                                         log(
                                             LogTag::Swap,
                                             "GMGN_QUOTE_SUCCESS",
@@ -289,7 +255,7 @@ pub async fn get_gmgn_quote(
                                     );
                                     return Ok(data);
                                 } else {
-                                    if is_debug_swap_enabled() {
+                                    if is_debug_swaps_enabled() {
                                         log(
                                             LogTag::Swap,
                                             "GMGN_EMPTY_DATA",
@@ -301,7 +267,7 @@ pub async fn get_gmgn_quote(
                                     ));
                                 }
                             } else {
-                                if is_debug_swap_enabled() {
+                                if is_debug_swaps_enabled() {
                                     log(
                                         LogTag::Swap,
                                         "GMGN_API_ERROR",
@@ -314,7 +280,7 @@ pub async fn get_gmgn_quote(
                             }
                         }
                         Err(e) => {
-                            if is_debug_swap_enabled() {
+                            if is_debug_swaps_enabled() {
                                 log(
                                     LogTag::Swap,
                                     "GMGN_PARSE_ERROR",
@@ -327,7 +293,7 @@ pub async fn get_gmgn_quote(
                         }
                     }
                 } else {
-                    if is_debug_swap_enabled() {
+                    if is_debug_swaps_enabled() {
                         log(
                             LogTag::Swap,
                             "GMGN_HTTP_ERROR",
@@ -340,7 +306,7 @@ pub async fn get_gmgn_quote(
                 }
             }
             Err(e) => {
-                if is_debug_swap_enabled() {
+                if is_debug_swaps_enabled() {
                     log(
                         LogTag::Swap,
                         "GMGN_NETWORK_ERROR",
@@ -354,7 +320,7 @@ pub async fn get_gmgn_quote(
         // Wait before retry (except on last attempt)
         if attempt < 3 {
             let delay = tokio::time::Duration::from_millis(1000 * attempt as u64);
-            if is_debug_swap_enabled() {
+            if is_debug_swaps_enabled() {
                 log(
                     LogTag::Swap,
                     "GMGN_RETRY_DELAY",
@@ -371,7 +337,7 @@ pub async fn get_gmgn_quote(
     }
 
     // If we get here, all retries failed
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "GMGN_ALL_RETRIES_FAILED",

@@ -292,7 +292,7 @@ pub enum LogTag {
     RlLearn,
     Summary,
     Transactions,
-    Position,
+    Positions,
     Test,
     Other(String),
 }
@@ -320,7 +320,7 @@ impl std::fmt::Display for LogTag {
             LogTag::RlLearn => format!("{:<8}", "RL_LEARN").bright_cyan().bold(), // 🤖 AI cyan
             LogTag::Summary => format!("{:<8}", "SUMMARY").bright_white().bold(), // 📊 Summary white
             LogTag::Transactions => format!("{:<8}", "TX").bright_blue().bold(), // 📝 Transactions blue
-            LogTag::Position => format!("{:<8}", "POSITION").bright_yellow().bold(), // 📊 Position yellow
+            LogTag::Positions => format!("{:<8}", "Positions").bright_yellow().bold(), // 📊 Positions yellow
             LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(), // 🧪 Test blue
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
@@ -352,7 +352,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::RlLearn => ENABLE_RL_LEARN_LOGS,
         LogTag::Summary => ENABLE_SUMMARY_LOGS,
         LogTag::Transactions => ENABLE_TRANSACTIONS_LOGS,
-        LogTag::Position => true, // Always enable position logs (critical for trading)
+        LogTag::Positions => true, // Always enable Positions logs (critical for trading)
         LogTag::Other(_) => ENABLE_OTHER_LOGS,
         LogTag::Test => true, // Always enable test logs
     };
@@ -477,8 +477,8 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
             format!("{:<width$}", "TX", width = TAG_WIDTH)
                 .bright_blue()
                 .bold(),
-        LogTag::Position =>
-            format!("{:<width$}", "POSITION", width = TAG_WIDTH)
+        LogTag::Positions =>
+            format!("{:<width$}", "Positions", width = TAG_WIDTH)
                 .bright_yellow()
                 .bold(),
         LogTag::Test =>
@@ -619,7 +619,7 @@ pub fn log(tag: LogTag, log_type: &str, message: &str) {
         LogTag::RlLearn => "RL_LEARN",
         LogTag::Summary => "SUMMARY",
         LogTag::Transactions => "TX",
-        LogTag::Position => "POSITION",
+        LogTag::Positions => "Positions",
         LogTag::Test => "TEST",
         LogTag::Other(ref s) => s,
     };
@@ -741,7 +741,7 @@ fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
 
     result
 }
-/// Enhanced logging function for price changes with comprehensive position details
+/// Enhanced logging function for price changes with comprehensive Positions details
 /// Shows full symbol, both pool and API prices, pool information, and current P&L
 /// Displays information in two well-formatted lines for better readability
 pub fn log_price_change(
@@ -894,5 +894,5 @@ pub fn log_price_change(
     let combined_message = format!("{}\n{}", line1, line2);
 
     // Log both lines using a single logger call
-    log(LogTag::Other("POSITION".to_string()), "PRICE", &combined_message);
+    log(LogTag::Other("Positions".to_string()), "PRICE", &combined_message);
 }

@@ -4,7 +4,7 @@ use screenerbot::{
     tokens::{
         pool::{
             init_pool_service,
-            get_price_history_for_rl_learning,
+            get_price_history_for_analysis,
             get_detailed_pool_price_history,
             get_pools_with_price_history,
             cleanup_old_price_history_caches,
@@ -107,7 +107,7 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
 
     // Try to get existing price history
     println!("\n📊 Checking existing price history...");
-    let existing_history = get_price_history_for_rl_learning(token_mint).await;
+    let existing_history = get_price_history_for_analysis(token_mint).await;
     println!("📈 Found {} existing price history entries", existing_history.len());
 
     if !existing_history.is_empty() {
@@ -180,7 +180,7 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
 
     // Check updated price history
     println!("\n📊 Checking updated price history...");
-    let updated_history = get_price_history_for_rl_learning(token_mint).await;
+    let updated_history = get_price_history_for_analysis(token_mint).await;
     println!("📈 Found {} total price history entries", updated_history.len());
 
     if updated_history.len() > existing_history.len() {
@@ -218,16 +218,16 @@ async fn test_price_history_cache(token_mint: &str) -> Result<(), Box<dyn std::e
         }
     }
 
-    // Test RL learning integration
-    println!("\n🤖 Testing RL Learning Integration...");
-    let rl_history = get_price_history_for_rl_learning(token_mint).await;
-    println!("🧠 RL Learning retrieved {} price history entries", rl_history.len());
+    // Test analysis integration
+    println!("\n📊 Testing Analysis Integration...");
+    let analysis_history = get_price_history_for_analysis(token_mint).await;
+    println!("📈 Analysis retrieved {} price history entries", analysis_history.len());
 
-    if rl_history.len() >= 6 {
-        println!("   ✅ Sufficient data for RL analysis (6+ entries required)");
+    if analysis_history.len() >= 6 {
+        println!("   ✅ Sufficient data for analysis (6+ entries required)");
 
         // Calculate some basic statistics
-        let prices: Vec<f64> = rl_history
+        let prices: Vec<f64> = analysis_history
             .iter()
             .map(|(_, price)| *price)
             .collect();

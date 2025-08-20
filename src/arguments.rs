@@ -111,11 +111,6 @@ pub fn is_debug_entry_enabled() -> bool {
     has_arg("--debug-entry")
 }
 
-/// Reinforcement learning debug mode
-pub fn is_debug_rl_learn_enabled() -> bool {
-    has_arg("--debug-rl-learn")
-}
-
 /// OHLCV analysis debug mode
 pub fn is_debug_ohlcv_enabled() -> bool {
     has_arg("--debug-ohlcv")
@@ -127,8 +122,8 @@ pub fn is_debug_wallet_enabled() -> bool {
 }
 
 /// Swap operations debug mode
-pub fn is_debug_swap_enabled() -> bool {
-    has_arg("--debug-swap")
+pub fn is_debug_swaps_enabled() -> bool {
+    has_arg("--debug-swaps")
 }
 
 /// Decimals module debug mode
@@ -151,19 +146,85 @@ pub fn is_debug_rpc_enabled() -> bool {
     has_arg("--debug-rpc")
 }
 
+/// Positions module debug mode
+pub fn is_debug_positions_enabled() -> bool {
+    has_arg("--debug-positions")
+}
+
+/// ATA operations debug mode
+pub fn is_debug_ata_enabled() -> bool {
+    has_arg("--debug-ata")
+}
+
 /// Dry-run mode - simulates trading without executing actual transactions
 pub fn is_dry_run_enabled() -> bool {
     has_arg("--dry-run")
 }
 
-/// No-summary mode - disables console output from summary module
-pub fn is_no_summary_enabled() -> bool {
-    has_arg("--no-summary")
+/// Summary mode - enables console output from summary module
+pub fn is_summary_enabled() -> bool {
+    has_arg("--summary")
 }
 
 /// Dashboard mode - enables terminal UI and disables all console logging
 pub fn is_dashboard_enabled() -> bool {
     has_arg("--dashboard")
+}
+
+/// Run mode - enables actual bot execution (required to start services)
+pub fn is_run_enabled() -> bool {
+    has_arg("--run")
+}
+
+// =============================================================================
+// HELP SYSTEM
+// =============================================================================
+
+/// Displays the help menu with all available flags and their descriptions
+pub fn print_help() {
+    println!("ScreenerBot - Advanced Solana DeFi Trading Bot");
+    println!();
+    println!("USAGE:");
+    println!("    screenerbot [FLAGS]");
+    println!();
+    println!("REQUIRED FLAGS:");
+    println!("    --run                     Enable bot execution (required to start trading)");
+    println!();
+    println!("CORE FLAGS:");
+    println!("    --help, -h                Show this help message");
+    println!("    --dry-run                 Simulate trading without executing transactions");
+    println!("    --dashboard               Enable terminal UI mode");
+    println!("    --summary                 Enable console output from summary module");
+    println!();
+    println!("DEBUG FLAGS:");
+    println!("    --debug-api               API calls debug mode");
+    println!("    --debug-decimals          Decimals module debug mode");
+    println!("    --debug-discovery         Discovery module debug mode");
+    println!("    --debug-entry             Entry module debug mode");
+    println!("    --debug-filtering         Filtering module debug mode");
+    println!("    --debug-monitor           Monitor module debug mode");
+    println!("    --debug-ohlcv             OHLCV analysis debug mode");
+    println!("    --debug-pool-prices       Pool prices debug mode");
+    println!("    --debug-positions         Positions module debug mode");
+    println!("    --debug-price-service     Price service debug mode");
+    println!("    --debug-profit            Profit calculation debug mode");
+    println!("    --debug-rpc               RPC operations debug mode");
+    println!("    --debug-rugcheck          Rugcheck module debug mode");
+    println!("    --debug-summary           Summary module debug mode");
+    println!("    --debug-swaps             Swap operations debug mode");
+    println!("    --debug-trader            Trader module debug mode");
+    println!("    --debug-transactions      Transactions module debug mode");
+    println!("    --debug-wallet            Wallet operations debug mode");
+    println!();
+    println!("EXAMPLES:");
+    println!("    screenerbot --run                           # Start bot normally");
+    println!("    screenerbot --run --dry-run                 # Start bot in simulation mode");
+    println!("    screenerbot --run --dashboard               # Start bot with terminal UI");
+    println!("    screenerbot --run --summary                 # Start bot with console summary");
+    println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
+    println!("    screenerbot --help                          # Show this help");
+    println!();
+    println!("For more information, visit: https://github.com/farfary/ScreenerBot");
 }
 
 // =============================================================================
@@ -182,14 +243,15 @@ pub fn is_any_debug_enabled() -> bool {
     is_debug_price_service_enabled() ||
     is_debug_rugcheck_enabled() ||
     is_debug_entry_enabled() ||
-    is_debug_rl_learn_enabled() ||
     is_debug_ohlcv_enabled() ||
     is_debug_wallet_enabled() ||
-    is_debug_swap_enabled() ||
+    is_debug_swaps_enabled() ||
     is_debug_decimals_enabled() ||
     is_debug_summary_enabled() ||
     is_debug_transactions_enabled() ||
-    is_debug_rpc_enabled()
+    is_debug_rpc_enabled() ||
+    is_debug_positions_enabled() ||
+    is_debug_ata_enabled()
 }
 
 /// Gets a list of all enabled debug modes
@@ -206,16 +268,16 @@ pub fn get_enabled_debug_modes() -> Vec<&'static str> {
     if is_debug_price_service_enabled() { modes.push("price-service"); }
     if is_debug_rugcheck_enabled() { modes.push("rugcheck"); }
     if is_debug_entry_enabled() { modes.push("entry"); }
-    if is_debug_rl_learn_enabled() { modes.push("rl-learn"); }
     if is_debug_ohlcv_enabled() { modes.push("ohlcv"); }
     if is_debug_wallet_enabled() { modes.push("wallet"); }
-    if is_debug_swap_enabled() { modes.push("swap"); }
+    if is_debug_swaps_enabled() { modes.push("swaps"); }
     if is_debug_decimals_enabled() { modes.push("decimals"); }
     if is_debug_summary_enabled() { modes.push("summary"); }
     if is_debug_transactions_enabled() { modes.push("transactions"); }
     if is_debug_rpc_enabled() { modes.push("rpc"); }
+    if is_debug_positions_enabled() { modes.push("positions"); }
     if is_dry_run_enabled() { modes.push("dry-run"); }
-    if is_no_summary_enabled() { modes.push("no-summary"); }
+    if is_summary_enabled() { modes.push("summary"); }
     if is_dashboard_enabled() { modes.push("dashboard"); }
     
     modes

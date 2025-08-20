@@ -24,6 +24,7 @@ use solana_transaction_status::EncodedConfirmedTransactionWithStatusMeta;
 use std::str::FromStr;
 use tabled::{Table, Tabled, settings::{Style, Modify, object::Rows, Alignment}};
 use once_cell::sync::Lazy;
+use rand;
 
 use crate::logger::{log, LogTag};
 use crate::global::{
@@ -90,8 +91,6 @@ fn get_mint_prefix(mint: &str) -> &str {
 
 // Main monitoring intervals
 const NORMAL_CHECK_INTERVAL_SECS: u64 = 15;      // Normal transaction checking every 15 seconds
-const PRIORITY_CHECK_INTERVAL_SECS: u64 = 3;     // Priority transaction checking every 3 seconds
-const MAX_PRIORITY_ATTEMPTS: u32 = 20;           // Max attempts before giving up (20 * 3s = 60s max)
 
 // RPC and batch processing limits
 const RPC_BATCH_SIZE: usize = 1000;                      // Transaction signatures fetch batch size (increased for fewer pages)
@@ -101,6 +100,7 @@ const TRANSACTION_DATA_BATCH_SIZE: usize = 50;           // Transaction data fet
 const ATA_RENT_COST_SOL: f64 = 0.00203928;              // Standard ATA creation/closure cost
 const ATA_RENT_TOLERANCE_LAMPORTS: i64 = 10000;         // Tolerance for ATA rent variations (lamports)
 const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000;           // Default compute unit price (micro-lamports)
+const WSOL_MINT: &str = "So11111111111111111111111111111111111111112"; // Wrapped SOL mint address
 
 // Analysis cache versioning (bump when snapshot schema changes)
 const ANALYSIS_CACHE_VERSION: u32 = 1;
@@ -109,6 +109,16 @@ const ANALYSIS_CACHE_VERSION: u32 = 1;
 // =============================================================================
 // CORE DATA STRUCTURES
 // =============================================================================
+
+/// Deferred retry record for signatures that timed out/dropped
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeferredRetry {
+    pub signature: String,
+    pub next_retry_at: DateTime<Utc>,
+    pub remaining_attempts: i32,
+    pub current_delay_secs: i64,
+    pub last_error: Option<String>,
+}
 
 /// Main Transaction structure used throughout the bot
 /// Contains all Solana data + our calculations and analysis
@@ -176,36 +186,13 @@ pub struct Transaction {
     #[serde(skip_serializing, default)]
     pub token_decimals: Option<u8>,
     
-    // Priority and tracking
-    pub is_priority: bool,
-    pub priority_added_at: Option<DateTime<Utc>>,
+    // Cache file path and metadata
     pub last_updated: DateTime<Utc>,
     pub cache_file_path: String,
 
     // Optional persisted analysis snapshot for finalized txs to avoid re-analysis on every load
     #[serde(default)]
     pub cached_analysis: Option<CachedAnalysis>,
-}
-
-/// Enhanced priority transaction state management
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PriorityTransaction {
-    pub signature: String,
-    pub added_at: DateTime<Utc>,
-    pub attempts: u32,
-    pub state: PriorityState,
-    pub last_check: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum PriorityState {
-    Pending,
-    TransactionSuccess,
-    SwapSuccess,
-    TransactionFailed,
-    SwapFailed,
-    NotFound,
-    MaxAttemptsReached,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -658,13 +645,16 @@ pub struct TransactionsManager {
     pub wallet_pubkey: Pubkey,
     pub debug_enabled: bool,
     pub known_signatures: HashSet<String>,
-    pub priority_transactions: HashMap<String, PriorityTransaction>,
     pub last_signature_check: Option<String>,
     pub total_transactions: u64,
     pub new_transactions_count: u64,
     
     // Token database integration
     pub token_database: Option<TokenDatabase>,
+
+    // Deferred retries for transactions that failed to process
+    // This helps avoid losing verifications due to temporary RPC lag or network issues
+    pub deferred_retries: HashMap<String, DeferredRetry>,
 }
 
 impl TransactionsManager {
@@ -688,11 +678,11 @@ impl TransactionsManager {
             wallet_pubkey,
             debug_enabled: is_debug_transactions_enabled(),
             known_signatures: HashSet::new(),
-            priority_transactions: HashMap::new(),
             last_signature_check: None,
             total_transactions: 0,
             new_transactions_count: 0,
             token_database,
+            deferred_retries: HashMap::new(),
         })
     }
 
@@ -737,15 +727,15 @@ impl TransactionsManager {
         
         if self.debug_enabled {
             log(LogTag::Transactions, "RPC_CALL", &format!(
-                "Checking for new transactions (known: {}, last_sig: {})", 
-                self.known_signatures.len(),
-                self.last_signature_check.as_deref().unwrap_or("none")
+                "Checking for new transactions (known: {}, using latest 50)", 
+                self.known_signatures.len()
             ));
         }
         
         // Get recent signatures from wallet
+        // IMPORTANT: Always fetch most recent page (no 'before' cursor) to avoid missing new txs
         let signatures = rpc_client
-            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, self.last_signature_check.as_deref())
+            .get_wallet_signatures_main_rpc(&self.wallet_pubkey, 50, None)
             .await
             .map_err(|e| format!("Failed to fetch wallet signatures: {}", e))?;
 
@@ -763,10 +753,7 @@ impl TransactionsManager {
             self.known_signatures.insert(signature.clone());
             new_signatures.push(signature.clone());
             
-            // Update last signature for pagination
-            if self.last_signature_check.is_none() {
-                self.last_signature_check = Some(signature);
-            }
+            // Do not advance pagination cursor here; we always fetch the latest page
         }
 
         if !new_signatures.is_empty() {
@@ -788,9 +775,6 @@ impl TransactionsManager {
         if self.debug_enabled {
             log(LogTag::Transactions, "PROCESS", &format!("Processing transaction: {}", &signature[..8]));
         }
-
-        // Check if priority transaction
-        let is_priority = self.priority_transactions.contains_key(signature);
 
         // Check if we already have this transaction cached and can avoid RPC call
         let cache_file = format!("{}/{}.json", get_transactions_cache_dir().display(), signature);
@@ -834,10 +818,25 @@ impl TransactionsManager {
             }
             
             let rpc_client = get_rpc_client();
-            let tx_data = rpc_client
+            let tx_data = match rpc_client
                 .get_transaction_details_premium_rpc(signature)
                 .await
-                .map_err(|e| format!("Failed to fetch transaction details: {}", e))?;
+            {
+                Ok(data) => {
+                    log(LogTag::Rpc, "SUCCESS", &format!("Retrieved transaction details for {} from premium RPC", &signature[..8]));
+                    data
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("not found") || error_msg.contains("no longer available") {
+                        log(LogTag::Rpc, "NOT_FOUND", &format!("Transaction {} not found on-chain (likely failed swap)", &signature[..8]));
+                        return Err(format!("Transaction not found: {}", signature));
+                    } else {
+                        log(LogTag::Rpc, "ERROR", &format!("RPC error fetching {}: {}", &signature[..8], error_msg));
+                        return Err(format!("Failed to fetch transaction details: {}", e));
+                    }
+                }
+            };
 
             // Create Transaction structure
             // Convert block_time to proper timestamp if available
@@ -882,12 +881,6 @@ impl TransactionsManager {
                 price_source: None,
                 token_symbol: None,
                 token_decimals: None,
-                is_priority,
-                priority_added_at: if is_priority { 
-                    self.priority_transactions.get(signature).map(|pt| pt.added_at) 
-                } else { 
-                    None 
-                },
                 last_updated: Utc::now(),
                 cache_file_path: cache_file.clone(),
                 cached_analysis: None,
@@ -906,17 +899,6 @@ impl TransactionsManager {
 
         // Always cache the result (updates existing cache with new analysis)
         self.cache_transaction(&transaction).await?;
-
-        // Remove from priority tracking if it was priority
-        if is_priority {
-            self.priority_transactions.remove(signature);
-            if self.debug_enabled {
-                log(LogTag::Transactions, "PRIORITY", &format!(
-                    "Priority transaction {} processed and removed from tracking", 
-                    &signature[..8]
-                ));
-            }
-        }
 
         Ok(transaction)
     }
@@ -998,8 +980,6 @@ impl TransactionsManager {
             success: transaction.success,
             error_message: transaction.error_message.clone(),
             raw_transaction_data: transaction.raw_transaction_data.clone(),
-            is_priority: transaction.is_priority,
-            priority_added_at: transaction.priority_added_at,
             last_updated: transaction.last_updated,
             cache_file_path: transaction.cache_file_path.clone(),
             // Keep snapshot only if transaction is finalized to avoid redundant recalcs
@@ -1056,116 +1036,6 @@ impl TransactionsManager {
                 "Cached cleaned transaction {} to disk (calculated fields removed)", 
                 &transaction.signature[..8]
             ));
-        }
-
-        Ok(())
-    }
-
-    /// Add priority transaction for monitoring
-    pub fn add_priority_transaction(&mut self, signature: String) {
-        let priority_transaction = PriorityTransaction {
-            signature: signature.clone(),
-            added_at: Utc::now(),
-            last_check: Utc::now(),
-            attempts: 0,
-            state: PriorityState::Pending,
-        };
-        
-        self.priority_transactions.insert(signature.clone(), priority_transaction);
-        
-        if self.debug_enabled {
-            log(LogTag::Transactions, "PRIORITY", &format!(
-                "Added priority transaction: {}", 
-                &signature[..8]
-            ));
-        }
-    }
-
-    /// Check priority transactions for completion with enhanced state management
-    pub async fn check_priority_transactions(&mut self) -> Result<(), String> {
-        let signatures_to_check: Vec<String> = self.priority_transactions.keys().cloned().collect();
-        
-        for signature in signatures_to_check {
-            // If we already processed this signature, mark as completed and remove
-            if self.known_signatures.contains(&signature) {
-                if let Some(mut priority_tx) = self.priority_transactions.get(&signature).cloned() {
-                    priority_tx.state = PriorityState::TransactionSuccess;
-                    priority_tx.last_check = Utc::now();
-                    
-                    if self.debug_enabled {
-                        log(LogTag::Transactions, "PRIORITY", &format!(
-                            "Priority transaction {} completed after {} attempts", 
-                            &signature[..8], priority_tx.attempts
-                        ));
-                    }
-                }
-                self.priority_transactions.remove(&signature);
-                continue;
-            }
-
-            // Get current priority transaction state
-            let mut priority_tx = match self.priority_transactions.get(&signature).cloned() {
-                Some(tx) => tx,
-                None => continue, // Should not happen
-            };
-
-            // Check if we've exceeded max attempts
-            if priority_tx.attempts >= MAX_PRIORITY_ATTEMPTS {
-                priority_tx.state = PriorityState::MaxAttemptsReached;
-                priority_tx.last_check = Utc::now();
-                
-                if self.debug_enabled {
-                    log(LogTag::Transactions, "PRIORITY", &format!(
-                        "Priority transaction {} reached max attempts ({})", 
-                        &signature[..8], MAX_PRIORITY_ATTEMPTS
-                    ));
-                }
-                
-                self.priority_transactions.remove(&signature);
-                continue;
-            }
-
-            // Update attempt count and last check time
-            priority_tx.attempts += 1;
-            priority_tx.last_check = Utc::now();
-
-            // Check if transaction is now available/finalized
-            match self.process_transaction(&signature).await {
-                Ok(_) => {
-                    priority_tx.state = PriorityState::TransactionSuccess;
-                    
-                    if self.debug_enabled {
-                        log(LogTag::Transactions, "PRIORITY", &format!(
-                            "Priority transaction {} now available and processed after {} attempts", 
-                            &signature[..8], priority_tx.attempts
-                        ));
-                    }
-                    
-                    // Immediately verify positions affected by this transaction so UI updates fast
-                    if let Err(e) = self.check_and_verify_position_transactions().await {
-                        log(LogTag::Transactions, "PRIORITY", &format!(
-                            "Post-process verification failed for {}: {}", &signature[..8], e
-                        ));
-                    }
-
-                    // Remove from priority since it's now processed
-                    self.priority_transactions.remove(&signature);
-                }
-                Err(e) => {
-                    // Still not available - update state and keep monitoring
-                    priority_tx.state = PriorityState::Pending;
-                    
-                    if self.debug_enabled {
-                        log(LogTag::Transactions, "PRIORITY", &format!(
-                            "Priority transaction {} still pending (attempt {}): {}", 
-                            &signature[..8], priority_tx.attempts, e
-                        ));
-                    }
-                    
-                    // Update the priority transaction state
-                    self.priority_transactions.insert(signature, priority_tx);
-                }
-            }
         }
 
         Ok(())
@@ -1519,8 +1389,6 @@ impl TransactionsManager {
             price_source: None,
             token_symbol: None,
             token_decimals: None,
-            is_priority: false,
-            priority_added_at: None,
             last_updated: Utc::now(),
             cache_file_path: format!("{}/{}.json", get_transactions_cache_dir().display(), signature),
             cached_analysis: None,
@@ -1592,8 +1460,6 @@ impl TransactionsManager {
             price_source: None,
             token_symbol: None,
             token_decimals: None,
-            is_priority: false,
-            priority_added_at: None,
             last_updated: Utc::now(),
             cache_file_path: format!("{}/{}.json", get_transactions_cache_dir().display(), signature),
             cached_analysis: None,
@@ -1691,24 +1557,13 @@ impl TransactionsManager {
         TransactionStats {
             total_transactions: self.total_transactions,
             new_transactions_count: self.new_transactions_count,
-            priority_transactions_count: self.priority_transactions.len() as u64,
             known_signatures_count: self.known_signatures.len() as u64,
         }
-    }
-
-    /// Get priority transactions (for testing)
-    pub fn priority_transactions(&self) -> &HashMap<String, PriorityTransaction> {
-        &self.priority_transactions
     }
 
     /// Get known signatures count (for testing)  
     pub fn known_signatures(&self) -> &HashSet<String> {
         &self.known_signatures
-    }
-
-    /// Clear priority transactions (for testing only)
-    pub fn clear_priority_transactions_for_testing(&mut self) {
-        self.priority_transactions.clear();
     }
 
     /// Get recent transactions from cache (for orphaned position recovery)
@@ -1749,317 +1604,6 @@ impl TransactionsManager {
         }
         
         Ok(transactions)
-    }
-
-    /// Check and verify unverified position transactions
-    /// This function checks all positions with unverified entry or exit transactions
-    /// and updates position data based on transaction analysis
-    pub async fn check_and_verify_position_transactions(&mut self) -> Result<(), String> {
-        use crate::positions::SAVED_POSITIONS;
-        use crate::utils::save_positions_to_file;
-        use crate::tokens::get_token_decimals;
-        use crate::rpc::lamports_to_sol;
-
-        // Get all positions without holding the lock during async operations
-        let positions_to_check = {
-            match SAVED_POSITIONS.lock() {
-                Ok(positions) => {
-                    // Find positions with unverified transactions
-                    positions
-                        .iter()
-                        .filter(|p| {
-                            // Check for unverified entry transaction
-                            let has_unverified_entry = p.entry_transaction_signature.is_some() 
-                                && !p.transaction_entry_verified;
-                            
-                            // Check for unverified exit transaction
-                            let has_unverified_exit = p.exit_transaction_signature.is_some() 
-                                && !p.transaction_exit_verified;
-                            
-                            has_unverified_entry || has_unverified_exit
-                        })
-                        .cloned()
-                        .collect::<Vec<_>>()
-                }
-                Err(e) => {
-                    log(LogTag::Transactions, "ERROR", &format!(
-                        "Failed to lock positions for verification check: {}", e
-                    ));
-                    return Err(format!("Failed to lock positions: {}", e));
-                }
-            }
-        }; // Mutex guard is dropped here
-
-        if positions_to_check.is_empty() {
-            return Ok(());
-        }
-
-        log(LogTag::Transactions, "POSITION_VERIFY", &format!(
-            "🔍 Checking {} positions with unverified transactions", 
-            positions_to_check.len()
-        ));
-
-        let mut verification_updates = Vec::new();
-
-        // Process each position without holding the positions lock
-        for position in positions_to_check {
-            // Check entry transaction verification
-            if let Some(ref entry_sig) = position.entry_transaction_signature {
-                if !position.transaction_entry_verified {
-                    if let Ok(entry_tx) = crate::transactions::get_transaction(entry_sig).await {
-                        if let Some(mut tx) = entry_tx {
-                            // If loaded from cache, try hydrate from snapshot first; otherwise recalc
-                            if !self.try_hydrate_from_cached_analysis(&mut tx) || !matches!(tx.status, TransactionStatus::Finalized) {
-                                if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
-                                    log(LogTag::Transactions, "POSITION_VERIFY", &format!(
-                                        "⚠️ Failed to recalc entry {} for {}: {}",
-                                        get_signature_prefix(&tx.signature), position.symbol, e
-                                    ));
-                                }
-                            }
-                            // Store transaction signature and type for precise position matching
-                            verification_updates.push((tx.signature.clone(), "entry".to_string(), tx));
-                        }
-                    }
-                }
-            }
-
-            // Check exit transaction verification
-            if let Some(ref exit_sig) = position.exit_transaction_signature {
-                if !position.transaction_exit_verified {
-                    if let Ok(exit_tx) = crate::transactions::get_transaction(exit_sig).await {
-                        if let Some(mut tx) = exit_tx {
-                            // If loaded from cache, try hydrate from snapshot first; otherwise recalc
-                            if !self.try_hydrate_from_cached_analysis(&mut tx) || !matches!(tx.status, TransactionStatus::Finalized) {
-                                if let Err(e) = self.recalculate_transaction_analysis(&mut tx).await {
-                                    log(LogTag::Transactions, "POSITION_VERIFY", &format!(
-                                        "⚠️ Failed to recalc exit {} for {}: {}",
-                                        get_signature_prefix(&tx.signature), position.symbol, e
-                                    ));
-                                }
-                            }
-                            // Store transaction signature and type for precise position matching
-                            verification_updates.push((tx.signature.clone(), "exit".to_string(), tx));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Apply all updates in a single lock operation to avoid deadlocks
-        if !verification_updates.is_empty() {
-            match SAVED_POSITIONS.lock() {
-                Ok(mut positions) => {
-                    let mut updated_count = 0;
-                    
-                    for (transaction_signature, transaction_type, transaction) in verification_updates {
-                        // Find position by matching the exact transaction signature
-                        let position = match transaction_type.as_str() {
-                            "entry" => positions.iter_mut().find(|p| 
-                                p.entry_transaction_signature.as_ref() == Some(&transaction_signature)
-                            ),
-                            "exit" => positions.iter_mut().find(|p| 
-                                p.exit_transaction_signature.as_ref() == Some(&transaction_signature)
-                            ),
-                            _ => None
-                        };
-
-                        if let Some(position) = position {
-                            match transaction_type.as_str() {
-                                "entry" => {
-                                    self.apply_entry_verification_data(position, &transaction);
-                                    updated_count += 1;
-                                }
-                                "exit" => {
-                                    self.apply_exit_verification_data(position, &transaction);
-                                    updated_count += 1;
-                                }
-                                _ => {}
-                            }
-                        } else {
-                            log(LogTag::Transactions, "POSITION_NOT_FOUND", &format!(
-                                "⚠️ Could not find position with {} transaction signature: {}",
-                                transaction_type, get_signature_prefix(&transaction_signature)
-                            ));
-                        }
-                    }
-
-                    if updated_count > 0 {
-                        // Save positions to file
-                        save_positions_to_file(&positions);
-                        log(LogTag::Transactions, "POSITION_UPDATED", &format!(
-                            "✅ Updated {} position verification records", updated_count
-                        ));
-                    }
-                }
-                Err(e) => {
-                    log(LogTag::Transactions, "ERROR", &format!(
-                        "Failed to apply position verification updates: {}", e
-                    ));
-                    return Err(format!("Failed to apply updates: {}", e));
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-
-
-    /// Apply entry verification data to position using analyze-swaps-exact logic
-    fn apply_entry_verification_data(
-        &self, 
-        position: &mut crate::positions::Position, 
-        transaction: &Transaction
-    ) {
-        // Check if transaction was successful
-        if !transaction.success {
-            position.transaction_entry_verified = false;
-            log(LogTag::Transactions, "POSITION_ENTRY_FAILED", &format!(
-                "❌ Entry transaction {} failed for position {}: marking as failed verification - PENDING TRANSACTION SHOULD BE REMOVED",
-                &transaction.signature[..8], position.symbol
-            ));
-            return;
-        }
-
-        log(LogTag::Transactions, "POSITION_ENTRY_PROCESSING", &format!(
-            "🔄 Processing successful entry transaction {} for position {} - converting to swap PnL info",
-            &transaction.signature[..8], position.symbol
-        ));
-
-        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-        let empty_cache = std::collections::HashMap::new();
-        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache, false) {
-            log(LogTag::Transactions, "POSITION_ENTRY_SWAP_INFO", &format!(
-                "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
-                position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
-                swap_pnl_info.sol_amount, swap_pnl_info.token_amount, swap_pnl_info.calculated_price_sol
-            ));
-
-            if swap_pnl_info.swap_type == "Buy" && swap_pnl_info.token_mint == position.mint {
-                // Update position with analyze-swaps-exact calculations using effective pricing
-                position.transaction_entry_verified = true;
-                
-                // Calculate effective entry price using effective SOL spent (excludes ATA rent)
-                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_spent > 0.0 {
-                    swap_pnl_info.effective_sol_spent / swap_pnl_info.token_amount.abs()
-                } else {
-                    swap_pnl_info.calculated_price_sol // Fallback to regular price
-                };
-                
-                position.effective_entry_price = Some(effective_price);
-                position.total_size_sol = swap_pnl_info.sol_amount;
-                
-                // Convert token amount from float to units (with decimals)
-                if let Some(token_decimals) = crate::tokens::get_token_decimals_sync(&position.mint) {
-                    let token_amount_units = (swap_pnl_info.token_amount.abs() * 
-                        (10_f64).powi(token_decimals as i32)) as u64;
-                    position.token_amount = Some(token_amount_units);
-                    
-                    log(LogTag::Transactions, "POSITION_ENTRY_TOKEN_AMOUNT", &format!(
-                        "🔢 Converted token amount for {}: {} tokens ({} units with {} decimals)",
-                        position.symbol, swap_pnl_info.token_amount, token_amount_units, token_decimals
-                    ));
-                }
-                
-                // Convert fee from SOL to lamports
-                position.entry_fee_lamports = Some(sol_to_lamports(swap_pnl_info.fee_sol));
-                
-                log(LogTag::Transactions, "POSITION_ENTRY_VERIFIED", &format!(
-                    "✅ ENTRY TRANSACTION VERIFIED: Position {} marked as verified, price={:.9} SOL, PENDING TRANSACTION CLEARED",
-                    position.symbol, swap_pnl_info.calculated_price_sol
-                ));
-
-                // Clean up any pending transaction tracking for this signature
-                if let Some(ref entry_sig) = position.entry_transaction_signature {
-                    // Spawn cleanup task to avoid blocking and prevent runtime conflicts
-                    let entry_sig_clone = entry_sig.clone();
-                    tokio::task::spawn(async move {
-                        let _ = cleanup_verified_transaction(&entry_sig_clone).await;
-                    });
-                }
-            } else {
-                position.transaction_entry_verified = false;
-                log(LogTag::Transactions, "POSITION_ENTRY_MISMATCH", &format!(
-                    "⚠️ Entry transaction {} type/token mismatch for position {}: expected Buy {}, got {} {} - PENDING TRANSACTION SHOULD BE REMOVED",
-                    get_signature_prefix(&transaction.signature), position.symbol, get_mint_prefix(&position.mint), 
-                    swap_pnl_info.swap_type, get_mint_prefix(&swap_pnl_info.token_mint)
-                ));
-            }
-        } else {
-            position.transaction_entry_verified = false;
-            log(LogTag::Transactions, "POSITION_ENTRY_NO_SWAP", &format!(
-                "⚠️ Entry transaction {} has no valid swap analysis for position {}",
-                &transaction.signature[..8], position.symbol
-            ));
-        }
-    }
-
-    /// Apply exit verification data to position using analyze-swaps-exact logic
-    fn apply_exit_verification_data(
-        &self, 
-        position: &mut crate::positions::Position, 
-        transaction: &Transaction
-    ) {
-        // Check if transaction was successful
-        if !transaction.success {
-            position.transaction_exit_verified = false;
-            log(LogTag::Transactions, "POSITION_EXIT_FAILED", &format!(
-                "❌ Exit transaction {} failed for position {}: marking as failed verification",
-                &transaction.signature[..8], position.symbol
-            ));
-            return;
-        }
-
-        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-        let empty_cache = std::collections::HashMap::new();
-        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(transaction, &empty_cache, false) {
-            if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
-                // Update position with analyze-swaps-exact calculations using effective pricing
-                position.transaction_exit_verified = true;
-                
-                // Calculate effective exit price using effective SOL received (excludes ATA rent)
-                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_received > 0.0 {
-                    swap_pnl_info.effective_sol_received / swap_pnl_info.token_amount.abs()
-                } else {
-                    swap_pnl_info.calculated_price_sol // Fallback to regular price
-                };
-                
-                position.effective_exit_price = Some(effective_price);
-                position.sol_received = Some(swap_pnl_info.sol_amount);
-                
-                // Update exit price if not set
-                if position.exit_price.is_none() {
-                    position.exit_price = Some(swap_pnl_info.calculated_price_sol);
-                }
-                
-                // Convert fee from SOL to lamports
-                position.exit_fee_lamports = Some(sol_to_lamports(swap_pnl_info.fee_sol));
-                
-                // Set exit time if not set
-                if position.exit_time.is_none() {
-                    position.exit_time = Some(swap_pnl_info.timestamp);
-                }
-                
-                log(LogTag::Transactions, "POSITION_EXIT_UPDATED", &format!(
-                    "📝 Updated exit data for position {}: verified=true, price={:.9} SOL (analyze-swaps-exact)",
-                    position.symbol, swap_pnl_info.calculated_price_sol
-                ));
-            } else {
-                position.transaction_exit_verified = false;
-                log(LogTag::Transactions, "POSITION_EXIT_MISMATCH", &format!(
-                    "⚠️ Exit transaction {} type/token mismatch for position {}: expected Sell {}, got {} {}",
-                    &transaction.signature[..8], position.symbol, position.mint, 
-                    swap_pnl_info.swap_type, swap_pnl_info.token_mint
-                ));
-            }
-        } else {
-            position.transaction_exit_verified = false;
-            log(LogTag::Transactions, "POSITION_EXIT_NO_SWAP", &format!(
-                "⚠️ Exit transaction {} has no valid swap analysis for position {}",
-                &transaction.signature[..8], position.symbol
-            ));
-        }
     }
 
 
@@ -2505,7 +2049,7 @@ impl TransactionsManager {
         let mut wsol_rent_spent = 0.0_f64;
         let mut wsol_rent_recovered = 0.0_f64;
 
-        let wsol_mint = "So11111111111111111111111111111111111111112";
+        let wsol_mint = WSOL_MINT;
 
         if let Some(raw) = &transaction.raw_transaction_data {
             let meta = raw.get("meta");
@@ -3961,7 +3505,7 @@ impl TransactionsManager {
 
     /// Convert transaction to SwapPnLInfo using precise ATA rent detection
     /// Set silent=true to skip detailed logging (for hydrated transactions)
-    fn convert_to_swap_pnl_info(&self, transaction: &Transaction, token_symbol_cache: &std::collections::HashMap<String, String>, silent: bool) -> Option<SwapPnLInfo> {
+    pub fn convert_to_swap_pnl_info(&self, transaction: &Transaction, token_symbol_cache: &std::collections::HashMap<String, String>, silent: bool) -> Option<SwapPnLInfo> {
         if !self.is_swap_transaction(transaction) {
             return None;
         }
@@ -4631,247 +4175,6 @@ impl TransactionsManager {
         log(LogTag::Transactions, "TABLE", "=== END ANALYSIS ===");
     }
 
-    /// Verify and recalculate all positions using cached transaction data
-    /// This ensures position entry/exit prices match the analyze swaps calculations exactly
-    pub async fn verify_and_recalculate_all_positions(&mut self) -> Result<(), String> {
-        use crate::positions::SAVED_POSITIONS;
-        use crate::utils::save_positions_to_file;
-
-        log(LogTag::Transactions, "RECALC", "🔄 Loading all positions for verification...");
-
-        // Get all positions (both open and closed)
-        let mut positions_to_recalculate = {
-            match SAVED_POSITIONS.lock() {
-                Ok(positions) => positions.clone(),
-                Err(e) => {
-                    return Err(format!("Failed to access positions: {}", e));
-                }
-            }
-        };
-
-        if positions_to_recalculate.is_empty() {
-            log(LogTag::Transactions, "RECALC", "📭 No positions found to recalculate");
-            return Ok(());
-        }
-
-        log(LogTag::Transactions, "RECALC", &format!(
-            "🔍 Found {} positions to recalculate", 
-            positions_to_recalculate.len()
-        ));
-
-        let mut updated_count = 0;
-        let mut verified_count = 0;
-
-        // Process each position
-        for position in &mut positions_to_recalculate {
-            let mut position_updated = false;
-
-            // Recalculate entry transaction data using analyze-swaps-exact logic
-            if let Some(ref entry_sig) = position.entry_transaction_signature {
-                log(LogTag::Transactions, "RECALC_ENTRY_START", &format!(
-                    "🔍 Recalculating entry transaction {} for position {}",
-                    &entry_sig[..8], position.symbol
-                ));
-
-                match get_transaction(entry_sig).await {
-                    Ok(Some(mut transaction)) => {
-                        log(LogTag::Transactions, "RECALC_ENTRY_FOUND", &format!(
-                            "✅ Retrieved entry transaction {} for position {} - processing",
-                            &entry_sig[..8], position.symbol
-                        ));
-
-                        // IMPORTANT: Try hydration first; only recalc if snapshot missing/invalid or not finalized
-                        if !self.try_hydrate_from_cached_analysis(&mut transaction) || !matches!(transaction.status, TransactionStatus::Finalized) {
-                            if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
-                                log(LogTag::Transactions, "RECALC_ERROR", &format!(
-                                    "❌ Failed to recalculate analysis for entry {}: {}",
-                                    &entry_sig[..8], e
-                                ));
-                                // Continue; conversion will likely fail without analysis
-                            }
-                        }
-
-                        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-                        let empty_cache = std::collections::HashMap::new();
-                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache, false) {
-                            log(LogTag::Transactions, "RECALC_ENTRY_SWAP_INFO", &format!(
-                                "📊 Entry swap info for {}: type={}, token_mint={}, sol_amount={}, token_amount={}, price={:.9}",
-                                position.symbol, swap_pnl_info.swap_type, &swap_pnl_info.token_mint[..8],
-                                swap_pnl_info.sol_amount, swap_pnl_info.token_amount, swap_pnl_info.calculated_price_sol
-                            ));
-
-                            if swap_pnl_info.swap_type == "Buy" && swap_pnl_info.token_mint == position.mint {
-                                let old_price = position.effective_entry_price;
-                                let was_verified = position.transaction_entry_verified;
-                                
-                                // Calculate effective entry price using effective SOL spent (excludes ATA rent)
-                                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_spent > 0.0 {
-                                    swap_pnl_info.effective_sol_spent / swap_pnl_info.token_amount.abs()
-                                } else {
-                                    swap_pnl_info.calculated_price_sol // Fallback to regular price
-                                };
-                                
-                                // Update position with analyze-swaps-exact calculations
-                                position.effective_entry_price = Some(effective_price);
-                                position.transaction_entry_verified = true;
-                                position.total_size_sol = swap_pnl_info.sol_amount;
-                                
-                                log(LogTag::Transactions, "RECALC_ENTRY_VERIFIED", &format!(
-                                    "✅ ENTRY RECALC VERIFIED: Position {} - was_verified={}, now_verified=true, old_price={:?}, new_price={:.9} (effective={:.9})",
-                                    position.symbol, was_verified, old_price, swap_pnl_info.calculated_price_sol, effective_price
-                                ));
-
-                                // Clean up any pending transaction tracking for this signature
-                                let _ = cleanup_verified_transaction(entry_sig).await;
-                                
-                                // Convert token amount from float to units (with decimals)
-                                if let Some(token_decimals) = get_token_decimals(&position.mint).await {
-                                    let token_amount_units = (swap_pnl_info.token_amount.abs() * 
-                                        (10_f64).powi(token_decimals as i32)) as u64;
-                                    position.token_amount = Some(token_amount_units);
-                                }
-                                
-                                // Convert fee from SOL to lamports
-                                position.entry_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
-                                
-                                position_updated = true;
-                                verified_count += 1;
-                                
-                                log(LogTag::Transactions, "RECALC_ENTRY", &format!(
-                                    "📈 {} entry price: {:.9} → {:.9} SOL (analyze-swaps-exact)", 
-                                    position.symbol,
-                                    old_price.unwrap_or(0.0),
-                                    swap_pnl_info.calculated_price_sol
-                                ));
-                            }
-                        } else {
-                            log(LogTag::Transactions, "RECALC_WARN", &format!(
-                                "⚠️ Could not generate SwapPnLInfo for entry transaction {} of {}",
-                                &entry_sig[..8], position.symbol
-                            ));
-                        }
-                    }
-                    Ok(None) => {
-                        log(LogTag::Transactions, "RECALC_WARN", &format!(
-                            "⚠️ Entry transaction {} not found for {}",
-                            &entry_sig[..8], position.symbol
-                        ));
-                    }
-                    Err(e) => {
-                        log(LogTag::Transactions, "RECALC_ERROR", &format!(
-                            "❌ Failed to get entry transaction {} for {}: {}",
-                            &entry_sig[..8], position.symbol, e
-                        ));
-                    }
-                }
-            }
-
-            // Recalculate exit transaction data using analyze-swaps-exact logic
-            if let Some(ref exit_sig) = position.exit_transaction_signature {
-                match get_transaction(exit_sig).await {
-                    Ok(Some(mut transaction)) => {
-                        // Try hydration first; only recalc if snapshot missing/invalid or not finalized
-                        if !self.try_hydrate_from_cached_analysis(&mut transaction) || !matches!(transaction.status, TransactionStatus::Finalized) {
-                            if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
-                                log(LogTag::Transactions, "RECALC_ERROR", &format!(
-                                    "❌ Failed to recalculate analysis for exit {}: {}",
-                                    &exit_sig[..8], e
-                                ));
-                                // Continue; conversion may fail without analysis
-                            }
-                        }
-                        // Use convert_to_swap_pnl_info for the exact same calculation as analyze swaps display
-                        let empty_cache = std::collections::HashMap::new();
-                        if let Some(swap_pnl_info) = self.convert_to_swap_pnl_info(&transaction, &empty_cache, false) {
-                            if swap_pnl_info.swap_type == "Sell" && swap_pnl_info.token_mint == position.mint {
-                                let old_price = position.effective_exit_price;
-                                
-                                // Calculate effective exit price using effective SOL received (excludes ATA rent)
-                                let effective_price = if swap_pnl_info.token_amount.abs() > 0.0 && swap_pnl_info.effective_sol_received > 0.0 {
-                                    swap_pnl_info.effective_sol_received / swap_pnl_info.token_amount.abs()
-                                } else {
-                                    swap_pnl_info.calculated_price_sol // Fallback to regular price
-                                };
-                                
-                                // Update position with analyze-swaps-exact calculations
-                                position.effective_exit_price = Some(effective_price);
-                                position.transaction_exit_verified = true;
-                                position.sol_received = Some(swap_pnl_info.sol_amount);
-                                
-                                // Update exit price if not set (use effective price)
-                                if position.exit_price.is_none() {
-                                    position.exit_price = Some(effective_price);
-                                }
-                                
-                                // Convert fee from SOL to lamports
-                                position.exit_fee_lamports = Some((swap_pnl_info.fee_sol * 1_000_000_000.0) as u64);
-                                
-                                // Set exit time if not set
-                                if position.exit_time.is_none() {
-                                    position.exit_time = Some(swap_pnl_info.timestamp);
-                                }
-                                
-                                position_updated = true;
-                                verified_count += 1;
-                                
-                                log(LogTag::Transactions, "RECALC_EXIT", &format!(
-                                    "📉 {} exit price: {:.9} → {:.9} SOL (analyze-swaps-exact)", 
-                                    position.symbol,
-                                    old_price.unwrap_or(0.0),
-                                    swap_pnl_info.calculated_price_sol
-                                ));
-                            }
-                        } else {
-                            log(LogTag::Transactions, "RECALC_WARN", &format!(
-                                "⚠️ Could not generate SwapPnLInfo for exit transaction {} of {}",
-                                &exit_sig[..8], position.symbol
-                            ));
-                        }
-                    }
-                    Ok(None) => {
-                        log(LogTag::Transactions, "RECALC_WARN", &format!(
-                            "⚠️ Exit transaction {} not found for {}",
-                            &exit_sig[..8], position.symbol
-                        ));
-                    }
-                    Err(e) => {
-                        log(LogTag::Transactions, "RECALC_ERROR", &format!(
-                            "❌ Failed to get exit transaction {} for {}: {}",
-                            &exit_sig[..8], position.symbol, e
-                        ));
-                    }
-                }
-            }
-
-            if position_updated {
-                updated_count += 1;
-            }
-        }
-
-        // Save updated positions back to file
-        if updated_count > 0 {
-            match SAVED_POSITIONS.lock() {
-                Ok(mut positions) => {
-                    *positions = positions_to_recalculate.clone();
-                    save_positions_to_file(&positions);
-                    
-                    log(LogTag::Transactions, "RECALC", &format!(
-                        "💾 Saved {} updated positions to file", updated_count
-                    ));
-                }
-                Err(e) => {
-                    return Err(format!("Failed to save updated positions: {}", e));
-                }
-            }
-        }
-
-        log(LogTag::Transactions, "RECALC", &format!(
-            "✅ Position recalculation complete: {} positions processed, {} updated, {} verified (analyze-swaps-exact)", 
-            positions_to_recalculate.len(), updated_count, verified_count
-        ));
-
-        Ok(())
-    }
 
     /// Analyze and display position lifecycle with PnL calculations
     pub async fn analyze_positions(&mut self, max_count: Option<usize>) -> Result<(), String> {
@@ -4886,7 +4189,7 @@ impl TransactionsManager {
         use std::collections::HashMap;
         
         let mut positions: HashMap<String, PositionState> = HashMap::new();
-        let mut completed_positions = Vec::new();
+        let mut completed_positions: Vec<PositionAnalysis> = Vec::new();
 
         // Sort swaps by slot for proper chronological processing
         let mut sorted_swaps = swaps.to_vec();
@@ -5001,12 +4304,12 @@ impl TransactionsManager {
                             ));
                         }
                         
-                        // This swap closed the position - create the final analysis with this closing timestamp
-                        let mut final_state = position_state.clone();
-                        final_state.last_activity_timestamp = Some(swap.timestamp);
-                        
-                        let position_analysis = self.finalize_position_analysis(final_state);
-                        completed_positions.push(position_analysis);
+                        // This swap closed the position - position analysis is now handled by positions manager
+                        // No longer using this old position analysis system
+                        log(LogTag::Transactions, "POSITION_COMPLETED", &format!(
+                            "Position completed for {} - now managed by positions manager",
+                            swap.token_symbol
+                        ));
                         
                         // Reset the position state for potential future reopening
                         *position_state = PositionState {
@@ -5036,126 +4339,24 @@ impl TransactionsManager {
             position_state.last_activity_timestamp = Some(swap.timestamp);
         }
 
-        // Add remaining open positions
+        // Add remaining open positions - now handled by positions manager
         for (_, position_state) in positions {
             if position_state.total_tokens > 0.0001 || position_state.buy_count > 0 {
-                let position_analysis = self.finalize_position_analysis(position_state);
-                completed_positions.push(position_analysis);
+                log(LogTag::Transactions, "OPEN_POSITION", &format!(
+                    "Open position for {} - now managed by positions manager",
+                    position_state.token_symbol
+                ));
             }
         }
 
-        // Sort by last activity timestamp (newest first) - most recent transactions at top
-        completed_positions.sort_by(|a, b| {
-            // Debug logging to verify timestamps
-            if self.debug_enabled {
-                if let (Some(a_time), Some(b_time)) = (&a.last_activity_timestamp, &b.last_activity_timestamp) {
-                    log(LogTag::Transactions, "SORT_DEBUG", &format!(
-                        "Comparing {} (last activity: {}) vs {} (last activity: {})",
-                        a.token_symbol, a_time, b.token_symbol, b_time
-                    ));
-                }
-            }
-            
-            match (&b.last_activity_timestamp, &a.last_activity_timestamp) {
-                (Some(b_time), Some(a_time)) => b_time.cmp(a_time),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
-        });
-
-        log(LogTag::Transactions, "POSITION_CALC", &format!(
-            "Generated {} position analyses", completed_positions.len()
-        ));
-
-        completed_positions
+        // Position analysis is now handled by the new positions manager system
+        // This old analysis method is deprecated
+        log(LogTag::Transactions, "DEPRECATED", "Position analysis moved to positions manager - returning empty result");
+        
+        Vec::new() // Return empty vector as positions are now managed elsewhere
     }
 
-    /// Finalize position analysis with PnL calculations
-    fn finalize_position_analysis(&self, state: PositionState) -> PositionAnalysis {
-        let net_sol_flow = state.total_sol_received - state.total_sol_invested;
-        // Only include trading fees in costs, not ATA rents (they're mostly recoverable infrastructure costs)
-        let total_costs = state.total_fees;
-        let realized_pnl = net_sol_flow - total_costs;
-        
-        // Calculate unrealized PnL for open positions
-        let unrealized_pnl = if state.total_tokens > 0.0001 {
-            // Would need current token price for accurate unrealized PnL
-            // For now, estimate based on average buy price
-            0.0 // TODO: Integrate with current price data
-        } else {
-            0.0
-        };
-
-        let total_pnl = realized_pnl + unrealized_pnl;
-        
-        // Determine position status
-        let status = if state.total_tokens > 0.0001 {
-            if state.sell_count > 0 {
-                PositionStatus::PartiallyReduced
-            } else {
-                PositionStatus::Open
-            }
-        } else if state.total_tokens < -0.0001 {
-            PositionStatus::Oversold
-        } else {
-            PositionStatus::Closed
-        };
-
-        // Calculate position duration
-        let duration_hours = match status {
-            PositionStatus::Closed | PositionStatus::Oversold => {
-                // For closed positions, calculate from open to close
-                if let (Some(first), Some(last)) = (&state.first_buy_timestamp, &state.last_activity_timestamp) {
-                    let duration = last.signed_duration_since(*first);
-                    (duration.num_hours() as f64 + (duration.num_minutes() % 60) as f64 / 60.0).max(0.0)
-                } else {
-                    0.0
-                }
-            },
-            PositionStatus::Open | PositionStatus::PartiallyReduced => {
-                // For open positions, calculate from open to now
-                if let Some(first) = &state.first_buy_timestamp {
-                    let now = chrono::Utc::now();
-                    let duration = now.signed_duration_since(*first);
-                    (duration.num_hours() as f64 + (duration.num_minutes() % 60) as f64 / 60.0).max(0.0)
-                } else {
-                    0.0
-                }
-            },
-        };
-
-        PositionAnalysis {
-            token_mint: state.token_mint,
-            token_symbol: state.token_symbol,
-            status,
-            total_tokens_bought: state.transactions.iter()
-                .filter(|t| t.swap_type == "Buy")
-                .map(|t| t.token_amount)
-                .sum(),
-            total_tokens_sold: state.transactions.iter()
-                .filter(|t| t.swap_type == "Sell")
-                .map(|t| t.token_amount.abs())  // Use absolute value for sell amounts
-                .sum(),
-            remaining_tokens: state.total_tokens,
-            total_sol_invested: state.total_sol_invested,
-            total_sol_received: state.total_sol_received,
-            net_sol_flow,
-            average_buy_price: state.average_buy_price,
-            realized_pnl,
-            unrealized_pnl,
-            total_pnl,
-            total_fees: state.total_fees,
-            total_ata_rents: state.total_ata_rents,
-            buy_count: state.buy_count,
-            sell_count: state.sell_count,
-            first_buy_timestamp: state.first_buy_timestamp,
-            last_activity_timestamp: state.last_activity_timestamp,
-            duration_hours,
-            transactions: state.transactions,
-        }
-    }
-
+    
     /// Display comprehensive position analysis table
     pub fn display_position_analysis_table(&self, positions: &[PositionAnalysis]) {
         if positions.is_empty() {
@@ -5317,7 +4518,6 @@ impl TransactionsManager {
 pub struct TransactionStats {
     pub total_transactions: u64,
     pub new_transactions_count: u64,
-    pub priority_transactions_count: u64,
     pub known_signatures_count: u64,
 }
 
@@ -5360,14 +4560,8 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
         manager.known_signatures.len()
     ));
 
-    // STARTUP: Verify and recalculate all positions using cached transaction data
-    log(LogTag::Transactions, "STARTUP", "🔄 Starting position verification and recalculation...");
-    if let Err(e) = manager.verify_and_recalculate_all_positions().await {
-        log(LogTag::Transactions, "ERROR", &format!("Position recalculation failed: {}", e));
-        // Continue anyway - don't stop the service
-    } else {
-        log(LogTag::Transactions, "STARTUP", "✅ Position verification and recalculation completed");
-    }
+    // Position verification and management is now handled by the positions manager service
+    log(LogTag::Transactions, "STARTUP", "✅ Transaction service started - positions managed separately");
     
     // Signal that position recalculation is complete - traders can now start
     crate::global::POSITION_RECALCULATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -5375,7 +4569,7 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
 
     // Simplified dual-loop monitoring system (Phase 1 implementation)
     let mut next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
-    let mut next_priority_check = tokio::time::Instant::now() + Duration::from_secs(PRIORITY_CHECK_INTERVAL_SECS);
+    let mut next_priority_check = tokio::time::Instant::now() + Duration::from_secs(60);
     
     loop {
         tokio::select! {
@@ -5399,20 +4593,14 @@ pub async fn start_transactions_service(shutdown: Arc<Notify>) {
                     }
                 }
                 next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
+
+                // Normal transaction monitoring
+                next_normal_check = tokio::time::Instant::now() + Duration::from_secs(NORMAL_CHECK_INTERVAL_SECS);
             }
             _ = tokio::time::sleep_until(next_priority_check) => {
-                // Priority transaction checking every 3 seconds
-                if !manager.priority_transactions.is_empty() {
-                    if let Err(e) = manager.check_priority_transactions().await {
-                        log(LogTag::Transactions, "ERROR", &format!("Priority transaction check error: {}", e));
-                    } else if manager.debug_enabled {
-                        log(LogTag::Transactions, "PRIORITY", &format!(
-                            "� Priority check complete - {} pending transactions",
-                            manager.priority_transactions.len()
-                        ));
-                    }
-                }
-                next_priority_check = tokio::time::Instant::now() + Duration::from_secs(PRIORITY_CHECK_INTERVAL_SECS);
+                // Priority transaction system disabled - positions handled by positions manager
+                log(LogTag::Transactions, "INFO", "Priority transaction checking disabled - using positions manager");
+                next_priority_check = tokio::time::Instant::now() + Duration::from_secs(60);
             }
         }
     }
@@ -5437,24 +4625,17 @@ async fn do_monitoring_cycle(manager: &mut TransactionsManager) -> Result<(usize
     }
 
     // Check and verify position transactions
-    if let Err(e) = manager.check_and_verify_position_transactions().await {
-        log(LogTag::Transactions, "WARN", &format!(
-            "Position verification check failed: {}", e
-        ));
-    }
-
-    // Check if we have pending priority transactions
-    let has_pending_transactions = !manager.priority_transactions.is_empty();
+    // Position verification now handled by PositionsManager
+    // PositionsManager automatically processes verified transactions
 
     // Log stats periodically
     // Update statistics
     if manager.debug_enabled {
         let stats = manager.get_stats();
         log(LogTag::Transactions, "STATS", &format!(
-            "Total: {}, New: {}, Priority: {}, Cached: {}", 
+            "Total: {}, New: {}, Cached: {}", 
             stats.total_transactions,
             stats.new_transactions_count,
-            stats.priority_transactions_count,
             stats.known_signatures_count
         ));
     }
@@ -5492,109 +4673,8 @@ impl Default for FeeBreakdown {
 // =============================================================================
 
 /// Global transaction manager instance for monitoring
-static GLOBAL_TRANSACTION_MANAGER: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> = 
+pub static GLOBAL_TRANSACTION_MANAGER: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Option<TransactionsManager>>>> = 
     once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(None)));
-
-/// Add priority transaction from swaps module for monitoring
-pub async fn add_priority_transaction(signature: String) -> Result<(), String> {
-    log(LogTag::Transactions, "PRIORITY", &format!(
-        "Adding priority transaction for monitoring: {}", 
-        &signature[..8]
-    ));
-    
-    // DEADLOCK FIX: Add to priority queue first (quick operation)
-    {
-        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-        if let Some(manager) = manager_guard.as_mut() {
-            manager.add_priority_transaction(signature.clone());
-        } else {
-            log(LogTag::Transactions, "WARN", "No global transaction manager available for monitoring");
-            return Ok(());
-        }
-    } // Drop mutex guard before async operations
-    
-    // DEADLOCK FIX: DON'T process transaction immediately - let background service handle it
-    // Processing transaction here while holding any locks can cause deadlocks
-    log(LogTag::Transactions, "SUCCESS", &format!(
-        "Priority transaction {} added to queue - background service will process it", 
-        &signature[..8]
-    ));
-    
-    Ok(())
-}
-
-/// Wait for transaction verification with timeout
-/// Regular version with standard timeout
-pub async fn wait_for_transaction_verification(
-    signature: &str, 
-    timeout_seconds: u64
-) -> Result<bool, String> {
-    let start_time = std::time::Instant::now();
-    let timeout_duration = std::time::Duration::from_secs(timeout_seconds);
-    
-    log(LogTag::Transactions, "VERIFY", &format!(
-        "Waiting for transaction verification: {} (timeout: {}s)", 
-        &signature[..8], 
-        timeout_seconds
-    ));
-    
-    while start_time.elapsed() < timeout_duration {
-        // Check if transaction is verified
-        if is_transaction_verified(signature).await {
-            log(LogTag::Transactions, "VERIFIED", &format!(
-                "Transaction {} verified successfully", 
-                &signature[..8]
-            ));
-            return Ok(true);
-        }
-        
-        // Wait before checking again
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    }
-    
-    log(LogTag::Transactions, "TIMEOUT", &format!(
-        "Transaction verification timeout for {}", 
-        &signature[..8]
-    ));
-    
-    Ok(false)
-}
-
-/// Wait for priority transaction verification with faster timeout and checking
-/// Use this for time-sensitive position management operations
-pub async fn wait_for_priority_transaction_verification(
-    signature: &str
-) -> Result<bool, String> {
-    let start_time = std::time::Instant::now();
-    let timeout_duration = std::time::Duration::from_secs(MAX_PRIORITY_ATTEMPTS as u64 * PRIORITY_CHECK_INTERVAL_SECS);
-    
-    log(LogTag::Transactions, "PRIORITY_VERIFY", &format!(
-        "Priority transaction verification: {} (timeout: {}s)", 
-        &signature[..8], 
-        MAX_PRIORITY_ATTEMPTS as u64 * PRIORITY_CHECK_INTERVAL_SECS
-    ));
-    
-    while start_time.elapsed() < timeout_duration {
-        // Check if transaction is verified (more frequent checking for priority)
-        if is_transaction_verified(signature).await {
-            log(LogTag::Transactions, "PRIORITY_VERIFIED", &format!(
-                "Priority transaction {} verified successfully", 
-                &signature[..8]
-            ));
-            return Ok(true);
-        }
-        
-        // More frequent checking for priority transactions (500ms vs 2s)
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    }
-    
-    log(LogTag::Transactions, "PRIORITY_TIMEOUT", &format!(
-        "Priority transaction verification timeout for {}", 
-        &signature[..8]
-    ));
-    
-    Ok(false)
-}
 
 /// Initialize global transaction manager for monitoring
 pub async fn initialize_global_transaction_manager(wallet_pubkey: Pubkey) -> Result<(), String> {
@@ -5664,7 +4744,6 @@ pub async fn get_transaction_stats() -> TransactionStats {
     TransactionStats {
         total_transactions: 0,
         new_transactions_count: 0,
-        priority_transactions_count: 0,
         known_signatures_count: 0,
     }
 }
@@ -5724,355 +4803,6 @@ pub async fn get_global_swap_transactions() -> Result<Vec<SwapPnLInfo>, String> 
     let mut temp_manager = TransactionsManager::new(wallet_address).await?;
     
     temp_manager.get_all_swap_transactions().await
-}
-
-/// Check if there are pending transactions for a specific token mint
-/// This prevents duplicate buy transactions for the same token
-pub async fn has_pending_transactions_for_token(token_mint: &str) -> Result<bool, String> {
-    let token_mint = token_mint.to_string(); // Convert to owned String for spawn_blocking
-    
-    log(
-        LogTag::Transactions,
-        "PENDING_CHECK_START",
-        &format!("🔍 Checking for pending transactions for token: {}", &token_mint[..8])
-    );
-
-    // DEADLOCK FIX: Get position data first with timeout protection, then get manager data separately
-    // Never hold both mutexes at the same time
-    let positions_with_unverified_for_token: Vec<(String, Option<String>, Option<String>, bool, bool)> = {
-        let token_mint_clone = token_mint.clone(); // Clone for the closure
-        // Use timeout to prevent deadlock if position lock is held by another thread
-        match tokio::time::timeout(
-            Duration::from_millis(500), 
-            tokio::task::spawn_blocking(move || -> Result<Vec<(String, Option<String>, Option<String>, bool, bool)>, String> {
-                match crate::positions::SAVED_POSITIONS.try_lock() {
-                    Ok(positions) => {
-                        // Extract and filter positions for specific token with unverified transactions
-                        let result: Vec<(String, Option<String>, Option<String>, bool, bool)> = positions
-                            .iter()
-                            .filter(|pos| pos.mint == token_mint_clone)
-                            .filter(|position| {
-                                // Has unverified entry transaction
-                                (position.entry_transaction_signature.is_some() && !position.transaction_entry_verified) ||
-                                // Has unverified exit transaction  
-                                (position.exit_transaction_signature.is_some() && !position.transaction_exit_verified)
-                            })
-                            .map(|p| (
-                                p.symbol.clone(),
-                                p.entry_transaction_signature.clone(),
-                                p.exit_transaction_signature.clone(),
-                                p.transaction_entry_verified,
-                                p.transaction_exit_verified
-                            ))
-                            .collect();
-                        Ok(result)
-                    }
-                    Err(e) => Err(format!("Failed to lock positions: {}", e))
-                }
-            })
-        ).await {
-            Ok(spawn_result) => match spawn_result {
-                Ok(positions_result) => match positions_result {
-                    Ok(positions) => positions,
-                    Err(lock_err) => return Err(lock_err),
-                },
-                Err(join_err) => {
-                    log(LogTag::Transactions, "WARN", &format!("Position lock task join failed: {} - assuming no pending transactions", join_err));
-                    return Ok(false);
-                }
-            },
-            Err(_timeout_elapsed) => {
-                log(LogTag::Transactions, "WARN", "Position lock timeout - assuming no pending transactions");
-                return Ok(false);
-            }
-        }
-    };
-
-    // Now check manager data separately
-    let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    
-    if let Some(manager) = manager_guard.as_ref() {
-        log(
-            LogTag::Transactions,
-            "PENDING_CHECK_MANAGER_OK",
-            &format!("✅ Global transaction manager available for token {}", &token_mint[..8])
-        );
-
-        log(
-            LogTag::Transactions,
-            "PENDING_CHECK_POSITIONS",
-            &format!("📋 Checking {} positions for unverified transactions for token {}", positions_with_unverified_for_token.len(), &token_mint[..8])
-        );
-
-        let mut unverified_found = false;
-        let mut unverified_count = 0;
-
-        for (symbol, entry_sig, exit_sig, entry_verified, exit_verified) in &positions_with_unverified_for_token {
-            log(
-                LogTag::Transactions,
-                "PENDING_CHECK_POSITION_MATCH",
-                &format!(
-                    "🎯 Found position for token {}: symbol={}, entry_verified={}, exit_verified={}, entry_sig={:?}, exit_sig={:?}",
-                    &token_mint[..8],
-                    symbol,
-                    entry_verified,
-                    exit_verified,
-                    entry_sig.as_ref().map(|s| &s[..8]),
-                    exit_sig.as_ref().map(|s| &s[..8])
-                )
-            );
-
-            // Check for unverified entry transactions
-            if !entry_verified && entry_sig.is_some() {
-                unverified_found = true;
-                unverified_count += 1;
-                
-                log(
-                    LogTag::Transactions,
-                    "PENDING_UNVERIFIED_ENTRY",
-                    &format!(
-                        "⚠️ Found unverified entry transaction for token {}: position {} with signature {} - BLOCKING new position",
-                        &token_mint[..8],
-                        symbol,
-                        entry_sig.as_ref().unwrap()[..8].to_string()
-                    )
-                );
-            }
-
-            // Check for unverified exit transactions (don't block new positions)
-            if !exit_verified && exit_sig.is_some() {
-                log(
-                    LogTag::Transactions,
-                    "PENDING_UNVERIFIED_EXIT",
-                    &format!(
-                        "📤 Found unverified exit transaction for token {}: position {} with signature {} - NOT blocking new position",
-                        &token_mint[..8],
-                        symbol,
-                        exit_sig.as_ref().unwrap()[..8].to_string()
-                    )
-                );
-            }
-
-            // Check for verified entry but no exit (open position) - this blocks new positions
-            if *entry_verified && exit_sig.is_none() {
-                unverified_found = true; // Block new positions when we already have an open position
-                
-                log(
-                    LogTag::Transactions,
-                    "PENDING_OPEN_POSITION",
-                    &format!(
-                        "🔒 Found open position for token {}: symbol={} (entry verified, no exit) - BLOCKING new position to prevent duplicates",
-                        &token_mint[..8],
-                        symbol
-                    )
-                );
-            }
-        }
-
-        if unverified_count > 0 {
-            log(
-                LogTag::Transactions,
-                "PENDING_SUMMARY_UNVERIFIED",
-                &format!(
-                    "📊 Found {} unverified entry transactions for token {} - BLOCKING new positions",
-                    unverified_count, &token_mint[..8]
-                )
-            );
-        }
-
-        if unverified_found {
-            return Ok(true);
-        }
-        
-        // Check priority transactions that are still pending
-        // Any pending priority transaction could potentially conflict with new positions
-        let priority_txs = manager.priority_transactions();
-        let pending_priority: Vec<_> = priority_txs
-            .values()
-            .filter(|tx| tx.state == PriorityState::Pending)
-            .collect();
-            
-        log(
-            LogTag::Transactions,
-            "PENDING_CHECK_PRIORITY",
-            &format!(
-                "🔄 Checking {} total priority transactions, found {} pending for token {}",
-                priority_txs.len(), pending_priority.len(), &token_mint[..8]
-            )
-        );
-
-        if !pending_priority.is_empty() {
-            for (i, tx) in pending_priority.iter().enumerate() {
-                log(
-                    LogTag::Transactions,
-                    "PENDING_PRIORITY_DETAIL",
-                    &format!(
-                        "⏳ Pending priority transaction {}/{}: signature={}, age={:?}",
-                        i + 1, pending_priority.len(),
-                        tx.signature.get(..8).unwrap_or(&tx.signature),
-                        (Utc::now() - tx.added_at)
-                    )
-                );
-            }
-
-            log(
-                LogTag::Transactions,
-                "PENDING_PRIORITY_BLOCK",
-                &format!(
-                    "🚫 Found {} pending priority transactions - BLOCKING new position for token {} to prevent conflicts",
-                    pending_priority.len(), &token_mint[..8]
-                )
-            );
-            return Ok(true);
-        }
-        
-        log(
-            LogTag::Transactions,
-            "PENDING_CHECK_CLEAR",
-            &format!("✅ No pending transactions found for token {} - allowing new position", &token_mint[..8])
-        );
-        
-        return Ok(false);
-    }
-    
-    // No global manager available - assume no pending transactions
-    log(
-        LogTag::Transactions, 
-        "PENDING_CHECK_NO_MANAGER", 
-        &format!("⚠️ No global transaction manager available to check pending transactions for token {}", &token_mint[..8])
-    );
-    Ok(false)
-}
-
-/// Clean up pending transactions that have been completed/verified
-/// This should be called when a transaction is verified to remove it from pending state
-pub async fn cleanup_completed_transactions() -> Result<(), String> {
-    log(
-        LogTag::Transactions,
-        "CLEANUP_PENDING_START",
-        "🧹 Starting cleanup of completed pending transactions"
-    );
-
-    let manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-    
-    if let Some(manager) = manager_guard.as_ref() {
-        // DEADLOCK FIX: Extract data snapshot while holding lock, then process without lock
-        let priority_txs = manager.priority_transactions();
-        let priority_snapshot: Vec<(String, PriorityState, DateTime<Utc>)> = priority_txs.iter()
-            .map(|(sig, tx)| (sig.clone(), tx.state.clone(), tx.added_at))
-            .collect();
-        
-        drop(manager_guard); // Release lock early
-        
-        let mut cleanup_count = 0;
-        
-        // Process the snapshot without holding any locks
-        for (sig, state, added_at) in priority_snapshot {
-            match state {
-                PriorityState::TransactionSuccess | 
-                PriorityState::SwapSuccess | 
-                PriorityState::TransactionFailed | 
-                PriorityState::SwapFailed | 
-                PriorityState::MaxAttemptsReached => {
-                    cleanup_count += 1;
-                    
-                    log(
-                        LogTag::Transactions,
-                        "CLEANUP_COMPLETED_TX",
-                        &format!(
-                            "🗑️ Found completed transaction for cleanup: {} (state: {:?}, age: {:?})",
-                            &sig[..8], state, (Utc::now() - added_at)
-                        )
-                    );
-                }
-                PriorityState::Pending => {
-                    // Check age - if too old, consider for cleanup
-                    let age = Utc::now() - added_at;
-                    if age.num_seconds() > 300 { // 5 minutes
-                        log(
-                            LogTag::Transactions,
-                            "CLEANUP_OLD_PENDING",
-                            &format!(
-                                "⏰ Old pending transaction found: {} (age: {:.1}s) - may need manual review",
-                                &sig[..8], age.num_seconds() as f64
-                            )
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-        
-        // Note: We would need to add a cleanup method to the manager to actually remove these
-        // For now, just log what we found
-        log(
-            LogTag::Transactions,
-            "CLEANUP_PENDING_SUMMARY",
-            &format!(
-                "🧹 Cleanup summary: {} completed transactions found for potential removal",
-                cleanup_count
-            )
-        );
-        
-        Ok(())
-    } else {
-        log(
-            LogTag::Transactions,
-            "CLEANUP_NO_MANAGER",
-            "⚠️ No global transaction manager available for cleanup"
-        );
-        Ok(())
-    }
-}
-
-/// Check and clean up specific transaction signature from pending state
-/// Called when a transaction is verified to ensure it's removed from pending tracking
-pub async fn cleanup_verified_transaction(signature: &str) -> Result<(), String> {
-    log(
-        LogTag::Transactions,
-        "CLEANUP_VERIFIED_START",
-        &format!("🔍 Checking cleanup for verified transaction: {}", &signature[..8])
-    );
-
-    // Direct async execution - no runtime creation needed
-        let mut manager_guard = GLOBAL_TRANSACTION_MANAGER.lock().await;
-        
-        if let Some(manager) = manager_guard.as_mut() {
-            if let Some(tx) = manager.priority_transactions.get(signature) {
-                log(
-                    LogTag::Transactions,
-                    "CLEANUP_VERIFIED_FOUND",
-                    &format!(
-                        "✅ Found transaction {} in priority tracking: state={:?}, age={:?} - removing from priority tracking",
-                        &signature[..8], tx.state, (Utc::now() - tx.added_at)
-                    )
-                );
-                
-                // CRITICAL FIX: Actually remove the transaction from priority tracking
-                manager.priority_transactions.remove(signature);
-                
-                log(
-                    LogTag::Transactions,
-                    "CLEANUP_VERIFIED_REMOVED",
-                    &format!("🗑️ Successfully removed transaction {} from priority tracking", &signature[..8])
-                );
-        } else {
-            log(
-                LogTag::Transactions,
-                "CLEANUP_VERIFIED_NOT_FOUND",
-                &format!("ℹ️ Transaction {} not found in priority tracking - already cleaned or never tracked", &signature[..8])
-            );
-        }
-        
-        Ok(())
-    } else {
-        log(
-            LogTag::Transactions,
-            "CLEANUP_VERIFIED_NO_MANAGER",
-            &format!("⚠️ No global transaction manager available to cleanup {}", &signature[..8])
-        );
-        Ok(())
-    }
 }
 
 /// Clean all existing cache files by removing calculated fields
@@ -6277,7 +5007,6 @@ impl TransactionsManager {
     /// - Fallback to scanning ATA init instructions for a non-WSOL mint if balance changes are unavailable.
     async fn extract_target_token_mint_from_jupiter(&self, transaction: &Transaction) -> Option<String> {
         let wallet_str = self.wallet_pubkey.to_string();
-        const WSOL: &str = "So11111111111111111111111111111111111111112";
         let epsilon = 1e-12f64;
 
         // 1) Prefer wallet pre/post token balance deltas
@@ -6294,7 +5023,7 @@ impl TransactionsManager {
                         let mint = post_balance.get("mint").and_then(|v| v.as_str());
                         if owner == Some(wallet_str.as_str()) {
                             if let Some(mint_str) = mint {
-                                if mint_str == WSOL { continue; }
+                                if mint_str == WSOL_MINT { continue; }
                                 let account_index = post_balance.get("accountIndex").and_then(|v| v.as_u64());
                                 let pre_amount = pre_balances.iter()
                                     .find(|pre| pre.get("accountIndex").and_then(|v| v.as_u64()) == account_index)
@@ -6361,7 +5090,7 @@ impl TransactionsManager {
                                 if let Some(parsed) = instruction.get("parsed") {
                                     if let Some(info) = parsed.get("info") {
                                         if let Some(mint) = info.get("mint").and_then(|v| v.as_str()) {
-                                            if mint != WSOL {
+                                            if mint != WSOL_MINT {
                                                 return Some(mint.to_string());
                                             }
                                         }

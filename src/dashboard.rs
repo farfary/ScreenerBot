@@ -612,8 +612,8 @@ impl Dashboard {
         if height == 2 { return v; }
 
         let mut rows_left = height.saturating_sub(3) as usize; // Account for header + borders
-        let open_positions = get_open_positions();
-        let closed_positions = get_closed_positions();
+        let open_positions = get_open_positions().await;
+        let closed_positions = get_closed_positions().await;
 
         // Separator before content
         v.push(RenderLine{ text: border.separator(width), color: BORDER_COLOR, bold: false, is_wrapped: false, is_border_only: true });
@@ -728,8 +728,8 @@ impl Dashboard {
             } else { 0.0 }
         } else { 0.0 };
 
-        let open_positions = get_open_positions();
-        let closed_positions = get_closed_positions();
+        let open_positions = get_open_positions().await;
+        let closed_positions = get_closed_positions().await;
         let total_open = open_positions.len();
         let total_closed = closed_positions.len();
 
@@ -760,7 +760,6 @@ impl Dashboard {
             crate::transactions::TransactionStats { 
                 total_transactions: 0, 
                 new_transactions_count: 0, 
-                priority_transactions_count: 0, 
                 known_signatures_count: 0,
             }
         };
@@ -822,7 +821,7 @@ impl Dashboard {
         if current_line < height as usize {
             let col1 = format!("Tx Total: {}", tx_stats.total_transactions);
             let col2 = format!("New: {}", tx_stats.new_transactions_count);
-            let col3 = format!("Priority: {}", tx_stats.priority_transactions_count);
+            let col3 = format!("Cached: {}", tx_stats.known_signatures_count);
             let content_width = width.saturating_sub(2) as usize;
             let col_w = content_width / 3;
             let row_content = format!("{:<col_w$}{:<col_w$}{:<col_w$}", 

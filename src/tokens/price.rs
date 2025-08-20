@@ -500,7 +500,7 @@ impl TokenPriceService {
         cache.insert(mint.to_string(), cache_entry.clone());
 
         // Check if this is an open position and log colored price changes (always visible, not debug-only)
-        if is_open_position(mint) {
+        if is_open_position(mint).await {
             if let (Some(old), Some(new)) = (old_price, cache_entry.price_sol) {
                 // Only log if there's an actual price change
                 if (old - new).abs() > f64::EPSILON {
@@ -540,7 +540,7 @@ impl TokenPriceService {
                     let current_pnl = {
                         use crate::positions::{ get_open_positions, calculate_position_pnl };
                         if
-                            let Some(position) = get_open_positions()
+                            let Some(position) = get_open_positions().await
                                 .into_iter()
                                 .find(|pos| pos.mint == mint)
                         {

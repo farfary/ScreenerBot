@@ -6,7 +6,7 @@ use crate::tokens::Token;
 use crate::tokens::decimals::{get_token_decimals_from_chain, SOL_DECIMALS};
 use crate::logger::{log, LogTag};
 use crate::rpc::SwapError;
-use crate::global::{is_debug_swap_enabled, is_debug_api_enabled};
+use crate::global::{is_debug_swaps_enabled, is_debug_api_enabled};
 use crate::swaps::types::{SwapData, SwapQuote, RawTransaction, JupiterQuoteResponse, JupiterSwapResponse};
 use super::config::{
     JUPITER_QUOTE_API, JUPITER_SWAP_API, API_TIMEOUT_SECS, QUOTE_TIMEOUT_SECS,
@@ -40,7 +40,7 @@ pub async fn jupiter_sign_and_send_transaction(
     priority_fee_lamports: Option<u64>,
     compute_unit_limit: Option<u64>
 ) -> Result<String, SwapError> {
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_SIGN_START",
@@ -55,7 +55,7 @@ pub async fn jupiter_sign_and_send_transaction(
         );
     }
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_SIGNING",
@@ -67,7 +67,7 @@ pub async fn jupiter_sign_and_send_transaction(
     let rpc_client = crate::rpc::get_rpc_client();
     let signature = rpc_client.sign_and_send_transaction(swap_transaction_base64).await?;
     
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_TRANSACTION_SENT",
@@ -75,64 +75,16 @@ pub async fn jupiter_sign_and_send_transaction(
         );
     }
     
-    // Wait for transaction confirmation before proceeding
+    // Do NOT wait for confirmation here; let the Transactions service verify in background
     log(
         LogTag::Swap,
-        "JUPITER_CONFIRMING",
+        "JUPITER_SUBMITTED",
         &format!(
-            "⏳ Jupiter: Starting transaction confirmation for {} (max attempts: {}, retry delay: {}ms)",
-            &signature[..8], TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS
+            "📤 Jupiter: Transaction submitted: {} — verification will run in background",
+            &signature[..8]
         )
     );
-    
-    let confirmation_start = std::time::Instant::now();
-    
-    match rpc_client.wait_for_transaction_confirmation_smart(&signature, TRANSACTION_CONFIRMATION_MAX_ATTEMPTS, TRANSACTION_CONFIRMATION_RETRY_DELAY_MS).await {
-        Ok(true) => {
-            let confirmation_duration = confirmation_start.elapsed();
-            log(
-                LogTag::Swap,
-                "JUPITER_CONFIRMED",
-                &format!(
-                    "✅ Jupiter: Transaction confirmed on-chain: {} (took {:.2}s)",
-                    &signature[..8], confirmation_duration.as_secs_f64()
-                )
-            );
-        }
-        Ok(false) => {
-            let confirmation_duration = confirmation_start.elapsed();
-            log(
-                LogTag::Swap,
-                "JUPITER_TIMEOUT",
-                &format!(
-                    "⏰ Jupiter: Transaction confirmation timeout: {} (after {:.2}s, {} attempts)",
-                    &signature[..8], confirmation_duration.as_secs_f64(), TRANSACTION_CONFIRMATION_MAX_ATTEMPTS
-                )
-            );
-            return Err(SwapError::TransactionError(
-                format!("Transaction confirmation timeout after {:.2}s: {}", confirmation_duration.as_secs_f64(), signature)
-            ));
-        }
-        Err(e) => {
-            let confirmation_duration = confirmation_start.elapsed();
-            log(
-                LogTag::Swap,
-                "JUPITER_CONFIRMATION_ERROR",
-                &format!(
-                    "❌ Jupiter: Transaction confirmation error: {} - {} (after {:.2}s)",
-                    &signature[..8], e, confirmation_duration.as_secs_f64()
-                )
-            );
-            return Err(e);
-        }
-    }
-    
-    log(
-        LogTag::Swap,
-        "JUPITER_SIGN_SUCCESS",
-        &format!("✅ Jupiter: Transaction signed, sent and confirmed: {}", signature)
-    );
-    
+
     Ok(signature)
 }
 
@@ -147,7 +99,7 @@ pub async fn get_jupiter_quote(
     fee: f64,
     is_anti_mev: bool,
 ) -> Result<SwapData, SwapError> {
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_QUOTE_START",
@@ -189,7 +141,7 @@ pub async fn get_jupiter_quote(
             .join("&")
     );
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(LogTag::Swap, "JUPITER_URL", &format!("🌐 Jupiter API URL: {}", url));
     }
 
@@ -197,7 +149,7 @@ pub async fn get_jupiter_quote(
         log(LogTag::Swap, "JUPITER_API", &format!("Jupiter Quote URL: {}", url));
     }
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_QUOTE_DETAILS",
@@ -217,7 +169,7 @@ pub async fn get_jupiter_quote(
 
     let client = reqwest::Client::new();
     
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_REQUEST_SEND",
@@ -249,19 +201,19 @@ pub async fn get_jupiter_quote(
     let response = timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS), client.get(&url).send())
         .await
         .map_err(|_| {
-            if is_debug_swap_enabled() {
+            if is_debug_swaps_enabled() {
                 log(LogTag::Swap, "JUPITER_TIMEOUT", "⏰ Jupiter quote request timeout");
             }
             SwapError::ApiError("Jupiter quote request timeout".to_string())
         })?
         .map_err(|e| {
-            if is_debug_swap_enabled() {
+            if is_debug_swaps_enabled() {
                 log(LogTag::Swap, "JUPITER_NETWORK_ERROR", &format!("❌ Jupiter network error: {}", e));
             }
             SwapError::NetworkError(e)
         })?;
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_RESPONSE_STATUS",
@@ -270,7 +222,7 @@ pub async fn get_jupiter_quote(
     }
 
     if !response.status().is_success() {
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "JUPITER_HTTP_ERROR",
@@ -283,7 +235,7 @@ pub async fn get_jupiter_quote(
     }
 
     // Parse response
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_PARSING",
@@ -293,7 +245,7 @@ pub async fn get_jupiter_quote(
     
     let quote_response: JupiterQuoteResponse = response.json().await
         .map_err(|e| {
-            if is_debug_swap_enabled() {
+            if is_debug_swaps_enabled() {
                 log(
                     LogTag::Swap,
                     "JUPITER_PARSE_ERROR",
@@ -305,7 +257,7 @@ pub async fn get_jupiter_quote(
             )
         })?;
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_QUOTE_SUCCESS",
@@ -345,7 +297,7 @@ pub async fn get_jupiter_swap_transaction(
     dynamic_compute_unit_limit: bool,
     priority_fee_lamports: Option<u64>,
 ) -> Result<JupiterSwapResponse, SwapError> {
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_BUILD",
@@ -371,7 +323,7 @@ pub async fn get_jupiter_swap_transaction(
     if let Some(fee) = priority_fee_lamports {
         request_body["prioritizationFeeLamports"] = serde_json::json!(fee);
         
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "JUPITER_PRIORITY_FEE",
@@ -380,7 +332,7 @@ pub async fn get_jupiter_swap_transaction(
         }
     }
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_BUILD_REQUEST",
@@ -396,7 +348,7 @@ pub async fn get_jupiter_swap_transaction(
 
     let client = reqwest::Client::new();
     
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_BUILD_SENDING",
@@ -412,13 +364,13 @@ pub async fn get_jupiter_swap_transaction(
     )
     .await
     .map_err(|_| {
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(LogTag::Swap, "JUPITER_BUILD_TIMEOUT", "⏰ Jupiter swap transaction build timeout");
         }
         SwapError::ApiError("Jupiter swap transaction timeout".to_string())
     })?
     .map_err(|e| {
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(LogTag::Swap, "JUPITER_BUILD_NETWORK_ERROR", &format!("❌ Jupiter build network error: {}", e));
         }
         SwapError::NetworkError(e)
@@ -426,7 +378,7 @@ pub async fn get_jupiter_swap_transaction(
 
         let response_status = response.status();
         
-        if is_debug_swap_enabled() {
+        if is_debug_swaps_enabled() {
             log(
                 LogTag::Swap,
                 "JUPITER_BUILD_RESPONSE_STATUS",
@@ -437,7 +389,7 @@ pub async fn get_jupiter_swap_transaction(
         if !response_status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             
-            if is_debug_swap_enabled() {
+            if is_debug_swaps_enabled() {
                 log(
                     LogTag::Swap,
                     "JUPITER_BUILD_ERROR",
@@ -450,7 +402,7 @@ pub async fn get_jupiter_swap_transaction(
             ));
         }    let swap_response: JupiterSwapResponse = response.json().await
         .map_err(|e| {
-            if is_debug_swap_enabled() {
+            if is_debug_swaps_enabled() {
                 log(
                     LogTag::Swap,
                     "JUPITER_BUILD_PARSE_ERROR",
@@ -462,7 +414,7 @@ pub async fn get_jupiter_swap_transaction(
             )
         })?;
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_BUILD_SUCCESS",
@@ -559,7 +511,7 @@ async fn convert_jupiter_quote_to_swap_data(jupiter_quote: JupiterQuoteResponse)
         get_token_decimals_from_chain(&jupiter_quote.output_mint).await.unwrap_or(SOL_DECIMALS) 
     };
 
-    if is_debug_swap_enabled() {
+    if is_debug_swaps_enabled() {
         log(
             LogTag::Swap,
             "JUPITER_DECIMALS_DEBUG",

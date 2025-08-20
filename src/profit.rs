@@ -1118,8 +1118,8 @@ fn calculate_momentum_score(volume_trend: f64, buy_pressure: f64, price_momentum
 /// - ATH proximity warnings
 /// - Minimum profit threshold in SOL (from trader.rs PROFIT_EXTRA_NEEDED_SOL)
 ///
-/// Returns: (urgency_score: 0.0-1.0, detailed_reason: String)
-pub async fn should_sell(position: &Position, current_price: f64) -> (f64, String) {
+/// Returns: boolean indicating whether to sell the position
+pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🔍 CRITICAL SAFETY CHECKS
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -1127,13 +1127,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
     // Validate inputs
     if current_price <= 0.0 || !current_price.is_finite() {
         log(LogTag::Profit, "ERROR", &format!("Invalid current price: {}", current_price));
-        return (0.0, "Invalid price data - holding position".to_string());
+        return false;
     }
 
     let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
     if entry_price <= 0.0 || !entry_price.is_finite() {
         log(LogTag::Profit, "ERROR", &format!("Invalid entry price: {}", entry_price));
-        return (0.0, "Invalid entry price - holding position".to_string());
+        return false;
     }
 
     // Calculate current P&L
@@ -1165,15 +1165,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 )
             );
         }
-        return (
-            0.0, 
-            format!(
-                "Profit too small: {:.8} SOL < {:.8} SOL minimum ({:.2}% profit)",
-                pnl_sol,
-                PROFIT_EXTRA_NEEDED_SOL,
-                pnl_percent
-            )
-        );
+        return false;
     }
 
     // ───────────────────────────────────────────────────────────────────────────────────────
@@ -1188,20 +1180,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 
     // Hard stop is enforced later as well (double safety)
     if pnl_percent <= STOP_LOSS_PERCENT {
-        return (1.0, format!("HARD STOP: {:.2}% <= {:.0}%", pnl_percent, STOP_LOSS_PERCENT));
+        return true;
     }
 
     // Early soft stop for higher-liquidity tokens
     if pnl_percent <= soft_stop && minutes_held > 1.0 {
-        return (
-            0.95,
-            format!(
-                "SOFT STOP {tier}: pnl={:.2}% <= {:.0}%",
-                pnl_percent,
-                soft_stop,
-                tier = liquidity_tier
-            )
-        );
+        return true;
     }
 
     // Risk-Reward check using pool price history since entry
@@ -1231,29 +1215,18 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 
     // Time pressure and hard cap
     if minutes_held >= HARD_TIME_CAP_MIN {
-        let urgency = if pnl_percent >= 0.0 { 0.85 } else { 0.95 };
-        return (
-            urgency,
-            format!("HARD TIME CAP: {:.1}m reached (pnl={:.2}%)", minutes_held, pnl_percent)
-        );
+        return true;
     }
 
     if minutes_held >= SOFT_TIME_CAP_MIN {
         if pnl_percent < CONSERVATIVE_PROFIT_MIN || rr_now < required_rr {
-            let urgency = 0.7 + ((minutes_held - SOFT_TIME_CAP_MIN) / (HARD_TIME_CAP_MIN - SOFT_TIME_CAP_MIN)).clamp(0.0, 1.0) * 0.25;
-            return (
-                urgency.min(0.95),
-                format!("TIME PRESSURE: {:.1}m, pnl={:.2}%, RR_now={:.2} (<{:.1})", minutes_held, pnl_percent, rr_now, required_rr)
-            );
+            return true;
         }
     }
 
     // Momentum fade guard
     if mae_pct <= -35.0 && rr_now < required_rr * 0.8 {
-        return (
-            0.7,
-            format!("RISK ALERT: MAE={:.2}%, RR_now={:.2} (<{:.1})", mae_pct, rr_now, required_rr)
-        );
+        return true;
     }
 
     // ───────────────────────────────────────────────────────────────────────────────────────
@@ -1306,30 +1279,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             
             log(LogTag::Profit, "PUMP_EXIT_IMMEDIATE", &exit_message);
             
-            let reason = if pnl_percent >= 100.0 {
-                format!("🚀💎 ULTRA MEGA: {:.1}% - LEGENDARY!", pnl_percent)
-            } else if pnl_percent >= 75.0 {
-                format!("🚀🔥 SUPER MEGA: {:.1}% - MASSIVE!", pnl_percent)
-            } else if pnl_percent >= 50.0 {
-                format!("🚀⚡ MEGA: {:.1}% - HUGE!", pnl_percent)
-            } else {
-                format!("🚀 MEGA PUMP: {:.2}% @ {:.3}%/sec", pnl_percent, pump_analysis.velocity_percent_per_second)
-            };
-            
-            return (1.0, reason);
+            return true;
         },
         PumpAction::ExitSoon => {
             // Enhanced exit soon messaging for strong gains
-            let urgency = if pnl_percent >= 50.0 {
-                0.95 // Very high urgency for 50%+ gains
-            } else if pnl_percent >= 30.0 {
-                0.92 // High urgency for 30%+ gains
-            } else if pnl_percent >= 20.0 {
-                0.9  // Standard high urgency for 20%+ gains
-            } else {
-                0.85 // Moderate urgency for smaller gains
-            };
-            
             let exit_message = if pnl_percent >= 50.0 {
                 format!(
                     "🎯🔥 MAJOR PUMP: {} - {:.1}% in {:.1}min - EXIT VERY SOON!",
@@ -1349,15 +1302,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             
             log(LogTag::Profit, "PUMP_EXIT_SOON", &exit_message);
             
-            let reason = if pnl_percent >= 50.0 {
-                format!("🎯🔥 MAJOR PUMP: {:.1}% - EXIT VERY SOON!", pnl_percent)
-            } else if pnl_percent >= 30.0 {
-                format!("🎯⚡ STRONG: {:.1}% - EXIT SOON!", pnl_percent)
-            } else {
-                format!("🎯 PUMP: {:.2}% (conf: {:.2}) - EXIT SOON!", pnl_percent, pump_analysis.confidence)
-            };
-            
-            return (urgency, reason);
+            return true;
         },
         PumpAction::WatchClosely => {
             // Continue to normal logic but with higher urgency baseline
@@ -1387,11 +1332,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                         )
                     );
                 }
-                return (0.0, format!(
-                    "💎 HOLD: {:.2}% profit too small (need >{:.1}%)",
-                    pnl_percent,
-                    CONSERVATIVE_PROFIT_MIN
-                ));
+                return false;
             }
         },
         PumpAction::Hold => {
@@ -1401,140 +1342,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 
     // ⚡ Fast profit capture safeguards (non-pump scenarios)
     if minutes_held <= LIGHTNING_PROFIT_TIME_LIMIT && pnl_percent >= LIGHTNING_PROFIT_THRESHOLD {
-        return (0.9, format!("LIGHTNING EXIT: +{:.2}% in {:.0}s", pnl_percent, minutes_held * 60.0));
+        return true;
     }
     if minutes_held <= FAST_PROFIT_TIME_LIMIT && pnl_percent >= FAST_PROFIT_THRESHOLD {
-        return (0.8, format!("FAST EXIT: +{:.2}% in {:.1}m", pnl_percent, minutes_held));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🤖 RL-ENHANCED EXIT ANALYSIS FOR 30+ MINUTE POSITIONS
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    // For positions older than 30 minutes, use RL-based exit analysis
-    if minutes_held >= 30.0 {
-        use crate::rl_learning::get_rl_exit_recommendation;
-
-        // Get comprehensive token data for RL analysis
-        let (liquidity_usd, volume_24h, market_cap, rugcheck_score) = match
-            analyze_token_for_rl(&position.mint).await
-        {
-            Ok((liq, vol, mc, rs)) => (liq, vol, mc, rs),
-            Err(_) => (50000.0, 200000.0, None, Some(50.0)), // Safe defaults
-        };
-
-        // Get RL exit recommendation
-        if
-            let Ok(exit_prediction) = get_rl_exit_recommendation(
-                &position.mint,
-                entry_price,
-                current_price,
-                pnl_percent,
-                minutes_held / 60.0, // Convert to hours
-                liquidity_usd,
-                volume_24h,
-                market_cap,
-                rugcheck_score
-            ).await
-        {
-            if is_debug_profit_enabled() {
-                log(
-                    LogTag::Profit,
-                    "RL_EXIT_ANALYSIS",
-                    &format!(
-                        "🤖 RL analysis for {} (age: {:.1}min, PnL: {:.2}%): Exit: {}, Urgency: {:.1}%, Recovery: {:.1}%, Support: {:?}",
-                        position.symbol,
-                        minutes_held,
-                        pnl_percent,
-                        if exit_prediction.should_exit_now {
-                            "✅ YES"
-                        } else {
-                            "❌ NO"
-                        },
-                        exit_prediction.exit_urgency_score * 100.0,
-                        exit_prediction.predicted_recovery_probability * 100.0,
-                        exit_prediction.support_level
-                    )
-                );
-            }
-
-            // Smart exit decision based on RL analysis
-            if exit_prediction.should_exit_now {
-                if pnl_percent > 0.0 {
-                    // Profitable position - exit based on RL urgency
-                    log(
-                        LogTag::Profit,
-                        "RL_PROFIT_EXIT",
-                        &format!(
-                            "RL PROFIT EXIT: {:.2}% profit, {:.1}min held, urgency: {:.1}%, opportunity cost: {:.1}%",
-                            pnl_percent,
-                            minutes_held,
-                            exit_prediction.exit_urgency_score * 100.0,
-                            exit_prediction.opportunity_cost_score * 100.0
-                        )
-                    );
-                    return (
-                        exit_prediction.exit_urgency_score,
-                        format!(
-                            "RL PROFIT EXIT: {:.2}% profit - RL recommends exit for better opportunities",
-                            pnl_percent
-                        ),
-                    );
-                } else if pnl_percent > -55.0 {
-                    // Loss position but not at stop loss - smart loss minimization
-                    let min_loss_target = exit_prediction.min_loss_exit_price;
-                    let current_distance = (
-                        ((current_price - min_loss_target) / min_loss_target) *
-                        100.0
-                    ).abs();
-
-                    if
-                        current_distance <= 2.0 ||
-                        exit_prediction.predicted_recovery_probability < 0.3
-                    {
-                        log(
-                            LogTag::Profit,
-                            "RL_LOSS_EXIT",
-                            &format!(
-                                "RL LOSS MINIMIZATION: {:.2}% loss, low recovery chance ({:.1}%), taking controlled exit",
-                                pnl_percent,
-                                exit_prediction.predicted_recovery_probability * 100.0
-                            )
-                        );
-                        return (
-                            exit_prediction.exit_urgency_score,
-                            format!(
-                                "RL SMART EXIT: {:.2}% loss - minimizing loss with low recovery chance",
-                                pnl_percent
-                            ),
-                        );
-                    }
-                }
-            } else if pnl_percent < 0.0 && exit_prediction.predicted_recovery_probability >= 0.6 {
-                // Loss position but good recovery chance - hold for recovery
-                if is_debug_profit_enabled() {
-                    log(
-                        LogTag::Profit,
-                        "RL_RECOVERY_HOLD",
-                        &format!(
-                            "RL RECOVERY HOLD: {:.2}% loss, but {:.1}% recovery chance in {:.1}h, holding for support: {:?}",
-                            pnl_percent,
-                            exit_prediction.predicted_recovery_probability * 100.0,
-                            exit_prediction.predicted_recovery_time_hours,
-                            exit_prediction.support_level
-                        )
-                    );
-                }
-                return (
-                    0.0,
-                    format!(
-                        "RL RECOVERY HOLD: {:.2}% loss - {:.0}% recovery chance",
-                        pnl_percent,
-                        exit_prediction.predicted_recovery_probability * 100.0
-                    ),
-                );
-            }
-        }
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -1553,215 +1364,62 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 STOP_LOSS_PERCENT
             )
         );
-        return (1.0, format!("STOP LOSS: {:.2}% loss reached", pnl_percent));
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // 🧠 INTELLIGENT LOSS MANAGEMENT - 30+ MINUTE RULE & RL INTEGRATION
+    // 🧠 INTELLIGENT LOSS MANAGEMENT - TIME-BASED APPROACH
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
-    // For positions at loss, apply intelligent loss management
+    // For positions at loss, apply time-based loss management
     if pnl_percent < 0.0 {
         let loss_severity = pnl_percent.abs();
 
-        // 🧠 GET RL ANALYSIS FOR INTELLIGENT EXIT DECISIONS (available for all loss scenarios)
-        let token_analysis = {
-            use crate::rl_learning::get_rl_exit_recommendation;
-            get_rl_exit_recommendation(
-                &position.mint,
-                position.entry_price,
-                current_price,
-                pnl_percent,
-                minutes_held / 60.0, // Convert to hours
-                5000.0, // Default liquidity (will be improved later)
-                50000.0, // Default volume (will be improved later)
-                None, // market_cap
-                None // rugcheck_score
-            ).await.ok()
-        };
-
         // 🕐 30+ MINUTE LOSS MANAGEMENT RULE
         if minutes_held >= 30.0 {
-            let time_pressure = (minutes_held - 30.0) / 60.0; // Hours over 30 minutes
-
-            // 📈 GET PRICE HISTORY FOR TREND ANALYSIS
-            let price_trend_factor = {
-                use crate::tokens::pool::get_price_history_for_rl_learning;
-                let price_history = get_price_history_for_rl_learning(&position.mint).await;
-                if price_history.len() >= 10 {
-                    // Analyze recent price trend (last 30 minutes)
-                    let recent_cutoff = Utc::now() - chrono::Duration::minutes(30);
-                    let recent_prices: Vec<f64> = price_history
-                        .iter()
-                        .filter(|(timestamp, _)| *timestamp >= recent_cutoff)
-                        .map(|(_, price)| *price)
-                        .collect();
-
-                    if recent_prices.len() >= 5 {
-                        let recent_trend = if recent_prices.len() >= 2 {
-                            let start_price = recent_prices.first().unwrap();
-                            let end_price = recent_prices.last().unwrap();
-                            (end_price - start_price) / start_price
-                        } else {
-                            0.0
-                        };
-
-                        // Downward trend increases exit urgency
-                        if recent_trend < -0.05 {
-                            0.3
-                        } else if
-                            // Strong downtrend
-                            recent_trend < -0.02
-                        {
-                            0.15
-                        } else if
-                            // Moderate downtrend
-                            recent_trend > 0.02
-                        {
-                            -0.1
-                        } else {
-                            // Uptrend reduces urgency
-                            0.0
-                        } // Sideways
-                    } else {
-                        0.0
-                    }
-                } else {
-                    0.0
-                }
-            };
-
-            // Calculate intelligent loss exit urgency based on:
-            // 1. Loss severity (higher loss = higher urgency)
-            // 2. Time held (longer = higher urgency)
-            // 3. RL recovery probability (lower recovery = higher urgency)
-            // 4. Price trend (downtrend = higher urgency)
-            let loss_urgency = if let Some(analysis) = &token_analysis {
-                // Use RL-enhanced loss management
-                let recovery_factor = 1.0 - analysis.predicted_recovery_probability;
-                let severity_factor = (loss_severity / 55.0).min(1.0); // 0-1 scale
-                let time_factor = (time_pressure * 0.3).min(0.5); // Up to 50% from time
-
-                (
-                    recovery_factor * 0.4 +
-                    severity_factor * 0.3 +
-                    time_factor * 0.2 +
-                    price_trend_factor * 0.1
-                ).min(1.0)
+            let hours_held = minutes_held / 60.0;
+            
+            // Time-based exit criteria for losses
+            let should_exit = if loss_severity >= 30.0 {
+                // Severe losses: exit after 30 minutes
+                true
+            } else if loss_severity >= 20.0 {
+                // Moderate losses: exit after 1 hour
+                hours_held >= 1.0
+            } else if loss_severity >= 15.0 {
+                // Smaller losses: exit after 1.5 hours
+                hours_held >= 1.5
             } else {
-                // Fallback: time + severity + trend based urgency
-                let severity_factor = (loss_severity / 55.0).min(1.0);
-                let time_factor = (time_pressure * 0.4).min(0.6);
-                (severity_factor * 0.5 + time_factor * 0.4 + price_trend_factor * 0.1).min(1.0)
+                // Minor losses: exit after 2 hours
+                hours_held >= 2.0
             };
 
-            // Apply intelligent thresholds
-            let should_exit_loss = if let Some(analysis) = &token_analysis {
-                // RL-based decision with enhanced criteria
-                loss_severity >= 12.0 && // Lowered threshold for early intervention
-                    (analysis.predicted_recovery_probability < 0.4 || // Low recovery chance
-                        minutes_held >= 120.0 || // 2+ hours held
-                        loss_severity >= 30.0 || // Significant loss
-                        price_trend_factor >= 0.2) // Strong downtrend
-            } else {
-                // Fallback decision with trend consideration
-                loss_severity >= 15.0 && // Only for losses >= 15%
-                    (minutes_held >= 90.0 || // 1.5+ hours held
-                        loss_severity >= 35.0 || // Very significant loss
-                        price_trend_factor >= 0.25) // Very strong downtrend
-            };
-
-            if should_exit_loss {
+            if should_exit {
                 log(
                     LogTag::Profit,
-                    "SMART_LOSS_EXIT",
+                    "TIME_BASED_LOSS_EXIT",
                     &format!(
-                        "Intelligent loss exit: {:.2}% loss, {:.1}min held, urgency: {:.1}%, trend: {:.1}%{}",
-                        pnl_percent,
-                        minutes_held,
-                        loss_urgency * 100.0,
-                        price_trend_factor * 100.0,
-                        if let Some(analysis) = &token_analysis {
-                            format!(
-                                ", recovery chance: {:.1}%",
-                                analysis.predicted_recovery_probability * 100.0
-                            )
-                        } else {
-                            String::new()
-                        }
-                    )
-                );
-                return (
-                    loss_urgency,
-                    format!(
-                        "SMART LOSS: {:.2}% loss, {:.1}min held - cutting losses intelligently",
+                        "Time-based loss exit: {:.2}% loss, {:.1}min held, severity threshold reached",
                         pnl_percent,
                         minutes_held
-                    ),
+                    )
                 );
+                return true;
             }
         }
 
-        // For losses under 30 minutes or not meeting exit criteria, hold position
-        // BUT apply emergency exit for severe losses with bad trends
-        if minutes_held < 30.0 && loss_severity >= 25.0 {
-            // Emergency exit for severe early losses
-            let emergency_urgency = if let Some(analysis) = &token_analysis {
-                if analysis.predicted_recovery_probability < 0.2 {
-                    0.7 // High urgency for low recovery chance
-                } else {
-                    0.0
-                }
-            } else {
-                // Check price trend for emergency decision
-                use crate::tokens::pool::get_price_history_for_rl_learning;
-                let price_history = get_price_history_for_rl_learning(&position.mint).await;
-                if price_history.len() >= 5 {
-                    let recent_prices: Vec<f64> = price_history
-                        .iter()
-                        .rev()
-                        .take(10)
-                        .map(|(_, price)| *price)
-                        .collect();
-
-                    if recent_prices.len() >= 3 {
-                        let start = recent_prices.last().unwrap();
-                        let end = recent_prices.first().unwrap();
-                        let trend = (end - start) / start;
-
-                        if trend < -0.15 {
-                            0.8
-                        } else {
-                            // Very bad trend
-                            0.0
-                        }
-                    } else {
-                        0.0
-                    }
-                } else {
-                    0.0
-                }
-            };
-
-            if emergency_urgency > 0.0 {
-                log(
-                    LogTag::Profit,
-                    "EMERGENCY_LOSS_EXIT",
-                    &format!(
-                        "Emergency loss exit: {:.2}% loss in {:.1}min, severe decline detected",
-                        pnl_percent,
-                        minutes_held
-                    )
-                );
-                return (
-                    emergency_urgency,
-                    format!(
-                        "EMERGENCY LOSS: {:.2}% loss in {:.1}min - severe decline",
-                        pnl_percent,
-                        minutes_held
-                    ),
-                );
-            }
+        // Emergency exit for severe early losses (under 30 minutes)
+        if minutes_held < 30.0 && loss_severity >= 35.0 {
+            log(
+                LogTag::Profit,
+                "EMERGENCY_LOSS_EXIT",
+                &format!(
+                    "Emergency loss exit: {:.2}% loss in {:.1}min, severe decline detected",
+                    pnl_percent,
+                    minutes_held
+                )
+            );
+            return true;
         }
 
         if is_debug_profit_enabled() {
@@ -1769,13 +1427,13 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 LogTag::Profit,
                 "HOLD_LOSS",
                 &format!(
-                    "Holding position with {:.2}% loss ({:.1}min held, above stop loss)",
+                    "Holding position with {:.2}% loss ({:.1}min held, above thresholds)",
                     pnl_percent,
                     minutes_held
                 )
             );
         }
-        return (0.0, format!("Holding at {:.2}% loss (above stop loss)", pnl_percent));
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -1798,14 +1456,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 )
             );
         }
-        return (
-            0.0,
-            format!(
-                "Holding for minimum time: {:.1}s of {:.0}s required",
-                minutes_held * 60.0,
-                MIN_HOLD_TIME * 60.0
-            ),
-        );
+        return false;
     }
 
     // ⚡ LIGHTNING PROFIT EXIT: >10% profit in 15+ seconds = ultra-instant sell (HIGHEST PRIORITY)
@@ -1819,14 +1470,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 minutes_held * 60.0
             )
         );
-        return (
-            1.0,
-            format!(
-                "⚡ LIGHTNING: {:.2}% in {:.0}s - moonshot captured!",
-                pnl_percent,
-                minutes_held * 60.0
-            ),
-        );
+        return true;
     }
 
     // 🚀 SPEED PROFIT EXIT: >5% profit in 30+ seconds = mega urgent (SECOND PRIORITY)
@@ -1840,14 +1484,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 minutes_held * 60.0
             )
         );
-        return (
-            1.0,
-            format!(
-                "🚀 SPEED: {:.2}% in {:.0}s - ultra-fast momentum!",
-                pnl_percent,
-                minutes_held * 60.0
-            ),
-        );
+        return true;
     }
 
     // ⚡ FAST PROFIT EXIT: >3% profit in 1+ minute = immediate sell (THIRD PRIORITY)
@@ -1861,14 +1498,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                 minutes_held * 60.0
             )
         );
-        return (
-            1.0,
-            format!(
-                "⚡ FAST: {:.2}% in {:.0}s - immediate exit!",
-                pnl_percent,
-                minutes_held * 60.0
-            ),
-        );
+        return true;
     }
 
     // 🧠 ADAPTIVE FAST PROFIT: Adjusts thresholds based on momentum and time
@@ -1904,15 +1534,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                     dynamic_threshold
                 )
             );
-            return (
-                0.9, // High urgency but not maximum to allow for slight delays
-                format!(
-                    "ADAPTIVE FAST: {:.2}% in {:.0}s (momentum: {:.4}%/s)",
-                    pnl_percent,
-                    time_seconds,
-                    momentum_factor
-                ),
-            );
+            return true;
         }
     } // ═══════════════════════════════════════════════════════════════════════════════════════
     // 🚀 INSTANT MEGA-PROFIT EXITS
@@ -1924,12 +1546,12 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             "MEGA_PROFIT",
             &format!("Instant sell triggered: {:.2}% profit", pnl_percent)
         );
-        return (1.0, format!("MEGA PROFIT: {:.2}% - instant sell!", pnl_percent));
+        return true;
     }
 
     if pnl_percent >= MEGA_PROFIT_THRESHOLD {
         log(LogTag::Profit, "LARGE_PROFIT", &format!("Large profit detected: {:.2}%", pnl_percent));
-        return (0.9, format!("LARGE PROFIT: {:.2}% - sell very soon!", pnl_percent));
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -2012,15 +1634,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             )
         );
 
-        return (
-            1.0,
-            format!(
-                "URGENT SAFETY EXIT: {:.1}min held (>{:.0}min limit) with {:.2}% profit!",
-                minutes_held,
-                urgent_time,
-                pnl_percent
-            ),
-        );
+        return true;
     }
 
     // 🟡 SAFETY TIME EXIT: Approaching max hold time with profit
@@ -2049,16 +1663,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
             )
         );
 
-        return (
-            final_urgency,
-            format!(
-                "SAFETY EXIT: {:.1}min held ({:.0}% of max {:.0}min) with {:.2}% profit",
-                minutes_held,
-                (minutes_held / max_hold_time) * 100.0,
-                max_hold_time,
-                pnl_percent
-            ),
-        );
+        return final_urgency >= 0.7;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -2088,15 +1693,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
                         trailing_stop_threshold
                     )
                 );
-                return (
-                    1.0,
-                    format!(
-                        "TRAILING STOP: Dropped {:.2}% from {:.2}% peak (safety {:?})",
-                        current_drop_from_peak,
-                        highest_profit_percent,
-                        safety_level
-                    ),
-                );
+                return true;
             }
         }
     }
@@ -2293,7 +1890,8 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
         );
     }
 
-    (final_urgency_with_time_boost, reason)
+    // Return true if urgency is high enough to sell
+    final_urgency_with_time_boost >= 0.7
 }
 
 // ================================================================================================
@@ -2301,29 +1899,14 @@ pub async fn should_sell(position: &Position, current_price: f64) -> (f64, Strin
 // ================================================================================================
 
 /// Simple fallback profit logic when comprehensive analysis fails
-fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> (f64, String) {
+fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> bool {
     // 🚨 MANDATORY TIME-BASED EXITS (even in fallback mode)
     if minutes_held >= 45.0 && pnl_percent > 0.0 {
-        return (
-            1.0,
-            format!(
-                "FALLBACK URGENT EXIT: {:.1}min held (>45min) with {:.1}% profit - immediate sell!",
-                minutes_held,
-                pnl_percent
-            ),
-        );
+        return true;
     }
 
     if minutes_held >= 30.0 && pnl_percent > 0.0 {
-        let overtime_urgency = 0.7 + ((minutes_held - 30.0) / 15.0) * 0.3; // 70-100% urgency
-        return (
-            overtime_urgency.min(1.0),
-            format!(
-                "FALLBACK FAST EXIT: {:.1}min held (>30min) with {:.1}% profit - taking profits!",
-                minutes_held,
-                pnl_percent
-            ),
-        );
+        return true;
     }
 
     // Conservative profit targets when we can't analyze the token
@@ -2347,19 +1930,8 @@ fn fallback_profit_logic(pnl_percent: f64, minutes_held: f64) -> (f64, String) {
 
     let urgency = (profit_factor * 0.5 + time_pressure * 0.5 + time_boost).min(1.0);
 
-    let reason = format!(
-        "FALLBACK: {:.1}% profit, {:.1}min held, target {:.1}% (no token data){}",
-        pnl_percent,
-        minutes_held,
-        target_profit,
-        if time_boost > 0.0 {
-            format!(" +{:.0}% time urgency", time_boost * 100.0)
-        } else {
-            "".to_string()
-        }
-    );
-
-    (urgency, reason)
+    // Return true if urgency is high enough to sell
+    urgency >= 0.7
 }
 
 // ================================================================================================
