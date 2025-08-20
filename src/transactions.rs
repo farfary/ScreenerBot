@@ -3356,28 +3356,33 @@ impl TransactionsManager {
                 Ok(mut transaction) => {
                     processed_count += 1;
                     
-                    // Always recalculate transaction analysis
-                    // Reset analysis fields and recalc using cached raw data
-                    if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
-                        log(LogTag::Transactions, "WARN", &format!(
-                            "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
-                        ));
-                        continue;
-                    }
+                    // Only recalculate if transaction analysis is missing or invalid
+                    let needs_recalculation = transaction.transaction_type == TransactionType::Unknown
+                        || transaction.swap_analysis.is_none();
+                    
+                    if needs_recalculation {
+                        // Recalculate transaction analysis from raw data
+                        if let Err(e) = self.recalculate_transaction_analysis(&mut transaction).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to recalculate transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                            ));
+                            continue;
+                        }
 
-                    // Persist a snapshot for finalized transactions
-                    if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
-                        transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
-                    }
+                        // Persist a snapshot for finalized transactions
+                        if matches!(transaction.status, TransactionStatus::Finalized) && transaction.raw_transaction_data.is_some() {
+                            transaction.cached_analysis = Some(CachedAnalysis::from_transaction(&transaction));
+                        }
 
-                    // Save updated transaction back to cache
-                    if let Err(e) = self.cache_transaction(&transaction).await {
-                        log(LogTag::Transactions, "WARN", &format!(
-                            "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
-                        ));
-                    }
+                        // Save updated transaction back to cache
+                        if let Err(e) = self.cache_transaction(&transaction).await {
+                            log(LogTag::Transactions, "WARN", &format!(
+                                "Failed to cache recalculated transaction {}: {}", get_signature_prefix(&transaction.signature), e
+                            ));
+                        }
 
-                    recalculated_count += 1;
+                        recalculated_count += 1;
+                    }
                     
                     // Convert to SwapPnLInfo if it's a swap transaction
                     if let Some(swap_info) = self.convert_to_swap_pnl_info(&transaction, &token_symbol_cache, false) {
