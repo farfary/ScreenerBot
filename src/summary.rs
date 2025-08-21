@@ -536,13 +536,13 @@ pub async fn display_positions_table() {
         .iter()
         .map(|p| p.entry_size_sol)
         .sum();
-    let total_pnl: f64 = closed_positions
-        .iter()
-        .map(|p| {
-            let (pnl_sol, _) = calculate_position_pnl(p, None);
-            pnl_sol
-        })
-        .sum();
+
+    // Calculate P&L for all closed positions (async)
+    let mut total_pnl = 0.0;
+    for position in &closed_positions {
+        let (pnl_sol, _) = calculate_position_pnl(position, None).await;
+        total_pnl += pnl_sol;
+    }
 
     if is_debug_summary_enabled() {
         log(
@@ -665,13 +665,20 @@ pub async fn display_positions_table() {
         sorted_closed.sort_by_key(|p| p.exit_time.unwrap_or(Utc::now()));
 
         let closed_build_start = Instant::now();
-        let recent_closed: Vec<_> = sorted_closed
+        let closed_iter: Vec<_> = sorted_closed
             .iter()
             .rev() // Most recent first
             .take(10) // Take last 10
             .rev() // Reverse back so oldest of the 10 is first
-            .map(|position| ClosedPositionDisplay::from_position(position))
             .collect();
+
+        let mut recent_closed = Vec::new();
+        for position in closed_iter {
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None).await;
+            recent_closed.push(
+                ClosedPositionDisplay::from_position(position, pnl_sol, pnl_percent)
+            );
+        }
         if is_debug_summary_enabled() {
             log(
                 LogTag::Summary,
@@ -744,8 +751,17 @@ pub async fn display_positions_table() {
             let mut displays = Vec::new();
             let build_start = Instant::now();
             for position in &sorted_open {
-                // current_price is now read directly from position object inside from_position()
-                displays.push(OpenPositionDisplay::from_position(position, None));
+                // Calculate PnL using stored current_price from position object
+                let current_price = position.current_price;
+                let (pnl_sol, pnl_percent) = calculate_position_pnl(position, current_price).await;
+                displays.push(
+                    OpenPositionDisplay::from_position(
+                        position,
+                        current_price,
+                        pnl_sol,
+                        pnl_percent
+                    )
+                );
             }
             if is_debug_summary_enabled() {
                 log(
@@ -847,20 +863,21 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
     if is_debug_summary_enabled() {
         log(LogTag::Summary, "DEBUG", "[build_bot_summary] Computing trading statistics");
     }
+    // Calculate P&L for all positions first (async)
+    let mut pnl_values = Vec::new();
+    for position in closed_positions {
+        let (pnl_sol, _) = calculate_position_pnl(position, None).await;
+        pnl_values.push(pnl_sol);
+    }
+
     let total_trades = closed_positions.len();
-    let profitable_trades = closed_positions
+    let profitable_trades = pnl_values
         .iter()
-        .filter(|p| {
-            let (pnl_sol, _) = calculate_position_pnl(p, None);
-            pnl_sol > 0.0
-        })
+        .filter(|&pnl| *pnl > 0.0)
         .count();
-    let losing_trades = closed_positions
+    let losing_trades = pnl_values
         .iter()
-        .filter(|p| {
-            let (pnl_sol, _) = calculate_position_pnl(p, None);
-            pnl_sol < 0.0
-        })
+        .filter(|&pnl| *pnl < 0.0)
         .count();
     let break_even_trades = total_trades - profitable_trades - losing_trades;
 
@@ -870,15 +887,7 @@ pub async fn build_bot_summary(closed_positions: &[&Position]) -> String {
         0.0
     };
 
-    // Calculate P&L metrics
-    let pnl_values: Vec<f64> = closed_positions
-        .iter()
-        .map(|p| {
-            let (pnl_sol, _) = calculate_position_pnl(p, None);
-            pnl_sol
-        })
-        .collect();
-
+    // Calculate P&L metrics (using already calculated pnl_values)
     let total_pnl: f64 = pnl_values.iter().sum();
     let avg_pnl_per_trade = if total_trades > 0 { total_pnl / (total_trades as f64) } else { 0.0 };
 
@@ -1845,7 +1854,7 @@ fn calculate_max_drawdown(pnl_values: &[f64]) -> f64 {
 }
 
 impl ClosedPositionDisplay {
-    pub fn from_position(position: &Position) -> Self {
+    pub fn from_position(position: &Position, pnl_sol: f64, pnl_percent: f64) -> Self {
         // Check if position is fully verified (both entry and exit must be verified for closed positions)
         let is_verified = position.transaction_entry_verified && position.transaction_exit_verified;
 
@@ -1879,7 +1888,7 @@ impl ClosedPositionDisplay {
             position.exit_price.unwrap_or(0.0)
         );
 
-        let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
+        let (pnl_sol, pnl_percent) = (pnl_sol, pnl_percent);
 
         let pnl_sol_str = if pnl_sol >= 0.0 {
             format!("+{:.6}", pnl_sol)
@@ -1921,9 +1930,14 @@ impl ClosedPositionDisplay {
 }
 
 impl OpenPositionDisplay {
-    pub fn from_position(position: &Position, _current_price: Option<f64>) -> Self {
+    pub fn from_position(
+        position: &Position,
+        current_price: Option<f64>,
+        pnl_sol: f64,
+        pnl_percent: f64
+    ) -> Self {
         // Use the stored current_price from position object (updated by monitor_open_positions)
-        let current_price = position.current_price;
+        let current_price = current_price.or(position.current_price);
         // Check if position entry is verified (for open positions, only entry needs to be verified)
         let is_verified = position.transaction_entry_verified;
 
@@ -1962,7 +1976,6 @@ impl OpenPositionDisplay {
         };
 
         let (pnl_sol_str, pnl_percent_str) = if let Some(price) = current_price {
-            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));
             let sol_str = if pnl_sol >= 0.0 {
                 format!("+{:.6}", pnl_sol)
             } else {
@@ -1979,7 +1992,6 @@ impl OpenPositionDisplay {
         };
 
         let status = if let Some(price) = current_price {
-            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(price));
             get_profit_status_emoji(pnl_sol, pnl_percent, false)
         } else {
             "OPEN".to_string()

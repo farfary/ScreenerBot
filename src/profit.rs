@@ -31,16 +31,16 @@ use std::collections::HashMap;
 pub const STOP_LOSS_PERCENT: f64 = -55.0; // Intelligent stop loss at -55%
 
 // ➕ Liquidity-tier soft stops (percent)
-const SOFT_STOP_LARGE: f64 = -40.0;   // large/XLARGE liquidity: cut earlier at -40%
-const SOFT_STOP_MEDIUM: f64 = -50.0;  // medium liquidity: -50%
+const SOFT_STOP_LARGE: f64 = -40.0; // large/XLARGE liquidity: cut earlier at -40%
+const SOFT_STOP_MEDIUM: f64 = -50.0; // medium liquidity: -50%
 const SOFT_STOP_DEFAULT: f64 = -55.0; // small/unknown: -55%
 
 // ⏳ Time caps (minutes) — earlier than 1 hour as requested
-const SOFT_TIME_CAP_MIN: f64 = 30.0;  // begin time pressure at 30 minutes
-const HARD_TIME_CAP_MIN: f64 = 45.0;  // must act by 45 minutes
+const SOFT_TIME_CAP_MIN: f64 = 30.0; // begin time pressure at 30 minutes
+const HARD_TIME_CAP_MIN: f64 = 45.0; // must act by 45 minutes
 
 // 📐 Risk-Reward minimums by liquidity tier (RR = current_gain% / |MAE%|)
-const REQUIRED_RR_LARGE: f64 = 1.2;   // more tolerant for high-liquidity
+const REQUIRED_RR_LARGE: f64 = 1.2; // more tolerant for high-liquidity
 const REQUIRED_RR_MEDIUM: f64 = 1.4;
 const REQUIRED_RR_DEFAULT: f64 = 1.6; // tighter for small/unknown
 
@@ -131,20 +131,20 @@ pub struct PumpAnalysis {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PumpType {
-    MegaPump,    // 50%+ gains
-    MainPump,    // 15-50% gains  
-    MicroPump,   // 8-15% gains (for volatile tokens)
-    TrendMove,   // 5-8% sustained move
-    NoMove,      // < 5% movement
+    MegaPump, // 50%+ gains
+    MainPump, // 15-50% gains
+    MicroPump, // 8-15% gains (for volatile tokens)
+    TrendMove, // 5-8% sustained move
+    NoMove, // < 5% movement
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PumpAction {
-    ExitImmediately,    // Mega pump detected
-    ExitSoon,          // Main pump detected  
-    WatchClosely,      // Micro pump or good trend
-    Hold,              // Normal movement
-    HoldForMore,       // Too small to exit
+    ExitImmediately, // Mega pump detected
+    ExitSoon, // Main pump detected
+    WatchClosely, // Micro pump or good trend
+    Hold, // Normal movement
+    HoldForMore, // Too small to exit
 }
 
 /// Detect pumps using price history and velocity analysis
@@ -155,11 +155,11 @@ pub async fn detect_pump(
 ) -> PumpAnalysis {
     let entry_price = position.effective_entry_price.unwrap_or(position.entry_price);
     let current_profit_percent = ((current_price - entry_price) / entry_price) * 100.0;
-    
+
     // Get price history for pump analysis
     let pool_service = get_pool_service();
     let price_history = pool_service.get_recent_price_history(&position.mint).await;
-    
+
     if price_history.is_empty() || minutes_held < 0.5 {
         return PumpAnalysis {
             is_pump: false,
@@ -171,15 +171,24 @@ pub async fn detect_pump(
             recommended_action: PumpAction::Hold,
         };
     }
-    
+
     // Analyze price velocity and patterns
-    let velocity_analysis = analyze_price_velocity(&price_history, entry_price, current_price, minutes_held);
+    let velocity_analysis = analyze_price_velocity(
+        &price_history,
+        entry_price,
+        current_price,
+        minutes_held
+    );
     let pattern_analysis = analyze_pump_pattern(&price_history, entry_price, minutes_held);
     let volatility_context = get_token_volatility_context(&position.mint).await;
-    
+
     // Determine pump type based on magnitude and velocity
-    let pump_type = classify_pump_type(current_profit_percent, velocity_analysis.max_velocity, volatility_context);
-    
+    let pump_type = classify_pump_type(
+        current_profit_percent,
+        velocity_analysis.max_velocity,
+        volatility_context
+    );
+
     // Calculate confidence based on multiple factors
     let confidence = calculate_pump_confidence(
         &velocity_analysis,
@@ -187,10 +196,15 @@ pub async fn detect_pump(
         current_profit_percent,
         volatility_context
     );
-    
+
     // Determine recommended action
-    let recommended_action = determine_pump_action(&pump_type, confidence, current_profit_percent, minutes_held);
-    
+    let recommended_action = determine_pump_action(
+        &pump_type,
+        confidence,
+        current_profit_percent,
+        minutes_held
+    );
+
     PumpAnalysis {
         is_pump: matches!(pump_type, PumpType::MicroPump | PumpType::MainPump | PumpType::MegaPump),
         pump_type,
@@ -204,19 +218,19 @@ pub async fn detect_pump(
 
 #[derive(Debug)]
 struct VelocityAnalysis {
-    max_velocity: f64,              // Max % per second
-    avg_velocity: f64,              // Average % per second
-    acceleration: f64,              // Change in velocity
-    time_to_peak: f64,              // Seconds to reach peak
-    is_accelerating: bool,          // Still gaining speed
+    max_velocity: f64, // Max % per second
+    avg_velocity: f64, // Average % per second
+    acceleration: f64, // Change in velocity
+    time_to_peak: f64, // Seconds to reach peak
+    is_accelerating: bool, // Still gaining speed
 }
 
 #[derive(Debug)]
 struct PatternAnalysis {
-    is_parabolic: bool,             // Parabolic price curve
-    has_sharp_spike: bool,          // Sudden price spike
-    volume_spike: bool,             // Volume confirmation
-    consistency_score: f64,         // 0-1, how consistent the move is
+    is_parabolic: bool, // Parabolic price curve
+    has_sharp_spike: bool, // Sudden price spike
+    volume_spike: bool, // Volume confirmation
+    consistency_score: f64, // 0-1, how consistent the move is
 }
 
 /// Analyze price velocity over time
@@ -235,63 +249,66 @@ fn analyze_price_velocity(
             is_accelerating: false,
         };
     }
-    
+
     let mut velocities = Vec::new();
     let mut max_velocity = 0.0;
     let mut time_to_peak = 0.0;
     let mut peak_price = entry_price;
-    
+
     // Calculate velocities between consecutive points
     for i in 1..price_history.len() {
-        let (time1, price1) = &price_history[i-1];
+        let (time1, price1) = &price_history[i - 1];
         let (time2, price2) = &price_history[i];
-        
+
         let time_diff_seconds = (*time2 - *time1).num_seconds() as f64;
-        
+
         if time_diff_seconds > 0.0 && price1 > &0.0 {
             let price_change_percent = ((price2 - price1) / price1) * 100.0;
             let velocity = price_change_percent / time_diff_seconds;
-            
+
             velocities.push(velocity);
-            
+
             if velocity > max_velocity {
                 max_velocity = velocity;
                 time_to_peak = time_diff_seconds;
             }
-            
+
             if *price2 > peak_price {
                 peak_price = *price2;
             }
         }
     }
-    
+
     // Include movement from entry to current
     let total_time_seconds = minutes_held * 60.0;
     if total_time_seconds > 0.0 {
-        let entry_to_current_velocity = ((current_price - entry_price) / entry_price * 100.0) / total_time_seconds;
+        let entry_to_current_velocity =
+            (((current_price - entry_price) / entry_price) * 100.0) / total_time_seconds;
         velocities.push(entry_to_current_velocity);
-        
+
         if entry_to_current_velocity > max_velocity {
             max_velocity = entry_to_current_velocity;
             time_to_peak = total_time_seconds;
         }
     }
-    
+
     let avg_velocity = if !velocities.is_empty() {
-        velocities.iter().sum::<f64>() / velocities.len() as f64
+        velocities.iter().sum::<f64>() / (velocities.len() as f64)
     } else {
         0.0
     };
-    
+
     // Calculate acceleration (change in velocity)
     let acceleration = if velocities.len() >= 2 {
-        let recent_avg = velocities.iter().rev().take(3).sum::<f64>() / (3.0_f64).min(velocities.len() as f64);
-        let early_avg = velocities.iter().take(3).sum::<f64>() / (3.0_f64).min(velocities.len() as f64);
+        let recent_avg =
+            velocities.iter().rev().take(3).sum::<f64>() / (3.0_f64).min(velocities.len() as f64);
+        let early_avg =
+            velocities.iter().take(3).sum::<f64>() / (3.0_f64).min(velocities.len() as f64);
         recent_avg - early_avg
     } else {
         0.0
     };
-    
+
     VelocityAnalysis {
         max_velocity,
         avg_velocity,
@@ -315,18 +332,21 @@ fn analyze_pump_pattern(
             consistency_score: 0.0,
         };
     }
-    
-    let prices: Vec<f64> = price_history.iter().map(|(_, price)| *price).collect();
-    
+
+    let prices: Vec<f64> = price_history
+        .iter()
+        .map(|(_, price)| *price)
+        .collect();
+
     // Check for parabolic curve (exponential growth)
     let is_parabolic = check_parabolic_pattern(&prices, entry_price);
-    
+
     // Check for sharp spike (sudden large move)
     let has_sharp_spike = check_sharp_spike(&prices, entry_price);
-    
+
     // Calculate consistency (how smooth the upward movement is)
     let consistency_score = calculate_consistency_score(&prices);
-    
+
     PatternAnalysis {
         is_parabolic,
         has_sharp_spike,
@@ -340,26 +360,27 @@ fn check_parabolic_pattern(prices: &[f64], entry_price: f64) -> bool {
     if prices.len() < 4 {
         return false;
     }
-    
+
     // Look for accelerating gains (each move larger than the last)
     let mut acceleration_count = 0;
     let total_checks = prices.len() - 1;
-    
+
     for i in 1..prices.len() {
         if i >= 2 {
-            let prev_gain = (prices[i-1] - prices[i-2]) / prices[i-2];
-            let curr_gain = (prices[i] - prices[i-1]) / prices[i-1];
-            
-            if curr_gain > prev_gain * 1.1 { // 10% acceleration
+            let prev_gain = (prices[i - 1] - prices[i - 2]) / prices[i - 2];
+            let curr_gain = (prices[i] - prices[i - 1]) / prices[i - 1];
+
+            if curr_gain > prev_gain * 1.1 {
+                // 10% acceleration
                 acceleration_count += 1;
             }
         }
     }
-    
+
     // Parabolic if >60% of moves are accelerating and total gain > 10%
-    let acceleration_ratio = acceleration_count as f64 / total_checks as f64;
-    let total_gain = (prices.last().unwrap() - entry_price) / entry_price * 100.0;
-    
+    let acceleration_ratio = (acceleration_count as f64) / (total_checks as f64);
+    let total_gain = ((prices.last().unwrap() - entry_price) / entry_price) * 100.0;
+
     acceleration_ratio > 0.6 && total_gain > 10.0
 }
 
@@ -368,15 +389,16 @@ fn check_sharp_spike(prices: &[f64], _entry_price: f64) -> bool {
     if prices.len() < 3 {
         return false;
     }
-    
+
     // Look for sudden large moves
     for i in 1..prices.len() {
-        let gain = (prices[i] - prices[i-1]) / prices[i-1] * 100.0;
-        if gain > 8.0 { // Single move > 8%
+        let gain = ((prices[i] - prices[i - 1]) / prices[i - 1]) * 100.0;
+        if gain > 8.0 {
+            // Single move > 8%
             return true;
         }
     }
-    
+
     false
 }
 
@@ -385,17 +407,17 @@ fn calculate_consistency_score(prices: &[f64]) -> f64 {
     if prices.len() < 3 {
         return 0.0;
     }
-    
+
     let mut positive_moves = 0;
     let total_moves = prices.len() - 1;
-    
+
     for i in 1..prices.len() {
-        if prices[i] > prices[i-1] {
+        if prices[i] > prices[i - 1] {
             positive_moves += 1;
         }
     }
-    
-    positive_moves as f64 / total_moves as f64
+
+    (positive_moves as f64) / (total_moves as f64)
 }
 
 /// Get token volatility context (simplified without performance cache)
@@ -414,45 +436,55 @@ fn classify_pump_type(profit_percent: f64, max_velocity: f64, volatility_context
     } else {
         (1.0 + volatility_context).min(2.0)
     };
-    
+
     // Dynamic thresholds with progressive scaling
     let ultra_mega_threshold = 100.0 / volatility_multiplier; // 100%+ ultra mega
-    let super_mega_threshold = 75.0 / volatility_multiplier;  // 75%+ super mega
-    let mega_threshold = 50.0 / volatility_multiplier;        // 50%+ mega
+    let super_mega_threshold = 75.0 / volatility_multiplier; // 75%+ super mega
+    let mega_threshold = 50.0 / volatility_multiplier; // 50%+ mega
     let strong_mega_threshold = 30.0 / volatility_multiplier; // 30%+ strong mega
     let main_threshold = PUMP_MIN_PERCENT / volatility_multiplier;
     let micro_threshold = MICRO_PUMP_PERCENT / volatility_multiplier;
     let trend_threshold = 5.0 / volatility_multiplier;
-    
+
     // Ultra-sensitive velocity detection for extreme gains
-    let ultra_velocity_factor = max_velocity > 2.0;  // Ultra high velocity
-    let super_velocity_factor = max_velocity > 1.5;  // Super high velocity
-    let high_velocity_factor = max_velocity > 1.0;   // High velocity
+    let ultra_velocity_factor = max_velocity > 2.0; // Ultra high velocity
+    let super_velocity_factor = max_velocity > 1.5; // Super high velocity
+    let high_velocity_factor = max_velocity > 1.0; // High velocity
     let pump_velocity_factor = max_velocity > PUMP_VELOCITY_THRESHOLD;
-    
+
     // Progressive pump classification with velocity boosting
     match profit_percent {
         // ULTRA TIER - 100%+ gains (immediate exit regardless)
         p if p >= ultra_mega_threshold => PumpType::MegaPump,
-        
-        // SUPER TIER - 75%+ gains 
-        p if p >= super_mega_threshold || (ultra_velocity_factor && p >= 60.0) => PumpType::MegaPump,
-        
+
+        // SUPER TIER - 75%+ gains
+        p if p >= super_mega_threshold || (ultra_velocity_factor && p >= 60.0) =>
+            PumpType::MegaPump,
+
         // MEGA TIER - 50%+ gains
         p if p >= mega_threshold || (super_velocity_factor && p >= 40.0) => PumpType::MegaPump,
-        
+
         // STRONG MEGA TIER - 30%+ gains
-        p if p >= strong_mega_threshold || (high_velocity_factor && p >= 25.0) => PumpType::MegaPump,
-        
+        p if p >= strong_mega_threshold || (high_velocity_factor && p >= 25.0) =>
+            PumpType::MegaPump,
+
         // MAIN PUMP TIER - 15%+ gains with various velocity combinations
-        p if p >= main_threshold || (pump_velocity_factor && p >= 12.0) || (high_velocity_factor && p >= 10.0) => PumpType::MainPump,
-        
+        p if
+            p >= main_threshold ||
+            (pump_velocity_factor && p >= 12.0) ||
+            (high_velocity_factor && p >= 10.0)
+        => PumpType::MainPump,
+
         // MICRO PUMP TIER - 8%+ gains with velocity assistance
-        p if p >= micro_threshold || (pump_velocity_factor && p >= 6.0) || (high_velocity_factor && p >= 5.0) => PumpType::MicroPump,
-        
+        p if
+            p >= micro_threshold ||
+            (pump_velocity_factor && p >= 6.0) ||
+            (high_velocity_factor && p >= 5.0)
+        => PumpType::MicroPump,
+
         // TREND TIER - 5%+ gains with some velocity
         p if p >= trend_threshold || (pump_velocity_factor && p >= 3.0) => PumpType::TrendMove,
-        
+
         _ => PumpType::NoMove,
     }
 }
@@ -465,7 +497,7 @@ fn calculate_pump_confidence(
     volatility_context: f64
 ) -> f64 {
     let mut confidence = 0.0;
-    
+
     // Ultra-high gain confidence boost (extreme gains = max confidence)
     if profit_percent >= 100.0 {
         confidence += 0.9; // 100%+ gains = nearly max confidence
@@ -476,46 +508,46 @@ fn calculate_pump_confidence(
     } else if profit_percent >= 30.0 {
         confidence += 0.5; // 30%+ gains = moderate confidence boost
     }
-    
+
     // Enhanced velocity confidence with progressive scaling
     if velocity.max_velocity > 2.0 {
         confidence += 0.3; // Ultra velocity
     } else if velocity.max_velocity > 1.5 {
-        confidence += 0.25; // Super velocity  
+        confidence += 0.25; // Super velocity
     } else if velocity.max_velocity > 1.0 {
         confidence += 0.2; // High velocity
     } else if velocity.max_velocity > PUMP_VELOCITY_THRESHOLD {
         confidence += 0.15 * (velocity.max_velocity / (PUMP_VELOCITY_THRESHOLD * 2.0)).min(1.0);
     }
-    
+
     // Pattern confidence with extreme gain awareness
     if pattern.is_parabolic && profit_percent >= 30.0 {
         confidence += 0.15; // Parabolic + high gains = very confident
     } else if pattern.is_parabolic {
         confidence += 0.1;
     }
-    
+
     if pattern.has_sharp_spike && profit_percent >= 20.0 {
         confidence += 0.15; // Sharp spike + good gains = confident
     } else if pattern.has_sharp_spike {
         confidence += 0.1;
     }
-    
+
     // Consistency confidence with gain scaling
     let consistency_weight = if profit_percent >= 50.0 { 0.15 } else { 0.1 };
     confidence += pattern.consistency_score * consistency_weight;
-    
+
     // Magnitude confidence (10% weight)
     let magnitude_factor = (profit_percent / (PUMP_MIN_PERCENT * 2.0)).min(1.0);
     confidence += magnitude_factor * 0.1;
-    
+
     // Adjust for token volatility context
     let volatility_adjustment = if volatility_context > 0.2 {
         0.8 // Reduce confidence for highly volatile tokens
     } else {
         1.0
     };
-    
+
     (confidence * volatility_adjustment).min(1.0).max(0.0)
 }
 
@@ -542,7 +574,7 @@ fn determine_pump_action(
             } else {
                 PumpAction::ExitSoon
             }
-        },
+        }
         PumpType::MainPump => {
             // More aggressive for strong gains
             if profit_percent >= 50.0 {
@@ -556,7 +588,7 @@ fn determine_pump_action(
             } else {
                 PumpAction::WatchClosely
             }
-        },
+        }
         PumpType::MicroPump => {
             // Enhanced micro pump sensitivity
             if profit_percent >= 30.0 {
@@ -570,7 +602,7 @@ fn determine_pump_action(
             } else {
                 PumpAction::Hold
             }
-        },
+        }
         PumpType::TrendMove => {
             // More sensitive trend detection
             if profit_percent >= 20.0 && confidence > 0.5 {
@@ -582,7 +614,7 @@ fn determine_pump_action(
             } else {
                 PumpAction::Hold
             }
-        },
+        }
         PumpType::NoMove => {
             // Enhanced conservative logic
             if profit_percent < CONSERVATIVE_PROFIT_MIN && minutes_held < 10.0 {
@@ -1137,7 +1169,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     }
 
     // Calculate current P&L
-    let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(current_price));
+    let (pnl_sol, pnl_percent) = calculate_position_pnl(position, Some(current_price)).await;
 
     // Calculate position duration
     let now = Utc::now();
@@ -1147,10 +1179,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // 💰 MINIMUM PROFIT THRESHOLD CHECK (NEW FEATURE)
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    
+
     // Import the minimum profit threshold from trader.rs
     use crate::trader::PROFIT_EXTRA_NEEDED_SOL;
-    
+
     // For profitable positions, ensure minimum SOL profit before selling
     if pnl_percent > 0.0 && pnl_sol < PROFIT_EXTRA_NEEDED_SOL {
         if is_debug_profit_enabled() {
@@ -1196,12 +1228,16 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         let mut max_p = current_price;
         for (ts, p) in history.iter() {
             if *ts >= position.entry_time {
-                if *p < min_p { min_p = *p; }
-                if *p > max_p { max_p = *p; }
+                if *p < min_p {
+                    min_p = *p;
+                }
+                if *p > max_p {
+                    max_p = *p;
+                }
             }
         }
-        let mae = if entry_price > 0.0 { ((min_p / entry_price) - 1.0) * 100.0 } else { 0.0 };
-        let mfe = if entry_price > 0.0 { ((max_p / entry_price) - 1.0) * 100.0 } else { 0.0 };
+        let mae = if entry_price > 0.0 { (min_p / entry_price - 1.0) * 100.0 } else { 0.0 };
+        let mfe = if entry_price > 0.0 { (max_p / entry_price - 1.0) * 100.0 } else { 0.0 };
         let risk = mae.abs().max(0.1); // avoid div-by-zero; floor 0.1%
         let rr = pnl_percent / risk;
         (mae, mfe, rr)
@@ -1232,10 +1268,10 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
     // ───────────────────────────────────────────────────────────────────────────────────────
     // 🚀 PUMP DETECTION SYSTEM - HIGHEST PRIORITY
     // ───────────────────────────────────────────────────────────────────────────────────────
-    
+
     // Analyze pump patterns BEFORE other logic
     let pump_analysis = detect_pump(position, current_price, minutes_held).await;
-    
+
     if is_debug_profit_enabled() {
         log(
             LogTag::Profit,
@@ -1250,7 +1286,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             )
         );
     }
-    
+
     // PUMP-BASED EXIT DECISIONS
     match pump_analysis.recommended_action {
         PumpAction::ExitImmediately => {
@@ -1258,65 +1294,78 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
             let exit_message = if pnl_percent >= 100.0 {
                 format!(
                     "🚀💎 ULTRA MEGA PUMP: {} - {:.1}% in {:.1}min - LEGENDARY MOONSHOT!",
-                    position.symbol, pnl_percent, minutes_held
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
                 )
             } else if pnl_percent >= 75.0 {
                 format!(
                     "🚀🔥 SUPER MEGA PUMP: {} - {:.1}% in {:.1}min - MASSIVE GAIN!",
-                    position.symbol, pnl_percent, minutes_held
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
                 )
             } else if pnl_percent >= 50.0 {
                 format!(
                     "🚀⚡ MEGA PUMP: {} - {:.1}% in {:.1}min - HUGE GAIN!",
-                    position.symbol, pnl_percent, minutes_held
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
                 )
             } else {
                 format!(
                     "🚀 MEGA PUMP DETECTED: {} - {:.2}% in {:.1}min, velocity: {:.3}%/sec - IMMEDIATE EXIT!",
-                    position.symbol, pnl_percent, minutes_held, pump_analysis.velocity_percent_per_second
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held,
+                    pump_analysis.velocity_percent_per_second
                 )
             };
-            
+
             log(LogTag::Profit, "PUMP_EXIT_IMMEDIATE", &exit_message);
-            
+
             return true;
-        },
+        }
         PumpAction::ExitSoon => {
             // Enhanced exit soon messaging for strong gains
             let exit_message = if pnl_percent >= 50.0 {
                 format!(
                     "🎯🔥 MAJOR PUMP: {} - {:.1}% in {:.1}min - EXIT VERY SOON!",
-                    position.symbol, pnl_percent, minutes_held
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
                 )
             } else if pnl_percent >= 30.0 {
                 format!(
                     "🎯⚡ STRONG PUMP: {} - {:.1}% in {:.1}min - EXIT SOON!",
-                    position.symbol, pnl_percent, minutes_held
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held
                 )
             } else {
                 format!(
                     "🎯 PUMP DETECTED: {} - {:.2}% in {:.1}min, confidence: {:.2} - EXIT SOON!",
-                    position.symbol, pnl_percent, minutes_held, pump_analysis.confidence
+                    position.symbol,
+                    pnl_percent,
+                    minutes_held,
+                    pump_analysis.confidence
                 )
             };
-            
+
             log(LogTag::Profit, "PUMP_EXIT_SOON", &exit_message);
-            
+
             return true;
-        },
+        }
         PumpAction::WatchClosely => {
             // Continue to normal logic but with higher urgency baseline
             if is_debug_profit_enabled() {
                 log(
                     LogTag::Profit,
                     "PUMP_WATCH",
-                    &format!(
-                        "👀 {} potential pump developing - watching closely",
-                        position.symbol
-                    )
+                    &format!("👀 {} potential pump developing - watching closely", position.symbol)
                 );
             }
-        },
+        }
         PumpAction::HoldForMore => {
             // Conservative mode - don't exit on small gains
             if pnl_percent > 0.0 && pnl_percent < CONSERVATIVE_PROFIT_MIN {
@@ -1334,7 +1383,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
                 }
                 return false;
             }
-        },
+        }
         PumpAction::Hold => {
             // Normal logic continues
         }
@@ -1378,7 +1427,7 @@ pub async fn should_sell(position: &Position, current_price: f64) -> bool {
         // 🕐 30+ MINUTE LOSS MANAGEMENT RULE
         if minutes_held >= 30.0 {
             let hours_held = minutes_held / 60.0;
-            
+
             // Time-based exit criteria for losses
             let should_exit = if loss_severity >= 30.0 {
                 // Severe losses: exit after 30 minutes

@@ -181,7 +181,8 @@ impl TokenPriceService {
             Ok(()) => {
                 // Try to get the price again after update
                 // Try to get the price again after update (fresh only)
-                let price = self.get_cached_price_maybe_stale(mint, false).await
+                let price = self
+                    .get_cached_price_maybe_stale(mint, false).await
                     // Final fallback: allow stale cache so callers rarely see None
                     .or(self.get_cached_price_maybe_stale(mint, true).await);
                 if is_debug_price_service_enabled() {
@@ -242,7 +243,11 @@ impl TokenPriceService {
                                 "CACHE_VALID",
                                 &format!(
                                     "✅ VALID {}CACHE for {}: price={:.12} SOL, age={}s",
-                                    if is_expired {"STALE-"} else {""},
+                                    if is_expired {
+                                        "STALE-"
+                                    } else {
+                                        ""
+                                    },
                                     mint,
                                     price,
                                     age_seconds
@@ -482,7 +487,11 @@ impl TokenPriceService {
                     log(
                         LogTag::PriceService,
                         "API_PRICE",
-                        &format!("Using API price for {}: ${:.8}", mint, api_token.price_sol.unwrap_or(0.0))
+                        &format!(
+                            "Using API price for {}: ${:.8}",
+                            mint,
+                            api_token.price_sol.unwrap_or(0.0)
+                        )
                     );
                 }
                 (PriceCacheEntry::from_api_token(&api_token), (None, None))
@@ -547,7 +556,7 @@ impl TokenPriceService {
                             let (pnl_sol, pnl_percent) = calculate_position_pnl(
                                 &position,
                                 Some(new)
-                            );
+                            ).await;
                             Some((pnl_sol, pnl_percent))
                         } else {
                             None
@@ -792,9 +801,7 @@ pub async fn initialize_price_service() -> Result<(), Box<dyn std::error::Error>
     }
 
     let service = Arc::new(TokenPriceService::new()?);
-    let _ = PRICE_SERVICE
-        .set(service)
-        .map_err(|_| "Price service already initialized")?;
+    let _ = PRICE_SERVICE.set(service).map_err(|_| "Price service already initialized")?;
     log(LogTag::PriceService, "INIT", "Price service initialized successfully");
     Ok(())
 }
@@ -885,7 +892,7 @@ pub async fn get_priority_tokens_safe() -> Vec<String> {
 
 /// Get multiple token prices in batch (for compatibility)
 pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Option<f64>> {
-    use futures::stream::{FuturesOrdered, StreamExt};
+    use futures::stream::{ FuturesOrdered, StreamExt };
 
     if is_debug_price_service_enabled() {
         log(
@@ -920,7 +927,10 @@ pub async fn get_token_prices_batch_safe(mints: &[String]) -> HashMap<String, Op
         }
 
         if is_debug_price_service_enabled() {
-            let found_prices = results.values().filter(|p| p.is_some()).count();
+            let found_prices = results
+                .values()
+                .filter(|p| p.is_some())
+                .count();
             log(
                 LogTag::PriceService,
                 "BATCH_COMPLETE",

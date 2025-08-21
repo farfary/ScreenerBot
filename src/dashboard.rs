@@ -832,7 +832,7 @@ impl Dashboard {
                 // Use stored current_price from position object (updated by monitor_open_positions)
                 let current_price = position.current_price.unwrap_or(0.0);
                 let (pnl_sol, pnl_percent) = if current_price > 0.0 {
-                    calculate_position_pnl(position, Some(current_price))
+                    calculate_position_pnl(position, Some(current_price)).await
                 } else {
                     (0.0, 0.0)
                 };
@@ -861,7 +861,7 @@ impl Dashboard {
             }
 
             for position in right_iter.take(rows_left) {
-                let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
+                let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None).await;
                 let sym = {
                     let mut acc = String::new();
                     let mut w = 0usize;
@@ -988,7 +988,7 @@ impl Dashboard {
         let mut winners = 0;
         let mut losers = 0;
         for position in &closed_positions {
-            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None);
+            let (pnl_sol, pnl_percent) = calculate_position_pnl(position, None).await;
             total_pnl_sol += pnl_sol;
             if pnl_percent > 0.0 {
                 winners += 1;
