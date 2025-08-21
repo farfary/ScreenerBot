@@ -20,11 +20,11 @@ use chrono::{ DateTime, Utc };
 use colored::Colorize;
 use once_cell::sync::Lazy;
 use serde::{ Deserialize, Serialize };
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 use std::sync::Arc;
 use tokio::sync::{ mpsc, oneshot, Notify, Mutex as AsyncMutex };
 use tokio::fs;
-use tokio::time::{ interval, Duration };
+use tokio::time::{ interval, Duration, Instant };
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Uses effective prices and actual token amounts when available
@@ -267,6 +267,86 @@ struct SwapAttempt {
 static RECENT_SWAP_ATTEMPTS: Lazy<Arc<AsyncMutex<HashMap<String, SwapAttempt>>>> = Lazy::new(||
     Arc::new(AsyncMutex::new(HashMap::new()))
 );
+
+// 1b. ACTIVE_SELLS: Track mints currently undergoing a sell to prevent overlapping waves.
+//    We use mint string as key. Guarded by AsyncMutex for async contexts. Only store while an
+//    active sell flow is running (method or background). Cleared on completion or error.
+static ACTIVE_SELLS: Lazy<Arc<AsyncMutex<HashSet<String>>>> = Lazy::new(||
+    Arc::new(AsyncMutex::new(HashSet::new()))
+);
+
+// 2. BALANCE_CACHE: Short-lived cache for token balances to collapse bursts of identical RPC calls.
+// Key: wallet|mint  Value: (balance, Instant timestamp)
+struct CachedBalance {
+    amount: u64,
+    fetched: Instant,
+}
+static BALANCE_CACHE: Lazy<Arc<AsyncMutex<HashMap<String, CachedBalance>>>> = Lazy::new(||
+    Arc::new(AsyncMutex::new(HashMap::new()))
+);
+const BALANCE_CACHE_TTL_MS: u64 = 1200; // 1.2s window
+
+/// Fetch token balance with short-lived in-memory cache.
+async fn get_cached_token_balance(wallet: &str, mint: &str) -> Result<u64, String> {
+    let key = format!("{}|{}", wallet, mint);
+    // Try fast path
+    if
+        let Ok(mut guard) = tokio::time::timeout(
+            Duration::from_millis(100),
+            BALANCE_CACHE.lock()
+        ).await
+    {
+        if let Some(entry) = guard.get(&key) {
+            if entry.fetched.elapsed().as_millis() < (BALANCE_CACHE_TTL_MS as u128) {
+                return Ok(entry.amount);
+            }
+        }
+        drop(guard);
+    }
+
+    // Fetch fresh
+    let balance = get_token_balance(wallet, mint).await.map_err(|e| format!("{}", e))?;
+    if
+        let Ok(mut guard) = tokio::time::timeout(
+            Duration::from_millis(100),
+            BALANCE_CACHE.lock()
+        ).await
+    {
+        guard.insert(key, CachedBalance { amount: balance, fetched: Instant::now() });
+    }
+    Ok(balance)
+}
+
+/// Register an active sell. Returns true if newly inserted, false if it already existed.
+async fn register_active_sell(mint: &str) -> bool {
+    // Short timeout so we don't block if contention; if lock not acquired quickly treat as busy.
+    match tokio::time::timeout(Duration::from_millis(250), ACTIVE_SELLS.lock()).await {
+        Ok(mut guard) => {
+            if guard.contains(mint) {
+                false
+            } else {
+                guard.insert(mint.to_string());
+                true
+            }
+        }
+        Err(_) => {
+            // On timeout assume another sell in progress.
+            false
+        }
+    }
+}
+
+/// Clear active sell entry for mint.
+async fn clear_active_sell(mint: &str) {
+    if
+        let Ok(mut guard) = tokio::time::timeout(
+            Duration::from_millis(250),
+            ACTIVE_SELLS.lock()
+        ).await
+    {
+        guard.remove(mint);
+    }
+}
 
 /// Duration to prevent duplicate swaps (30 seconds)
 const DUPLICATE_SWAP_PREVENTION_SECS: i64 = 30;
@@ -1839,30 +1919,7 @@ impl PositionsManager {
             return Err("DRY-RUN: Position would be closed".to_string());
         }
 
-        // Check wallet balance
-        let wallet_address = match crate::utils::get_wallet_address() {
-            Ok(addr) => addr,
-            Err(e) => {
-                return Err(format!("Failed to get wallet address: {}", e));
-            }
-        };
-
-        let wallet_balance = match
-            crate::utils::get_token_balance(&wallet_address, &position.mint).await
-        {
-            Ok(balance) => balance,
-            Err(e) => {
-                return Err(format!("Failed to get token balance: {}", e));
-            }
-        };
-
-        if wallet_balance == 0 {
-            // Handle phantom position
-            self.handle_phantom_position(&mut position, token, exit_price, exit_time).await;
-            return Err("Phantom position resolved".to_string());
-        }
-
-        // Execute sell transaction with retry logic
+        // Execute sell transaction with retry logic (balance check happens in retry function)
         self.execute_sell_with_retry(&mut position, token, exit_price, exit_time).await
     }
 
@@ -1876,6 +1933,33 @@ impl PositionsManager {
         let _guard = crate::trader::CriticalOperationGuard::new(
             &format!("SELL {}", position.symbol)
         );
+
+        // Active sell registry guard
+        if !register_active_sell(&position.mint).await {
+            log(
+                LogTag::Swap,
+                "ACTIVE_SELL_SKIP",
+                &format!(
+                    "⏳ Skipping sell for {} - another sell already in progress for mint {}",
+                    position.symbol,
+                    get_mint_prefix(&position.mint)
+                )
+            );
+            return Err("Active sell already in progress".to_string());
+        }
+        // Ensure cleanup at end of function scope
+        struct ActiveSellCleanup {
+            mint: String,
+        }
+        impl Drop for ActiveSellCleanup {
+            fn drop(&mut self) {
+                let mint = self.mint.clone();
+                tokio::spawn(async move {
+                    clear_active_sell(&mint).await;
+                });
+            }
+        }
+        let _active_cleanup = ActiveSellCleanup { mint: position.mint.clone() };
 
         let max_attempts = crate::arguments::get_max_exit_retries();
         for attempt in 1..=max_attempts {
@@ -1949,6 +2033,7 @@ impl PositionsManager {
                     );
                 }
 
+                // Get wallet balance (actual amount to sell)
                 let wallet_address = match get_wallet_address() {
                     Ok(addr) => addr,
                     Err(e) => {
@@ -1957,10 +2042,10 @@ impl PositionsManager {
                     }
                 };
 
-                let actual_wallet_balance = match
+                let actual_sell_amount = match
                     tokio::time::timeout(
                         Duration::from_secs(45),
-                        get_token_balance(&wallet_address, &token.mint)
+                        get_cached_token_balance(&wallet_address, &token.mint)
                     ).await
                 {
                     Ok(Ok(balance)) => balance,
@@ -1976,20 +2061,7 @@ impl PositionsManager {
                     }
                 };
 
-                if actual_wallet_balance == 0 {
-                    log(
-                        LogTag::Swap,
-                        "WARNING",
-                        &format!(
-                            "⚠️ No {} tokens in wallet to sell (expected: {}, actual: 0)",
-                            token.symbol,
-                            token_amount
-                        )
-                    );
-                    return Err(format!("No {} tokens in wallet", token.symbol));
-                }
-
-                let actual_sell_amount = actual_wallet_balance;
+                // Note: Zero balance check removed - phantom positions handled by verification system
 
                 log(
                     LogTag::Swap,
@@ -1999,21 +2071,38 @@ impl PositionsManager {
                         actual_sell_amount,
                         token.symbol,
                         token_amount,
-                        actual_wallet_balance
+                        actual_sell_amount
                     )
                 );
 
-                // DUPLICATE SWAP PREVENTION: Check if similar sell was recently attempted
+                // DUPLICATE SWAP PREVENTION (improved):
+                // Previous logic blocked ALL attempts inside the slippage loop even when NO prior sell executed.
+                // That resulted in perpetual duplicate prevention + repeated balance RPC calls while tokens were still present.
+                // We now only apply duplicate prevention if wallet balance is LOWER than the recorded position amount
+                // (indicating a prior partial/complete execution) OR if wallet balance is zero (already sold externally).
                 let expected_sol_amount = exit_price; // Use expected SOL from exit calculation
-                if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
-                    last_error = Some(
-                        format!(
-                            "Duplicate sell prevented for {} - similar sell attempted within last {}s",
+                let full_position_intact = actual_sell_amount == token_amount;
+                if !full_position_intact {
+                    if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
+                        last_error = Some(
+                            format!(
+                                "Duplicate sell prevented for {} - similar sell attempted within last {}s (wallet balance changed)",
+                                token.symbol,
+                                DUPLICATE_SWAP_PREVENTION_SECS
+                            )
+                        );
+                        continue;
+                    }
+                } else if crate::arguments::is_debug_swaps_enabled() {
+                    log(
+                        LogTag::Swap,
+                        "DUPLICATE_SKIP",
+                        &format!(
+                            "🔄 Duplicate prevention skipped for {} (full balance intact: {} tokens)",
                             token.symbol,
-                            DUPLICATE_SWAP_PREVENTION_SECS
+                            actual_sell_amount
                         )
                     );
-                    continue;
                 }
 
                 let best_quote = match
@@ -4129,37 +4218,7 @@ pub async fn execute_close_position_background(
         return Err("DRY-RUN: Position would be closed".to_string());
     }
 
-    // Check wallet balance
-    let wallet_address = match crate::utils::get_wallet_address() {
-        Ok(addr) => addr,
-        Err(e) => {
-            return Err(format!("Failed to get wallet address: {}", e));
-        }
-    };
-
-    let wallet_balance = match
-        crate::utils::get_token_balance(&wallet_address, &position.mint).await
-    {
-        Ok(balance) => balance,
-        Err(e) => {
-            return Err(format!("Failed to get token balance: {}", e));
-        }
-    };
-
-    if wallet_balance == 0 {
-        // Handle phantom position - we'll need to signal this through the normal position update mechanism
-        log(
-            LogTag::Positions,
-            "PHANTOM",
-            &format!(
-                "👻 Phantom position detected for {} - marking as closed with 0 SOL received",
-                position.symbol
-            )
-        );
-
-        // This will need to be handled by the verification system
-        return Err("Phantom position detected - needs verification handling".to_string());
-    }
+    // Balance check and phantom detection happens in execute_sell_with_retry_background()
 
     // Execute sell transaction with retry logic
     execute_sell_with_retry_background(&mut position, &token, exit_price, exit_time).await
@@ -4173,6 +4232,32 @@ async fn execute_sell_with_retry_background(
     exit_time: DateTime<Utc>
 ) -> Result<(String, String), String> {
     let _guard = crate::trader::CriticalOperationGuard::new(&format!("SELL {}", position.symbol));
+
+    // Active sell registry guard (background context)
+    if !register_active_sell(&position.mint).await {
+        log(
+            LogTag::Swap,
+            "ACTIVE_SELL_SKIP",
+            &format!(
+                "⏳ Skipping sell (background) for {} - another sell already in progress for mint {}",
+                position.symbol,
+                get_mint_prefix(&position.mint)
+            )
+        );
+        return Err("Active sell already in progress".to_string());
+    }
+    struct ActiveSellCleanupBg {
+        mint: String,
+    }
+    impl Drop for ActiveSellCleanupBg {
+        fn drop(&mut self) {
+            let mint = self.mint.clone();
+            tokio::spawn(async move {
+                clear_active_sell(&mint).await;
+            });
+        }
+    }
+    let _active_cleanup = ActiveSellCleanupBg { mint: position.mint.clone() };
 
     let max_attempts = crate::arguments::get_max_exit_retries();
     for attempt in 1..=max_attempts {
@@ -4239,7 +4324,7 @@ async fn execute_sell_with_retry_background(
             let actual_wallet_balance = match
                 tokio::time::timeout(
                     Duration::from_secs(45),
-                    get_token_balance(&wallet_address, &token.mint)
+                    get_cached_token_balance(&wallet_address, &token.mint)
                 ).await
             {
                 Ok(Ok(balance)) => balance,
@@ -4258,17 +4343,17 @@ async fn execute_sell_with_retry_background(
             if actual_wallet_balance == 0 {
                 log(
                     LogTag::Swap,
-                    "WARNING",
+                    "PHANTOM",
                     &format!(
-                        "⚠️ No {} tokens in wallet to sell (expected: {}, actual: 0)",
+                        "👻 Phantom position detected for {} - expected {}, wallet 0. Marking as sold elsewhere.",
                         token.symbol,
                         token_amount
                     )
                 );
-                return Err(format!("No {} tokens in wallet", token.symbol));
+                return Err("Phantom position - zero balance".to_string());
             }
 
-            let actual_sell_amount = actual_wallet_balance;
+            let actual_sell_amount = actual_wallet_balance; // may be partial
 
             log(
                 LogTag::Swap,
@@ -4282,17 +4367,30 @@ async fn execute_sell_with_retry_background(
                 )
             );
 
-            // DUPLICATE SWAP PREVENTION: Check if similar sell was recently attempted
-            let expected_sol_amount = exit_price; // Use expected SOL from exit calculation
-            if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
-                last_error = Some(
-                    format!(
-                        "Duplicate sell prevented for {} - similar sell attempted within last {}s",
+            // DUPLICATE SWAP PREVENTION (improved parity with method): Only block if wallet balance decreased vs recorded amount.
+            let expected_sol_amount = exit_price;
+            let full_position_intact = actual_wallet_balance == token_amount;
+            if !full_position_intact {
+                if is_duplicate_swap_attempt(&token.mint, expected_sol_amount, "SELL").await {
+                    last_error = Some(
+                        format!(
+                            "Duplicate sell prevented for {} (background) - similar sell attempted within last {}s (wallet balance changed)",
+                            token.symbol,
+                            DUPLICATE_SWAP_PREVENTION_SECS
+                        )
+                    );
+                    continue;
+                }
+            } else if crate::arguments::is_debug_swaps_enabled() {
+                log(
+                    LogTag::Swap,
+                    "DUPLICATE_SKIP",
+                    &format!(
+                        "🔄 Duplicate prevention skipped (background) for {} (full balance intact: {} tokens)",
                         token.symbol,
-                        DUPLICATE_SWAP_PREVENTION_SECS
+                        actual_wallet_balance
                     )
                 );
-                continue;
             }
 
             let best_quote = match
